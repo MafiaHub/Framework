@@ -109,6 +109,10 @@ namespace Framework::Integrations::Client {
         // Pending resources from server (stored here to survive scripting module reset)
         std::vector<Client::Scripting::ServerResourceInfo> _pendingServerResources;
 
+        // Client resources the server hot-reloaded; refreshed after the next
+        // asset re-sync completes (dev mode). Empty on a normal connect.
+        std::vector<Client::Scripting::ServerResourceInfo> _pendingRefreshResources;
+
         // Handshake state carried from ServerResources until the ReadyEvent spawn barrier completes.
         int _readyEventId {};
         float _serverTickRate {};
@@ -118,6 +122,8 @@ namespace Framework::Integrations::Client {
         void InitNetworkingMessages();
         void InitAssetDownloader();
         void OnAssetsDownloaded(bool success);
+        // Targeted delta re-sync for a hot-reload (does not stop all resources).
+        void SyncResourceUpdatesFromServer();
         void InitCacheAssetFolders();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
 

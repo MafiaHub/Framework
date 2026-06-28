@@ -18,6 +18,7 @@
 #include "networking/replication/replication_manager.h"
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/client_identity.h"
+#include "networking/rpc/resource_refresh.h"
 #include "networking/rpc/server_resources.h"
 
 #include "networking/connection.h"
@@ -152,6 +153,7 @@ namespace Framework::Integrations::Server {
 
         // Initialize the scripting engine
         _scriptingModule->SetResourcesPath(_opts.resourcesPath);
+        _scriptingModule->SetDevMode(_opts.developmentMode);
         if (_scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
             return Error("Failed to initialize the scripting engine");
         }
@@ -177,11 +179,25 @@ namespace Framework::Integrations::Server {
         // Initialize asset streamer (needs discovered resources to know client files)
         InitAssetStreamer();
 
+        // Mirror runtime resource start/stop to clients. Gated on boot (the
+        // StartAll below predates any connection) and shutdown.
+        _scriptingModule->GetResourceManager()->SetOnResourceStarted([this](const std::string &name) {
+            if (_resourcesBooted && !_shuttingDown) {
+                BroadcastResourceRefresh(name);
+            }
+        });
+        _scriptingModule->GetResourceManager()->SetOnResourceStopped([this](const std::string &name) {
+            if (_resourcesBooted && !_shuttingDown) {
+                BroadcastResourceStop(name);
+            }
+        });
+
         // Start all resources (ES modules load asynchronously via normal Update cycle)
         auto startResult = _scriptingModule->GetResourceManager()->StartAll();
         if (!startResult) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources: {}", startResult.GetError());
         }
+        _resourcesBooted = true;
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
@@ -431,6 +447,72 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset streamer ready with {} client files", streamer->GetNumberOfFilesForUpload());
     }
 
+    void Instance::BroadcastResourceRefresh(const std::string &name) {
+        if (!_scriptingModule || !_networkingEngine) {
+            return;
+        }
+        auto *rm = _scriptingModule->GetResourceManager();
+        if (!rm) {
+            return;
+        }
+        const auto *resource = rm->GetResource(name);
+        if (!resource) {
+            return;
+        }
+        // Only resources with a client entry point need a client-side refresh.
+        if (resource->GetManifest().GetMafiaHubConfig().client.empty()) {
+            return;
+        }
+
+        const auto net = _networkingEngine->GetNetworkServer();
+        if (!net) {
+            return;
+        }
+
+        // Rebuild the streamer's upload list so changed files get fresh hashes;
+        // the delta transfer compares stored hashes. See docs/resource_hot_reload.md.
+        if (auto *streamer = net->GetAssetStreamer()) {
+            streamer->ClearUploads();
+        }
+        InitAssetStreamer();
+
+        Framework::Networking::RPC::ResourceRefresh refresh;
+        refresh.resources.push_back({resource->GetName(), resource->GetVersion()});
+        net->BroadcastRPC(refresh);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Broadcasting hot-reload of resource '{}' to clients", name);
+    }
+
+    void Instance::BroadcastResourceStop(const std::string &name) {
+        if (!_scriptingModule || !_networkingEngine) {
+            return;
+        }
+        auto *rm = _scriptingModule->GetResourceManager();
+        if (!rm) {
+            return;
+        }
+        const auto *resource = rm->GetResource(name);
+        if (!resource) {
+            return;
+        }
+        // Only client resources need a client-side stop.
+        if (resource->GetManifest().GetMafiaHubConfig().client.empty()) {
+            return;
+        }
+
+        const auto net = _networkingEngine->GetNetworkServer();
+        if (!net) {
+            return;
+        }
+
+        // No streamer rebuild: stopping ships no files.
+        Framework::Networking::RPC::ResourceStop stop;
+        stop.resources.push_back({resource->GetName(), resource->GetVersion()});
+        net->BroadcastRPC(stop);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Broadcasting stop of resource '{}' to clients", name);
+    }
+
     void Instance::InitCommandListener() {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Setting up command listener and processor...");
         
@@ -450,12 +532,35 @@ namespace Framework::Integrations::Server {
             "Show this help message");
             
         _commandProcessor->RegisterCommand(
-            "stop", {},
+            "quit", {},
             [this](cxxopts::ParseResult &) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopping server...");
                 Shutdown();
             },
             "Stop the server");
+
+        // No argument: stop the server (back-compat). With one: stop a resource.
+        _commandProcessor->RegisterCommand(
+            "stop", {},
+            [this](cxxopts::ParseResult &result) {
+                const auto &args = result.unmatched();
+                if (args.empty()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopping server...");
+                    Shutdown();
+                    return;
+                }
+                auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
+                if (!rm) {
+                    return;
+                }
+                auto res = rm->StopResource(args[0]);
+                if (res) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopped resource '{}'", args[0]);
+                } else {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to stop '{}': {}", args[0], res.GetError());
+                }
+            },
+            "Stop a resource (stop <resource>), or the server if no resource is given");
 
         _commandProcessor->RegisterCommand(
             "status", {},
@@ -471,7 +576,83 @@ namespace Framework::Integrations::Server {
                 }
             },
             "Show server status");
-        
+
+        // Resource lifecycle commands. Helper folds the shared boilerplate
+        // (resolve manager, require a name, log the result).
+        auto resourceCommand = [this](std::string_view verb, auto op) {
+            return [this, verb, op](cxxopts::ParseResult &result) {
+                auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
+                if (!rm) {
+                    return;
+                }
+                const auto &args = result.unmatched();
+                if (args.empty()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Usage: {} <resource>", verb);
+                    return;
+                }
+                auto res = op(rm, args[0]);
+                if (res) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}: '{}'", verb, args[0]);
+                } else {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to {} '{}': {}", verb, args[0], res.GetError());
+                }
+            };
+        };
+
+        _commandProcessor->RegisterCommand(
+            "start", {},
+            resourceCommand("start", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                return rm->StartResource(n);
+            }),
+            "Start a resource: start <resource>");
+
+        _commandProcessor->RegisterCommand(
+            "restart", {},
+            resourceCommand("restart", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                if (!rm->IsResourceRunning(n)) {
+                    return Framework::Scripting::ResourceOperationResult(std::string("resource is not running (use start)"));
+                }
+                return rm->RestartResource(n);
+            }),
+            "Reload a running resource's code: restart <resource>");
+
+        // Start-or-reload — the canonical verb FiveM/MTASA operators expect.
+        _commandProcessor->RegisterCommand(
+            "ensure", {},
+            resourceCommand("ensure", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                return rm->IsResourceRunning(n) ? rm->RefreshResource(n) : rm->StartResource(n);
+            }),
+            "Start or reload a resource: ensure <resource>");
+
+        // Re-scan for new/changed resources (manifests), without restarting.
+        _commandProcessor->RegisterCommand(
+            "refresh", {},
+            [this](cxxopts::ParseResult &) {
+                auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
+                if (!rm) {
+                    return;
+                }
+                auto added = rm->Rescan();
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refreshed resources ({} new)", added.size());
+            },
+            "Re-scan the resources directory for new/changed resources");
+
+        _commandProcessor->RegisterCommand(
+            "refreshall", {},
+            [this](cxxopts::ParseResult &) {
+                auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
+                if (!rm) {
+                    return;
+                }
+                auto res = rm->RefreshAll();
+                if (res) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refreshed all resources ({} affected)", res.GetValue().size());
+                } else {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to refresh all resources: {}", res.GetError());
+                }
+            },
+            "Re-scan and reload all running resources from disk");
+
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Command listener and processor initialized");
     }
 

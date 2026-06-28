@@ -64,6 +64,14 @@ namespace Framework::Scripting {
          */
         virtual bool ExecuteFile(std::string_view filepath) = 0;
 
+        // Evict cached modules under a resource dir so hot-reload re-reads
+        // edited files. No-op without a module cache; call only after stop.
+        virtual void EvictModulesUnderPath(const std::string &rootPath) {}
+
+        // Cancel timers the resource created (setTimeout/setInterval) so the
+        // shared runtime doesn't keep firing them after stop. Call after stop.
+        virtual void ClearResourceTimers(const std::string &resourceName) {}
+
         /**
          * Register framework SDK bindings.
          * Called after Init() to set up Framework.* APIs.

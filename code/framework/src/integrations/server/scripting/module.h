@@ -90,6 +90,12 @@ namespace Framework::Integrations::Server::Scripting {
         std::string GetResourcesPath() const { return _resourcesPath; }
 
         /**
+         * Enable/disable development mode (file-watch hot-reload). Must be set
+         * before Init(); also updates an already-created resource manager.
+         */
+        void SetDevMode(bool enabled);
+
+        /**
          * Get list of resources to send to clients.
          * Only includes resources with client entry points defined.
          */
@@ -110,6 +116,7 @@ namespace Framework::Integrations::Server::Scripting {
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
 
         std::string _resourcesPath = "resources";
+        bool _devMode = false;
     };
 
 } // namespace Framework::Integrations::Server::Scripting

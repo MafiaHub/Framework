@@ -295,7 +295,16 @@ endif()
 # One-directional ordering only (Framework never links MafiaHubServices back): declare it here so
 # order-dependent GNU ld places Framework after it.
 if(TARGET MafiaHubServices)
-    target_link_libraries(MafiaHubServices INTERFACE Framework)
+    # Prebuilt = IMPORTED (only the INTERFACE keyword is allowed). Source build
+    # from the submodule = normal target whose own CMakeLists already links with
+    # the plain signature, so match it — mixing plain/keyword on one target errors.
+    get_target_property(_mhs_imported MafiaHubServices IMPORTED)
+    if(_mhs_imported)
+        target_link_libraries(MafiaHubServices INTERFACE Framework)
+    else()
+        target_link_libraries(MafiaHubServices Framework)
+    endif()
+    unset(_mhs_imported)
 endif()
 
 # Include scripting engine objects in Framework

@@ -47,6 +47,12 @@ namespace Framework::Scripting {
 
         // Whether to warn (instead of error) when a dependency is missing
         bool warnOnMissingDependency = false;
+
+        // Dev mode: poll resource files and auto-reload on change (off in prod).
+        bool devMode = false;
+
+        // Minimum interval between file-change polls, in milliseconds.
+        int fileWatchIntervalMs = 1000;
     };
 
     /**
@@ -142,6 +148,32 @@ namespace Framework::Scripting {
          * @return Result indicating success or failure
          */
         ResourceOperationResult ReloadResource(std::string_view name);
+
+        /**
+         * Re-parse a resource's package.json from disk and, if it was running,
+         * restart it (evicting its cached modules first). Picks up both code
+         * and manifest edits. Resources stopped beforehand stay stopped.
+         * Backs the `refresh` console command.
+         * @param name Resource name
+         * @return Result with the list of affected resources
+         */
+        ResourceOperationResult RefreshResource(std::string_view name);
+
+        /**
+         * Re-scan the resources directory, re-parse every known resource, and
+         * restart exactly those that were running. Newly discovered resources
+         * are registered but left stopped. Backs the `refreshall` command.
+         * @return Result with the list of affected resources
+         */
+        ResourceOperationResult RefreshAll();
+
+        /**
+         * Re-scan the resources directory for newly-added resources and rebuild
+         * the dependency graph, without starting or restarting anything (the
+         * FiveM-style `refresh`). New resources are left stopped.
+         * @return Names of resources newly discovered
+         */
+        std::vector<std::string> Rescan();
 
         // Registry Queries
 
@@ -315,6 +347,10 @@ namespace Framework::Scripting {
          */
         void ProcessScheduledRestarts();
 
+        // Dev mode: poll running resources for file changes and hot-reload
+        // them. No-op unless devMode. Call from the scripting update tick.
+        void ProcessFileWatch();
+
       private:
         // Internal resource access (mutable)
         Resource *GetResourceMutable(std::string_view name);
@@ -324,6 +360,10 @@ namespace Framework::Scripting {
 
         // Build dependency graph from discovered resources
         void BuildDependencyGraph();
+
+        // Scan the resources directory for resources not already registered and
+        // register them. Returns the names added. Used by RefreshAll.
+        std::vector<std::string> RescanResources();
 
         // Validate all dependencies can be satisfied
         bool ValidateDependencies(std::string &outError) const;
@@ -339,6 +379,9 @@ namespace Framework::Scripting {
 
         // Compute topological sort for load order
         std::vector<std::string> ComputeLoadOrder() const;
+
+        // True if the dependency graph has a cycle (can't fully topo-sort).
+        bool HasDependencyCycle() const;
 
         // Configuration
         ResourceManagerConfig _config;
@@ -373,6 +416,10 @@ namespace Framework::Scripting {
         };
         std::vector<ScheduledRestart> _scheduledRestarts;
         mutable std::mutex _scheduledRestartsMutex;
+
+        // Dev-mode file watcher: resource name -> newest file mtime seen.
+        std::map<std::string, int64_t> _watchSnapshots;
+        std::chrono::steady_clock::time_point _lastFileWatchPoll{};
 
         // Events instance owned by this manager
         Events _events;

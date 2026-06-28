@@ -13,6 +13,7 @@
 // Included only by v8_engine.cpp — not part of the public API.
 
 #include "v8_engine.h"
+#include "resource/resource_manager.h"
 
 #include <logging/logger.h>
 
@@ -138,11 +139,25 @@ namespace Framework::Scripting::V8EngineCallbacks {
             if (delayMs < 0) delayMs = 0;
         }
 
+        v8::Local<v8::Function> callbackFn = v8::Local<v8::Function>::Cast(args[0]);
+
         auto entry = std::make_unique<V8Engine::TimerEntry>();
-        entry->callback.Reset(isolate, v8::Local<v8::Function>::Cast(args[0]));
+        entry->callback.Reset(isolate, callbackFn);
         entry->fireTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(delayMs);
         entry->intervalMs = data->isInterval ? (delayMs > 0 ? delayMs : 1) : 0;
         entry->cancelled = false;
+
+        // Owner for cleanup on stop: callback script origin, then context, then stack.
+        if (auto *mgr = data->engine->GetResourceManager()) {
+            std::string owner = mgr->GetResourceNameFromFunction(isolate, callbackFn);
+            if (owner.empty()) {
+                owner = mgr->GetCurrentResourceContext();
+            }
+            if (owner.empty()) {
+                owner = mgr->GetResourceContextFromStack(isolate);
+            }
+            entry->ownerResource = std::move(owner);
+        }
 
         // Capture extra arguments
         for (int i = 2; i < args.Length(); ++i) {

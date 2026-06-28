@@ -65,6 +65,74 @@ namespace Framework::Scripting {
         _requireDataStore.clear();
     }
 
+    void V8Engine::EvictModulesUnderPath(const std::string &rootPath) {
+        if (!_isolate) {
+            return;
+        }
+
+        // Hold a Locker to dispose Global handles (engine runs in locking mode).
+        v8::Locker locker(_isolate);
+        v8::Isolate::Scope isolateScope(_isolate);
+
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        fs::path canonicalRoot = fs::weakly_canonical(fs::path(rootPath), ec);
+        std::string rootStr = (ec ? fs::path(rootPath) : canonicalRoot).string();
+        if (rootStr.empty()) {
+            return;
+        }
+
+        auto insideRoot = [&](const std::string &path) {
+            std::string p = path;
+            std::string r = rootStr;
+#ifdef _WIN32
+            // Windows filesystems are case-insensitive; normalize both sides.
+            std::transform(p.begin(), p.end(), p.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            std::transform(r.begin(), r.end(), r.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+#endif
+            if (p.size() < r.size() || p.compare(0, r.size(), r) != 0) {
+                return false;
+            }
+            // Require a directory boundary so /res/a doesn't match /res/ab.
+            if (p.size() > r.size()) {
+                char next = p[r.size()];
+                char sep = static_cast<char>(fs::path::preferred_separator);
+                if (next != sep && next != '/' && r.back() != sep) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        for (auto it = _moduleCache.begin(); it != _moduleCache.end();) {
+            if (insideRoot(it->first)) {
+                it = _moduleCache.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
+        _requireDataStore.erase(
+            std::remove_if(_requireDataStore.begin(), _requireDataStore.end(),
+                [&](const std::unique_ptr<RequireData> &d) {
+                    return d && insideRoot(d->currentDir);
+                }),
+            _requireDataStore.end());
+    }
+
+    void V8Engine::ClearResourceTimers(const std::string &resourceName) {
+        if (resourceName.empty()) {
+            return;
+        }
+        for (auto &timer : _timers) {
+            if (timer && timer->ownerResource == resourceName) {
+                timer->cancelled = true;
+            }
+        }
+    }
+
     void V8Engine::Shutdown() {
         if (!_initialized) {
             return;

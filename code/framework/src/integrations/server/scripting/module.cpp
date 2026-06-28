@@ -56,6 +56,7 @@ namespace Framework::Integrations::Server::Scripting {
         config.resourcesPath = _resourcesPath;
         config.isClient = false;
         config.cascadeStopDependents = true;
+        config.devMode = _devMode;
 
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
             _nodeEngine.get(), config);
@@ -77,6 +78,7 @@ namespace Framework::Integrations::Server::Scripting {
             v8::Context::Scope contextScope(context);
 
             _nodeEngine->InstallUncaughtExceptionHandler(_resourcesPath);
+            _nodeEngine->InstallResourceTimerTracking();
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
@@ -180,6 +182,8 @@ namespace Framework::Integrations::Server::Scripting {
         if (_resourceManager) {
             // Process scheduled restarts
             _resourceManager->ProcessScheduledRestarts();
+            // Dev-mode: poll resource files and hot-reload on change
+            _resourceManager->ProcessFileWatch();
         }
 
         // Process pending message responses
@@ -204,6 +208,15 @@ namespace Framework::Integrations::Server::Scripting {
         }
     }
 
+    void ServerScriptingModule::SetDevMode(bool enabled) {
+        _devMode = enabled;
+        if (_resourceManager) {
+            Framework::Scripting::ResourceManagerConfig config = _resourceManager->GetConfig();
+            config.devMode = enabled;
+            _resourceManager->SetConfig(config);
+        }
+    }
+
     std::vector<ClientResourceInfo> ServerScriptingModule::GetClientResourceList() const {
         std::vector<ClientResourceInfo> result;
 
@@ -219,8 +232,9 @@ namespace Framework::Integrations::Server::Scripting {
                 continue;
             }
 
-            // Only include resources that have client entry points
-            if (!resource->GetClientEntryPoint().empty()) {
+            // Only running resources with a client entry point — a stopped
+            // resource must not be handed to (re)connecting clients.
+            if (resource->IsRunning() && !resource->GetClientEntryPoint().empty()) {
                 ClientResourceInfo info;
                 info.name = resource->GetName();
                 info.version = resource->GetVersion();

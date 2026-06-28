@@ -84,6 +84,12 @@ namespace Framework::Scripting {
          */
         void ClearModuleCache();
 
+        // Evict cached modules (and require() backing data) under rootPath.
+        void EvictModulesUnderPath(const std::string &rootPath) override;
+
+        // Cancel all timers created by the named resource.
+        void ClearResourceTimers(const std::string &resourceName) override;
+
         // Module loader internals (used by require callback)
         v8::MaybeLocal<v8::Value> LoadModule(std::string_view requestedPath,
                                               std::string_view referencingDir);
@@ -98,6 +104,7 @@ namespace Framework::Scripting {
             std::chrono::steady_clock::time_point fireTime;
             int intervalMs = 0; // 0 = setTimeout, >0 = setInterval
             bool cancelled = false;
+            std::string ownerResource; // resource that created the timer, for cleanup on stop
         };
 
         static constexpr uint32_t kMaxTimers = 10000;

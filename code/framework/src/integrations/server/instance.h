@@ -45,6 +45,10 @@ namespace Framework::Integrations::Server {
         std::string modConfigFile = "server.json";
         std::string resourcesPath = "resources";
 
+        // Development mode: watch resource files and hot-reload on change.
+        // Leave off in production.
+        bool developmentMode = false;
+
         // networked game metadata (required)
         std::string gameName;
         std::string gameVersion;
@@ -104,6 +108,8 @@ namespace Framework::Integrations::Server {
     class Instance : public Framework::Lifecycle {
       private:
         std::atomic<bool> _shuttingDown;
+        // Set after the initial StartAll; gates runtime broadcasts to clients.
+        bool _resourcesBooted = false;
         std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
 
         InstanceOptions _opts;
@@ -119,6 +125,10 @@ namespace Framework::Integrations::Server {
         void InitEndpoints();
         void InitNetworkingMessages();
         void InitAssetStreamer();
+        // Re-sync a hot-reloaded/started client resource to connected clients.
+        void BroadcastResourceRefresh(const std::string &name);
+        // Tell connected clients to stop a client resource.
+        void BroadcastResourceStop(const std::string &name);
         void InitCommandListener();
         bool LoadConfigFromJSON();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);

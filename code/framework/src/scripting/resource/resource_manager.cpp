@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <queue>
 #include <stack>
@@ -38,6 +40,44 @@ namespace Framework::Scripting {
                 }
             }
             return true;
+        }
+
+        // Newest file mtime under a resource directory, in impl-defined clock
+        // ticks (monotonic for comparison). 0 if the directory can't be scanned.
+        int64_t ComputeResourceMTime(const std::string &path) {
+            std::error_code ec;
+            int64_t newest = 0;
+            std::filesystem::recursive_directory_iterator it(
+                path, std::filesystem::directory_options::skip_permission_denied, ec);
+            const std::filesystem::recursive_directory_iterator end;
+            if (ec) {
+                return newest;
+            }
+            for (; it != end; it.increment(ec)) {
+                if (ec) {
+                    break;
+                }
+                // Skip large, non-hand-edited trees.
+                if (it->is_directory(ec) && !ec) {
+                    const auto dirName = it->path().filename().string();
+                    if (dirName == "node_modules" || dirName == ".git") {
+                        it.disable_recursion_pending();
+                    }
+                    continue;
+                }
+                if (!it->is_regular_file(ec) || ec) {
+                    continue;
+                }
+                auto t = std::filesystem::last_write_time(it->path(), ec);
+                if (ec) {
+                    continue;
+                }
+                int64_t ticks = static_cast<int64_t>(t.time_since_epoch().count());
+                if (ticks > newest) {
+                    newest = ticks;
+                }
+            }
+            return newest;
         }
     } // anonymous namespace
 
@@ -364,6 +404,11 @@ namespace Framework::Scripting {
         // Call cleanup (removes handlers)
         CallResourceStop(name);
 
+        // Cancel timers the resource left running.
+        if (_jsEngine) {
+            _jsEngine->ClearResourceTimers(std::string(name));
+        }
+
         // Clear exports
         resource->ClearExports();
 
@@ -378,16 +423,234 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::RestartResource(std::string_view name) {
+        // Evict the resource's modules between stop and start: in a shared
+        // runtime a plain stop+start would re-run against stale caches and not
+        // reload code. See docs/resource_hot_reload.md.
+        std::string resourceRoot;
+        {
+            std::scoped_lock lock(_resourcesMutex);
+            auto it = _resources.find(name);
+            if (it != _resources.end() && it->second) {
+                resourceRoot = it->second->GetPath();
+            }
+        }
+
         auto stopResult = StopResource(name);
         if (!stopResult) {
             return stopResult;
         }
 
-        return StartResource(name);
+        // Evict only after stop (engine cache contract).
+        if (_jsEngine && !resourceRoot.empty()) {
+            _jsEngine->EvictModulesUnderPath(resourceRoot);
+        }
+
+        // Restart the resource plus any dependents the stop cascaded down. If it
+        // wasn't running, the stop reports nothing, so start the resource itself.
+        auto toRestart = stopResult.GetValue();
+        if (toRestart.empty()) {
+            toRestart.push_back(std::string(name));
+        }
+        std::vector<std::string> affected;
+        for (const auto &n : toRestart) {
+            auto result = StartResource(n);
+            if (result) {
+                const auto &a = result.GetValue();
+                affected.insert(affected.end(), a.begin(), a.end());
+            }
+        }
+        return ResourceOperationResult::Ok(affected);
+    }
+
+    bool ResourceManager::HasDependencyCycle() const {
+        // ComputeLoadOrder (Kahn's) drops nodes that never reach in-degree 0, so
+        // a shorter result than the registry means a cycle.
+        return ComputeLoadOrder().size() < GetResourceCount();
     }
 
     ResourceOperationResult ResourceManager::ReloadResource(std::string_view name) {
         return RestartResource(name);
+    }
+
+    ResourceOperationResult ResourceManager::RefreshResource(std::string_view name) {
+        std::string path;
+        bool wasRunning = false;
+        {
+            std::scoped_lock lock(_resourcesMutex);
+            auto it = _resources.find(name);
+            if (it == _resources.end() || !it->second) {
+                return ResourceOperationResult("Resource not found: " + std::string(name));
+            }
+            path        = it->second->GetPath();
+            wasRunning  = it->second->IsRunning();
+        }
+
+        // Stop first (cascades to dependents); remember what went down to
+        // restart it all afterwards.
+        std::vector<std::string> toRestart;
+        if (wasRunning) {
+            auto stopResult = StopResource(name);
+            if (!stopResult) {
+                return stopResult;
+            }
+            toRestart = stopResult.GetValue();
+        }
+
+        if (_jsEngine && !path.empty()) {
+            _jsEngine->EvictModulesUnderPath(path);
+        }
+
+        // Re-parse package.json so manifest edits (deps, entry points) apply.
+        auto reparsed = std::make_unique<Resource>(path);
+        if (!reparsed->IsManifestValid()) {
+            return ResourceOperationResult("Invalid package.json in " + path + ": " + reparsed->GetErrorMessage());
+        }
+        const std::string oldName = std::string(name);
+        std::string newName       = reparsed->GetName();
+        {
+            std::scoped_lock lock(_resourcesMutex);
+            if (newName != oldName && _resources.count(newName) > 0) {
+                return ResourceOperationResult("Rename '" + oldName + "' -> '" + newName + "' collides with an existing resource");
+            }
+            if (newName != oldName) {
+                _resources.erase(oldName);
+            }
+            _resources[newName] = std::move(reparsed);
+        }
+        BuildDependencyGraph();
+
+        if (!wasRunning) {
+            return ResourceOperationResult::Ok({newName});
+        }
+
+        // A manifest edit could introduce a cycle; bail before recursing into it.
+        if (HasDependencyCycle()) {
+            return ResourceOperationResult("Dependency cycle after reloading '" + newName + "'; left stopped");
+        }
+
+        // Restart the resource plus the dependents that cascaded down.
+        std::vector<std::string> affected;
+        for (const auto &stoppedName : toRestart) {
+            const std::string startName = (stoppedName == oldName) ? newName : stoppedName;
+            auto result = StartResource(startName);
+            if (result) {
+                const auto &a = result.GetValue();
+                affected.insert(affected.end(), a.begin(), a.end());
+            }
+        }
+        return ResourceOperationResult::Ok(affected);
+    }
+
+    ResourceOperationResult ResourceManager::RefreshAll() {
+        // Remember who was running so we restart exactly them.
+        auto running = GetRunningResourceNames();
+
+        // Stop everything currently running (reverse dependency order).
+        StopAll();
+
+        // Evict + re-parse every known resource so code/manifest edits apply.
+        // Track renames so we can restart the right names afterwards.
+        std::map<std::string, std::string> renamed; // old -> new
+        for (const auto &name : GetAllResourceNames()) {
+            std::string path;
+            {
+                std::scoped_lock lock(_resourcesMutex);
+                auto it = _resources.find(name);
+                if (it != _resources.end() && it->second) {
+                    path = it->second->GetPath();
+                }
+            }
+            if (path.empty()) {
+                continue;
+            }
+            if (_jsEngine) {
+                _jsEngine->EvictModulesUnderPath(path);
+            }
+            auto reparsed = std::make_unique<Resource>(path);
+            if (!reparsed->IsManifestValid()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
+                    ->warn("Skipping invalid package.json in {}: {}", path, reparsed->GetErrorMessage());
+                continue;
+            }
+            std::string newName = reparsed->GetName();
+            std::scoped_lock lock(_resourcesMutex);
+            if (newName != name && _resources.count(newName) > 0) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
+                    ->warn("Skipping rename '{}' -> '{}': name already in use", name, newName);
+                continue;
+            }
+            if (newName != name) {
+                _resources.erase(name);
+                renamed[name] = newName;
+            }
+            _resources[newName] = std::move(reparsed);
+        }
+
+        // Pick up brand-new resource directories, then rebuild the graph once.
+        RescanResources();
+        BuildDependencyGraph();
+
+        if (HasDependencyCycle()) {
+            return ResourceOperationResult("Dependency cycle after refresh; nothing restarted");
+        }
+
+        // Restart exactly what was running before (following any renames).
+        std::vector<std::string> affected;
+        for (const auto &name : running) {
+            const auto it = renamed.find(name);
+            const std::string &startName = (it != renamed.end()) ? it->second : name;
+            auto result = StartResource(startName);
+            if (result) {
+                const auto &a = result.GetValue();
+                affected.insert(affected.end(), a.begin(), a.end());
+            }
+        }
+        return ResourceOperationResult::Ok(affected);
+    }
+
+    std::vector<std::string> ResourceManager::Rescan() {
+        auto added = RescanResources();
+        BuildDependencyGraph();
+        return added;
+    }
+
+    std::vector<std::string> ResourceManager::RescanResources() {
+        std::vector<std::string> added;
+
+        std::error_code ec;
+        std::filesystem::path resourcesDir(_config.resourcesPath);
+        if (!std::filesystem::exists(resourcesDir, ec)) {
+            return added;
+        }
+
+        for (const auto &entry : std::filesystem::directory_iterator(resourcesDir, ec)) {
+            if (ec) {
+                break;
+            }
+            if (!entry.is_directory()) {
+                continue;
+            }
+            if (!std::filesystem::exists(entry.path() / "package.json")) {
+                continue;
+            }
+
+            Resource probe(entry.path().string());
+            if (!probe.IsManifestValid()) {
+                continue;
+            }
+
+            bool exists;
+            {
+                std::scoped_lock lock(_resourcesMutex);
+                exists = _resources.contains(probe.GetName());
+            }
+            if (!exists && DiscoverResource(entry.path().string())) {
+                added.push_back(probe.GetName());
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
+                    ->info("Discovered new JS resource: {}", added.back());
+            }
+        }
+        return added;
     }
 
     bool ResourceManager::ExecuteResourceScript(Resource &resource, std::string &outError) {
@@ -791,6 +1054,52 @@ namespace Framework::Scripting {
 
         for (const auto &sr : dueRestarts) {
             RestartResource(sr.resourceName);
+        }
+    }
+
+    void ResourceManager::ProcessFileWatch() {
+        if (!_config.devMode) {
+            return;
+        }
+
+        // Throttle polls to the configured interval.
+        const auto now = std::chrono::steady_clock::now();
+        if (_lastFileWatchPoll.time_since_epoch().count() != 0) {
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - _lastFileWatchPoll).count();
+            if (elapsed < _config.fileWatchIntervalMs) {
+                return;
+            }
+        }
+        _lastFileWatchPoll = now;
+
+        for (const auto &name : GetRunningResourceNames()) {
+            std::string path;
+            {
+                std::scoped_lock lock(_resourcesMutex);
+                auto it = _resources.find(name);
+                if (it != _resources.end() && it->second) {
+                    path = it->second->GetPath();
+                }
+            }
+            if (path.empty()) {
+                continue;
+            }
+
+            const int64_t current = ComputeResourceMTime(path);
+            auto snapIt = _watchSnapshots.find(name);
+            if (snapIt == _watchSnapshots.end()) {
+                // First time we've seen this resource: seed, don't reload.
+                _watchSnapshots[name] = current;
+                continue;
+            }
+            if (current > snapIt->second) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
+                    ->info("Detected change in resource '{}', hot-reloading", name);
+                // Update before reloading so we don't re-trigger on it.
+                snapIt->second = current;
+                RefreshResource(name);
+            }
         }
     }
 

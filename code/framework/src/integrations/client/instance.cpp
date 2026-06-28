@@ -13,6 +13,7 @@
 #include "networking/rpc/rpc.h"
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/client_identity.h"
+#include "networking/rpc/resource_refresh.h"
 #include "networking/rpc/server_resources.h"
 
 #include "scripting/resource/resource_manager.h"
@@ -350,6 +351,63 @@ namespace Framework::Integrations::Client {
             DownloadsAssetsFromConnectedServer();
         });
 
+        // Server hot-reloaded a client resource (dev mode): re-sync its files
+        // (delta) and restart just that resource, leaving the rest running.
+        net->RegisterRPC<Framework::Networking::RPC::ResourceRefresh>([this](const Framework::Networking::RPC::ResourceRefresh &payload, MafiaNet::Packet *) {
+            if (payload.resources.empty()) {
+                return;
+            }
+            // Ignore until connected with a running module, else we'd cancel
+            // the initial download (which already fetches current files).
+            auto *sm = GetScriptingModule();
+            if (!sm || !sm->GetScriptingEngine() || !sm->GetScriptingEngine()->IsInitialized()) {
+                return;
+            }
+            // Accumulate (deduped): one reload arrives as several RPCs and a
+            // single delta download covers them all; overwriting would drop all but the last.
+            for (const auto &r : payload.resources) {
+                bool known = false;
+                for (const auto &e : _pendingRefreshResources) {
+                    if (e.name == r.name) { known = true; break; }
+                }
+                if (!known) {
+                    _pendingRefreshResources.push_back(r);
+                }
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Server hot-reloaded {} resource(s); re-syncing", payload.resources.size());
+            // An in-flight re-sync already covers these; it drains the full set on complete.
+            if (!_downloadStatus.downloading) {
+                SyncResourceUpdatesFromServer();
+            }
+        });
+
+        // Server stopped a client resource at runtime: stop it here too.
+        net->RegisterRPC<Framework::Networking::RPC::ResourceStop>([this](const Framework::Networking::RPC::ResourceStop &payload, MafiaNet::Packet *) {
+            if (payload.resources.empty()) {
+                return;
+            }
+            auto *sm = GetScriptingModule();
+            if (!sm || !sm->GetScriptingEngine() || !sm->GetScriptingEngine()->IsInitialized()) {
+                return;
+            }
+            auto *rm = sm->GetResourceManager();
+            if (!rm) {
+                return;
+            }
+            for (const auto &res : payload.resources) {
+                // Drop any queued refresh so a pending sync can't resurrect it.
+                for (auto it = _pendingRefreshResources.begin(); it != _pendingRefreshResources.end();) {
+                    it = (it->name == res.name) ? _pendingRefreshResources.erase(it) : it + 1;
+                }
+                if (rm->IsResourceRunning(res.name)) {
+                    auto result = rm->StopResource(res.name);
+                    if (!result) {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Failed to stop client resource '{}': {}", res.name, result.GetError());
+                    }
+                }
+            }
+        });
+
         // Spawn barrier complete: activate replication and report the connection final.
         net->SetOnConnectionReadyCallback([this, net](int eventId) {
             // Only the event the server assigned in ServerResources finalizes this connection, and
@@ -484,12 +542,73 @@ namespace Framework::Integrations::Client {
         _downloadStatus.setID = streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), new AssetDownloadFileProgress(this), MafiaNet::Priority::High, 2, nullptr);
     }
 
+    void Instance::SyncResourceUpdatesFromServer() {
+        const auto net = GetNetworkingEngine()->GetNetworkClient();
+        if (net->GetConnectionState() != Framework::Networking::PeerState::CONNECTED) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Cannot re-sync resources while not connected");
+            _pendingRefreshResources.clear();
+            return;
+        }
+
+        // Unlike DownloadsAssetsFromConnectedServer, does NOT stop all resources
+        // or tear down web views; cache path is already set from connect.
+        const auto streamer = net->GetAssetStreamer();
+        const auto cacheDir = GetAssetCachePath();
+        if (cacheDir.empty()) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("No asset cache path set; cannot re-sync resources");
+            _pendingRefreshResources.clear();
+            return;
+        }
+        streamer->SetApplicationDirectory(cacheDir.c_str());
+
+        if (_downloadStatus.downloading) {
+            net->GetFileListTransfer()->CancelReceive(_downloadStatus.setID);
+            _downloadStatus = {};
+        }
+        _downloadStatus.downloading = true;
+        _downloadStatus.setID = streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), new AssetDownloadFileProgress(this), MafiaNet::Priority::High, 2, nullptr);
+    }
+
     void Instance::OnAssetsDownloaded(bool success) {
         const auto net = GetNetworkingEngine()->GetNetworkClient();
         if (success) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("All the assets have been downloaded!");
 
             auto scriptingModule = GetScriptingModule();
+
+            // Hot-reload path: module already running, refresh just the flagged
+            // resources instead of re-initializing everything.
+            if (scriptingModule && scriptingModule->GetScriptingEngine()
+                && scriptingModule->GetScriptingEngine()->IsInitialized()
+                && !_pendingRefreshResources.empty()) {
+                if (auto *rm = scriptingModule->GetResourceManager()) {
+                    for (const auto &res : _pendingRefreshResources) {
+                        // Newly started server-side: discover from cache first.
+                        if (!rm->HasResource(res.name)) {
+                            const std::string resPath = GetAssetCachePath() + "/" + res.name;
+                            if (!rm->DiscoverResource(resPath)) {
+                                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not discover new client resource '{}' at {}", res.name, resPath);
+                                continue;
+                            }
+                        }
+                        // Reload if running, start if newly discovered/stopped.
+                        auto result = rm->IsResourceRunning(res.name) ? rm->RefreshResource(res.name) : rm->StartResource(res.name);
+                        if (!result) {
+                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Failed to sync client resource '{}': {}", res.name, result.GetError());
+                        }
+                    }
+                }
+                _pendingRefreshResources.clear();
+                // Run the shared completion cleanup, skipping only the
+                // first-connect spawn barrier below.
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+                _downloadStatus = {};
+                OnAssetsDownloadFinished(success);
+                return;
+            }
+            // A refresh that raced an initial connect falls through to full init.
+            _pendingRefreshResources.clear();
+
             if (scriptingModule) {
                 // Set resource cache path before init
                 scriptingModule->SetResourceCachePath(GetAssetCachePath());
