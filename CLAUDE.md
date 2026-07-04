@@ -88,5 +88,6 @@ Format: `Module: Brief commit description`
 - **MafiaNet** - Networking (MafiaHub's fork of RakNet/SLikeNet)
 - **CEF** - Web-based UI (Chromium Embedded Framework)
 - **Dear ImGui** - Immediate mode GUI
+- **Tracy** - Frame profiler (wrapped by `utils/profiler.h` FW_PROFILE_* macros; toggle with `FW_PROFILING`)
 - **spdlog** - Logging
 - **nlohmann/json** - JSON parsing
