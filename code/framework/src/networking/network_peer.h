@@ -105,12 +105,13 @@ namespace Framework::Networking {
             });
         }
 
-        // Send an RPC payload to every connected system.
+        // Send an RPC payload to every connected system, optionally excluding one (in broadcast mode
+        // RakNet treats the guid as the system to SKIP — e.g. don't echo a client's own update back).
         template <RPC::Payload T>
-        void BroadcastRPC(T &payload, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
+        void BroadcastRPC(T &payload, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered, MafiaNet::RakNetGUID except = MafiaNet::UNASSIGNED_RAKNET_GUID) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
-            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, MafiaNet::UNASSIGNED_RAKNET_GUID, true, false);
+            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, except, true, false);
         }
 
         // Send an RPC payload to a single system.
