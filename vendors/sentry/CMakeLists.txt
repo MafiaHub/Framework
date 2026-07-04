@@ -31,9 +31,22 @@ elseif(APPLE)
 else()
     target_link_directories(Sentry PUBLIC "lib/linux")
     file(GLOB SENTRY_LIBS "lib/linux/*.a")
+    add_custom_command(TARGET Sentry POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/linux/crashpad_handler" "${CMAKE_BINARY_DIR}/bin/"
+            )
 endif()
 
-target_link_libraries(Sentry PUBLIC ${SENTRY_LIBS})
+if(NOT SENTRY_LIBS)
+    message(FATAL_ERROR "No prebuilt Sentry libraries found for this platform in vendors/sentry/lib/")
+endif()
+
+# GNU ld resolves archives left-to-right; the globbed alphabetical order puts libsentry.a
+# (which depends on the crashpad archives) last, so group them for mutual resolution.
+if(UNIX AND NOT APPLE)
+    target_link_libraries(Sentry PUBLIC -Wl,--start-group ${SENTRY_LIBS} -Wl,--end-group)
+else()
+    target_link_libraries(Sentry PUBLIC ${SENTRY_LIBS})
+endif()
 target_include_directories(Sentry PUBLIC "include")
 # Vendored libs are static; without this sentry.h decorates its API as __declspec(dllimport).
 target_compile_definitions(Sentry PUBLIC SENTRY_BUILD_STATIC)
@@ -42,4 +55,6 @@ target_compile_definitions(Sentry PUBLIC SENTRY_BUILD_STATIC)
 # generated sentry-config.cmake, which we bypass by globbing the archives directly).
 if(WIN32)
     target_link_libraries(Sentry PUBLIC winhttp version dbghelp shlwapi synchronization advapi32 rpcrt4 powrprof user32 kernel32)
+elseif(UNIX AND NOT APPLE)
+    target_link_libraries(Sentry PUBLIC pthread dl rt z)
 endif()

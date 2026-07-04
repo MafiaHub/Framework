@@ -43,6 +43,7 @@ jobs:
     
       - name: Install tools on Ubuntu
         run: |
+          sudo apt-get update
           sudo apt-get install -y ninja-build build-essential g++ libcurl4-openssl-dev
           echo "Building with:"; gcc --version; g++ --version
         if: runner.os == 'Linux'
