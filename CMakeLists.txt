@@ -13,6 +13,10 @@ if(FW_STANDALONE)
     include(FrameworkSetup)
 endif()
 
+# Profiling (Tracy): instrumentation compiles out entirely when OFF.
+# ON by default with on-demand mode - zero overhead until a profiler connects.
+option(FW_PROFILING "Enable Tracy profiler instrumentation" ON)
+
 if (WIN32)
     if (MSVC)
         add_compile_options(

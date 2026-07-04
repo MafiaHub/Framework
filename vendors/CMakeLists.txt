@@ -61,6 +61,15 @@ add_subdirectory(sfd)
 # Build lua
 add_subdirectory(lua-5.4.4)
 
+# Build Tracy (profiler client)
+# TRACY_ENABLE follows FW_PROFILING; the TracyClient target is always available
+# so Framework can link it unconditionally - it compiles to no-ops when disabled.
+set(TRACY_ENABLE ${FW_PROFILING} CACHE BOOL "" FORCE)
+set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
+set(TRACY_STATIC ON CACHE BOOL "" FORCE)
+set(TRACY_FIBERS ON CACHE BOOL "" FORCE) # FTL job system runs on fibers
+add_subdirectory(tracy)
+
 # Build FTL (Fiber Tasking Library)
 set(FTL_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(FTL_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
