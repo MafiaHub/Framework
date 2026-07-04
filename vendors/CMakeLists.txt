@@ -68,6 +68,10 @@ set(TRACY_ENABLE ${FW_PROFILING} CACHE BOOL "" FORCE)
 set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
 set(TRACY_STATIC ON CACHE BOOL "" FORCE)
 set(TRACY_FIBERS ON CACHE BOOL "" FORCE) # FTL job system runs on fibers
+# Multiple modules link TracyClient statically on Windows (loader exe + client
+# in the game DLL). Delayed init makes the profiler start on first zone use,
+# so only modules that actually record data spawn a Tracy instance.
+set(TRACY_DELAYED_INIT ON CACHE BOOL "" FORCE)
 add_subdirectory(tracy)
 
 # Build FTL (Fiber Tasking Library)
