@@ -25,6 +25,7 @@
 
 #include "utils/command_processor.h"
 #include "utils/path.h"
+#include "utils/profiler.h"
 #include "utils/version.h"
 
 #include "cxxopts.hpp"
@@ -744,19 +745,25 @@ namespace Framework::Integrations::Server {
     void Instance::Update() {
         const auto start = std::chrono::high_resolution_clock::now();
         if (_nextTick <= start) {
+            FW_PROFILE_SCOPE_N("Server::Tick");
+
             if (_networkingEngine) {
+                FW_PROFILE_SCOPE_N("Server::Networking");
                 _networkingEngine->Update();
             }
 
             if (_scriptingModule) {
+                FW_PROFILE_SCOPE_N("Server::Scripting");
                 _scriptingModule->Update();
             }
 
             if (_commandListener) {
+                FW_PROFILE_SCOPE_N("Server::Commands");
                 _commandListener->Update();
             }
 
             if (_masterlist->IsInitialized()) {
+                FW_PROFILE_SCOPE_N("Server::MasterlistPing");
                 Services::ServerInfo info {};
                 info.port           = _opts.bindPort;
                 info.gameMode       = _opts.modName;
@@ -766,7 +773,12 @@ namespace Framework::Integrations::Server {
                 _masterlist->Ping(info);
             }
 
-            PostUpdate();
+            {
+                FW_PROFILE_SCOPE_N("Server::PostUpdate");
+                PostUpdate();
+            }
+
+            FW_PROFILE_FRAME();
 
             _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(_opts.worldConfig.tickInterval * 1000.0f));
         }
