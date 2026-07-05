@@ -30,6 +30,7 @@
 #include <logging/logger.h>
 
 #include "utils/path.h"
+#include "utils/profiler.h"
 #include "utils/version.h"
 #include "utils/hardware_id.h"
 
@@ -302,43 +303,65 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::Update() {
+        FW_PROFILE_SCOPE_N("Client::Update");
+
         if (_presence && _presence->IsInitialized()) {
+            FW_PROFILE_SCOPE_N("Client::Presence");
             _presence->Update();
         }
 
         if (_networkingEngine) {
+            FW_PROFILE_SCOPE_N("Client::Networking");
             _networkingEngine->Update();
         }
 
         if (_scriptingModule) {
+            FW_PROFILE_SCOPE_N("Client::Scripting");
             _scriptingModule->Update();
         }
 
         if (_imguiApp && _imguiApp->IsInitialized()) {
+            FW_PROFILE_SCOPE_N("Client::ImGui");
             _imguiApp->Update();
         }
 
         if (_renderIO) {
+            FW_PROFILE_SCOPE_N("Client::RenderIO");
             _renderIO->UpdateMainThread();
         }
 
         if (_webManager) {
+            FW_PROFILE_SCOPE_N("Client::WebManager");
             _webManager->Update();
         }
 
-        PostUpdate();
+        {
+            FW_PROFILE_SCOPE_N("Client::PostUpdate");
+            PostUpdate();
+        }
+
+        FW_PROFILE_FRAME();
     }
 
     void Instance::Render() {
+        FW_PROFILE_SCOPE_N("Client::Render");
+
         if (_renderer && _renderer->IsInitialized()) {
+            FW_PROFILE_SCOPE_N("Client::Renderer");
             _renderer->Update();
         }
 
         if (_renderIO) {
+            FW_PROFILE_SCOPE_N("Client::RenderThreadIO");
             _renderIO->UpdateRenderThread();
         }
 
-        PostRender();
+        {
+            FW_PROFILE_SCOPE_N("Client::PostRender");
+            PostRender();
+        }
+
+        FW_PROFILE_FRAME_N("Render");
     }
 
     void Instance::InitNetworkingMessages() {
