@@ -185,6 +185,14 @@ namespace hook {
         }
     }
 
+    // Stub a function to `mov eax, value ; ret[n stackSize]` (needs 6-8 patchable bytes).
+    template <typename AddressType>
+    inline void return_value_function(AddressType address, uint32_t value, uint16_t stackSize = 0) {
+        put<uint8_t>(address, 0xB8);
+        put<uint32_t>((uintptr_t)address + 1, value);
+        return_function((uintptr_t)address + 5, stackSize);
+    }
+
     template <typename TRet, typename TFnRet, typename... TArgs>
     inline TRet bind(TFnRet (*func)(TArgs...)) {
         return (TRet) reinterpret_cast<void *&>(func);
