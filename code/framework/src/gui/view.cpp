@@ -109,6 +109,29 @@ namespace Framework::GUI {
         // Nothing to update at the base level for CEF; message loop is driven by Manager
     }
 
+    void View::LockToOrigin(const std::string &url) {
+        if (!_lifeSpanHandler) {
+            return;
+        }
+        std::string origin = CEF::LifeSpanHandler::OriginFromURL(url);
+        if (origin.empty()) {
+            // unparsable origin (data:, about:): lock everything out rather than open up
+            Framework::Logging::GetLogger("Web")->warn("View {}: cannot derive origin from '{}', locking view down", _id, url);
+            origin = "null";
+        }
+        _lifeSpanHandler->SetAllowedOrigin(std::move(origin));
+    }
+
+    void View::LoadURL(const std::string &url) {
+        if (!_browser || !_browser->GetMainFrame()) {
+            return;
+        }
+        if (_lifeSpanHandler && !_lifeSpanHandler->GetAllowedOrigin().empty()) {
+            LockToOrigin(url);
+        }
+        _browser->GetMainFrame()->LoadURL(url);
+    }
+
     void View::Resize(int width, int height) {
         if (width <= 0 || height <= 0) {
             return;

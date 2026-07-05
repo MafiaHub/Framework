@@ -127,6 +127,12 @@ namespace Framework::GUI {
         // Resize the view and its CEF surface; backend recreates its texture on next Render.
         void Resize(int width, int height);
 
+        // Restrict main-frame navigation and page->script events to the URL's origin.
+        void LockToOrigin(const std::string &url);
+
+        // Navigate the main frame; re-locks the origin when the view is origin-locked.
+        void LoadURL(const std::string &url);
+
         void SetAutoResize(bool enable) {
             _autoResize = enable;
         }

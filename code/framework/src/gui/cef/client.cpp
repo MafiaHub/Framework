@@ -20,6 +20,12 @@ namespace Framework::GUI::CEF {
 
     bool Client::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId sourceProcess, CefRefPtr<CefProcessMessage> message) {
         if (message->GetName() == "CallEvent" && _sdk) {
+            // drop events from frames off the locked origin
+            if (_lifeSpanHandler && !_lifeSpanHandler->GetAllowedOrigin().empty()) {
+                if (!frame || LifeSpanHandler::OriginFromURL(frame->GetURL()) != _lifeSpanHandler->GetAllowedOrigin()) {
+                    return true;
+                }
+            }
             auto args              = message->GetArgumentList();
             std::string eventName  = args->GetString(0).ToString();
             std::string payload    = args->GetString(1).ToString();

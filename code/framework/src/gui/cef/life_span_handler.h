@@ -12,6 +12,7 @@
 #include "include/cef_request_handler.h"
 #include <atomic>
 #include <functional>
+#include <string>
 
 namespace Framework::GUI::CEF {
     using OnBeforeBrowseCallback = std::function<bool(CefURLParts, CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, bool, bool)>;
@@ -24,6 +25,9 @@ namespace Framework::GUI::CEF {
 
         std::function<void(CefRefPtr<CefBrowser>)> _onAfterCreated;
         OnBeforeBrowseCallback _onBeforeBrowse;
+
+        // Non-empty = origin lock: rejects cross-origin main-frame navigation and page events.
+        std::string _allowedOrigin;
 
         // Live browsers (pre-OnBeforeClose); Shutdown drains this before CefShutdown.
         static std::atomic<int> s_liveBrowserCount;
@@ -39,6 +43,17 @@ namespace Framework::GUI::CEF {
         void SetOnBeforeBrowseCallback(OnBeforeBrowseCallback cb) {
             _onBeforeBrowse = std::move(cb);
         }
+
+        void SetAllowedOrigin(std::string origin) {
+            _allowedOrigin = std::move(origin);
+        }
+
+        const std::string &GetAllowedOrigin() const {
+            return _allowedOrigin;
+        }
+
+        // "scheme://host[:port]" lowercased, empty when unparsable (data:, about:).
+        static std::string OriginFromURL(const CefString &url);
 
         void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
         bool OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int popupId, const CefString &targetUrl, const CefString &targetFrameName, CefLifeSpanHandler::WindowOpenDisposition targetDisposition, bool userGesture, const CefPopupFeatures &popupFeatures, CefWindowInfo &windowInfo, CefRefPtr<CefClient> &client, CefBrowserSettings &settings, CefRefPtr<CefDictionaryValue> &extraInfo, bool *noJavascriptAccess) override;

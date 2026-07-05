@@ -9,7 +9,31 @@
 #include "life_span_handler.h"
 #include "include/cef_parser.h"
 
+#include <algorithm>
+#include <cctype>
+
 namespace Framework::GUI::CEF {
+    std::string LifeSpanHandler::OriginFromURL(const CefString &url) {
+        CefURLParts parts;
+        if (!CefParseURL(url, parts)) {
+            return "";
+        }
+        std::string scheme = CefString(&parts.scheme).ToString();
+        std::string host   = CefString(&parts.host).ToString();
+        const std::string port = CefString(&parts.port).ToString();
+        if (scheme.empty() || host.empty()) {
+            return "";
+        }
+        const auto lower = [](std::string &s) {
+            std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+        };
+        lower(scheme);
+        lower(host);
+        return scheme + "://" + host + (port.empty() ? "" : ":" + port);
+    }
+
     std::atomic<int> LifeSpanHandler::s_liveBrowserCount {0};
 
     void LifeSpanHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
@@ -35,6 +59,10 @@ namespace Framework::GUI::CEF {
         CefURLParts urlParts;
         if (!CefParseURL(request->GetURL(), urlParts))
             return true; // Cancel if invalid URL
+
+        if (!_allowedOrigin.empty() && frame && frame->IsMain() && OriginFromURL(request->GetURL()) != _allowedOrigin) {
+            return true; // origin lock: no cross-origin main-frame navigation
+        }
 
         if (_onBeforeBrowse) {
             return _onBeforeBrowse(urlParts, browser, frame, request, userGesture, isRedirect);
