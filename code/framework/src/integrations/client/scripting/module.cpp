@@ -18,6 +18,8 @@
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/environment.h>
 
+#include "builtins/web.h"
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -90,6 +92,11 @@ namespace Framework::Integrations::Client::Scripting {
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
             _engine.get(), config);
 
+        // Web views created by a resource die with it
+        _resourceManager->SetOnResourceStopped([](const std::string &resourceName) {
+            Builtins::Web::CleanupResource(resourceName);
+        });
+
         // Register Framework SDK bindings for the new ResourceManager
         RegisterFrameworkBindings();
 
@@ -141,6 +148,9 @@ namespace Framework::Integrations::Client::Scripting {
         // Register environment info
         Framework::Scripting::Environment::Register(isolate, context, coreObj, true);
 
+        // Register web views API (client only)
+        Builtins::Web::Register(isolate, context, frameworkObj, _resourceManager.get());
+
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
     }
 
@@ -149,6 +159,9 @@ namespace Framework::Integrations::Client::Scripting {
             _resourceManager->StopAll();
             _resourceManager.reset();
         }
+
+        // Releases V8 globals; must precede engine shutdown (isolate disposal)
+        Builtins::Web::Shutdown();
 
         if (_engine) {
             _engine->Shutdown();
@@ -167,6 +180,8 @@ namespace Framework::Integrations::Client::Scripting {
             _resourceManager->StopAll();
             _resourceManager.reset();
         }
+
+        Builtins::Web::Shutdown();
 
         if (_engine && _engine->IsInitialized()) {
             _engine->ClearModuleCache();
