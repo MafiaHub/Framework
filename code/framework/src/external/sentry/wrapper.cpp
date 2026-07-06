@@ -33,9 +33,14 @@ namespace Framework::External::Sentry {
         }
 
         cppfs::FileHandle cacheDirectory = cppfs::fs::open(path + "/cache/sentry");
-        const auto result                = cacheDirectory.createDirectory();
-        if (!result) {
-            return Framework::Error("Failed to create the Sentry cache directory");
+        if (!cacheDirectory.isDirectory()) {
+            cppfs::FileHandle cacheRoot = cppfs::fs::open(path + "/cache");
+            if (!cacheRoot.isDirectory()) {
+                cacheRoot.createDirectory();
+            }
+            if (!cacheDirectory.createDirectory()) {
+                return Framework::Error("Failed to create the Sentry cache directory");
+            }
         }
 
         sentry_options_set_handler_path(opts, breakpadFile.path().c_str());
