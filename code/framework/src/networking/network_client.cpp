@@ -86,6 +86,10 @@ namespace Framework::Networking {
         _peer->Shutdown(100, 0, MafiaNet::Priority::Immediate);
         Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting from the server...");
 
+        // Peer shutdown fires TwoWayAuthentication::Clear(), wiping the registered build token;
+        // drop the cache so the next Connect()'s Init() re-registers instead of no-op'ing.
+        _registeredToken.clear();
+
         if (_onPlayerDisconnectedCallback) {
             // Locally initiated: there is no inbound packet, so pass null rather than a stale _packet.
             _onPlayerDisconnectedCallback(nullptr, DisconnectionReason::GRACEFUL_SHUTDOWN, "");
