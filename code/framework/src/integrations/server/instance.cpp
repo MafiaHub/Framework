@@ -15,7 +15,7 @@
 
 #include "core_modules.h"
 
-#include "integrations/shared/rpc/emit_lua_event.h"
+#include "integrations/shared/rpc/emit_script_event.h"
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
 #include "networking/rpc/chat_message.h"
@@ -400,7 +400,7 @@ namespace Framework::Integrations::Server {
         // its viewer entity, then hand off to OnClientEvent, which routes into the dedicated
         // client-event table (Events.onClient) — never the global bus a client could otherwise
         // collide with.
-        net->RegisterRPC<Framework::Integrations::Shared::RPC::EmitLuaEvent>([this](const Framework::Integrations::Shared::RPC::EmitLuaEvent &payload, MafiaNet::Packet *packet) {
+        net->RegisterRPC<Framework::Integrations::Shared::RPC::EmitScriptEvent>([this](const Framework::Integrations::Shared::RPC::EmitScriptEvent &payload, MafiaNet::Packet *packet) {
             const std::string name = payload.GetEventName();
             if (name.empty()) {
                 return;
