@@ -130,7 +130,7 @@ namespace Framework::Networking::Replication {
         // Grouped under `streaming` so the server-only nature is explicit and these don't read as
         // per-entity wire state. Dimension lives in the VirtualWorldReplica3 base (Get/SetVirtualWorld).
         struct Streaming {
-            bool alwaysVisible = false;  // bypass interest culling; replicated to everyone
+            bool alwaysVisible = false;  // bypass range culling; dimension still applies
             bool visible       = true;   // master visibility switch
             bool isViewer      = false;  // drives a connection's interest set (the player's avatar)
             float range        = 100.0f; // interest radius (world units) when acting as a viewer

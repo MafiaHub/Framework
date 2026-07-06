@@ -128,10 +128,11 @@ namespace Framework::Networking::Replication {
         _inRange.clear();
         QueryRadius(viewer->position, viewer->streaming.range, _inRange);
 
-        // In-range entities still face the dimension check; owned, always-visible, and the viewer
-        // itself bypass range and dimension culling entirely so they never drop out.
+        // In-range entities still face the dimension check; owned entities and the viewer itself
+        // bypass range and dimension culling so they never drop out. Always-visible entities bypass
+        // range only, keeping the interest set in agreement with QuerySerialization's dimension gate.
         for (NetworkEntity *entity : _inRange) {
-            if (entity->streaming.visible && (entity->streaming.alwaysVisible || entity == viewer || entity->ownerGUID == viewerGUID || MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), observerWorld))) {
+            if (entity->streaming.visible && (entity == viewer || entity->ownerGUID == viewerGUID || MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), observerWorld))) {
                 out.insert(entity);
             }
         }
@@ -143,7 +144,7 @@ namespace Framework::Networking::Replication {
             }
         }
         for (NetworkEntity *entity : AlwaysVisible()) {
-            if (entity->streaming.visible) {
+            if (entity->streaming.visible && MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), observerWorld)) {
                 out.insert(entity);
             }
         }
