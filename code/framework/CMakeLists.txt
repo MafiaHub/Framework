@@ -92,6 +92,7 @@ list(APPEND FRAMEWORK_CLIENT_SRC
     src/gui/clipboard.cpp
     src/gui/view.cpp
     src/gui/sdk.cpp
+    src/gui/backend/view_d3d9.cpp
     src/gui/backend/view_d3d11.cpp
     src/gui/backend/view_d3d12.cpp
     src/gui/cef/app.cpp
@@ -407,6 +408,8 @@ if(WIN32)
         add_dependencies(FrameworkClient CEFCopyDlls)
         add_dependencies(cef_subprocess CEFCopyDlls)
     endif()
+    # clients need the subprocess exe at runtime; build it with every FrameworkClient consumer
+    add_dependencies(FrameworkClient cef_subprocess)
 
     # Ensure runtime DLLs are copied to bin directory for all client/server targets
     if(TARGET libnode_copy_dll)

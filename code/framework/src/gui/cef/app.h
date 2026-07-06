@@ -43,8 +43,14 @@ namespace Framework::GUI::CEF {
         , public CefSchemeHandlerFactory {
       private:
         bool _contextInitialized = false;
+        bool _gpuAccelerated     = false;
 
       public:
+        // Must be set before CefInitialize; false adds --disable-gpu (CPU OSR path only)
+        void SetGPUAccelerated(bool enabled) {
+            _gpuAccelerated = enabled;
+        }
+
         CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
             return this;
         }

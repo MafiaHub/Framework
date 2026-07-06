@@ -13,6 +13,7 @@
 
 #include "gui/backend/view_d3d11.h"
 #include "gui/backend/view_d3d12.h"
+#include "gui/backend/view_d3d9.h"
 
 #include "include/cef_scheme.h"
 
@@ -106,7 +107,7 @@ namespace Framework::GUI {
         settings.windowless_rendering_enabled = true;
         settings.multi_threaded_message_loop  = false;
         settings.no_sandbox                   = true;
-        settings.log_severity                 = LOGSEVERITY_FATAL;
+        settings.log_severity                 = LOGSEVERITY_ERROR;
 
         // CEF >=120 holds a process-singleton lock on root_cache_path. Two clients on the
         // same machine sharing it would trigger the singleton relay (a stray blank browser
@@ -133,6 +134,7 @@ namespace Framework::GUI {
 
         // Create the CEF app
         _cefApp = new CEF::App();
+        _cefApp->SetGPUAccelerated(gpuAccelerated);
 
         // Initialize CEF
         CefMainArgs mainArgs(GetModuleHandle(nullptr));
@@ -248,6 +250,9 @@ namespace Framework::GUI {
         // Create the view based on the graphics backend
         std::unique_ptr<View> view;
         switch (_graphicsRenderer->GetBackendType()) {
+        case Graphics::RendererBackend::BACKEND_D3D_9:
+            view = std::make_unique<ViewD3D9>(++_id, _graphicsRenderer, this);
+            break;
         case Graphics::RendererBackend::BACKEND_D3D_11:
             view = std::make_unique<ViewD3D11>(++_id, _graphicsRenderer, this);
             break;
