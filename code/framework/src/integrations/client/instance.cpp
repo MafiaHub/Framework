@@ -476,9 +476,16 @@ namespace Framework::Integrations::Client {
             case Framework::Networking::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
             case Framework::Networking::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
             case Framework::Networking::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
+            case Framework::Networking::DisconnectionReason::NO_FREE_SLOT: reason = "The server is full."; break;
+            case Framework::Networking::DisconnectionReason::GRACEFUL_SHUTDOWN: reason = "The server closed the connection."; break;
+            case Framework::Networking::DisconnectionReason::LOST: reason = "Connection to the server lost."; break;
+            case Framework::Networking::DisconnectionReason::FAILED: reason = "Could not connect to the server."; break;
             default: break;
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection dropped: {}", reason);
+
+            // A null packet means the disconnect was locally initiated (user quit) — no reason to surface.
+            _lastDisconnectionReason = packet ? reason : "";
 
             // Reset initial asset download state
             _initialDownloadDone = false;

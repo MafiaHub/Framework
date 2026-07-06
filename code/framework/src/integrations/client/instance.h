@@ -127,6 +127,10 @@ namespace Framework::Integrations::Client {
         // One-shot latch so a stray ready-event completion can't re-run the mod's finalization.
         bool _connectionFinalized {};
 
+        // Human-readable reason for the last remote disconnection; empty when it was locally
+        // initiated (user quit). Set before OnConnectionClosed() fires.
+        std::string _lastDisconnectionReason;
+
         void InitNetworkingMessages();
         void InitAssetDownloader();
         void OnAssetsDownloaded(bool success);
@@ -179,6 +183,10 @@ namespace Framework::Integrations::Client {
 
         CurrentState GetCurrentState() const {
             return _currentState;
+        }
+
+        const std::string &GetLastDisconnectionReason() const {
+            return _lastDisconnectionReason;
         }
 
         void SetCurrentState(CurrentState state) {
