@@ -176,6 +176,11 @@ namespace Framework::Integrations::Server {
             (void)senderNetworkId, (void)text, (void)command, (void)args;
         }
 
+        // A client emitted a scripted event up (Game.emitServer), sender already resolved. Default
+        // dispatches into the client-event table (Events.onClient) as (senderNetworkId, payload);
+        // override to hand handlers your own player object. eventName/payloadJson are untrusted.
+        virtual void OnClientEvent(uint64_t senderNetworkId, const std::string &eventName, const std::string &payloadJson);
+
         void Update() override;
 
         void Run();

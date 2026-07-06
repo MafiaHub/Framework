@@ -45,6 +45,15 @@ namespace Framework::Scripting {
      * - onLocal(eventName, handler) - Resource-local listener
      * - emitLocal(eventName, ...args) - Resource-local emit
      * - listenerCount(eventName) - Get handler count
+     * - onClient(eventName, handler) - Listen for client-originated events (see below)
+     * - onceClient / offClient - One-time / remove variants
+     *
+     * Client-event trust boundary:
+     * onClient() handlers live in a table entirely separate from on()/emit(). Events arriving
+     * from a client (EmitClient, native-only) are dispatched into that table and nothing else,
+     * so a client-supplied event name can never resolve to a handler registered with on() — the
+     * "server said this" vs "a client claims this" split is enforced by construction, not by a
+     * naming convention. emit()/emitTo() from scripts likewise cannot reach the client table.
      */
     class Events final {
       public:
@@ -73,6 +82,17 @@ namespace Framework::Scripting {
                                             const std::vector<v8::Local<v8::Value>> &args);
 
         /**
+         * Emit a client-originated event from native code. Dispatched ONLY to onClient()
+         * handlers, which live in a table separate from the native/global bus — so a
+         * client-supplied event name can never resolve to an on() handler. Returns a Promise
+         * that resolves when all handlers complete.
+         */
+        v8::Local<v8::Promise> EmitClient(v8::Isolate *isolate,
+                                          v8::Local<v8::Context> context,
+                                          const std::string &eventName,
+                                          const std::vector<v8::Local<v8::Value>> &args);
+
+        /**
          * Clean up all handlers for a resource (called on resource stop).
          */
         void CleanupResource(std::string_view resourceName);
@@ -83,9 +103,15 @@ namespace Framework::Scripting {
         void ClearAll();
 
         /**
-         * Get count of handlers for an event.
+         * Get count of handlers for an event (global/on() table).
          */
         size_t GetListenerCount(std::string_view eventName);
+
+        /**
+         * Get count of client-event handlers for an event (onClient() table). Disjoint from
+         * GetListenerCount, mirroring the on()/onClient() table split.
+         */
+        size_t GetClientListenerCount(std::string_view eventName);
 
       private:
         /**
@@ -100,29 +126,48 @@ namespace Framework::Scripting {
             std::atomic<bool> valid{true};
         };
 
-        // V8 callbacks
+        // Selects which handler table an operation targets. The client table backs onClient()
+        // and EmitClient(); it is deliberately disjoint from the global table (on()/emit()) so
+        // client-originated event names cannot reach native handlers.
+        enum class HandlerScope { Global, Client };
+
+        // V8 callbacks. on/once/off are shared by the global and client scopes via the *Impl
+        // helpers; the bound callbacks only pin the scope.
         static void OnCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void OnceCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void OffCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void OnClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void OnceClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void OffClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void EmitCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void EmitToCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void OnLocalCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void EmitLocalCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void ListenerCountCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
 
+        // Scope-aware bodies behind the on/once/off callbacks.
+        static void OnImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope);
+        static void OnceImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope);
+        static void OffImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope);
+
+        // Returns the handler table backing the given scope.
+        std::map<std::string, std::vector<EventHandler>, std::less<>> &HandlerTable(HandlerScope scope);
+
         // Internal registration helper
         void RegisterHandler(v8::Isolate *isolate,
                             ResourceManager *manager,
                             std::string_view eventName,
                             v8::Local<v8::Function> handler,
-                            bool once);
+                            bool once,
+                            HandlerScope scope);
 
         // Internal emit helper - returns Promise
         v8::Local<v8::Promise> EmitInternal(v8::Isolate *isolate,
                                             v8::Local<v8::Context> context,
                                             const std::string &eventName,
                                             const std::vector<v8::Local<v8::Value>> &args,
-                                            const std::string &targetResource = "");
+                                            const std::string &targetResource = "",
+                                            HandlerScope scope = HandlerScope::Global);
 
         // Helper: invoke handlers and collect results as promises
         // handlers: pairs of (callback, logContext) where logContext is used for error logging
@@ -151,6 +196,10 @@ namespace Framework::Scripting {
 
         // Global handlers: eventName -> handlers (FIFO order)
         std::map<std::string, std::vector<EventHandler>, std::less<>> _globalHandlers;
+
+        // Client-originated handlers (onClient), kept disjoint from _globalHandlers so a
+        // client-supplied event name can never dispatch into a native/global listener.
+        std::map<std::string, std::vector<EventHandler>, std::less<>> _clientHandlers;
 
         // Local handlers: resourceName -> eventName -> handlers
         std::map<std::string, std::map<std::string, std::vector<EventHandler>, std::less<>>, std::less<>> _localHandlers;
