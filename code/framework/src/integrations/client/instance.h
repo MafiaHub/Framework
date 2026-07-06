@@ -131,9 +131,13 @@ namespace Framework::Integrations::Client {
         // initiated (user quit). Set before OnConnectionClosed() fires.
         std::string _lastDisconnectionReason;
 
+        // One-shot: serve http://resources/<resource>/<file> from the asset cache (scripted web views).
+        bool _resourceSchemeRegistered {};
+
         void InitNetworkingMessages();
         void InitAssetDownloader();
         void OnAssetsDownloaded(bool success);
+        void RegisterResourceSchemeHandler();
         // Targeted delta re-sync for a hot-reload (does not stop all resources).
         void SyncResourceUpdatesFromServer();
         void InitCacheAssetFolders();

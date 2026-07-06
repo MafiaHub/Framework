@@ -9,6 +9,7 @@
 #include "instance.h"
 
 #include <filesystem>
+#include <set>
 #include <fstream>
 #include <sstream>
 
@@ -440,15 +441,16 @@ namespace Framework::Integrations::Server {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->trace("Added client asset: {}", clientEntryName.string());
                 }
 
-                // If the client entry is in a subdirectory, add all JS files from that directory
+                // If the client entry is in a subdirectory, add all script and web-view asset files
+                // from that directory (pages served to views via http://resources/<resource>/<file>)
+                static const std::set<std::string> kClientAssetExtensions = {".js", ".mjs", ".ts", ".json", ".html", ".htm", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".ttf", ".otf", ".woff", ".woff2"};
                 std::filesystem::path clientDir = clientEntryPath.parent_path();
                 if (clientDir != resourcePath && std::filesystem::exists(clientDir)) {
                     for (const auto &entry : std::filesystem::recursive_directory_iterator(clientDir)) {
                         if (!entry.is_regular_file()) continue;
 
-                        // Add JavaScript and TypeScript files
                         const auto ext = entry.path().extension().string();
-                        if (ext == ".js" || ext == ".mjs" || ext == ".ts" || ext == ".json") {
+                        if (kClientAssetExtensions.contains(ext)) {
                             std::filesystem::path relativePath = std::filesystem::relative(entry.path(), std::filesystem::path(assetsPath));
                             streamer->AddFile(entry.path().string().c_str(), relativePath.string().c_str());
                             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->trace("Added client asset: {}", relativePath.string());
