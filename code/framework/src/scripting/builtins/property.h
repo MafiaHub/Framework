@@ -57,8 +57,12 @@ namespace Framework::Scripting::Builtins {
                 // exact as JS numbers.
                 info.GetReturnValue().Set(static_cast<double>(value));
             }
-            else {
+            else if constexpr (std::is_arithmetic_v<V>) {
                 info.GetReturnValue().Set(value);
+            }
+            else {
+                // Containers and other composites go through the v8pp converter (vector -> JS array).
+                info.GetReturnValue().Set(v8pp::to_v8(info.GetIsolate(), std::forward<T>(value)));
             }
         }
 
