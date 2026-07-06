@@ -109,17 +109,6 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
-        uint32_t GetVirtualWorld() const {
-            auto *label = ResolveLabel();
-            return label ? label->GetVirtualWorld() : 0;
-        }
-
-        void SetVirtualWorld(uint32_t world) {
-            if (auto *label = ResolveLabel()) {
-                label->SetVirtualWorld(world);
-            }
-        }
-
         std::string ToString() const override {
             std::ostringstream ss;
             ss << "TextLabel{ id: " << _id << ", text: \"" << GetText() << "\" }";
@@ -156,8 +145,7 @@ namespace Framework::Scripting::Builtins {
                 .function("setFontSize", &TextLabel::SetFontSize)
                 .function("setDrawDistance", &TextLabel::SetDrawDistance)
                 .function("setFadeDistance", &TextLabel::SetFadeDistance)
-                .function("setStyle", &TextLabel::SetStyle)
-                .function("setVirtualWorld", &TextLabel::SetVirtualWorld);
+                .function("setStyle", &TextLabel::SetStyle);
 
             auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
             RegisterReadonlyProperty<TextLabel, &TextLabel::GetText>(isolate, protoTemplate, "text");
@@ -166,7 +154,6 @@ namespace Framework::Scripting::Builtins {
             RegisterReadonlyProperty<TextLabel, &TextLabel::GetDrawDistance>(isolate, protoTemplate, "drawDistance");
             RegisterReadonlyProperty<TextLabel, &TextLabel::GetFadeDistance>(isolate, protoTemplate, "fadeDistance");
             RegisterReadonlyProperty<TextLabel, &TextLabel::GetStyle>(isolate, protoTemplate, "style");
-            RegisterReadonlyProperty<TextLabel, &TextLabel::GetVirtualWorld>(isolate, protoTemplate, "virtualWorld");
 
             return *cls;
         }

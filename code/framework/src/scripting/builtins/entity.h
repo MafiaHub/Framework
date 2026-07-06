@@ -93,6 +93,19 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
+        uint32_t GetVirtualWorld() const {
+            if (auto *e = Resolve()) {
+                return e->GetVirtualWorld();
+            }
+            return 0;
+        }
+
+        void SetVirtualWorld(uint32_t world) {
+            if (auto *e = Resolve()) {
+                e->SetVirtualWorld(world);
+            }
+        }
+
         virtual std::string ToString() const {
             std::ostringstream ss;
             ss << "Entity{ id: " << _id << " }";
@@ -109,11 +122,13 @@ namespace Framework::Scripting::Builtins {
             cls = std::make_unique<v8pp::class_<Entity>>(isolate);
             cls->auto_wrap_objects(true);
             cls->ctor<uint64_t>()
-                .function("toString", &Entity::ToString);
+                .function("toString", &Entity::ToString)
+                .function("setVirtualWorld", &Entity::SetVirtualWorld);
 
             auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
 
             RegisterReadonlyProperty<Entity, &Entity::GetId>(isolate, protoTemplate, "id");
+            RegisterReadonlyProperty<Entity, &Entity::GetVirtualWorld>(isolate, protoTemplate, "virtualWorld");
             RegisterObjectProperty<Entity, &Entity::GetPosition, &Entity::SetPosition>(isolate, protoTemplate, "position");
 
             // Property: rotation (accepts both Vector3 euler degrees and Quaternion).
