@@ -84,6 +84,7 @@ set(FRAMEWORK_CLIENT_SRC
     # JavaScript scripting (V8 engine for client)
     src/integrations/client/scripting/module.cpp
     src/integrations/client/scripting/builtins/web.cpp
+    src/integrations/client/scripting/builtins/keybinds.cpp
 )
 
 # GUI (CEF-based)

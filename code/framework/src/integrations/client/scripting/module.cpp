@@ -18,6 +18,7 @@
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/environment.h>
 
+#include "builtins/keybinds.h"
 #include "builtins/web.h"
 
 #include <algorithm>
@@ -92,9 +93,10 @@ namespace Framework::Integrations::Client::Scripting {
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
             _engine.get(), config);
 
-        // Web views created by a resource die with it
+        // Web views and key binds created by a resource die with it (single callback slot).
         _resourceManager->SetOnResourceStopped([](const std::string &resourceName) {
             Builtins::Web::CleanupResource(resourceName);
+            Builtins::Keybinds::CleanupResource(resourceName);
         });
 
         // Register Framework SDK bindings for the new ResourceManager
@@ -151,6 +153,9 @@ namespace Framework::Integrations::Client::Scripting {
         // Register web views API (client only)
         Builtins::Web::Register(isolate, context, frameworkObj, _resourceManager.get());
 
+        // Register keybinding API (client only)
+        Builtins::Keybinds::Register(isolate, context, frameworkObj, _resourceManager.get());
+
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
     }
 
@@ -162,6 +167,7 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Releases V8 globals; must precede engine shutdown (isolate disposal)
         Builtins::Web::Shutdown();
+        Builtins::Keybinds::Shutdown();
 
         if (_engine) {
             _engine->Shutdown();
@@ -182,6 +188,7 @@ namespace Framework::Integrations::Client::Scripting {
         }
 
         Builtins::Web::Shutdown();
+        Builtins::Keybinds::Shutdown();
 
         if (_engine && _engine->IsInitialized()) {
             _engine->ClearModuleCache();
@@ -212,6 +219,9 @@ namespace Framework::Integrations::Client::Scripting {
 
                 Framework::Scripting::Messages::ProcessPendingResponses(isolate, context);
             }
+
+            // Poll keys and dispatch key binds (self-scopes the isolate).
+            Builtins::Keybinds::Update();
         }
     }
 

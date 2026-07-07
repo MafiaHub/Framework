@@ -7,3 +7,4 @@
 /// <reference path="framework/messages.d.ts" />
 /// <reference path="framework/imports.d.ts" />
 /// <reference path="framework/exports.d.ts" />
+/// <reference path="framework/key.d.ts" />
