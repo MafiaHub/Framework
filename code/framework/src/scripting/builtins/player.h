@@ -9,9 +9,11 @@
 #pragma once
 
 #include "entity.h"
+#include "property.h"
 
 #include <core_modules.h>
 #include <networking/network_peer.h>
+#include <networking/rpc/client_identity.h>
 
 #include <v8.h>
 #include <v8pp/class.hpp>
@@ -45,6 +47,22 @@ namespace Framework::Scripting::Builtins {
                 reason);
         }
 
+        // Client-announced identity (RPC::ClientIdentity). Server-only, unverified; empty when absent.
+        std::string GetSteamId() const {
+            const auto *identity = ResolveIdentity();
+            return identity ? identity->steamId : "";
+        }
+
+        std::string GetDiscordId() const {
+            const auto *identity = ResolveIdentity();
+            return identity ? identity->discordId : "";
+        }
+
+        std::string GetHardwareId() const {
+            const auto *identity = ResolveIdentity();
+            return identity ? identity->hardwareId : "";
+        }
+
         std::string ToString() const override {
             std::ostringstream ss;
             ss << "Player{ id: " << _id << " }";
@@ -67,10 +85,24 @@ namespace Framework::Scripting::Builtins {
                 .ctor<uint64_t>()
                 .function("toString", &Player::ToString)
                 .function("kick", &Player::Kick);
+
+            auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
+            RegisterReadonlyProperty<Player, &Player::GetSteamId>(isolate, protoTemplate, "steamId");
+            RegisterReadonlyProperty<Player, &Player::GetDiscordId>(isolate, protoTemplate, "discordId");
+            RegisterReadonlyProperty<Player, &Player::GetHardwareId>(isolate, protoTemplate, "hardwareId");
             return *cls;
         }
 
       protected:
+        const Networking::RPC::ClientIdentity *ResolveIdentity() const {
+            const auto *entity = Resolve();
+            if (!entity) {
+                return nullptr;
+            }
+            auto *peer = CoreModules::GetNetworkPeer();
+            return peer ? peer->GetPeerIdentity(MafiaNet::ToGuid(entity->ownerGUID)) : nullptr;
+        }
+
         inline static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Player>>> _classes;
     };
 } // namespace Framework::Scripting::Builtins
