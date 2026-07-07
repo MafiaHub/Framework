@@ -37,6 +37,13 @@
 #include <utility>
 #include <vector>
 
+namespace v8 {
+    class Isolate;
+    class Value;
+    template <class T>
+    class Local;
+} // namespace v8
+
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
 
@@ -178,10 +185,12 @@ namespace Framework::Integrations::Server {
             (void)senderNetworkId, (void)text, (void)command, (void)args;
         }
 
-        // A client emitted a scripted event up (Events.emitServer). Default dispatches into the
-        // client-event table (Events.onClient) as (player, payload) with the base Player builtin;
-        // override to substitute your own player wrapper. eventName/payloadJson are untrusted.
+        // A client emitted a scripted event up (Events.emitServer); dispatch it to Events.onClient as
+        // (player, payload). Override WrapScriptPlayer to change the player object.
         virtual void OnClientEvent(uint64_t senderNetworkId, const std::string &eventName, const std::string &payloadJson);
+
+        // The player object passed to onClient handlers. Default is the base Player builtin.
+        virtual v8::Local<v8::Value> WrapScriptPlayer(v8::Isolate *isolate, uint64_t networkId);
 
         void Update() override;
 

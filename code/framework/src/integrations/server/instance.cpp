@@ -454,9 +454,7 @@ namespace Framework::Integrations::Server {
         v8::Context::Scope contextScope(context);
 
         std::vector<v8::Local<v8::Value>> args;
-        // Hand handlers a base Player object; mods override OnClientEvent to substitute their own.
-        Framework::Scripting::Builtins::Player::GetClass(isolate);
-        args.push_back(v8pp::class_<Framework::Scripting::Builtins::Player>::create_object(isolate, senderNetworkId));
+        args.push_back(WrapScriptPlayer(isolate, senderNetworkId));
 
         // The payload is untrusted. Parse it under a TryCatch: v8 rejects (and schedules an exception
         // for) inputs like too-deeply-nested JSON, so on any failure drop the whole event — continuing
@@ -474,6 +472,11 @@ namespace Framework::Integrations::Server {
         }
 
         resourceManager->GetEvents().EmitClient(isolate, context, eventName, args);
+    }
+
+    v8::Local<v8::Value> Instance::WrapScriptPlayer(v8::Isolate *isolate, uint64_t networkId) {
+        Framework::Scripting::Builtins::Player::GetClass(isolate);
+        return v8pp::class_<Framework::Scripting::Builtins::Player>::create_object(isolate, networkId);
     }
 
     void Instance::InitAssetStreamer() {
