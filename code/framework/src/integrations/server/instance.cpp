@@ -333,20 +333,32 @@ namespace Framework::Integrations::Server {
                 return;
             }
 
-            auto nickname = payload.name;
-            if (nickname.size() > 64) {
-                nickname = nickname.substr(0, 64);
+            // Sanitize before retention: nickname length-capped, ids digit strings or dropped.
+            auto identity = payload;
+            if (identity.name.size() > 64) {
+                identity.name.resize(64);
             }
+            const auto digits = [](std::string &value, size_t max) {
+                if (value.size() > max || value.find_first_not_of("0123456789") != std::string::npos) {
+                    value.clear();
+                }
+            };
+            digits(identity.steamId, 32);
+            digits(identity.discordId, 32);
+            digits(identity.hardwareId, 128);
+            net->SetPeerIdentity(guid, identity);
 
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {}", nickname, guid.g, payload.hardwareId);
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {}", identity.name, guid.g, identity.hardwareId);
 
             // The game builds the avatar and registers it as this connection's viewer; hand it the
             // metadata so it spawns with the real nickname/slot.
             PlayerConnectionData data;
             data.guid        = peerGuid;
             data.playerIndex = guid.systemIndex;
-            data.nickname    = nickname;
-            data.hardwareID  = payload.hardwareId;
+            data.nickname    = identity.name;
+            data.hardwareID  = identity.hardwareId;
+            data.steamId     = identity.steamId;
+            data.discordId   = identity.discordId;
             OnPlayerConnect(data);
 
             // Gate opens: this connection now starts receiving the replicated world.

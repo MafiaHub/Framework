@@ -104,13 +104,15 @@ namespace Framework::Integrations::Server {
     };
 
     // Connection metadata handed to the player-connect callback so the game can create and fully
-    // populate the player's avatar (nickname, slot index, hardware id) instead of leaving spawn-time
-    // fields at their defaults.
+    // populate the player's avatar (nickname, slot index, identity ids) instead of leaving spawn-time
+    // fields at their defaults. Ids are client-reported and unverified; empty when absent.
     struct PlayerConnectionData {
         MafiaNet::PeerGuid guid {};
         uint16_t playerIndex = MafiaNet::UNASSIGNED_PLAYER_INDEX; // the connection's dense slot
         std::string nickname;
         std::string hardwareID;
+        std::string steamId;
+        std::string discordId;
     };
 
     class Instance : public Framework::Lifecycle {

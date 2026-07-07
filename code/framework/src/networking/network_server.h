@@ -13,6 +13,7 @@
 #include "errors.h"
 #include "connection.h"
 #include "network_peer.h"
+#include "rpc/client_identity.h"
 #include "rpc/rpc.h"
 
 #include <utils/error.h>
@@ -37,6 +38,9 @@ namespace Framework::Networking {
 
         // Guids whose build challenge passed — the gate keeping unverified peers out of replication.
         std::unordered_set<uint64_t> _authenticatedClients;
+
+        // Identities announced via ClientIdentity, kept for the connection's lifetime.
+        std::unordered_map<uint64_t, RPC::ClientIdentity> _peerIdentities;
 
         void ClearClientState(MafiaNet::RakNetGUID guid);
 
@@ -65,6 +69,15 @@ namespace Framework::Networking {
 
         // Send a Kick RPC then close the connection.
         void KickPlayer(MafiaNet::RakNetGUID guid, DisconnectionReason reason, const std::string &customReason = "") override;
+
+        void SetPeerIdentity(MafiaNet::RakNetGUID guid, const RPC::ClientIdentity &identity) {
+            _peerIdentities[guid.g] = identity;
+        }
+
+        const RPC::ClientIdentity *GetPeerIdentity(MafiaNet::RakNetGUID guid) const override {
+            const auto it = _peerIdentities.find(guid.g);
+            return it != _peerIdentities.end() ? &it->second : nullptr;
+        }
 
         // Per-connection ReadyEvent id, derived from the slot so both ends agree without coordination.
         static int ReadyEventId(MafiaNet::RakNetGUID guid) {

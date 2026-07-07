@@ -156,6 +156,7 @@ namespace Framework::Networking {
 
     void NetworkServer::ClearClientState(MafiaNet::RakNetGUID guid) {
         _authenticatedClients.erase(guid.g);
+        _peerIdentities.erase(guid.g);
         _readyEvent.DeleteEvent(ReadyEventId(guid)); // recycle the slot for reconnects
     }
 } // namespace Framework::Networking

@@ -33,6 +33,10 @@ namespace Framework::Networking::Replication {
     class ReplicationManager;
 } // namespace Framework::Networking::Replication
 
+namespace Framework::Networking::RPC {
+    struct ClientIdentity;
+} // namespace Framework::Networking::RPC
+
 namespace Framework::Networking {
     class NetworkPeer : public Lifecycle {
       protected:
@@ -148,6 +152,11 @@ namespace Framework::Networking {
 
         // Server-only; base no-op lets shared code kick through a NetworkPeer* without a cast.
         virtual void KickPlayer(MafiaNet::RakNetGUID, DisconnectionReason, const std::string & = "") {}
+
+        // Server-only; the identity the peer announced via ClientIdentity (unverified), else nullptr.
+        virtual const RPC::ClientIdentity *GetPeerIdentity(MafiaNet::RakNetGUID) const {
+            return nullptr;
+        }
 
         void SetUnknownPacketHandler(PacketCallback callback) {
             _onUnknownPacketCallback = std::move(callback);
