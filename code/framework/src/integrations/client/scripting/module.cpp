@@ -137,7 +137,7 @@ namespace Framework::Integrations::Client::Scripting {
         Framework::Scripting::Builtins::RegisterAll(isolate, coreObj);
 
         // Register communication APIs
-        _resourceManager->GetEvents().Register(isolate, context, coreObj, _resourceManager.get());
+        _resourceManager->GetEvents().Register(isolate, context, coreObj, _resourceManager.get(), /*isClient*/ true);
         Framework::Scripting::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());

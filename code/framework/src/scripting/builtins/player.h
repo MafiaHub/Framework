@@ -12,6 +12,7 @@
 #include "property.h"
 
 #include <core_modules.h>
+#include <integrations/shared/rpc/emit_lua_event.h>
 #include <networking/network_peer.h>
 #include <networking/rpc/client_identity.h>
 
@@ -45,6 +46,25 @@ namespace Framework::Scripting::Builtins {
             peer->KickPlayer(MafiaNet::ToGuid(entity->ownerGUID),
                 reason.empty() ? Networking::DisconnectionReason::KICKED : Networking::DisconnectionReason::KICKED_CUSTOM,
                 reason);
+        }
+
+        // Send a named event to this player's client, received there as Core.Events.on(name, data).
+        // Server-only; payloadJson is JSON.parsed on the client (pass JSON text, empty = no data).
+        void Emit(const std::string &eventName, const std::string &payloadJson) {
+            if (eventName.empty()) {
+                return;
+            }
+            auto *entity = Resolve();
+            if (!entity) {
+                return;
+            }
+            auto *peer = CoreModules::GetNetworkPeer();
+            if (!peer) {
+                return;
+            }
+            Framework::Integrations::Shared::RPC::EmitLuaEvent ev;
+            ev.FromParameters(eventName, payloadJson);
+            peer->SendRPC(ev, MafiaNet::ToGuid(entity->ownerGUID));
         }
 
         // Client-announced identity (RPC::ClientIdentity). Server-only, unverified; empty when absent.
@@ -84,7 +104,8 @@ namespace Framework::Scripting::Builtins {
             cls->inherit<Entity>()
                 .ctor<uint64_t>()
                 .function("toString", &Player::ToString)
-                .function("kick", &Player::Kick);
+                .function("kick", &Player::Kick)
+                .function("emit", &Player::Emit);
 
             auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
             RegisterReadonlyProperty<Player, &Player::GetSteamId>(isolate, protoTemplate, "steamId");

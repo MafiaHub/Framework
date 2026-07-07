@@ -65,12 +65,14 @@ namespace Framework::Scripting {
         Events &operator=(const Events &) = delete;
 
         /**
-         * Register the Events object on the target object.
+         * Register the Events object on the target. isClient exposes emitServer (client -> onClient);
+         * otherwise exposes emitAllClients (server -> every client's on()).
          */
         void Register(v8::Isolate *isolate,
                      v8::Local<v8::Context> context,
                      v8::Local<v8::Object> target,
-                     ResourceManager *resourceManager);
+                     ResourceManager *resourceManager,
+                     bool isClient = false);
 
         /**
          * Emit an event from native code to all global handlers.
@@ -139,6 +141,9 @@ namespace Framework::Scripting {
         static void OnClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void OnceClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void OffClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        // Script-level client<->server event bridge: emitServer (client), emitAllClients (server).
+        static void EmitServerCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void EmitAllClientsCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void EmitCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void EmitToCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void OnLocalCallback(const v8::FunctionCallbackInfo<v8::Value> &args);

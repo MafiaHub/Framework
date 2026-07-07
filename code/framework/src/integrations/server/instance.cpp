@@ -26,6 +26,7 @@
 #include "networking/connection.h"
 
 #include "scripting/builtins/events.h"
+#include "scripting/builtins/player.h"
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
 
@@ -453,7 +454,9 @@ namespace Framework::Integrations::Server {
         v8::Context::Scope contextScope(context);
 
         std::vector<v8::Local<v8::Value>> args;
-        args.push_back(v8pp::to_v8(isolate, senderNetworkId));
+        // Hand handlers a base Player object; mods override OnClientEvent to substitute their own.
+        Framework::Scripting::Builtins::Player::GetClass(isolate);
+        args.push_back(v8pp::class_<Framework::Scripting::Builtins::Player>::create_object(isolate, senderNetworkId));
 
         // The payload is untrusted. Parse it under a TryCatch: v8 rejects (and schedules an exception
         // for) inputs like too-deeply-nested JSON, so on any failure drop the whole event — continuing

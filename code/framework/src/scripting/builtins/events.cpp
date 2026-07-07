@@ -10,7 +10,10 @@
 #include "../engine_helpers.h"
 #include "../resource/resource_manager.h"
 
+#include <core_modules.h>
+#include <integrations/shared/rpc/emit_lua_event.h>
 #include <logging/logger.h>
+#include <networking/network_peer.h>
 
 namespace Framework::Scripting {
 
@@ -45,7 +48,8 @@ namespace Framework::Scripting {
     void Events::Register(v8::Isolate *isolate,
                           v8::Local<v8::Context> context,
                           v8::Local<v8::Object> target,
-                          ResourceManager *resourceManager) {
+                          ResourceManager *resourceManager,
+                          bool isClient) {
         // Create callback context that will be passed to all V8 callbacks
         _callbackContext = std::make_unique<CallbackContext>();
         _callbackContext->events = this;
@@ -97,6 +101,16 @@ namespace Framework::Scripting {
         v8::Local<v8::FunctionTemplate> offClientTmpl = v8::FunctionTemplate::New(isolate, OffClientCallback, contextData);
         eventsObj->Set(context, v8pp::to_v8(isolate, "offClient"), offClientTmpl->GetFunction(context).ToLocalChecked()).Check();
 
+        // Bridge, split by side: emitServer up (client), emitAllClients down (server).
+        if (isClient) {
+            v8::Local<v8::FunctionTemplate> emitServerTmpl = v8::FunctionTemplate::New(isolate, EmitServerCallback, contextData);
+            eventsObj->Set(context, v8pp::to_v8(isolate, "emitServer"), emitServerTmpl->GetFunction(context).ToLocalChecked()).Check();
+        }
+        else {
+            v8::Local<v8::FunctionTemplate> emitAllTmpl = v8::FunctionTemplate::New(isolate, EmitAllClientsCallback, contextData);
+            eventsObj->Set(context, v8pp::to_v8(isolate, "emitAllClients"), emitAllTmpl->GetFunction(context).ToLocalChecked()).Check();
+        }
+
         // Register as "Events" on target object
         target->Set(context, v8pp::to_v8(isolate, "Events"), eventsObj).Check();
     }
@@ -134,6 +148,45 @@ namespace Framework::Scripting {
         if (std::string_view(base) == "on") return "onClient";
         if (std::string_view(base) == "once") return "onceClient";
         return "offClient";
+    }
+
+    // Shared body for emitServer/emitAllClients: BroadcastRPC a named event + payload over the peer's
+    // connections (a client peer reaches only the server, a server peer all clients). A string payload
+    // is sent verbatim; any other value is JSON-serialized here. `api` names the caller in errors.
+    static void BroadcastLuaEvent(const v8::FunctionCallbackInfo<v8::Value> &args, const char *api) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+
+        if (args.Length() < 1 || !args[0]->IsString()) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, std::string("Events.") + api + " requires an eventName string")));
+            return;
+        }
+        const std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
+        if (eventName.empty()) {
+            return;
+        }
+
+        std::string payload;
+        if (args.Length() >= 2 && !args[1]->IsUndefined() && !args[1]->IsNull()) {
+            if (args[1]->IsString()) {
+                payload = v8pp::from_v8<std::string>(isolate, args[1]);
+            }
+            else {
+                v8::Local<v8::String> json;
+                if (v8::JSON::Stringify(isolate->GetCurrentContext(), args[1]).ToLocal(&json)) {
+                    payload = v8pp::from_v8<std::string>(isolate, json);
+                }
+            }
+        }
+
+        auto *peer = CoreModules::GetNetworkPeer();
+        if (!peer) {
+            return;
+        }
+        Framework::Integrations::Shared::RPC::EmitLuaEvent ev;
+        ev.FromParameters(eventName, payload);
+        peer->BroadcastRPC(ev);
     }
 
     void Events::RegisterHandler(v8::Isolate *isolate,
@@ -274,6 +327,16 @@ namespace Framework::Scripting {
 
     void Events::OnceClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
         OnceImpl(args, HandlerScope::Client);
+    }
+
+    // Client -> server, dispatched there to onClient(name, (player, data)).
+    void Events::EmitServerCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        BroadcastLuaEvent(args, "emitServer");
+    }
+
+    // Server -> every client, arriving as Core.Events.on(name, data).
+    void Events::EmitAllClientsCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        BroadcastLuaEvent(args, "emitAllClients");
     }
 
     void Events::OnceImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope) {
