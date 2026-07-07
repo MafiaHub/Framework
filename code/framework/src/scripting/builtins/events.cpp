@@ -86,6 +86,17 @@ namespace Framework::Scripting {
         v8::Local<v8::FunctionTemplate> countTmpl = v8::FunctionTemplate::New(isolate, ListenerCountCallback, contextData);
         eventsObj->Set(context, v8pp::to_v8(isolate, "listenerCount"), countTmpl->GetFunction(context).ToLocalChecked()).Check();
 
+        // onClient/onceClient/offClient — client-originated events (dispatched via EmitClient).
+        // Backed by a table separate from on()/emit(), so a client can never target a native handler.
+        v8::Local<v8::FunctionTemplate> onClientTmpl = v8::FunctionTemplate::New(isolate, OnClientCallback, contextData);
+        eventsObj->Set(context, v8pp::to_v8(isolate, "onClient"), onClientTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+        v8::Local<v8::FunctionTemplate> onceClientTmpl = v8::FunctionTemplate::New(isolate, OnceClientCallback, contextData);
+        eventsObj->Set(context, v8pp::to_v8(isolate, "onceClient"), onceClientTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+        v8::Local<v8::FunctionTemplate> offClientTmpl = v8::FunctionTemplate::New(isolate, OffClientCallback, contextData);
+        eventsObj->Set(context, v8pp::to_v8(isolate, "offClient"), offClientTmpl->GetFunction(context).ToLocalChecked()).Check();
+
         // Register as "Events" on target object
         target->Set(context, v8pp::to_v8(isolate, "Events"), eventsObj).Check();
     }
@@ -113,14 +124,27 @@ namespace Framework::Scripting {
         return manager->GetResourceContextFromStack(isolate);
     }
 
+    std::map<std::string, std::vector<EventHandler>, std::less<>> &Events::HandlerTable(HandlerScope scope) {
+        return scope == HandlerScope::Client ? _clientHandlers : _globalHandlers;
+    }
+
+    // Human-readable API name for error messages, given scope + variant.
+    static const char *EventApiName(bool client, const char *base) {
+        if (!client) return base;
+        if (std::string_view(base) == "on") return "onClient";
+        if (std::string_view(base) == "once") return "onceClient";
+        return "offClient";
+    }
+
     void Events::RegisterHandler(v8::Isolate *isolate,
                                   ResourceManager *manager,
                                   std::string_view eventName,
                                   v8::Local<v8::Function> handler,
-                                  bool once) {
+                                  bool once,
+                                  HandlerScope scope) {
         std::string resourceName = GetResourceContextWithFallback(isolate, manager, handler);
         if (resourceName.empty()) {
-            std::string methodName = once ? "Events.once" : "Events.on";
+            std::string methodName = std::string("Events.") + EventApiName(scope == HandlerScope::Client, once ? "once" : "on");
             isolate->ThrowException(v8::Exception::Error(
                 v8pp::to_v8(isolate, methodName + ": must be called from within a resource")));
             return;
@@ -132,36 +156,45 @@ namespace Framework::Scripting {
         entry.once = once;
 
         std::scoped_lock lock(_handlersMutex);
-        _globalHandlers[std::string(eventName)].push_back(std::move(entry));
+        HandlerTable(scope)[std::string(eventName)].push_back(std::move(entry));
     }
 
     void Events::OnCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        OnImpl(args, HandlerScope::Global);
+    }
+
+    void Events::OnClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        OnImpl(args, HandlerScope::Client);
+    }
+
+    void Events::OnImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        const char *api = EventApiName(scope == HandlerScope::Client, "on");
 
         if (args.Length() < 2) {
             isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.on requires 2 arguments: eventName, handler")));
+                v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
             return;
         }
 
         if (!args[0]->IsString()) {
             isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.on: eventName must be a string")));
+                v8pp::to_v8(isolate, std::string("Events.") + api + ": eventName must be a string")));
             return;
         }
 
         if (!args[1]->IsFunction()) {
             isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.on: handler must be a function")));
+                v8pp::to_v8(isolate, std::string("Events.") + api + ": handler must be a function")));
             return;
         }
 
         CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
         if (!ctx || !ctx->events || !ctx->resourceManager) {
             isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.on: context not available")));
+                v8pp::to_v8(isolate, std::string("Events.") + api + ": context not available")));
             return;
         }
 
@@ -174,11 +207,11 @@ namespace Framework::Scripting {
 
         if (resourceName.empty()) {
             isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.on: must be called from within a resource")));
+                v8pp::to_v8(isolate, std::string("Events.") + api + ": must be called from within a resource")));
             return;
         }
 
-        events->RegisterHandler(isolate, manager, eventName, handler, false);
+        events->RegisterHandler(isolate, manager, eventName, handler, false, scope);
 
         // Return unsubscribe function - use CallbackContext for lifetime safety
         v8::Local<v8::Object> data = v8::Object::New(isolate);
@@ -186,6 +219,7 @@ namespace Framework::Scripting {
         data->Set(context, v8pp::to_v8(isolate, "handler"), args[1]).Check();
         data->Set(context, v8pp::to_v8(isolate, "resourceName"), v8pp::to_v8(isolate, resourceName)).Check();
         data->Set(context, v8pp::to_v8(isolate, "context"), v8::External::New(isolate, ctx)).Check();
+        data->Set(context, v8pp::to_v8(isolate, "scope"), v8::Integer::New(isolate, static_cast<int>(scope))).Check();
 
         v8::Local<v8::Function> unsubscribe = v8::Function::New(context,
             [](const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -209,14 +243,17 @@ namespace Framework::Scripting {
                 v8::Local<v8::Value> evtVal = d->Get(localCtx, v8pp::to_v8(iso, "eventName")).ToLocalChecked();
                 v8::Local<v8::Value> hndVal = d->Get(localCtx, v8pp::to_v8(iso, "handler")).ToLocalChecked();
                 v8::Local<v8::Value> resVal = d->Get(localCtx, v8pp::to_v8(iso, "resourceName")).ToLocalChecked();
+                v8::Local<v8::Value> scopeVal = d->Get(localCtx, v8pp::to_v8(iso, "scope")).ToLocalChecked();
 
                 std::string evt = v8pp::from_v8<std::string>(iso, evtVal);
                 v8::Local<v8::Function> hnd = hndVal.As<v8::Function>();
                 std::string resName = v8pp::from_v8<std::string>(iso, resVal);
+                HandlerScope scope = static_cast<HandlerScope>(scopeVal->Int32Value(localCtx).FromMaybe(0));
 
                 std::scoped_lock lock(eventsInst->_handlersMutex);
-                auto it = eventsInst->_globalHandlers.find(evt);
-                if (it != eventsInst->_globalHandlers.end()) {
+                auto &table = eventsInst->HandlerTable(scope);
+                auto it = table.find(evt);
+                if (it != table.end()) {
                     auto &handlers = it->second;
                     handlers.erase(
                         std::remove_if(handlers.begin(), handlers.end(),
@@ -232,41 +269,59 @@ namespace Framework::Scripting {
     }
 
     void Events::OnceCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        OnceImpl(args, HandlerScope::Global);
+    }
+
+    void Events::OnceClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        OnceImpl(args, HandlerScope::Client);
+    }
+
+    void Events::OnceImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
+        const char *api = EventApiName(scope == HandlerScope::Client, "once");
 
         if (args.Length() < 2) {
             isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.once requires 2 arguments: eventName, handler")));
+                v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
             return;
         }
 
         if (!args[0]->IsString() || !args[1]->IsFunction()) {
             isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.once: invalid arguments")));
+                v8pp::to_v8(isolate, std::string("Events.") + api + ": invalid arguments")));
             return;
         }
 
         CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
         if (!ctx || !ctx->events || !ctx->resourceManager) {
             isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.once: context not available")));
+                v8pp::to_v8(isolate, std::string("Events.") + api + ": context not available")));
             return;
         }
 
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
         v8::Local<v8::Function> handler = args[1].As<v8::Function>();
 
-        ctx->events->RegisterHandler(isolate, ctx->resourceManager, eventName, handler, true);
+        ctx->events->RegisterHandler(isolate, ctx->resourceManager, eventName, handler, true, scope);
     }
 
     void Events::OffCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        OffImpl(args, HandlerScope::Global);
+    }
+
+    void Events::OffClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        OffImpl(args, HandlerScope::Client);
+    }
+
+    void Events::OffImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
+        const char *api = EventApiName(scope == HandlerScope::Client, "off");
 
         if (args.Length() < 2) {
             isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.off requires 2 arguments: eventName, handler")));
+                v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
             return;
         }
 
@@ -292,8 +347,9 @@ namespace Framework::Scripting {
         }
 
         std::scoped_lock lock(events->_handlersMutex);
-        auto it = events->_globalHandlers.find(eventName);
-        if (it != events->_globalHandlers.end()) {
+        auto &table = events->HandlerTable(scope);
+        auto it = table.find(eventName);
+        if (it != table.end()) {
             auto &handlers = it->second;
             handlers.erase(
                 std::remove_if(handlers.begin(), handlers.end(),
@@ -506,7 +562,8 @@ namespace Framework::Scripting {
                                                  v8::Local<v8::Context> context,
                                                  const std::string &eventName,
                                                  const std::vector<v8::Local<v8::Value>> &args,
-                                                 const std::string &targetResource) {
+                                                 const std::string &targetResource,
+                                                 HandlerScope scope) {
         v8::EscapableHandleScope handleScope(isolate);
 
         // Create Promise resolver
@@ -519,8 +576,9 @@ namespace Framework::Scripting {
 
         {
             std::scoped_lock lock(_handlersMutex);
-            auto it = _globalHandlers.find(eventName);
-            if (it != _globalHandlers.end()) {
+            auto &table = HandlerTable(scope);
+            auto it = table.find(eventName);
+            if (it != table.end()) {
                 for (size_t idx = 0; idx < it->second.size(); ++idx) {
                     const auto &handler = it->second[idx];
 
@@ -566,7 +624,14 @@ namespace Framework::Scripting {
                                                  v8::Local<v8::Context> context,
                                                  const std::string &eventName,
                                                  const std::vector<v8::Local<v8::Value>> &args) {
-        return EmitInternal(isolate, context, eventName, args, "");
+        return EmitInternal(isolate, context, eventName, args, "", HandlerScope::Global);
+    }
+
+    v8::Local<v8::Promise> Events::EmitClient(v8::Isolate *isolate,
+                                               v8::Local<v8::Context> context,
+                                               const std::string &eventName,
+                                               const std::vector<v8::Local<v8::Value>> &args) {
+        return EmitInternal(isolate, context, eventName, args, "", HandlerScope::Client);
     }
 
     void Events::EmitCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -751,12 +816,14 @@ namespace Framework::Scripting {
     void Events::CleanupResource(std::string_view resourceName) {
         std::scoped_lock lock(_handlersMutex);
 
-        // Remove from global handlers
-        for (auto &[eventName, handlers] : _globalHandlers) {
-            handlers.erase(
-                std::remove_if(handlers.begin(), handlers.end(),
-                    [&](const EventHandler &h) { return h.resourceName == resourceName; }),
-                handlers.end());
+        // Remove from global + client handlers
+        for (auto *table : {&_globalHandlers, &_clientHandlers}) {
+            for (auto &[eventName, handlers] : *table) {
+                handlers.erase(
+                    std::remove_if(handlers.begin(), handlers.end(),
+                        [&](const EventHandler &h) { return h.resourceName == resourceName; }),
+                    handlers.end());
+            }
         }
 
         // Remove local handlers entirely
@@ -769,14 +836,16 @@ namespace Framework::Scripting {
     void Events::ClearAll() {
         std::scoped_lock lock(_handlersMutex);
 
-        // Explicitly Reset() all global handles before clearing to avoid
+        // Explicitly Reset() all global + client handles before clearing to avoid
         // crash when destroying handlers from dead isolates
-        for (auto &[eventName, handlers] : _globalHandlers) {
-            for (auto &handler : handlers) {
-                handler.callback.Reset();
+        for (auto *table : {&_globalHandlers, &_clientHandlers}) {
+            for (auto &[eventName, handlers] : *table) {
+                for (auto &handler : handlers) {
+                    handler.callback.Reset();
+                }
             }
+            table->clear();
         }
-        _globalHandlers.clear();
 
         for (auto &[resourceName, eventMap] : _localHandlers) {
             for (auto &[eventName, handlers] : eventMap) {
@@ -792,6 +861,15 @@ namespace Framework::Scripting {
         std::scoped_lock lock(_handlersMutex);
         auto it = _globalHandlers.find(eventName);
         if (it != _globalHandlers.end()) {
+            return it->second.size();
+        }
+        return 0;
+    }
+
+    size_t Events::GetClientListenerCount(std::string_view eventName) {
+        std::scoped_lock lock(_handlersMutex);
+        auto it = _clientHandlers.find(eventName);
+        if (it != _clientHandlers.end()) {
             return it->second.size();
         }
         return 0;

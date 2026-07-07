@@ -15,6 +15,7 @@
 
 #include "core_modules.h"
 
+#include "integrations/shared/rpc/emit_lua_event.h"
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
 #include "networking/rpc/chat_message.h"
@@ -23,6 +24,13 @@
 #include "networking/rpc/server_resources.h"
 
 #include "networking/connection.h"
+
+#include "scripting/builtins/events.h"
+#include "scripting/node_engine.h"
+#include "scripting/resource/resource_manager.h"
+
+#include <nlohmann/json.hpp>
+#include <v8pp/convert.hpp>
 
 #include "utils/command_processor.h"
 #include "utils/path.h"
@@ -375,9 +383,24 @@ namespace Framework::Integrations::Server {
             HandleIncomingChat(sender->GetNetworkID(), payload.text);
         });
 
-        // Note: Client-to-server events are handled through the JS Events system
-        // The client can emit events via Framework.events.emitToServer() which uses
-        // the networking messages system to send events to the server
+        // Client -> server scripting events (the client's Game.emitServer). Resolve the sender from
+        // its viewer entity, then hand off to OnClientEvent, which routes into the dedicated
+        // client-event table (Events.onClient) — never the global bus a client could otherwise
+        // collide with.
+        net->RegisterRPC<Framework::Integrations::Shared::RPC::EmitLuaEvent>([this](const Framework::Integrations::Shared::RPC::EmitLuaEvent &payload, MafiaNet::Packet *packet) {
+            const std::string name = payload.GetEventName();
+            if (name.empty()) {
+                return;
+            }
+            auto *engine = GetNetworkingEngine();
+            auto *server = engine ? engine->GetNetworkServer() : nullptr;
+            auto *repl   = server ? server->GetReplicationManager() : nullptr;
+            auto *sender = repl ? repl->GetViewer(MafiaNet::ToPeerGuid(packet->guid)) : nullptr;
+            if (!sender) {
+                return;
+            }
+            OnClientEvent(sender->GetNetworkID(), name, payload.GetPayload());
+        });
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
     }
@@ -398,6 +421,44 @@ namespace Framework::Integrations::Server {
         const std::string command = std::move(tokens.front());
         tokens.erase(tokens.begin());
         OnChatCommand(senderNetworkId, text, command, tokens);
+    }
+
+    void Instance::OnClientEvent(uint64_t senderNetworkId, const std::string &eventName, const std::string &payloadJson) {
+        if (!_scriptingModule) {
+            return;
+        }
+        auto *engine          = _scriptingModule->GetEngine();
+        auto *resourceManager = _scriptingModule->GetResourceManager();
+        if (!engine || !resourceManager || !engine->IsInitialized()) {
+            return;
+        }
+
+        v8::Isolate *isolate = engine->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine->GetContext();
+        v8::Context::Scope contextScope(context);
+
+        std::vector<v8::Local<v8::Value>> args;
+        args.push_back(v8pp::to_v8(isolate, senderNetworkId));
+
+        // The payload is untrusted. Parse it under a TryCatch: v8 rejects (and schedules an exception
+        // for) inputs like too-deeply-nested JSON, so on any failure drop the whole event — continuing
+        // into EmitClient with an exception pending on the isolate would abort the process.
+        if (!payloadJson.empty()) {
+            v8::TryCatch tryCatch(isolate);
+            v8::Local<v8::String> jsonStr;
+            v8::Local<v8::Value> parsed;
+            if (!v8::String::NewFromUtf8(isolate, payloadJson.c_str()).ToLocal(&jsonStr) ||
+                !v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropping client event '{}' from {}: malformed JSON payload", eventName, senderNetworkId);
+                return;
+            }
+            args.push_back(parsed);
+        }
+
+        resourceManager->GetEvents().EmitClient(isolate, context, eventName, args);
     }
 
     void Instance::InitAssetStreamer() {
