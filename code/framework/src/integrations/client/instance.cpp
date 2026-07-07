@@ -713,9 +713,16 @@ namespace Framework::Integrations::Client {
 
             const auto serverGuid = net->GetPeer()->GetGUIDFromIndex(0);
 
+            // Launcher-set when the game was located through Steam; Win32 read, the CRT's getenv
+            // copy predates it.
+            char steamId[32] = {};
+#ifdef _WIN32
+            GetEnvironmentVariableA("MafiaHubSteamId", steamId, sizeof(steamId));
+#endif
+
             Framework::Networking::RPC::ClientIdentity identity;
             identity.name       = _currentState.nickname;
-            identity.steamId    = ""; // no Steam integration wired into the client yet
+            identity.steamId    = steamId;
             identity.discordId  = _presence ? _presence->GetUserId() : "";
             identity.hardwareId = Framework::Utils::GetHardwareId();
             net->SendRPC(identity, serverGuid);

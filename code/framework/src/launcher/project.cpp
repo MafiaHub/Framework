@@ -402,6 +402,12 @@ namespace Framework::Launcher {
         const auto appId = std::to_wstring(_config.steamAppId);
         SetEnvironmentVariableW(L"SteamAppId", appId.c_str());
 
+        // Hand the account id to the in-process client (ClientIdentity); the wrapper is gone by then.
+        const auto steamId = _steamWrapper->GetSteamID().ConvertToUint64();
+        if (steamId != 0) {
+            SetEnvironmentVariableW(L"MafiaHubSteamId", std::to_wstring(steamId).c_str());
+        }
+
         // Now we have everything we want, just say goodbye
         _steamWrapper->Shutdown();
         return true;
