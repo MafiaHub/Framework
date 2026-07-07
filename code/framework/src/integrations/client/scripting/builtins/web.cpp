@@ -131,6 +131,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         bind("on", OnCallback);
         bind("off", OffCallback);
         bind("emit", EmitCallback);
+        bind("getScreenSize", GetScreenSizeCallback);
 
         frameworkObj->Set(context, v8pp::to_v8(isolate, "Web"), webObj).Check();
     }
@@ -522,6 +523,24 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         view->EvaluateScript(script);
         args.GetReturnValue().Set(true);
+    }
+
+    void Web::GetScreenSizeCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+        int width = 0, height = 0;
+        if (auto *gui = CoreModules::GetGUIManager()) {
+            const auto viewport = gui->GetViewportConfiguration();
+            width  = viewport.width;
+            height = viewport.height;
+        }
+
+        v8::Local<v8::Object> result = v8::Object::New(isolate);
+        result->Set(context, v8pp::to_v8(isolate, "width"), v8pp::to_v8(isolate, width)).Check();
+        result->Set(context, v8pp::to_v8(isolate, "height"), v8pp::to_v8(isolate, height)).Check();
+        args.GetReturnValue().Set(result);
     }
 
     void Web::DispatchViewEvent(int viewId, const std::string &eventName, const std::string &payload) {

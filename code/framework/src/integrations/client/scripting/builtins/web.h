@@ -31,6 +31,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     //   loadURL(id, url) / resizeView(id, w, h) / setViewPosition(id, x, y)
     //   on(id, event, handler) / off(id, event, handler?)  page -> script via callEvent()
     //   emit(id, event, payload?)                          script -> page as CustomEvent
+    //   getScreenSize() -> {width, height}  client viewport, in pixels
     // Views are resource-owned: destroyed when the creating resource stops, and only
     // views created here are reachable from scripts. Views are origin-locked to their
     // URL (loadURL re-locks): cross-origin main-frame navigation is blocked and
@@ -65,6 +66,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static void OnCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void OffCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void EmitCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void GetScreenSizeCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
 
         static bool DestroyViewInternal(int viewId);
         static void DispatchViewEvent(int viewId, const std::string &eventName, const std::string &payload);
