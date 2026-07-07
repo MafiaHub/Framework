@@ -13,8 +13,7 @@
 #include <cstdint>
 #include <vector>
 
-// Unit coverage for the pure syncer-election policy (ElectOwner). No networking is involved, so the
-// hysteresis, load-balancing, proximity and veto rules are exercised in isolation.
+// Coverage for the pure syncer-election policy (ElectOwner).
 MODULE(delegation, {
     using namespace Framework::Networking::Replication;
 
@@ -34,8 +33,7 @@ MODULE(delegation, {
         return c;
     };
 
-    // Default policy: acquire 80, drop 130. Entity sits at the origin. Distances are on the XZ plane
-    // (groundXY=false) unless a test overrides it.
+    // Defaults: acquire 80, drop 130; entity at the origin, XZ plane unless a test overrides.
     DelegationParams params;
     const glm::vec3 origin(0.0f, 0.0f, 0.0f);
 
@@ -58,10 +56,8 @@ MODULE(delegation, {
     });
 
     IT("keeps the current owner inside dropRange even past acquireRange (hysteresis)", {
-        // Owner at 100: beyond acquire (80) but within drop (130), so it must not be re-elected away
-        // even though a fresh candidate sits closer.
         std::vector<DelegationCandidate> c = {
-            candidate(guid(1), 100.0f, 0.0f, 0, true), // current owner, in the hysteresis band
+            candidate(guid(1), 100.0f, 0.0f, 0, true), // owner, in the hysteresis band (80..130)
             candidate(guid(2), 40.0f, 0.0f, 0, true),  // closer newcomer
         };
         const auto next = ElectOwner(origin, guid(1), c, params, false);
@@ -106,7 +102,6 @@ MODULE(delegation, {
     });
 
     IT("does not keep a current owner that has become ineligible", {
-        // Owner still within drop range but vetoed/left the dimension: must hand off, not stick.
         std::vector<DelegationCandidate> c = {
             candidate(guid(1), 50.0f, 0.0f, 0, false),
             candidate(guid(2), 60.0f, 0.0f, 0, true),
@@ -127,7 +122,6 @@ MODULE(delegation, {
     });
 
     IT("keeps the current owner even when it is over the soft cap", {
-        // The cap gates new grants, never revokes what a client already simulates.
         params.loadSoftCap = 1;
         std::vector<DelegationCandidate> c = {
             candidate(guid(1), 100.0f, 0.0f, 5, true), // owner in hysteresis band, over cap
@@ -139,8 +133,7 @@ MODULE(delegation, {
     });
 
     IT("measures distance on the XY plane when groundXY is set (Z-up)", {
-        // A large Z separation must not count as distance on a Z-up game: the candidate is at XY
-        // distance 0, so it is in range despite z=1000.
+        // XY distance 0 despite z=1000, so in range.
         std::vector<DelegationCandidate> c = {
             {guid(1), glm::vec3(0.0f, 0.0f, 1000.0f), 0, true},
         };

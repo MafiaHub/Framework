@@ -41,9 +41,6 @@ namespace Framework::Networking::Replication {
     }
 
     void NetworkEntity::AdoptIncomingOwner(MafiaNet::PeerGuid incomingOwner) {
-        // The server keeps its own authoritative owner assignment and must not let an owning client
-        // dictate it back (SetOwnerFromServer no-ops on the server); clients adopt what the server
-        // sends and fire the ownership-change hook on a flip.
         SetOwnerFromServer(incomingOwner);
     }
 
@@ -53,8 +50,7 @@ namespace Framework::Networking::Replication {
         }
         const bool was = IsOwner();
         ownerGUID      = newOwner;
-        // During construction the pose/state fields aren't read yet; DeserializeConstruction fires the
-        // gained-ownership callback once at the end instead, so a seeding handler sees the real pose.
+        // Construction defers the callback (see DeserializeConstruction) until the pose is read.
         if (_constructing) {
             return;
         }
@@ -118,8 +114,7 @@ namespace Framework::Networking::Replication {
         SerializeFields(seed);
         _constructing = false;
         OnConstructed();
-        // Announce ownership now that the pose/state are populated (SetOwnerFromServer deferred it):
-        // covers an entity that arrives already owned by us, e.g. reconnect resuming a delegation.
+        // Announce ownership if we arrive already owning it, now that the pose is populated.
         if (!IsServerPeer() && IsOwner()) {
             OnOwnershipChanged(true);
         }

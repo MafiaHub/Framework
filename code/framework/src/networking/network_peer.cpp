@@ -66,8 +66,8 @@ namespace Framework::Networking {
             return;
         }
 
-        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance, then run
-        // syncer election off the fresh positions (both server-only no-ops on a client).
+        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance, then
+        // elect syncers off the fresh positions.
         if (_replicationManager) {
             _replicationManager->RebuildInterest();
             _replicationManager->RunDelegation(MafiaNet::GetTime());

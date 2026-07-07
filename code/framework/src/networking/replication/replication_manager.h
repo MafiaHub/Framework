@@ -119,11 +119,9 @@ namespace Framework::Networking::Replication {
         }
 
         // --- Syncer delegation ---
-        // Server only, driven from NetworkPeer::Update after RebuildInterest (so it sees this tick's
-        // positions). Runs the proximity election over delegatable entities, cadence-gated by
-        // DelegationParams::electionIntervalMs, and calls SetOwner when an entity's syncer should
-        // change. Cheap no-op when no entity opts in (delegatable stays false). `nowMs` is a
-        // monotonic millisecond clock (MafiaNet::GetTime).
+        // Server only. Runs proximity election over delegatable entities and calls SetOwner on a
+        // change, cadence-gated by DelegationParams::electionIntervalMs. Driven from NetworkPeer::Update
+        // after RebuildInterest; nowMs is MafiaNet::GetTime.
         void RunDelegation(uint64_t nowMs);
         void SetDelegationParams(const DelegationParams &params) {
             _delegationParams = params;
@@ -168,10 +166,8 @@ namespace Framework::Networking::Replication {
         bool _clientRPCsRegistered = false;
         InterestGrid _interest;
         DelegationParams _delegationParams;
-        // Last election pass time (MafiaNet::GetTime ms); gates the cadence in RunDelegation.
-        uint64_t _lastDelegationMs = 0;
-        // Ground plane for election distances, mirrored from SetInterestGroundPlaneXY.
-        bool _groundXY = false;
+        uint64_t _lastDelegationMs = 0; // last election pass; gates the cadence
+        bool _groundXY             = false; // election distance plane, mirrored from the interest grid
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
         fu2::function<void(MafiaNet::PeerGuid) const> _onClientDisconnect;
         fu2::function<void(uint64_t) const> _onEntityCreated;
