@@ -8,7 +8,7 @@
 
 #include "instance.h"
 
-#include "integrations/shared/rpc/emit_lua_event.h"
+#include "integrations/shared/rpc/emit_script_event.h"
 
 #include "networking/rpc/rpc.h"
 #include "networking/rpc/chat_message.h"
@@ -50,7 +50,7 @@ namespace Framework::Integrations::Client {
     namespace {
         // Handler for server-emitted scripting events; reaches the scripting engine through the
         // CoreModules singleton.
-        void OnEmitLuaEvent(const Shared::RPC::EmitLuaEvent &rpc, MafiaNet::Packet *packet) {
+        void OnEmitScriptEvent(const Shared::RPC::EmitScriptEvent &rpc, MafiaNet::Packet *packet) {
             (void)packet;
             const auto eventName = rpc.GetEventName();
             if (eventName.empty()) {
@@ -518,7 +518,7 @@ namespace Framework::Integrations::Client {
             }
         });
 
-        net->RegisterRPC<Shared::RPC::EmitLuaEvent>(&OnEmitLuaEvent);
+        net->RegisterRPC<Shared::RPC::EmitScriptEvent>(&OnEmitScriptEvent);
 
         // Chat lines from the server are forwarded to the mod's UI via the received callback.
         net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, MafiaNet::Packet *) {

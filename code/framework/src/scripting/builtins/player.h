@@ -12,7 +12,7 @@
 #include "property.h"
 
 #include <core_modules.h>
-#include <integrations/shared/rpc/emit_lua_event.h>
+#include <integrations/shared/rpc/emit_script_event.h>
 #include <networking/network_peer.h>
 #include <networking/rpc/client_identity.h>
 
@@ -62,7 +62,7 @@ namespace Framework::Scripting::Builtins {
             if (!peer) {
                 return;
             }
-            Framework::Integrations::Shared::RPC::EmitLuaEvent ev;
+            Framework::Integrations::Shared::RPC::EmitScriptEvent ev;
             ev.FromParameters(eventName, payloadJson);
             peer->SendRPC(ev, MafiaNet::ToGuid(entity->ownerGUID));
         }

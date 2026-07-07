@@ -11,7 +11,7 @@
 #include "../resource/resource_manager.h"
 
 #include <core_modules.h>
-#include <integrations/shared/rpc/emit_lua_event.h>
+#include <integrations/shared/rpc/emit_script_event.h>
 #include <logging/logger.h>
 #include <networking/network_peer.h>
 
@@ -184,7 +184,7 @@ namespace Framework::Scripting {
         if (!peer) {
             return;
         }
-        Framework::Integrations::Shared::RPC::EmitLuaEvent ev;
+        Framework::Integrations::Shared::RPC::EmitScriptEvent ev;
         ev.FromParameters(eventName, payload);
         peer->BroadcastRPC(ev);
     }
