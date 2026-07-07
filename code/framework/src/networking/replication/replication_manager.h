@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "delegation_policy.h"
 #include "entity_registry.h"
 #include "interest_grid.h"
 #include "network_entity.h"
@@ -106,6 +107,7 @@ namespace Framework::Networking::Replication {
         // InterestGrid::SetGroundPlaneXY.
         void SetInterestGroundPlaneXY(bool groundXY) {
             _interest.SetGroundPlaneXY(groundXY);
+            _groundXY = groundXY; // election measures distance on the same plane
         }
         // Rebuild the spatial index from current entity positions. Server only; call once per tick
         // before ReplicaManager3 serializes (driven from NetworkPeer::Update).
@@ -114,6 +116,20 @@ namespace Framework::Networking::Replication {
         // Change counter for the interest index (see InterestGrid::Generation).
         uint32_t InterestGeneration() const {
             return _interest.Generation();
+        }
+
+        // --- Syncer delegation ---
+        // Server only, driven from NetworkPeer::Update after RebuildInterest (so it sees this tick's
+        // positions). Runs the proximity election over delegatable entities, cadence-gated by
+        // DelegationParams::electionIntervalMs, and calls SetOwner when an entity's syncer should
+        // change. Cheap no-op when no entity opts in (delegatable stays false). `nowMs` is a
+        // monotonic millisecond clock (MafiaNet::GetTime).
+        void RunDelegation(uint64_t nowMs);
+        void SetDelegationParams(const DelegationParams &params) {
+            _delegationParams = params;
+        }
+        const DelegationParams &GetDelegationParams() const {
+            return _delegationParams;
         }
 
         // Server: invoked from OnClosedConnection just before the dropped peer's avatar is destroyed,
@@ -151,6 +167,11 @@ namespace Framework::Networking::Replication {
         NetworkPeer *_owner = nullptr;
         bool _clientRPCsRegistered = false;
         InterestGrid _interest;
+        DelegationParams _delegationParams;
+        // Last election pass time (MafiaNet::GetTime ms); gates the cadence in RunDelegation.
+        uint64_t _lastDelegationMs = 0;
+        // Ground plane for election distances, mirrored from SetInterestGroundPlaneXY.
+        bool _groundXY = false;
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
         fu2::function<void(MafiaNet::PeerGuid) const> _onClientDisconnect;
         fu2::function<void(uint64_t) const> _onEntityCreated;

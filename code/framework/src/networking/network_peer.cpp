@@ -12,6 +12,7 @@
 #include "replication/replication_manager.h"
 
 #include <logging/logger.h>
+#include <mafianet/GetTime.h>
 
 namespace Framework::Networking {
     NetworkPeer::NetworkPeer() {
@@ -65,9 +66,11 @@ namespace Framework::Networking {
             return;
         }
 
-        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance.
+        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance, then run
+        // syncer election off the fresh positions (both server-only no-ops on a client).
         if (_replicationManager) {
             _replicationManager->RebuildInterest();
+            _replicationManager->RunDelegation(MafiaNet::GetTime());
         }
 
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
