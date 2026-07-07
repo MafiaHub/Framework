@@ -429,6 +429,129 @@ MODULE(js_features, {
     });
 
     // ========================================
+    // CLIENT-EVENT CHANNEL TESTS (onClient)
+    // ========================================
+    // Assert the guarantee structurally via the two listener counts: onClient() handlers land in a
+    // table disjoint from on() and are removed independently. The async emit round-trip stays covered
+    // by integration testing (its Promise-aggregation teardown is flaky under this unit harness).
+
+    auto registerEvents = [](NodeEngine &engine, ResourceManager &manager) {
+        v8::Isolate *isolate = engine.GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine.GetContext();
+        v8::Context::Scope contextScope(context);
+        v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+        context->Global()->Set(context,
+            v8::String::NewFromUtf8Literal(isolate, "Core"),
+            coreObj).Check();
+        manager.GetEvents().Register(isolate, context, coreObj, &manager);
+        manager.SetCurrentResourceContext("testResource");
+    };
+
+    auto cleanupResource = [](NodeEngine &engine, ResourceManager &manager) {
+        v8::Isolate *isolate = engine.GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        manager.GetEvents().CleanupResource("testResource");
+    };
+
+    // The core guarantee: on() and onClient() (incl. onceClient) register into disjoint tables under
+    // the same event name — so a client event, which only ever dispatches into the client table, can
+    // never resolve to an on() handler.
+    IT("onClient/onceClient register into a table disjoint from on", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerEvents(engine, manager);
+
+        RunJS(engine, "Core.Events.onClient('shared', () => {}); 0");
+        // In the client table, invisible to the global on() count.
+        EQUALS(manager.GetEvents().GetClientListenerCount("shared"), (size_t)1);
+        EQUALS(manager.GetEvents().GetListenerCount("shared"), (size_t)0);
+
+        // Same name on the global bus lands in the other table; neither perturbs the other.
+        RunJS(engine, "Core.Events.on('shared', () => {}); 0");
+        EQUALS(manager.GetEvents().GetListenerCount("shared"), (size_t)1);
+        EQUALS(manager.GetEvents().GetClientListenerCount("shared"), (size_t)1);
+
+        RunJS(engine, "Core.Events.onceClient('once1', () => {}); 0");
+        EQUALS(manager.GetEvents().GetClientListenerCount("once1"), (size_t)1);
+        EQUALS(manager.GetEvents().GetListenerCount("once1"), (size_t)0);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // onClient's unsubscribe fn and offClient remove from the client table only, leaving on() intact.
+    IT("onClient unsubscribe and offClient touch only the client table", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerEvents(engine, manager);
+
+        RunJS(engine, R"(
+            Core.Events.on('e', () => {});
+            globalThis.u = Core.Events.onClient('e', () => {});
+            0
+        )");
+        EQUALS(manager.GetEvents().GetClientListenerCount("e"), (size_t)1);
+        EQUALS(manager.GetEvents().GetListenerCount("e"), (size_t)1);
+
+        RunJS(engine, "globalThis.u(); 0");
+        EQUALS(manager.GetEvents().GetClientListenerCount("e"), (size_t)0);
+        EQUALS(manager.GetEvents().GetListenerCount("e"), (size_t)1); // on() handler untouched
+
+        RunJS(engine, R"(
+            globalThis.h = () => {};
+            Core.Events.onClient('e', globalThis.h);
+            0
+        )");
+        EQUALS(manager.GetEvents().GetClientListenerCount("e"), (size_t)1);
+        RunJS(engine, "Core.Events.offClient('e', globalThis.h); 0");
+        EQUALS(manager.GetEvents().GetClientListenerCount("e"), (size_t)0);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // CleanupResource drops client handlers along with global ones (a resource stop leaks neither).
+    IT("CleanupResource clears client handlers", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerEvents(engine, manager);
+
+        RunJS(engine, R"(
+            Core.Events.on('e', () => {});
+            Core.Events.onClient('e', () => {});
+            0
+        )");
+        EQUALS(manager.GetEvents().GetClientListenerCount("e"), (size_t)1);
+        EQUALS(manager.GetEvents().GetListenerCount("e"), (size_t)1);
+
+        cleanupResource(engine, manager);
+        EQUALS(manager.GetEvents().GetClientListenerCount("e"), (size_t)0);
+        EQUALS(manager.GetEvents().GetListenerCount("e"), (size_t)0);
+
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
     // CONSOLE BUILTIN TESTS
     // ========================================
 
