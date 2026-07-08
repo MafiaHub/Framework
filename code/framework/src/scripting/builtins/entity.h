@@ -71,12 +71,11 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
-        Vector3 GetRotation() const {
+        Quaternion GetRotation() const {
             if (auto *e = Resolve()) {
-                const glm::vec3 euler = glm::degrees(glm::eulerAngles(e->rotation));
-                return Vector3(euler.x, euler.y, euler.z);
+                return Quaternion(e->rotation);
             }
-            return Vector3(0, 0, 0);
+            return Quaternion();
         }
 
         void SetRotationFromEuler(const Vector3 &rot) {
@@ -131,14 +130,13 @@ namespace Framework::Scripting::Builtins {
             RegisterReadonlyProperty<Entity, &Entity::GetVirtualWorld>(isolate, protoTemplate, "virtualWorld");
             RegisterObjectProperty<Entity, &Entity::GetPosition, &Entity::SetPosition>(isolate, protoTemplate, "position");
 
-            // Property: rotation (accepts both Vector3 euler degrees and Quaternion).
+            // Property: rotation. Getter returns a Quaternion; setter accepts a Quaternion or a Vector3 (euler degrees).
             {
                 auto rotationGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                     auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
                     if (self) {
-                        auto rot     = self->GetRotation();
-                        auto &vecCls = Vector3::GetClass(info.GetIsolate());
-                        info.GetReturnValue().Set(vecCls.import_external(info.GetIsolate(), new Vector3(rot)));
+                        auto &quatCls = Quaternion::GetClass(info.GetIsolate());
+                        info.GetReturnValue().Set(quatCls.import_external(info.GetIsolate(), new Quaternion(self->GetRotation())));
                     }
                 });
                 auto rotationSetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
