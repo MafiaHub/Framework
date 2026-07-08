@@ -81,22 +81,28 @@ jobs:
             username: MafiaHub Services
             
   build:
-    name: Build MafiaHubServices on ${{ matrix.os }}
+    name: Build MafiaHubServices (${{ matrix.artifact_name }})
     runs-on: ${{ matrix.os }}
     needs: notify_start
     if: github.event_name == 'workflow_dispatch' || needs.check_submodule.outputs.should_build == 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
         include:
           - os: windows-latest
-            cmake_generator: "Visual Studio 17 2022"
+            artifact_name: mafiahub-services-windows-x64
+            msvc_arch: x64
+            build_type: "Release"
+          - os: windows-latest
+            artifact_name: mafiahub-services-windows-x86
+            msvc_arch: x86
             build_type: "Release"
           - os: ubuntu-latest
+            artifact_name: mafiahub-services-ubuntu-latest
             cmake_generator: "Unix Makefiles"
             build_type: "Release"
           - os: macos-latest
+            artifact_name: mafiahub-services-macos-latest
             cmake_generator: "Unix Makefiles"
             build_type: "Release"
     steps:
@@ -121,6 +127,8 @@ jobs:
       - name: Set up Visual Studio shell
         if: runner.os == 'Windows'
         uses: egor-tensin/vs-shell@v2
+        with:
+          arch: ${{ matrix.msvc_arch }}
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -139,7 +147,7 @@ jobs:
       - name: Upload MafiaHub Services
         uses: actions/upload-artifact@v7
         with:
-          name: mafiahub-services-${{ matrix.os }}
+          name: ${{ matrix.artifact_name }}
           path: |
             ${{ github.workspace }}/code/framework/src/services/lib
             ${{ github.workspace }}/code/framework/src/services/bin
@@ -178,7 +186,7 @@ jobs:
             zip -r "../../release-artifacts/$platform_name.zip" .
             cd "../.."
           done
-      
+
       - name: Check for existing release
         id: check_release
         run: |

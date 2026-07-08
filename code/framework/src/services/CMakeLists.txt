@@ -12,9 +12,28 @@ else()
     
     # Create cache directory if it doesn't exist
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/cache")
+
+    # Determine platform-specific zip file
+    if(WIN32)
+        if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+            set(PLATFORM_ZIP "mafiahub-services-windows-x86.zip")
+        elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            set(PLATFORM_ZIP "mafiahub-services-windows-x64.zip")
+        else()
+            message(FATAL_ERROR "Unsupported Windows pointer size for MafiaHub Services: ${CMAKE_SIZEOF_VOID_P}")
+        endif()
+        set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/MafiaHubServices.lib")
+        set(MAFIA_HUB_UPDATER "${CMAKE_CURRENT_SOURCE_DIR}/bin/MafiaHubUpdater.exe")
+    elseif(APPLE)
+        set(PLATFORM_ZIP "mafiahub-services-macos-latest.zip")
+        set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/libMafiaHubServices_macos.a")
+    elseif(UNIX)
+        set(PLATFORM_ZIP "mafiahub-services-ubuntu-latest.zip")
+        set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/libMafiaHubServices.a")
+    endif()
     
     # Define local build.txt path
-    set(LOCAL_BUILD_TXT "${CMAKE_CURRENT_SOURCE_DIR}/cache/build.txt")
+    set(LOCAL_BUILD_TXT "${CMAKE_CURRENT_SOURCE_DIR}/cache/${PLATFORM_ZIP}.build.txt")
     
     # Try to download remote build.txt
     file(DOWNLOAD
@@ -50,19 +69,6 @@ else()
             endif()
         else()
             message(STATUS "No local build.txt found, will download MafiaHub Services")
-        endif()
-        
-        # Determine platform-specific zip file
-        if(WIN32)
-            set(PLATFORM_ZIP "mafiahub-services-windows-latest.zip")
-            set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/MafiaHubServices.lib")
-            set(MAFIA_HUB_UPDATER "${CMAKE_CURRENT_SOURCE_DIR}/bin/MafiaHubUpdater.exe")
-        elseif(APPLE)
-            set(PLATFORM_ZIP "mafiahub-services-macos-latest.zip")
-            set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/libMafiaHubServices_macos.a")
-        elseif(UNIX)
-            set(PLATFORM_ZIP "mafiahub-services-ubuntu-latest.zip")
-            set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/libMafiaHubServices.a")
         endif()
         
         # If update is needed, download and extract the zip file
