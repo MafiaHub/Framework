@@ -28,6 +28,9 @@
 vendors/**/*.cmake
 
 Bin/
+!vendors/openssl/bin/
+!vendors/openssl/bin/x86/
+!vendors/openssl/bin/x86/*.dll
 [Bb]uild/
 [Bb]uild*/
 [Bb]uilds/
