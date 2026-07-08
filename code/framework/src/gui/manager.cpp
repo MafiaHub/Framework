@@ -163,8 +163,9 @@ namespace Framework::GUI {
 
         std::scoped_lock lock(_renderMutex);
 
-        // Update the views
+        // One external begin frame per render frame bounds CEF's cadence to our loop.
         for (auto &view : _views) {
+            view->RequestBeginFrame();
             view->Update();
         }
 

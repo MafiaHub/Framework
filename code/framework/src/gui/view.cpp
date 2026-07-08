@@ -89,10 +89,11 @@ namespace Framework::GUI {
         // Configure windowless rendering
         CefWindowInfo windowInfo;
         windowInfo.SetAsWindowless(nullptr);
-        windowInfo.shared_texture_enabled = gpuAccelerated;
+        windowInfo.shared_texture_enabled       = gpuAccelerated;
+        windowInfo.external_begin_frame_enabled = true;
 
         CefBrowserSettings browserSettings;
-        browserSettings.windowless_frame_rate = 60;
+        browserSettings.windowless_frame_rate = 240;
         browserSettings.background_color      = CefColorSetARGB(0, 0, 0, 0);
 
         // Create the browser synchronously
@@ -107,6 +108,12 @@ namespace Framework::GUI {
 
     void View::Update() {
         // Nothing to update at the base level for CEF; message loop is driven by Manager
+    }
+
+    void View::RequestBeginFrame() {
+        if (_browser) {
+            _browser->GetHost()->SendExternalBeginFrame();
+        }
     }
 
     void View::LockToOrigin(const std::string &url) {

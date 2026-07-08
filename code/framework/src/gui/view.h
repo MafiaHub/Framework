@@ -90,6 +90,8 @@ namespace Framework::GUI {
         virtual void Update();
         virtual void Render() = 0;
 
+        void RequestBeginFrame();
+
         // Submit the view's quad; called inside an ImGui frame on the game thread.
         virtual void SubmitImGuiDraw() {}
 

@@ -46,7 +46,7 @@ namespace Framework::GUI::CEF {
         commandLine->AppendSwitch("disable-pdf-extension");
         commandLine->AppendSwitch("disable-spell-checking");
         commandLine->AppendSwitch("disable-component-update");
-        commandLine->AppendSwitch("enable-begin-frame-scheduling");
+        // No internal begin-frame scheduler: rendering uses external begin frames.
     }
 
     void App::OnContextInitialized() {
