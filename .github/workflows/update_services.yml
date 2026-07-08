@@ -132,12 +132,17 @@ jobs:
       - name: Build MafiaHubServices
         run: |
           cmake --build build --target MafiaHubServices --config ${{ matrix.build_type }}
+      - name: Build MafiaHubUpdater
+        if: runner.os == 'Windows'
+        run: |
+          cmake --build build --target MafiaHubUpdater --config ${{ matrix.build_type }}
       - name: Upload MafiaHub Services
         uses: actions/upload-artifact@v7
         with:
           name: mafiahub-services-${{ matrix.os }}
           path: |
             ${{ github.workspace }}/code/framework/src/services/lib
+            ${{ github.workspace }}/code/framework/src/services/bin
             ${{ github.workspace }}/code/framework/src/services/services
           if-no-files-found: error
 

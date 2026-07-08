@@ -56,6 +56,7 @@ else()
         if(WIN32)
             set(PLATFORM_ZIP "mafiahub-services-windows-latest.zip")
             set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/MafiaHubServices.lib")
+            set(MAFIA_HUB_UPDATER "${CMAKE_CURRENT_SOURCE_DIR}/bin/MafiaHubUpdater.exe")
         elseif(APPLE)
             set(PLATFORM_ZIP "mafiahub-services-macos-latest.zip")
             set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/libMafiaHubServices_macos.a")
@@ -86,6 +87,9 @@ else()
                 endif()
                 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/services")
                     file(REMOVE_RECURSE "${CMAKE_CURRENT_SOURCE_DIR}/services")
+                endif()
+                if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bin")
+                    file(REMOVE_RECURSE "${CMAKE_CURRENT_SOURCE_DIR}/bin")
                 endif()
                 
                 # Extract the zip file
@@ -126,4 +130,10 @@ else()
     set_target_properties(MafiaHubServices PROPERTIES
         IMPORTED_LOCATION "${MAFIA_HUB_LIB}"
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/services")
+
+    if(WIN32 AND EXISTS "${MAFIA_HUB_UPDATER}")
+        add_executable(MafiaHubUpdater IMPORTED GLOBAL)
+        set_target_properties(MafiaHubUpdater PROPERTIES
+            IMPORTED_LOCATION "${MAFIA_HUB_UPDATER}")
+    endif()
 endif()
