@@ -15,6 +15,8 @@
 #include <cppfs/fs.h>
 #include <logging/logger.h>
 
+#include <filesystem>
+
 namespace Framework::External::Sentry {
     Utils::Result<void, Framework::Error> Wrapper::Init(const std::string &key, const std::string &path) {
         // Build the options payload
@@ -45,6 +47,12 @@ namespace Framework::External::Sentry {
 
         sentry_options_set_handler_path(opts, breakpadFile.path().c_str());
         sentry_options_set_database_path(opts, cacheDirectory.path().c_str());
+
+        // Crashpad reads attachments lazily at crash time, so cef.log carries the CHECK/FATAL
+        // line CEF writes before it fast-fails. Registered before init so the handler knows it.
+        const std::string cefLog = std::filesystem::absolute(std::filesystem::path(path) / "logs" / "cef.log").string();
+        sentry_options_add_attachment(opts, cefLog.c_str());
+
         if (sentry_init(opts) != 0) {
             return Framework::Error("Failed to initialize Sentry");
         }
@@ -58,6 +66,15 @@ namespace Framework::External::Sentry {
         }
         sentry_close();
         Lifecycle::Shutdown();
+    }
+
+    Utils::Result<void, Framework::Error> Wrapper::AddAttachment(const std::string &path) const {
+        if (!_initialized) {
+            return Framework::Error {"Sentry is not initialized"};
+        }
+        const std::string absolute = std::filesystem::absolute(std::filesystem::path(path)).string();
+        sentry_attach_file(absolute.c_str());
+        return {};
     }
 
     Utils::Result<void, Framework::Error> Wrapper::SetGameInformation(const GameInformation &infos) const {

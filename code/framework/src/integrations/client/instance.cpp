@@ -165,6 +165,8 @@ namespace Framework::Integrations::Client {
             }
             else {
                 _crashReporter->SetGameInformation({opts.gameName, opts.gameVersion + " / mod " + opts.modVersion});
+                const auto *logger = Logging::GetInstance();
+                _crashReporter->AddAttachment(logger->GetLogFolder() + "/" + logger->GetLogName() + ".log");
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Crash reporting initialized");
             }
         }

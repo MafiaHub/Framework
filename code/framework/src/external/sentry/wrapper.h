@@ -51,6 +51,8 @@ namespace Framework::External::Sentry {
         Utils::Result<void, Framework::Error> CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const;
         Utils::Result<void, Framework::Error> CaptureEventException(const std::string &type, const std::string &message) const;
 
+        Utils::Result<void, Framework::Error> AddAttachment(const std::string &path) const;
+
         Utils::Result<void, Framework::Error> SetSystemInformation(const SystemInformation &) const;
         Utils::Result<void, Framework::Error> SetScreenInformation(const ScreenInformation &) const;
         Utils::Result<void, Framework::Error> SetUserInformation(const UserInformation &) const;
