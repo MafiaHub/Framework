@@ -9,11 +9,11 @@ jobs:
   check_submodule:
     name: Check for services-adapter changes
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
     outputs:
       should_build: ${{ steps.check_changes.outputs.changed }}
     steps:
       - name: Checkout services-adapter repository
+        if: github.event_name == 'push'
         uses: actions/checkout@v5
         with:
           repository: MafiaHub/services-adapter
@@ -24,6 +24,12 @@ jobs:
       - name: Get latest commits and check for changes
         id: check_changes
         run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual build requested. Triggering build."
+            echo "changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           cd services-adapter-repo
           
           # Get the timestamp of the last successful build from build.txt
@@ -66,7 +72,7 @@ jobs:
   notify_start:
     name: Send Start Notification
     needs: check_submodule
-    if: github.event_name == 'workflow_dispatch' || needs.check_submodule.outputs.should_build == 'true'
+    if: needs.check_submodule.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Send Discord Notification
@@ -84,7 +90,6 @@ jobs:
     name: Build MafiaHubServices (${{ matrix.artifact_name }})
     runs-on: ${{ matrix.os }}
     needs: notify_start
-    if: github.event_name == 'workflow_dispatch' || needs.check_submodule.outputs.should_build == 'true'
     strategy:
       fail-fast: false
       matrix:
