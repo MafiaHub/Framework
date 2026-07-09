@@ -136,6 +136,10 @@ else()
     set_target_properties(MafiaHubServices PROPERTIES
         IMPORTED_LOCATION "${MAFIA_HUB_LIB}"
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/services")
+    if(WIN32)
+        set_property(TARGET MafiaHubServices APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES User32 Gdi32 Comctl32)
+    endif()
 
     if(WIN32 AND EXISTS "${MAFIA_HUB_UPDATER}")
         add_executable(MafiaHubUpdater IMPORTED GLOBAL)
