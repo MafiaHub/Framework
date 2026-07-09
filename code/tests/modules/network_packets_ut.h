@@ -81,6 +81,7 @@ MODULE(network_packets, {
         out.steamId    = "steam-1";
         out.discordId  = "discord-2";
         out.hardwareId = "hw-3";
+        out.epicId     = "epic-4";
         out.ticket     = "one-time-ticket";
 
         MafiaNet::BitStream bs;
@@ -90,6 +91,7 @@ MODULE(network_packets, {
         STREQUALS(in.steamId.c_str(), "steam-1");
         STREQUALS(in.discordId.c_str(), "discord-2");
         STREQUALS(in.hardwareId.c_str(), "hw-3");
+        STREQUALS(in.epicId.c_str(), "epic-4");
         STREQUALS(in.ticket.c_str(), "one-time-ticket");
     });
 
@@ -101,6 +103,7 @@ MODULE(network_packets, {
         out.steamId    = "76561198000000000";
         out.discordId  = "123";
         out.hardwareId = "456";
+        out.epicId     = "abc123def456";
         out.ticket     = "tkt-abc+123";
 
         const auto in = RPC::ClientIdentity::Decode(out.Encode());
@@ -109,6 +112,7 @@ MODULE(network_packets, {
         STREQUALS(in->steamId.c_str(), "76561198000000000");
         STREQUALS(in->discordId.c_str(), "123");
         STREQUALS(in->hardwareId.c_str(), "456");
+        STREQUALS(in->epicId.c_str(), "abc123def456");
         STREQUALS(in->ticket.c_str(), "tkt-abc+123");
     });
 

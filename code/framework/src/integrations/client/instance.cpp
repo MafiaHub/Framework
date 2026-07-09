@@ -929,15 +929,18 @@ namespace Framework::Integrations::Client {
         // Who is asking, carried in the connection request itself: the server's admission gate
         // decides on it before either side reports a connection.
         //
-        // The Steam id is launcher-set when the game was located through Steam; Win32 read, the CRT's
-        // getenv copy predates it.
+        // The Steam id is launcher-set when the game was located through Steam, the Epic id when it
+        // authenticated through Epic; Win32 read, the CRT's getenv copy predates them.
         char steamId[32] = {};
+        char epicId[33]  = {}; // EOS account id: 32 hex chars + null
 #ifdef _WIN32
         GetEnvironmentVariableA("MafiaHubSteamId", steamId, sizeof(steamId));
+        GetEnvironmentVariableA("MafiaHubEpicId", epicId, sizeof(epicId));
 #endif
         Framework::Networking::RPC::ClientIdentity identity;
         identity.name       = _currentState.nickname;
         identity.steamId    = steamId;
+        identity.epicId     = epicId;
         identity.discordId  = _presence ? _presence->GetUserId() : "";
         identity.hardwareId = Framework::Utils::GetHardwareId();
         identity.ticket     = _currentState.ticket;

@@ -627,6 +627,7 @@ namespace Framework::Integrations::Server {
             data.nickname    = identity.name;
             data.hardwareID  = identity.hardwareId;
             data.steamId     = identity.steamId;
+            data.epicId      = identity.epicId;
             data.discordId   = identity.discordId;
             OnPlayerConnect(data);
 
@@ -732,6 +733,10 @@ namespace Framework::Integrations::Server {
         digits(identity.steamId, 32);
         digits(identity.discordId, 32);
         digits(identity.hardwareId, 128);
+        // The Epic account id is hex, not decimal, so it needs its own charset check.
+        if (identity.epicId.size() > 32 || identity.epicId.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
+            identity.epicId.clear();
+        }
         if (identity.ticket.size() > Framework::Networking::RPC::ClientIdentity::kMaxTicketLength) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropping a {} byte ticket from {}", identity.ticket.size(), guid.g);
             identity.ticket.clear();
