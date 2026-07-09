@@ -198,6 +198,7 @@ if(WIN32)
         src/external/steam/wrapper.cpp
         src/external/epic/manifest.cpp
         src/external/rockstar/library.cpp
+        src/external/epic/auth.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/pattern_table.cpp
@@ -418,7 +419,8 @@ if(WIN32)
     )
 
     link_shared_deps(FrameworkLoader)
-    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} MafiaHubServices FrameworkLoaderData ntdll sfd)
+    # winhttp + crypt32: Epic account auth (external/epic/auth.cpp) — OAuth over HTTPS + DPAPI.
+    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} MafiaHubServices FrameworkLoaderData ntdll sfd winhttp crypt32)
     target_link_libraries(FrameworkLoaderData udis86 minhook::minhook)
     target_compile_definitions(FrameworkLoaderData PRIVATE _USE_MATH_DEFINES NOMINMAX)
     target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage /EXPORT:CoreSetExceptionOverride)
