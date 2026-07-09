@@ -123,7 +123,9 @@ jobs:
         if: runner.os == 'macOS'
     
       - name: Install tools on Ubuntu
-        run: sudo apt-get install -y ninja-build build-essential libcurl4-openssl-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build build-essential libcurl4-openssl-dev
         if: runner.os == 'Linux'
       - name: Set up CMake
         uses: lukka/get-cmake@latest
