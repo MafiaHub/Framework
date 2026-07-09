@@ -66,8 +66,9 @@ namespace Framework::Networking::Replication {
             });
             owner->RegisterRPC<SetOwnerRPC>([this](const SetOwnerRPC &payload, MafiaNet::Packet *) {
                 if (auto *entity = GetEntityByNetworkID(payload.networkId)) {
-                    entity->ownerGUID  = payload.ownerGUID;
+                    // Epoch before the flip: a gained owner sends from inside OnOwnershipChanged.
                     entity->stateEpoch = payload.stateEpoch;
+                    entity->SetOwnerFromServer(payload.ownerGUID);
                 }
             });
             _clientRPCsRegistered = true;
@@ -209,6 +210,83 @@ namespace Framework::Networking::Replication {
 
     void ReplicationManager::CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out) {
         _interest.CollectVisible(viewer, viewerGUID, out);
+    }
+
+    void ReplicationManager::RunDelegation(uint64_t nowMs) {
+        if (!_isServer) {
+            return;
+        }
+        if (nowMs - _lastDelegationMs < _delegationParams.electionIntervalMs) {
+            return;
+        }
+        _lastDelegationMs = nowMs;
+
+        // Delegated entities each client owns, for load balancing.
+        std::unordered_map<MafiaNet::PeerGuid, int> load;
+        ForEachEntity([&load](NetworkEntity *entity) {
+            if (entity->delegation.delegatable && entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+                ++load[entity->ownerGUID];
+            }
+        });
+
+        // Destroy deferred past the sweep: DestroyEntity mutates the index ForEachEntity walks.
+        std::vector<NetworkEntity *> toDestroy;
+        std::vector<DelegationCandidate> candidates;
+        ForEachEntity([&](NetworkEntity *entity) {
+            if (!entity->delegation.delegatable) {
+                return;
+            }
+
+            // A pinned syncer bypasses election.
+            if (entity->delegation.pinnedOwner != MafiaNet::UNASSIGNED_PEER_GUID) {
+                if (entity->ownerGUID != entity->delegation.pinnedOwner) {
+                    SetOwner(entity, entity->delegation.pinnedOwner);
+                }
+                return;
+            }
+
+            candidates.clear();
+            candidates.reserve(_viewers.size());
+            const auto entityWorld = entity->GetVirtualWorld();
+            for (const auto &[guid, viewer] : _viewers) {
+                if (!viewer) {
+                    continue;
+                }
+                DelegationCandidate candidate;
+                candidate.guid      = guid;
+                candidate.position  = viewer->position;
+                const auto loadIt   = load.find(guid);
+                candidate.ownedLoad = loadIt != load.end() ? loadIt->second : 0;
+                candidate.eligible  = MafiaNet::VirtualWorldsCanSee(viewer->GetVirtualWorld(), entityWorld) && entity->CanDelegateTo(guid);
+                candidates.push_back(candidate);
+            }
+
+            const MafiaNet::PeerGuid previous = entity->ownerGUID;
+            const MafiaNet::PeerGuid next     = ElectOwner(entity->position, previous, candidates, _delegationParams, _groundXY);
+            if (next == previous) {
+                return;
+            }
+
+            if (next == MafiaNet::UNASSIGNED_PEER_GUID && entity->delegation.orphanMode == NetworkEntity::OrphanMode::Destroy) {
+                toDestroy.push_back(entity);
+                return;
+            }
+
+            SetOwner(entity, next);
+            // Keep load current within the pass so later entities balance against it.
+            if (previous != MafiaNet::UNASSIGNED_PEER_GUID) {
+                if (const auto it = load.find(previous); it != load.end() && --it->second <= 0) {
+                    load.erase(it);
+                }
+            }
+            if (next != MafiaNet::UNASSIGNED_PEER_GUID) {
+                ++load[next];
+            }
+        });
+
+        for (NetworkEntity *entity : toDestroy) {
+            DestroyEntity(entity);
+        }
     }
 
     void ReplicationManager::OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) {

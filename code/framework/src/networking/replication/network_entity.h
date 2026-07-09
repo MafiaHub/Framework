@@ -137,6 +137,21 @@ namespace Framework::Networking::Replication {
         };
         Streaming streaming;
 
+        // Fate of a delegatable entity when no client can take it.
+        enum class OrphanMode : uint8_t {
+            Freeze,  // return to the server (UNASSIGNED), keep replicating its last pose
+            Destroy, // remove it
+        };
+
+        // Server-only, never replicated. Opt-in via delegatable; see ReplicationManager::RunDelegation.
+        struct Delegation {
+            bool delegatable      = false;
+            OrphanMode orphanMode = OrphanMode::Freeze;
+            // Pin the syncer to a client, bypassing election. UNASSIGNED elects normally.
+            MafiaNet::PeerGuid pinnedOwner = MafiaNet::UNASSIGNED_PEER_GUID;
+        };
+        Delegation delegation;
+
         // --- Game extension points ---
         virtual void OnSerializeConstruction(FieldSerializer &fields) {
             (void)fields;
@@ -164,6 +179,18 @@ namespace Framework::Networking::Replication {
         // Called on the owning client after SerializeForcedState has applied the forced fields.
         virtual void OnStateForced() {}
 
+        // Client-only: authority over this entity crossed our peer. On gain, the replicated pose is
+        // already current, so seed the local sim from it; on loss, tear it down.
+        virtual void OnOwnershipChanged(bool nowOwner) {
+            (void)nowOwner;
+        }
+
+        // Server: veto electing `candidate` as syncer (proximity/dimension already applied).
+        virtual bool CanDelegateTo(MafiaNet::PeerGuid candidate) const {
+            (void)candidate;
+            return true;
+        }
+
         // Server: push this entity's forced state to its owner. No-op for unowned (server-owned)
         // entities, which replicate to everyone normally.
         void ForceState();
@@ -173,6 +200,10 @@ namespace Framework::Networking::Replication {
         // and a revoked previous owner pick up the change through normal serialization. Pass
         // MafiaNet::UNASSIGNED_PEER_GUID to return ownership to the server.
         void SetOwner(MafiaNet::PeerGuid guid);
+
+        // Client-side: adopt an owner from the server, firing OnOwnershipChanged on a flip. No-op on
+        // the server. The single sink for client owner changes so the callback can't be bypassed.
+        void SetOwnerFromServer(MafiaNet::PeerGuid newOwner);
 
         // True on the peer with authority over this entity: the owning client, or the server for
         // server-owned entities. The game decides what owning means (bind the local avatar, drive
@@ -225,6 +256,9 @@ namespace Framework::Networking::Replication {
         // returns false when the update is stale (sent before the last ForceState) and must not be
         // applied.
         bool ApplyIncomingEpoch(uint8_t incomingEpoch);
+
+        // Set during DeserializeConstruction: defers OnOwnershipChanged to the end, once the pose is read.
+        bool _constructing = false;
 
         // CRC32 of the registered name; stamped by EntityRegistry, not game-settable.
         uint32_t typeId = 0;
