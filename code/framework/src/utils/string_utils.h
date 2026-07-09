@@ -145,4 +145,27 @@ namespace Framework::Utils::StringUtils {
         }
         text.resize(end);
     }
+
+    // Standard base64 (RFC 4648, '+'/'/' alphabet, '=' padded).
+    inline std::string Base64Encode(const std::string &in) {
+        static const char *T = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string out;
+        unsigned val = 0;
+        int bits     = -6;
+        for (unsigned char c : in) {
+            val = (val << 8) + c;
+            bits += 8;
+            while (bits >= 0) {
+                out.push_back(T[(val >> bits) & 0x3F]);
+                bits -= 6;
+            }
+        }
+        if (bits > -6) {
+            out.push_back(T[((val << 8) >> (bits + 8)) & 0x3F]);
+        }
+        while (out.size() % 4) {
+            out.push_back('=');
+        }
+        return out;
+    }
 } // namespace Framework::Utils::StringUtils
