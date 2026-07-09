@@ -44,6 +44,7 @@ namespace Framework::Scripting::Builtins {
 
         // Client-announced identity (RPC::ClientIdentity). Server-only, unverified; empty when absent.
         std::string GetSteamId() const;
+        std::string GetEpicId() const;
         std::string GetDiscordId() const;
         std::string GetHardwareId() const;
 
