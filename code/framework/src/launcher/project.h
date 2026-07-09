@@ -22,7 +22,8 @@
 namespace Framework::Launcher {
     enum class ProjectPlatform {
         CLASSIC,
-        STEAM
+        STEAM,
+        EPIC
     };
     enum class ProjectLaunchType {
         PE_LOADING,
@@ -60,6 +61,10 @@ namespace Framework::Launcher {
 
         // if promptForGameExe is true, and steam dll is found in the game's library, switch to steam platform
         bool preferSteam = false;
+
+        // EPIC platform: Epic catalog id ("AppName") of the destination game. Optional — when
+        // empty the Epic manifest is matched by the launch executable's file name instead.
+        std::wstring epicAppName;
 
         // game exe integrity checks (uses CRC32 checksum)
         bool verifyGameIntegrity = false;
@@ -159,6 +164,7 @@ namespace Framework::Launcher {
         uint32_t GetGameVersion() const;
 
         bool RunInnerSteamChecks();
+        bool RunInnerEpicChecks();
         bool RunInnerClassicChecks();
 
         // Extracts a launch URL from the command line into the environment for the client.
