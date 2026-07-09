@@ -9,10 +9,13 @@
 #pragma once
 
 #include <chrono>
+#include <functional>
 #include <map>
+#include <mutex>
 #include <spdlog/async.h>
 #include <spdlog/sinks/ringbuffer_sink.h>
 #include <spdlog/spdlog.h>
+#include <string>
 #include <unordered_map>
 
 #define FRAMEWORK_INNER_NETWORKING   "Networking"
@@ -29,6 +32,9 @@
 #define FRAMEWORK_INNER_CLIENT "Client"
 
 namespace Framework::Logging {
+    // level is the raw spdlog::level value.
+    using LogForwarder = std::function<void(int level, const std::string &name, const std::string &message)>;
+
     class Logger final {
       private:
         [[maybe_unused]] std::chrono::time_point<std::chrono::system_clock> _sessionStart;
@@ -41,11 +47,19 @@ namespace Framework::Logging {
         std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> ringbuffer_sink;
         static inline size_t _maxRingBufferSize = 128;
 
+        std::shared_ptr<spdlog::sinks::sink> _forwardingSink;
+        std::mutex _forwarderMutex;
+        LogForwarder _forwarder;
+        int _forwarderThreshold = spdlog::level::warn;
+
       public:
         Logger();
         ~Logger() = default;
 
         std::shared_ptr<spdlog::logger> Get(const char *moduleName, bool async = false);
+
+        void SetLogForwarder(LogForwarder forwarder, int threshold = spdlog::level::warn);
+        void ForwardLog(int level, const std::string &name, const std::string &message);
 
         void SetLogName(const std::string &name) {
             _logName = name;

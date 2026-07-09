@@ -18,10 +18,50 @@
 #include <filesystem>
 
 namespace Framework::External::Sentry {
-    Utils::Result<void, Framework::Error> Wrapper::Init(const std::string &key, const std::string &path) {
+    namespace {
+        sentry_value_t ToSentryValue(const ContextValue &value) {
+            switch (value.type) {
+            case ContextValue::Type::Int: return sentry_value_new_int32(value.integer);
+            case ContextValue::Type::Double: return sentry_value_new_double(value.number);
+            case ContextValue::Type::Bool: return sentry_value_new_bool(value.boolean);
+            case ContextValue::Type::String:
+            default: return sentry_value_new_string(value.string.c_str());
+            }
+        }
+
+        sentry_value_t ToSentryObject(const ContextFields &fields) {
+            const sentry_value_t object = sentry_value_new_object();
+            for (const auto &[key, value] : fields) {
+                sentry_value_set_by_key(object, key.c_str(), ToSentryValue(value));
+            }
+            return object;
+        }
+
+        const char *LevelToString(Level level) {
+            switch (level) {
+            case Level::Trace:
+            case Level::Debug: return "debug";
+            case Level::Warning: return "warning";
+            case Level::Error: return "error";
+            case Level::Fatal: return "fatal";
+            case Level::Info:
+            default: return "info";
+            }
+        }
+    } // namespace
+
+    Utils::Result<void, Framework::Error> Wrapper::Init(const InitOptions &options) {
         // Build the options payload
         sentry_options_t *opts = sentry_options_new();
-        sentry_options_set_dsn(opts, key.c_str());
+        sentry_options_set_dsn(opts, options.dsn.c_str());
+
+        if (!options.release.empty()) {
+            sentry_options_set_release(opts, options.release.c_str());
+        }
+        if (!options.environment.empty()) {
+            sentry_options_set_environment(opts, options.environment.c_str());
+        }
+        sentry_options_set_max_breadcrumbs(opts, static_cast<size_t>(options.maxBreadcrumbs));
 
         std::string handlerName = "crashpad_handler.exe";
 #if defined(__APPLE__) || defined(__linux__)
@@ -29,14 +69,14 @@ namespace Framework::External::Sentry {
 #endif
 
         // Setup the breakpad path
-        const cppfs::FileHandle breakpadFile = cppfs::fs::open(path + "/" + handlerName);
+        const cppfs::FileHandle breakpadFile = cppfs::fs::open(options.handlerPath + "/" + handlerName);
         if (!breakpadFile.exists()) {
             return Framework::Error("Failed to locate the crashpad handler at " + breakpadFile.path());
         }
 
-        cppfs::FileHandle cacheDirectory = cppfs::fs::open(path + "/cache/sentry");
+        cppfs::FileHandle cacheDirectory = cppfs::fs::open(options.handlerPath + "/cache/sentry");
         if (!cacheDirectory.isDirectory()) {
-            cppfs::FileHandle cacheRoot = cppfs::fs::open(path + "/cache");
+            cppfs::FileHandle cacheRoot = cppfs::fs::open(options.handlerPath + "/cache");
             if (!cacheRoot.isDirectory()) {
                 cacheRoot.createDirectory();
             }
@@ -50,7 +90,7 @@ namespace Framework::External::Sentry {
 
         // Crashpad reads attachments lazily at crash time, so cef.log carries the CHECK/FATAL
         // line CEF writes before it fast-fails. Registered before init so the handler knows it.
-        const std::string cefLog = std::filesystem::absolute(std::filesystem::path(path) / "logs" / "cef.log").string();
+        const std::string cefLog = std::filesystem::absolute(std::filesystem::path(options.handlerPath) / "logs" / "cef.log").string();
         sentry_options_add_attachment(opts, cefLog.c_str());
 
         if (sentry_init(opts) != 0) {
@@ -64,6 +104,7 @@ namespace Framework::External::Sentry {
         if (!_initialized) {
             return;
         }
+        Logging::GetInstance()->SetLogForwarder(nullptr);
         sentry_close();
         Lifecycle::Shutdown();
     }
@@ -77,14 +118,45 @@ namespace Framework::External::Sentry {
         return {};
     }
 
+    void Wrapper::SetTag(const std::string &key, const std::string &value) const {
+        if (!_initialized) {
+            return;
+        }
+        sentry_set_tag(key.c_str(), value.c_str());
+    }
+
+    void Wrapper::RemoveTag(const std::string &key) const {
+        if (!_initialized) {
+            return;
+        }
+        sentry_remove_tag(key.c_str());
+    }
+
+    void Wrapper::SetContext(const std::string &name, const ContextFields &fields) const {
+        if (!_initialized) {
+            return;
+        }
+        sentry_set_context(name.c_str(), ToSentryObject(fields));
+    }
+
+    void Wrapper::AddBreadcrumb(const std::string &category, const std::string &message, Level level, const ContextFields &data) const {
+        if (!_initialized) {
+            return;
+        }
+        const sentry_value_t crumb = sentry_value_new_breadcrumb("default", message.c_str());
+        sentry_value_set_by_key(crumb, "category", sentry_value_new_string(category.c_str()));
+        sentry_value_set_by_key(crumb, "level", sentry_value_new_string(LevelToString(level)));
+        if (!data.empty()) {
+            sentry_value_set_by_key(crumb, "data", ToSentryObject(data));
+        }
+        sentry_add_breadcrumb(crumb);
+    }
+
     Utils::Result<void, Framework::Error> Wrapper::SetGameInformation(const GameInformation &infos) const {
         if (!_initialized) {
             return Framework::Error {"Sentry is not initialized"};
         }
-        const sentry_value_t game = sentry_value_new_object();
-        sentry_value_set_by_key(game, "title", sentry_value_new_string(infos._title.c_str()));
-        sentry_value_set_by_key(game, "version", sentry_value_new_string(infos._version.c_str()));
-        sentry_set_extra("game", game);
+        SetContext("game", {{"title", infos._title}, {"version", infos._version}});
         return {};
     }
 
@@ -92,11 +164,7 @@ namespace Framework::External::Sentry {
         if (!_initialized) {
             return Framework::Error {"Sentry is not initialized"};
         }
-        const sentry_value_t screen = sentry_value_new_object();
-        sentry_value_set_by_key(screen, "width", sentry_value_new_int32(infos._width));
-        sentry_value_set_by_key(screen, "height", sentry_value_new_int32(infos._height));
-        sentry_value_set_by_key(screen, "fullscreen", sentry_value_new_bool(infos._fullscreen));
-        sentry_set_extra("screen", screen);
+        SetContext("display", {{"width", infos._width}, {"height", infos._height}, {"fullscreen", infos._fullscreen}});
         return {};
     }
 
@@ -104,19 +172,17 @@ namespace Framework::External::Sentry {
         if (!_initialized) {
             return Framework::Error {"Sentry is not initialized"};
         }
-        const sentry_value_t system = sentry_value_new_object();
-        sentry_value_set_by_key(system, "cpuBrandString", sentry_value_new_string(infos._cpuBrand.c_str()));
-        sentry_value_set_by_key(system, "cpuProcessors", sentry_value_new_int32(infos._cpuProcessorsCount));
-
-        // OS
+        ContextFields fields {
+            {"cpuBrandString", infos._cpuBrand},
+            {"cpuProcessors", static_cast<int32_t>(infos._cpuProcessorsCount)},
+        };
         if (!infos._osVersion.empty()) {
-            sentry_value_set_by_key(system, "osVersion", sentry_value_new_string(infos._osVersion.c_str()));
-            sentry_value_set_by_key(system, "osMajorVersion", sentry_value_new_int32(infos._osMajorVersion));
-            sentry_value_set_by_key(system, "osMinorVersion", sentry_value_new_int32(infos._osMinorVersion));
-            sentry_value_set_by_key(system, "osBuildNumber", sentry_value_new_int32(infos._osBuildNumber));
+            fields.emplace("osVersion", infos._osVersion);
+            fields.emplace("osMajorVersion", infos._osMajorVersion);
+            fields.emplace("osMinorVersion", infos._osMinorVersion);
+            fields.emplace("osBuildNumber", infos._osBuildNumber);
         }
-
-        sentry_set_extra("system", system);
+        SetContext("system", fields);
         return {};
     }
 

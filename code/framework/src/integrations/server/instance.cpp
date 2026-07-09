@@ -69,12 +69,35 @@ namespace Framework::Integrations::Server {
 
         // Crash reporting comes up first so its handler is installed before anything else can fault.
         if (_crashReporter && !opts.sentryDSN.empty()) {
-            const std::string handlerPath = opts.sentryModulePath.empty() ? "." : opts.sentryModulePath;
-            if (auto sentryResult = _crashReporter->Init(opts.sentryDSN, handlerPath); !sentryResult) {
+            External::Sentry::InitOptions sentryOpts;
+            sentryOpts.dsn         = opts.sentryDSN;
+            sentryOpts.handlerPath = opts.sentryModulePath.empty() ? "." : opts.sentryModulePath;
+            sentryOpts.release     = opts.sentryRelease.empty() ? opts.gameName + "@" + opts.gameVersion : opts.sentryRelease;
+            sentryOpts.environment = opts.sentryEnvironment;
+            if (auto sentryResult = _crashReporter->Init(sentryOpts); !sentryResult) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Crash reporting disabled: {}", sentryResult.GetError().message);
             }
             else {
                 _crashReporter->SetGameInformation({opts.gameName, opts.gameVersion + " / mod " + opts.modVersion});
+                _crashReporter->SetTag("net.role", "server");
+                _crashReporter->SetTag("build.game_version", opts.gameVersion);
+                _crashReporter->SetTag("build.mod_version", opts.modVersion);
+
+                auto *reporter = _crashReporter.get();
+                Logging::GetInstance()->SetLogForwarder([reporter](int level, const std::string &name, const std::string &message) {
+                    External::Sentry::Level mapped = External::Sentry::Level::Info;
+                    if (level >= spdlog::level::critical) {
+                        mapped = External::Sentry::Level::Fatal;
+                    }
+                    else if (level >= spdlog::level::err) {
+                        mapped = External::Sentry::Level::Error;
+                    }
+                    else if (level >= spdlog::level::warn) {
+                        mapped = External::Sentry::Level::Warning;
+                    }
+                    reporter->AddBreadcrumb(name, message, mapped);
+                });
+
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Crash reporting initialized");
             }
         }

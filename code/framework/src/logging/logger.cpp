@@ -8,11 +8,30 @@
 
 #include "logger.h"
 
+#include <spdlog/details/log_msg.h>
+#include <spdlog/sinks/base_sink.h>
 #include <spdlog/sinks/null_sink.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 namespace Framework::Logging {
+    namespace {
+        class ForwardingSink final : public spdlog::sinks::base_sink<std::mutex> {
+          public:
+            explicit ForwardingSink(Logger *owner): _owner(owner) {}
+
+          protected:
+            void sink_it_(const spdlog::details::log_msg &msg) override {
+                _owner->ForwardLog(static_cast<int>(msg.level), std::string(msg.logger_name.data(), msg.logger_name.size()), std::string(msg.payload.data(), msg.payload.size()));
+            }
+
+            void flush_() override {}
+
+          private:
+            Logger *_owner;
+        };
+    } // namespace
+
     Logger::Logger() {
         _sessionStart = std::chrono::system_clock::now();
 
@@ -21,6 +40,9 @@ namespace Framework::Logging {
 
         // Support for async logging
         spdlog::init_thread_pool(10000, 4); // queue with 10K items and 4 backing threads.
+
+        _forwardingSink = std::make_shared<ForwardingSink>(this);
+        _forwardingSink->set_level(spdlog::level::trace);
     }
 
     std::shared_ptr<spdlog::logger> Logger::Get(const char *logName, bool async) {
@@ -54,7 +76,7 @@ namespace Framework::Logging {
             ringbuffer_sink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(_maxRingBufferSize);
             ringbuffer_sink->set_level(spdlog::level::debug);
         }
-        std::vector<spdlog::sink_ptr> sinks {consoleLogger, fileLogger, ringbuffer_sink};
+        std::vector<spdlog::sink_ptr> sinks {consoleLogger, fileLogger, ringbuffer_sink, _forwardingSink};
 
         // Create our logging instance
         std::shared_ptr<spdlog::logger> spdLogger;
@@ -79,6 +101,24 @@ namespace Framework::Logging {
         _loggers.emplace(logName, spdLogger);
 
         return spdLogger;
+    }
+
+    void Logger::SetLogForwarder(LogForwarder forwarder, int threshold) {
+        std::lock_guard lock(_forwarderMutex);
+        _forwarder          = std::move(forwarder);
+        _forwarderThreshold = threshold;
+    }
+
+    void Logger::ForwardLog(int level, const std::string &name, const std::string &message) {
+        LogForwarder forwarder;
+        {
+            std::lock_guard lock(_forwarderMutex);
+            if (!_forwarder || level < _forwarderThreshold) {
+                return;
+            }
+            forwarder = _forwarder;
+        }
+        forwarder(level, name, message);
     }
 
     Logger *GetInstance() {

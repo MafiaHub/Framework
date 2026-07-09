@@ -68,6 +68,10 @@ namespace Framework::Integrations::Client {
         // Directory holding crashpad_handler(.exe); the Sentry cache is created beneath it.
         // Empty -> current working directory.
         std::string sentryModulePath;
+        // Release identifier; empty -> derived from gameName + gameVersion.
+        std::string sentryRelease;
+        // Deployment environment ("retail" / "dev" / "ci"); empty leaves it unset.
+        std::string sentryEnvironment;
 
         // Optional UI font (TTF). Empty -> ImGui's embedded ASCII-only font.
         // A Unicode-covering font enables non-Latin scripts (e.g. Cyrillic).
