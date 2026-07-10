@@ -12,12 +12,11 @@
 
 namespace Framework::External::Steam {
     Utils::Result<void, Framework::Error> Wrapper::Init() {
-        if (!SteamAPI_IsSteamRunning()) {
-            return Framework::Error("Steam client is not running");
-        }
-
+        // Do NOT gate on SteamAPI_IsSteamRunning(): it only tests the ActiveProcess\pid registry
+        // value, which goes stale (returns false while Steam is open, cured only by a Steam
+        // restart). SteamAPI_Init() connects over the live IPC pipe and is the authoritative check.
         if (!SteamAPI_Init()) {
-            return Framework::Error("Failed to initialize the Steam API");
+            return Framework::Error("Failed to initialize the Steam API (is the Steam client running?)");
         }
 
         if (!SteamUser()->BLoggedOn()) {
