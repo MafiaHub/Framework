@@ -83,6 +83,16 @@ namespace Framework::Scripting::Builtins {
             return identity ? identity->hardwareId : "";
         }
 
+        // Connection's average round-trip time in ms. Server-only; -1 when unavailable.
+        int GetPing() const {
+            const auto *entity = Resolve();
+            if (!entity) {
+                return -1;
+            }
+            auto *peer = CoreModules::GetNetworkPeer();
+            return peer ? peer->GetPing(MafiaNet::ToGuid(entity->ownerGUID)) : -1;
+        }
+
         std::string ToString() const override {
             std::ostringstream ss;
             ss << "Player{ id: " << _id << " }";
@@ -111,6 +121,7 @@ namespace Framework::Scripting::Builtins {
             RegisterReadonlyProperty<Player, &Player::GetSteamId>(isolate, protoTemplate, "steamId");
             RegisterReadonlyProperty<Player, &Player::GetDiscordId>(isolate, protoTemplate, "discordId");
             RegisterReadonlyProperty<Player, &Player::GetHardwareId>(isolate, protoTemplate, "hardwareId");
+            RegisterReadonlyProperty<Player, &Player::GetPing>(isolate, protoTemplate, "ping");
             return *cls;
         }
 

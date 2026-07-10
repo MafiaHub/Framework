@@ -158,6 +158,11 @@ namespace Framework::Networking {
             return nullptr;
         }
 
+        // Server-only; the connection's average round-trip time in ms, or -1 if unavailable.
+        virtual int GetPing(MafiaNet::RakNetGUID) const {
+            return -1;
+        }
+
         void SetUnknownPacketHandler(PacketCallback callback) {
             _onUnknownPacketCallback = std::move(callback);
         }
