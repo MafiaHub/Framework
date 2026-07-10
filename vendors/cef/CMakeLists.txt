@@ -13,7 +13,7 @@
 # -------------------------------------------------------------------
 # CEF version - update this to upgrade CEF
 # -------------------------------------------------------------------
-set(CEF_VERSION "145.0.25+g265860d+chromium-145.0.7632.76" CACHE STRING "CEF binary distribution version" FORCE)
+set(CEF_VERSION "150.0.11+gb887805+chromium-150.0.7871.115" CACHE STRING "CEF binary distribution version" FORCE)
 
 # -------------------------------------------------------------------
 # Platform detection
