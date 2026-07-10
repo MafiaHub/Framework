@@ -111,9 +111,15 @@ namespace Framework::GUI {
     }
 
     void View::RequestBeginFrame() {
-        if (_browser) {
-            _browser->GetHost()->SendExternalBeginFrame();
+        if (!_browser) {
+            return;
         }
+        // Software OSR emits OnPaint only when the view has damage, so force a repaint each cycle;
+        // the begin frame then drives the compositor to hand us that frame. Both must run on the
+        // CEF UI thread — this is called from Manager::Update, which also pumps the message loop.
+        const auto host = _browser->GetHost();
+        host->Invalidate(PET_VIEW);
+        host->SendExternalBeginFrame();
     }
 
     void View::LockToOrigin(const std::string &url) {
