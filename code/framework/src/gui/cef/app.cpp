@@ -46,6 +46,7 @@ namespace Framework::GUI::CEF {
         commandLine->AppendSwitch("disable-pdf-extension");
         commandLine->AppendSwitch("disable-spell-checking");
         commandLine->AppendSwitch("disable-component-update");
+        commandLine->AppendSwitchWithValue("disable-features", "WebUSB,WebHID");
         // No internal begin-frame scheduler: rendering uses external begin frames.
     }
 
