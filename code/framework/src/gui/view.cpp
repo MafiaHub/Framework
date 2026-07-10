@@ -216,25 +216,39 @@ namespace Framework::GUI {
 
         switch (msg) {
         case WM_KEYDOWN: {
-            cefEvent.type = KEYEVENT_RAWKEYDOWN;
+            cefEvent.type             = KEYEVENT_RAWKEYDOWN;
+            cefEvent.windows_key_code = static_cast<int>(wParam);
         } break;
         case WM_KEYUP: {
-            cefEvent.type = KEYEVENT_KEYUP;
+            cefEvent.type             = KEYEVENT_KEYUP;
+            cefEvent.windows_key_code = static_cast<int>(wParam);
         } break;
         case WM_CHAR: {
             cefEvent.type = KEYEVENT_CHAR;
 
-            // Make sure that pressing enter does not trigger this event
-            if (wParam == 13) {
+            if (wParam == VK_RETURN) {
                 return;
             }
+
+            // ANSI window: widen the codepage byte to UTF-16 for CEF.
+            wchar_t wide = static_cast<wchar_t>(wParam);
+            if (!IsWindowUnicode(hWnd)) {
+                const HKL layout = GetKeyboardLayout(0);
+                UINT codePage    = CP_ACP;
+                GetLocaleInfoA(MAKELCID(HIWORD(layout), SORT_DEFAULT), LOCALE_IDEFAULTANSICODEPAGE | LOCALE_RETURN_NUMBER, reinterpret_cast<LPSTR>(&codePage), sizeof(codePage));
+                wide = 0;
+                MultiByteToWideChar(codePage, MB_PRECOMPOSED, reinterpret_cast<const char *>(&wParam), 2, &wide, 1);
+            }
+
+            cefEvent.windows_key_code     = wide;
+            cefEvent.character            = static_cast<char16_t>(wide);
+            cefEvent.unmodified_character = static_cast<char16_t>(wide);
         } break;
         default:
             return;
         }
 
-        cefEvent.windows_key_code = static_cast<int>(wParam);
-        cefEvent.native_key_code  = static_cast<int>(lParam);
+        cefEvent.native_key_code = static_cast<int>(lParam);
 
         const bool ctrlPressed  = GetKeyState(VK_CONTROL) & 0x8000;
         const bool shiftPressed = GetKeyState(VK_SHIFT) & 0x8000;
