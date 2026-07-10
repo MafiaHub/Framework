@@ -243,3 +243,21 @@ jobs:
             Make sure your Framework repository is up-to-date to avoid any conflicts.
           color: 0x440000
           username: MafiaHub Services
+
+  notify_failure:
+    name: Send Failure Notification
+    needs: [check_submodule, notify_start, build, release]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord Notification
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.RELEASES_WEBHOOK }}
+          title: "MafiaHub Services update failed!"
+          nodetail: true
+          description: |
+            The MafiaHub Services build or release failed.
+            [View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          color: 0xFF0000
+          username: MafiaHub Services
