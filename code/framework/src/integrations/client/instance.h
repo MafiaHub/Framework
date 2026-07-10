@@ -19,6 +19,8 @@
 #include <graphics/renderio.h>
 
 #include "networking/engine.h"
+#include "networking/rpc/chat_message.h"
+#include "integrations/client/ui/chat_box.h"
 #include <mafianet/FileListTransferCBInterface.h>
 
 #include <memory>
@@ -138,6 +140,8 @@ namespace Framework::Integrations::Client {
         // One-shot: serve http://resources/<resource>/<file> from the asset cache (scripted web views).
         bool _resourceSchemeRegistered {};
 
+        UI::ChatBox _chatBox;
+
         void InitNetworkingMessages();
         void InitAssetDownloader();
         void OnAssetsDownloaded(bool success);
@@ -177,8 +181,8 @@ namespace Framework::Integrations::Client {
         virtual void OnAssetsDownloadFinished(bool success) {
             (void)success;
         }
-        virtual void OnChatMessageReceived(const std::string &text) {
-            (void)text;
+        virtual void OnChatMessageReceived(const Framework::Networking::RPC::ChatMessage &msg) {
+            (void)msg;
         }
 
         [[nodiscard]] Utils::Result<void, Error> RenderInit();
@@ -202,13 +206,19 @@ namespace Framework::Integrations::Client {
             _currentState.serverIDHash = Framework::Utils::Hashing::CalculateCRC32(_currentState.host + ":" + std::to_string(_currentState.port));
         }
 
-        // Invoked by the chat RPC handler with a line received from the server.
-        void DispatchReceivedChat(const std::string &text) {
-            OnChatMessageReceived(text);
-        }
+        // Emits the reserved "chatMessage" script event, then calls OnChatMessageReceived.
+        void DispatchReceivedChat(const Framework::Networking::RPC::ChatMessage &msg);
 
         // Send a chat line to the server (the local player's outgoing text).
         void SendChatMessage(const std::string &text);
+
+        // Built-in chat overlay, inert until a mod renders it. Driven by the Chat scripting builtin.
+        UI::ChatBox &GetChatBox() {
+            return _chatBox;
+        }
+        const UI::ChatBox &GetChatBox() const {
+            return _chatBox;
+        }
 
         Networking::Engine *GetNetworkingEngine() const {
             return _networkingEngine.get();

@@ -18,6 +18,7 @@
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/environment.h>
 
+#include "builtins/chat.h"
 #include "builtins/keybinds.h"
 #include "builtins/web.h"
 
@@ -155,6 +156,9 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Register keybinding API (client only)
         Builtins::Keybinds::Register(isolate, context, frameworkObj, _resourceManager.get());
+
+        // Register chat networking API (client only): global Chat.send + overlay visibility
+        Builtins::Chat::Register(isolate, context, frameworkObj, _resourceManager.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
     }

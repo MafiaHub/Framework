@@ -29,6 +29,10 @@ namespace Framework::Input {
     class IInput;
 } // namespace Framework::Input
 
+namespace Framework::Integrations::Client {
+    class Instance;
+} // namespace Framework::Integrations::Client
+
 namespace Framework {
 
 #define FW_ASSERT_MODULE_REGISTRATION(current, incoming, name)                \
@@ -47,6 +51,7 @@ namespace Framework {
             _scriptingModule  = nullptr;
             _webManager       = nullptr;
             _input            = nullptr;
+            _clientInstance   = nullptr;
         }
 
         // Singleton setters
@@ -75,6 +80,11 @@ namespace Framework {
             _input = input;
         }
 
+        static void SetClientInstance(Integrations::Client::Instance *instance) {
+            FW_ASSERT_MODULE_REGISTRATION(_clientInstance, instance, "ClientInstance");
+            _clientInstance = instance;
+        }
+
         static void SetTickInterval(double seconds) noexcept {
             _tickInterval = (seconds > 0.0) ? seconds : (1.0 / 60.0);
         }
@@ -100,6 +110,10 @@ namespace Framework {
             return _input;
         }
 
+        static Integrations::Client::Instance *GetClientInstance() noexcept {
+            return _clientInstance;
+        }
+
         static double GetTickInterval() noexcept {
             return _tickInterval;
         }
@@ -110,6 +124,7 @@ namespace Framework {
         static inline Scripting::ScriptingModule *_scriptingModule {};
         static inline GUI::Manager *_webManager {};
         static inline Input::IInput *_input {};
+        static inline Integrations::Client::Instance *_clientInstance {};
         static inline double _tickInterval {1.0 / 60.0};
     };
 } // namespace Framework

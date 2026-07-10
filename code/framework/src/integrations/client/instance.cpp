@@ -107,7 +107,51 @@ namespace Framework::Integrations::Client {
 
             resourceManager->GetEvents().EmitReserved(isolate, context, eventName, args);
         }
+
+        // Reserved "chatMessage" event carrying { author, text, color }.
+        void EmitChatMessageEvent(const Framework::Networking::RPC::ChatMessage &msg) {
+            auto *scriptingModule = static_cast<Client::Scripting::ClientScriptingModule *>(Framework::CoreModules::GetScriptingModule());
+            if (!scriptingModule) {
+                return;
+            }
+            auto resourceManager = scriptingModule->GetResourceManager();
+            if (!resourceManager) {
+                return;
+            }
+            auto *engine = scriptingModule->GetEngine();
+            if (!engine || !engine->IsInitialized()) {
+                return;
+            }
+
+            v8::Isolate *isolate = engine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            v8::Local<v8::String> authorStr;
+            v8::Local<v8::String> textStr;
+            if (!v8::String::NewFromUtf8(isolate, msg.author.c_str()).ToLocal(&authorStr) || !v8::String::NewFromUtf8(isolate, msg.text.c_str()).ToLocal(&textStr)) {
+                return;
+            }
+            v8::Local<v8::Object> obj = v8::Object::New(isolate);
+            obj->Set(context, v8::String::NewFromUtf8Literal(isolate, "author"), authorStr).Check();
+            obj->Set(context, v8::String::NewFromUtf8Literal(isolate, "text"), textStr).Check();
+            obj->Set(context, v8::String::NewFromUtf8Literal(isolate, "color"), v8::Uint32::NewFromUnsigned(isolate, msg.color)).Check();
+
+            std::vector<v8::Local<v8::Value>> args {obj};
+            resourceManager->GetEvents().EmitReserved(isolate, context, "chatMessage", args);
+        }
     } // namespace
+
+    void Instance::DispatchReceivedChat(const Framework::Networking::RPC::ChatMessage &msg) {
+        EmitChatMessageEvent(msg);
+        if (_chatBox.IsVisible()) {
+            _chatBox.AddMessage(msg.author, msg.text, msg.color);
+        }
+        OnChatMessageReceived(msg);
+    }
 
     bool AssetDownloadFileProgress::OnFile(MafiaNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) {
         if (onFileStruct->numberOfFilesInThisSet > 0) {
@@ -146,6 +190,10 @@ namespace Framework::Integrations::Client {
         _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>();
         _webManager = std::make_unique<Framework::GUI::Manager>();
         _crashReporter = std::make_unique<External::Sentry::Wrapper>();
+
+        _chatBox.SetSubmitHandler([this](const std::string &text) {
+            SendChatMessage(text);
+        });
     }
 
     Instance::~Instance() = default;
@@ -156,6 +204,8 @@ namespace Framework::Integrations::Client {
         if (opts.gameName.empty() || opts.gameVersion.empty()) {
             return Error("Game name and version are required");
         }
+
+        CoreModules::SetClientInstance(this);
 
         // Crash reporting comes up first so its handler is installed before anything else can fault.
         if (_crashReporter && !opts.sentryDSN.empty()) {
@@ -329,6 +379,7 @@ namespace Framework::Integrations::Client {
         CoreModules::SetNetworkPeer(nullptr);
         CoreModules::SetReplication(nullptr);
         CoreModules::SetInput(nullptr);
+        CoreModules::SetClientInstance(nullptr);
         CoreModules::Reset();
 
         Lifecycle::Shutdown();
@@ -495,6 +546,8 @@ namespace Framework::Integrations::Client {
                 CoreModules::SetReplication(replication);
                 replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_serverTickRate * 1000.0f));
             }
+            _chatBox.SetVisible(true);
+            _chatBox.SetSessionActive(true);
             OnConnectionFinalized(_serverTickRate);
         });
 
@@ -528,6 +581,8 @@ namespace Framework::Integrations::Client {
             // connection drops (QueryActionOnPopConnection_Client).
             CoreModules::SetReplication(nullptr);
 
+            _chatBox.SetSessionActive(false);
+
             // Notify mod-level that network integration got closed
             OnConnectionClosed();
 
@@ -548,7 +603,7 @@ namespace Framework::Integrations::Client {
 
         // Chat lines from the server are forwarded to the mod's UI via the received callback.
         net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, MafiaNet::Packet *) {
-            DispatchReceivedChat(payload.text);
+            DispatchReceivedChat(payload);
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Networking messages registered");

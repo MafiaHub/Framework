@@ -80,11 +80,13 @@ set(FRAMEWORK_CLIENT_SRC
 
     src/integrations/client/instance.cpp
     src/integrations/client/networking/engine.cpp
+    src/integrations/client/ui/chat_box.cpp
 
     # JavaScript scripting (V8 engine for client)
     src/integrations/client/scripting/module.cpp
     src/integrations/client/scripting/builtins/web.cpp
     src/integrations/client/scripting/builtins/keybinds.cpp
+    src/integrations/client/scripting/builtins/chat.cpp
 )
 
 # GUI (CEF-based)
