@@ -95,5 +95,6 @@ namespace Framework::Launcher::Loaders {
 
         void Protect() const;
         void LoadIntoModule(HMODULE module);
+        void RunTLSCallbacks() const;
     };
 } // namespace Framework::Launcher::Loaders

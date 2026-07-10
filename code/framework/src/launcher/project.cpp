@@ -19,6 +19,7 @@
 #include <Windows.h>
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
+#include <cstdlib>
 #include <fstream>
 #include <ostream>
 #include <utils/hooking/hooking.h>
@@ -61,6 +62,12 @@ static wchar_t gProjectDllPath[32768];
 
 // Default entry point for the client DLL
 using ClientEntryPoint = void (*)(const wchar_t *projectPath);
+using ThreadLocalCallback = void(NTAPI *)(void *, DWORD, void *);
+
+void __cdecl RegisterThreadLocalExeAtexitCallback_Stub(ThreadLocalCallback) {
+    // ucrtbase owns one EXE TLS-destructor callback per process. The launcher's CRT
+    // already registered it, so registering the mapped game's callback aborts.
+}
 
 static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     const auto result = Framework::Utils::MiniDump::ExceptionFilter(exceptionInfo);
@@ -83,29 +90,62 @@ void WINAPI GetStartupInfoA_Stub(LPSTARTUPINFOA lpStartupInfo) {
     return GetStartupInfoA(lpStartupInfo);
 }
 
+LPWSTR BuildGameCommandLineW() {
+    if (!gImagePath || !gConfig) {
+        return GetCommandLineW();
+    }
+
+    static wchar_t buffer[32768] = {};
+    const auto &args             = gConfig->additionalLaunchArguments;
+    const wchar_t *separator     = !args.empty() && args.front() != L' ' ? L" " : L"";
+    _snwprintf_s(buffer, _countof(buffer), _TRUNCATE, L"\"%ls\"%ls%ls", gImagePath, separator, args.c_str());
+    return buffer;
+}
+
+LPSTR BuildGameCommandLineA() {
+    static char buffer[32768] = {};
+    const auto commandLine    = Framework::Utils::StringUtils::WideToNormal(BuildGameCommandLineW());
+    strcpy_s(buffer, commandLine.c_str());
+    return buffer;
+}
+
+bool SynchronizeUCRTCommandLine() {
+    const auto ucrt = GetModuleHandleW(L"ucrtbase.dll");
+    if (!ucrt) {
+        return false;
+    }
+
+    using NarrowCommandLineAccessor = char **(__cdecl *)();
+    using WideCommandLineAccessor   = wchar_t **(__cdecl *)();
+    const auto narrowAccessor = reinterpret_cast<NarrowCommandLineAccessor>(GetProcAddress(ucrt, "__p__acmdln"));
+    const auto wideAccessor   = reinterpret_cast<WideCommandLineAccessor>(GetProcAddress(ucrt, "__p__wcmdln"));
+    if (!narrowAccessor || !wideAccessor) {
+        return false;
+    }
+
+    *narrowAccessor() = BuildGameCommandLineA();
+    *wideAccessor()   = BuildGameCommandLineW();
+    return true;
+}
+
+bool SetProcessEnvironmentVariable(const wchar_t *name, const std::wstring &value) {
+    const bool processUpdated = SetEnvironmentVariableW(name, value.c_str()) != FALSE;
+    const bool ucrtUpdated    = _wputenv_s(name, value.c_str()) == 0;
+    return processUpdated && ucrtUpdated;
+}
+
 LPWSTR WINAPI GetCommandLineW_Stub() {
     if (!gConfig->loadClientManually) {
         Framework::Launcher::Project::InitialiseClientDLL();
     }
-
-    static wchar_t buffer[MAX_PATH] = {0};
-    wcscpy_s(buffer, MAX_PATH, GetCommandLineW());
-    wcscat_s(buffer, MAX_PATH, gConfig->additionalLaunchArguments.c_str());
-
-    return buffer;
+    return BuildGameCommandLineW();
 }
 
 LPSTR WINAPI GetCommandLineA_Stub() {
     if (!gConfig->loadClientManually) {
         Framework::Launcher::Project::InitialiseClientDLL();
     }
-    const auto args = Framework::Utils::StringUtils::WideToNormal(gConfig->additionalLaunchArguments);
-
-    static char buffer[MAX_PATH] = {0};
-    strcpy_s(buffer, MAX_PATH, GetCommandLineA());
-    strcat_s(buffer, MAX_PATH, args.c_str());
-
-    return buffer;
+    return BuildGameCommandLineA();
 }
 
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
@@ -309,7 +349,7 @@ namespace Framework::Launcher {
 
             // append bin & game directories
             const std::wstring newPath = _gamePath + L";" + std::wstring(gProjectDllPath) + L";" + std::wstring(pathBuf);
-            SetEnvironmentVariableW(L"PATH", newPath.c_str());
+            SetProcessEnvironmentVariable(L"PATH", newPath);
         }
 
         // Update the game path to include the executable name;
@@ -400,12 +440,12 @@ namespace Framework::Launcher {
 
         // Make sure Steam is aware of himself
         const auto appId = std::to_wstring(_config.steamAppId);
-        SetEnvironmentVariableW(L"SteamAppId", appId.c_str());
+        SetProcessEnvironmentVariable(L"SteamAppId", appId);
 
         // Hand the account id to the in-process client (ClientIdentity); the wrapper is gone by then.
         const auto steamId = _steamWrapper->GetSteamID().ConvertToUint64();
         if (steamId != 0) {
-            SetEnvironmentVariableW(L"MafiaHubSteamId", std::to_wstring(steamId).c_str());
+            SetProcessEnvironmentVariable(L"MafiaHubSteamId", std::to_wstring(steamId));
         }
 
         // Now we have everything we want, just say goodbye
@@ -688,6 +728,12 @@ namespace Framework::Launcher {
 
             const auto exportName = std::string(exportFn);
 
+            if (_config.suppressThreadLocalExeAtexitCallback &&
+                exportName == "_register_thread_local_exe_atexit_callback") {
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info(
+                    "Suppressing duplicate mapped-EXE TLS atexit registration");
+                return reinterpret_cast<LPVOID>(RegisterThreadLocalExeAtexitCallback_Stub);
+            }
             if (!_config.loadClientManually && exportName == "GetStartupInfoW") {
                 return reinterpret_cast<LPVOID>(GetStartupInfoW_Stub);
             }
@@ -746,6 +792,15 @@ namespace Framework::Launcher {
         hook::set_base(reinterpret_cast<uintptr_t>(base));
 
         try {
+            if (SynchronizeUCRTCommandLine()) {
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info(
+                    "Mapped game command line: {}", BuildGameCommandLineA());
+            }
+
+            // The OS loader normally dispatches executable TLS callbacks before the entry
+            // point. This image was mapped manually, so complete that loader step here.
+            loader.RunTLSCallbacks();
+
             if (_preLaunchFunctor) {
                 _preLaunchFunctor();
             }

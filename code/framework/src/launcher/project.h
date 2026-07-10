@@ -100,6 +100,10 @@ namespace Framework::Launcher {
         // When true, copies game TLS directly to slot 0 (requires sacrificial TLS buffer in launcher EXE)
         // When false, uses framework's allocated TLS slot (traditional approach)
         bool useDirectTlsSlot0 = false;
+
+        // Some launchers already own ucrtbase's process-wide EXE TLS-destructor slot.
+        // Suppress the mapped game's second registration when that would abort startup.
+        bool suppressThreadLocalExeAtexitCallback = false;
     };
 
     class Project {

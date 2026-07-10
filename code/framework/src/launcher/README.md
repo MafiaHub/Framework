@@ -63,6 +63,19 @@ config.useDirectTlsSlot0 = true;  // Use direct slot 0 (requires sacrificial buf
 config.useDirectTlsSlot0 = false; // Use allocated slot (default)
 ```
 
+When the launcher and mapped game both use the dynamic UCRT and startup aborts in
+`_register_thread_local_exe_atexit_callback`, the launcher has already claimed the
+process-wide EXE TLS-destructor slot. Suppress only the mapped game's duplicate registration:
+
+```cpp
+config.suppressThreadLocalExeAtexitCallback = true;
+```
+
+Leave this disabled unless the duplicate-registration failure is confirmed; a game whose
+launcher did not claim the slot should retain the normal UCRT registration. Suppression means
+the mapped game's primary-thread TLS destructors are not run during process exit; thread
+attach/detach callbacks and normal execution are unaffected.
+
 ## When to Use Which Approach
 
 | Game Behavior | Approach | Config |
