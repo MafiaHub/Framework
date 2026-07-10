@@ -34,6 +34,12 @@ namespace Framework::External::Discord {
         Utils::Result<void, Framework::Error> SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) const;
         Utils::Result<void, Framework::Error> SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) const;
 
+        // Publish a fully-composed activity (the entire rich-presence surface); use when the
+        // SetPresence shortcuts above are too coarse. Null-safe.
+        Utils::Result<void, Framework::Error> UpdateActivity(const discord::Activity &activity) const;
+        // Clear the local player's activity entirely.
+        Utils::Result<void, Framework::Error> ClearActivity() const;
+
         void SignInWithDiscord(const DiscordLoginProc &proc) const;
 
         // Snowflake of the signed-in user once OnCurrentUserUpdate has fired, empty otherwise.

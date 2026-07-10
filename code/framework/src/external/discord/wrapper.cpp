@@ -75,6 +75,34 @@ namespace Framework::External::Discord {
         return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
     }
 
+    Utils::Result<void, Framework::Error> Wrapper::UpdateActivity(const discord::Activity &activity) const {
+        if (!_instance) {
+            return Framework::Error {"Discord core instance is null"};
+        }
+
+        _instance->ActivityManager().UpdateActivity(activity, [](discord::Result res) {
+            if (res != discord::Result::Ok) {
+                Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to update activity");
+            }
+        });
+
+        return {};
+    }
+
+    Utils::Result<void, Framework::Error> Wrapper::ClearActivity() const {
+        if (!_instance) {
+            return Framework::Error {"Discord core instance is null"};
+        }
+
+        _instance->ActivityManager().ClearActivity([](discord::Result res) {
+            if (res != discord::Result::Ok) {
+                Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to clear activity");
+            }
+        });
+
+        return {};
+    }
+
     void Wrapper::SignInWithDiscord(const DiscordLoginProc &proc) const {
         _instance->ApplicationManager().GetOAuth2Token([proc](discord::Result result, const discord::OAuth2Token &tokenData) {
             if (result == discord::Result::Ok) {

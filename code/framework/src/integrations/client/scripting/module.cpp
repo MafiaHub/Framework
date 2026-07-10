@@ -19,6 +19,7 @@
 #include <scripting/builtins/environment.h>
 
 #include "builtins/chat.h"
+#include "builtins/discord.h"
 #include "builtins/keybinds.h"
 #include "builtins/web.h"
 
@@ -159,6 +160,9 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Register chat networking API (client only): global Chat.send + overlay visibility
         Builtins::Chat::Register(isolate, context, frameworkObj, _resourceManager.get());
+
+        // Register Discord rich presence API (client only)
+        Builtins::Discord::Register(isolate, context, frameworkObj, _resourceManager.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
     }
