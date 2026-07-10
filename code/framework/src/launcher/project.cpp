@@ -809,13 +809,9 @@ namespace Framework::Launcher {
             return true;
         }
         catch (const std::exception &ex) {
-            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Exception caught: {}", ex.what());
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Unhandled C++ exception escaped the game session: {}", ex.what());
 
-            UnmapViewOfFile(data);
-            CloseHandle(hMapping);
-            CloseHandle(hFile);
-
-            MessageBoxA(nullptr, "Failed to launch game", _config.name.c_str(), MB_ICONERROR);
+            MessageBoxA(nullptr, fmt::format("The game stopped due to an unhandled error:\n\n{}\n\nSee Launcher.log for the full stack trace.", ex.what()).c_str(), _config.name.c_str(), MB_ICONERROR);
             return false;
         }
     }
