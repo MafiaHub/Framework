@@ -407,6 +407,8 @@ if(WIN32)
     target_compile_definitions(cef_subprocess PRIVATE _USE_MATH_DEFINES NOMINMAX)
     set_target_properties(cef_subprocess PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        # Windowed subsystem (no black console window per CEF child) while keeping the int main() entry.
+        LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
     )
     if(TARGET CEFCopyDlls)
         add_dependencies(FrameworkClient CEFCopyDlls)
