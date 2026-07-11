@@ -156,6 +156,19 @@ namespace Framework::GUI {
         }
     }
 
+    // MK_* button/modifier state from a mouse message's wParam, as CEF event flags.
+    // Blink sustains drags (scrollbar thumb, text selection) off the button flags
+    // carried by the move events, so these must reflect the live state.
+    static uint32_t CefMouseModifiers(WPARAM wParam) {
+        uint32_t mods = 0;
+        if (wParam & MK_CONTROL) mods |= EVENTFLAG_CONTROL_DOWN;
+        if (wParam & MK_SHIFT) mods |= EVENTFLAG_SHIFT_DOWN;
+        if (wParam & MK_LBUTTON) mods |= EVENTFLAG_LEFT_MOUSE_BUTTON;
+        if (wParam & MK_MBUTTON) mods |= EVENTFLAG_MIDDLE_MOUSE_BUTTON;
+        if (wParam & MK_RBUTTON) mods |= EVENTFLAG_RIGHT_MOUSE_BUTTON;
+        return mods;
+    }
+
     void View::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (!_browser || !_shouldDisplay || !_hasFocus) {
             return;
@@ -163,12 +176,16 @@ namespace Framework::GUI {
 
         auto host = _browser->GetHost();
 
-        // Handle mouse wheel separately
+        // Handle mouse wheel separately. Unlike the client-relative messages below,
+        // WM_MOUSEWHEEL reports the cursor in screen coordinates, and packs the
+        // button/modifier state into the low word of wParam.
         if (msg == WM_MOUSEWHEEL) {
+            POINT pt {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ::ScreenToClient(hWnd, &pt);
             CefMouseEvent cefEvent;
-            cefEvent.x = GET_X_LPARAM(lParam) - _x;
-            cefEvent.y = GET_Y_LPARAM(lParam) - _y;
-            cefEvent.modifiers = 0;
+            cefEvent.x = pt.x - _x;
+            cefEvent.y = pt.y - _y;
+            cefEvent.modifiers = CefMouseModifiers(GET_KEYSTATE_WPARAM(wParam));
             int delta = GET_WHEEL_DELTA_WPARAM(wParam);
             host->SendMouseWheelEvent(cefEvent, 0, delta);
             return;
@@ -177,7 +194,7 @@ namespace Framework::GUI {
         CefMouseEvent cefEvent;
         cefEvent.x = GET_X_LPARAM(lParam) - _x;
         cefEvent.y = GET_Y_LPARAM(lParam) - _y;
-        cefEvent.modifiers = 0;
+        cefEvent.modifiers = CefMouseModifiers(wParam);
 
         switch (msg) {
         case WM_MOUSEMOVE: {
@@ -187,6 +204,10 @@ namespace Framework::GUI {
         case WM_LBUTTONDOWN: {
             _isMouseDown = true;
             host->SendMouseClickEvent(cefEvent, MBT_LEFT, false, 1);
+        } break;
+        case WM_LBUTTONDBLCLK: {
+            _isMouseDown = true;
+            host->SendMouseClickEvent(cefEvent, MBT_LEFT, false, 2);
         } break;
         case WM_LBUTTONUP: {
             _isMouseDown = false;
