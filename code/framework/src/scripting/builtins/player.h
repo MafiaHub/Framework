@@ -93,6 +93,16 @@ namespace Framework::Scripting::Builtins {
             return peer ? peer->GetPing(MafiaNet::ToGuid(entity->ownerGUID)) : -1;
         }
 
+        // Connection's remote IP address (no port). Server-only; empty when unavailable.
+        std::string GetAddress() const {
+            const auto *entity = Resolve();
+            if (!entity) {
+                return "";
+            }
+            auto *peer = CoreModules::GetNetworkPeer();
+            return peer ? peer->GetAddress(MafiaNet::ToGuid(entity->ownerGUID)) : "";
+        }
+
         std::string ToString() const override {
             std::ostringstream ss;
             ss << "Player{ id: " << _id << " }";
@@ -115,13 +125,15 @@ namespace Framework::Scripting::Builtins {
                 .ctor<uint64_t>()
                 .function("toString", &Player::ToString)
                 .function("kick", &Player::Kick)
-                .function("emit", &Player::Emit);
+                .function("emit", &Player::Emit)
+                .function("getIP", &Player::GetAddress);
 
             auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
             RegisterReadonlyProperty<Player, &Player::GetSteamId>(isolate, protoTemplate, "steamId");
             RegisterReadonlyProperty<Player, &Player::GetDiscordId>(isolate, protoTemplate, "discordId");
             RegisterReadonlyProperty<Player, &Player::GetHardwareId>(isolate, protoTemplate, "hardwareId");
             RegisterReadonlyProperty<Player, &Player::GetPing>(isolate, protoTemplate, "ping");
+            RegisterReadonlyProperty<Player, &Player::GetAddress>(isolate, protoTemplate, "ip");
             return *cls;
         }
 

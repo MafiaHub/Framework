@@ -163,6 +163,11 @@ namespace Framework::Networking {
             return -1;
         }
 
+        // Server-only; the connection's remote IP address (no port), or empty if unavailable.
+        virtual std::string GetAddress(MafiaNet::RakNetGUID) const {
+            return "";
+        }
+
         void SetUnknownPacketHandler(PacketCallback callback) {
             _onUnknownPacketCallback = std::move(callback);
         }

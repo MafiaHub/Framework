@@ -58,6 +58,7 @@ namespace Framework::Networking {
         void SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered);
 
         int GetPing(MafiaNet::RakNetGUID guid) const override;
+        std::string GetAddress(MafiaNet::RakNetGUID guid) const override;
 
         bool IsAuthenticated(MafiaNet::RakNetGUID guid) const {
             return _authenticatedClients.contains(guid.g);

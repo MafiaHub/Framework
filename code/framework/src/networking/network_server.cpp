@@ -123,6 +123,15 @@ namespace Framework::Networking {
     int NetworkServer::GetPing(MafiaNet::RakNetGUID guid) const {
         return _peer->GetAveragePing(guid);
     }
+    std::string NetworkServer::GetAddress(MafiaNet::RakNetGUID guid) const {
+        const auto address = _peer->GetSystemAddressFromGuid(guid);
+        if (address == MafiaNet::UNASSIGNED_SYSTEM_ADDRESS) {
+            return "";
+        }
+        char buffer[64] = {0};
+        address.ToString(false, buffer, sizeof(buffer));
+        return buffer;
+    }
     void NetworkServer::SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, MafiaNet::Priority priority, MafiaNet::Reliability reliability) {
         // When broadcasting, the system identifier is the peer to exclude, so a single Signal reaches
         // everyone but the sender.
