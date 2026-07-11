@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 12
+#define UNIT_MAX_MODULES 16
 #include "logging/logger.h"
 #include "unit.h"
 
@@ -17,6 +17,7 @@
 #include "modules/network_packets_ut.h"
 #include "modules/state_machine_ut.h"
 #include "modules/persistent_config_ut.h"
+#include "modules/snapshot_buffer_ut.h"
 
 // Scripting tests
 #include "modules/engine_ut.h"
@@ -36,6 +37,7 @@ int main() {
     UNIT_MODULE(network_packets);
     UNIT_MODULE(state_machine);
     UNIT_MODULE(persistent_config);
+    UNIT_MODULE(snapshot_buffer);
 
     // Scripting tests
     UNIT_MODULE(engine);
