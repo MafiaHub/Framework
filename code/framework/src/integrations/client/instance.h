@@ -23,7 +23,9 @@
 #include "integrations/client/ui/chat_box.h"
 #include <mafianet/FileListTransferCBInterface.h>
 
+#include <cstdint>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "scripting/module.h"
@@ -90,10 +92,26 @@ namespace Framework::Integrations::Client {
         uint32_t serverIDHash;
     };
 
+    // On-connect asset transfer state, filled from the MafiaNet transfer set.
     struct AssetDownloadStatus {
-        float progress {0.0f};
-        bool downloading;
-        uint16_t setID;
+        bool downloading         = false;
+        float progress           = 0.0f; // 0..1 over the whole set
+        uint64_t bytesDownloaded = 0;
+        uint64_t bytesTotal      = 0;
+        uint32_t filesDownloaded = 0;
+        uint32_t filesTotal      = 0;
+        std::string currentFile;
+        uint16_t setID           = 0;
+    };
+
+    // Observable stages of the connect handshake, for a mod's loading UI.
+    enum class ConnectionPhase {
+        Disconnected,
+        Connecting,
+        Authenticating,
+        Downloading,
+        Starting,
+        InGame,
     };
 
     class Instance : public Framework::Lifecycle {
@@ -117,6 +135,7 @@ namespace Framework::Integrations::Client {
 
         // assets
         AssetDownloadStatus _downloadStatus {};
+        ConnectionPhase _connectionPhase = ConnectionPhase::Disconnected;
         std::string _assetCachePath;
         bool _initialDownloadDone {};
 
@@ -180,6 +199,12 @@ namespace Framework::Integrations::Client {
         virtual void OnConnectionClosed() {}
         virtual void OnAssetsDownloadFinished(bool success) {
             (void)success;
+        }
+        virtual void OnAssetsDownloadProgress(const AssetDownloadStatus &status) {
+            (void)status;
+        }
+        virtual void OnConnectionPhaseChanged(ConnectionPhase phase) {
+            (void)phase;
         }
         virtual void OnChatMessageReceived(const Framework::Networking::RPC::ChatMessage &msg) {
             (void)msg;
@@ -255,6 +280,13 @@ namespace Framework::Integrations::Client {
         AssetDownloadStatus &GetAssetDownloadStatus() {
             return _downloadStatus;
         }
+
+        ConnectionPhase GetConnectionPhase() const {
+            return _connectionPhase;
+        }
+
+        // Set the phase; fires OnConnectionPhaseChanged on change.
+        void SetConnectionPhase(ConnectionPhase phase);
 
         void SetAssetCachePath(const std::string &path) {
             _assetCachePath = path;

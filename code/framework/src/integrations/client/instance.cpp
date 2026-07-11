@@ -155,28 +155,49 @@ namespace Framework::Integrations::Client {
 
     bool AssetDownloadFileProgress::OnFile(MafiaNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) {
         if (onFileStruct->numberOfFilesInThisSet > 0) {
-            auto &downloadStatus    = _instance->GetAssetDownloadStatus();
-            downloadStatus.progress = onFileStruct->bytesDownloadedForThisSet / float(onFileStruct->byteLengthOfThisSet);
+            auto &downloadStatus           = _instance->GetAssetDownloadStatus();
+            downloadStatus.downloading     = true;
+            downloadStatus.setID           = onFileStruct->setID;
+            downloadStatus.filesTotal      = onFileStruct->numberOfFilesInThisSet;
+            downloadStatus.bytesTotal      = onFileStruct->byteLengthOfThisSet;
+            downloadStatus.bytesDownloaded = onFileStruct->bytesDownloadedForThisSet;
+            downloadStatus.currentFile     = onFileStruct->fileName;
+            downloadStatus.progress        = onFileStruct->byteLengthOfThisSet > 0 ? onFileStruct->bytesDownloadedForThisSet / float(onFileStruct->byteLengthOfThisSet) : 0.0f;
             if (onFileStruct->bytesDownloadedForThisFile == onFileStruct->byteLengthOfThisFile) {
+                downloadStatus.filesDownloaded = onFileStruct->fileIndex + 1;
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Asset downloaded ({}/{} - {}%): {}", onFileStruct->fileIndex + 1, onFileStruct->numberOfFilesInThisSet, int(downloadStatus.progress * 100.0f), onFileStruct->fileName);
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
             }
+            _instance->OnAssetsDownloadProgress(downloadStatus);
         }
         return true;
     }
 
     void AssetDownloadFileProgress::OnFileProgress(MafiaNet::FileListTransferCBInterface::FileProgressStruct *fps) {
-        auto &downloadStatus    = _instance->GetAssetDownloadStatus();
-        auto onFileStruct       = fps->onFileStruct;
-        downloadStatus.progress = onFileStruct->byteLengthOfThisSet / float(onFileStruct->bytesDownloadedForThisSet);
+        auto *onFileStruct = fps->onFileStruct;
+        if (!onFileStruct || onFileStruct->byteLengthOfThisSet == 0) {
+            return;
+        }
+        auto &downloadStatus           = _instance->GetAssetDownloadStatus();
+        downloadStatus.downloading     = true;
+        downloadStatus.setID           = onFileStruct->setID;
+        downloadStatus.filesTotal      = onFileStruct->numberOfFilesInThisSet;
+        downloadStatus.bytesTotal      = onFileStruct->byteLengthOfThisSet;
+        downloadStatus.bytesDownloaded = onFileStruct->bytesDownloadedForThisSet;
+        downloadStatus.currentFile     = onFileStruct->fileName;
+        downloadStatus.progress        = onFileStruct->bytesDownloadedForThisSet / float(onFileStruct->byteLengthOfThisSet);
+        _instance->OnAssetsDownloadProgress(downloadStatus);
     }
 
     bool AssetDownloadFileProgress::OnDownloadComplete(DownloadCompleteStruct *dcs) {
         (void)dcs;
 
-        auto &downloadStatus       = _instance->GetAssetDownloadStatus();
-        downloadStatus.progress    = 1.0f;
-        downloadStatus.downloading = false;
+        auto &downloadStatus           = _instance->GetAssetDownloadStatus();
+        downloadStatus.progress        = 1.0f;
+        downloadStatus.downloading     = false;
+        downloadStatus.bytesDownloaded = downloadStatus.bytesTotal;
+        downloadStatus.filesDownloaded = downloadStatus.filesTotal;
+        _instance->OnAssetsDownloadProgress(downloadStatus);
         _instance->OnAssetsDownloaded(true);
         return false;
     }
@@ -458,8 +479,9 @@ namespace Framework::Integrations::Client {
             net->SetBuildToken(Framework::Networking::NetworkPeer::kBuildVerificationDisabledToken);
         }
 
-        net->SetOnPlayerConnectedCallback([](MafiaNet::Packet *) {
+        net->SetOnPlayerConnectedCallback([this](MafiaNet::Packet *) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, verifying build");
+            SetConnectionPhase(ConnectionPhase::Authenticating);
         });
 
         // Server's resource list. Store it (survives a scripting module reset) and start the asset
@@ -471,6 +493,7 @@ namespace Framework::Integrations::Client {
             _pendingServerResources = payload.resources;
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", _pendingServerResources.size());
 
+            SetConnectionPhase(ConnectionPhase::Downloading);
             DownloadsAssetsFromConnectedServer();
         });
 
@@ -548,6 +571,7 @@ namespace Framework::Integrations::Client {
             }
             _chatBox.SetVisible(true);
             _chatBox.SetSessionActive(true);
+            SetConnectionPhase(ConnectionPhase::InGame);
             OnConnectionFinalized(_serverTickRate);
         });
 
@@ -576,6 +600,7 @@ namespace Framework::Integrations::Client {
             _initialDownloadDone = false;
             _downloadStatus      = {};
             _connectionFinalized = false;
+            SetConnectionPhase(ConnectionPhase::Disconnected);
             
             // Entity teardown is native: ReplicaManager3 deletes server-created replicas when the
             // connection drops (QueryActionOnPopConnection_Client).
@@ -619,6 +644,14 @@ namespace Framework::Integrations::Client {
         }
         Framework::Networking::RPC::ChatMessage payload {text};
         net->BroadcastRPC(payload);
+    }
+
+    void Instance::SetConnectionPhase(ConnectionPhase phase) {
+        if (_connectionPhase == phase) {
+            return;
+        }
+        _connectionPhase = phase;
+        OnConnectionPhaseChanged(phase);
     }
 
     void Instance::DownloadsAssetsFromConnectedServer() {
@@ -673,6 +706,7 @@ namespace Framework::Integrations::Client {
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
 
+        _downloadStatus.downloading = true;
         _downloadStatus.setID = streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), new AssetDownloadFileProgress(this), MafiaNet::Priority::High, 2, nullptr);
     }
 
@@ -742,6 +776,8 @@ namespace Framework::Integrations::Client {
             }
             // A refresh that raced an initial connect falls through to full init.
             _pendingRefreshResources.clear();
+
+            SetConnectionPhase(ConnectionPhase::Starting);
 
             if (scriptingModule) {
                 // Set resource cache path before init
