@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2023, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,34 +8,59 @@
 
 #pragma once
 
-#include <fmt/format.h>
+#include "world_text.h"
+
 #include <imgui/imgui.h>
 
 #include <algorithm>
-#include <string>
 
 namespace Framework::External::ImGUI::Widgets {
-    void DrawNameTag(ImVec2 screenPos, const char *label, float healthPercent, float healthBarWidth = 50.0f, float healthBarHeight = 8.0f) {
-        ImDrawList *drawList = ImGui::GetBackgroundDrawList();
+    struct NameTagStyle {
+        ImU32 textColor       = IM_COL32(255, 255, 255, 255);
+        ImU32 bgColor         = IM_COL32(0, 0, 0, 153);
+        float fontSize        = 0.0f; // 0 = current font size
+        float rounding        = 4.0f;
+        float padding         = 4.0f;
+        float healthBarWidth  = 50.0f; // used when a healthPercent is supplied
+        float healthBarHeight = 5.0f;
+    };
 
-        const ImVec2 textSize     = ImGui::CalcTextSize(label);
-        const float halfTextWidth = textSize.x / 2.0f;
-        drawList->AddText(NULL, 16.0f, {screenPos.x - halfTextWidth + 1, screenPos.y + 1}, IM_COL32(0, 0, 0, 255), label);
-        drawList->AddText(NULL, 16.0f, {screenPos.x - halfTextWidth, screenPos.y}, IM_COL32(255, 255, 255, 255), label);
-
-        if (healthBarWidth <= 0.0f || healthBarHeight <= 0.0f)
+    // Draw a name tag centered on screenPos (pixels): the name over a rounded background box, and an
+    // optional health bar below it when healthPercent is in [0, 100]. color alphas are multiplied by
+    // `alpha` (distance fade, see WorldTextAlpha).
+    inline void DrawNameTag(ImDrawList *drawList, ImVec2 screenPos, const char *name, const NameTagStyle &style = {}, float alpha = 1.0f, float healthPercent = -1.0f) {
+        if (!drawList || !name || !name[0] || alpha <= 0.0f) {
             return;
+        }
 
-        const float halfHealthBarWidth = healthBarWidth / 2.0f;
-        screenPos.y += 1.2f * textSize.y;
-        drawList->AddRect({screenPos.x - halfHealthBarWidth - 1.0f, screenPos.y}, {screenPos.x + halfHealthBarWidth + 1.0f, screenPos.y + healthBarHeight + 1.0f}, IM_COL32(100, 100, 100, 200));
-        drawList->AddRectFilled({screenPos.x - halfHealthBarWidth, screenPos.y + 1.0f}, {screenPos.x + halfHealthBarWidth, screenPos.y + healthBarHeight}, IM_COL32(0, 0, 0, 175));
+        ImFont *font   = ImGui::GetFont();
+        float fontSize = style.fontSize > 0.0f ? style.fontSize : ImGui::GetFontSize();
 
-        const float alpha               = std::clamp(healthPercent / 100.0f, 0.0f, 1.0f);
-        const ImU32 healthBarLeftColor  = IM_COL32(80, 0, 0, 255);
-        const ImU32 healthBarRightColor = IM_COL32(glm::mix(80, 255, alpha), glm::mix(0, 40, alpha), glm::mix(0, 80, alpha), 255);
-        const ImVec2 healthBarMin       = {screenPos.x - halfHealthBarWidth, screenPos.y + 1.0f};
-        const ImVec2 healthBarMax       = {screenPos.x - halfHealthBarWidth + (alpha * healthBarWidth), screenPos.y + healthBarHeight};
-        drawList->AddRectFilledMultiColor(healthBarMin, healthBarMax, healthBarLeftColor, healthBarRightColor, healthBarRightColor, healthBarLeftColor);
+        const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, name);
+        const ImVec2 textPos(screenPos.x - textSize.x * 0.5f, screenPos.y - textSize.y * 0.5f);
+
+        drawList->AddRectFilled(
+            ImVec2(textPos.x - style.padding, textPos.y - style.padding),
+            ImVec2(textPos.x + textSize.x + style.padding, textPos.y + textSize.y + style.padding),
+            WorldTextModulateAlpha(style.bgColor, alpha),
+            style.rounding);
+        drawList->AddText(font, fontSize, textPos, WorldTextModulateAlpha(style.textColor, alpha), name);
+
+        if (healthPercent < 0.0f || style.healthBarWidth <= 0.0f || style.healthBarHeight <= 0.0f) {
+            return;
+        }
+
+        const float t             = std::clamp(healthPercent / 100.0f, 0.0f, 1.0f);
+        const float halfBarWidth  = style.healthBarWidth * 0.5f;
+        const float barTop        = textPos.y + textSize.y + style.padding + 3.0f;
+        const ImVec2 barMin(screenPos.x - halfBarWidth, barTop);
+        const ImVec2 barMax(screenPos.x + halfBarWidth, barTop + style.healthBarHeight);
+
+        drawList->AddRectFilled(barMin, barMax, WorldTextModulateAlpha(IM_COL32(0, 0, 0, 175), alpha), style.rounding * 0.5f);
+
+        const ImU32 fillLeft  = WorldTextModulateAlpha(IM_COL32(80, 0, 0, 255), alpha);
+        const ImU32 fillRight = WorldTextModulateAlpha(
+            IM_COL32(80 + static_cast<int>(175.0f * t), static_cast<int>(40.0f * t), static_cast<int>(80.0f * t), 255), alpha);
+        drawList->AddRectFilledMultiColor(barMin, ImVec2(barMin.x + style.healthBarWidth * t, barMax.y), fillLeft, fillRight, fillRight, fillLeft);
     }
 } // namespace Framework::External::ImGUI::Widgets
