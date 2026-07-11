@@ -172,7 +172,7 @@ namespace Framework::Integrations::Server {
             });
         }
 
-        if (!_opts.bindPublicServer || !_masterlist->Init(_opts.services.apiUrl, _opts.services.masterlistUrl, _opts.bindSecretKey)) {
+        if (!_opts.bindPublicServer || !_masterlist->Init(_opts.services.masterlistUrl, _opts.bindSecretKey)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
         }
 
