@@ -8,6 +8,7 @@
 
 #include "command_listener.h"
 
+#include <chrono>
 #include <iostream>
 #include <mutex>
 #include <thread>
@@ -18,7 +19,16 @@ namespace Framework::Utils {
         std::thread([this]() {
             while (_running) {
                 std::string commandString;
-                std::getline(std::cin, commandString);
+                if (!std::getline(std::cin, commandString)) {
+                    // Non-interactive stdin (e.g. Docker, no TTY) is at EOF and getline
+                    // returns instantly; break on EOF, back off otherwise, to avoid a busy-spin.
+                    if (std::cin.eof()) {
+                        break;
+                    }
+                    std::cin.clear();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    continue;
+                }
 
                 if (commandString.empty())
                     continue;
