@@ -383,6 +383,12 @@ namespace Framework::Integrations::Client {
     void Instance::Shutdown() {
         PreShutdown();
 
+        // Before the renderer: CefShutdown must drain the browsers while the device is
+        // alive, else the guarded pump faults and orphans cef_subprocess.exe.
+        if (_webManager && _webManager->IsInitialized()) {
+            _webManager->Shutdown();
+        }
+
         if (_renderer && _renderer->IsInitialized()) {
             _renderer->Shutdown();
         }
