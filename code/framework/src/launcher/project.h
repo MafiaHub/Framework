@@ -104,6 +104,11 @@ namespace Framework::Launcher {
         // Some launchers already own ucrtbase's process-wide EXE TLS-destructor slot.
         // Suppress the mapped game's second registration when that would abort startup.
         bool suppressThreadLocalExeAtexitCallback = false;
+
+        // Custom URL scheme deep link. When set, the launcher extracts a <urlProtocolScheme>://
+        // argument from its command line and passes it to Instance::OnProtocolLaunch. Registering the
+        // scheme with the OS is the mod's responsibility.
+        std::wstring urlProtocolScheme; // e.g. L"mafiamp" (no "://")
     };
 
     class Project {
@@ -155,6 +160,9 @@ namespace Framework::Launcher {
 
         bool RunInnerSteamChecks();
         bool RunInnerClassicChecks();
+
+        // Extracts a launch URL from the command line into the environment for the client.
+        void HandleUrlProtocolLaunch();
 
         bool LoadJSONConfig();
         void SaveJSONConfig() const;

@@ -299,6 +299,8 @@ namespace Framework::Integrations::Client {
         PostInit();
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Mod subsystems initialized");
 
+        InitProtocolHandler();
+
         
         // Store reference to the input system
         CoreModules::SetInput(GetBaseInput());
@@ -314,6 +316,16 @@ namespace Framework::Integrations::Client {
         GetNetworkingEngine()->GetNetworkClient()->SetOnAssetsDownloadFailedCallback([this]() {
             this->OnAssetsDownloaded(false);
         });
+    }
+
+    void Instance::InitProtocolHandler() {
+#ifdef _WIN32
+        char urlBuffer[2048] = {};
+        if (GetEnvironmentVariableA("MafiaHubLaunchURL", urlBuffer, sizeof(urlBuffer)) > 0 && urlBuffer[0]) {
+            _pendingProtocolUrl = urlBuffer;
+            SetEnvironmentVariableA("MafiaHubLaunchURL", nullptr); // clear so it can't leak into children
+        }
+#endif
     }
 
     void Instance::InitCacheAssetFolders() {
@@ -408,6 +420,13 @@ namespace Framework::Integrations::Client {
 
     void Instance::Update() {
         FW_PROFILE_SCOPE_N("Client::Update");
+
+        // Deliver the cold-start deep link (after PostInit).
+        if (!_pendingProtocolUrl.empty()) {
+            std::string url;
+            url.swap(_pendingProtocolUrl);
+            OnProtocolLaunch(url);
+        }
 
         if (_presence && _presence->IsInitialized()) {
             FW_PROFILE_SCOPE_N("Client::Presence");
