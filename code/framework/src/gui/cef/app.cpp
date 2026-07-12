@@ -47,6 +47,10 @@ namespace Framework::GUI::CEF {
         commandLine->AppendSwitch("disable-spell-checking");
         commandLine->AppendSwitch("disable-component-update");
         commandLine->AppendSwitchWithValue("disable-features", "WebUSB,WebHID");
+        // Allow UI audio without a user gesture: CEF views are host-driven overlays (notifications,
+        // HUD, menus) that never receive a real "user activation", so the default autoplay policy
+        // would silently block all sound (Web Audio / <audio>). This opts the embedded browser out.
+        commandLine->AppendSwitchWithValue("autoplay-policy", "no-user-gesture-required");
         // No internal begin-frame scheduler: rendering uses external begin frames.
     }
 
