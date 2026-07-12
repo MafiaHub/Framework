@@ -782,9 +782,17 @@ namespace Framework::Integrations::Server {
                     case Utils::CommandProcessorError::COMMAND_PRINT_HELP:
                         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.GetValue());
                         break;
-                    case Utils::CommandProcessorError::COMMAND_UNKNOWN:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command ({}): {}", command, result.GetValue());
+                    case Utils::CommandProcessorError::COMMAND_UNKNOWN: {
+                        // Not a built-in command; hand it to the mod override and the scripting layer.
+                        std::vector<std::string> tokens = Utils::CommandProcessor::Tokenize(command);
+                        if (!tokens.empty()) {
+                            const std::string name = std::move(tokens.front());
+                            tokens.erase(tokens.begin());
+                            OnConsoleCommand(std::string(command), name, tokens);
+                            EmitConsoleCommand(name, tokens);
+                        }
                         break;
+                    }
                     case Utils::CommandProcessorError::COMMAND_EMPTY_INPUT:
                         break;
                     case Utils::CommandProcessorError::COMMAND_INTERNAL_ERROR:
@@ -799,6 +807,34 @@ namespace Framework::Integrations::Server {
         catch (const std::exception &ex) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", ex.what());
         }
+    }
+
+    void Instance::EmitConsoleCommand(const std::string &command, const std::vector<std::string> &args) {
+        if (!_scriptingModule) {
+            return;
+        }
+        auto *engine          = _scriptingModule->GetEngine();
+        auto *resourceManager = _scriptingModule->GetResourceManager();
+        if (!engine || !resourceManager || !engine->IsInitialized()) {
+            return;
+        }
+
+        v8::Isolate *isolate = engine->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine->GetContext();
+        v8::Context::Scope contextScope(context);
+
+        v8::Local<v8::Array> argsArr = v8::Array::New(isolate, static_cast<int>(args.size()));
+        for (size_t i = 0; i < args.size(); ++i) {
+            argsArr->Set(context, static_cast<uint32_t>(i), v8pp::to_v8(isolate, args[i])).Check();
+        }
+
+        std::vector<v8::Local<v8::Value>> eventArgs;
+        eventArgs.push_back(v8pp::to_v8(isolate, command));
+        eventArgs.push_back(argsArr);
+        resourceManager->GetEvents().EmitReserved(isolate, context, "consoleCommand", eventArgs);
     }
 
     void Instance::Shutdown() {
