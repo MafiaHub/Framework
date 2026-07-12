@@ -11,7 +11,10 @@
 
 #include "graphics/backend/d3d9.h"
 
+#include <imgui/imgui.h>
+
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 
 namespace Framework::GUI {
@@ -172,5 +175,32 @@ namespace Framework::GUI {
         }
 
         DrawQuad(device);
+    }
+
+    void ViewD3D9::SubmitImGuiDraw() {
+        if (!_browser || !_shouldDisplay) {
+            return;
+        }
+
+        std::scoped_lock lock(_renderMutex);
+
+        auto *backend = _graphicsRenderer->GetD3D9Backend();
+        if (!backend) {
+            return;
+        }
+        auto *device = backend->GetDevice();
+        if (!device) {
+            return;
+        }
+
+        if (!UploadPixels(device) || !_texture) {
+            return;
+        }
+
+        // Composite into the background draw list so world-space overlays queued earlier
+        // (nametags, labels) are occluded by opaque pages while ImGui windows stay on top.
+        const ImVec2 pMin(static_cast<float>(_x), static_cast<float>(_y));
+        const ImVec2 pMax(static_cast<float>(_x + _width), static_cast<float>(_y + _height));
+        ImGui::GetBackgroundDrawList()->AddImage(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(_texture.Get())), pMin, pMax);
     }
 } // namespace Framework::GUI
