@@ -156,13 +156,22 @@ namespace Framework::GUI {
         }
     }
 
-    // MK_* button/modifier state from a mouse message's wParam, as CEF event flags.
-    // Blink sustains drags (scrollbar thumb, text selection) off the button flags
-    // carried by the move events, so these must reflect the live state.
-    static uint32_t CefMouseModifiers(WPARAM wParam) {
+    // Ctrl/Shift/Alt from the live keyboard state. Mouse messages only carry
+    // Ctrl/Shift (there is no MK_ALT), so both input paths read modifiers here
+    // uniformly instead of off wParam, otherwise DOM e.altKey never fires.
+    static uint32_t CefKeyboardModifiers() {
         uint32_t mods = 0;
-        if (wParam & MK_CONTROL) mods |= EVENTFLAG_CONTROL_DOWN;
-        if (wParam & MK_SHIFT) mods |= EVENTFLAG_SHIFT_DOWN;
+        if (GetKeyState(VK_CONTROL) & 0x8000) mods |= EVENTFLAG_CONTROL_DOWN;
+        if (GetKeyState(VK_SHIFT) & 0x8000) mods |= EVENTFLAG_SHIFT_DOWN;
+        if (GetKeyState(VK_MENU) & 0x8000) mods |= EVENTFLAG_ALT_DOWN;
+        return mods;
+    }
+
+    // MK_* button state from a mouse message's wParam, as CEF event flags. Blink
+    // sustains drags (scrollbar thumb, text selection) off the button flags
+    // carried by the move events, so these must reflect the live state.
+    static uint32_t CefMouseButtons(WPARAM wParam) {
+        uint32_t mods = 0;
         if (wParam & MK_LBUTTON) mods |= EVENTFLAG_LEFT_MOUSE_BUTTON;
         if (wParam & MK_MBUTTON) mods |= EVENTFLAG_MIDDLE_MOUSE_BUTTON;
         if (wParam & MK_RBUTTON) mods |= EVENTFLAG_RIGHT_MOUSE_BUTTON;
@@ -185,7 +194,7 @@ namespace Framework::GUI {
             CefMouseEvent cefEvent;
             cefEvent.x = pt.x - _x;
             cefEvent.y = pt.y - _y;
-            cefEvent.modifiers = CefMouseModifiers(GET_KEYSTATE_WPARAM(wParam));
+            cefEvent.modifiers = CefKeyboardModifiers() | CefMouseButtons(GET_KEYSTATE_WPARAM(wParam));
             int delta = GET_WHEEL_DELTA_WPARAM(wParam);
             host->SendMouseWheelEvent(cefEvent, 0, delta);
             return;
@@ -194,7 +203,7 @@ namespace Framework::GUI {
         CefMouseEvent cefEvent;
         cefEvent.x = GET_X_LPARAM(lParam) - _x;
         cefEvent.y = GET_Y_LPARAM(lParam) - _y;
-        cefEvent.modifiers = CefMouseModifiers(wParam);
+        cefEvent.modifiers = CefKeyboardModifiers() | CefMouseButtons(wParam);
 
         switch (msg) {
         case WM_MOUSEMOVE: {
@@ -236,10 +245,16 @@ namespace Framework::GUI {
         CefKeyEvent cefEvent;
 
         switch (msg) {
+        case WM_SYSKEYDOWN:
+            cefEvent.is_system_key = true;
+            [[fallthrough]];
         case WM_KEYDOWN: {
             cefEvent.type             = KEYEVENT_RAWKEYDOWN;
             cefEvent.windows_key_code = static_cast<int>(wParam);
         } break;
+        case WM_SYSKEYUP:
+            cefEvent.is_system_key = true;
+            [[fallthrough]];
         case WM_KEYUP: {
             cefEvent.type             = KEYEVENT_KEYUP;
             cefEvent.windows_key_code = static_cast<int>(wParam);
@@ -270,11 +285,7 @@ namespace Framework::GUI {
         }
 
         cefEvent.native_key_code = static_cast<int>(lParam);
-
-        const bool ctrlPressed  = GetKeyState(VK_CONTROL) & 0x8000;
-        const bool shiftPressed = GetKeyState(VK_SHIFT) & 0x8000;
-        const bool altPressed   = GetKeyState(VK_MENU) & 0x8000;
-        cefEvent.modifiers      = (ctrlPressed ? EVENTFLAG_CONTROL_DOWN : 0) | (shiftPressed ? EVENTFLAG_SHIFT_DOWN : 0) | (altPressed ? EVENTFLAG_ALT_DOWN : 0);
+        cefEvent.modifiers       = CefKeyboardModifiers();
 
         _browser->GetHost()->SendKeyEvent(cefEvent);
     }
