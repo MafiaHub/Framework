@@ -155,8 +155,8 @@ namespace Framework::Integrations::Server {
         bool LoadConfigFromJSON();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
         
-        // Command handlers
         void HandleCommand(std::string_view command);
+        void EmitConsoleCommand(const std::string &command, const std::vector<std::string> &args);
 
       public:
         Instance();
@@ -187,6 +187,10 @@ namespace Framework::Integrations::Server {
         }
         virtual void OnChatCommand(uint64_t senderNetworkId, const std::string &text, const std::string &command, const std::vector<std::string> &args) {
             (void)senderNetworkId, (void)text, (void)command, (void)args;
+        }
+        // A console line no built-in command claimed; also emitted as the "consoleCommand" event.
+        virtual void OnConsoleCommand(const std::string &text, const std::string &command, const std::vector<std::string> &args) {
+            (void)text, (void)command, (void)args;
         }
 
         // A client emitted a scripted event up (Events.emitServer); dispatch it to Events.onClient as

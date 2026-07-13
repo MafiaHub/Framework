@@ -36,6 +36,7 @@ MODULE(snapshot_buffer, {
         TransformSnapshotBuffer buffer;
         TransformSnapshot a, b;
         a.position = glm::vec3(0.0f);
+        a.velocity = glm::vec3(2.0f, 0.0f, 0.0f); // already moving, so the 10u step is not a teleport
         b.position = glm::vec3(10.0f, 0.0f, 0.0f);
         buffer.Push(a, 1000);
         buffer.Push(b, 1100);
@@ -48,6 +49,7 @@ MODULE(snapshot_buffer, {
         TransformSnapshotBuffer buffer;
         TransformSnapshot a, b;
         a.position = glm::vec3(0.0f);
+        a.velocity = glm::vec3(2.0f, 0.0f, 0.0f); // already moving, so the 10u step is not a teleport
         b.position = glm::vec3(10.0f, 0.0f, 0.0f);
         buffer.Push(a, 1000);
         buffer.Push(b, 1100);

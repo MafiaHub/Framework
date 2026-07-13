@@ -114,7 +114,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Checkout private services adapter
+        uses: actions/checkout@v5
+        with:
+          repository: MafiaHub/services-adapter
+          path: code/framework/src/services/src
           token: ${{ secrets.FW_SERVICES_PAT }}
                               
       - uses: maxim-lobanov/setup-xcode@v1
@@ -139,11 +145,11 @@ jobs:
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
         run: |
-          cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DMAFIAHUB_SERVICES_BUILD_FROM_SOURCE=ON
       - name: Configure CMake (Unix)
         if: runner.os != 'Windows'
         run: |
-          cmake -G "${{ matrix.cmake_generator }}" -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          cmake -G "${{ matrix.cmake_generator }}" -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DMAFIAHUB_SERVICES_BUILD_FROM_SOURCE=ON
       - name: Build MafiaHubServices
         run: |
           cmake --build build --target MafiaHubServices --config ${{ matrix.build_type }}

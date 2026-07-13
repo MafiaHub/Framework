@@ -105,6 +105,13 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
+        // Restrict streaming to a single player's connection (null clears). Range/visibility still apply.
+        void SetVisibleTo(Networking::Replication::NetworkEntity *targetEntity) {
+            if (auto *e = Resolve()) {
+                e->streaming.targetGUID = targetEntity ? targetEntity->ownerGUID : MafiaNet::UNASSIGNED_PEER_GUID;
+            }
+        }
+
         virtual std::string ToString() const {
             std::ostringstream ss;
             ss << "Entity{ id: " << _id << " }";
@@ -157,6 +164,33 @@ namespace Framework::Scripting::Builtins {
                         v8pp::to_v8(info.GetIsolate(), "rotation must be a Vector3 (euler degrees) or Quaternion")));
                 });
                 protoTemplate->SetAccessorProperty(v8pp::to_v8(isolate, "rotation").As<v8::Name>(), rotationGetter, rotationSetter);
+            }
+
+            // setVisibleTo(player|null): restrict streaming to one player's connection.
+            {
+                auto setVisibleTo = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                    auto *isolate = info.GetIsolate();
+                    auto *self    = v8pp::class_<Entity>::unwrap_object(isolate, info.This());
+                    if (!self) {
+                        return;
+                    }
+                    if (info.Length() < 1 || info[0]->IsNullOrUndefined()) {
+                        self->SetVisibleTo(nullptr);
+                        return;
+                    }
+                    auto *target = v8pp::class_<Entity>::unwrap_object(isolate, info[0]);
+                    if (!target) {
+                        isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "setVisibleTo: expected a Player (or null to clear)")));
+                        return;
+                    }
+                    auto *targetEntity = target->Resolve();
+                    if (!targetEntity || targetEntity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
+                        isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "setVisibleTo: target has no owning connection")));
+                        return;
+                    }
+                    self->SetVisibleTo(targetEntity);
+                });
+                protoTemplate->Set(v8pp::to_v8(isolate, "setVisibleTo").As<v8::Name>(), setVisibleTo);
             }
 
             return *cls;

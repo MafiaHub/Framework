@@ -31,6 +31,7 @@ namespace Framework::GUI {
 
         void Update() override;
         void Render() override;
+        void SubmitImGuiDraw() override;
 
       private:
         bool UploadPixels(IDirect3DDevice9 *device);

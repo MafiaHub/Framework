@@ -120,6 +120,11 @@ if(WIN32)
         src/utils/memory.cpp
         src/utils/minidump.cpp
     )
+
+    # URL scheme launch-argument extraction (used by the launcher).
+    list(APPEND FRAMEWORK_SRC
+        src/utils/url_protocol.cpp
+    )
 endif()
 
 # Additional libraries

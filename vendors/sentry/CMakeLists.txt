@@ -55,6 +55,16 @@ target_compile_definitions(Sentry PUBLIC SENTRY_BUILD_STATIC)
 # generated sentry-config.cmake, which we bypass by globbing the archives directly).
 if(WIN32)
     target_link_libraries(Sentry PUBLIC winhttp version dbghelp shlwapi synchronization advapi32 rpcrt4 powrprof user32 kernel32)
+elseif(APPLE)
+    # The crashpad backend links these system frameworks; the HTTP transport uses libcurl.
+    find_package(Threads REQUIRED)
+    target_link_libraries(Sentry PUBLIC
+            "-framework ApplicationServices"
+            "-framework CoreFoundation"
+            "-framework Foundation"
+            "-framework IOKit"
+            "-framework Security"
+            bsm curl z Threads::Threads)
 elseif(UNIX AND NOT APPLE)
     target_link_libraries(Sentry PUBLIC pthread dl rt z)
 endif()

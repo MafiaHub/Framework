@@ -134,6 +134,7 @@ namespace Framework::Networking::Replication {
             bool visible       = true;   // master visibility switch
             bool isViewer      = false;  // drives a connection's interest set (the player's avatar)
             float range        = 100.0f; // interest radius (world units) when acting as a viewer
+            MafiaNet::PeerGuid targetGUID = MafiaNet::UNASSIGNED_PEER_GUID; // if set, streams only to this connection
         };
         Streaming streaming;
 

@@ -159,10 +159,14 @@ namespace Framework::Integrations::Client {
         // One-shot: serve http://resources/<resource>/<file> from the asset cache (scripted web views).
         bool _resourceSchemeRegistered {};
 
+        // Cold-start deep-link URL; delivered to OnProtocolLaunch from Update().
+        std::string _pendingProtocolUrl;
+
         UI::ChatBox _chatBox;
 
         void InitNetworkingMessages();
         void InitAssetDownloader();
+        void InitProtocolHandler();
         void OnAssetsDownloaded(bool success);
         void RegisterResourceSchemeHandler();
         // Targeted delta re-sync for a hot-reload (does not stop all resources).
@@ -208,6 +212,12 @@ namespace Framework::Integrations::Client {
         }
         virtual void OnChatMessageReceived(const Framework::Networking::RPC::ChatMessage &msg) {
             (void)msg;
+        }
+
+        // Deep link (custom URL protocol) that launched the client. Fires once from Update() after
+        // PostInit. url is the raw, un-decoded URI.
+        virtual void OnProtocolLaunch(const std::string &url) {
+            (void)url;
         }
 
         [[nodiscard]] Utils::Result<void, Error> RenderInit();
