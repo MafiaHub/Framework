@@ -842,6 +842,14 @@ namespace Framework::Launcher {
         AttachConsole(GetCurrentProcessId());
         SetConsoleTitleW(_config.developerConsoleTitle.c_str());
 
+        // Disable QuickEdit: a stray click puts the console in select mode, which blocks
+        // every write to it — freezing whatever game thread logs next until a key clears it.
+        const HANDLE conIn = GetStdHandle(STD_INPUT_HANDLE);
+        DWORD conMode      = 0;
+        if (conIn != INVALID_HANDLE_VALUE && GetConsoleMode(conIn, &conMode)) {
+            SetConsoleMode(conIn, (conMode & ~ENABLE_QUICK_EDIT_MODE) | ENABLE_EXTENDED_FLAGS);
+        }
+
         (void)freopen("CON", "w", stdout);
         (void)freopen("CONIN$", "r", stdin);
         (void)freopen("CONIN$", "r", stderr);
