@@ -115,7 +115,15 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         bool IsPhysicallyDown(int vk) {
-            return (::GetAsyncKeyState(vk) & 0x8000) != 0;
+            if ((::GetAsyncKeyState(vk) & 0x8000) == 0) {
+                return false;
+            }
+            // GetAsyncKeyState is a GLOBAL key state — it reads the key even while our window is in the
+            // background (alt-tab). Honor the documented "false while backgrounded" by requiring our own
+            // process to own the foreground window.
+            DWORD pid = 0;
+            ::GetWindowThreadProcessId(::GetForegroundWindow(), &pid);
+            return pid == ::GetCurrentProcessId();
         }
     } // anonymous namespace
 
@@ -419,7 +427,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     void Keybinds::Shutdown() {
         std::scoped_lock lock(_mutex);
         _buckets.clear();
-        _activeCallback = nullptr;
+        // NOTE: do NOT reset _activeCallback here. It is a HOST gate (installed via SetActiveCallback)
+        // that captures host state living for the whole process — well beyond a single scripting session.
+        // Clearing it on every Shutdown (disconnect) dropped keybind suppression after a RECONNECT (the
+        // host only re-installs the gate on a full process restart), so bound keys started firing again
+        // while typing into chat. The host can still clear it explicitly via SetActiveCallback(nullptr).
         _resourceManager = nullptr;
     }
 
