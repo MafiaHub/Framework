@@ -13,6 +13,7 @@
 #include "sfd.h"
 #include "utils/hashing.h"
 #include "utils/string_utils.h"
+#include "utils/url_protocol.h"
 
 #include <Psapi.h>
 #include <ShellScalingApi.h>
@@ -244,6 +245,10 @@ namespace Framework::Launcher {
     }
 
     bool Project::Launch() {
+        if (!_config.urlProtocolScheme.empty()) {
+            HandleUrlProtocolLaunch();
+        }
+
         if (_config.allocateDeveloperConsole) {
             AllocateDeveloperConsole();
         }
@@ -513,6 +518,12 @@ namespace Framework::Launcher {
 
         _gamePath = _config.classicGamePath;
         return true;
+    }
+
+    void Project::HandleUrlProtocolLaunch() {
+        if (const auto url = Utils::UrlProtocol::ExtractLaunchUrl(_config.urlProtocolScheme, GetCommandLineW())) {
+            SetProcessEnvironmentVariable(L"MafiaHubLaunchURL", *url);
+        }
     }
 
     DLLInjectionResult InjectLibraryIntoProcess(HANDLE hProcess, const wchar_t *szLibraryPath) {

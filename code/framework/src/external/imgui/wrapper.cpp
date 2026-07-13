@@ -69,6 +69,16 @@ namespace Framework::External::ImGUI {
 
         io.ConfigWindowsResizeFromEdges = true;
 
+        // The launcher opts into per-monitor DPI awareness, so Windows no longer bitmap-scales
+        // the UI for us. Scale both fonts and style metrics from the window's monitor instead.
+        if (_config.windowBackend == Graphics::PlatformBackend::PLATFORM_WIN32) {
+            const float dpiScale = ImGui_ImplWin32_GetDpiScaleForHwnd(_config.windowHandle);
+            if (dpiScale > 0.0f) {
+                ImGui::GetStyle().FontScaleDpi = dpiScale;
+                ImGui::GetStyle().ScaleAllSizes(dpiScale);
+            }
+        }
+
         // Load the optional UI font before the first frame. ImGui 1.92 rasterizes
         // glyphs on demand, so any script the font covers renders without baking
         // explicit ranges. Falls back to the embedded font when unset or on failure.

@@ -1,10 +1,16 @@
-if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt")
-    message(STATUS "MafiaHub Services source module is present, loading the project...")
+option(MAFIAHUB_SERVICES_BUILD_FROM_SOURCE "Build the private MafiaHub Services adapter from source" OFF)
+
+if(MAFIAHUB_SERVICES_BUILD_FROM_SOURCE)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt")
+        message(FATAL_ERROR "MAFIAHUB_SERVICES_BUILD_FROM_SOURCE requires the private services adapter at ${CMAKE_CURRENT_SOURCE_DIR}/src")
+    endif()
+
+    message(STATUS "Building the private MafiaHub Services adapter from source")
     file(GLOB _mh_service_headers "${CMAKE_CURRENT_SOURCE_DIR}/src/src/*.h")
     file(COPY ${_mh_service_headers} DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/services")
     add_subdirectory(src)
 else()
-    message(STATUS "MafiaHub Services source module is not present, checking for a new version...")
+    message(STATUS "Using the precompiled MafiaHub Services distribution")
     
     # Define release URLs
     set(MAFIA_HUB_RELEASE_URL "https://github.com/MafiaHub/Framework/releases/tag/MafiaHub-Services")
