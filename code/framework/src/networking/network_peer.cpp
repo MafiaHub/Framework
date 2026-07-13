@@ -82,6 +82,9 @@ namespace Framework::Networking {
             uint8_t packetID = _packet->data[_packetDataOffset];
 
             if (!HandlePacket(packetID, _packet)) {
+                if (IsReplicationPacket(packetID)) {
+                    continue;
+                }
                 Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
                 if (_onUnknownPacketCallback) {
                     _onUnknownPacketCallback(_packet);
@@ -103,6 +106,19 @@ namespace Framework::Networking {
             return -1;
         }
         return 1 + static_cast<int>(sizeof(MafiaNet::Time));
+    }
+
+    bool NetworkPeer::IsReplicationPacket(uint8_t packetID) {
+        switch (packetID) {
+        case ID_REPLICA_MANAGER_CONSTRUCTION:
+        case ID_REPLICA_MANAGER_SCOPE_CHANGE:
+        case ID_REPLICA_MANAGER_SERIALIZE:
+        case ID_REPLICA_MANAGER_DOWNLOAD_STARTED:
+        case ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE:
+            return true;
+        default:
+            return false;
+        }
     }
 
     const char *NetworkPeer::GetStartupResultString(uint8_t id) {

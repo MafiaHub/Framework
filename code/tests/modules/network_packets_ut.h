@@ -55,6 +55,16 @@ MODULE(network_packets, {
         EQUALS(NetworkPeer::ResolvePacketDataOffset(nullptr, 0), -1);
     });
 
+    IT("classifies all ReplicaManager3 ids as replication packets", {
+        EQUALS(NetworkPeer::IsReplicationPacket(ID_REPLICA_MANAGER_CONSTRUCTION), true);
+        EQUALS(NetworkPeer::IsReplicationPacket(ID_REPLICA_MANAGER_SCOPE_CHANGE), true);
+        EQUALS(NetworkPeer::IsReplicationPacket(ID_REPLICA_MANAGER_SERIALIZE), true);
+        EQUALS(NetworkPeer::IsReplicationPacket(ID_REPLICA_MANAGER_DOWNLOAD_STARTED), true);
+        EQUALS(NetworkPeer::IsReplicationPacket(ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE), true);
+        EQUALS(NetworkPeer::IsReplicationPacket(ID_USER_PACKET_ENUM), false);
+        EQUALS(NetworkPeer::IsReplicationPacket(ID_CONNECTION_LOST), false);
+    });
+
     IT("round-trips a ChatMessage payload", {
         RPC::ChatMessage out {};
         out.text = "Expecto Patronum!";

@@ -150,6 +150,12 @@ namespace Framework::Networking {
         // from what RakNet writes (a wrong width reads the id mid-timestamp — phantom control packets).
         static int ResolvePacketDataOffset(const uint8_t *data, uint32_t length);
 
+        // True for ReplicaManager3 message ids. The plugin fully processes these but intentionally
+        // returns RR_CONTINUE_PROCESSING so applications can observe replication traffic; Update()
+        // uses this to keep them off the unknown-packet path. A subclass that wants one (e.g.
+        // ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE) can still claim it in its HandlePacket switch.
+        static bool IsReplicationPacket(uint8_t packetID);
+
         // Server-only; base no-op lets shared code kick through a NetworkPeer* without a cast.
         virtual void KickPlayer(MafiaNet::RakNetGUID, DisconnectionReason, const std::string & = "") {}
 
