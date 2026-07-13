@@ -226,11 +226,11 @@ License:
         FAIL(a, b);                                                                                                    \
     }
 #define LESSEREQ(a, b)                                                                                                 \
-    if (a < b) {                                                                                                       \
+    if (a > b) {                                                                                                       \
         FAIL(a, b);                                                                                                    \
     }
 #define GREATEREQ(a, b)                                                                                                \
-    if (a > b) {                                                                                                       \
+    if (a < b) {                                                                                                       \
         FAIL(a, b);                                                                                                    \
     }
 #define SKIP()                                                                                                         \
