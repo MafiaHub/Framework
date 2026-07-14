@@ -47,16 +47,16 @@ namespace Framework::Utils {
     };
 
     LONG WINAPI MiniDump::ExceptionFilter(EXCEPTION_POINTERS *exceptionInfo) {
-        if (!isCaptureEnabled) {
+        if (!_isCaptureEnabled) {
             return EXCEPTION_EXECUTE_HANDLER;
         }
         if (exceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_BREAKPOINT) {
             return EXCEPTION_CONTINUE_EXECUTION;
         }
 
-        isCaptureEnabled = false;
+        _isCaptureEnabled = false;
         StackWalkerSentry sw;
-        sw.SetSymPath(symbolPath.c_str());
+        sw.SetSymPath(_symbolPath.c_str());
         sw.ShowCallstack(GetCurrentThread(), exceptionInfo->ContextRecord);
 #ifdef _M_AMD64
         std::string crashInfo = fmt::format("{:X} with code: {:X} \n\nRegisters: \n"
@@ -83,7 +83,7 @@ namespace Framework::Utils {
 
         Framework::Logging::GetLogger("MiniDump")->error(fmt::format("Unhandled exception at address: {}\nStack trace:\n\n{}", crashInfo, sw.GetOutputDump()));
         Framework::Logging::GetLogger("MiniDump")->flush();
-        isCaptureEnabled = true;
+        _isCaptureEnabled = true;
 
         // Give async logger some time to flush the log
         Sleep(2000);

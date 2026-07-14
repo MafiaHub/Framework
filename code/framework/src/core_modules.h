@@ -52,6 +52,7 @@ namespace Framework {
             _webManager       = nullptr;
             _input            = nullptr;
             _clientInstance   = nullptr;
+            _tickInterval     = 1.0 / 60.0;
         }
 
         // Singleton setters
@@ -102,7 +103,7 @@ namespace Framework {
             return _scriptingModule;
         }
 
-        static GUI::Manager *GetGUIManager() noexcept {
+        static GUI::Manager *GetWebManager() noexcept {
             return _webManager;
         }
 

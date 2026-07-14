@@ -45,7 +45,7 @@ namespace Framework::Networking::Replication {
         }
         NetworkEntity *entity = it->second.constructor();
         if (entity) {
-            entity->typeId = typeId;
+            entity->_typeId = typeId;
         }
         return entity;
     }

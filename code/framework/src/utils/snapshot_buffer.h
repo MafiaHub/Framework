@@ -74,8 +74,8 @@ namespace Framework::Utils {
 
             _ring[_head].snapshot = snapshot;
             _ring[_head].time     = time;
-            _head                 = (_head + 1) % kCapacity;
-            if (_count < kCapacity) {
+            _head                 = (_head + 1) % _capacity;
+            if (_count < _capacity) {
                 ++_count;
             }
         }
@@ -145,7 +145,7 @@ namespace Framework::Utils {
         }
 
       private:
-        static constexpr int kCapacity = 32;
+        static constexpr int _capacity = 32;
 
         struct Entry {
             TSnapshot snapshot {};
@@ -159,7 +159,7 @@ namespace Framework::Utils {
 
         // i in [0, _count): 0 = oldest
         const Entry &At(int i) const {
-            const int idx = ((_head - _count + i) % kCapacity + kCapacity) % kCapacity;
+            const int idx = ((_head - _count + i) % _capacity + _capacity) % _capacity;
             return _ring[idx];
         }
 
@@ -169,7 +169,7 @@ namespace Framework::Utils {
 
         const SnapshotBufferConfig *_config = nullptr;
 
-        Entry _ring[kCapacity];
+        Entry _ring[_capacity];
         int _head  = 0; // next write slot
         int _count = 0;
 

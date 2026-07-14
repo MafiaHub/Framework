@@ -143,7 +143,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 return nullptr;
             }
         }
-        auto *gui = CoreModules::GetGUIManager();
+        auto *gui = CoreModules::GetWebManager();
         if (!gui) {
             return nullptr;
         }
@@ -171,7 +171,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        auto *gui = CoreModules::GetGUIManager();
+        auto *gui = CoreModules::GetWebManager();
         if (!gui || !gui->IsInitialized()) {
             ThrowError(isolate, "Web.createView: web view manager is not available");
             return;
@@ -531,7 +531,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         int width = 0, height = 0;
-        if (auto *gui = CoreModules::GetGUIManager()) {
+        if (auto *gui = CoreModules::GetWebManager()) {
             const auto viewport = gui->GetViewportConfiguration();
             width  = viewport.width;
             height = viewport.height;
@@ -608,7 +608,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
             _handlers.erase(viewId);
         }
-        if (auto *gui = CoreModules::GetGUIManager()) {
+        if (auto *gui = CoreModules::GetWebManager()) {
             gui->DestroyView(viewId);
         }
         return true;

@@ -76,10 +76,10 @@ namespace Framework::Scripting::Builtins {
                 v8::HandleScope iterationScope(isolate);
                 v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
                 v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch try_catch(isolate);
+                v8::TryCatch tryCatch(isolate);
                 v8::Local<v8::Value> result;
                 if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (try_catch.HasCaught()) isolate->ThrowException(try_catch.Exception());
+                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
                     hadException = true;
                 }
             });
@@ -95,10 +95,10 @@ namespace Framework::Scripting::Builtins {
                 v8::HandleScope iterationScope(isolate);
                 v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
                 v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch try_catch(isolate);
+                v8::TryCatch tryCatch(isolate);
                 v8::Local<v8::Value> result;
                 if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (try_catch.HasCaught()) isolate->ThrowException(try_catch.Exception());
+                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
                     hadException = true;
                     return;
                 }
@@ -116,10 +116,10 @@ namespace Framework::Scripting::Builtins {
                 v8::EscapableHandleScope iterationScope(isolate);
                 v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
                 v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch try_catch(isolate);
+                v8::TryCatch tryCatch(isolate);
                 v8::Local<v8::Value> result;
                 if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (try_catch.HasCaught()) isolate->ThrowException(try_catch.Exception());
+                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
                     hadException = true;
                     return;
                 }
@@ -141,10 +141,10 @@ namespace Framework::Scripting::Builtins {
                 v8::HandleScope iterationScope(isolate);
                 v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
                 v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch try_catch(isolate);
+                v8::TryCatch tryCatch(isolate);
                 v8::Local<v8::Value> result;
                 if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (try_catch.HasCaught()) isolate->ThrowException(try_catch.Exception());
+                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
                     hadException = true;
                     return;
                 }
@@ -161,10 +161,10 @@ namespace Framework::Scripting::Builtins {
                 v8::HandleScope iterationScope(isolate);
                 v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
                 v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch try_catch(isolate);
+                v8::TryCatch tryCatch(isolate);
                 v8::Local<v8::Value> result;
                 if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (try_catch.HasCaught()) isolate->ThrowException(try_catch.Exception());
+                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
                     hadException = true;
                     return;
                 }
@@ -181,10 +181,10 @@ namespace Framework::Scripting::Builtins {
                 v8::HandleScope iterationScope(isolate);
                 v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
                 v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch try_catch(isolate);
+                v8::TryCatch tryCatch(isolate);
                 v8::Local<v8::Value> result;
                 if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (try_catch.HasCaught()) isolate->ThrowException(try_catch.Exception());
+                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
                     hadException = true;
                     return;
                 }

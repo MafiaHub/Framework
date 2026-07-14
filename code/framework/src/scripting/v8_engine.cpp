@@ -140,10 +140,10 @@ namespace Framework::Scripting {
 
         {
             v8::Locker locker(_isolate);
-            v8::Isolate::Scope isolate_scope(_isolate);
-            v8::HandleScope handle_scope(_isolate);
+            v8::Isolate::Scope isolateScope(_isolate);
+            v8::HandleScope handleScope(_isolate);
             v8::Local<v8::Context> context = _context.Get(_isolate);
-            v8::Context::Scope context_scope(context);
+            v8::Context::Scope contextScope(context);
 
             Messages::Shutdown();
         }
@@ -197,8 +197,8 @@ namespace Framework::Scripting {
         _isolate->SetPromiseRejectCallback(PromiseRejectCallback);
 
         v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolate_scope(_isolate);
-        v8::HandleScope handle_scope(_isolate);
+        v8::Isolate::Scope isolateScope(_isolate);
+        v8::HandleScope handleScope(_isolate);
 
         // Create context
         v8::Local<v8::Context> context = v8::Context::New(_isolate);
@@ -211,7 +211,7 @@ namespace Framework::Scripting {
             return false;
         }
 
-        v8::Context::Scope context_scope(context);
+        v8::Context::Scope contextScope(context);
 
         // Block eval() and new Function('') for security
         context->AllowCodeGenerationFromStrings(false);
@@ -611,9 +611,9 @@ namespace Framework::Scripting {
         }
 
         v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolate_scope(_isolate);
-        v8::HandleScope handle_scope(_isolate);
-        v8::Context::Scope context_scope(GetContext());
+        v8::Isolate::Scope isolateScope(_isolate);
+        v8::HandleScope handleScope(_isolate);
+        v8::Context::Scope contextScope(GetContext());
 
         ProcessTimers();
         _isolate->PerformMicrotaskCheckpoint();
@@ -634,10 +634,10 @@ namespace Framework::Scripting {
         // only allows relative paths). This is the internal entry point
         // used by ResourceManager::ExecuteResourceScript().
         v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolate_scope(_isolate);
-        v8::HandleScope handle_scope(_isolate);
+        v8::Isolate::Scope isolateScope(_isolate);
+        v8::HandleScope handleScope(_isolate);
         v8::Local<v8::Context> context = _context.Get(_isolate);
-        v8::Context::Scope context_scope(context);
+        v8::Context::Scope contextScope(context);
 
         v8::TryCatch tryCatch(_isolate);
 

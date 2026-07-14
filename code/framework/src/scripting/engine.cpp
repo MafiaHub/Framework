@@ -21,10 +21,10 @@ namespace Framework::Scripting {
 
         v8::Isolate *isolate = GetIsolate();
         v8::Locker locker(isolate);
-        v8::Isolate::Scope isolate_scope(isolate);
-        v8::HandleScope handle_scope(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
         v8::Local<v8::Context> context = GetContext();
-        v8::Context::Scope context_scope(context);
+        v8::Context::Scope contextScope(context);
 
         v8::TryCatch tryCatch(isolate);
 

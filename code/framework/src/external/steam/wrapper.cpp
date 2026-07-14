@@ -93,6 +93,6 @@ namespace Framework::External::Steam {
     }
 
     void Wrapper::OnGetAuthSessionTicketResponse(GetAuthSessionTicketResponse_t *pParam) {
-        _authTicket._status = pParam->m_eResult;
+        _authTicket.status = pParam->m_eResult;
     }
 } // namespace Framework::External::Steam

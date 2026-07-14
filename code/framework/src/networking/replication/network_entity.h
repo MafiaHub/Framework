@@ -228,7 +228,7 @@ namespace Framework::Networking::Replication {
         bool ApplyIncomingEpoch(uint8_t incomingEpoch);
 
         // CRC32 of the registered name; stamped by EntityRegistry, not game-settable.
-        uint32_t typeId = 0;
+        uint32_t _typeId = 0;
         friend class EntityRegistry;
 
         // Tracks the last value of each serialized variable per connection so updates carry only

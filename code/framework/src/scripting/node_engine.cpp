@@ -83,9 +83,9 @@ namespace Framework::Scripting {
         // 4. CommonEnvironmentSetup destructor runs last
         {
             v8::Locker locker(_isolate);
-            v8::Isolate::Scope isolate_scope(_isolate);
-            v8::HandleScope handle_scope(_isolate);
-            v8::Context::Scope context_scope(_setup->context());
+            v8::Isolate::Scope isolateScope(_isolate);
+            v8::HandleScope handleScope(_isolate);
+            v8::Context::Scope contextScope(_setup->context());
 
             Messages::Shutdown();
         }
@@ -181,9 +181,9 @@ namespace Framework::Scripting {
 
         // Enter scopes for LoadEnvironment as required by Node.js docs
         v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolate_scope(_isolate);
-        v8::HandleScope handle_scope(_isolate);
-        v8::Context::Scope context_scope(_setup->context());
+        v8::Isolate::Scope isolateScope(_isolate);
+        v8::HandleScope handleScope(_isolate);
+        v8::Context::Scope contextScope(_setup->context());
 
         // Load Node.js internals with require setup and uncaught exception/rejection
         // handlers. These prevent async errors (timers, promises) from crashing
@@ -332,10 +332,10 @@ namespace Framework::Scripting {
         }
 
         v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolate_scope(_isolate);
-        v8::HandleScope handle_scope(_isolate);
+        v8::Isolate::Scope isolateScope(_isolate);
+        v8::HandleScope handleScope(_isolate);
         v8::Local<v8::Context> context = _setup->context();
-        v8::Context::Scope context_scope(context);
+        v8::Context::Scope contextScope(context);
 
 #ifdef FW_NODE_INSPECTOR
         // Trigger V8 interrupt processing for inspector CDP messages.

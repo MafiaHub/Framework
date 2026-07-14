@@ -21,17 +21,17 @@
 
 namespace Framework::External::Steam {
     struct AuthTicket {
-        EResult _status     = k_EResultPending;
-        HAuthTicket _handle = 0;
-        char _buffer[1024]  = {0};
-        size_t _size        = 0;
+        EResult status     = k_EResultPending;
+        HAuthTicket handle = 0;
+        char buffer[1024]  = {0};
+        size_t size        = 0;
 
         bool IsPending() const {
-            return _status == k_EResultPending;
+            return status == k_EResultPending;
         }
 
         bool IsValid() const {
-            return _status == k_EResultOK;
+            return status == k_EResultOK;
         }
 
         bool IsError() const {

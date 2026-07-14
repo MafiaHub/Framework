@@ -49,7 +49,7 @@ namespace Framework::Networking::Replication {
     }
 
     void NetworkEntity::WriteAllocationID(MafiaNet::Connection_RM3 *, MafiaNet::BitStream *allocationIdBitstream) const {
-        allocationIdBitstream->Write(typeId);
+        allocationIdBitstream->Write(_typeId);
     }
 
     bool NetworkEntity::ApplyIncomingEpoch(uint8_t incomingEpoch) {
