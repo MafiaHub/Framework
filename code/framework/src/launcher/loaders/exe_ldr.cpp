@@ -203,7 +203,9 @@ namespace Framework::Launcher::Loaders {
     void ExecutableLoader::Protect() const {
         for (const auto &protection : _targetProtections) {
             DWORD op;
-            VirtualProtect(std::get<0>(protection), std::get<1>(protection), std::get<2>(protection), &op);
+            if (!VirtualProtect(std::get<0>(protection), std::get<1>(protection), std::get<2>(protection), &op)) {
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not restore protection on section at {}. Error code was {}.", std::get<0>(protection), GetLastError());
+            }
         }
     }
 
@@ -345,14 +347,20 @@ namespace Framework::Launcher::Loaders {
         _entryPoint         = GetTargetRVA<void>(ntHeader->OptionalHeader.AddressOfEntryPoint);
 
         DWORD oldProtect1;
-        VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect1);
+        if (!VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect1)) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not make the target NT header writable. Error code was {}.", GetLastError());
+            throw std::runtime_error("Could not make the target NT header writable");
+        }
         sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC] = ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
 
         LoadSections(ntHeader);
 
         // Apply relocations AFTER sections are loaded, so we can read the relocation data
         // from the now-copied sections and apply fixups to absolute addresses
-        ApplyRelocations();
+        if (!ApplyRelocations()) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not apply relocations to the target module.");
+            throw std::runtime_error("Could not apply relocations to the target module");
+        }
 
         LoadImports(ntHeader);
         LoadDelayImports(ntHeader);
@@ -399,7 +407,10 @@ namespace Framework::Launcher::Loaders {
                 if (useDirectSlot0) {
                     // Direct slot 0 approach (for launchers with sacrificial TLS buffer)
                     DWORD oldProtect;
-                    VirtualProtect(reinterpret_cast<LPVOID>(targetTls->StartAddressOfRawData), tlsDataSize, PAGE_READWRITE, &oldProtect);
+                    if (!VirtualProtect(reinterpret_cast<LPVOID>(targetTls->StartAddressOfRawData), tlsDataSize, PAGE_READWRITE, &oldProtect)) {
+                        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not make the target TLS data writable. Error code was {}.", GetLastError());
+                        throw std::runtime_error("Could not make the target TLS data writable");
+                    }
 
                     std::memcpy(tlsSlot0, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), tlsDataSize);
                     std::memcpy(reinterpret_cast<void *>(targetTls->StartAddressOfRawData),
@@ -408,7 +419,10 @@ namespace Framework::Launcher::Loaders {
                 else if (tlsInit != nullptr && tlsBase != nullptr && tlsIndex < TLS_MINIMUM_AVAILABLE) {
                     // Allocated slot approach (traditional, for MafiaMP etc.)
                     DWORD oldProtect;
-                    VirtualProtect(tlsInit, tlsDataSize, PAGE_READWRITE, &oldProtect);
+                    if (!VirtualProtect(tlsInit, tlsDataSize, PAGE_READWRITE, &oldProtect)) {
+                        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not make the allocated TLS data writable. Error code was {}.", GetLastError());
+                        throw std::runtime_error("Could not make the allocated TLS data writable");
+                    }
 
                     memcpy(tlsBase[tlsIndex], reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), tlsDataSize);
                     memcpy(tlsInit, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), tlsDataSize);
@@ -471,9 +485,13 @@ namespace Framework::Launcher::Loaders {
                 const uint16_t type = relocStart[i] >> 12;
                 const uint32_t rva  = (relocStart[i] & 0xFFF) + relocation->VirtualAddress;
 
-                void *addr = GetTargetRVA<void>(rva);
+                void *addr           = GetTargetRVA<void>(rva);
+                const SIZE_T relSize = (type == IMAGE_REL_BASED_DIR64) ? 8 : 4;
                 DWORD oldProtect;
-                VirtualProtect(addr, (type == IMAGE_REL_BASED_DIR64) ? 8 : 4, PAGE_EXECUTE_READWRITE, &oldProtect);
+                if (!VirtualProtect(addr, relSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not make relocation target {} writable. Error code was {}.", addr, GetLastError());
+                    return false;
+                }
 
                 if (type == IMAGE_REL_BASED_HIGHLOW) {
                     *reinterpret_cast<int32_t *>(addr) += relocOffset;
@@ -485,7 +503,9 @@ namespace Framework::Launcher::Loaders {
                     return false;
                 }
 
-                VirtualProtect(addr, (type == IMAGE_REL_BASED_DIR64) ? 8 : 4, oldProtect, &oldProtect);
+                if (!VirtualProtect(addr, relSize, oldProtect, &oldProtect)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not restore protection on relocation target {}. Error code was {}.", addr, GetLastError());
+                }
             }
 
             // on to the next one!
