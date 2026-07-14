@@ -44,11 +44,19 @@ namespace Framework::HTTP {
             res.status = 500;
         });
 
-        _webThread = std::jthread([this, address, port](std::stop_token) {
-            _server->listen(address, port);
+        // Bind synchronously so a taken port is reported to the caller
+        // instead of failing silently inside the listen thread.
+        if (!_server->bind_to_port(address, port)) {
+            Logging::GetLogger(FRAMEWORK_INNER_HTTP)->error("[Webserver] Failed to bind to {}:{}", address, port);
+            _running = false;
+            return WebserverError::WEBSERVER_BIND_FAILED;
+        }
+
+        _webThread = std::jthread([this](std::stop_token) {
+            _server->listen_after_bind();
         });
 
-        Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("[Webserver] Listening on {}", address.c_str());
+        Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("[Webserver] Listening on {}:{}", address, port);
 
         _initialized = true;
         return WebserverError::WEBSERVER_NONE;
