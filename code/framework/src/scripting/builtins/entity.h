@@ -12,7 +12,6 @@
 #include "quaternion.h"
 #include "vector3.h"
 
-#include <core_modules.h>
 #include <networking/replication/network_entity.h>
 #include <networking/replication/replication_manager.h>
 
@@ -20,13 +19,8 @@
 #include <v8pp/class.hpp>
 #include <v8pp/convert.hpp>
 
-#include <fmt/format.h>
-#include <glm/gtc/quaternion.hpp>
-
 #include <cstdint>
 #include <memory>
-#include <sstream>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 
@@ -37,16 +31,10 @@ namespace Framework::Scripting::Builtins {
     // (position/rotation); writing it goes through NetworkEntity::ForceState, so the server's value is
     // authoritative even over an entity a client owns. Mods derive their own handles (player, vehicle)
     // via v8pp inherit<Entity>() and add their game-specific properties.
-    //
-    // Header-only so it compiles against whichever V8 the including target links (libnode on the
-    // server, standalone V8 on the client).
     class Entity {
       public:
-        Entity(uint64_t networkId): _id(networkId) {
-            if (!Resolve()) {
-                throw std::runtime_error(fmt::format("Entity handle '{}' is not valid!", networkId));
-            }
-        }
+        // Throws std::runtime_error when the network id doesn't resolve to a live entity.
+        Entity(uint64_t networkId);
         virtual ~Entity() = default;
 
         uint64_t GetId() const {
@@ -57,156 +45,27 @@ namespace Framework::Scripting::Builtins {
             return Resolve();
         }
 
-        Vector3 GetPosition() const {
-            if (auto *e = Resolve()) {
-                return Vector3(e->position.x, e->position.y, e->position.z);
-            }
-            return Vector3(0, 0, 0);
-        }
+        Vector3 GetPosition() const;
+        void SetPosition(const Vector3 &pos);
 
-        void SetPosition(const Vector3 &pos) {
-            if (auto *e = Resolve()) {
-                e->position = pos.vec();
-                e->ForceState();
-            }
-        }
+        Quaternion GetRotation() const;
+        void SetRotationFromEuler(const Vector3 &rot);
+        void SetRotationFromQuaternion(const Quaternion &quat);
 
-        Quaternion GetRotation() const {
-            if (auto *e = Resolve()) {
-                return Quaternion(e->rotation);
-            }
-            return Quaternion();
-        }
-
-        void SetRotationFromEuler(const Vector3 &rot) {
-            if (auto *e = Resolve()) {
-                e->rotation = glm::quat(glm::radians(rot.vec()));
-                e->ForceState();
-            }
-        }
-
-        void SetRotationFromQuaternion(const Quaternion &quat) {
-            if (auto *e = Resolve()) {
-                e->rotation = quat.quat();
-                e->ForceState();
-            }
-        }
-
-        uint32_t GetVirtualWorld() const {
-            if (auto *e = Resolve()) {
-                return e->GetVirtualWorld();
-            }
-            return 0;
-        }
-
-        void SetVirtualWorld(uint32_t world) {
-            if (auto *e = Resolve()) {
-                e->SetVirtualWorld(world);
-            }
-        }
+        uint32_t GetVirtualWorld() const;
+        void SetVirtualWorld(uint32_t world);
 
         // Restrict streaming to a single player's connection (null clears). Range/visibility still apply.
-        void SetVisibleTo(Networking::Replication::NetworkEntity *targetEntity) {
-            if (auto *e = Resolve()) {
-                e->streaming.targetGUID = targetEntity ? targetEntity->ownerGUID : MafiaNet::UNASSIGNED_PEER_GUID;
-            }
-        }
+        void SetVisibleTo(Networking::Replication::NetworkEntity *targetEntity);
 
-        virtual std::string ToString() const {
-            std::ostringstream ss;
-            ss << "Entity{ id: " << _id << " }";
-            return ss.str();
-        }
+        virtual std::string ToString() const;
 
-        static v8pp::class_<Entity> &GetClass(v8::Isolate *isolate) {
-            auto it = _classes.find(isolate);
-            if (it != _classes.end()) {
-                return *it->second;
-            }
+        static v8pp::class_<Entity> &GetClass(v8::Isolate *isolate);
 
-            auto &cls = _classes[isolate];
-            cls = std::make_unique<v8pp::class_<Entity>>(isolate);
-            cls->auto_wrap_objects(true);
-            cls->ctor<uint64_t>()
-                .function("toString", &Entity::ToString)
-                .function("setVirtualWorld", &Entity::SetVirtualWorld);
-
-            auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
-
-            RegisterReadonlyProperty<Entity, &Entity::GetId>(isolate, protoTemplate, "id");
-            RegisterReadonlyProperty<Entity, &Entity::GetVirtualWorld>(isolate, protoTemplate, "virtualWorld");
-            RegisterObjectProperty<Entity, &Entity::GetPosition, &Entity::SetPosition>(isolate, protoTemplate, "position");
-
-            // Property: rotation. Getter returns a Quaternion; setter accepts a Quaternion or a Vector3 (euler degrees).
-            {
-                auto rotationGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                    if (self) {
-                        auto &quatCls = Quaternion::GetClass(info.GetIsolate());
-                        info.GetReturnValue().Set(quatCls.import_external(info.GetIsolate(), new Quaternion(self->GetRotation())));
-                    }
-                });
-                auto rotationSetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                    if (!self || info.Length() < 1) return;
-
-                    auto *vec = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info[0]);
-                    if (vec) {
-                        self->SetRotationFromEuler(*vec);
-                        return;
-                    }
-                    auto *quat = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info[0]);
-                    if (quat) {
-                        self->SetRotationFromQuaternion(*quat);
-                        return;
-                    }
-                    info.GetIsolate()->ThrowException(v8::Exception::TypeError(
-                        v8pp::to_v8(info.GetIsolate(), "rotation must be a Vector3 (euler degrees) or Quaternion")));
-                });
-                protoTemplate->SetAccessorProperty(v8pp::to_v8(isolate, "rotation").As<v8::Name>(), rotationGetter, rotationSetter);
-            }
-
-            // setVisibleTo(player|null): restrict streaming to one player's connection.
-            {
-                auto setVisibleTo = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                    auto *isolate = info.GetIsolate();
-                    auto *self    = v8pp::class_<Entity>::unwrap_object(isolate, info.This());
-                    if (!self) {
-                        return;
-                    }
-                    if (info.Length() < 1 || info[0]->IsNullOrUndefined()) {
-                        self->SetVisibleTo(nullptr);
-                        return;
-                    }
-                    auto *target = v8pp::class_<Entity>::unwrap_object(isolate, info[0]);
-                    if (!target) {
-                        isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "setVisibleTo: expected a Player (or null to clear)")));
-                        return;
-                    }
-                    auto *targetEntity = target->Resolve();
-                    if (!targetEntity || targetEntity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
-                        isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "setVisibleTo: target has no owning connection")));
-                        return;
-                    }
-                    self->SetVisibleTo(targetEntity);
-                });
-                protoTemplate->Set(v8pp::to_v8(isolate, "setVisibleTo").As<v8::Name>(), setVisibleTo);
-            }
-
-            return *cls;
-        }
-
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-            v8pp::class_<Entity> &cls = GetClass(isolate);
-            auto ctx                  = isolate->GetCurrentContext();
-            global->Set(ctx, v8pp::to_v8(isolate, "Entity"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
-        }
+        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
 
       protected:
-        Networking::Replication::NetworkEntity *Resolve() const {
-            auto *replication = CoreModules::GetReplication();
-            return replication ? replication->GetEntityByNetworkID(_id) : nullptr;
-        }
+        Networking::Replication::NetworkEntity *Resolve() const;
 
         uint64_t _id = 0;
         inline static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Entity>>> _classes;

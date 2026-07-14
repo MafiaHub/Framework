@@ -37,6 +37,10 @@ set(FRAMEWORK_SRC
     src/scripting/builtins/vector4.cpp
     src/scripting/builtins/quaternion.cpp
     src/scripting/builtins/color.cpp
+    src/scripting/builtins/entity.cpp
+    src/scripting/builtins/player.cpp
+    src/scripting/builtins/text_label.cpp
+    src/scripting/builtins/chat.cpp
     src/scripting/builtins/events.cpp
     src/scripting/builtins/messages.cpp
     src/scripting/builtins/console.cpp

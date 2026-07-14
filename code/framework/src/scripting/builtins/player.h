@@ -11,20 +11,18 @@
 #include "entity.h"
 #include "property.h"
 
-#include <core_modules.h>
-#include <integrations/shared/rpc/emit_script_event.h>
-#include <networking/network_peer.h>
-#include <networking/rpc/client_identity.h>
-
 #include <v8.h>
 #include <v8pp/class.hpp>
 #include <v8pp/convert.hpp>
 
 #include <cstdint>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <unordered_map>
+
+namespace Framework::Networking::RPC {
+    struct ClientIdentity;
+} // namespace Framework::Networking::RPC
 
 namespace Framework::Scripting::Builtins {
     // A connection's player entity. Connection-level ops (kick, ...) live here, not on Entity, so
@@ -34,118 +32,29 @@ namespace Framework::Scripting::Builtins {
         Player(uint64_t networkId): Entity(networkId) {}
 
         // Server-only; a no-op on the client (see NetworkPeer::KickPlayer).
-        void Kick(const std::string &reason) {
-            auto *entity = Resolve();
-            if (!entity) {
-                return;
-            }
-            auto *peer = CoreModules::GetNetworkPeer();
-            if (!peer) {
-                return;
-            }
-            peer->KickPlayer(MafiaNet::ToGuid(entity->ownerGUID),
-                reason.empty() ? Networking::DisconnectionReason::KICKED : Networking::DisconnectionReason::KICKED_CUSTOM,
-                reason);
-        }
+        void Kick(const std::string &reason);
 
         // Send a named event to this player's client, received there as Core.Events.on(name, data).
         // Server-only; payloadJson is JSON.parsed on the client (pass JSON text, empty = no data).
-        void Emit(const std::string &eventName, const std::string &payloadJson) {
-            if (eventName.empty()) {
-                return;
-            }
-            auto *entity = Resolve();
-            if (!entity) {
-                return;
-            }
-            auto *peer = CoreModules::GetNetworkPeer();
-            if (!peer) {
-                return;
-            }
-            Framework::Integrations::Shared::RPC::EmitScriptEvent ev;
-            ev.FromParameters(eventName, payloadJson);
-            peer->SendRPC(ev, MafiaNet::ToGuid(entity->ownerGUID));
-        }
+        void Emit(const std::string &eventName, const std::string &payloadJson);
 
         // Client-announced identity (RPC::ClientIdentity). Server-only, unverified; empty when absent.
-        std::string GetSteamId() const {
-            const auto *identity = ResolveIdentity();
-            return identity ? identity->steamId : "";
-        }
-
-        std::string GetDiscordId() const {
-            const auto *identity = ResolveIdentity();
-            return identity ? identity->discordId : "";
-        }
-
-        std::string GetHardwareId() const {
-            const auto *identity = ResolveIdentity();
-            return identity ? identity->hardwareId : "";
-        }
+        std::string GetSteamId() const;
+        std::string GetDiscordId() const;
+        std::string GetHardwareId() const;
 
         // Connection's average round-trip time in ms. Server-only; -1 when unavailable.
-        int GetPing() const {
-            const auto *entity = Resolve();
-            if (!entity) {
-                return -1;
-            }
-            auto *peer = CoreModules::GetNetworkPeer();
-            return peer ? peer->GetPing(MafiaNet::ToGuid(entity->ownerGUID)) : -1;
-        }
+        int GetPing() const;
 
         // Connection's remote IP address (no port). Server-only; empty when unavailable.
-        std::string GetAddress() const {
-            const auto *entity = Resolve();
-            if (!entity) {
-                return "";
-            }
-            auto *peer = CoreModules::GetNetworkPeer();
-            return peer ? peer->GetAddress(MafiaNet::ToGuid(entity->ownerGUID)) : "";
-        }
+        std::string GetAddress() const;
 
-        std::string ToString() const override {
-            std::ostringstream ss;
-            ss << "Player{ id: " << _id << " }";
-            return ss.str();
-        }
+        std::string ToString() const override;
 
-        static v8pp::class_<Player> &GetClass(v8::Isolate *isolate) {
-            auto it = _classes.find(isolate);
-            if (it != _classes.end()) {
-                return *it->second;
-            }
-
-            // v8pp inherit<Entity> requires Entity registered first.
-            Entity::GetClass(isolate);
-
-            auto &cls = _classes[isolate];
-            cls = std::make_unique<v8pp::class_<Player>>(isolate);
-            cls->auto_wrap_objects(true);
-            cls->inherit<Entity>()
-                .ctor<uint64_t>()
-                .function("toString", &Player::ToString)
-                .function("kick", &Player::Kick)
-                .function("emit", &Player::Emit)
-                .function("getIP", &Player::GetAddress);
-
-            auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
-            RegisterReadonlyProperty<Player, &Player::GetSteamId>(isolate, protoTemplate, "steamId");
-            RegisterReadonlyProperty<Player, &Player::GetDiscordId>(isolate, protoTemplate, "discordId");
-            RegisterReadonlyProperty<Player, &Player::GetHardwareId>(isolate, protoTemplate, "hardwareId");
-            RegisterReadonlyProperty<Player, &Player::GetPing>(isolate, protoTemplate, "ping");
-            RegisterReadonlyProperty<Player, &Player::GetAddress>(isolate, protoTemplate, "ip");
-            return *cls;
-        }
+        static v8pp::class_<Player> &GetClass(v8::Isolate *isolate);
 
       protected:
-        const Networking::RPC::ClientIdentity *ResolveIdentity() const {
-            const auto *entity = Resolve();
-            if (!entity) {
-                return nullptr;
-            }
-            auto *peer = CoreModules::GetNetworkPeer();
-            return peer ? peer->GetPeerIdentity(MafiaNet::ToGuid(entity->ownerGUID)) : nullptr;
-        }
+        const Networking::RPC::ClientIdentity *ResolveIdentity() const;
 
         inline static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Player>>> _classes;
     };
