@@ -15,7 +15,7 @@ cd "$script_path/.." || exit 1
 #  */
 GOOD_LICENSE_HEADER_PATTERN=$'^/\*\n \* MafiaHub OSS license\n( \* Copyright \(c\) [0-9]{4}(-[0-9]{4})?\, .*\n)+ \*\n \* This file comes from MafiaHub, hosted at https://github\.com/MafiaHub/Framework\.\n \* See LICENSE file in the source repository for information regarding licensing\.\n \*/(\n\n|$)'
 BAD_LICENSE_HEADER_ERRORS=()
-LICENSE_HEADER_CHECK_EXCLUDES=(code/framework/src/utils/hooks/*)
+LICENSE_HEADER_CHECK_EXCLUDES=(code/framework/src/utils/hooking/* code/framework/src/launcher/data/*)
 
 # We check that "#pragma once" is present
 PRAGMA_ONCE_PATTERN='#pragma once'
@@ -45,7 +45,8 @@ done < <(git ls-files -- \
     '*.hpp' \
 	':!:vendors' \
 	':!:code/tests/unit.h' \
-	':!:code/framework/utils/hooks' \
+	':!:code/framework/src/utils/hooking' \
+	':!:code/framework/src/launcher/data' \
 	':!:code/framework/src/graphics/shaders' \
 )
 

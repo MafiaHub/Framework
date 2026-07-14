@@ -1,0 +1,3 @@
+# Generated shader blobs and embedded shader sources. Exempt from house formatting.
+DisableFormat: true
+SortIncludes: false
