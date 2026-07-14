@@ -789,20 +789,23 @@ namespace Framework::Launcher {
             tlsExport(base, index);
         });
 
-        loader.LoadIntoModule(base);
-        loader.Protect();
-
-        // Once loaded, we can close handles
-        UnmapViewOfFile(data);
-        CloseHandle(hMapping);
-        CloseHandle(hFile);
-
-        // Acquire the entry point reference
-        const auto entry_point = static_cast<void (*)()>(loader.GetEntryPoint());
-
-        hook::set_base(reinterpret_cast<uintptr_t>(base));
-
+        // The loader throws on fatal mapping errors (unresolvable imports,
+        // protection failures); keep it inside the try so those reach the
+        // error dialog instead of std::terminate.
         try {
+            loader.LoadIntoModule(base);
+            loader.Protect();
+
+            // Once loaded, we can close handles
+            UnmapViewOfFile(data);
+            CloseHandle(hMapping);
+            CloseHandle(hFile);
+
+            // Acquire the entry point reference
+            const auto entry_point = static_cast<void (*)()>(loader.GetEntryPoint());
+
+            hook::set_base(reinterpret_cast<uintptr_t>(base));
+
             if (SynchronizeUCRTCommandLine()) {
                 Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info(
                     "Mapped game command line: {}", BuildGameCommandLineA());
