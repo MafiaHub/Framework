@@ -135,6 +135,9 @@ namespace Framework::Integrations::Client {
 
         // assets
         AssetDownloadStatus _downloadStatus {};
+        // Shared file-transfer callback handed to MafiaNet; MafiaNet does not
+        // take ownership of it, so it must outlive any active download.
+        AssetDownloadFileProgress _assetDownloadProgress {this};
         ConnectionPhase _connectionPhase = ConnectionPhase::Disconnected;
         std::string _assetCachePath;
         bool _initialDownloadDone {};
