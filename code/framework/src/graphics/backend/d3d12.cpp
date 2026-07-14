@@ -106,17 +106,29 @@ namespace Framework::Graphics {
     }
 
     void D3D12Backend::Shutdown() {
-        // release objects
+        // release objects; Init can fail partway through, so any of these may
+        // still be null
         if (_currentBackBuffer) {
             _currentBackBuffer->Release();
             _currentBackBuffer = nullptr;
         }
-        _rtvHeap->Release();
-        _srvHeap->Release();
-        _srvHeap = nullptr;
-        _commandList->Release();
-        for (const auto &frameContext : _frameContext) {
-            frameContext._commandAllocator->Release();
+        if (_rtvHeap) {
+            _rtvHeap->Release();
+            _rtvHeap = nullptr;
+        }
+        if (_srvHeap) {
+            _srvHeap->Release();
+            _srvHeap = nullptr;
+        }
+        if (_commandList) {
+            _commandList->Release();
+            _commandList = nullptr;
+        }
+        for (auto &frameContext : _frameContext) {
+            if (frameContext._commandAllocator) {
+                frameContext._commandAllocator->Release();
+                frameContext._commandAllocator = nullptr;
+            }
         }
         if (_device) {
             _device->Release();
