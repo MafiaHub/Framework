@@ -73,15 +73,7 @@ namespace Framework::Scripting::Builtins {
             bool hadException = false;
             ForEachNative([&](NativeType *e) {
                 if (hadException) return;
-                v8::HandleScope iterationScope(isolate);
-                v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
-                v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch tryCatch(isolate);
-                v8::Local<v8::Value> result;
-                if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
-                    hadException = true;
-                }
+                hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value>) {});
             });
         }
 
@@ -92,17 +84,9 @@ namespace Framework::Scripting::Builtins {
             uint32_t outIndex        = 0;
             ForEachNative([&](NativeType *e) {
                 if (hadException) return;
-                v8::HandleScope iterationScope(isolate);
-                v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
-                v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch tryCatch(isolate);
-                v8::Local<v8::Value> result;
-                if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
-                    hadException = true;
-                    return;
-                }
-                if (result->BooleanValue(isolate)) arr->Set(ctx, outIndex++, jsEntity).Check();
+                hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object> jsEntity, v8::Local<v8::Value> result) {
+                    if (result->BooleanValue(isolate)) arr->Set(ctx, outIndex++, jsEntity).Check();
+                });
             });
             return hadException ? v8::Array::New(isolate, 0) : arr;
         }
@@ -113,20 +97,12 @@ namespace Framework::Scripting::Builtins {
             bool foundOne = false, hadException = false;
             ForEachNative([&](NativeType *e) {
                 if (foundOne || hadException) return;
-                v8::EscapableHandleScope iterationScope(isolate);
-                v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
-                v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch tryCatch(isolate);
-                v8::Local<v8::Value> result;
-                if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
-                    hadException = true;
-                    return;
-                }
-                if (result->BooleanValue(isolate)) {
-                    found    = iterationScope.Escape(jsEntity);
-                    foundOne = true;
-                }
+                hadException = !InvokeCallback<v8::EscapableHandleScope>(isolate, ctx, callback, e, [&](v8::EscapableHandleScope &scope, v8::Local<v8::Object> jsEntity, v8::Local<v8::Value> result) {
+                    if (result->BooleanValue(isolate)) {
+                        found    = scope.Escape(jsEntity);
+                        foundOne = true;
+                    }
+                });
             });
             return hadException ? v8::Undefined(isolate) : found;
         }
@@ -138,17 +114,9 @@ namespace Framework::Scripting::Builtins {
             uint32_t outIndex        = 0;
             ForEachNative([&](NativeType *e) {
                 if (hadException) return;
-                v8::HandleScope iterationScope(isolate);
-                v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
-                v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch tryCatch(isolate);
-                v8::Local<v8::Value> result;
-                if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
-                    hadException = true;
-                    return;
-                }
-                arr->Set(ctx, outIndex++, result).Check();
+                hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value> result) {
+                    arr->Set(ctx, outIndex++, result).Check();
+                });
             });
             return hadException ? v8::Array::New(isolate, 0) : arr;
         }
@@ -158,17 +126,9 @@ namespace Framework::Scripting::Builtins {
             bool found = false, hadException = false;
             ForEachNative([&](NativeType *e) {
                 if (found || hadException) return;
-                v8::HandleScope iterationScope(isolate);
-                v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
-                v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch tryCatch(isolate);
-                v8::Local<v8::Value> result;
-                if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
-                    hadException = true;
-                    return;
-                }
-                if (result->BooleanValue(isolate)) found = true;
+                hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value> result) {
+                    if (result->BooleanValue(isolate)) found = true;
+                });
             });
             return hadException ? false : found;
         }
@@ -178,19 +138,30 @@ namespace Framework::Scripting::Builtins {
             bool allMatch = true, hadException = false;
             ForEachNative([&](NativeType *e) {
                 if (!allMatch || hadException) return;
-                v8::HandleScope iterationScope(isolate);
-                v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
-                v8::Local<v8::Value> argv[1]   = {jsEntity};
-                v8::TryCatch tryCatch(isolate);
-                v8::Local<v8::Value> result;
-                if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                    if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
-                    hadException = true;
-                    return;
-                }
-                if (!result->BooleanValue(isolate)) allMatch = false;
+                hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value> result) {
+                    if (!result->BooleanValue(isolate)) allMatch = false;
+                });
             });
             return hadException ? false : allMatch;
+        }
+
+      private:
+        // Shared per-iteration plumbing for the array-like methods: wraps the entity, invokes the
+        // callback under a TryCatch and rethrows on script exception (returning false). visit runs
+        // inside the iteration scope, which is passed through so Find can Escape its match.
+        template <typename Scope, typename Visit>
+        static bool InvokeCallback(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Function> callback, NativeType *e, Visit &&visit) {
+            Scope iterationScope(isolate);
+            v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
+            v8::Local<v8::Value> argv[1]   = {jsEntity};
+            v8::TryCatch tryCatch(isolate);
+            v8::Local<v8::Value> result;
+            if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
+                if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
+                return false;
+            }
+            visit(iterationScope, jsEntity, result);
+            return true;
         }
     };
 
