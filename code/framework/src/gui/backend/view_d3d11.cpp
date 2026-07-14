@@ -152,7 +152,14 @@ namespace Framework::GUI {
                     auto &texEntry = backend->GetTexture(_textureID);
                     Microsoft::WRL::ComPtr<ID3D11Texture2D> tex;
                     sharedTex->QueryInterface(IID_PPV_ARGS(&tex));
-                    texEntry.texture = tex;
+
+                    // CEF hands us a new shared texture when the surface changes (e.g. resize).
+                    // Drop the SRV bound to the previous texture so it is recreated against the
+                    // new one; otherwise the view keeps sampling the stale surface.
+                    if (texEntry.texture.Get() != tex.Get()) {
+                        texEntry.texture = tex;
+                        texEntry.texture_srv.Reset();
+                    }
 
                     if (!texEntry.texture_srv) {
                         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc {};
