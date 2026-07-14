@@ -16,6 +16,12 @@
 #include <logging/logger.h>
 
 namespace Framework::Networking {
+    namespace {
+        // How long Shutdown() blocks to flush the disconnection notification to connected peers, in
+        // ms. Larger than the client's because the server broadcasts to every connection.
+        constexpr unsigned int kShutdownBlockDurationMs = 1000;
+    } // namespace
+
     Utils::Result<void, Error> NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password) {
         if (port <= 0 || port > 65535) {
             return Error("Invalid server port: " + std::to_string(port));
@@ -114,7 +120,7 @@ namespace Framework::Networking {
             return;
         }
 
-        _peer->Shutdown(1000);
+        _peer->Shutdown(kShutdownBlockDurationMs);
         MafiaNet::RakPeerInterface::DestroyInstance(_peer);
         _peer = nullptr;
         Lifecycle::Shutdown();

@@ -13,6 +13,12 @@
 #include <logging/logger.h>
 
 namespace Framework::Networking {
+    namespace {
+        // How long Shutdown() blocks to flush the disconnection notification to the server, in ms.
+        // Short because it is a single Immediate-priority packet to one peer.
+        constexpr unsigned int kShutdownBlockDurationMs = 100;
+    } // namespace
+
     NetworkClient::NetworkClient(): NetworkPeer(), _state(PeerState::DISCONNECTED) {}
 
     NetworkClient::~NetworkClient() {
@@ -83,7 +89,7 @@ namespace Framework::Networking {
             return {};
         }
 
-        _peer->Shutdown(100, 0, MafiaNet::Priority::Immediate);
+        _peer->Shutdown(kShutdownBlockDurationMs, 0, MafiaNet::Priority::Immediate);
         Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting from the server...");
 
         // Peer shutdown fires TwoWayAuthentication::Clear(), wiping the registered build token;

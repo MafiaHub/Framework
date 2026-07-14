@@ -14,6 +14,12 @@
 
 namespace Framework::Launcher::RGL {
 
+    namespace {
+        // How long to wait for the injected LoadLibraryW thread to finish, in ms. Bounded so a hung
+        // loader can't wedge injection forever; a timeout is treated as a failed injection.
+        constexpr DWORD kInjectionWaitMs = 10000;
+    } // namespace
+
     // =========================================================================
     // Bypass Implementation
     // =========================================================================
@@ -330,11 +336,14 @@ namespace Framework::Launcher::RGL {
             return BypassResult::INJECTION_FAILED;
         }
 
-        // Wait for DLL to load
-        WaitForSingleObject(hThread, 10000);
+        // Wait for the loader thread; a timeout means it is still running (LoadLibraryW hung), so
+        // treat it as a failed injection rather than reading a bogus exit code.
+        const DWORD waitResult = WaitForSingleObject(hThread, kInjectionWaitMs);
 
         DWORD exitCode = 0;
-        GetExitCodeThread(hThread, &exitCode);
+        if (waitResult == WAIT_OBJECT_0) {
+            GetExitCodeThread(hThread, &exitCode);
+        }
 
         CloseHandle(hThread);
         VirtualFreeEx(processHandle, remotePath, 0, MEM_RELEASE);

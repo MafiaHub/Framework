@@ -15,6 +15,13 @@
 #include "graphics/backend/d3d11.h"
 
 namespace Framework::GUI {
+    namespace {
+        // CEF windowless (off-screen) render cap in FPS. Kept high so the browser paints at the
+        // game's frame rate rather than CEF's 30 FPS default; external_begin_frame still drives the
+        // actual cadence.
+        constexpr int kWindowlessFrameRate = 240;
+    } // namespace
+
     View::View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager)
         : _id(id)
         , _graphicsRenderer(graphicsRenderer)
@@ -93,7 +100,7 @@ namespace Framework::GUI {
         windowInfo.external_begin_frame_enabled = true;
 
         CefBrowserSettings browserSettings;
-        browserSettings.windowless_frame_rate = 240;
+        browserSettings.windowless_frame_rate = kWindowlessFrameRate;
         browserSettings.background_color      = CefColorSetARGB(0, 0, 0, 0);
 
         // Create the browser synchronously
