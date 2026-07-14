@@ -8,6 +8,10 @@
 
 #pragma once
 
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+
 #include <glm/mat4x4.hpp>
 #include <vector>
 
