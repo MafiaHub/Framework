@@ -227,6 +227,13 @@ namespace Framework::Integrations::Client {
 
         void DownloadsAssetsFromConnectedServer();
 
+      private:
+        // Cancel any in-flight transfer and kick off a fresh asset download from the connected
+        // server. The single call site for MafiaNet's DownloadFromSubdirectory.
+        void StartAssetDownload();
+
+      public:
+
         InstanceOptions &GetOptions() {
             return _opts;
         }

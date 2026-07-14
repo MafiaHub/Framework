@@ -11,29 +11,12 @@
 #include <logging/logger.h>
 
 namespace Framework::Integrations::Server::Networking {
-    Engine::Engine() {
-        _networkServer = std::make_unique<Framework::Networking::NetworkServer>();
-    }
-
     Utils::Result<void, Error> Engine::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password) {
-        if (auto result = _networkServer->Init(host, port, maxPlayers, password); !result) {
+        if (auto result = _peer->Init(host, port, maxPlayers, password); !result) {
             return result;
         }
 
         _initialized = true;
         return {};
-    }
-
-    void Engine::Shutdown() {
-        if (_networkServer) {
-            _networkServer->Shutdown();
-        }
-        Lifecycle::Shutdown();
-    }
-
-    void Engine::Update() {
-        if (_networkServer) {
-            _networkServer->Update();
-        }
     }
 } // namespace Framework::Integrations::Server::Networking

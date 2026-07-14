@@ -11,12 +11,8 @@
 #include <logging/logger.h>
 
 namespace Framework::Integrations::Client::Networking {
-    Engine::Engine() {
-        _networkClient = std::make_unique<Framework::Networking::NetworkClient>();
-    }
-
     Utils::Result<void, Error> Engine::Init() {
-        if (auto result = _networkClient->Init(); !result) {
+        if (auto result = _peer->Init(); !result) {
             return result;
         }
         _initialized = true;
@@ -24,23 +20,10 @@ namespace Framework::Integrations::Client::Networking {
     }
 
     Utils::Result<void, Error> Engine::Connect(const std::string &host, const int32_t port, const std::string password) const {
-        if (!_networkClient) {
+        if (!_peer) {
             return Error("Network client is not available");
         }
 
-        return _networkClient->Connect(host, port, password);
-    }
-
-    void Engine::Shutdown() {
-        if (_networkClient) {
-            _networkClient->Shutdown();
-        }
-        Lifecycle::Shutdown();
-    }
-
-    void Engine::Update() {
-        if (_networkClient) {
-            _networkClient->Update();
-        }
+        return _peer->Connect(host, port, password);
     }
 } // namespace Framework::Integrations::Client::Networking

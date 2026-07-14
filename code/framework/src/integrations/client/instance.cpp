@@ -710,6 +710,7 @@ namespace Framework::Integrations::Client {
         auto cacheDirHandle = cppfs::fs::open(cacheDir);
 
         // Ensure we stop existing downloads since the server has pushed new changes already
+        // (also before the bail below, so a failed cache dir doesn't leave a transfer running)
         if (_downloadStatus.downloading) {
             net->GetFileListTransfer()->CancelReceive(_downloadStatus.setID);
             _downloadStatus = {};
@@ -730,6 +731,18 @@ namespace Framework::Integrations::Client {
             }
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+
+        StartAssetDownload();
+    }
+
+    void Instance::StartAssetDownload() {
+        const auto net      = GetNetworkingEngine()->GetNetworkClient();
+        const auto streamer = net->GetAssetStreamer();
+
+        if (_downloadStatus.downloading) {
+            net->GetFileListTransfer()->CancelReceive(_downloadStatus.setID);
+            _downloadStatus = {};
+        }
 
         _downloadStatus.downloading = true;
         _downloadStatus.setID = streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), &_assetDownloadProgress, MafiaNet::Priority::High, 2, nullptr);
@@ -754,12 +767,7 @@ namespace Framework::Integrations::Client {
         }
         streamer->SetApplicationDirectory(cacheDir.c_str());
 
-        if (_downloadStatus.downloading) {
-            net->GetFileListTransfer()->CancelReceive(_downloadStatus.setID);
-            _downloadStatus = {};
-        }
-        _downloadStatus.downloading = true;
-        _downloadStatus.setID = streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), &_assetDownloadProgress, MafiaNet::Priority::High, 2, nullptr);
+        StartAssetDownload();
     }
 
     void Instance::OnAssetsDownloaded(bool success) {

@@ -9,26 +9,18 @@
 #pragma once
 
 #include <utils/error.h>
-#include <utils/lifecycle.h>
 #include <utils/result.h>
 
+#include <integrations/shared/networking/peer_engine.h>
 #include <networking/network_server.h>
 
 namespace Framework::Integrations::Server::Networking {
-    class Engine final : public Framework::Lifecycle {
-      private:
-        std::unique_ptr<Framework::Networking::NetworkServer> _networkServer {};
-
+    class Engine final : public Shared::Networking::PeerEngine<Framework::Networking::NetworkServer> {
       public:
-        Engine();
-
         [[nodiscard]] Utils::Result<void, Error> Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password);
-        void Shutdown() override;
-
-        void Update() override;
 
         Framework::Networking::NetworkServer *GetNetworkServer() const {
-            return _networkServer.get();
+            return _peer.get();
         }
     };
 } // namespace Framework::Integrations::Server::Networking
