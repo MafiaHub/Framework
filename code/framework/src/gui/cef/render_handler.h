@@ -49,7 +49,7 @@ namespace Framework::GUI::CEF {
         void OnAcceleratedPaint(CefRefPtr<CefBrowser> browser, PaintElementType type, const RectList &dirtyRects, const CefAcceleratedPaintInfo &info) override;
         void OnPaint(CefRefPtr<CefBrowser> browser, PaintElementType type, const RectList &dirtyRects, const void *buffer, int width, int height) override;
 
-        std::lock_guard<std::mutex> LockTexture() {
+        [[nodiscard]] std::lock_guard<std::mutex> LockTexture() {
             return std::lock_guard<std::mutex>(_textureMutex);
         }
 

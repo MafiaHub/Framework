@@ -146,6 +146,10 @@ namespace Framework::GUI {
             // GPU path: use shared texture from CEF
             auto *renderHandler = GetRenderHandler();
             if (renderHandler) {
+                // held for the whole read; OnAcceleratedPaint resets the
+                // shared texture when CEF hands us a new handle
+                const auto texLock = renderHandler->LockTexture();
+
                 auto *sharedTex = renderHandler->GetSharedTexture();
                 if (sharedTex) {
                     // Register the shared texture with the D3D11 backend if not already done
