@@ -790,9 +790,10 @@ namespace Framework::Launcher {
             tlsExport(base, index);
         });
 
-        // The loader throws on fatal mapping errors (unresolvable imports,
-        // protection failures); keep it inside the try so those reach the
-        // error dialog instead of std::terminate.
+        // Map and prepare the image. The loader throws on fatal mapping errors (unresolvable
+        // imports, protection failures); catch them here, before the game runs, so they report as
+        // a startup failure rather than a crash inside the running game.
+        void (*entry_point)() = nullptr;
         try {
             loader.LoadIntoModule(base);
             loader.Protect();
@@ -803,7 +804,7 @@ namespace Framework::Launcher {
             CloseHandle(hFile);
 
             // Acquire the entry point reference
-            const auto entry_point = static_cast<void (*)()>(loader.GetEntryPoint());
+            entry_point = static_cast<void (*)()>(loader.GetEntryPoint());
 
             hook::set_base(reinterpret_cast<uintptr_t>(base));
 
@@ -819,7 +820,16 @@ namespace Framework::Launcher {
             if (_preLaunchFunctor) {
                 _preLaunchFunctor();
             }
+        }
+        catch (const std::exception &ex) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to load and start the game: {}", ex.what());
 
+            MessageBoxA(nullptr, fmt::format("The game could not be started:\n\n{}\n\nSee Launcher.log for the full stack trace.", ex.what()).c_str(), _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
+        // The game runs here; a C++ exception surfacing means it crashed while running.
+        try {
             InvokeEntryPoint(entry_point);
             return true;
         }
