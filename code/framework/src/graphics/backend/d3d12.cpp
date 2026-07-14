@@ -144,7 +144,10 @@ namespace Framework::Graphics {
             return;
         }
         const auto &currentFrameContext = _frameContext[idx];
-        currentFrameContext._commandAllocator->Reset();
+        if (FAILED(currentFrameContext._commandAllocator->Reset())) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::Begin, command allocator Reset failed; skipping frame");
+            return;
+        }
 
         // acquire the back buffer fresh, release in End(); never held across
         // frames so our ref doesn't block the game's ResizeBuffers
@@ -163,7 +166,12 @@ namespace Framework::Graphics {
         _barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
         _barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
 
-        _commandList->Reset(currentFrameContext._commandAllocator, nullptr);
+        if (FAILED(_commandList->Reset(currentFrameContext._commandAllocator, nullptr))) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::Begin, command list Reset failed; skipping frame");
+            _currentBackBuffer->Release();
+            _currentBackBuffer = nullptr;
+            return;
+        }
         _commandList->ResourceBarrier(1, &_barrier);
         _commandList->OMSetRenderTargets(1, &currentFrameContext._mainRenderTargetDescriptor, FALSE, nullptr);
         _commandList->SetDescriptorHeaps(1, &_srvHeap);
@@ -177,8 +185,13 @@ namespace Framework::Graphics {
         _barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
         _barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
         _commandList->ResourceBarrier(1, &_barrier);
-        _commandList->Close();
-        _commandQueue->ExecuteCommandLists(1, (ID3D12CommandList **)&_commandList);
+        if (SUCCEEDED(_commandList->Close())) {
+            _commandQueue->ExecuteCommandLists(1, (ID3D12CommandList **)&_commandList);
+        }
+        else {
+            // Executing a command list that failed to close is invalid.
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::End, command list Close failed; dropping frame");
+        }
 
         // Drop our per-frame reference; the swapchain still owns the buffer.
         _currentBackBuffer->Release();

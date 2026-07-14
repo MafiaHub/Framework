@@ -50,7 +50,10 @@ namespace Framework::Graphics {
             blend_desc.IndependentBlendEnable = false;
             blend_desc.RenderTarget[0]        = rt_blend_desc;
 
-            _device->CreateBlendState(&blend_desc, _blendState.GetAddressOf());
+            if (FAILED(_device->CreateBlendState(&blend_desc, _blendState.GetAddressOf()))) {
+                Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::Init, unable to create the enabled blend state.");
+                return false;
+            }
         }
 
         {
@@ -73,7 +76,10 @@ namespace Framework::Graphics {
             disabled_blend_desc.IndependentBlendEnable = false;
             disabled_blend_desc.RenderTarget[0]        = rt_disabled_blend_desc;
 
-            _device->CreateBlendState(&disabled_blend_desc, _disabledBlendState.GetAddressOf());
+            if (FAILED(_device->CreateBlendState(&disabled_blend_desc, _disabledBlendState.GetAddressOf()))) {
+                Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::Init, unable to create the disabled blend state.");
+                return false;
+            }
         }
 
         {
@@ -95,7 +101,10 @@ namespace Framework::Graphics {
             rasterizer_desc.AntialiasedLineEnable = false;
 #endif
 
-            _device->CreateRasterizerState(&rasterizer_desc, _rsState.GetAddressOf());
+            if (FAILED(_device->CreateRasterizerState(&rasterizer_desc, _rsState.GetAddressOf()))) {
+                Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::Init, unable to create the rasterizer state.");
+                return false;
+            }
         }
 
         {
@@ -117,11 +126,17 @@ namespace Framework::Graphics {
             scissor_rasterizer_desc.AntialiasedLineEnable = false;
 #endif
 
-            _device->CreateRasterizerState(&scissor_rasterizer_desc, _scissoredRsState.GetAddressOf());
+            if (FAILED(_device->CreateRasterizerState(&scissor_rasterizer_desc, _scissoredRsState.GetAddressOf()))) {
+                Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::Init, unable to create the scissored rasterizer state.");
+                return false;
+            }
         }
 
-        if (opts.d3d11.useDeferredContext)
-            _device->CreateDeferredContext(0, _deferredContext.GetAddressOf());
+        // Render() falls back to the immediate context when no deferred
+        // context exists, so a failure here degrades instead of aborting.
+        if (opts.d3d11.useDeferredContext && FAILED(_device->CreateDeferredContext(0, _deferredContext.GetAddressOf()))) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->warn("D3D11Backend::Init, unable to create a deferred context, falling back to the immediate context.");
+        }
 
         return true;
     }
@@ -143,11 +158,15 @@ namespace Framework::Graphics {
         // we have rendered all our resources already.
         if (GetDeferredContext()) {
             ID3D11CommandList *cc;
-            GetDeferredContext()->FinishCommandList(false, &cc);
-
-            if (_deviceCommandList)
-                _deviceCommandList->Release();
-            _deviceCommandList = cc;
+            if (SUCCEEDED(GetDeferredContext()->FinishCommandList(false, &cc))) {
+                if (_deviceCommandList)
+                    _deviceCommandList->Release();
+                _deviceCommandList = cc;
+            }
+            else {
+                // keep the previous command list; Paint() replays it
+                Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::Render, unable to finish the deferred command list.");
+            }
         }
 
         // Drop the per-frame back-buffer RTV; the command list holds its own
@@ -254,6 +273,11 @@ namespace Framework::Graphics {
             }
         }
 #endif
+
+        if (FAILED(hr)) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::CreateTexture, unable to create the shader resource view. hr:{}", hr);
+            _textures.erase(texture_id);
+        }
     }
 
     void D3D11Backend::UpdateTexture(uint32_t texture_id, Bitmap bitmap) {
@@ -264,7 +288,10 @@ namespace Framework::Graphics {
 
         auto &entry = i->second;
         D3D11_MAPPED_SUBRESOURCE res;
-        GetContext()->Map(entry.texture.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &res);
+        if (FAILED(GetContext()->Map(entry.texture.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &res))) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::UpdateTexture, unable to map the texture.");
+            return;
+        }
 
         if (res.RowPitch == bitmap.pitch) {
             memcpy(res.pData, bitmap.pixels, bitmap.size);
@@ -333,8 +360,10 @@ namespace Framework::Graphics {
         HRESULT hr                  = _device->CreateRenderTargetView(tex.Get(), &renderTargetViewDesc, render_target_entry.render_target_view.GetAddressOf());
 
         render_target_entry.render_target_texture_id = buffer.texture_id;
-        if (FAILED(hr))
+        if (FAILED(hr)) {
             spdlog::error("D3D11Backend::CreateRenderBuffer, unable to create render target.");
+            _renderTargets.erase(render_buffer_id);
+        }
     }
 
     void D3D11Backend::DestroyRenderBuffer(uint32_t render_buffer_id) {
@@ -400,11 +429,17 @@ namespace Framework::Graphics {
         auto &entry = i->second;
         D3D11_MAPPED_SUBRESOURCE res;
 
-        GetContext()->Map(entry.vertexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &res);
+        if (FAILED(GetContext()->Map(entry.vertexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &res))) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::UpdateGeometry, unable to map the vertex buffer.");
+            return;
+        }
         memcpy(res.pData, vertices.data, vertices.size);
         GetContext()->Unmap(entry.vertexBuffer.Get(), 0);
 
-        GetContext()->Map(entry.indexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &res);
+        if (FAILED(GetContext()->Map(entry.indexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &res))) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::UpdateGeometry, unable to map the index buffer.");
+            return;
+        }
         memcpy(res.pData, indices.data, indices.size);
         GetContext()->Unmap(entry.indexBuffer.Get(), 0);
     }
@@ -700,7 +735,9 @@ namespace Framework::Graphics {
             if (!_backBufferRTV && _swapChain) {
                 ID3D11Texture2D *pBackBuffer = nullptr;
                 if (SUCCEEDED(_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&pBackBuffer))) {
-                    _device->CreateRenderTargetView(pBackBuffer, nullptr, _backBufferRTV.GetAddressOf());
+                    if (FAILED(_device->CreateRenderTargetView(pBackBuffer, nullptr, _backBufferRTV.GetAddressOf()))) {
+                        Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::GetRenderTargetView, unable to create the back buffer render target view.");
+                    }
                     pBackBuffer->Release();
                 }
             }
@@ -790,7 +827,10 @@ namespace Framework::Graphics {
         for (size_t i = 0; i < state.clip_size; ++i) uniforms.Clip[i] = ConvertGLMMatrixToXMMatrix(state.clip[i]);
 
         D3D11_MAPPED_SUBRESOURCE res;
-        GetContext()->Map(buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &res);
+        if (FAILED(GetContext()->Map(buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &res))) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::UpdateConstantBuffer, unable to map the constant buffer.");
+            return;
+        }
         memcpy(res.pData, &uniforms, sizeof(Uniforms));
         GetContext()->Unmap(buffer.Get(), 0);
     }
