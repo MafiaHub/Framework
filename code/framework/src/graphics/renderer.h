@@ -76,6 +76,12 @@ namespace Framework::Graphics {
         std::unique_ptr<D3D11Backend> _d3d11Backend;
         std::unique_ptr<D3D12Backend> _d3d12Backend;
 
+        // Dispatch fn to whichever backend is active. The backends share the Backend<> template but
+        // not a common base, so this is a generic call site instead of a virtual one. Defined in
+        // renderer.cpp; only used there.
+        template <typename Fn>
+        void ForActiveBackend(Fn &&fn);
+
       public:
         Renderer();
         ~Renderer();

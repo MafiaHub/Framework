@@ -50,57 +50,46 @@ namespace Framework::Graphics {
         return {};
     }
 
+    template <typename Fn>
+    void Renderer::ForActiveBackend(Fn &&fn) {
+        if (_d3d11Backend) {
+            fn(*_d3d11Backend);
+        }
+        else if (_d3d9Backend) {
+            fn(*_d3d9Backend);
+        }
+        else if (_d3d12Backend) {
+            fn(*_d3d12Backend);
+        }
+    }
+
     void Renderer::Shutdown() {
         if (!_initialized) {
             return;
         }
 
-        if (_d3d11Backend) {
-            _d3d11Backend->Shutdown();
-        }
-        else if (_d3d9Backend) {
-            _d3d9Backend->Shutdown();
-        }
-        else if (_d3d12Backend) {
-            _d3d12Backend->Shutdown();
-        }
+        ForActiveBackend([](auto &backend) {
+            backend.Shutdown();
+        });
 
         Lifecycle::Shutdown();
     }
 
     void Renderer::Update() {
-        if (_d3d11Backend) {
-            _d3d11Backend->Update();
-        }
-        else if (_d3d9Backend) {
-            _d3d9Backend->Update();
-        }
-        else if (_d3d12Backend) {
-            _d3d12Backend->Update();
-        }
+        ForActiveBackend([](auto &backend) {
+            backend.Update();
+        });
     }
 
     void Renderer::Render() {
-        if (_d3d11Backend) {
-            _d3d11Backend->Render();
-        }
-        else if (_d3d9Backend) {
-            _d3d9Backend->Render();
-        }
-        else if (_d3d12Backend) {
-            _d3d12Backend->Render();
-        }
+        ForActiveBackend([](auto &backend) {
+            backend.Render();
+        });
     }
-    
+
     void Renderer::Paint() {
-        if (_d3d11Backend) {
-            _d3d11Backend->Paint();
-        }
-        else if (_d3d9Backend) {
-            _d3d9Backend->Paint();
-        }
-        else if (_d3d12Backend) {
-            _d3d12Backend->Paint();
-        }
+        ForActiveBackend([](auto &backend) {
+            backend.Paint();
+        });
     }
 } // namespace Framework::Graphics
