@@ -258,7 +258,7 @@ namespace Framework::Graphics {
 
                 desc.SampleDesc.Count   = 1;
                 desc.SampleDesc.Quality = 0;
-                hr                      = _device->CreateTexture2D(&desc, NULL, texture_entry.resolve_texture.GetAddressOf());
+                hr                      = _device->CreateTexture2D(&desc, nullptr, texture_entry.resolve_texture.GetAddressOf());
 
                 if (FAILED(hr))
                     Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::CreateTexture, unable to create MSAA resolve texture.");
@@ -567,11 +567,11 @@ namespace Framework::Graphics {
     }
 
     void D3D11Backend::EnableBlend() {
-        GetContext()->OMSetBlendState(_blendState.Get(), NULL, 0xffffffff);
+        GetContext()->OMSetBlendState(_blendState.Get(), nullptr, 0xffffffff);
     }
 
     void D3D11Backend::DisableBlend() {
-        GetContext()->OMSetBlendState(_disabledBlendState.Get(), NULL, 0xffffffff);
+        GetContext()->OMSetBlendState(_disabledBlendState.Get(), nullptr, 0xffffffff);
     }
 
     void D3D11Backend::EnableScissor() {

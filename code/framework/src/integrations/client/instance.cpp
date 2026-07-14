@@ -38,6 +38,7 @@
 #include "utils/path.h"
 #include "utils/profiler.h"
 #include "utils/version.h"
+#include "utils/time.h"
 #include "utils/hardware_id.h"
 
 #include "core_modules.h"
@@ -596,7 +597,7 @@ namespace Framework::Integrations::Client {
             // tickInterval is in seconds; SetAutoSerializeInterval wants milliseconds.
             if (auto *replication = net->GetReplicationManager()) {
                 CoreModules::SetReplication(replication);
-                replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_serverTickRate * 1000.0f));
+                replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(Framework::Utils::Time::SecondsToMs(_serverTickRate)));
             }
             _chatBox.SetVisible(true);
             _chatBox.SetSessionActive(true);

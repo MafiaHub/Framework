@@ -233,7 +233,6 @@ namespace Framework::Integrations::Client {
         void StartAssetDownload();
 
       public:
-
         InstanceOptions &GetOptions() {
             return _opts;
         }

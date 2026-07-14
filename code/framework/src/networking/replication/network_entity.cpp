@@ -11,6 +11,7 @@
 #include "replication_manager.h"
 
 #include <mafianet/GetTime.h>
+#include <utils/time.h>
 
 namespace Framework::Networking::Replication {
     namespace {
@@ -235,7 +236,7 @@ namespace Framework::Networking::Replication {
     }
 
     glm::vec3 NetworkEntity::GetExtrapolatedPosition() const {
-        return position + velocity * (static_cast<float>(GetUpdateAge()) / 1000.0f);
+        return position + velocity * Framework::Utils::Time::MsToSeconds(static_cast<float>(GetUpdateAge()));
     }
 
     MafiaNet::RM3ConstructionState NetworkEntity::QueryConstructionWithinWorld(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *) {

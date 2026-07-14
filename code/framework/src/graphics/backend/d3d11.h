@@ -131,10 +131,10 @@ namespace Framework::Graphics {
         using ShaderMap = std::map<ShaderType, std::pair<Microsoft::WRL::ComPtr<ID3D11VertexShader>, Microsoft::WRL::ComPtr<ID3D11PixelShader>>>;
         ShaderMap _shaders;
 
-    public:
+      public:
         TextureEntry &GetTexture(uint32_t texture_id);
 
-    private:
+      private:
         struct Vertex_2f_4ub_2f {
             DirectX::XMFLOAT2 pos;
             uint8_t color[4];

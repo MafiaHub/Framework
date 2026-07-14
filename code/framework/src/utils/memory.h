@@ -13,4 +13,4 @@
 
 namespace Framework::Utils {
     void MarkMemoryRW(uint8_t *base);
-}
+} // namespace Framework::Utils

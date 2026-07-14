@@ -103,4 +103,4 @@ namespace Framework::Graphics {
 
         return true;
     }
-}
+} // namespace Framework::Graphics

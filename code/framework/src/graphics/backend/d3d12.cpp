@@ -89,7 +89,7 @@ namespace Framework::Graphics {
                 }
             }
 
-            if (pD3DDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, _frameContext[0]._commandAllocator, NULL, IID_PPV_ARGS(&_commandList)) != S_OK || _commandList->Close() != S_OK) {
+            if (pD3DDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, _frameContext[0]._commandAllocator, nullptr, IID_PPV_ARGS(&_commandList)) != S_OK || _commandList->Close() != S_OK) {
                 return false;
             }
         }

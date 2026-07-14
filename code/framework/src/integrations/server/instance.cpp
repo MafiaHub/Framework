@@ -38,6 +38,7 @@
 #include "utils/path.h"
 #include "utils/profiler.h"
 #include "utils/version.h"
+#include "utils/time.h"
 
 #include "cxxopts.hpp"
 #include <cppfs/FileHandle.h>
@@ -164,7 +165,7 @@ namespace Framework::Integrations::Server {
         auto *replication = _networkingEngine->GetNetworkServer()->GetReplicationManager();
         CoreModules::SetReplication(replication);
         if (replication) {
-            replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_opts.worldConfig.tickInterval * 1000.0f));
+            replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
             replication->ConfigureGrid(_opts.worldConfig.streamCellSize, _opts.worldConfig.streamWorldMin, _opts.worldConfig.streamWorldMax);
             // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
             // still resolvable) just before destroying and broadcasting the destruction of the avatar.
@@ -921,7 +922,7 @@ namespace Framework::Integrations::Server {
 
             FW_PROFILE_FRAME();
 
-            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(_opts.worldConfig.tickInterval * 1000.0f));
+            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
         }
         else {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));

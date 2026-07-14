@@ -28,7 +28,7 @@ namespace Framework::Integrations::Server::Scripting {
         options.processName = "mafiahub-server";
 #ifdef FW_NODE_INSPECTOR
         options.enableInspector = true;
-        options.inspectorPort = 9229;
+        // inspectorPort keeps its NodeEngine default (the standard Node debug port).
 #endif
         _nodeEngine = std::make_unique<Framework::Scripting::NodeEngine>(options);
     }

@@ -12,6 +12,17 @@
 #include <stdint.h>
 
 namespace Framework::Utils::Time {
+    // Seconds <-> milliseconds conversions, so callers stop sprinkling bare * / 1000 literals.
+    template <typename T>
+    constexpr T SecondsToMs(T seconds) {
+        return seconds * static_cast<T>(1000);
+    }
+
+    template <typename T>
+    constexpr T MsToSeconds(T milliseconds) {
+        return milliseconds / static_cast<T>(1000);
+    }
+
     using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
     extern int64_t GetTime();
     extern TimePoint GetTimePoint();

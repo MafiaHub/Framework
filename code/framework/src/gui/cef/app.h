@@ -74,7 +74,7 @@ namespace Framework::GUI::CEF {
 
         IMPLEMENT_REFCOUNTING(App);
 
-        private:
+      private:
         // Create() runs on the CEF IO thread per request; registration happens
         // on the game thread
         std::mutex _handlersMutex;

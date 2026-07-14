@@ -19,7 +19,7 @@ namespace Framework::Integrations::Client::Networking {
       public:
         [[nodiscard]] Utils::Result<void, Error> Init();
 
-        [[nodiscard]] Utils::Result<void, Error> Connect(const std::string &, const int32_t, const std::string password = "") const;
+        [[nodiscard]] Utils::Result<void, Error> Connect(const std::string &host, int32_t port, const std::string &password = "") const;
 
         Framework::Networking::NetworkClient *GetNetworkClient() const {
             return _peer.get();

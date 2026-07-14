@@ -11,6 +11,7 @@
 #include <cmath>
 #include <glm/ext.hpp>
 #include <mafianet/GetTime.h>
+#include <utils/time.h>
 
 namespace Framework::Utils {
     // Tunables for SnapshotBuffer. One instance can be shared by many buffers (e.g. all remote
@@ -102,8 +103,8 @@ namespace Framework::Utils {
 
             // Ahead of the buffer (underrun): extrapolate from the newest along its velocity, capped.
             if (renderTime >= newest.time) {
-                double dt        = static_cast<double>(renderTime - newest.time) / 1000.0;
-                const double cap = static_cast<double>(Config().maxExtrapolationMs) / 1000.0;
+                double dt        = Time::MsToSeconds(static_cast<double>(renderTime - newest.time));
+                const double cap = Time::MsToSeconds(static_cast<double>(Config().maxExtrapolationMs));
                 if (dt > cap) {
                     dt = cap;
                 }
