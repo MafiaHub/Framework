@@ -83,11 +83,6 @@ namespace Framework::Graphics {
         }
 
         {
-            ID3D12CommandAllocator *allocator {nullptr};
-            if (pD3DDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)) != S_OK) {
-                return false;
-            }
-
             for (size_t i = 0; i < _frameBufferCount; i++) {
                 if (pD3DDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&_frameContext[i]._commandAllocator)) != S_OK) {
                     return false;
