@@ -244,6 +244,7 @@ namespace Framework::Graphics {
                 if (FAILED(hr))
                     Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)
                         ->error("D3D11Backend::CreateTexture, unable to create shader resource view for MSAA ");
+            }
         }
 #endif
     }
