@@ -93,6 +93,11 @@ namespace Framework::Graphics {
         Microsoft::WRL::ComPtr<ID3D11SamplerState> _samplerState;
         Microsoft::WRL::ComPtr<ID3D11Buffer> _constantBuffer;
 
+        // Back-buffer RTV for the fallback render target path; released every
+        // frame in Render() so our reference never blocks the game's
+        // ResizeBuffers.
+        Microsoft::WRL::ComPtr<ID3D11RenderTargetView> _backBufferRTV;
+
         struct GeometryEntry {
             VertexBufferFormat format;
             Microsoft::WRL::ComPtr<ID3D11Buffer> vertexBuffer;

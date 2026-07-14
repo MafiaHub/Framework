@@ -141,16 +141,18 @@ namespace Framework::Graphics {
 
         // If there is no deferred context initialised
         // we have rendered all our resources already.
-        if (!GetDeferredContext()) {
-            return;
+        if (GetDeferredContext()) {
+            ID3D11CommandList *cc;
+            GetDeferredContext()->FinishCommandList(false, &cc);
+
+            if (_deviceCommandList)
+                _deviceCommandList->Release();
+            _deviceCommandList = cc;
         }
 
-        ID3D11CommandList *cc;
-        GetDeferredContext()->FinishCommandList(false, &cc);
-
-        if (_deviceCommandList)
-            _deviceCommandList->Release();
-        _deviceCommandList = cc;
+        // Drop the per-frame back-buffer RTV; the command list holds its own
+        // reference, and keeping ours would block the game's ResizeBuffers.
+        _backBufferRTV.Reset();
     }
 
     void D3D11Backend::Paint() {
@@ -687,18 +689,18 @@ namespace Framework::Graphics {
 #endif
         }
         else {
-            // Couldn't find the render buffer id in our local render target map.
-            ID3D11RenderTargetView *pRenderTargetView = nullptr;
-            ID3D11Texture2D *pBackBuffer              = nullptr;
-
-            if (_swapChain) {
-                // Get the back buffer from the swap chain
+            // Couldn't find the render buffer id in our local render target
+            // map; fall back to the swap chain back buffer. The RTV is cached
+            // for the current frame and released in Render().
+            if (!_backBufferRTV && _swapChain) {
+                ID3D11Texture2D *pBackBuffer = nullptr;
                 if (SUCCEEDED(_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&pBackBuffer))) {
-                    // Create a render target view
-                    _device->CreateRenderTargetView(pBackBuffer, nullptr, &target);
+                    _device->CreateRenderTargetView(pBackBuffer, nullptr, _backBufferRTV.GetAddressOf());
                     pBackBuffer->Release();
                 }
             }
+
+            target = _backBufferRTV.Get();
         }
 
         return target;
