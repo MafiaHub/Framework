@@ -59,7 +59,7 @@ namespace Framework::Launcher::RGL {
      * 1. In-process (PE Loading): Call Apply* methods directly
      * 2. Cross-process (DLL Injection): Use ProcessMonitor to inject a DLL that calls Apply*
      */
-    class Bypass {
+    class Bypass final {
       public:
         explicit Bypass(uintptr_t moduleBase = 0, const BypassConfig &config = {});
 
@@ -107,7 +107,7 @@ namespace Framework::Launcher::RGL {
      * when the game starts. The injected DLL should call Bypass::ApplyAll()
      * during its initialization.
      */
-    class ProcessMonitor {
+    class ProcessMonitor final {
       public:
         using ProcessCallback = fu2::function<void(DWORD processId, HANDLE processHandle)>;
 

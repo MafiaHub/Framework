@@ -13,7 +13,7 @@
 #include <string>
 
 namespace Framework::Utils {
-    class MiniDump {
+    class MiniDump final {
       private:
         static inline std::string symbolPath;
         static inline bool isCaptureEnabled = true;

@@ -111,7 +111,7 @@ namespace Framework::Launcher {
         std::wstring urlProtocolScheme; // e.g. L"mafiamp" (no "://")
     };
 
-    class Project {
+    class Project final {
       public:
         using FunctionResolverProc = fu2::function<LPVOID(HMODULE, const char *) const>;
         using LibraryLoaderProc    = fu2::function<HMODULE(const char *) const>;

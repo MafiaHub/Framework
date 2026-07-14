@@ -33,7 +33,7 @@ namespace Framework::Utils {
     };
 
     using CommandProc = fu2::function<void(cxxopts::ParseResult &) const>;
-    class CommandProcessor {
+    class CommandProcessor final {
       private:
         struct CommandInfo {
             std::unique_ptr<cxxopts::Options> options;

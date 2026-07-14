@@ -29,7 +29,7 @@
 namespace Framework::Networking {
     using ClientGuidCallback = fu2::function<void(MafiaNet::RakNetGUID) const>;
 
-    class NetworkServer: public NetworkPeer {
+    class NetworkServer final: public NetworkPeer {
       private:
         PacketCallback _onPlayerConnectCallback;
         DisconnectPacketCallback _onPlayerDisconnectCallback;

@@ -13,7 +13,7 @@
 #include <glm/ext.hpp>
 
 namespace Framework::Utils {
-    class Interpolator {
+    class Interpolator final {
       public:
         using TimePoint = std::chrono::high_resolution_clock::time_point;
         template <typename T>

@@ -27,7 +27,7 @@
 #endif
 
 namespace Framework::Graphics {
-    class D3D11Backend: public Backend<ID3D11Device *, ID3D11DeviceContext *, IDXGISwapChain *, void *> {
+    class D3D11Backend final: public Backend<ID3D11Device *, ID3D11DeviceContext *, IDXGISwapChain *, void *> {
       public:
         bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
         void Shutdown() override;
@@ -53,15 +53,15 @@ namespace Framework::Graphics {
         void SetViewport(uint32_t width, uint32_t height) override;
         glm::mat4 ApplyProjection(const glm::mat4 &transform, float screen_width, float screen_height) override;
 
-        virtual ID3D11DeviceContext *GetImmediateContext() const;
-        virtual ID3D11DeviceContext *GetDeferredContext() const;
-        virtual ID3D11DeviceContext *GetContext() const;
+        ID3D11DeviceContext *GetImmediateContext() const;
+        ID3D11DeviceContext *GetDeferredContext() const;
+        ID3D11DeviceContext *GetContext() const;
 
-        virtual void EnableBlend();
-        virtual void DisableBlend();
+        void EnableBlend();
+        void DisableBlend();
 
-        virtual void EnableScissor();
-        virtual void DisableScissor();
+        void EnableScissor();
+        void DisableScissor();
 
         IDXGISwapChain *GetSwapChain() const;
 

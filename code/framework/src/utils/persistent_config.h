@@ -12,7 +12,7 @@
 
 namespace Framework::Utils {
     // File-backed Config; falls back to GetDefaultConfig() when the file is missing or invalid
-    class PersistentConfig: public Config {
+    class PersistentConfig final: public Config {
       private:
         std::string _path;
 

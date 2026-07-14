@@ -17,7 +17,7 @@ namespace Framework::Utils {
     /**
      * Delays a scope with set amount of milliseconds.
      */
-    class DelayScope {
+    class DelayScope final {
       public:
         DelayScope(uint32_t delay, fu2::function<void()> callback);
 

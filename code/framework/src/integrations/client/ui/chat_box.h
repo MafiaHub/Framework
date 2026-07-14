@@ -18,7 +18,7 @@ struct ImGuiInputTextCallbackData;
 namespace Framework::Integrations::Client::UI {
     // In-game chat overlay (top-left): a fading backlog and a single-line input. Pure UI — the owner
     // supplies the send path via SetSubmitHandler and drives Render/OpenInput/session itself.
-    class ChatBox {
+    class ChatBox final {
       public:
         // author empty = notice line; color packed 0xRRGGBBAA on the body (0 = theme default).
         void AddMessage(const std::string &author, const std::string &text, uint32_t color = 0);

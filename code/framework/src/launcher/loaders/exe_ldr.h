@@ -21,7 +21,7 @@
 #include <winnt.h>
 
 namespace Framework::Launcher::Loaders {
-    class ExecutableLoader {
+    class ExecutableLoader final {
       public:
         using FunctionResolverProc = fu2::function<LPVOID(HMODULE, const char *) const>;
         using LibraryLoaderProc    = fu2::function<HMODULE(const char *) const>;

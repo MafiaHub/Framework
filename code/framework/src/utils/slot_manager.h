@@ -12,7 +12,7 @@
 
 namespace Framework::Utils {
     template <typename T>
-    class SlotManager {
+    class SlotManager final {
       private:
         std::vector<bool> _occupied;
         std::vector<T> _slots;

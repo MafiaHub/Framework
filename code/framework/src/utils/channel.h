@@ -14,7 +14,7 @@
 
 namespace Framework::Utils {
     template <typename ProcT = fu2::function<void() const>>
-    class Channel {
+    class Channel final {
       public:
         using Proc = ProcT;
 

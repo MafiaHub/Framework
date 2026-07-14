@@ -30,7 +30,7 @@ namespace Framework::Networking::Replication {
     // without removal support), so a parallel live-entity set is the deletion authority: Remove()
     // drops the entity there and every query filters grid hits through it, which is what keeps an
     // intra-tick DestroyEntity from handing out a dangling pointer.
-    class InterestGrid {
+    class InterestGrid final {
       public:
         // Spatial index extent. Defaults cover a 20km² map at 100m cells (~40k cells). Pick bounds
         // that enclose the playable area; entities outside clamp to edge cells (still found by radius

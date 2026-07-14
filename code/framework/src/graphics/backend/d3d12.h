@@ -15,7 +15,7 @@
 #include <vector>
 
 namespace Framework::Graphics {
-    class D3D12Backend: public Backend<ID3D12Device *, ID3D12DeviceContext *, IDXGISwapChain3 *, ID3D12CommandQueue *> {
+    class D3D12Backend final: public Backend<ID3D12Device *, ID3D12DeviceContext *, IDXGISwapChain3 *, ID3D12CommandQueue *> {
       public:
         // Shader-visible SRV slots reserved past the ImGui font descriptors,
         // handed to web views via AllocateSRVSlot.

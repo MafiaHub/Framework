@@ -27,7 +27,7 @@ namespace Framework::Utils::States {
         Next
     };
 
-    class Machine {
+    class Machine final {
       private:
         mutable std::mutex _mutex;
         std::map<int32_t, std::unique_ptr<IState>> _states;

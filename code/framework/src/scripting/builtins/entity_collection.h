@@ -35,7 +35,7 @@ namespace Framework::Scripting::Builtins {
     // GetClass(isolate) and a JsType(uint64_t) ctor; NativeType the replicated entity. Instantiated in
     // mod code where NativeType is complete, so this header pulls in only the NetworkEntity base.
     template <typename JsType, typename NativeType, typename Predicate = AcceptAll>
-    class EntityCollection {
+    class EntityCollection final {
       public:
         EntityCollection() = default;
 

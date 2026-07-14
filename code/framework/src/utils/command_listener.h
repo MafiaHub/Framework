@@ -17,7 +17,7 @@
 
 namespace Framework::Utils {
     using CommandCallback = fu2::function<void(const std::string &) const>;
-    class CommandListener {
+    class CommandListener final {
       private:
         std::queue<std::string> _queue;
         std::mutex _mutex;

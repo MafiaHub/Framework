@@ -29,7 +29,7 @@ namespace Framework::Scripting::Builtins {
     // handle (a mod's Player/Human resolves to Entity via v8pp inheritance), so it stays game-agnostic.
     //   Chat.sendToAll(text, opts?)             opts = { author?: string, color?: number 0xRRGGBBAA }
     //   Chat.sendToPlayer(player, text, opts?)
-    class Chat {
+    class Chat final {
       public:
         static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
             if (!isolate || global.IsEmpty()) {

@@ -64,7 +64,7 @@ namespace Framework::Graphics {
         } d3d12;
     };
 
-    class Renderer : public Framework::Lifecycle {
+    class Renderer final : public Framework::Lifecycle {
       private:
         RendererConfiguration _config {};
         RendererState _state     = RendererState::STATE_NOT_INITIALIZED;

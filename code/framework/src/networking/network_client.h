@@ -33,7 +33,7 @@ namespace Framework::Networking {
         void SetCallback(OnAssetsDownloadFailedCallback cb);
         void OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) override;
     };
-    class NetworkClient: public NetworkPeer {
+    class NetworkClient final: public NetworkPeer {
       private:
 
         PeerState _state;

@@ -17,7 +17,7 @@
 #endif
 
 namespace Framework::Graphics {
-    class D3D9Backend: public Backend<IDirect3DDevice9 *, void *, void *, void *> {
+    class D3D9Backend final: public Backend<IDirect3DDevice9 *, void *, void *, void *> {
       public:
         bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
         void Shutdown() override;

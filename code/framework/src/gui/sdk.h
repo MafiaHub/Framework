@@ -21,7 +21,7 @@
 namespace Framework::GUI {
     using EventCallback = fu2::function<void(const std::string &eventPayload) const>;
 
-    class SDK {
+    class SDK final {
       private:
         CefRefPtr<CefBrowser> _browser;
         std::unordered_map<std::string, EventCallback> _eventListeners;

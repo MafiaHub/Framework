@@ -10,7 +10,7 @@
 
 namespace Framework::Utils {
     template <typename T>
-    class Watcher {
+    class Watcher final {
       private:
         T _value {};
         bool _hasChanged = false;
