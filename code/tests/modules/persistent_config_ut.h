@@ -10,6 +10,10 @@
 
 #include "utils/persistent_config.h"
 
+// Config::Get/GetDefault/Set are templates that instantiate against nlohmann::json, so this TU
+// needs the full definition — persistent_config.h only forward-declares it via json_fwd.hpp.
+#include <nlohmann/json.hpp>
+
 #include <filesystem>
 #include <fstream>
 #include <string>
