@@ -216,6 +216,11 @@ namespace Framework::Graphics {
 
         if (FAILED(hr)) {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::CreateTexture, unable to create texture. hr:{}, w:{}, h:{}, size:{}", hr, desc.Width, desc.Height, bitmap.size);
+
+            // Drop the half-initialized entry so later Bind/UpdateTexture
+            // calls miss the map instead of touching a null texture.
+            _textures.erase(texture_id);
+            return;
         }
 
         D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc;
