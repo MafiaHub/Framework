@@ -107,7 +107,13 @@ namespace Framework::GUI {
     }
 
     void View::Update() {
-        // Nothing to update at the base level for CEF; message loop is driven by Manager
+        if (!_browser || !_shouldDisplay) {
+            return;
+        }
+
+        // Nothing else to update for CEF (the message loop is driven by Manager); the lock
+        // synchronizes the update tick against a concurrent Render.
+        std::scoped_lock lock(_renderMutex);
     }
 
     void View::RequestBeginFrame() {

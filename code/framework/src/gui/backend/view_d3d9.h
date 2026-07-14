@@ -29,7 +29,6 @@ namespace Framework::GUI {
 
         [[nodiscard]] Utils::Result<void, Framework::Error> Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated = false) override;
 
-        void Update() override;
         void Render() override;
         void SubmitImGuiDraw() override;
 

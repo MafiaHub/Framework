@@ -35,15 +35,6 @@ namespace Framework::GUI {
         return View::Init(url, width, height, offsetX, offsetY, false);
     }
 
-    void ViewD3D9::Update() {
-        if (!_browser || !_shouldDisplay) {
-            return;
-        }
-
-        std::scoped_lock lock(_renderMutex);
-        View::Update();
-    }
-
     bool ViewD3D9::UploadPixels(IDirect3DDevice9 *device) {
         auto *renderHandler = GetRenderHandler();
         if (!renderHandler) {

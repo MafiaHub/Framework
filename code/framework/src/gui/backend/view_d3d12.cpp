@@ -29,15 +29,6 @@ namespace Framework::GUI {
         return View::Init(url, width, height, offsetX, offsetY, false);
     }
 
-    void ViewD3D12::Update() {
-        if (!_browser || !_shouldDisplay) {
-            return;
-        }
-
-        std::scoped_lock lock(_renderMutex);
-        View::Update();
-    }
-
     bool ViewD3D12::CreateResources() {
         auto *backend = _graphicsRenderer ? _graphicsRenderer->GetD3D12Backend() : nullptr;
         auto *device  = backend ? backend->GetDevice() : nullptr;

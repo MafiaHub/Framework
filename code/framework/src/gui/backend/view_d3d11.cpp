@@ -19,15 +19,6 @@ namespace Framework::GUI {
         return View::Init(url, width, height, offsetX, offsetY, gpuAccelerated);
     }
 
-    void ViewD3D11::Update() {
-        if (!_browser || !_shouldDisplay) {
-            return;
-        }
-
-        std::scoped_lock lock(_renderMutex);
-        View::Update();
-    }
-
     void ViewD3D11::CreateOrUpdateGeometry() {
         auto *backend = _graphicsRenderer->GetD3D11Backend();
         if (!backend) {
