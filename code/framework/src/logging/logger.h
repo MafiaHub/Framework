@@ -12,7 +12,6 @@
 #include <functional>
 #include <map>
 #include <mutex>
-#include <spdlog/async.h>
 #include <spdlog/sinks/ringbuffer_sink.h>
 #include <spdlog/spdlog.h>
 #include <string>

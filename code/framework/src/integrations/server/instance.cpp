@@ -30,6 +30,7 @@
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
 
+#include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <v8pp/convert.hpp>
 

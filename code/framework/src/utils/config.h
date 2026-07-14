@@ -9,7 +9,7 @@
 #pragma once
 
 #include <memory>
-#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -51,20 +51,24 @@ namespace Framework::Utils {
 
         virtual const char *GetDefaultConfig();
 
-        template <typename T>
+        // Document is a template parameter (always nlohmann::json) only so the bodies are checked at
+        // instantiation rather than definition, which lets this header get away with json_fwd.hpp.
+        // TUs that call Get/GetDefault/Set must include <nlohmann/json.hpp> themselves.
+        template <typename T, typename Document = nlohmann::json>
         T Get(std::string_view field) const {
             if (!_lastError.empty()) {
                 LogUnparsedAccess(field);
                 return {};
             }
             std::string key(field);
+            Document &doc = *_document;
             if constexpr (std::is_same_v<T, std::wstring>) {
-                return Utils::StringUtils::NormalToWide((*_document)[key]);
+                return Utils::StringUtils::NormalToWide(doc[key]);
             }
-            return (*_document)[key];
+            return doc[key];
         }
 
-        template <typename T>
+        template <typename T, typename Document = nlohmann::json>
         T GetDefault(std::string_view field, T defaultValue) const {
             if (!_lastError.empty()) {
                 LogUnparsedAccess(field);
@@ -73,25 +77,27 @@ namespace Framework::Utils {
 
             try {
                 std::string key(field);
+                Document &doc = *_document;
                 if constexpr (std::is_same_v<T, std::wstring>) {
-                    return Utils::StringUtils::NormalToWide((*_document)[key]);
+                    return Utils::StringUtils::NormalToWide(doc[key]);
                 }
-                return (*_document)[key];
+                return doc[key];
             }
             catch (const std::exception &) {
                 return defaultValue;
             }
         }
 
-        template <typename T>
+        template <typename T, typename Document = nlohmann::json>
         void Set(const std::string &field, T value) {
             if (!_lastError.empty())
                 return;
+            Document &doc = *_document;
             if constexpr (std::is_same_v<T, std::wstring>) {
-                (*_document)[field] = Utils::StringUtils::WideToNormal(value);
+                doc[field] = Utils::StringUtils::WideToNormal(value);
                 return;
             }
-            (*_document)[field] = value;
+            doc[field] = value;
         }
     };
 } // namespace Framework::Utils

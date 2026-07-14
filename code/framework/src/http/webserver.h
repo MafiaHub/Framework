@@ -15,12 +15,20 @@
 #include <atomic>
 #include <cstdint>
 #include <function2.hpp>
-#include <httplib.h>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
+
+// Keep httplib out of this header; consumers implementing request callbacks
+// include <httplib.h> themselves for the complete Request/Response types.
+namespace httplib {
+    struct Request;
+    struct Response;
+    class ContentReader;
+    class Server;
+} // namespace httplib
 
 namespace Framework::HTTP {
     using RequestCallback = fu2::function<void(const httplib::Request &, httplib::Response &) const>;

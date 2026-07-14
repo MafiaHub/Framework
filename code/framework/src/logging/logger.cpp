@@ -8,6 +8,7 @@
 
 #include "logger.h"
 
+#include <spdlog/async.h>
 #include <spdlog/details/log_msg.h>
 #include <spdlog/sinks/base_sink.h>
 #include <spdlog/sinks/null_sink.h>

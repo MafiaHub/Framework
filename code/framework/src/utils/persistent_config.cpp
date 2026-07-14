@@ -8,6 +8,8 @@
 
 #include "persistent_config.h"
 
+#include <nlohmann/json.hpp>
+
 #include <filesystem>
 #include <fstream>
 #include <sstream>

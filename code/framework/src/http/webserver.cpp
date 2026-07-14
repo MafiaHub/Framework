@@ -8,6 +8,7 @@
 
 #include "webserver.h"
 
+#include <httplib.h>
 #include <logging/logger.h>
 
 namespace Framework::HTTP {

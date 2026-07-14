@@ -9,7 +9,6 @@
 #pragma once
 
 #include <cxxopts.hpp>
-#include <spdlog/spdlog.h>
 
 #include "result.h"
 

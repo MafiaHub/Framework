@@ -9,6 +9,7 @@
 #include "config.h"
 
 #include <logging/logger.h>
+#include <nlohmann/json.hpp>
 
 namespace Framework::Utils {
     Config::Config(): _document(std::make_unique<nlohmann::json>()) {

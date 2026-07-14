@@ -21,6 +21,7 @@
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <cstdlib>
+#include <nlohmann/json.hpp>
 #include <fstream>
 #include <ostream>
 #include <utils/hooking/hooking.h>
