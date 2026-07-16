@@ -9,7 +9,6 @@
 #pragma once
 
 #include "entity.h"
-#include "property.h"
 
 #include <networking/replication/entities/text_label_entity.h>
 
