@@ -123,15 +123,13 @@ namespace Framework::Scripting::Builtins {
             .function("setFontSize", &TextLabel::SetFontSize)
             .function("setDrawDistance", &TextLabel::SetDrawDistance)
             .function("setFadeDistance", &TextLabel::SetFadeDistance)
-            .function("setStyle", &TextLabel::SetStyle);
-
-        auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
-        RegisterReadonlyProperty<TextLabel, &TextLabel::GetText>(isolate, protoTemplate, "text");
-        RegisterReadonlyProperty<TextLabel, &TextLabel::GetColor>(isolate, protoTemplate, "color");
-        RegisterReadonlyProperty<TextLabel, &TextLabel::GetFontSize>(isolate, protoTemplate, "fontSize");
-        RegisterReadonlyProperty<TextLabel, &TextLabel::GetDrawDistance>(isolate, protoTemplate, "drawDistance");
-        RegisterReadonlyProperty<TextLabel, &TextLabel::GetFadeDistance>(isolate, protoTemplate, "fadeDistance");
-        RegisterReadonlyProperty<TextLabel, &TextLabel::GetStyle>(isolate, protoTemplate, "style");
+            .function("setStyle", &TextLabel::SetStyle)
+            .property("text", &TextLabel::GetText)
+            .property("color", &TextLabel::GetColor)
+            .property("fontSize", &TextLabel::GetFontSize)
+            .property("drawDistance", &TextLabel::GetDrawDistance)
+            .property("fadeDistance", &TextLabel::GetFadeDistance)
+            .property("style", &TextLabel::GetStyle);
 
         return *cls;
     }

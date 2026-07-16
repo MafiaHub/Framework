@@ -9,7 +9,6 @@
 #pragma once
 
 #include "entity.h"
-#include "property.h"
 
 #include <v8.h>
 #include <v8pp/class.hpp>

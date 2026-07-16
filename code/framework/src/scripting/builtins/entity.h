@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "property.h"
 #include "quaternion.h"
 #include "vector3.h"
 

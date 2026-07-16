@@ -94,13 +94,10 @@ namespace Framework::Scripting::Builtins {
         cls->auto_wrap_objects(true);
         cls->ctor<uint64_t>()
             .function("toString", &Entity::ToString)
-            .function("setVirtualWorld", &Entity::SetVirtualWorld);
-
-        auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
-
-        RegisterReadonlyProperty<Entity, &Entity::GetId>(isolate, protoTemplate, "id");
-        RegisterReadonlyProperty<Entity, &Entity::GetVirtualWorld>(isolate, protoTemplate, "virtualWorld");
-        RegisterObjectProperty<Entity, &Entity::GetPosition, &Entity::SetPosition>(isolate, protoTemplate, "position");
+            .function("setVirtualWorld", &Entity::SetVirtualWorld)
+            .property("id", &Entity::GetId)
+            .property("virtualWorld", &Entity::GetVirtualWorld)
+            .property("position", &Entity::GetPosition, &Entity::SetPosition);
 
         // Property: rotation. Getter returns a Quaternion; setter accepts a Quaternion or a Vector3 (euler degrees).
         {
@@ -128,12 +125,12 @@ namespace Framework::Scripting::Builtins {
                 info.GetIsolate()->ThrowException(v8::Exception::TypeError(
                     v8pp::to_v8(info.GetIsolate(), "rotation must be a Vector3 (euler degrees) or Quaternion")));
             });
-            protoTemplate->SetAccessorProperty(v8pp::to_v8(isolate, "rotation").As<v8::Name>(), rotationGetter, rotationSetter);
+            cls->accessor_property("rotation", rotationGetter, rotationSetter, {});
         }
 
         // setVisibleTo(player|null): restrict streaming to one player's connection.
-        {
-            auto setVisibleTo = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+        cls->prototype_function(
+            "setVisibleTo", [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 auto *isolate = info.GetIsolate();
                 auto *self    = v8pp::class_<Entity>::unwrap_object(isolate, info.This());
                 if (!self) {
@@ -155,8 +152,6 @@ namespace Framework::Scripting::Builtins {
                 }
                 self->SetVisibleTo(targetEntity);
             });
-            protoTemplate->Set(v8pp::to_v8(isolate, "setVisibleTo").As<v8::Name>(), setVisibleTo);
-        }
 
         return *cls;
     }

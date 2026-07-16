@@ -103,14 +103,12 @@ namespace Framework::Scripting::Builtins {
             .function("toString", &Player::ToString)
             .function("kick", &Player::Kick)
             .function("emit", &Player::Emit)
-            .function("getIP", &Player::GetAddress);
-
-        auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
-        RegisterReadonlyProperty<Player, &Player::GetSteamId>(isolate, protoTemplate, "steamId");
-        RegisterReadonlyProperty<Player, &Player::GetDiscordId>(isolate, protoTemplate, "discordId");
-        RegisterReadonlyProperty<Player, &Player::GetHardwareId>(isolate, protoTemplate, "hardwareId");
-        RegisterReadonlyProperty<Player, &Player::GetPing>(isolate, protoTemplate, "ping");
-        RegisterReadonlyProperty<Player, &Player::GetAddress>(isolate, protoTemplate, "ip");
+            .function("getIP", &Player::GetAddress)
+            .property("steamId", &Player::GetSteamId)
+            .property("discordId", &Player::GetDiscordId)
+            .property("hardwareId", &Player::GetHardwareId)
+            .property("ping", &Player::GetPing)
+            .property("ip", &Player::GetAddress);
         return *cls;
     }
 
