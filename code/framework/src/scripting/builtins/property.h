@@ -74,8 +74,9 @@ namespace Framework::Scripting::Builtins {
             using A  = std::decay_t<Arg>;
             auto ctx = isolate->GetCurrentContext();
             if constexpr (std::is_same_v<A, bool>) {
-                if (value->IsBoolean())
+                if (value->IsBoolean()) {
                     apply(value->BooleanValue(isolate));
+                }
             }
             else if constexpr (std::is_same_v<A, std::string>) {
                 if (value->IsString()) {
@@ -84,13 +85,15 @@ namespace Framework::Scripting::Builtins {
                 }
             }
             else if constexpr (std::is_floating_point_v<A>) {
-                if (value->IsNumber())
+                if (value->IsNumber()) {
                     apply(static_cast<A>(value->NumberValue(ctx).FromMaybe(0.0)));
+                }
             }
             else if constexpr (std::is_integral_v<A>) {
                 // Any JS number, not just int32, so values up to 2^53 (e.g. NetworkIDs) round-trip.
-                if (value->IsNumber())
+                if (value->IsNumber()) {
                     apply(static_cast<A>(value->IntegerValue(ctx).FromMaybe(0)));
+                }
             }
         }
 
@@ -98,8 +101,9 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::FunctionTemplate> ScalarGetter(v8::Isolate *isolate) {
             return v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
+                if (self) {
                     Return(info, (self->*Getter)());
+                }
             });
         }
 
@@ -107,8 +111,9 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::FunctionTemplate> ScalarSetter(v8::Isolate *isolate) {
             return v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-                if (!self || info.Length() < 1)
+                if (!self || info.Length() < 1) {
                     return;
+                }
                 using Arg = typename MemberArg<decltype(Setter)>::type;
                 Apply<Arg>(info.GetIsolate(), info[0], [&](auto &&v) {
                     (self->*Setter)(std::forward<decltype(v)>(v));
@@ -132,11 +137,13 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::FunctionTemplate> ObjectSetter(v8::Isolate *isolate) {
             return v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-                if (!self || info.Length() < 1)
+                if (!self || info.Length() < 1) {
                     return;
+                }
                 auto *val = v8pp::class_<Value>::unwrap_object(info.GetIsolate(), info[0]);
-                if (val)
+                if (val) {
                     (self->*Setter)(*val);
+                }
             });
         }
     } // namespace detail
