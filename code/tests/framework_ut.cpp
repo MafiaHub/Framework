@@ -13,17 +13,18 @@
 /* TEST CATEGORIES */
 #include "modules/bitops_ut.h"
 #include "modules/interpolator_ut.h"
-#include "modules/result_ut.h"
 #include "modules/network_packets_ut.h"
-#include "modules/state_machine_ut.h"
 #include "modules/persistent_config_ut.h"
+#include "modules/result_ut.h"
 #include "modules/snapshot_buffer_ut.h"
+#include "modules/state_machine_ut.h"
 
 // Scripting tests
 #include "modules/engine_ut.h"
-#include "modules/resource_ut.h"
-#include "modules/resource_manager_ut.h"
 #include "modules/js_features_ut.h"
+#include "modules/property_bindings_ut.h"
+#include "modules/resource_manager_ut.h"
+#include "modules/resource_ut.h"
 #include "modules/timer_context_ut.h"
 
 int main() {
@@ -44,6 +45,7 @@ int main() {
     UNIT_MODULE(resource);
     UNIT_MODULE(resource_manager);
     UNIT_MODULE(js_features);
+    UNIT_MODULE(property_bindings);
     UNIT_MODULE(timer_context);
 
     return UNIT_RUN();

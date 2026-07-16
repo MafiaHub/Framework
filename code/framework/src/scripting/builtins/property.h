@@ -13,7 +13,9 @@
 #include <v8pp/convert.hpp>
 
 #include <string>
+#include <string_view>
 #include <type_traits>
+#include <utility>
 
 namespace Framework::Scripting::Builtins {
     // Helpers to register JS accessor properties on a v8pp-wrapped class from plain getter/setter
@@ -72,7 +74,8 @@ namespace Framework::Scripting::Builtins {
             using A  = std::decay_t<Arg>;
             auto ctx = isolate->GetCurrentContext();
             if constexpr (std::is_same_v<A, bool>) {
-                if (value->IsBoolean()) apply(value->BooleanValue(isolate));
+                if (value->IsBoolean())
+                    apply(value->BooleanValue(isolate));
             }
             else if constexpr (std::is_same_v<A, std::string>) {
                 if (value->IsString()) {
@@ -81,79 +84,117 @@ namespace Framework::Scripting::Builtins {
                 }
             }
             else if constexpr (std::is_floating_point_v<A>) {
-                if (value->IsNumber()) apply(static_cast<A>(value->NumberValue(ctx).FromMaybe(0.0)));
+                if (value->IsNumber())
+                    apply(static_cast<A>(value->NumberValue(ctx).FromMaybe(0.0)));
             }
             else if constexpr (std::is_integral_v<A>) {
                 // Any JS number, not just int32, so values up to 2^53 (e.g. NetworkIDs) round-trip.
-                if (value->IsNumber()) apply(static_cast<A>(value->IntegerValue(ctx).FromMaybe(0)));
+                if (value->IsNumber())
+                    apply(static_cast<A>(value->IntegerValue(ctx).FromMaybe(0)));
             }
         }
-    } // namespace detail
 
-    // Read/write scalar or string property. Installed as an accessor pair so the setter fires when a
-    // script assigns to the property through the prototype chain.
-    template <typename Class, auto Getter, auto Setter>
-    void RegisterProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, const char *name) {
-        auto getter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-            auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-            if (self) detail::Return(info, (self->*Getter)());
-        });
-        auto setter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-            auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-            if (!self || info.Length() < 1) return;
-            using Arg = typename detail::MemberArg<decltype(Setter)>::type;
-            detail::Apply<Arg>(info.GetIsolate(), info[0], [&](auto &&v) {
-                (self->*Setter)(std::forward<decltype(v)>(v));
-            });
-        });
-        proto->SetAccessorProperty(v8pp::to_v8(isolate, name).As<v8::Name>(), getter, setter);
-    }
-
-    // Read-only scalar or string property.
-    template <typename Class, auto Getter>
-    void RegisterReadonlyProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, const char *name) {
-        proto->SetNativeDataProperty(
-            v8pp::to_v8(isolate, name).As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
+        template <typename Class, auto Getter>
+        v8::Local<v8::FunctionTemplate> ScalarGetter(v8::Isolate *isolate) {
+            return v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-                if (self) detail::Return(info, (self->*Getter)());
+                if (self)
+                    Return(info, (self->*Getter)());
             });
-    }
+        }
 
-    // Read/write property whose value is itself a v8pp-wrapped class returned/taken by value
-    // (e.g. Color, Vector3). The value type is deduced from the getter; its result is copied into a
-    // fresh JS-owned object.
-    template <typename Class, auto Getter, auto Setter>
-    void RegisterObjectProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, const char *name) {
-        using Value = std::decay_t<typename detail::MemberReturn<decltype(Getter)>::type>;
-        auto getter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-            auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-            if (self) {
-                auto &cls = Value::GetClass(info.GetIsolate());
-                info.GetReturnValue().Set(cls.import_external(info.GetIsolate(), new Value((self->*Getter)())));
-            }
-        });
-        auto setter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-            auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-            if (!self || info.Length() < 1) return;
-            auto *val = v8pp::class_<Value>::unwrap_object(info.GetIsolate(), info[0]);
-            if (val) (self->*Setter)(*val);
-        });
-        proto->SetAccessorProperty(v8pp::to_v8(isolate, name).As<v8::Name>(), getter, setter);
-    }
+        template <typename Class, auto Setter>
+        v8::Local<v8::FunctionTemplate> ScalarSetter(v8::Isolate *isolate) {
+            return v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
+                if (!self || info.Length() < 1)
+                    return;
+                using Arg = typename MemberArg<decltype(Setter)>::type;
+                Apply<Arg>(info.GetIsolate(), info[0], [&](auto &&v) {
+                    (self->*Setter)(std::forward<decltype(v)>(v));
+                });
+            });
+        }
 
-    // Read-only wrapped-value property (e.g. Vector3). The value type is deduced from the getter.
-    template <typename Class, auto Getter>
-    void RegisterReadonlyObjectProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, const char *name) {
-        using Value = std::decay_t<typename detail::MemberReturn<decltype(Getter)>::type>;
-        proto->SetNativeDataProperty(
-            v8pp::to_v8(isolate, name).As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
+        template <typename Class, auto Getter>
+        v8::Local<v8::FunctionTemplate> ObjectGetter(v8::Isolate *isolate) {
+            using Value = std::decay_t<typename MemberReturn<decltype(Getter)>::type>;
+            return v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
                 if (self) {
                     auto &cls = Value::GetClass(info.GetIsolate());
                     info.GetReturnValue().Set(cls.import_external(info.GetIsolate(), new Value((self->*Getter)())));
                 }
             });
+        }
+
+        template <typename Class, auto Setter, typename Value>
+        v8::Local<v8::FunctionTemplate> ObjectSetter(v8::Isolate *isolate) {
+            return v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
+                if (!self || info.Length() < 1)
+                    return;
+                auto *val = v8pp::class_<Value>::unwrap_object(info.GetIsolate(), info[0]);
+                if (val)
+                    (self->*Setter)(*val);
+            });
+        }
+    } // namespace detail
+
+    // Read/write scalar or string property. Installed as an accessor pair so the setter fires when a
+    // script assigns to the property through the prototype chain.
+    template <typename Class, auto Getter, auto Setter>
+    void RegisterProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, std::string_view name) {
+        auto getter = detail::ScalarGetter<Class, Getter>(isolate);
+        auto setter = detail::ScalarSetter<Class, Setter>(isolate);
+        proto->SetAccessorProperty(v8pp::to_v8(isolate, name).As<v8::Name>(), getter, setter);
+    }
+
+    template <typename Class, auto Getter, auto Setter>
+    void RegisterProperty(v8pp::class_<Class> &binding, std::string_view name, v8pp::metadata::property_options docs) {
+        auto *isolate = binding.isolate();
+        binding.accessor_property(name, detail::ScalarGetter<Class, Getter>(isolate), detail::ScalarSetter<Class, Setter>(isolate), std::move(docs));
+    }
+
+    // Read-only scalar or string property.
+    template <typename Class, auto Getter>
+    void RegisterReadonlyProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, std::string_view name) {
+        proto->SetAccessorProperty(v8pp::to_v8(isolate, name).As<v8::Name>(), detail::ScalarGetter<Class, Getter>(isolate), {}, v8::ReadOnly);
+    }
+
+    template <typename Class, auto Getter>
+    void RegisterReadonlyProperty(v8pp::class_<Class> &binding, std::string_view name, v8pp::metadata::property_options docs) {
+        auto *isolate = binding.isolate();
+        binding.accessor_property(name, detail::ScalarGetter<Class, Getter>(isolate), {}, std::move(docs));
+    }
+
+    // Read/write property whose value is itself a v8pp-wrapped class returned/taken by value
+    // (e.g. Color, Vector3). The value type is deduced from the getter; its result is copied into a
+    // fresh JS-owned object.
+    template <typename Class, auto Getter, auto Setter>
+    void RegisterObjectProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, std::string_view name) {
+        using Value = std::decay_t<typename detail::MemberReturn<decltype(Getter)>::type>;
+        auto getter = detail::ObjectGetter<Class, Getter>(isolate);
+        auto setter = detail::ObjectSetter<Class, Setter, Value>(isolate);
+        proto->SetAccessorProperty(v8pp::to_v8(isolate, name).As<v8::Name>(), getter, setter);
+    }
+
+    template <typename Class, auto Getter, auto Setter>
+    void RegisterObjectProperty(v8pp::class_<Class> &binding, std::string_view name, v8pp::metadata::property_options docs) {
+        using Value   = std::decay_t<typename detail::MemberReturn<decltype(Getter)>::type>;
+        auto *isolate = binding.isolate();
+        binding.accessor_property(name, detail::ObjectGetter<Class, Getter>(isolate), detail::ObjectSetter<Class, Setter, Value>(isolate), std::move(docs));
+    }
+
+    // Read-only wrapped-value property (e.g. Vector3). The value type is deduced from the getter.
+    template <typename Class, auto Getter>
+    void RegisterReadonlyObjectProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, std::string_view name) {
+        proto->SetAccessorProperty(v8pp::to_v8(isolate, name).As<v8::Name>(), detail::ObjectGetter<Class, Getter>(isolate), {}, v8::ReadOnly);
+    }
+
+    template <typename Class, auto Getter>
+    void RegisterReadonlyObjectProperty(v8pp::class_<Class> &binding, std::string_view name, v8pp::metadata::property_options docs) {
+        auto *isolate = binding.isolate();
+        binding.accessor_property(name, detail::ObjectGetter<Class, Getter>(isolate), {}, std::move(docs));
     }
 } // namespace Framework::Scripting::Builtins
