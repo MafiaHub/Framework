@@ -12,6 +12,8 @@
 
 #include "core_modules.h"
 
+#include <scripting/scripting_catalog.h>
+
 #include <v8pp/convert.hpp>
 
 #include <discord.h>
@@ -447,6 +449,45 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         attach("isAvailable", &Discord::IsAvailableCallback);
 
         frameworkObj->Set(context, v8pp::to_v8(isolate, "Discord"), discordObj).Check();
+
+        auto &metadata   = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Discord", "Client-only Discord rich-presence composer exposed as Framework.Discord; setters stage values until update or setPresence publishes them.");
+        const auto field = [&](const char *name, const char *type, const char *parameter, const char *description) {
+            metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>(name, v8pp::metadata::docs("void", {v8pp::metadata::param(parameter, type, false, description)}, std::string("Stages ") + description)));
+        };
+        field("setType", "\"playing\" | \"streaming\" | \"listening\" | \"watching\" | number", "type", "the Discord activity verb or numeric enum value.");
+        field("setName", "string", "name", "the activity name.");
+        field("setDetails", "string", "details", "the top presence line.");
+        field("setState", "string", "state", "the bottom presence line.");
+        field("setStartTimestamp", "number", "seconds", "the elapsed-time Unix timestamp in seconds; zero clears it.");
+        field("setEndTimestamp", "number", "seconds", "the countdown Unix timestamp in seconds; zero clears it.");
+        field("setSupportedPlatforms", "number", "flags", "the supported-platform bitmask: Desktop 1, Android 2, and iOS 4.");
+        field("setLargeImage", "string", "assetKey", "the large image asset key.");
+        field("setLargeText", "string", "text", "the large image tooltip.");
+        field("setSmallImage", "string", "assetKey", "the small image asset key.");
+        field("setSmallText", "string", "text", "the small image tooltip.");
+        field("setPartyId", "string", "id", "the party grouping identifier.");
+        field("setPartyPrivacy", "\"private\" | \"public\" | number", "privacy", "the party join-privacy name or numeric enum value.");
+        field("setMatchSecret", "string", "secret", "the opaque match secret.");
+        field("setJoinSecret", "string", "secret", "the opaque join secret that enables invitations.");
+        field("setSpectateSecret", "string", "secret", "the opaque spectate secret.");
+        field("setInstance", "boolean", "instance", "whether the activity represents an instanced session.");
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setAssets",
+            v8pp::metadata::docs("void", {v8pp::metadata::param("assets", "{ largeImage?: string; largeText?: string; smallImage?: string; smallText?: string }", false, "Asset keys and tooltips to merge into the staged activity.")},
+                "Stages multiple Discord image fields at once.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPartySize",
+            v8pp::metadata::docs("void", {v8pp::metadata::param("current", "number", false, "Current party member count."), v8pp::metadata::param("max", "number", false, "Maximum party capacity.")}, "Stages the party's current and maximum size.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setParty",
+            v8pp::metadata::docs("void", {v8pp::metadata::param("party", "{ id?: string; size?: [number, number]; privacy?: \"private\" | \"public\" | number }", false, "Party fields to merge into the staged activity.")}, "Stages multiple Discord party fields at once.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setSecrets",
+            v8pp::metadata::docs("void", {v8pp::metadata::param("secrets", "{ match?: string; join?: string; spectate?: string }", false, "Opaque secrets to merge into the staged activity.")}, "Stages multiple Discord activity secrets at once.")));
+        metadata.record(
+            v8pp::metadata::function_of<v8::FunctionCallback>("setPresence", v8pp::metadata::docs("boolean", {v8pp::metadata::param("options", "Record<string, unknown>", false, "Batch of supported activity, timestamp, asset, party, secret, instance, and platform fields.")},
+                                                                                 "Merges a complete option batch into the staged activity and publishes it immediately.", "True when the update was dispatched; false when Discord is unavailable.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("update", v8pp::metadata::docs("boolean", {}, "Publishes the currently staged activity as one rate-limited Discord update.", "True when dispatched; false when Discord is unavailable.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("clear", v8pp::metadata::docs("boolean", {}, "Clears the published Discord activity and resets staged state.", "True when dispatched; false when Discord is unavailable.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("reset", v8pp::metadata::docs("void", {}, "Resets staged activity fields without publishing a Discord update.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getUserId", v8pp::metadata::docs("string", {}, "Returns the signed-in Discord user's snowflake.", "User ID string, or an empty string until available.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isAvailable", v8pp::metadata::docs("boolean", {}, "Checks whether Discord is connected and can publish presence.", "True when rich presence is initialized.")));
     }
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins

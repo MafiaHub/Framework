@@ -11,12 +11,13 @@
 #include <logging/logger.h>
 
 #include <scripting/builtins/builtins.h>
+#include <scripting/builtins/console.h>
+#include <scripting/builtins/environment.h>
 #include <scripting/builtins/events.h>
 #include <scripting/builtins/exports.h>
-#include <scripting/builtins/messages.h>
-#include <scripting/builtins/console.h>
 #include <scripting/builtins/imports.h>
-#include <scripting/builtins/environment.h>
+#include <scripting/builtins/messages.h>
+#include <scripting/scripting_catalog.h>
 
 #include "builtins/chat.h"
 #include "builtins/discord.h"
@@ -46,7 +47,7 @@ namespace Framework::Integrations::Client::Scripting {
         // when the actual resource cache path is known.
         Framework::Scripting::V8EngineOptions options;
         options.processName = "mafiahub-client";
-        _engine = std::make_unique<Framework::Scripting::V8Engine>(options);
+        _engine             = std::make_unique<Framework::Scripting::V8Engine>(options);
     }
 
     ClientScriptingModule::~ClientScriptingModule() {
@@ -55,9 +56,9 @@ namespace Framework::Integrations::Client::Scripting {
 
     Framework::Scripting::ScriptingError ClientScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
         if (!_engine) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "Cannot initialize client scripting: engine is null (Shutdown() was called). "
-                "Create a new ClientScriptingModule instance instead.");
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
+                ->error("Cannot initialize client scripting: engine is null (Shutdown() was called). "
+                        "Create a new ClientScriptingModule instance instead.");
             return Framework::Scripting::ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
 
@@ -74,8 +75,7 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Initialize the V8 engine - no-op if already initialized
         if (_engine->Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "Failed to initialize V8 engine: {}", _engine->GetLastError());
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to initialize V8 engine: {}", _engine->GetLastError());
             return Framework::Scripting::ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
 
@@ -88,12 +88,11 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Initialize ResourceManager with client-side config
         Framework::Scripting::ResourceManagerConfig config;
-        config.resourcesPath = _resourceCachePath;
-        config.isClient = true;
+        config.resourcesPath         = _resourceCachePath;
+        config.isClient              = true;
         config.cascadeStopDependents = true;
-        
-        _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
-            _engine.get(), config);
+
+        _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_engine.get(), config);
 
         // Web views and key binds created by a resource die with it (single callback slot).
         _resourceManager->SetOnResourceStopped([](const std::string &resourceName) {
@@ -107,15 +106,17 @@ namespace Framework::Integrations::Client::Scripting {
         // Initialize Framework SDK only on first init (not after Reset)
         if (!engineAlreadyInitialized) {
             if (!_engine->InitFrameworkSDK()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                    "Failed to initialize Framework SDK: {}", _engine->GetLastError());
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to initialize Framework SDK: {}", _engine->GetLastError());
                 _resourceManager.reset();
                 return Framework::Scripting::ScriptingError::SCRIPTING_SDK_INIT_FAILED;
             }
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
-            "Client scripting module initialized with standalone V8 engine");
+        if (!v8pp::metadata::export_catalog_from_environment("framework-client", "FRAMEWORK_SCRIPTING_API_METADATA")) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export Framework client scripting API metadata");
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Client scripting module initialized with standalone V8 engine");
 
         _initialized = true;
         return Framework::Scripting::ScriptingError::SCRIPTING_NONE;
@@ -135,7 +136,9 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Get Framework and Core global objects (created by V8Engine)
         v8::Local<v8::Object> frameworkObj = _engine->GetFrameworkObject();
-        v8::Local<v8::Object> coreObj = _engine->GetCoreObject();
+        v8::Local<v8::Object> coreObj      = _engine->GetCoreObject();
+
+        Framework::Scripting::SetScriptingCatalog(isolate, "framework-client");
 
         // Register math type builtins on Core object
         Framework::Scripting::Builtins::RegisterAll(isolate, coreObj);
@@ -178,6 +181,7 @@ namespace Framework::Integrations::Client::Scripting {
         Builtins::Keybinds::Shutdown();
 
         if (_engine) {
+            Framework::Scripting::ClearScriptingCatalog(_engine->GetIsolate());
             _engine->Shutdown();
             _engine.reset();
         }
@@ -241,7 +245,7 @@ namespace Framework::Integrations::Client::Scripting {
         }
         if (_resourceManager) {
             Framework::Scripting::ResourceManagerConfig config = _resourceManager->GetConfig();
-            config.resourcesPath = path;
+            config.resourcesPath                               = path;
             _resourceManager->SetConfig(config);
         }
     }
@@ -251,8 +255,7 @@ namespace Framework::Integrations::Client::Scripting {
         _serverResourceList.reserve(resources.size());
         for (const auto &resource : resources) {
             if (!IsValidResourceName(resource.name)) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
-                    "Ignoring invalid server resource name: '{}'", resource.name);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Ignoring invalid server resource name: '{}'", resource.name);
                 continue;
             }
             _serverResourceList.push_back(resource);
@@ -292,15 +295,14 @@ namespace Framework::Integrations::Client::Scripting {
 
     void ClientScriptingModule::OnResourceDownloaded(const std::string &resourceName) {
         if (!IsValidResourceName(resourceName)) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
-                "Ignoring downloaded resource with invalid name: '{}'", resourceName);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Ignoring downloaded resource with invalid name: '{}'", resourceName);
             return;
         }
 
-        if (std::none_of(_serverResourceList.begin(), _serverResourceList.end(),
-            [&resourceName](const ServerResourceInfo &res) { return res.name == resourceName; })) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
-                "Ignoring downloaded resource not announced by server: '{}'", resourceName);
+        if (std::none_of(_serverResourceList.begin(), _serverResourceList.end(), [&resourceName](const ServerResourceInfo &res) {
+                return res.name == resourceName;
+            })) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Ignoring downloaded resource not announced by server: '{}'", resourceName);
             return;
         }
 
@@ -337,21 +339,18 @@ namespace Framework::Integrations::Client::Scripting {
         // Discover all resources in the cache path
         size_t discovered = _resourceManager->DiscoverResources();
         if (discovered == 0) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
-                "No JS resources discovered in: {}", _resourceCachePath);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No JS resources discovered in: {}", _resourceCachePath);
             return true; // Not an error, just no resources
         }
 
         // Start all discovered resources
         auto result = _resourceManager->StartAll();
         if (!result) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "Failed to start resources: {}", result.GetError());
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resources: {}", result.GetError());
             return false;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
-            "Started {} resource(s) on client", result.GetValue().size());
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started {} resource(s) on client", result.GetValue().size());
         return true;
     }
 

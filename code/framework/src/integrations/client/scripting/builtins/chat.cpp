@@ -13,6 +13,8 @@
 
 #include "core_modules.h"
 
+#include <scripting/scripting_catalog.h>
+
 #include <v8pp/convert.hpp>
 
 #include <string>
@@ -91,6 +93,16 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         attach(chatObj, "close", &Chat::CloseCallback);
         attach(chatObj, "isOpen", &Chat::IsOpenCallback);
         context->Global()->Set(context, v8pp::to_v8(isolate, "Chat"), chatObj).Check();
+
+        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Chat", "Client chat transport and native chat-box controls.");
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("send",
+            v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", false, "Player-authored chat text sent to the server.")}, "Submits a chat line to the server; incoming lines arrive through the reserved chatMessage event.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setUIVisible",
+            v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "Whether the chat overlay is rendered.")}, "Changes visibility of the native chat overlay without opening its input field.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isUIVisible", v8pp::metadata::docs("boolean", {}, "Checks whether the native chat overlay is visible.", "True when the overlay is currently rendered.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("open", v8pp::metadata::docs("void", {}, "Opens and focuses the native chat input field.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("close", v8pp::metadata::docs("void", {}, "Closes the native chat input field without submitting its contents.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isOpen", v8pp::metadata::docs("boolean", {}, "Checks whether the native chat input field is active.", "True while chat is capturing keyboard input.")));
     }
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins

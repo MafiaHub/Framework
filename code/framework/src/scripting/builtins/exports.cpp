@@ -7,8 +7,9 @@
  */
 
 #include "exports.h"
-#include "../resource/resource_manager.h"
 #include "../resource/resource.h"
+#include "../resource/resource_manager.h"
+#include "../scripting_catalog.h"
 
 #include <logging/logger.h>
 
@@ -16,10 +17,7 @@ namespace Framework::Scripting {
 
     ResourceManager *Exports::_resourceManager = nullptr;
 
-    void Exports::Register(v8::Isolate *isolate,
-                          v8::Local<v8::Context> context,
-                          v8::Local<v8::Object> frameworkObj,
-                          ResourceManager *resourceManager) {
+    void Exports::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, ResourceManager *resourceManager) {
         _resourceManager = resourceManager;
 
         v8::Local<v8::Object> exportsObj = v8::Object::New(isolate);
@@ -36,6 +34,20 @@ namespace Framework::Scripting {
         exportsObj->Set(context, v8pp::to_v8(isolate, "get"), getTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         frameworkObj->Set(context, v8pp::to_v8(isolate, "Exports"), exportsObj).Check();
+
+        auto &metadata = GetScriptingCatalog(isolate).global_object("Exports", "Registration and lookup of cross-resource values through Framework.Exports.");
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("register", v8pp::metadata::docs("boolean",
+                                                                                          {
+                                                                                              v8pp::metadata::param("name", "string", false, "Export name, preferably declared in the current resource manifest."),
+                                                                                              v8pp::metadata::param("value", "unknown", false, "JavaScript value or function retained by the current resource."),
+                                                                                          },
+                                                                                          "Registers a value from the calling resource for use by dependent resources.", "True when the value was registered.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("get", v8pp::metadata::docs("unknown",
+                                                                                     {
+                                                                                         v8pp::metadata::param("resourceName", "string", false, "Name of the running resource that owns the export."),
+                                                                                         v8pp::metadata::param("exportName", "string", false, "Registered export name."),
+                                                                                     },
+                                                                                     "Reads one registered export from another running resource; undeclared dependencies produce a warning.", "The exported value.")));
     }
 
     void Exports::RegisterCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -59,7 +71,7 @@ namespace Framework::Scripting {
             return;
         }
 
-        std::string exportName = v8pp::from_v8<std::string>(isolate, args[0]);
+        std::string exportName           = v8pp::from_v8<std::string>(isolate, args[0]);
         v8::Local<v8::Value> exportValue = args[1];
 
         // Get the current resource context (use stack fallback for async ES modules)
@@ -72,9 +84,7 @@ namespace Framework::Scripting {
         // Check if this export is declared in the manifest
         bool isInManifest = currentResource->HasExport(exportName);
         if (!isInManifest) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
-                "[{}] Registering undeclared export '{}' - add to package.json exports array",
-                currentResource->GetName(), exportName);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Registering undeclared export '{}' - add to package.json exports array", currentResource->GetName(), exportName);
         }
 
         // Set the isolate for the resource (needed for storing exports)
@@ -85,22 +95,17 @@ namespace Framework::Scripting {
         if (!registered) {
             if (!isInManifest) {
                 // RegisterExport failed because it's not in the manifest - this is permissive
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug(
-                    "[{}] Export '{}' registered (not in manifest)",
-                    currentResource->GetName(), exportName);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Export '{}' registered (not in manifest)", currentResource->GetName(), exportName);
                 args.GetReturnValue().Set(v8::True(isolate));
-            } else {
-                // Export is in manifest but RegisterExport still failed - real error (isolate issue)
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                    "[{}] Failed to register export '{}' - isolate initialization issue",
-                    currentResource->GetName(), exportName);
-                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate,
-                    "Exports.register: failed to register export '" + exportName + "' - internal error")));
             }
-        } else {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug(
-                "[{}] Export '{}' registered",
-                currentResource->GetName(), exportName);
+            else {
+                // Export is in manifest but RegisterExport still failed - real error (isolate issue)
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Failed to register export '{}' - isolate initialization issue", currentResource->GetName(), exportName);
+                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.register: failed to register export '" + exportName + "' - internal error")));
+            }
+        }
+        else {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Export '{}' registered", currentResource->GetName(), exportName);
             args.GetReturnValue().Set(v8::True(isolate));
         }
     }
@@ -127,7 +132,7 @@ namespace Framework::Scripting {
         }
 
         std::string resourceName = v8pp::from_v8<std::string>(isolate, args[0]);
-        std::string exportName = v8pp::from_v8<std::string>(isolate, args[1]);
+        std::string exportName   = v8pp::from_v8<std::string>(isolate, args[1]);
 
         // Get the target resource
         const Resource *resource = manager->GetResource(resourceName);
@@ -147,9 +152,7 @@ namespace Framework::Scripting {
         if (resourceIsolate != isolate) {
             // Cross-isolate access is not supported - V8 values cannot be shared across isolates
             // This typically happens when resources run in separate isolates (e.g., different threads)
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate,
-                "Exports.get: cannot access export '" + exportName + "' from resource '" + resourceName +
-                "' - cross-isolate access is not supported. Both resources must share the same isolate.")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: cannot access export '" + exportName + "' from resource '" + resourceName + "' - cross-isolate access is not supported. Both resources must share the same isolate.")));
             return;
         }
 

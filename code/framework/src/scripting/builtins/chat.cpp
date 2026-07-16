@@ -8,6 +8,7 @@
 
 #include "chat.h"
 
+#include "../scripting_catalog.h"
 #include "entity.h"
 
 #include <core_modules.h>
@@ -67,12 +68,27 @@ namespace Framework::Scripting::Builtins {
         auto ctx = isolate->GetCurrentContext();
 
         v8::Local<v8::Object> chatObj = v8::Object::New(isolate);
-        const auto attach = [&](const char *name, v8::FunctionCallback cb) {
+        const auto attach             = [&](const char *name, v8::FunctionCallback cb) {
             chatObj->Set(ctx, v8pp::to_v8(isolate, name), v8::Function::New(ctx, cb).ToLocalChecked()).Check();
         };
         attach("sendToAll", &Chat::JS_SendToAll);
         attach("sendToPlayer", &Chat::JS_SendToPlayer);
         global->Set(ctx, v8pp::to_v8(isolate, "Chat"), chatObj).Check();
+
+        auto &metadata = GetScriptingCatalog(isolate).global_object("Chat", "Server-side delivery of structured chat messages to connected clients.");
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("sendToAll", v8pp::metadata::docs("void",
+                                                                                           {
+                                                                                               v8pp::metadata::param("text", "string", false, "Message body broadcast to every connected client."),
+                                                                                               v8pp::metadata::param("options", "{ author?: string; color?: number }", true, "Optional author label and packed 0xRRGGBBAA color."),
+                                                                                           },
+                                                                                           "Broadcasts a structured chat message to all clients.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("sendToPlayer", v8pp::metadata::docs("void",
+                                                                                              {
+                                                                                                  v8pp::metadata::param("player", "Entity", false, "Player-owned entity identifying the destination connection."),
+                                                                                                  v8pp::metadata::param("text", "string", false, "Message body sent to the player."),
+                                                                                                  v8pp::metadata::param("options", "{ author?: string; color?: number }", true, "Optional author label and packed 0xRRGGBBAA color."),
+                                                                                              },
+                                                                                              "Sends a structured chat message to one player's owning connection.")));
     }
 
     void Chat::JS_SendToAll(const v8::FunctionCallbackInfo<v8::Value> &info) {

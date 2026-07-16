@@ -14,6 +14,7 @@
 #include <scripting/engine.h>
 #include <scripting/engine_helpers.h>
 #include <scripting/resource/resource_manager.h>
+#include <scripting/scripting_catalog.h>
 
 #include <logging/logger.h>
 
@@ -66,7 +67,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                     t["f" + std::to_string(i)] = VK_F1 + (i - 1);
                 }
                 for (int i = 0; i <= 9; ++i) {
-                    const int vk        = VK_NUMPAD0 + i;
+                    const int vk                    = VK_NUMPAD0 + i;
                     t["numpad" + std::to_string(i)] = vk;
                     t["num" + std::to_string(i)]    = vk;
                 }
@@ -110,7 +111,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         int NameToVk(const std::string &lowerName) {
             const auto &table = KeyTable();
-            const auto it      = table.find(lowerName);
+            const auto it     = table.find(lowerName);
             return it == table.end() ? -1 : it->second;
         }
 
@@ -151,6 +152,29 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         bind("isDown", IsDownCallback);
 
         frameworkObj->Set(context, v8pp::to_v8(isolate, "Key"), keyObj).Check();
+
+        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Key", "Client-only, resource-owned physical key bindings exposed as Framework.Key.");
+        metadata.record(
+            v8pp::metadata::function_of<v8::FunctionCallback>("bind", v8pp::metadata::docs("boolean",
+                                                                          {
+                                                                              v8pp::metadata::param("key", "string", false, "Case-insensitive supported keyboard or mouse key name."),
+                                                                              v8pp::metadata::param("stateOrHandler", "\"down\" | \"up\" | \"both\" | ((key: string, state: \"down\" | \"up\") => void)", false, "Trigger state, or the handler itself to use the default down state."),
+                                                                              v8pp::metadata::param("handler", "(key: string, state: \"down\" | \"up\") => void", true, "Handler required when an explicit trigger state is provided."),
+                                                                          },
+                                                                          "Binds a resource-owned handler that fires while the game has foreground input and no UI is capturing it.", "True after the binding is installed; invalid keys or states throw.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("unbind", v8pp::metadata::docs("boolean",
+                                                                                        {
+                                                                                            v8pp::metadata::param("key", "string", false, "Case-insensitive supported key name."),
+                                                                                            v8pp::metadata::param("state", "\"down\" | \"up\" | \"both\"", true, "Optional trigger-state filter."),
+                                                                                            v8pp::metadata::param("handler", "(key: string, state: \"down\" | \"up\") => void", true, "Optional exact handler filter."),
+                                                                                        },
+                                                                                        "Removes matching bindings owned by the calling resource; omitting filters removes every binding for the key.", "True when at least one binding was removed.")));
+        metadata.record(
+            v8pp::metadata::function_of<v8::FunctionCallback>("isDown", v8pp::metadata::docs("boolean",
+                                                                            {
+                                                                                v8pp::metadata::param("key", "string", false, "Case-insensitive supported key name."),
+                                                                            },
+                                                                            "Queries live physical key state using the same foreground and UI-input gate as binding dispatch.", "False when the key is up, the game is backgrounded, UI owns input, or the key name is invalid.")));
     }
 
     void Keybinds::SetActiveCallback(std::function<bool()> callback) {
@@ -211,7 +235,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         const std::string keyName = ToLower(v8pp::from_v8<std::string>(isolate, args[0]));
-        const int vk               = NameToVk(keyName);
+        const int vk              = NameToVk(keyName);
         if (vk < 0) {
             ThrowError(isolate, "Key.bind: unknown key name '" + keyName + "'");
             return;
@@ -254,7 +278,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         // Optional state filter, optional handler filter (in either order after the key).
         bool hasStateFilter = false;
-        State stateFilter    = State::Down;
+        State stateFilter   = State::Down;
         v8::Local<v8::Function> handler;
         for (int i = 1; i < args.Length(); ++i) {
             if (args[i]->IsString()) {
@@ -307,7 +331,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         const std::string keyName = ToLower(v8pp::from_v8<std::string>(isolate, args[0]));
-        const int vk               = NameToVk(keyName);
+        const int vk              = NameToVk(keyName);
         if (vk < 0) {
             ThrowError(isolate, "Key.isDown: unknown key name '" + keyName + "'");
             return;
@@ -383,7 +407,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                     continue;
                 }
                 const State edgeState = edge.down ? State::Down : State::Up;
-                const char *stateStr   = edge.down ? "down" : "up";
+                const char *stateStr  = edge.down ? "down" : "up";
                 for (const auto &h : it->second.handlers) {
                     if (h.state == edgeState || h.state == State::Both) {
                         pending.push_back({h.callback.Get(isolate), h.resourceName, edge.keyName, stateStr});
