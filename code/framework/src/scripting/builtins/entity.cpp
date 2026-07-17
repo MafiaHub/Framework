@@ -7,6 +7,7 @@
  */
 
 #include "entity.h"
+#include "../scripting_catalog.h"
 
 #include <core_modules.h>
 
@@ -90,14 +91,14 @@ namespace Framework::Scripting::Builtins {
         }
 
         auto &cls = _classes[isolate];
-        cls = std::make_unique<v8pp::class_<Entity>>(isolate);
+        cls       = std::make_unique<v8pp::class_<Entity>>(isolate, GetScriptingCatalog(isolate), "Entity", "Base handle for a live replicated network entity.");
         cls->auto_wrap_objects(true);
-        cls->ctor<uint64_t>()
-            .function("toString", &Entity::ToString)
-            .function("setVirtualWorld", &Entity::SetVirtualWorld)
-            .property("id", &Entity::GetId)
-            .property("virtualWorld", &Entity::GetVirtualWorld)
-            .property("position", &Entity::GetPosition, &Entity::SetPosition);
+        cls->ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a script wrapper for an existing entity with this ID; it does not spawn an entity."))
+            .function("toString", &Entity::ToString, v8pp::metadata::docs("string", {}, "Formats this entity handle for logging and debugging.", "Text containing the network entity ID."))
+            .function("setVirtualWorld", &Entity::SetVirtualWorld, v8pp::metadata::docs("void", {v8pp::metadata::param("world", "number", false, "Virtual-world identifier used to partition replication and visibility.")}, "Moves this entity into another virtual world."))
+            .property("id", &Entity::GetId, v8pp::metadata::property_docs("number", "Immutable network entity identifier."))
+            .property("virtualWorld", &Entity::GetVirtualWorld, v8pp::metadata::property_docs("number", "Current virtual-world identifier."))
+            .property("position", &Entity::GetPosition, &Entity::SetPosition, v8pp::metadata::property_docs("Vector3", "Authoritative world-space position; assignment forces replicated state."));
 
         // Property: rotation. Getter returns a Quaternion; setter accepts a Quaternion or a Vector3 (euler degrees).
         {
@@ -110,7 +111,8 @@ namespace Framework::Scripting::Builtins {
             });
             auto rotationSetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                if (!self || info.Length() < 1) return;
+                if (!self || info.Length() < 1)
+                    return;
 
                 auto *vec = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info[0]);
                 if (vec) {
@@ -122,15 +124,15 @@ namespace Framework::Scripting::Builtins {
                     self->SetRotationFromQuaternion(*quat);
                     return;
                 }
-                info.GetIsolate()->ThrowException(v8::Exception::TypeError(
-                    v8pp::to_v8(info.GetIsolate(), "rotation must be a Vector3 (euler degrees) or Quaternion")));
+                info.GetIsolate()->ThrowException(v8::Exception::TypeError(v8pp::to_v8(info.GetIsolate(), "rotation must be a Vector3 (euler degrees) or Quaternion")));
             });
-            cls->accessor_property("rotation", rotationGetter, rotationSetter, {});
+            cls->accessor_property("rotation", rotationGetter, rotationSetter, v8pp::metadata::property_docs("Quaternion | Vector3", "Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees."));
         }
 
         // setVisibleTo(player|null): restrict streaming to one player's connection.
         cls->prototype_function(
-            "setVisibleTo", [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+            "setVisibleTo",
+            [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 auto *isolate = info.GetIsolate();
                 auto *self    = v8pp::class_<Entity>::unwrap_object(isolate, info.This());
                 if (!self) {
@@ -151,7 +153,9 @@ namespace Framework::Scripting::Builtins {
                     return;
                 }
                 self->SetVisibleTo(targetEntity);
-            });
+            },
+            v8pp::metadata::docs("void", {v8pp::metadata::param("player", "Entity | null", false, "Player-owned entity whose connection should exclusively receive this entity, or null to clear the restriction.")},
+                "Restricts replication of this entity to one owning connection while preserving normal range and visibility checks."));
 
         return *cls;
     }

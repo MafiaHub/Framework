@@ -17,6 +17,7 @@
 #include <scripting/engine_helpers.h>
 #include <scripting/resource/resource.h>
 #include <scripting/resource/resource_manager.h>
+#include <scripting/scripting_catalog.h>
 
 #include <logging/logger.h>
 
@@ -134,6 +135,46 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         bind("getScreenSize", GetScreenSizeCallback);
 
         frameworkObj->Set(context, v8pp::to_v8(isolate, "Web"), webObj).Check();
+
+        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Web", "Client-only, resource-owned CEF web-view API exposed as Framework.Web.");
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("createView",
+            v8pp::metadata::docs("number",
+                {v8pp::metadata::param("url", "string", false, "Resource-relative URL or allowed absolute URL loaded into the view."),
+                    v8pp::metadata::param("options", "{ width?: number; height?: number; x?: number; y?: number; zIndex?: number; visible?: boolean; focus?: boolean }", true, "Optional initial pixel geometry, stacking, visibility, and focus settings.")},
+                "Creates an origin-locked web view owned by the calling resource.", "Numeric view ID used by the remaining Web methods.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("destroyView",
+            v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier.")}, "Destroys an owned view and removes all of its script event handlers.", "True when a view was destroyed.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("showView", v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier.")}, "Makes an owned view visible.", "True when the view exists and was updated.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("hideView", v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier.")}, "Hides an owned view.", "True when the view exists and was updated.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("focusView",
+            v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("focused", "boolean", true, "Whether the view captures keyboard and mouse input; defaults to true.")},
+                "Changes input focus for an owned view.", "True when the view exists and focus was updated.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isViewVisible",
+            v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier.")}, "Checks whether an owned view is currently visible.", "False for missing or unowned views.")));
+        metadata.record(
+            v8pp::metadata::function_of<v8::FunctionCallback>("loadURL", v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("url", "string", false, "New resource-relative or allowed absolute URL.")},
+                                                                             "Navigates a view and replaces its allowed origin with the new URL's origin.", "True when navigation was requested.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("resizeView",
+            v8pp::metadata::docs("boolean",
+                {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("width", "number", false, "New viewport width in pixels."), v8pp::metadata::param("height", "number", false, "New viewport height in pixels.")},
+                "Resizes an owned view's viewport.", "True when the view exists and was resized.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setViewPosition",
+            v8pp::metadata::docs("boolean",
+                {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("x", "number", false, "New horizontal screen position in pixels."), v8pp::metadata::param("y", "number", false, "New vertical screen position in pixels.")},
+                "Moves an owned view on screen.", "True when the view exists and was moved.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("on", v8pp::metadata::docs("void",
+                                                                                    {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("eventName", "string", false, "Page-to-script event name."),
+                                                                                        v8pp::metadata::param("handler", "(payload: unknown) => void", false, "Resource-owned callback invoked by the view's callEvent bridge.")},
+                                                                                    "Registers a handler for an event emitted by an owned same-origin page.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("off", v8pp::metadata::docs("boolean",
+                                                                                     {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("eventName", "string", false, "Page-to-script event name."),
+                                                                                         v8pp::metadata::param("handler", "(payload: unknown) => void", true, "Optional exact callback; omitting it removes every matching handler owned by the resource.")},
+                                                                                     "Removes page-event handlers from an owned view.", "True when at least one handler was removed.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("emit", v8pp::metadata::docs("boolean",
+                                                                                      {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("eventName", "string", false, "CustomEvent name dispatched in the page."),
+                                                                                          v8pp::metadata::param("payload", "unknown", true, "Optional JSON-serializable event detail.")},
+                                                                                      "Dispatches a CustomEvent into an owned view.", "True when the dispatch script was queued.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getScreenSize", v8pp::metadata::docs("{ width: number; height: number }", {}, "Returns the current client viewport size.", "Width and height in physical pixels.")));
     }
 
     Framework::GUI::View *Web::GetOwnedView(int viewId) {
@@ -183,13 +224,13 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         bool visible = true, focus = false;
         if (args.Length() >= 2 && args[1]->IsObject()) {
             v8::Local<v8::Object> options = args[1].As<v8::Object>();
-            width   = GetIntOption(isolate, context, options, "width", 0);
-            height  = GetIntOption(isolate, context, options, "height", 0);
-            x       = GetIntOption(isolate, context, options, "x", 0);
-            y       = GetIntOption(isolate, context, options, "y", 0);
-            zIndex  = GetIntOption(isolate, context, options, "zIndex", 0);
-            visible = GetBoolOption(isolate, context, options, "visible", true);
-            focus   = GetBoolOption(isolate, context, options, "focus", false);
+            width                         = GetIntOption(isolate, context, options, "width", 0);
+            height                        = GetIntOption(isolate, context, options, "height", 0);
+            x                             = GetIntOption(isolate, context, options, "x", 0);
+            y                             = GetIntOption(isolate, context, options, "y", 0);
+            zIndex                        = GetIntOption(isolate, context, options, "zIndex", 0);
+            visible                       = GetBoolOption(isolate, context, options, "visible", true);
+            focus                         = GetBoolOption(isolate, context, options, "focus", false);
         }
 
         const int id = gui->CreateView(url, width, height, x, y);
@@ -533,8 +574,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         int width = 0, height = 0;
         if (auto *gui = CoreModules::GetWebManager()) {
             const auto viewport = gui->GetViewportConfiguration();
-            width  = viewport.width;
-            height = viewport.height;
+            width               = viewport.width;
+            height              = viewport.height;
         }
 
         v8::Local<v8::Object> result = v8::Object::New(isolate);

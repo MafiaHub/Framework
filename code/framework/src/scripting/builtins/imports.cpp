@@ -7,8 +7,9 @@
  */
 
 #include "imports.h"
-#include "../resource/resource_manager.h"
 #include "../resource/resource.h"
+#include "../resource/resource_manager.h"
+#include "../scripting_catalog.h"
 
 #include <logging/logger.h>
 
@@ -16,10 +17,7 @@ namespace Framework::Scripting {
 
     ResourceManager *Imports::_resourceManager = nullptr;
 
-    void Imports::Register(v8::Isolate *isolate,
-                          v8::Local<v8::Context> context,
-                          v8::Local<v8::Object> frameworkObj,
-                          ResourceManager *resourceManager) {
+    void Imports::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, ResourceManager *resourceManager) {
         _resourceManager = resourceManager;
 
         v8::Local<v8::Object> importsObj = v8::Object::New(isolate);
@@ -32,6 +30,14 @@ namespace Framework::Scripting {
         importsObj->Set(context, v8pp::to_v8(isolate, "get"), getTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         frameworkObj->Set(context, v8pp::to_v8(isolate, "imports"), importsObj).Check();
+
+        auto &metadata = GetScriptingCatalog(isolate).global_object("imports", "Bulk access to values exported by another running resource through Framework.imports.");
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("get",
+            v8pp::metadata::docs("Record<string, unknown>",
+                {
+                    v8pp::metadata::param("resourceName", "string", false, "Name of the running resource whose exports should be read."),
+                },
+                "Builds an object containing every currently registered export from another resource; undeclared dependencies produce a warning.", "Object keyed by export name, or an empty object when the resource has no exports.")));
     }
 
     void Imports::GetCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -55,7 +61,7 @@ namespace Framework::Scripting {
             return;
         }
 
-        std::string resourceName = v8pp::from_v8<std::string>(isolate, args[0]);
+        std::string resourceName   = v8pp::from_v8<std::string>(isolate, args[0]);
         std::string callerResource = manager->GetCurrentResourceContext();
 
         // Check if target resource exists
@@ -75,9 +81,7 @@ namespace Framework::Scripting {
         if (!callerResource.empty()) {
             const Resource *caller = manager->GetResource(callerResource);
             if (caller && !caller->DependsOn(resourceName)) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
-                    "[{}] Importing from '{}' without declaring dependency",
-                    callerResource, resourceName);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Importing from '{}' without declaring dependency", callerResource, resourceName);
             }
         }
 
@@ -108,9 +112,7 @@ namespace Framework::Scripting {
         exportsObj->Set(context, v8pp::to_v8(isolate, "_availableExports"), exportArray).Check();
 
         // Log for debugging
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug(
-            "[{}] Imported {} exports from '{}'",
-            callerResource, exportNames.size(), resourceName);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Imported {} exports from '{}'", callerResource, exportNames.size(), resourceName);
 
         args.GetReturnValue().Set(exportsObj);
     }

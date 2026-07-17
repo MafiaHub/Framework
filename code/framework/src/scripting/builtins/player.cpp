@@ -7,6 +7,7 @@
  */
 
 #include "player.h"
+#include "../scripting_catalog.h"
 
 #include <core_modules.h>
 #include <integrations/shared/rpc/emit_script_event.h>
@@ -25,9 +26,7 @@ namespace Framework::Scripting::Builtins {
         if (!peer) {
             return;
         }
-        peer->KickPlayer(MafiaNet::ToGuid(entity->ownerGUID),
-            reason.empty() ? Networking::DisconnectionReason::KICKED : Networking::DisconnectionReason::KICKED_CUSTOM,
-            reason);
+        peer->KickPlayer(MafiaNet::ToGuid(entity->ownerGUID), reason.empty() ? Networking::DisconnectionReason::KICKED : Networking::DisconnectionReason::KICKED_CUSTOM, reason);
     }
 
     void Player::Emit(const std::string &eventName, const std::string &payloadJson) {
@@ -96,19 +95,22 @@ namespace Framework::Scripting::Builtins {
         Entity::GetClass(isolate);
 
         auto &cls = _classes[isolate];
-        cls = std::make_unique<v8pp::class_<Player>>(isolate);
+        cls       = std::make_unique<v8pp::class_<Player>>(isolate, GetScriptingCatalog(isolate), "Player", "Framework-owned base handle for a connected player, extended by each game or mod.");
         cls->auto_wrap_objects(true);
+        cls->document_base("Entity");
         cls->inherit<Entity>()
-            .ctor<uint64_t>()
-            .function("toString", &Player::ToString)
-            .function("kick", &Player::Kick)
-            .function("emit", &Player::Emit)
-            .function("getIP", &Player::GetAddress)
-            .property("steamId", &Player::GetSteamId)
-            .property("discordId", &Player::GetDiscordId)
-            .property("hardwareId", &Player::GetHardwareId)
-            .property("ping", &Player::GetPing)
-            .property("ip", &Player::GetAddress);
+            .ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a wrapper for an existing connected player with this ID; it does not connect or spawn a player."))
+            .function("toString", &Player::ToString, v8pp::metadata::docs("string", {}, "Formats this player handle for logging and debugging.", "Text containing the player's network entity ID."))
+            .function("kick", &Player::Kick, v8pp::metadata::docs("void", {v8pp::metadata::param("reason", "string", true, "Optional reason shown to the disconnected player; omitting it uses the generic kicked reason.")}, "Disconnects this player from the server."))
+            .function("emit", &Player::Emit,
+                v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Client event name."), v8pp::metadata::param("payloadJson", "string", true, "Optional JSON payload forwarded verbatim to the owning client.")},
+                    "Emits a named script event to this player's client connection."))
+            .function("getIP", &Player::GetAddress, v8pp::metadata::docs("string", {}, "Returns this player's current remote network address.", "Address string, or an empty string when the player or peer is unavailable."))
+            .property("steamId", &Player::GetSteamId, v8pp::metadata::property_docs("string", "Authenticated Steam identifier, or an empty string when unavailable."))
+            .property("discordId", &Player::GetDiscordId, v8pp::metadata::property_docs("string", "Authenticated Discord identifier, or an empty string when unavailable."))
+            .property("hardwareId", &Player::GetHardwareId, v8pp::metadata::property_docs("string", "Framework hardware identifier, or an empty string when unavailable."))
+            .property("ping", &Player::GetPing, v8pp::metadata::property_docs("number", "Current round-trip latency in milliseconds, or -1 when unavailable."))
+            .property("ip", &Player::GetAddress, v8pp::metadata::property_docs("string", "Current remote network address, or an empty string when unavailable."));
         return *cls;
     }
 

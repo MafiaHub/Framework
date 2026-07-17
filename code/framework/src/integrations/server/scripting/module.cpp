@@ -12,19 +12,20 @@
 
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/chat.h>
-#include <scripting/builtins/events.h>
-#include <scripting/builtins/messages.h>
 #include <scripting/builtins/console.h>
-#include <scripting/builtins/imports.h>
-#include <scripting/builtins/exports.h>
 #include <scripting/builtins/environment.h>
+#include <scripting/builtins/events.h>
+#include <scripting/builtins/exports.h>
+#include <scripting/builtins/imports.h>
+#include <scripting/builtins/messages.h>
+#include <scripting/scripting_catalog.h>
 
 namespace Framework::Integrations::Server::Scripting {
 
     ServerScriptingModule::ServerScriptingModule() {
         // Create Node.js engine without sandbox for full server capabilities
         Framework::Scripting::NodeEngineOptions options;
-        options.sandboxed = false;
+        options.sandboxed   = false;
         options.processName = "mafiahub-server";
 #ifdef FW_NODE_INSPECTOR
         options.enableInspector = true;
@@ -46,26 +47,28 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Initialize the Node.js engine
         if (_nodeEngine->Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "Failed to initialize Node.js engine: {}", _nodeEngine->GetLastError());
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to initialize Node.js engine: {}", _nodeEngine->GetLastError());
             return Framework::Scripting::ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
 
         // Initialize ResourceManager with server-side config
         Framework::Scripting::ResourceManagerConfig config;
-        config.resourcesPath = _resourcesPath;
-        config.isClient = false;
+        config.resourcesPath         = _resourcesPath;
+        config.isClient              = false;
         config.cascadeStopDependents = true;
-        config.devMode = _devMode;
+        config.devMode               = _devMode;
 
-        _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
-            _nodeEngine.get(), config);
+        _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_nodeEngine.get(), config);
 
         // Register Framework SDK bindings
         RegisterFrameworkBindings();
 
         // Initialize Framework SDK in the engine
         _nodeEngine->InitFrameworkSDK();
+
+        if (!v8pp::metadata::export_catalog_from_environment("framework-server", "FRAMEWORK_SCRIPTING_API_METADATA")) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export Framework server scripting API metadata");
+        }
 
         // Install uncaught exception handler to prevent async errors from
         // crashing the server process and route them to the resource system
@@ -81,8 +84,7 @@ namespace Framework::Integrations::Server::Scripting {
             _nodeEngine->InstallResourceTimerTracking();
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
-            "JS Server scripting module initialized with Node.js engine");
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("JS Server scripting module initialized with Node.js engine");
 
         _initialized = true;
         return Framework::Scripting::ScriptingError::SCRIPTING_NONE;
@@ -102,13 +104,15 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Get or create Framework global object
         v8::Local<v8::Object> global = context->Global();
+        Framework::Scripting::SetScriptingCatalog(isolate, "framework-server");
         v8::Local<v8::String> frameworkKey = v8::String::NewFromUtf8(isolate, "Framework").ToLocalChecked();
 
         v8::Local<v8::Object> frameworkObj;
         v8::Local<v8::Value> existingFramework;
         if (global->Get(context, frameworkKey).ToLocal(&existingFramework) && existingFramework->IsObject()) {
             frameworkObj = existingFramework.As<v8::Object>();
-        } else {
+        }
+        else {
             frameworkObj = v8::Object::New(isolate);
             global->Set(context, frameworkKey, frameworkObj).Check();
         }
@@ -119,7 +123,8 @@ namespace Framework::Integrations::Server::Scripting {
         v8::Local<v8::Value> existingCore;
         if (global->Get(context, coreKey).ToLocal(&existingCore) && existingCore->IsObject()) {
             coreObj = existingCore.As<v8::Object>();
-        } else {
+        }
+        else {
             coreObj = v8::Object::New(isolate);
             global->Set(context, coreKey, coreObj).Check();
         }
@@ -156,6 +161,7 @@ namespace Framework::Integrations::Server::Scripting {
         _resourceManager.reset();
 
         if (_nodeEngine) {
+            Framework::Scripting::ClearScriptingCatalog(_nodeEngine->GetIsolate());
             _nodeEngine->Shutdown();
             _nodeEngine.reset();
         }
@@ -203,7 +209,7 @@ namespace Framework::Integrations::Server::Scripting {
         _resourcesPath = path;
         if (_resourceManager) {
             Framework::Scripting::ResourceManagerConfig config = _resourceManager->GetConfig();
-            config.resourcesPath = path;
+            config.resourcesPath                               = path;
             _resourceManager->SetConfig(config);
         }
     }
@@ -212,7 +218,7 @@ namespace Framework::Integrations::Server::Scripting {
         _devMode = enabled;
         if (_resourceManager) {
             Framework::Scripting::ResourceManagerConfig config = _resourceManager->GetConfig();
-            config.devMode = enabled;
+            config.devMode                                     = enabled;
             _resourceManager->SetConfig(config);
         }
     }
@@ -236,7 +242,7 @@ namespace Framework::Integrations::Server::Scripting {
             // resource must not be handed to (re)connecting clients.
             if (resource->IsRunning() && !resource->GetClientEntryPoint().empty()) {
                 ClientResourceInfo info;
-                info.name = resource->GetName();
+                info.name    = resource->GetName();
                 info.version = resource->GetVersion();
                 result.push_back(info);
             }
@@ -254,21 +260,18 @@ namespace Framework::Integrations::Server::Scripting {
         // Discover all resources in the resources path
         size_t discovered = _resourceManager->DiscoverResources();
         if (discovered == 0) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
-                "No JS resources discovered in: {}", _resourcesPath);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No JS resources discovered in: {}", _resourcesPath);
             return true; // Not an error, just no resources
         }
 
         // Start all discovered resources
         auto result = _resourceManager->StartAll();
         if (!result) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "Failed to start JS resources: {}", result.GetError());
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start JS resources: {}", result.GetError());
             return false;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
-            "Started {} JS resource(s)", result.GetValue().size());
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started {} JS resource(s)", result.GetValue().size());
         return true;
     }
 
