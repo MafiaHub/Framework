@@ -61,6 +61,7 @@ namespace Framework::Integrations::Client {
         // networked game metadata (required)
         std::string gameName;
         std::string gameVersion;
+        std::string modSlug;
         std::string modVersion;
 
         bool verifyBuildToken = true; // false bypasses the build/version mismatch challenge
@@ -247,7 +248,7 @@ namespace Framework::Integrations::Client {
 
         void SetCurrentState(CurrentState state) {
             _currentState = std::move(state);
-            _currentState.serverIDHash = Framework::Utils::Hashing::CalculateCRC32(_currentState.host + ":" + std::to_string(_currentState.port));
+            _currentState.serverIDHash = Framework::Utils::Hashing::CalculateCRC32(_opts.modSlug + ":" + _currentState.host + ":" + std::to_string(_currentState.port));
         }
 
         // Emits the reserved "chatMessage" script event, then calls OnChatMessageReceived.
