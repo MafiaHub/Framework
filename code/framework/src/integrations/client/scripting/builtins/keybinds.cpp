@@ -368,6 +368,13 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 if (down == bucket.prevDown) {
                     continue;
                 }
+                // A fresh key-down while Alt is held is a Windows system chord (Alt+Tab / Alt+F4 /
+                // Alt+Enter / Alt+Space), not a script keystroke. Drop it WITHOUT latching prevDown so
+                // the later release fires no stray "up" and a genuine press after Alt releases still
+                // registers. Held keys (prevDown already set) and releases are unaffected.
+                if (down && bucket.vk != VK_MENU && (::GetAsyncKeyState(VK_MENU) & 0x8000)) {
+                    continue;
+                }
                 bucket.prevDown = down;
                 // Suppressed: advance prevDown but don't dispatch.
                 if (allowed) {
