@@ -90,6 +90,7 @@ namespace Framework::Integrations::Client {
         std::string host;
         int32_t port;
         std::string nickname;
+        std::string password;
         uint32_t serverIDHash;
     };
 
