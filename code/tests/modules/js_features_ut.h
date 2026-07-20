@@ -12,7 +12,7 @@
 #include "scripting/builtins/builtins.h"
 #include "scripting/builtins/console.h"
 #include "scripting/builtins/events.h"
-#include "scripting/builtins/environment.h"
+#include "scripting/builtins/execution_environment.h"
 #include "scripting/builtins/exports.h"
 #include "scripting/builtins/imports.h"
 #include "scripting/builtins/messages.h"
@@ -1046,9 +1046,10 @@ MODULE(js_features, {
     // JS-FACING NAMING
     // ========================================
     // The Framework.* namespace group uses one casing: exports joins the lowercase imports/messages
-    // (was Framework.Exports). Environment flags are camelCase isClient/isServer (were IsClient/
-    // IsServer). Guards the breaking rename; the old names must be gone.
-    IT("Framework.exports is lowercase and Environment flags are camelCase", {
+    // (was Framework.Exports). The runtime-flags global is ExecutionEnvironment (was Environment) at
+    // the root, with camelCase isClient/isServer (were IsClient/IsServer). Guards the breaking
+    // renames; the old names must be gone.
+    IT("Framework.exports is lowercase and ExecutionEnvironment flags are camelCase", {
         EventsTestHelper::Setup();
         NodeEngine engine({});
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
@@ -1065,10 +1066,9 @@ MODULE(js_features, {
             v8::Context::Scope contextScope(context);
             v8::Local<v8::Object> frameworkObj = v8::Object::New(isolate);
             context->Global()->Set(context, v8pp::to_v8(isolate, "Framework"), frameworkObj).Check();
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context, v8pp::to_v8(isolate, "Core"), coreObj).Check();
             Exports::Register(isolate, context, frameworkObj, &manager);
-            Environment::Register(isolate, context, coreObj, /*isClient*/ true);
+            // Registered at the global root, as production does.
+            ExecutionEnvironment::Register(isolate, context, context->Global(), /*isClient*/ true);
         }
 
         // exports: lowercase, matching imports/messages; the capitalized name is gone.
@@ -1077,11 +1077,12 @@ MODULE(js_features, {
         EQUALS(RunJSBool(engine, "typeof Framework.exports.get === 'function'"), true);
         EQUALS(RunJSBool(engine, "Framework.Exports === undefined"), true);
 
-        // Environment flags: camelCase; the PascalCase names are gone.
-        EQUALS(RunJSBool(engine, "Core.Environment.isClient === true"), true);
-        EQUALS(RunJSBool(engine, "Core.Environment.isServer === false"), true);
-        EQUALS(RunJSBool(engine, "Core.Environment.IsClient === undefined"), true);
-        EQUALS(RunJSBool(engine, "Core.Environment.IsServer === undefined"), true);
+        // ExecutionEnvironment at root, camelCase flags; old Environment name and PascalCase are gone.
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.isClient === true"), true);
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.isServer === false"), true);
+        EQUALS(RunJSBool(engine, "typeof Environment === 'undefined'"), true);
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.IsClient === undefined"), true);
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.IsServer === undefined"), true);
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();

@@ -13,19 +13,19 @@
 namespace Framework::Scripting::Builtins {
 
     /**
-     * JavaScript Environment API - provides runtime environment information.
+     * JavaScript ExecutionEnvironment API - provides runtime environment information.
      *
-     * Exposes an Environment global object:
-     * - Environment.isClient - true if running on the client side (read-only)
-     * - Environment.isServer - true if running on the server side (read-only)
+     * Exposes an ExecutionEnvironment global object:
+     * - ExecutionEnvironment.isClient - true if running on the client side (read-only)
+     * - ExecutionEnvironment.isServer - true if running on the server side (read-only)
      */
-    class Environment final {
+    class ExecutionEnvironment final {
       public:
         /**
-         * Register the Environment object on the target object.
+         * Register the ExecutionEnvironment object on the target object.
          * @param isolate V8 isolate
          * @param context Target context
-         * @param target Object to attach Environment to (e.g., Core)
+         * @param target Object to attach ExecutionEnvironment to (e.g., the global root)
          * @param isClient true if this is the client side, false for server
          */
         static void Register(v8::Isolate *isolate,

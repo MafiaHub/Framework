@@ -12,7 +12,7 @@
 
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/console.h>
-#include <scripting/builtins/environment.h>
+#include <scripting/builtins/execution_environment.h>
 #include <scripting/builtins/events.h>
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
@@ -153,7 +153,7 @@ namespace Framework::Integrations::Client::Scripting {
         Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
 
         // Register environment info at the global root
-        Framework::Scripting::Builtins::Environment::Register(isolate, context, global, true);
+        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, true);
 
         // Register web views API (client only)
         Builtins::Web::Register(isolate, context, frameworkObj, _resourceManager.get());
