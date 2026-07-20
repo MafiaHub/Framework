@@ -15,14 +15,14 @@ namespace Framework::Scripting::Builtins {
 
     void Environment::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, bool isClient) {
         v8pp::module env(isolate);
-        env.const_("IsClient", isClient);
-        env.const_("IsServer", !isClient);
+        env.const_("isClient", isClient);
+        env.const_("isServer", !isClient);
 
         target->Set(context, v8pp::to_v8(isolate, "Environment"), env.new_instance()).Check();
 
         auto &metadata = GetScriptingCatalog(isolate).global_object("Environment", "Runtime-side flags exposed as Core.Environment.");
-        metadata.add_property("IsClient", "boolean", "True in the sandboxed client scripting runtime.", true);
-        metadata.add_property("IsServer", "boolean", "True in the authoritative server scripting runtime.", true);
+        metadata.add_property("isClient", "boolean", "True in the sandboxed client scripting runtime.", true);
+        metadata.add_property("isServer", "boolean", "True in the authoritative server scripting runtime.", true);
     }
 
 } // namespace Framework::Scripting::Builtins
