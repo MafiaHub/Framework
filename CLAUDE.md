@@ -24,6 +24,16 @@ cmake --build build --target RunFrameworkTests  # Run tests
 
 Or use Visual Studio 2022 with CMake tools installed and open the repository folder for automatic setup.
 
+### CMake Source Discovery
+
+Sources in `code/framework/src/scripting/builtins/` are discovered automatically
+by `code/framework/CMakeLists.txt` using `file(GLOB ... CONFIGURE_DEPENDS)`. Do
+not add individual builtin `.cpp` paths to `FRAMEWORK_SRC`. When adding,
+deleting, or renaming a builtin, keep its headers, includes, registrations, and
+tests in sync, then run a clean CMake configure to verify the discovered source
+set. This avoids stale paths such as the former `environment.cpp` entry after it
+was renamed to `execution_environment.cpp`.
+
 ## Project Structure
 
 - `code/framework/` - Core framework source code split into three libraries:
