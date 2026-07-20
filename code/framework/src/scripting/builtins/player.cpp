@@ -123,6 +123,12 @@ namespace Framework::Scripting::Builtins {
         return peer ? peer->GetPeerIdentity(MafiaNet::ToGuid(entity->ownerGUID)) : nullptr;
     }
 
+    void Player::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
+        v8pp::class_<Player> &cls = GetClass(isolate);
+        auto ctx                  = isolate->GetCurrentContext();
+        global->Set(ctx, v8pp::to_v8(isolate, "Player"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
+    }
+
     void Player::UnregisterIsolate(v8::Isolate *isolate) {
         _classes.erase(isolate);
     }

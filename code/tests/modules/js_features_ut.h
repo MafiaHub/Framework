@@ -14,6 +14,7 @@
 #include "scripting/builtins/events.h"
 #include "scripting/builtins/imports.h"
 #include "scripting/builtins/messages.h"
+#include "scripting/builtins/player.h"
 #include "scripting/resource/resource.h"
 #include "scripting/resource/resource_manager.h"
 
@@ -192,7 +193,7 @@ MODULE(js_features, {
             context->Global()->Set(context,
                 v8::String::NewFromUtf8Literal(isolate, "Core"),
                 coreObj).Check();
-            Builtins::RegisterAll(isolate, coreObj);
+            Builtins::RegisterValueTypes(isolate, coreObj);
         }
 
         // Vector3 tests
@@ -876,6 +877,38 @@ MODULE(js_features, {
             v8::Isolate::Scope isolateScope(isolate);
             Messages::Shutdown();
         }
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
+    // REGISTRATION SHAPE
+    // ========================================
+    // RegisterValueTypes publishes only the value types; Player gained a Register that publishes its
+    // constructor like its handle-type siblings (Entity, TextLabel). Guards the registration sweep.
+    IT("RegisterValueTypes and Player::Register publish their constructors", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        v8::Isolate *isolate = engine.GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            v8::Local<v8::Object> target = context->Global();
+            Builtins::RegisterValueTypes(isolate, target);
+            Builtins::Player::Register(isolate, target);
+        }
+
+        // Value types published by RegisterValueTypes.
+        EQUALS(RunJSBool(engine, "typeof Vector3 === 'function'"), true);
+        EQUALS(RunJSBool(engine, "typeof Color === 'function'"), true);
+        // Player constructor published by the new Player::Register.
+        EQUALS(RunJSBool(engine, "typeof Player === 'function'"), true);
+
         engine.Shutdown();
         EventsTestHelper::Cleanup();
     });

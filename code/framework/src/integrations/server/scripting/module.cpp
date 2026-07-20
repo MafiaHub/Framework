@@ -129,8 +129,8 @@ namespace Framework::Integrations::Server::Scripting {
             global->Set(context, coreKey, coreObj).Check();
         }
 
-        // Register math type builtins on Core object
-        Framework::Scripting::Builtins::RegisterAll(isolate, coreObj);
+        // Register value-type builtins on Core object
+        Framework::Scripting::Builtins::RegisterValueTypes(isolate, coreObj);
 
         // Register communication APIs
         _resourceManager->GetEvents().Register(isolate, context, coreObj, _resourceManager.get());
