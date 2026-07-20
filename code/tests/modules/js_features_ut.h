@@ -554,15 +554,11 @@ MODULE(js_features, {
     // ========================================
     // ALLSETTLED AGGREGATION ROBUSTNESS
     // ========================================
-    // emit() aggregates handler results through the *global* Promise.allSettled, and its
-    // then-handler consumes the settled records. That global is script-mutable, so the
-    // then-handler must never trust the record shape: a replaced allSettled, or a record whose
-    // getter throws, must fail soft (skip/resolve) instead of aborting the process via an unchecked
-    // .As<>() cast or an empty ToLocalChecked(). These drive the then-handler with hostile shapes;
-    // pre-fix each aborts the process, post-fix each settles the emit() promise cleanly.
+    // emit() aggregates via the script-mutable global Promise.allSettled, so its then-handler must
+    // not trust the record shape. These drive it with hostile shapes: pre-fix each aborts the
+    // process, post-fix each settles the emit() promise cleanly.
 
-    // A record whose `status` getter throws: pre-fix, item->Get("status").ToLocalChecked() on the
-    // resulting empty MaybeLocal aborts the process.
+    // Throwing `status` getter: pre-fix, Get("status").ToLocalChecked() aborts on the empty MaybeLocal.
     IT("emit survives a Promise.allSettled whose records throw on access", {
         EventsTestHelper::Setup();
         NodeEngine engine({});
@@ -594,7 +590,7 @@ MODULE(js_features, {
         EventsTestHelper::Cleanup();
     });
 
-    // A non-array settled value: pre-fix it reaches info[0].As<v8::Array>() + Array::Length() (UB).
+    // Non-array settled value: pre-fix it reaches info[0].As<v8::Array>() + Array::Length() (UB).
     IT("emit survives a Promise.allSettled that resolves with a non-array", {
         EventsTestHelper::Setup();
         NodeEngine engine({});
@@ -622,8 +618,7 @@ MODULE(js_features, {
         EventsTestHelper::Cleanup();
     });
 
-    // Sanity: with the real Promise.allSettled, a rejecting handler still rejects the emit()
-    // promise (the hardening must not swallow genuine, well-formed rejections).
+    // Sanity: the hardening must not swallow genuine, well-formed rejections.
     IT("emit still rejects when a handler rejects (real allSettled)", {
         EventsTestHelper::Setup();
         NodeEngine engine({});

@@ -552,13 +552,8 @@ namespace Framework::Scripting {
             _pendingCallbacks.insert(callbackData);
         }
 
-        // The then-handler reaches its data through an External, and must own a strong reference
-        // for the whole microtask lifetime. Events::~Events() clears _pendingCallbacks, so if that
-        // set were the only owner the data would be freed before a still-pending handler reads
-        // `cancelled` (use-after-free). Hand the handler its own shared_ptr on the heap: it releases
-        // that reference when it runs, and destruction only drops the registry's reference. (If the
-        // handler never runs — isolate torn down first — this one holder leaks, which is bounded and
-        // memory-safe, unlike the free-before-read it replaces.)
+        // Give the handler its own strong reference via the External, so ~Events() clearing
+        // _pendingCallbacks can't free the data out from under a still-pending microtask.
         auto *handlerRef                     = new std::shared_ptr<AllSettledCallbackData>(callbackData);
         v8::Local<v8::External> resolverData = v8::External::New(isolate, handlerRef);
 
@@ -568,14 +563,11 @@ namespace Framework::Scripting {
                 v8::Isolate *iso           = info.GetIsolate();
                 v8::Local<v8::Context> ctx = iso->GetCurrentContext();
 
-                // Take our own strong reference, then free the heap holder: the data now outlives
-                // Events even if _pendingCallbacks was already cleared. A then-handler runs at most
-                // once, so deleting the holder here is safe.
+                // Own the data for this call, then free the heap holder (a then-handler runs once).
                 auto *handlerRef                             = static_cast<std::shared_ptr<AllSettledCallbackData> *>(info.Data().As<v8::External>()->Value());
                 std::shared_ptr<AllSettledCallbackData> data = *handlerRef;
                 delete handlerRef;
 
-                // Check if Events was destroyed before this callback ran
                 if (data->cancelled.load(std::memory_order_acquire)) {
                     return; // Events destroyed, bail out safely
                 }
@@ -585,16 +577,14 @@ namespace Framework::Scripting {
 
                 std::vector<v8::Local<v8::Value>> rejections;
 
-                // The settled records come from Promise.allSettled, which is read from the
-                // script-mutable global Promise. Never trust the callback argument's shape: a
-                // replaced allSettled, or a record carrying a throwing getter, must not abort the
-                // process through an unchecked cast or an empty ToLocalChecked(). Validate every
-                // step and skip malformed records instead.
+                // Records come from the script-mutable global Promise.allSettled, so the shape is
+                // untrusted: validate each step and skip malformed records rather than aborting via
+                // an unchecked cast or an empty ToLocalChecked().
                 if (info.Length() > 0 && info[0]->IsArray()) {
                     v8::Local<v8::Array> results = info[0].As<v8::Array>();
                     for (uint32_t i = 0; i < results->Length(); ++i) {
-                        // Swallow any getter exception so a malformed record is skipped rather than
-                        // leaving a pending exception that empties every subsequent MaybeLocal.
+                        // Contain a throwing getter so it skips the record instead of poisoning
+                        // later MaybeLocals with a pending exception.
                         v8::TryCatch tryCatch(iso);
 
                         v8::Local<v8::Value> itemVal;
@@ -652,15 +642,12 @@ namespace Framework::Scripting {
                     res->Resolve(ctx, v8::Undefined(iso)).Check();
                 }
 
-                // Remove from tracking - drops the registry's reference; the data is freed once
-                // this handler's own reference (`data`) also goes out of scope.
                 data->owner->RemovePendingCallback(data.get());
             },
             resolverData);
 
-        // Function::New and Promise::Then both return an empty MaybeLocal on a terminating
-        // isolate; unwrapping either with ToLocalChecked() would abort the process. Fail soft:
-        // the handler will never run, so free its heap holder and drop the tracking entry here.
+        // Function::New / Promise::Then return empty on a terminating isolate; ToLocalChecked()
+        // would abort. Fail soft: the handler won't run, so free its holder and untrack here.
         v8::Local<v8::Function> thenHandler;
         if (!maybeThenHandler.ToLocal(&thenHandler)) {
             delete handlerRef;
