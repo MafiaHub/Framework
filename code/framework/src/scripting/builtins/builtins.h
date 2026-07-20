@@ -16,6 +16,10 @@
 
 #include <v8.h>
 
+// Conventions every builtin here follows — namespace, throw idiom, registration
+// shape — are documented in README.md next to this file. Match them when adding
+// or editing a builtin.
+
 namespace Framework::Scripting::Builtins {
 
     /**
