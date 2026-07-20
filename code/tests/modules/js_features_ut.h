@@ -290,10 +290,13 @@ MODULE(js_features, {
             RegisterValueTypes(isolate, coreObj);
         }
 
-        // toHex emits lowercase, as documented.
-        std::string hex = RunJSString(engine, "new Core.Color(1, 0.5, 0, 1).toHex()");
+        // The 3-argument constructor works and alpha defaults to 1 (v8pp optional-ctor fix).
+        EQUALS(RunJSBool(engine, "new Core.Color(0.25, 0.5, 0.75).a === 1"), true);
+
+        // toHex emits lowercase, as documented (exercised through the 3-arg ctor).
+        std::string hex = RunJSString(engine, "new Core.Color(1, 0.5, 0).toHex()");
         STREQUALS(hex.c_str(), "#ff8000");
-        std::string hexA = RunJSString(engine, "new Core.Color(1, 0.5, 0, 1).toHex(true)");
+        std::string hexA = RunJSString(engine, "new Core.Color(1, 0.5, 0).toHex(true)");
         STREQUALS(hexA.c_str(), "#ff8000ff");
 
         // Full-length hex parses; unsupported 3-digit shorthand falls back to opaque white.
