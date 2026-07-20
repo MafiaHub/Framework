@@ -184,4 +184,8 @@ namespace Framework::Scripting::Builtins {
         return cls.import_external(isolate, new Vector3(value));
     }
 
+    void Vector3::UnregisterIsolate(v8::Isolate *isolate) {
+        _classes.erase(isolate);
+    }
+
 } // namespace Framework::Scripting::Builtins

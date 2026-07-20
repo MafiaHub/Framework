@@ -122,4 +122,8 @@ namespace Framework::Scripting::Builtins {
         auto *peer = CoreModules::GetNetworkPeer();
         return peer ? peer->GetPeerIdentity(MafiaNet::ToGuid(entity->ownerGUID)) : nullptr;
     }
+
+    void Player::UnregisterIsolate(v8::Isolate *isolate) {
+        _classes.erase(isolate);
+    }
 } // namespace Framework::Scripting::Builtins

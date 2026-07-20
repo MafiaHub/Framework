@@ -8,6 +8,7 @@
 
 #include "node_engine.h"
 #include "engine_helpers.h"
+#include "builtins/builtins.h"
 #include "builtins/messages.h"
 #include "resource/resource_manager.h"
 
@@ -96,6 +97,9 @@ namespace Framework::Scripting {
 
         // Release persistent handles before destroying the isolate
         _interruptDrainFn.Reset();
+
+        // Drop cached builtin class wrappers before the isolate dies (avoids leak + stale reuse).
+        Builtins::UnregisterAll(_isolate);
 
         // Clear our references before destroying setup
         _env = nullptr;

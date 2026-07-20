@@ -63,6 +63,8 @@ namespace Framework::Scripting::Builtins {
 
         static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
 
+        static void UnregisterIsolate(v8::Isolate *isolate);
+
       protected:
         Networking::Replication::NetworkEntity *Resolve() const;
 

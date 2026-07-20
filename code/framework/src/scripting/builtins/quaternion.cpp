@@ -197,4 +197,8 @@ namespace Framework::Scripting::Builtins {
         return cls.import_external(isolate, new Quaternion(value));
     }
 
+    void Quaternion::UnregisterIsolate(v8::Isolate *isolate) {
+        _classes.erase(isolate);
+    }
+
 } // namespace Framework::Scripting::Builtins

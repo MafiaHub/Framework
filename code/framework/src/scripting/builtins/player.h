@@ -52,6 +52,8 @@ namespace Framework::Scripting::Builtins {
 
         static v8pp::class_<Player> &GetClass(v8::Isolate *isolate);
 
+        static void UnregisterIsolate(v8::Isolate *isolate);
+
       protected:
         const Networking::RPC::ClientIdentity *ResolveIdentity() const;
 

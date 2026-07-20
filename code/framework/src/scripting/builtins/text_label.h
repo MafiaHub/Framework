@@ -60,6 +60,8 @@ namespace Framework::Scripting::Builtins {
 
         static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
 
+        static void UnregisterIsolate(v8::Isolate *isolate);
+
       private:
         // JS: TextLabel.create(x, y, z, text, fontSize?, drawDistance?, virtualWorld?) -> TextLabel
         static void JS_Create(const v8::FunctionCallbackInfo<v8::Value> &info);

@@ -65,6 +65,7 @@ class Vector4 final {
     static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);
     static v8pp::class_<Vector4>& GetClass(v8::Isolate* isolate);
     static v8::Local<v8::Object> NewInstance(v8::Isolate* isolate, const glm::vec4& value);
+    static void UnregisterIsolate(v8::Isolate* isolate);
 
   private:
     glm::vec4 _vec;

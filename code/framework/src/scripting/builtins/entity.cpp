@@ -170,4 +170,8 @@ namespace Framework::Scripting::Builtins {
         auto *replication = CoreModules::GetReplication();
         return replication ? replication->GetEntityByNetworkID(_id) : nullptr;
     }
+
+    void Entity::UnregisterIsolate(v8::Isolate *isolate) {
+        _classes.erase(isolate);
+    }
 } // namespace Framework::Scripting::Builtins

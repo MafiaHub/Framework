@@ -32,6 +32,7 @@ set(FRAMEWORK_SRC
     # JavaScript scripting engine base and builtins (used by both client and server)
     # Note: node_engine.cpp and v8_engine.cpp are in OBJECT libraries due to special compile flags
     src/scripting/engine.cpp
+    src/scripting/builtins/builtins.cpp
     src/scripting/builtins/vector2.cpp
     src/scripting/builtins/vector3.cpp
     src/scripting/builtins/vector4.cpp

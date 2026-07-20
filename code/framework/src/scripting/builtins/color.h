@@ -74,6 +74,7 @@ class Color final {
     // V8 Registration
     static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);
     static v8pp::class_<Color>& GetClass(v8::Isolate* isolate);
+    static void UnregisterIsolate(v8::Isolate* isolate);
 
   private:
     glm::vec4 _color;

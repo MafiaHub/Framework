@@ -212,4 +212,8 @@ namespace Framework::Scripting::Builtins {
 
         info.GetReturnValue().Set(wrapped);
     }
+
+    void TextLabel::UnregisterIsolate(v8::Isolate *isolate) {
+        _classes.erase(isolate);
+    }
 } // namespace Framework::Scripting::Builtins

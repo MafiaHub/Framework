@@ -233,4 +233,8 @@ namespace Framework::Scripting::Builtins {
         global->Set(ctx, v8pp::to_v8(isolate, "Color"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
     }
 
+    void Color::UnregisterIsolate(v8::Isolate *isolate) {
+        _classes.erase(isolate);
+    }
+
 } // namespace Framework::Scripting::Builtins
