@@ -16,8 +16,8 @@ namespace Framework::Scripting::Builtins {
      * JavaScript Environment API - provides runtime environment information.
      *
      * Exposes an Environment global object:
-     * - Environment.IsClient - true if running on the client side (read-only)
-     * - Environment.IsServer - true if running on the server side (read-only)
+     * - Environment.isClient - true if running on the client side (read-only)
+     * - Environment.isServer - true if running on the server side (read-only)
      */
     class Environment final {
       public:

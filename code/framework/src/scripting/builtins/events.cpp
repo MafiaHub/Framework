@@ -226,6 +226,8 @@ namespace Framework::Scripting::Builtins {
 
         auto *peer = CoreModules::GetNetworkPeer();
         if (!peer) {
+            // Missing subsystem is a state error, not a stale receiver — throw (README idiom).
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": network peer unavailable")));
             return;
         }
         Framework::Integrations::Shared::RPC::EmitScriptEvent ev;

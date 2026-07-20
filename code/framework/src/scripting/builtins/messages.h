@@ -47,11 +47,13 @@ namespace Framework::Scripting::Builtins {
         static void ProcessPendingResponses(v8::Isolate *isolate, v8::Local<v8::Context> context);
 
         /**
-         * Drop a stopped resource's registered handlers and any requests it
-         * originated, so its Global<Function> handles don't dangle until the
-         * whole isolate is torn down. Mirrors Events::CleanupResource.
+         * Drop a stopped resource's registered handlers, and reject+erase every
+         * pending request it originated or targeted, so its Global<Function>
+         * handles don't dangle and awaiting `request(...)` Promises reject
+         * instead of hanging until isolate teardown. Needs an active
+         * isolate/context to settle those Promises. Mirrors Events::CleanupResource.
          */
-        static void CleanupResource(const std::string &resourceName);
+        static void CleanupResource(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &resourceName);
 
         /**
          * Cleanup all static V8 globals.
@@ -80,11 +82,12 @@ namespace Framework::Scripting::Builtins {
         struct PendingRequest {
             uint64_t requestId;
             v8::Global<v8::Promise::Resolver> resolver;
-            std::string sourceResource;
+            std::string sourceResource; // resource awaiting the reply (owns the Promise)
+            std::string targetResource; // resource whose handler must reply
             std::atomic<bool> consumed{false}; // Prevents double-reply
 
-            PendingRequest(uint64_t id, v8::Global<v8::Promise::Resolver> res, std::string src)
-                : requestId(id), resolver(std::move(res)), sourceResource(std::move(src)), consumed(false) {}
+            PendingRequest(uint64_t id, v8::Global<v8::Promise::Resolver> res, std::string src, std::string tgt)
+                : requestId(id), resolver(std::move(res)), sourceResource(std::move(src)), targetResource(std::move(tgt)), consumed(false) {}
             PendingRequest(PendingRequest&&) = delete;
             PendingRequest& operator=(PendingRequest&&) = delete;
         };

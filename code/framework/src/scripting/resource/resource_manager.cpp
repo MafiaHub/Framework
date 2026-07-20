@@ -719,7 +719,18 @@ namespace Framework::Scripting {
     bool ResourceManager::CallResourceStop(std::string_view resourceName) {
         // Cleanup handlers before resource fully stops
         _events.CleanupResource(resourceName);
-        Builtins::Messages::CleanupResource(std::string(resourceName));
+
+        // Reject and drop message requests tied to this resource. Rejecting the awaiting
+        // Promises needs an active isolate/context, so scope one here.
+        if (_jsEngine && _jsEngine->IsInitialized()) {
+            v8::Isolate *isolate = _jsEngine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = _jsEngine->GetContext();
+            v8::Context::Scope contextScope(context);
+            Builtins::Messages::CleanupResource(isolate, context, std::string(resourceName));
+        }
         return true;
     }
 

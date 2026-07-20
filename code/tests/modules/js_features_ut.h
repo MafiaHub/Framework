@@ -963,10 +963,34 @@ MODULE(js_features, {
         pumpMessages(engine);
         EQUALS(RunJS(engine, "globalThis.__reply"), 42);
 
-        // Drop 'provider' handlers as its resource stops.
-        Messages::CleanupResource("provider");
+        // A request whose target hasn't replied yet stays pending...
+        manager.SetCurrentResourceContext("provider");
+        RunJS(engine, "Framework.messages.handle('slow', (payload, reply) => { globalThis.__saved = reply; }); 0");
+        manager.SetCurrentResourceContext("consumer");
+        RunJS(engine, R"(
+            globalThis.__inflight = 0;
+            Framework.messages.request('provider', 'slow', 1).then(() => { globalThis.__inflight = 1; },
+                                                                   () => { globalThis.__inflight = 2; });
+            0
+        )");
+        pumpMessages(engine);
+        EQUALS(RunJS(engine, "globalThis.__inflight"), 0);
 
-        // The same request now rejects: no handler remains for the target resource.
+        // Drop 'provider' handlers and reject requests tied to it as its resource stops.
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            Messages::CleanupResource(isolate, context, "provider");
+        }
+        pumpMessages(engine);
+        // ...and the in-flight Promise now rejects instead of hanging forever.
+        EQUALS(RunJS(engine, "globalThis.__inflight"), 2);
+
+        // A new request after cleanup also rejects: no handler remains for the target resource.
         RunJS(engine, R"(
             globalThis.__after = 0;
             Framework.messages.request('provider', 'ping', 1).then(() => { globalThis.__after = 1; },

@@ -180,7 +180,7 @@ namespace Framework::Scripting::Builtins {
         {
             std::scoped_lock lock(_pendingRequestsMutex);
             requestId = _nextRequestId++;
-            _pendingRequests.try_emplace(requestId, requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource);
+            _pendingRequests.try_emplace(requestId, requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource, targetResource);
         }
 
         // Create reply function - passes requestId as BigInt to avoid dangling pointer issues
@@ -359,7 +359,7 @@ namespace Framework::Scripting::Builtins {
         }
     }
 
-    void Messages::CleanupResource(const std::string &resourceName) {
+    void Messages::CleanupResource(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &resourceName) {
         // Drop the stopped resource's registered handlers so its Global<Function>
         // handles are released now instead of lingering until Shutdown().
         {
@@ -367,12 +367,21 @@ namespace Framework::Scripting::Builtins {
             _handlers.erase(resourceName);
         }
 
-        // Drop any requests this resource originated; their resolver Globals would
-        // otherwise dangle (the reply can never be delivered to a stopped resource).
+        // Settle and drop every pending request tied to the stopped resource:
+        // - source: a request this resource made, whose reply it can no longer receive;
+        // - target: a request another resource is still awaiting a reply from this one.
+        // Reject the awaiting Promise first (so `await request(...)` rejects instead of hanging
+        // forever) before erasing, then release the resolver Global.
         {
             std::scoped_lock lock(_pendingRequestsMutex);
             for (auto it = _pendingRequests.begin(); it != _pendingRequests.end();) {
-                if (it->second.sourceResource == resourceName) {
+                PendingRequest &req = it->second;
+                if (req.sourceResource == resourceName || req.targetResource == resourceName) {
+                    // A request still in the table is not yet settled — ProcessPendingResponses
+                    // settles and erases atomically under this same mutex — so rejecting always
+                    // moves the awaiting Promise out of pending (and V8 ignores a reject on an
+                    // already-settled promise anyway). After erasing, a late reply() finds nothing.
+                    req.resolver.Get(isolate)->Reject(context, v8pp::to_v8(isolate, "messages.request: resource '" + resourceName + "' stopped before reply")).Check();
                     it = _pendingRequests.erase(it);
                 }
                 else {
