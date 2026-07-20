@@ -14,7 +14,7 @@
 
 namespace Framework::Scripting {
 
-    std::map<std::string, std::map<std::string, v8::Global<v8::Function>>> Messages::_handlers;
+    std::map<std::string, std::map<std::string, Messages::Handler>> Messages::_handlers;
     std::mutex Messages::_handlersMutex;
     std::map<uint64_t, Messages::PendingRequest> Messages::_pendingRequests;
     std::mutex Messages::_pendingRequestsMutex;
@@ -106,7 +106,9 @@ namespace Framework::Scripting {
 
         {
             std::scoped_lock lock(_handlersMutex);
-            _handlers[resourceName][messageType].Reset(isolate, handler);
+            Handler &entry = _handlers[resourceName][messageType];
+            entry.isolate  = isolate;
+            entry.function.Reset(isolate, handler);
         }
     }
 
@@ -164,7 +166,16 @@ namespace Framework::Scripting {
                 return;
             }
 
-            handler.Reset(isolate, handlerIt->second.Get(isolate));
+            // The handler's Global<Function> is bound to the isolate it was registered on.
+            // Getting it from a different isolate crashes, so reject cross-isolate requests
+            // (mirrors the Exports.get isolate-ownership guard).
+            if (handlerIt->second.isolate != isolate) {
+                resolver->Reject(context, v8pp::to_v8(isolate, "messages.request: cannot invoke handler '" + messageType + "' in resource '" + targetResource + "' - cross-isolate access is not supported. Both resources must share the same isolate.")).Check();
+                args.GetReturnValue().Set(promise);
+                return;
+            }
+
+            handler.Reset(isolate, handlerIt->second.function.Get(isolate));
         }
 
         // Generate request ID and store pending request
@@ -284,7 +295,14 @@ namespace Framework::Scripting {
                 return; // Silently ignore
             }
 
-            handler.Reset(isolate, handlerIt->second.Get(isolate));
+            // Cross-isolate handler: Getting its Global<Function> from this isolate would
+            // crash. Skip delivery (send is fire-and-forget) and warn (mirrors Exports.get).
+            if (handlerIt->second.isolate != isolate) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("messages.send to '{}' skipped: handler '{}' lives in a different isolate", targetResource, messageType);
+                return;
+            }
+
+            handler.Reset(isolate, handlerIt->second.function.Get(isolate));
         }
 
         // Create no-op reply function
@@ -341,6 +359,29 @@ namespace Framework::Scripting {
             }
 
             _pendingRequests.erase(it);
+        }
+    }
+
+    void Messages::CleanupResource(const std::string &resourceName) {
+        // Drop the stopped resource's registered handlers so its Global<Function>
+        // handles are released now instead of lingering until Shutdown().
+        {
+            std::scoped_lock lock(_handlersMutex);
+            _handlers.erase(resourceName);
+        }
+
+        // Drop any requests this resource originated; their resolver Globals would
+        // otherwise dangle (the reply can never be delivered to a stopped resource).
+        {
+            std::scoped_lock lock(_pendingRequestsMutex);
+            for (auto it = _pendingRequests.begin(); it != _pendingRequests.end();) {
+                if (it->second.sourceResource == resourceName) {
+                    it = _pendingRequests.erase(it);
+                }
+                else {
+                    ++it;
+                }
+            }
         }
     }
 

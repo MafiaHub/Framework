@@ -13,6 +13,7 @@
 #include "scripting/builtins/console.h"
 #include "scripting/builtins/events.h"
 #include "scripting/builtins/imports.h"
+#include "scripting/builtins/messages.h"
 #include "scripting/resource/resource.h"
 #include "scripting/resource/resource_manager.h"
 
@@ -721,6 +722,89 @@ MODULE(js_features, {
         EQUALS(RunJSBool(engine, "__imp._availableExports === undefined"), true);
         EQUALS(RunJSBool(engine, "Object.keys(__imp).length === 2"), true);
 
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
+    // MESSAGES (handler lifecycle)
+    // ========================================
+    // messages.handle stores a Global<Function> per (resource, type). A stopped resource must not
+    // leave those handlers behind until full Shutdown — CleanupResource drops them eagerly, like
+    // Events. (The cross-isolate guard added alongside can only be exercised with two live isolates,
+    // which libnode cannot host in one process, so it is covered by integration testing.)
+    auto registerMessages = [](NodeEngine &engine, ResourceManager &manager) {
+        v8::Isolate *isolate = engine.GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine.GetContext();
+        v8::Context::Scope contextScope(context);
+        v8::Local<v8::Object> frameworkObj = v8::Object::New(isolate);
+        context->Global()->Set(context, v8pp::to_v8(isolate, "Framework"), frameworkObj).Check();
+        Messages::Register(isolate, context, frameworkObj, &manager);
+    };
+
+    auto pumpMessages = [](NodeEngine &engine) {
+        for (int i = 0; i < 8; ++i) {
+            {
+                v8::Isolate *isolate = engine.GetIsolate();
+                v8::Locker locker(isolate);
+                v8::Isolate::Scope isolateScope(isolate);
+                v8::HandleScope handleScope(isolate);
+                v8::Local<v8::Context> context = engine.GetContext();
+                v8::Context::Scope contextScope(context);
+                Messages::ProcessPendingResponses(isolate, context);
+            }
+            engine.Tick();
+        }
+    };
+
+    // A registered handler answers a same-isolate request; after CleanupResource the same request
+    // is rejected because the handler is gone — proving the resource's handlers were released.
+    IT("messages.request round-trips, and CleanupResource drops the handler", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerMessages(engine, manager);
+
+        // Register the handler as resource 'provider'.
+        manager.SetCurrentResourceContext("provider");
+        RunJS(engine, "Framework.messages.handle('ping', (payload, reply) => { reply(payload + 1); }); 0");
+
+        // Issue a request as resource 'consumer'.
+        manager.SetCurrentResourceContext("consumer");
+        RunJS(engine, R"(
+            globalThis.__reply = 0;
+            Framework.messages.request('provider', 'ping', 41).then(v => { globalThis.__reply = v; },
+                                                                    () => { globalThis.__reply = -1; });
+            0
+        )");
+        pumpMessages(engine);
+        EQUALS(RunJS(engine, "globalThis.__reply"), 42);
+
+        // Drop 'provider' handlers as its resource stops.
+        Messages::CleanupResource("provider");
+
+        // The same request now rejects: no handler remains for the target resource.
+        RunJS(engine, R"(
+            globalThis.__after = 0;
+            Framework.messages.request('provider', 'ping', 1).then(() => { globalThis.__after = 1; },
+                                                                   () => { globalThis.__after = 2; });
+            0
+        )");
+        pumpMessages(engine);
+        EQUALS(RunJS(engine, "globalThis.__after"), 2);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            Messages::Shutdown();
+        }
         engine.Shutdown();
         EventsTestHelper::Cleanup();
     });

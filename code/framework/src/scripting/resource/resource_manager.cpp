@@ -9,6 +9,7 @@
 #include "resource_manager.h"
 
 #include "../builtins/events.h"
+#include "../builtins/messages.h"
 
 #include <algorithm>
 #include <cctype>
@@ -718,6 +719,7 @@ namespace Framework::Scripting {
     bool ResourceManager::CallResourceStop(std::string_view resourceName) {
         // Cleanup handlers before resource fully stops
         _events.CleanupResource(resourceName);
+        Messages::CleanupResource(std::string(resourceName));
         return true;
     }
 

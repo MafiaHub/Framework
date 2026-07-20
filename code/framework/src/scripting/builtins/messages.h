@@ -45,6 +45,13 @@ namespace Framework::Scripting {
         static void ProcessPendingResponses(v8::Isolate *isolate, v8::Local<v8::Context> context);
 
         /**
+         * Drop a stopped resource's registered handlers and any requests it
+         * originated, so its Global<Function> handles don't dangle until the
+         * whole isolate is torn down. Mirrors Events::CleanupResource.
+         */
+        static void CleanupResource(const std::string &resourceName);
+
+        /**
          * Cleanup all static V8 globals.
          * Must be called before the V8 isolate is disposed.
          */
@@ -56,8 +63,15 @@ namespace Framework::Scripting {
         static void RequestCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void SendCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
 
+        // A registered handler together with the isolate its Global<Function> is
+        // bound to. Requests/sends must not Get() a handler from a foreign isolate.
+        struct Handler {
+            v8::Isolate *isolate = nullptr;
+            v8::Global<v8::Function> function;
+        };
+
         // Message handler storage: resourceName -> messageType -> handler
-        static std::map<std::string, std::map<std::string, v8::Global<v8::Function>>> _handlers;
+        static std::map<std::string, std::map<std::string, Handler>> _handlers;
         static std::mutex _handlersMutex;
 
         // Pending request structure
