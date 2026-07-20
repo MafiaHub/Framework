@@ -426,6 +426,7 @@ namespace Framework::Scripting::Builtins {
 
         CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
         if (!ctx || !ctx->events || !ctx->resourceManager) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": context not available")));
             return;
         }
 
@@ -436,8 +437,10 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Function> handler = args[1].As<v8::Function>();
         std::string resourceName        = GetResourceContextWithFallback(isolate, manager, handler);
 
-        // If no resource context, we can't determine which resource to remove handlers for
+        // No resource context: like Events.on, this is a state error, not a silent no-op — we can't
+        // determine which resource's handler to remove.
         if (resourceName.empty()) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": must be called from within a resource")));
             return;
         }
 

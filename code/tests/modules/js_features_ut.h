@@ -584,6 +584,12 @@ MODULE(js_features, {
         err = RunJSErrorName(engine, "Core.Events.off('e', () => {})");
         STREQUALS(err.c_str(), "");
 
+        // State error: with no resource context, off() can't tell which resource's handler to drop,
+        // so it throws Exception::Error like Events.on — not a silent return (README idiom).
+        manager.SetCurrentResourceContext("");
+        err = RunJSErrorName(engine, "Core.Events.off('e', () => {})");
+        STREQUALS(err.c_str(), "Error");
+
         {
             v8::Isolate *isolate = engine.GetIsolate();
             v8::Locker locker(isolate);
