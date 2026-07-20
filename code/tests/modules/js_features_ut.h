@@ -552,6 +552,69 @@ MODULE(js_features, {
     });
 
     // ========================================
+    // RE-REGISTER SAFETY (callback-context reuse)
+    // ========================================
+    // A second Register() must not dangle the v8::Externals baked during the first one. Regression
+    // guard for the double-Register use-after-free: externals captured before the second call must
+    // still resolve to live memory afterwards.
+
+    // An unsubscribe closure from the first Register() must still remove its handler after a second.
+    IT("Second Register keeps a prior unsubscribe closure valid", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+
+        // Stash the unsubscribe closure from the first Register().
+        registerEvents(engine, manager);
+        RunJS(engine, "globalThis.oldUnsub = Core.Events.on('persist', () => {}); 0");
+        EQUALS(manager.GetEvents().GetListenerCount("persist"), (size_t)1);
+
+        // Re-register on the same Events instance (the path that previously freed the context
+        // out from under oldUnsub). Handler tables are untouched.
+        registerEvents(engine, manager);
+        EQUALS(manager.GetEvents().GetListenerCount("persist"), (size_t)1);
+
+        // The old closure still reaches the live context and removes its handler.
+        RunJS(engine, "globalThis.oldUnsub(); 0");
+        EQUALS(manager.GetEvents().GetListenerCount("persist"), (size_t)0);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // The old Core.Events.on function (its template data holds the context) must still dispatch
+    // into the same Events after a second Register(), and the new Core.Events must work too.
+    IT("Second Register keeps prior function-template externals valid", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+
+        // Capture the on() function from the first Register(), then re-register over it.
+        registerEvents(engine, manager);
+        RunJS(engine, "globalThis.oldOn = Core.Events.on; 0");
+        registerEvents(engine, manager);
+
+        // The captured function still registers into the same Events instance.
+        RunJS(engine, "globalThis.oldOn('again', () => {}); 0");
+        EQUALS(manager.GetEvents().GetListenerCount("again"), (size_t)1);
+
+        // And the freshly-installed Core.Events works too.
+        RunJS(engine, "Core.Events.on('fresh', () => {}); 0");
+        EQUALS(manager.GetEvents().GetListenerCount("fresh"), (size_t)1);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
     // CONSOLE BUILTIN TESTS
     // ========================================
 

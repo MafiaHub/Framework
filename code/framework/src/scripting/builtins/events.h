@@ -211,7 +211,8 @@ namespace Framework::Scripting {
 
         mutable std::mutex _handlersMutex;
 
-        // Stored callback context (lifetime tied to this Events instance)
+        // Callback context passed to V8 via Externals. Allocated once and reused, never
+        // reallocated — its address outlives individual Register() calls. See Events::Register.
         std::unique_ptr<CallbackContext> _callbackContext;
 
         // Track pending AllSettled callbacks for cleanup on destruction

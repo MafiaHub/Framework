@@ -47,10 +47,15 @@ namespace Framework::Scripting {
     }
 
     void Events::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager, bool isClient) {
-        // Create callback context that will be passed to all V8 callbacks
-        _callbackContext                  = std::make_unique<CallbackContext>();
+        // Reuse the context across repeated Register() calls; never reallocate. Its address is
+        // baked into non-owning v8::Externals (template data and on() unsubscribe closures) that
+        // outlive this call, so replacing it would dangle them. Contents are invariant anyway.
+        if (!_callbackContext) {
+            _callbackContext = std::make_unique<CallbackContext>();
+        }
         _callbackContext->events          = this;
         _callbackContext->resourceManager = resourceManager;
+        _callbackContext->valid.store(true, std::memory_order_release);
 
         v8::Local<v8::Object> eventsObj     = v8::Object::New(isolate);
         v8::Local<v8::External> contextData = v8::External::New(isolate, _callbackContext.get());
