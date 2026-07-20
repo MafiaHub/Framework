@@ -552,11 +552,15 @@ namespace Framework::Scripting {
             _pendingCallbacks.insert(callbackData);
         }
 
-        // The then-handler reaches its data through a raw pointer wrapped in an External. Lifetime
-        // is owned by _pendingCallbacks (the shared_ptr above); the handler checks the cancelled
-        // flag first, so if Events is destroyed before it runs it bails out safely.
-        AllSettledCallbackData *rawData      = callbackData.get();
-        v8::Local<v8::External> resolverData = v8::External::New(isolate, rawData);
+        // The then-handler reaches its data through an External, and must own a strong reference
+        // for the whole microtask lifetime. Events::~Events() clears _pendingCallbacks, so if that
+        // set were the only owner the data would be freed before a still-pending handler reads
+        // `cancelled` (use-after-free). Hand the handler its own shared_ptr on the heap: it releases
+        // that reference when it runs, and destruction only drops the registry's reference. (If the
+        // handler never runs — isolate torn down first — this one holder leaks, which is bounded and
+        // memory-safe, unlike the free-before-read it replaces.)
+        auto *handlerRef                     = new std::shared_ptr<AllSettledCallbackData>(callbackData);
+        v8::Local<v8::External> resolverData = v8::External::New(isolate, handlerRef);
 
         v8::MaybeLocal<v8::Function> maybeThenHandler = v8::Function::New(
             context,
@@ -564,7 +568,12 @@ namespace Framework::Scripting {
                 v8::Isolate *iso           = info.GetIsolate();
                 v8::Local<v8::Context> ctx = iso->GetCurrentContext();
 
-                AllSettledCallbackData *data = static_cast<AllSettledCallbackData *>(info.Data().As<v8::External>()->Value());
+                // Take our own strong reference, then free the heap holder: the data now outlives
+                // Events even if _pendingCallbacks was already cleared. A then-handler runs at most
+                // once, so deleting the holder here is safe.
+                auto *handlerRef                             = static_cast<std::shared_ptr<AllSettledCallbackData> *>(info.Data().As<v8::External>()->Value());
+                std::shared_ptr<AllSettledCallbackData> data = *handlerRef;
+                delete handlerRef;
 
                 // Check if Events was destroyed before this callback ran
                 if (data->cancelled.load(std::memory_order_acquire)) {
@@ -643,22 +652,24 @@ namespace Framework::Scripting {
                     res->Resolve(ctx, v8::Undefined(iso)).Check();
                 }
 
-                // Remove from tracking - the shared_ptr in _pendingCallbacks will be erased,
-                // releasing the last reference and freeing the data
-                data->owner->RemovePendingCallback(data);
+                // Remove from tracking - drops the registry's reference; the data is freed once
+                // this handler's own reference (`data`) also goes out of scope.
+                data->owner->RemovePendingCallback(data.get());
             },
             resolverData);
 
         // Function::New and Promise::Then both return an empty MaybeLocal on a terminating
         // isolate; unwrapping either with ToLocalChecked() would abort the process. Fail soft:
-        // drop our tracking entry so the shared_ptr isn't leaked, then bail out.
+        // the handler will never run, so free its heap holder and drop the tracking entry here.
         v8::Local<v8::Function> thenHandler;
         if (!maybeThenHandler.ToLocal(&thenHandler)) {
+            delete handlerRef;
             RemovePendingCallback(callbackData.get());
             return;
         }
 
         if (allPromise->Then(context, thenHandler).IsEmpty()) {
+            delete handlerRef;
             RemovePendingCallback(callbackData.get());
             return;
         }
