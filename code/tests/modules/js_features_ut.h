@@ -12,6 +12,8 @@
 #include "scripting/builtins/builtins.h"
 #include "scripting/builtins/console.h"
 #include "scripting/builtins/events.h"
+#include "scripting/builtins/imports.h"
+#include "scripting/resource/resource.h"
 #include "scripting/resource/resource_manager.h"
 
 #include <cppfs/FileHandle.h>
@@ -670,6 +672,55 @@ MODULE(js_features, {
         EQUALS(RunJS(engine, "globalThis.__r"), 2);
 
         cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
+    // IMPORTS (real cross-resource values)
+    // ========================================
+    // imports.get must return an object of *real* export values keyed by name — mirroring
+    // Exports.get — not a placeholder listing export names. Regression guard for the old
+    // `_availableExports` stub that returned names instead of values.
+    IT("imports.get builds an object of real export values keyed by name", {
+        EventsTestHelper::Setup();
+
+        // Provider resource declaring two exports in its manifest.
+        std::string providerPath = EventsTestHelper::GetTestPath() + "/provider";
+        {
+            cppfs::FileHandle dir = cppfs::fs::open(providerPath);
+            if (!dir.exists()) dir.createDirectory();
+            std::ofstream pkg(providerPath + "/package.json");
+            pkg << R"({"name":"provider","version":"1.0.0","mafiahub":{"exports":["alpha","beta"]}})";
+        }
+
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        v8::Isolate *isolate = engine.GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+
+            Resource provider(providerPath);
+            provider.SetIsolate(isolate);
+            EQUALS(provider.RegisterExport("alpha", v8::Integer::New(isolate, 42)), true);
+            EQUALS(provider.RegisterExport("beta", v8pp::to_v8(isolate, std::string("hello"))), true);
+
+            v8::Local<v8::Object> imported = Imports::BuildImportsObject(isolate, context, &provider);
+            context->Global()->Set(context, v8pp::to_v8(isolate, "__imp"), imported).Check();
+        }
+
+        // Real values, not a name list.
+        EQUALS(RunJS(engine, "__imp.alpha"), 42);
+        EQUALS(RunJSBool(engine, "__imp.beta === 'hello'"), true);
+        // The old placeholder key must be gone, and only the two exports present.
+        EQUALS(RunJSBool(engine, "__imp._availableExports === undefined"), true);
+        EQUALS(RunJSBool(engine, "Object.keys(__imp).length === 2"), true);
+
         engine.Shutdown();
         EventsTestHelper::Cleanup();
     });
