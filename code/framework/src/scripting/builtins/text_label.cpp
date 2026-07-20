@@ -169,13 +169,13 @@ namespace Framework::Scripting::Builtins {
         v8::HandleScope hs(isolate);
 
         if (info.Length() < 4 || !info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber() || !info[3]->IsString()) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "TextLabel.create: expected (x, y, z, text, fontSize?, drawDistance?, virtualWorld?)"));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "TextLabel.create: expected (x, y, z, text, fontSize?, drawDistance?, virtualWorld?)")));
             return;
         }
 
         auto *replication = CoreModules::GetReplication();
         if (!replication) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "TextLabel.create: replication unavailable"));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: replication unavailable")));
             return;
         }
 
@@ -184,13 +184,13 @@ namespace Framework::Scripting::Builtins {
             ++count;
         });
         if (count >= kMaxLabels) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "TextLabel.create: label limit reached"));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: label limit reached")));
             return;
         }
 
         auto *label = replication->CreateEntity<LabelEntity>();
         if (!label) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "TextLabel.create: failed to create entity (type not registered?)"));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: failed to create entity (type not registered?)")));
             return;
         }
 

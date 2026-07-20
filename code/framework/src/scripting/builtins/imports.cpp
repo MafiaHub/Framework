@@ -46,12 +46,12 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 1) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get requires 1 argument: resourceName")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "imports.get requires 1 argument: resourceName")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get: resourceName must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "imports.get: resourceName must be a string")));
             return;
         }
 

@@ -203,7 +203,7 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 1 || !args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + " requires an eventName string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + " requires an eventName string")));
             return;
         }
         const std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
@@ -265,17 +265,17 @@ namespace Framework::Scripting {
         const char *api                = EventApiName(scope == HandlerScope::Client, "on");
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": eventName must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + ": eventName must be a string")));
             return;
         }
 
         if (!args[1]->IsFunction()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": handler must be a function")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + ": handler must be a function")));
             return;
         }
 
@@ -379,12 +379,12 @@ namespace Framework::Scripting {
         const char *api = EventApiName(scope == HandlerScope::Client, "once");
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
             return;
         }
 
         if (!args[0]->IsString() || !args[1]->IsFunction()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": invalid arguments")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + ": invalid arguments")));
             return;
         }
 
@@ -414,11 +414,13 @@ namespace Framework::Scripting {
         const char *api = EventApiName(scope == HandlerScope::Client, "off");
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
             return;
         }
 
+        // Bad arguments must throw, like Events.on — a silent no-op here hid caller bugs.
         if (!args[0]->IsString() || !args[1]->IsFunction()) {
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + ": eventName must be a string and handler a function")));
             return;
         }
 
@@ -739,12 +741,12 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 1) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.emit requires at least 1 argument: eventName")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.emit requires at least 1 argument: eventName")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.emit: eventName must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.emit: eventName must be a string")));
             return;
         }
 
@@ -771,12 +773,12 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.emitTo requires at least 2 arguments: resourceName, eventName")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.emitTo requires at least 2 arguments: resourceName, eventName")));
             return;
         }
 
         if (!args[0]->IsString() || !args[1]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.emitTo: resourceName and eventName must be strings")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.emitTo: resourceName and eventName must be strings")));
             return;
         }
 
@@ -803,7 +805,7 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 2 || !args[0]->IsString() || !args[1]->IsFunction()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.onLocal requires 2 arguments: eventName, handler")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.onLocal requires 2 arguments: eventName, handler")));
             return;
         }
 
@@ -839,7 +841,7 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 1 || !args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.emitLocal requires at least 1 argument: eventName")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.emitLocal requires at least 1 argument: eventName")));
             return;
         }
 

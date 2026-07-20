@@ -43,10 +43,11 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
-        void Send(const std::string &text, const std::string &author, uint32_t color, MafiaNet::RakNetGUID target, bool broadcast) {
+        // Returns false when the network peer is unavailable so the caller can throw a state error.
+        bool Send(const std::string &text, const std::string &author, uint32_t color, MafiaNet::RakNetGUID target, bool broadcast) {
             auto *net = CoreModules::GetNetworkPeer();
             if (!net) {
-                return;
+                return false;
             }
             Networking::RPC::ChatMessage payload;
             payload.text   = text;
@@ -58,6 +59,7 @@ namespace Framework::Scripting::Builtins {
             else {
                 net->SendRPC(payload, target);
             }
+            return true;
         }
     } // namespace
 
@@ -95,7 +97,7 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate = info.GetIsolate();
         v8::HandleScope hs(isolate);
         if (info.Length() < 1 || !info[0]->IsString()) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "Chat.sendToAll: expected (text, opts?)"));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Chat.sendToAll: expected (text, opts?)")));
             return;
         }
         std::string author;
@@ -103,22 +105,27 @@ namespace Framework::Scripting::Builtins {
         if (info.Length() >= 2) {
             ReadOptions(isolate, info[1], author, color);
         }
-        Send(v8pp::from_v8<std::string>(isolate, info[0]), author, color, MafiaNet::UNASSIGNED_RAKNET_GUID, true);
+        if (!Send(v8pp::from_v8<std::string>(isolate, info[0]), author, color, MafiaNet::UNASSIGNED_RAKNET_GUID, true)) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.sendToAll: network peer unavailable")));
+        }
     }
 
     void Chat::JS_SendToPlayer(const v8::FunctionCallbackInfo<v8::Value> &info) {
         v8::Isolate *isolate = info.GetIsolate();
         v8::HandleScope hs(isolate);
         if (info.Length() < 2 || !info[1]->IsString()) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "Chat.sendToPlayer: expected (player, text, opts?)"));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Chat.sendToPlayer: expected (player, text, opts?)")));
             return;
         }
+        // Bad argument (not a player) is the caller's bug — throw, mirroring Entity.setVisibleTo.
         auto *entity = v8pp::class_<Entity>::unwrap_object(isolate, info[0]);
         if (!entity) {
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Chat.sendToPlayer: expected a Player")));
             return;
         }
         auto *handle = entity->GetHandle();
         if (!handle) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.sendToPlayer: player has no owning connection")));
             return;
         }
         std::string author;
@@ -126,6 +133,8 @@ namespace Framework::Scripting::Builtins {
         if (info.Length() >= 3) {
             ReadOptions(isolate, info[2], author, color);
         }
-        Send(v8pp::from_v8<std::string>(isolate, info[1]), author, color, MafiaNet::ToGuid(handle->ownerGUID), false);
+        if (!Send(v8pp::from_v8<std::string>(isolate, info[1]), author, color, MafiaNet::ToGuid(handle->ownerGUID), false)) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.sendToPlayer: network peer unavailable")));
+        }
     }
 } // namespace Framework::Scripting::Builtins

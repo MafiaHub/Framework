@@ -132,6 +132,13 @@ static bool RunJSThrows(Framework::Scripting::NodeEngine &engine, const char *co
     return tryCatch.HasCaught();
 }
 
+// Run code and return the constructor name of whatever it throws ("TypeError", "Error", ...),
+// or "" when it does not throw. Used to assert the builtins' throw-idiom convention.
+static std::string RunJSErrorName(Framework::Scripting::NodeEngine &engine, const std::string &code) {
+    std::string wrapped = "(() => { try { " + code + "; return ''; } catch (e) { return (e && e.constructor && e.constructor.name) || 'Error'; } })()";
+    return RunJSString(engine, wrapped.c_str());
+}
+
 // Test helper for Events tests
 class EventsTestHelper {
   public:
@@ -419,6 +426,63 @@ MODULE(js_features, {
         EQUALS(RunJSThrows(engine, "Core.Events.on('test')"), true);
         EQUALS(RunJSThrows(engine, "Core.Events.on(123, () => {})"), true);
         EQUALS(RunJSThrows(engine, "Core.Events.on('test', 'notafunction')"), true);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            manager.GetEvents().CleanupResource("testResource");
+        }
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // Throw-idiom convention: arg-shape errors are TypeError (not Error), and Events.off no longer
+    // swallows bad arguments — it throws like Events.on. Guards the builtins conventions sweep.
+    IT("Events arg-shape errors are TypeError and off is no longer silent", {
+        EventsTestHelper::Setup();
+
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Core"), coreObj).Check();
+            manager.GetEvents().Register(isolate, context, coreObj, &manager);
+            manager.SetCurrentResourceContext("testResource");
+        }
+
+        std::string err;
+        // Arg-shape failures throw TypeError.
+        err = RunJSErrorName(engine, "Core.Events.on()");
+        STREQUALS(err.c_str(), "TypeError");
+        err = RunJSErrorName(engine, "Core.Events.on(123, () => {})");
+        STREQUALS(err.c_str(), "TypeError");
+        err = RunJSErrorName(engine, "Core.Events.emit()");
+        STREQUALS(err.c_str(), "TypeError");
+        err = RunJSErrorName(engine, "Core.Events.emitTo('r')");
+        STREQUALS(err.c_str(), "TypeError");
+
+        // Events.off used to silently ignore bad arguments; it now throws TypeError like on().
+        err = RunJSErrorName(engine, "Core.Events.off('e', 'notafn')");
+        STREQUALS(err.c_str(), "TypeError");
+        err = RunJSErrorName(engine, "Core.Events.off('e')");
+        STREQUALS(err.c_str(), "TypeError");
+        // A well-formed off() with no matching handler stays a quiet no-op.
+        err = RunJSErrorName(engine, "Core.Events.off('e', () => {})");
+        STREQUALS(err.c_str(), "");
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -770,6 +834,13 @@ MODULE(js_features, {
         config.resourcesPath = EventsTestHelper::GetTestPath();
         ResourceManager manager(&engine, config);
         registerMessages(engine, manager);
+
+        // Arg-shape failures throw TypeError (convention), before any state checks.
+        std::string margErr;
+        margErr = RunJSErrorName(engine, "Framework.messages.request(123)");
+        STREQUALS(margErr.c_str(), "TypeError");
+        margErr = RunJSErrorName(engine, "Framework.messages.send('r')");
+        STREQUALS(margErr.c_str(), "TypeError");
 
         // Register the handler as resource 'provider'.
         manager.SetCurrentResourceContext("provider");
