@@ -83,7 +83,7 @@ they feed, which we don't get to renumber freely. Know which one an API wants:
 
 | Where | Representation |
 |---|---|
-| `Core.Color` internal (`r`/`g`/`b`/`a`, `vec()`) | floats in `[0, 1]` |
+| `Color` internal (`r`/`g`/`b`/`a`, `vec()`) | floats in `[0, 1]` |
 | `Color.fromRGB(r, g, b, a?)` | byte components `0–255` |
 | `Chat` message `color` option | packed `0xRRGGBBAA` (uint32) |
 | `TextLabel` `color` / `setColor` | packed **ARGB** `0xAARRGGBB` (uint32) |
@@ -93,7 +93,7 @@ different existing payloads; unifying them is a wire-format change, out of scope
 for a scripting-layer bump.
 
 To spare scripts from packing bytes in the right order, **the packed-int APIs
-also accept a `Core.Color`**: `Chat.send(text, { color: new Core.Color(...) })`
-and `label.setColor(new Core.Color(...))` each convert the Color into that API's
+also accept a `Color`**: `Chat.send(text, { color: new Color(...) })`
+and `label.setColor(new Color(...))` each convert the Color into that API's
 own packed layout. Prefer passing a `Color`; reach for the raw packed int only
 when you already have one.
