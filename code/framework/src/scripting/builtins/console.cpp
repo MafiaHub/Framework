@@ -16,7 +16,7 @@
 #include <limits>
 #include <sstream>
 
-namespace Framework::Scripting {
+namespace Framework::Scripting::Builtins {
 
     void Console::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *resourceManager) {
         v8::Local<v8::Object> consoleObj = v8::Object::New(isolate);
@@ -190,4 +190,4 @@ namespace Framework::Scripting {
         LogWithLevel(args, spdlog::level::debug);
     }
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

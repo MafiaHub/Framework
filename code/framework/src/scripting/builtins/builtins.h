@@ -16,12 +16,18 @@
 
 #include <v8.h>
 
+// Conventions every builtin here follows — namespace, throw idiom, registration
+// shape — are documented in README.md next to this file. Match them when adding
+// or editing a builtin.
+
 namespace Framework::Scripting::Builtins {
 
     /**
-     * Register all builtin types on the target object.
+     * Register the pure value types (Vector2/3/4, Quaternion, Color) on the target
+     * object. Handle types (Entity, Player, TextLabel) and service APIs register
+     * themselves — see README.md. Counterpart to UnregisterAll.
      */
-    inline void RegisterAll(v8::Isolate *isolate, v8::Local<v8::Object> target) {
+    inline void RegisterValueTypes(v8::Isolate *isolate, v8::Local<v8::Object> target) {
         Vector2::Register(isolate, target);
         Vector3::Register(isolate, target);
         Vector4::Register(isolate, target);

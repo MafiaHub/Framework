@@ -13,13 +13,9 @@
 
 #include <logging/logger.h>
 
-namespace Framework::Scripting {
-
-    ResourceManager *Imports::_resourceManager = nullptr;
+namespace Framework::Scripting::Builtins {
 
     void Imports::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, ResourceManager *resourceManager) {
-        _resourceManager = resourceManager;
-
         v8::Local<v8::Object> importsObj = v8::Object::New(isolate);
 
         // Store resource manager as external data for callbacks
@@ -46,12 +42,12 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 1) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get requires 1 argument: resourceName")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "imports.get requires 1 argument: resourceName")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get: resourceName must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "imports.get: resourceName must be a string")));
             return;
         }
 
@@ -85,36 +81,37 @@ namespace Framework::Scripting {
             }
         }
 
-        // Get registered export names and build an object
-        std::vector<std::string> exportNames = resource->GetRegisteredExportNames();
-
-        if (exportNames.empty()) {
-            // Return empty object if no exports
-            args.GetReturnValue().Set(v8::Object::New(isolate));
+        // Validate isolate ownership - export values are bound to their resource's isolate.
+        // Mirrors Exports::GetCallback: V8 values cannot be shared across isolates.
+        v8::Isolate *resourceIsolate = resource->GetIsolate();
+        if (resourceIsolate != isolate) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get: cannot access exports from resource '" + resourceName + "' - cross-isolate access is not supported. Both resources must share the same isolate.")));
             return;
         }
 
-        // Note: The current implementation stores exports as v8::Global<v8::Value>
-        // We need to access them from the resource. For now, return an object
-        // that indicates the exports are available but we need the isolate
-        // from the target resource to actually retrieve them.
+        // Build an object mapping every registered export name to its real value.
+        v8::Local<v8::Object> exportsObj = BuildImportsObject(isolate, context, resource);
 
-        // For cross-resource exports to work properly, we need a shared context
-        // or value serialization. For now, return the list of available exports.
-
-        v8::Local<v8::Object> exportsObj = v8::Object::New(isolate);
-
-        // Add a special property listing available exports
-        v8::Local<v8::Array> exportArray = v8::Array::New(isolate, static_cast<int>(exportNames.size()));
-        for (size_t i = 0; i < exportNames.size(); ++i) {
-            exportArray->Set(context, static_cast<uint32_t>(i), v8pp::to_v8(isolate, exportNames[i])).Check();
-        }
-        exportsObj->Set(context, v8pp::to_v8(isolate, "_availableExports"), exportArray).Check();
-
-        // Log for debugging
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Imported {} exports from '{}'", callerResource, exportNames.size(), resourceName);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Imported {} exports from '{}'", callerResource, resource->GetRegisteredExportNames().size(), resourceName);
 
         args.GetReturnValue().Set(exportsObj);
     }
 
-} // namespace Framework::Scripting
+    v8::Local<v8::Object> Imports::BuildImportsObject(v8::Isolate *isolate, v8::Local<v8::Context> context, const Resource *resource) {
+        v8::Local<v8::Object> exportsObj = v8::Object::New(isolate);
+        if (!resource) {
+            return exportsObj;
+        }
+
+        for (const std::string &exportName : resource->GetRegisteredExportNames()) {
+            v8::Local<v8::Value> exportValue = resource->GetExportValue(exportName);
+            if (exportValue.IsEmpty()) {
+                continue;
+            }
+            exportsObj->Set(context, v8pp::to_v8(isolate, exportName), exportValue).Check();
+        }
+
+        return exportsObj;
+    }
+
+} // namespace Framework::Scripting::Builtins

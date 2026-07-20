@@ -146,7 +146,7 @@ namespace Framework::Scripting {
             v8::Local<v8::Context> context = _context.Get(_isolate);
             v8::Context::Scope contextScope(context);
 
-            Messages::Shutdown();
+            Builtins::Messages::Shutdown();
         }
 
         // Clear all timer callbacks (prevent dangling references)

@@ -12,7 +12,7 @@
 
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/console.h>
-#include <scripting/builtins/environment.h>
+#include <scripting/builtins/execution_environment.h>
 #include <scripting/builtins/events.h>
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
@@ -134,26 +134,26 @@ namespace Framework::Integrations::Client::Scripting {
         v8::Local<v8::Context> context = _engine->GetContext();
         v8::Context::Scope contextScope(context);
 
-        // Get Framework and Core global objects (created by V8Engine)
+        // Framework global object (created by V8Engine); builtins register at the global root.
         v8::Local<v8::Object> frameworkObj = _engine->GetFrameworkObject();
-        v8::Local<v8::Object> coreObj      = _engine->GetCoreObject();
+        v8::Local<v8::Object> global       = context->Global();
 
         Framework::Scripting::SetScriptingCatalog(isolate, "framework-client");
 
-        // Register math type builtins on Core object
-        Framework::Scripting::Builtins::RegisterAll(isolate, coreObj);
+        // Register value-type builtins at the global root (new Vector3, not new Core.Vector3)
+        Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
 
         // Register communication APIs
-        _resourceManager->GetEvents().Register(isolate, context, coreObj, _resourceManager.get(), /*isClient*/ true);
-        Framework::Scripting::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
-        Framework::Scripting::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());
-        Framework::Scripting::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());
+        _resourceManager->GetEvents().Register(isolate, context, global, _resourceManager.get(), /*isClient*/ true);
+        Framework::Scripting::Builtins::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
+        Framework::Scripting::Builtins::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());
+        Framework::Scripting::Builtins::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());
 
         // Register console override
-        Framework::Scripting::Console::Register(isolate, context, _resourceManager.get());
+        Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
 
-        // Register environment info
-        Framework::Scripting::Environment::Register(isolate, context, coreObj, true);
+        // Register environment info at the global root
+        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, true);
 
         // Register web views API (client only)
         Builtins::Web::Register(isolate, context, frameworkObj, _resourceManager.get());
@@ -229,7 +229,7 @@ namespace Framework::Integrations::Client::Scripting {
                 v8::Local<v8::Context> context = _engine->GetContext();
                 v8::Context::Scope contextScope(context);
 
-                Framework::Scripting::Messages::ProcessPendingResponses(isolate, context);
+                Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);
             }
 
             // Poll keys and dispatch key binds (self-scopes the isolate).

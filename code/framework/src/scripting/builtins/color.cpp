@@ -38,6 +38,20 @@ namespace Framework::Scripting::Builtins {
         return ss.str();
     }
 
+    namespace {
+        uint32_t colorByte(float v) {
+            return static_cast<uint32_t>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f));
+        }
+    } // namespace
+
+    uint32_t Color::toRGBA() const {
+        return (colorByte(_color.r) << 24) | (colorByte(_color.g) << 16) | (colorByte(_color.b) << 8) | colorByte(_color.a);
+    }
+
+    uint32_t Color::toARGB() const {
+        return (colorByte(_color.a) << 24) | (colorByte(_color.r) << 16) | (colorByte(_color.g) << 8) | colorByte(_color.b);
+    }
+
     std::string Color::toString() const {
         std::ostringstream ss;
         ss << "Color(" << _color.r << ", " << _color.g << ", " << _color.b << ", " << _color.a << ")";
@@ -85,14 +99,26 @@ namespace Framework::Scripting::Builtins {
         auto &cls = _classes[isolate];
         cls       = std::make_unique<v8pp::class_<Color>>(isolate, GetScriptingCatalog(isolate), "Color", "Mutable RGBA color exposed as Core.Color, with components stored from 0 to 1.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
-        cls->ctor<float, float, float, std::optional<float>>(v8pp::metadata::docs("void",
-                                                                 {
-                                                                     v8pp::metadata::param("r", "number", false, "Initial red component from 0 to 1."),
-                                                                     v8pp::metadata::param("g", "number", false, "Initial green component from 0 to 1."),
-                                                                     v8pp::metadata::param("b", "number", false, "Initial blue component from 0 to 1."),
-                                                                     v8pp::metadata::param("a", "number", true, "Optional alpha component from 0 to 1; defaults to 1."),
-                                                                 },
-                                                                 "Creates a color from normalized RGBA components."))
+        // Custom constructor callback rather than the default ctor<...> factory: v8pp's factory
+        // forwards args as std::optional<float>&&, which its is_optional trait doesn't recognize, so
+        // the default path would wrongly require all four arguments. This makes alpha truly optional
+        // (defaults to 1) while keeping the documented metadata below.
+        cls->ctor<float, float, float, std::optional<float>>(
+            v8pp::metadata::docs("void",
+                {
+                    v8pp::metadata::param("r", "number", false, "Initial red component from 0 to 1."),
+                    v8pp::metadata::param("g", "number", false, "Initial green component from 0 to 1."),
+                    v8pp::metadata::param("b", "number", false, "Initial blue component from 0 to 1."),
+                    v8pp::metadata::param("a", "number", true, "Optional alpha component from 0 to 1; defaults to 1."),
+                },
+                "Creates a color from normalized RGBA components."),
+            [](const v8::FunctionCallbackInfo<v8::Value> &args) -> Color * {
+                v8::Local<v8::Context> ctx = args.GetIsolate()->GetCurrentContext();
+                const auto num             = [&](int i, double fallback) {
+                    return (args.Length() > i && args[i]->IsNumber()) ? args[i]->NumberValue(ctx).FromMaybe(fallback) : fallback;
+                };
+                return new Color(static_cast<float>(num(0, 0.0)), static_cast<float>(num(1, 0.0)), static_cast<float>(num(2, 0.0)), static_cast<float>(num(3, 1.0)));
+            })
             // Instance methods
             .function("lerp", &Color::lerp,
                 v8pp::metadata::docs("this", {v8pp::metadata::param("target", "Color", false, "Destination color."), v8pp::metadata::param("t", "number", false, "Interpolation factor; 0 keeps this color and 1 reaches target.")},
@@ -104,7 +130,7 @@ namespace Framework::Scripting::Builtins {
                     "Replaces this color's normalized components in place.", "This mutated color for chaining."))
             .function("clone", &Color::clone, v8pp::metadata::docs("Color", {}, "Creates an independent copy of this color.", "New color with the same components."))
             .function("toHex", &Color::toHex,
-                v8pp::metadata::docs("string", {v8pp::metadata::param("includeAlpha", "boolean", true, "Whether to append the alpha byte; defaults to false.")}, "Converts normalized components to a hexadecimal CSS-style string.", "Uppercase #RRGGBB or #RRGGBBAA string."))
+                v8pp::metadata::docs("string", {v8pp::metadata::param("includeAlpha", "boolean", true, "Whether to append the alpha byte; defaults to false.")}, "Converts normalized components to a hexadecimal CSS-style string.", "Lowercase #rrggbb or #rrggbbaa string."))
             .function("toString", &Color::toString, v8pp::metadata::docs("string", {}, "Formats this color for logging and debugging.", "Text in Color(r, g, b, a) form."));
 
         // Add properties manually using v8's SetNativeDataProperty with correct signature
@@ -207,7 +233,7 @@ namespace Framework::Scripting::Builtins {
         auto &metadata = GetScriptingCatalog(isolate).constructor("Color");
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("toJSON", v8pp::metadata::docs("{ r: number; g: number; b: number; a: number }", {}, "Converts this color to a plain object for JSON.stringify.", "Object containing the current normalized components.")));
         metadata.record(v8pp::metadata::function_of<decltype(&Color::fromHex)>("fromHex",
-            v8pp::metadata::docs("Color", {v8pp::metadata::param("hex", "string", false, "Hexadecimal color in #RGB, #RGBA, #RRGGBB, or #RRGGBBAA form.")}, "Parses a hexadecimal color string.", "Parsed color, or opaque white when the input is invalid."), true));
+            v8pp::metadata::docs("Color", {v8pp::metadata::param("hex", "string", false, "Hexadecimal color in #RRGGBB or #RRGGBBAA form; the leading # is optional. Three- and four-digit shorthands are not supported.")}, "Parses a hexadecimal color string.", "Parsed color, or opaque white when the input is invalid."), true));
         metadata.record(v8pp::metadata::function_of<decltype(&Color::fromRGB)>("fromRGB",
             v8pp::metadata::docs("Color",
                 {v8pp::metadata::param("r", "number", false, "Red byte from 0 to 255."), v8pp::metadata::param("g", "number", false, "Green byte from 0 to 255."), v8pp::metadata::param("b", "number", false, "Blue byte from 0 to 255."),
@@ -231,6 +257,11 @@ namespace Framework::Scripting::Builtins {
         v8pp::class_<Color> &cls = GetClass(isolate);
         auto ctx                 = isolate->GetCurrentContext();
         global->Set(ctx, v8pp::to_v8(isolate, "Color"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
+    }
+
+    v8::Local<v8::Object> Color::NewInstance(v8::Isolate *isolate, const glm::vec4 &value) {
+        v8pp::class_<Color> &cls = GetClass(isolate);
+        return cls.import_external(isolate, new Color(value));
     }
 
     void Color::UnregisterIsolate(v8::Isolate *isolate) {

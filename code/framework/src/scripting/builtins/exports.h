@@ -13,6 +13,9 @@
 
 namespace Framework::Scripting {
     class ResourceManager;
+}
+
+namespace Framework::Scripting::Builtins {
 
     class Exports final {
       public:
@@ -24,8 +27,6 @@ namespace Framework::Scripting {
       private:
         static void RegisterCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void GetCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-
-        static ResourceManager *_resourceManager;
     };
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

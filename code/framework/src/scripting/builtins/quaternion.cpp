@@ -52,20 +52,21 @@ namespace Framework::Scripting::Builtins {
         }
 
         auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Quaternion>>(isolate, GetScriptingCatalog(isolate), "Quaternion", "Mutable quaternion exposed as Core.Quaternion for three-dimensional rotations.");
+        cls       = std::make_unique<v8pp::class_<Quaternion>>(isolate, GetScriptingCatalog(isolate), "Quaternion", "Mutable quaternion exposed as Core.Quaternion for three-dimensional rotations. Components are scalar-first (w, x, y, z), matching GLM — not the x, y, z, w order some libraries use.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
         cls->ctor<float, float, float, float>(v8pp::metadata::docs("void",
                                                   {
-                                                      v8pp::metadata::param("w", "number", false, "Initial scalar component."),
+                                                      v8pp::metadata::param("w", "number", false, "Initial scalar component (comes first — this is not x, y, z, w order)."),
                                                       v8pp::metadata::param("x", "number", false, "Initial X imaginary component."),
                                                       v8pp::metadata::param("y", "number", false, "Initial Y imaginary component."),
                                                       v8pp::metadata::param("z", "number", false, "Initial Z imaginary component."),
                                                   },
-                                                  "Creates a quaternion in w, x, y, z component order."))
+                                                  "Creates a quaternion in scalar-first w, x, y, z component order. Watch the trap: the scalar w is the first argument, unlike the x, y, z, w order used by some other libraries."))
             // Instance methods
-            .function("multiply", &Quaternion::multiply,
+            // Named mul for parity with Vector.mul (was multiply).
+            .function("mul", &Quaternion::multiply,
                 v8pp::metadata::docs("this", {v8pp::metadata::param("other", "Quaternion", false, "Rotation composed after this quaternion.")}, "Composes this rotation with another quaternion in place.", "This mutated quaternion for chaining."))
-            .function("normalize", &Quaternion::normalize, v8pp::metadata::docs("this", {}, "Normalizes this quaternion in place.", "This unit quaternion for chaining."))
+            .function("normalize", &Quaternion::normalize, v8pp::metadata::docs("this", {}, "Normalizes this quaternion in place; a zero quaternion becomes the identity rotation instead of NaN.", "This unit quaternion for chaining."))
             .function("conjugate", &Quaternion::conjugate, v8pp::metadata::docs("Quaternion", {}, "Computes the conjugate without changing this quaternion.", "New conjugated quaternion."))
             .function("inverse", &Quaternion::inverse, v8pp::metadata::docs("Quaternion", {}, "Computes the inverse rotation without changing this quaternion.", "New inverse quaternion."))
             .function("slerp", &Quaternion::slerp,
@@ -148,6 +149,22 @@ namespace Framework::Scripting::Builtins {
                 }
             });
         cls->document_property("z", v8pp::metadata::property_docs("number", "Mutable Z imaginary component."));
+
+        // Read-only property: length (magnitude / norm)
+        protoTemplate->SetNativeDataProperty(v8pp::to_v8(isolate, "length").As<v8::Name>(), [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
+            auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
+            if (self)
+                info.GetReturnValue().Set(self->getLength());
+        });
+        cls->document_property("length", {"Read-only magnitude (norm) of this quaternion; 1 for a unit rotation.", "number", true, false});
+
+        // Read-only property: lengthSquared
+        protoTemplate->SetNativeDataProperty(v8pp::to_v8(isolate, "lengthSquared").As<v8::Name>(), [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
+            auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
+            if (self)
+                info.GetReturnValue().Set(self->getLengthSquared());
+        });
+        cls->document_property("lengthSquared", {"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
 
         // toJSON method for JSON.stringify support - returns plain JS object
         protoTemplate->Set(v8pp::to_v8(isolate, "toJSON"), v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
