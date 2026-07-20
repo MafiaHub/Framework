@@ -1,12 +1,6 @@
 include(UpdateGitHash)
 update_git_version(FW "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/version.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/version.cpp")
 
-# Builtins are a cohesive source directory. Discover them automatically so
-# adding, deleting, or renaming one cannot leave the framework source list stale.
-file(GLOB FRAMEWORK_BUILTIN_SRC CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/scripting/builtins/*.cpp"
-)
-
 # List the source files
 set(FRAMEWORK_SRC
     src/logging/logger.cpp
@@ -38,7 +32,22 @@ set(FRAMEWORK_SRC
     # JavaScript scripting engine base and builtins (used by both client and server)
     # Note: node_engine.cpp and v8_engine.cpp are in OBJECT libraries due to special compile flags
     src/scripting/engine.cpp
-    ${FRAMEWORK_BUILTIN_SRC}
+    src/scripting/builtins/builtins.cpp
+    src/scripting/builtins/vector2.cpp
+    src/scripting/builtins/vector3.cpp
+    src/scripting/builtins/vector4.cpp
+    src/scripting/builtins/quaternion.cpp
+    src/scripting/builtins/color.cpp
+    src/scripting/builtins/entity.cpp
+    src/scripting/builtins/player.cpp
+    src/scripting/builtins/text_label.cpp
+    src/scripting/builtins/chat.cpp
+    src/scripting/builtins/events.cpp
+    src/scripting/builtins/messages.cpp
+    src/scripting/builtins/console.cpp
+    src/scripting/builtins/imports.cpp
+    src/scripting/builtins/exports.cpp
+    src/scripting/builtins/execution_environment.cpp
     src/scripting/resource/package_manifest.cpp
     src/scripting/resource/resource.cpp
     src/scripting/resource/resource_manager.cpp
