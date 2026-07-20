@@ -27,8 +27,6 @@ namespace Framework::Scripting::Builtins {
       private:
         static void RegisterCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void GetCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-
-        static ResourceManager *_resourceManager;
     };
 
 } // namespace Framework::Scripting::Builtins

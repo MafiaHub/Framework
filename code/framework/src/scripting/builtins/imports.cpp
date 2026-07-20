@@ -15,11 +15,7 @@
 
 namespace Framework::Scripting::Builtins {
 
-    ResourceManager *Imports::_resourceManager = nullptr;
-
     void Imports::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, ResourceManager *resourceManager) {
-        _resourceManager = resourceManager;
-
         v8::Local<v8::Object> importsObj = v8::Object::New(isolate);
 
         // Store resource manager as external data for callbacks

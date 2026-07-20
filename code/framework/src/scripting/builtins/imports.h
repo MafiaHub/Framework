@@ -56,8 +56,6 @@ namespace Framework::Scripting::Builtins {
       private:
         // V8 callback implementations
         static void GetCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-
-        static ResourceManager *_resourceManager;
     };
 
 } // namespace Framework::Scripting::Builtins

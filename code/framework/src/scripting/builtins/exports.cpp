@@ -15,11 +15,7 @@
 
 namespace Framework::Scripting::Builtins {
 
-    ResourceManager *Exports::_resourceManager = nullptr;
-
     void Exports::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, ResourceManager *resourceManager) {
-        _resourceManager = resourceManager;
-
         v8::Local<v8::Object> exportsObj = v8::Object::New(isolate);
 
         // Store resource manager as external data for callbacks
@@ -53,7 +49,6 @@ namespace Framework::Scripting::Builtins {
     void Exports::RegisterCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
             isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "exports.register requires 2 arguments: name, value")));
@@ -113,7 +108,6 @@ namespace Framework::Scripting::Builtins {
     void Exports::GetCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
             isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "exports.get requires 2 arguments: resourceName, exportName")));

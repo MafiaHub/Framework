@@ -198,7 +198,7 @@ namespace Framework::Scripting::Builtins {
     // Shared body for emitServer/emitAllClients: BroadcastRPC a named event + payload over the peer's
     // connections (a client peer reaches only the server, a server peer all clients). A string payload
     // is sent verbatim; any other value is JSON-serialized here. `api` names the caller in errors.
-    static void BroadcastLuaEvent(const v8::FunctionCallbackInfo<v8::Value> &args, const char *api) {
+    static void BroadcastScriptEvent(const v8::FunctionCallbackInfo<v8::Value> &args, const char *api) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
 
@@ -365,12 +365,12 @@ namespace Framework::Scripting::Builtins {
 
     // Client -> server, dispatched there to onClient(name, (player, data)).
     void Events::EmitServerCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        BroadcastLuaEvent(args, "emitServer");
+        BroadcastScriptEvent(args, "emitServer");
     }
 
     // Server -> every client, arriving as Core.Events.on(name, data).
     void Events::EmitAllClientsCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        BroadcastLuaEvent(args, "emitAllClients");
+        BroadcastScriptEvent(args, "emitAllClients");
     }
 
     void Events::OnceImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope) {

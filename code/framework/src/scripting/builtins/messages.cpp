@@ -20,12 +20,9 @@ namespace Framework::Scripting::Builtins {
     std::mutex Messages::_pendingRequestsMutex;
     std::vector<Messages::PendingResponse> Messages::_responseQueue;
     std::mutex Messages::_responseQueueMutex;
-    uint64_t Messages::_nextRequestId           = 1;
-    ResourceManager *Messages::_resourceManager = nullptr;
+    uint64_t Messages::_nextRequestId = 1;
 
     void Messages::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, ResourceManager *resourceManager) {
-        _resourceManager = resourceManager;
-
         v8::Local<v8::Object> messagesObj = v8::Object::New(isolate);
 
         // Store resource manager as external data for callbacks
@@ -398,7 +395,6 @@ namespace Framework::Scripting::Builtins {
             std::scoped_lock lock(_responseQueueMutex);
             _responseQueue.clear();
         }
-        _resourceManager = nullptr;
     }
 
 } // namespace Framework::Scripting::Builtins

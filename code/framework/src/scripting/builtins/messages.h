@@ -103,8 +103,6 @@ namespace Framework::Scripting::Builtins {
         static std::mutex _responseQueueMutex;
 
         static uint64_t _nextRequestId;
-
-        static ResourceManager *_resourceManager;
     };
 
 } // namespace Framework::Scripting::Builtins
