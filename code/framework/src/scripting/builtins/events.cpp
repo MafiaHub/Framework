@@ -536,7 +536,15 @@ namespace Framework::Scripting {
             return;
         }
 
-        v8::Local<v8::Promise> allPromise = allSettledResult.ToLocalChecked().As<v8::Promise>();
+        // A script-replaced Promise.allSettled may return a non-Promise; guard before
+        // casting so we don't reach ->Then() on a bad handle. Soft-resolve like the siblings.
+        v8::Local<v8::Value> allSettledValue = allSettledResult.ToLocalChecked();
+        if (!allSettledValue->IsPromise()) {
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            return;
+        }
+
+        v8::Local<v8::Promise> allPromise = allSettledValue.As<v8::Promise>();
 
         // Allocate callback data and track it for cleanup on Events destruction
         // Use shared_ptr so the data survives until either:

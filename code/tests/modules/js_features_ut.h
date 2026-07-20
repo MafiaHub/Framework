@@ -618,6 +618,35 @@ MODULE(js_features, {
         EventsTestHelper::Cleanup();
     });
 
+    // Non-Promise return: pre-fix, allSettledResult.ToLocalChecked().As<v8::Promise>()->Then()
+    // runs on a non-Promise handle and aborts. Post-fix the IsPromise() guard soft-resolves.
+    IT("emit survives a Promise.allSettled that returns a non-Promise", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerEvents(engine, manager);
+
+        RunJS(engine, R"(
+            globalThis.__done3 = 0;
+            Promise.allSettled = function () { return 42; };
+            Core.Events.on('hostile3', () => 1);
+            Core.Events.emit('hostile3').then(() => { globalThis.__done3 = 1; },
+                                              () => { globalThis.__done3 = 2; });
+            0
+        )");
+
+        for (int i = 0; i < 8; ++i) engine.Tick();
+
+        EQUALS(RunJS(engine, "globalThis.__done3"), 1);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
     // Sanity: the hardening must not swallow genuine, well-formed rejections.
     IT("emit still rejects when a handler rejects (real allSettled)", {
         EventsTestHelper::Setup();
