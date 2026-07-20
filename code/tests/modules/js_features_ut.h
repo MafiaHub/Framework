@@ -552,6 +552,100 @@ MODULE(js_features, {
     });
 
     // ========================================
+    // ALLSETTLED AGGREGATION ROBUSTNESS
+    // ========================================
+    // emit() aggregates via the script-mutable global Promise.allSettled, so its then-handler must
+    // not trust the record shape. These drive it with hostile shapes: pre-fix each aborts the
+    // process, post-fix each settles the emit() promise cleanly.
+
+    // Throwing `status` getter: pre-fix, Get("status").ToLocalChecked() aborts on the empty MaybeLocal.
+    IT("emit survives a Promise.allSettled whose records throw on access", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerEvents(engine, manager);
+
+        RunJS(engine, R"(
+            globalThis.__done = 0;
+            Promise.allSettled = function () {
+                return Promise.resolve([{ get status() { throw new Error('boom'); } }]);
+            };
+            Core.Events.on('hostile', () => 1);
+            Core.Events.emit('hostile').then(() => { globalThis.__done = 1; },
+                                             () => { globalThis.__done = 2; });
+            0
+        )");
+
+        // Drain microtasks so the then-handler and the emit() continuation run.
+        for (int i = 0; i < 8; ++i) engine.Tick();
+
+        // No crash, and the emit() promise settled — resolved, since no well-formed rejection.
+        EQUALS(RunJS(engine, "globalThis.__done"), 1);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // Non-array settled value: pre-fix it reaches info[0].As<v8::Array>() + Array::Length() (UB).
+    IT("emit survives a Promise.allSettled that resolves with a non-array", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerEvents(engine, manager);
+
+        RunJS(engine, R"(
+            globalThis.__done2 = 0;
+            Promise.allSettled = function () { return Promise.resolve("not-an-array"); };
+            Core.Events.on('hostile2', () => 1);
+            Core.Events.emit('hostile2').then(() => { globalThis.__done2 = 1; },
+                                              () => { globalThis.__done2 = 2; });
+            0
+        )");
+
+        for (int i = 0; i < 8; ++i) engine.Tick();
+
+        EQUALS(RunJS(engine, "globalThis.__done2"), 1);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // Sanity: the hardening must not swallow genuine, well-formed rejections.
+    IT("emit still rejects when a handler rejects (real allSettled)", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerEvents(engine, manager);
+
+        RunJS(engine, R"(
+            globalThis.__r = 0;
+            Core.Events.on('boom', () => { throw new Error('handler failed'); });
+            Core.Events.emit('boom').then(() => { globalThis.__r = 1; },
+                                          () => { globalThis.__r = 2; });
+            0
+        )");
+
+        for (int i = 0; i < 8; ++i) engine.Tick();
+
+        EQUALS(RunJS(engine, "globalThis.__r"), 2);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
     // RE-REGISTER SAFETY (callback-context reuse)
     // ========================================
     // A second Register() must not dangle the v8::Externals baked during the first one. Regression

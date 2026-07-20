@@ -552,34 +552,22 @@ namespace Framework::Scripting {
             _pendingCallbacks.insert(callbackData);
         }
 
-        // Store the shared_ptr in a weak reference via raw pointer in External,
-        // but we also need to ensure the shared_ptr stays alive. We do this by
-        // capturing it in the lambda below (via the closure's captured copy).
-        // The External just provides a way to access it from the V8 callback.
-        AllSettledCallbackData *rawData      = callbackData.get();
-        v8::Local<v8::External> resolverData = v8::External::New(isolate, rawData);
+        // Give the handler its own strong reference via the External, so ~Events() clearing
+        // _pendingCallbacks can't free the data out from under a still-pending microtask.
+        auto *handlerRef                     = new std::shared_ptr<AllSettledCallbackData>(callbackData);
+        v8::Local<v8::External> resolverData = v8::External::New(isolate, handlerRef);
 
-        // Prevent the shared_ptr from being destroyed when this function returns
-        // by creating a weak reference stored in V8's weak persistent handle mechanism.
-        // Actually, we need to ensure the then-handler lambda captures the shared_ptr.
-        // Since V8 callbacks can't directly capture, we use a persistent weak reference approach.
-        // Instead, we store the shared_ptr in a weak persistent handle that prevents GC.
-        //
-        // Simpler approach: We keep the shared_ptr in _pendingCallbacks (which we do).
-        // The then-handler will access via raw pointer but check cancelled flag before use.
-        // This is safe because:
-        // 1. If Events is alive, _pendingCallbacks keeps shared_ptr alive
-        // 2. If Events is destroyed, cancelled is set to true, then-handler bails out
-
-        v8::Local<v8::Function> thenHandler = v8::Function::New(
+        v8::MaybeLocal<v8::Function> maybeThenHandler = v8::Function::New(
             context,
             [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 v8::Isolate *iso           = info.GetIsolate();
                 v8::Local<v8::Context> ctx = iso->GetCurrentContext();
 
-                AllSettledCallbackData *data = static_cast<AllSettledCallbackData *>(info.Data().As<v8::External>()->Value());
+                // Own the data for this call, then free the heap holder (a then-handler runs once).
+                auto *handlerRef                             = static_cast<std::shared_ptr<AllSettledCallbackData> *>(info.Data().As<v8::External>()->Value());
+                std::shared_ptr<AllSettledCallbackData> data = *handlerRef;
+                delete handlerRef;
 
-                // Check if Events was destroyed before this callback ran
                 if (data->cancelled.load(std::memory_order_acquire)) {
                     return; // Events destroyed, bail out safely
                 }
@@ -587,17 +575,40 @@ namespace Framework::Scripting {
                 v8::Local<v8::Promise::Resolver> res = data->resolver.Get(iso);
                 std::string errorMsg                 = data->errorMessage;
 
-                v8::Local<v8::Array> results = info[0].As<v8::Array>();
                 std::vector<v8::Local<v8::Value>> rejections;
 
-                for (uint32_t i = 0; i < results->Length(); ++i) {
-                    v8::Local<v8::Object> item  = results->Get(ctx, i).ToLocalChecked().As<v8::Object>();
-                    v8::Local<v8::Value> status = item->Get(ctx, v8pp::to_v8(iso, "status")).ToLocalChecked();
-                    v8::String::Utf8Value statusStr(iso, status);
+                // Records come from the script-mutable global Promise.allSettled, so the shape is
+                // untrusted: validate each step and skip malformed records rather than aborting via
+                // an unchecked cast or an empty ToLocalChecked().
+                if (info.Length() > 0 && info[0]->IsArray()) {
+                    v8::Local<v8::Array> results = info[0].As<v8::Array>();
+                    for (uint32_t i = 0; i < results->Length(); ++i) {
+                        // Contain a throwing getter so it skips the record instead of poisoning
+                        // later MaybeLocals with a pending exception.
+                        v8::TryCatch tryCatch(iso);
 
-                    if (std::string(*statusStr) == "rejected") {
-                        v8::Local<v8::Value> reason = item->Get(ctx, v8pp::to_v8(iso, "reason")).ToLocalChecked();
-                        rejections.push_back(reason);
+                        v8::Local<v8::Value> itemVal;
+                        if (!results->Get(ctx, i).ToLocal(&itemVal) || !itemVal->IsObject()) {
+                            continue;
+                        }
+                        v8::Local<v8::Object> item = itemVal.As<v8::Object>();
+
+                        v8::Local<v8::Value> status;
+                        if (!item->Get(ctx, v8pp::to_v8(iso, "status")).ToLocal(&status)) {
+                            continue;
+                        }
+                        v8::String::Utf8Value statusStr(iso, status);
+                        if (!*statusStr || std::string(*statusStr) != "rejected") {
+                            continue;
+                        }
+
+                        v8::Local<v8::Value> reason;
+                        if (item->Get(ctx, v8pp::to_v8(iso, "reason")).ToLocal(&reason)) {
+                            rejections.push_back(reason);
+                        }
+                        else {
+                            rejections.push_back(v8::Undefined(iso));
+                        }
                     }
                 }
 
@@ -631,14 +642,24 @@ namespace Framework::Scripting {
                     res->Resolve(ctx, v8::Undefined(iso)).Check();
                 }
 
-                // Remove from tracking - the shared_ptr in _pendingCallbacks will be erased,
-                // releasing the last reference and freeing the data
-                data->owner->RemovePendingCallback(data);
+                data->owner->RemovePendingCallback(data.get());
             },
-            resolverData)
-                                                  .ToLocalChecked();
+            resolverData);
 
-        allPromise->Then(context, thenHandler).ToLocalChecked();
+        // Function::New / Promise::Then return empty on a terminating isolate; ToLocalChecked()
+        // would abort. Fail soft: the handler won't run, so free its holder and untrack here.
+        v8::Local<v8::Function> thenHandler;
+        if (!maybeThenHandler.ToLocal(&thenHandler)) {
+            delete handlerRef;
+            RemovePendingCallback(callbackData.get());
+            return;
+        }
+
+        if (allPromise->Then(context, thenHandler).IsEmpty()) {
+            delete handlerRef;
+            RemovePendingCallback(callbackData.get());
+            return;
+        }
     }
 
     v8::Local<v8::Promise> Events::EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource, HandlerScope scope) {
