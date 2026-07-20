@@ -272,6 +272,22 @@ MODULE(js_features, {
         engine.Shutdown();
     });
 
+    // The two packed layouts Chat (RGBA) and TextLabel (ARGB) accept a Color through are computed by
+    // Color::toRGBA/toARGB. Their end-to-end use needs networking/replication (integration-tested);
+    // here we lock the byte ordering directly. Color(1, 0.5, 0, 1) -> R=255 G=128 B=0 A=255.
+    IT("Color packs to RGBA and ARGB with the documented byte order", {
+        Color c(1.0f, 0.5f, 0.0f, 1.0f);
+        // 0xRRGGBBAA
+        UEQUALS(c.toRGBA(), (uint32_t)0xFF80'00FFu);
+        // 0xAARRGGBB
+        UEQUALS(c.toARGB(), (uint32_t)0xFFFF'8000u);
+
+        // Fully opaque red, distinct in the two layouts.
+        Color red(1.0f, 0.0f, 0.0f, 1.0f);
+        UEQUALS(red.toRGBA(), (uint32_t)0xFF00'00FFu);
+        UEQUALS(red.toARGB(), (uint32_t)0xFFFF'0000u);
+    });
+
     // ========================================
     // EVENTS SYSTEM TESTS
     // ========================================

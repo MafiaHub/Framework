@@ -11,6 +11,7 @@
 #include <v8pp/class.hpp>
 #include <v8pp/property.hpp>
 #include <glm/glm.hpp>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <memory>
@@ -70,6 +71,12 @@ class Color final {
 
     // Access underlying GLM type
     const glm::vec4& vec() const { return _color; }
+
+    // Pack into the two integer layouts the packed-int APIs use (bytes clamped
+    // to 0-255). Chat wants RGBA; TextLabel wants ARGB. See README "Color
+    // representations".
+    uint32_t toRGBA() const; // 0xRRGGBBAA
+    uint32_t toARGB() const; // 0xAARRGGBB
 
     // V8 Registration
     static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);

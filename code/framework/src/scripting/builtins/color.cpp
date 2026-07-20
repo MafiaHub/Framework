@@ -38,6 +38,20 @@ namespace Framework::Scripting::Builtins {
         return ss.str();
     }
 
+    namespace {
+        uint32_t colorByte(float v) {
+            return static_cast<uint32_t>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f));
+        }
+    } // namespace
+
+    uint32_t Color::toRGBA() const {
+        return (colorByte(_color.r) << 24) | (colorByte(_color.g) << 16) | (colorByte(_color.b) << 8) | colorByte(_color.a);
+    }
+
+    uint32_t Color::toARGB() const {
+        return (colorByte(_color.a) << 24) | (colorByte(_color.r) << 16) | (colorByte(_color.g) << 8) | colorByte(_color.b);
+    }
+
     std::string Color::toString() const {
         std::ostringstream ss;
         ss << "Color(" << _color.r << ", " << _color.g << ", " << _color.b << ", " << _color.a << ")";
