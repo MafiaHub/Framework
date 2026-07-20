@@ -233,6 +233,11 @@ namespace Framework::Scripting::Builtins {
         global->Set(ctx, v8pp::to_v8(isolate, "Color"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
     }
 
+    v8::Local<v8::Object> Color::NewInstance(v8::Isolate *isolate, const glm::vec4 &value) {
+        v8pp::class_<Color> &cls = GetClass(isolate);
+        return cls.import_external(isolate, new Color(value));
+    }
+
     void Color::UnregisterIsolate(v8::Isolate *isolate) {
         _classes.erase(isolate);
     }

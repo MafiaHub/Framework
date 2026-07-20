@@ -74,6 +74,9 @@ class Color final {
     // V8 Registration
     static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);
     static v8pp::class_<Color>& GetClass(v8::Isolate* isolate);
+    // Wrap a native color as a JS Color, so C++ (e.g. the native SDK) can return
+    // one to script. Mirrors Vector3/Quaternion::NewInstance.
+    static v8::Local<v8::Object> NewInstance(v8::Isolate* isolate, const glm::vec4& value);
     static void UnregisterIsolate(v8::Isolate* isolate);
 
   private:

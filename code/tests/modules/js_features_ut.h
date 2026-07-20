@@ -232,6 +232,46 @@ MODULE(js_features, {
         engine.Shutdown();
     });
 
+    // Value-type parity: Quaternion gained length/lengthSquared (like Vector) and mul (renamed from
+    // multiply — the old name is gone); Color gained NewInstance so native C++ can return a Color.
+    IT("Quaternion length/mul parity and Color::NewInstance", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        v8::Isolate *isolate = engine.GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Core"), coreObj).Check();
+            RegisterValueTypes(isolate, coreObj);
+
+            // Native C++ hands a Color to JS via NewInstance (the native-SDK direction).
+            v8::Local<v8::Object> col = Color::NewInstance(isolate, glm::vec4(0.25f, 0.5f, 0.75f, 1.0f));
+            context->Global()->Set(context, v8pp::to_v8(isolate, "__col"), col).Check();
+        }
+
+        // length / lengthSquared, mirroring Vector.
+        EQUALS(RunJSBool(engine, "Math.abs(new Core.Quaternion(0,3,4,0).length - 5) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "Math.abs(new Core.Quaternion(0,3,4,0).lengthSquared - 25) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "Math.abs(Core.Quaternion.identity().length - 1) < 0.001"), true);
+
+        // mul is the (renamed) composition; multiply is gone.
+        EQUALS(RunJSBool(engine, "typeof new Core.Quaternion(1,0,0,0).mul === 'function'"), true);
+        EQUALS(RunJSBool(engine, "new Core.Quaternion(1,0,0,0).multiply === undefined"), true);
+        EQUALS(RunJSBool(engine, "Core.Quaternion.identity().mul(Core.Quaternion.identity()).w === 1"), true);
+
+        // Color::NewInstance produced a real, live Core.Color.
+        EQUALS(RunJSBool(engine, "__col instanceof Core.Color"), true);
+        EQUALS(RunJSBool(engine, "Math.abs(__col.r - 0.25) < 0.001 && Math.abs(__col.g - 0.5) < 0.001 && Math.abs(__col.b - 0.75) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "typeof __col.toHex === 'function'"), true);
+
+        engine.Shutdown();
+    });
+
     // ========================================
     // EVENTS SYSTEM TESTS
     // ========================================

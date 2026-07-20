@@ -52,6 +52,11 @@ class Quaternion final {
     Quaternion& slerp(const Quaternion& target, float t) { _quat = glm::slerp(_quat, target._quat, t); return *this; }
     Quaternion& set(float w, float x, float y, float z) { _quat.w = w; _quat.x = x; _quat.y = y; _quat.z = z; return *this; }
 
+    // Read-only magnitude, mirroring Vector length/lengthSquared. A unit
+    // quaternion has length 1; the squared form avoids the square root.
+    float getLength() const { return glm::length(_quat); }
+    float getLengthSquared() const { return glm::dot(_quat, _quat); }
+
     // Non-mutating methods
     Quaternion conjugate() const { return Quaternion(glm::conjugate(_quat)); }
     Quaternion inverse() const { return Quaternion(glm::inverse(_quat)); }
