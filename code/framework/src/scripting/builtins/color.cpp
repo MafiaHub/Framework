@@ -118,7 +118,7 @@ namespace Framework::Scripting::Builtins {
                     "Replaces this color's normalized components in place.", "This mutated color for chaining."))
             .function("clone", &Color::clone, v8pp::metadata::docs("Color", {}, "Creates an independent copy of this color.", "New color with the same components."))
             .function("toHex", &Color::toHex,
-                v8pp::metadata::docs("string", {v8pp::metadata::param("includeAlpha", "boolean", true, "Whether to append the alpha byte; defaults to false.")}, "Converts normalized components to a hexadecimal CSS-style string.", "Uppercase #RRGGBB or #RRGGBBAA string."))
+                v8pp::metadata::docs("string", {v8pp::metadata::param("includeAlpha", "boolean", true, "Whether to append the alpha byte; defaults to false.")}, "Converts normalized components to a hexadecimal CSS-style string.", "Lowercase #rrggbb or #rrggbbaa string."))
             .function("toString", &Color::toString, v8pp::metadata::docs("string", {}, "Formats this color for logging and debugging.", "Text in Color(r, g, b, a) form."));
 
         // Add properties manually using v8's SetNativeDataProperty with correct signature
@@ -221,7 +221,7 @@ namespace Framework::Scripting::Builtins {
         auto &metadata = GetScriptingCatalog(isolate).constructor("Color");
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("toJSON", v8pp::metadata::docs("{ r: number; g: number; b: number; a: number }", {}, "Converts this color to a plain object for JSON.stringify.", "Object containing the current normalized components.")));
         metadata.record(v8pp::metadata::function_of<decltype(&Color::fromHex)>("fromHex",
-            v8pp::metadata::docs("Color", {v8pp::metadata::param("hex", "string", false, "Hexadecimal color in #RGB, #RGBA, #RRGGBB, or #RRGGBBAA form.")}, "Parses a hexadecimal color string.", "Parsed color, or opaque white when the input is invalid."), true));
+            v8pp::metadata::docs("Color", {v8pp::metadata::param("hex", "string", false, "Hexadecimal color in #RRGGBB or #RRGGBBAA form; the leading # is optional. Three- and four-digit shorthands are not supported.")}, "Parses a hexadecimal color string.", "Parsed color, or opaque white when the input is invalid."), true));
         metadata.record(v8pp::metadata::function_of<decltype(&Color::fromRGB)>("fromRGB",
             v8pp::metadata::docs("Color",
                 {v8pp::metadata::param("r", "number", false, "Red byte from 0 to 255."), v8pp::metadata::param("g", "number", false, "Green byte from 0 to 255."), v8pp::metadata::param("b", "number", false, "Blue byte from 0 to 255."),

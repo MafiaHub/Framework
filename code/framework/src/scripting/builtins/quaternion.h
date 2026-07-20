@@ -48,7 +48,12 @@ class Quaternion final {
 
     // Mutable methods (modify in place, return this for chaining)
     Quaternion& multiply(const Quaternion& other) { _quat = _quat * other._quat; return *this; }
-    Quaternion& normalize() { _quat = glm::normalize(_quat); return *this; }
+    // A zero (degenerate) quaternion has no direction to normalize toward, so it
+    // collapses to the identity rotation rather than producing NaNs.
+    Quaternion& normalize() {
+        _quat = (glm::dot(_quat, _quat) > 0.0f) ? glm::normalize(_quat) : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        return *this;
+    }
     Quaternion& slerp(const Quaternion& target, float t) { _quat = glm::slerp(_quat, target._quat, t); return *this; }
     Quaternion& set(float w, float x, float y, float z) { _quat.w = w; _quat.x = x; _quat.y = y; _quat.z = z; return *this; }
 

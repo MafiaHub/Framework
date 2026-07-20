@@ -272,6 +272,43 @@ MODULE(js_features, {
         engine.Shutdown();
     });
 
+    // Doc/impl reconciliation (now user-facing via @mafiahub/types): toHex is lowercase, fromHex
+    // 3/4-digit shorthands are unsupported (yield white), Quaternion.normalize maps zero to identity,
+    // and the ctor is scalar-first (w, x, y, z).
+    IT("Color hex and Quaternion normalize/ctor match their docs", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Core"), coreObj).Check();
+            RegisterValueTypes(isolate, coreObj);
+        }
+
+        // toHex emits lowercase, as documented.
+        std::string hex = RunJSString(engine, "new Core.Color(1, 0.5, 0, 1).toHex()");
+        STREQUALS(hex.c_str(), "#ff8000");
+        std::string hexA = RunJSString(engine, "new Core.Color(1, 0.5, 0, 1).toHex(true)");
+        STREQUALS(hexA.c_str(), "#ff8000ff");
+
+        // Full-length hex parses; unsupported 3-digit shorthand falls back to opaque white.
+        EQUALS(RunJSBool(engine, "Math.abs(Core.Color.fromHex('#ff0000').r - 1) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "(() => { const c = Core.Color.fromHex('#f00'); return c.r === 1 && c.g === 1 && c.b === 1; })()"), true);
+
+        // normalize maps a zero quaternion to identity rather than NaN.
+        EQUALS(RunJSBool(engine, "(() => { const q = new Core.Quaternion(0,0,0,0).normalize(); return q.w === 1 && q.x === 0 && q.y === 0 && q.z === 0; })()"), true);
+
+        // Constructor is scalar-first: w is the first argument.
+        EQUALS(RunJSBool(engine, "(() => { const p = new Core.Quaternion(1,2,3,4); return p.w === 1 && p.x === 2 && p.y === 3 && p.z === 4; })()"), true);
+
+        engine.Shutdown();
+    });
+
     // The two packed layouts Chat (RGBA) and TextLabel (ARGB) accept a Color through are computed by
     // Color::toRGBA/toARGB. Their end-to-end use needs networking/replication (integration-tested);
     // here we lock the byte ordering directly. Color(1, 0.5, 0, 1) -> R=255 G=128 B=0 A=255.
