@@ -134,15 +134,15 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Register communication APIs
         _resourceManager->GetEvents().Register(isolate, context, coreObj, _resourceManager.get());
-        Framework::Scripting::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
-        Framework::Scripting::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());
-        Framework::Scripting::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());
+        Framework::Scripting::Builtins::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
+        Framework::Scripting::Builtins::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());
+        Framework::Scripting::Builtins::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());
 
         // Register console override
-        Framework::Scripting::Console::Register(isolate, context, _resourceManager.get());
+        Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
 
         // Register environment info
-        Framework::Scripting::Environment::Register(isolate, context, coreObj, false);
+        Framework::Scripting::Builtins::Environment::Register(isolate, context, coreObj, false);
 
         // Register the chat API on the global object (Chat.sendToAll / Chat.sendToPlayer)
         Framework::Scripting::Builtins::Chat::Register(isolate, global);
@@ -201,7 +201,7 @@ namespace Framework::Integrations::Server::Scripting {
             v8::Local<v8::Context> context = _nodeEngine->GetContext();
             v8::Context::Scope contextScope(context);
 
-            Framework::Scripting::Messages::ProcessPendingResponses(isolate, context);
+            Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);
         }
     }
 

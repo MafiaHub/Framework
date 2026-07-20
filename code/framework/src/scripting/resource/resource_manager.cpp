@@ -719,7 +719,7 @@ namespace Framework::Scripting {
     bool ResourceManager::CallResourceStop(std::string_view resourceName) {
         // Cleanup handlers before resource fully stops
         _events.CleanupResource(resourceName);
-        Messages::CleanupResource(std::string(resourceName));
+        Builtins::Messages::CleanupResource(std::string(resourceName));
         return true;
     }
 
@@ -814,7 +814,7 @@ namespace Framework::Scripting {
         return _jsEngine;
     }
 
-    Events &ResourceManager::GetEvents() {
+    Builtins::Events &ResourceManager::GetEvents() {
         return _events;
     }
 

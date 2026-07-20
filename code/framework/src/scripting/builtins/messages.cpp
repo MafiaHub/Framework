@@ -12,7 +12,7 @@
 
 #include <logging/logger.h>
 
-namespace Framework::Scripting {
+namespace Framework::Scripting::Builtins {
 
     std::map<std::string, std::map<std::string, Messages::Handler>> Messages::_handlers;
     std::mutex Messages::_handlersMutex;
@@ -401,4 +401,4 @@ namespace Framework::Scripting {
         _resourceManager = nullptr;
     }
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

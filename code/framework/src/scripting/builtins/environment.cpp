@@ -11,7 +11,7 @@
 
 #include <v8pp/convert.hpp>
 
-namespace Framework::Scripting {
+namespace Framework::Scripting::Builtins {
 
     void Environment::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, bool isClient) {
         v8pp::module env(isolate);
@@ -25,4 +25,4 @@ namespace Framework::Scripting {
         metadata.add_property("IsServer", "boolean", "True in the authoritative server scripting runtime.", true);
     }
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

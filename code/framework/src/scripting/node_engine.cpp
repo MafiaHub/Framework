@@ -88,7 +88,7 @@ namespace Framework::Scripting {
             v8::HandleScope handleScope(_isolate);
             v8::Context::Scope contextScope(_setup->context());
 
-            Messages::Shutdown();
+            Builtins::Messages::Shutdown();
         }
         // All V8 scopes have now exited
 

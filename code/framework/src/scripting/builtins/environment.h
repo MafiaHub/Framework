@@ -10,7 +10,7 @@
 
 #include <v8pp/module.hpp>
 
-namespace Framework::Scripting {
+namespace Framework::Scripting::Builtins {
 
     /**
      * JavaScript Environment API - provides runtime environment information.
@@ -34,4 +34,4 @@ namespace Framework::Scripting {
                             bool isClient);
     };
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

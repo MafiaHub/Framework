@@ -13,7 +13,7 @@
 
 #include <logging/logger.h>
 
-namespace Framework::Scripting {
+namespace Framework::Scripting::Builtins {
 
     ResourceManager *Imports::_resourceManager = nullptr;
 
@@ -118,4 +118,4 @@ namespace Framework::Scripting {
         return exportsObj;
     }
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

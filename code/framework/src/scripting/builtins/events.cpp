@@ -16,7 +16,7 @@
 #include <logging/logger.h>
 #include <networking/network_peer.h>
 
-namespace Framework::Scripting {
+namespace Framework::Scripting::Builtins {
 
     // Context for AllSettled callback - holds resolver, error message, and owner for cleanup
     // Defined early so destructor can access it
@@ -984,4 +984,4 @@ namespace Framework::Scripting {
         args.GetReturnValue().Set(static_cast<uint32_t>(count));
     }
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

@@ -19,8 +19,10 @@
 #include <vector>
 
 namespace Framework::Scripting {
-
     class ResourceManager;
+}
+
+namespace Framework::Scripting::Builtins {
 
     /**
      * JavaScript messages system for request/response communication.
@@ -105,4 +107,4 @@ namespace Framework::Scripting {
         static ResourceManager *_resourceManager;
     };
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

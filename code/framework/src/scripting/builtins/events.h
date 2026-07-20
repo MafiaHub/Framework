@@ -21,8 +21,10 @@
 #include <vector>
 
 namespace Framework::Scripting {
-
     class ResourceManager;
+}
+
+namespace Framework::Scripting::Builtins {
 
     /**
      * Handler entry with metadata
@@ -220,4 +222,4 @@ namespace Framework::Scripting {
         std::mutex _pendingCallbacksMutex;
     };
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

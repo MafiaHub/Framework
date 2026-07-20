@@ -15,9 +15,11 @@
 #include <string>
 
 namespace Framework::Scripting {
-
     class ResourceManager;
     class Resource;
+}
+
+namespace Framework::Scripting::Builtins {
 
     /**
      * Resource imports system for accessing exports from other resources.
@@ -58,4 +60,4 @@ namespace Framework::Scripting {
         static ResourceManager *_resourceManager;
     };
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

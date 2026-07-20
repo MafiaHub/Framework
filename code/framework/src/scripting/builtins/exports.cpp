@@ -13,7 +13,7 @@
 
 #include <logging/logger.h>
 
-namespace Framework::Scripting {
+namespace Framework::Scripting::Builtins {
 
     ResourceManager *Exports::_resourceManager = nullptr;
 
@@ -166,4 +166,4 @@ namespace Framework::Scripting {
         args.GetReturnValue().Set(exportValue);
     }
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

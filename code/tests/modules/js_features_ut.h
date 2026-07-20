@@ -171,6 +171,7 @@ class EventsTestHelper {
 
 MODULE(js_features, {
     using namespace Framework::Scripting;
+    using namespace Framework::Scripting::Builtins;
 
     // ========================================
     // BUILTIN TYPES TESTS (single engine to avoid v8pp caching bug)

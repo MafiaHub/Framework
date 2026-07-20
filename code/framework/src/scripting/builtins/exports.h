@@ -13,6 +13,9 @@
 
 namespace Framework::Scripting {
     class ResourceManager;
+}
+
+namespace Framework::Scripting::Builtins {
 
     class Exports final {
       public:
@@ -28,4 +31,4 @@ namespace Framework::Scripting {
         static ResourceManager *_resourceManager;
     };
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins
