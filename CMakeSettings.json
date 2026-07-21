@@ -25,6 +25,16 @@
                     "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
+                },
+                {
+                    "name": "CMAKE_MAKE_PROGRAM",
+                    "value": "${projectDir}\\scripts\\ninja_utf8.cmd",
+                    "type": "FILEPATH"
+                },
+                {
+                    "name": "CMAKE_PROJECT_INCLUDE_BEFORE",
+                    "value": "${projectDir}\\cmake\\MSVCUtf8.cmake",
+                    "type": "FILEPATH"
                 }
             ]
         },
@@ -53,6 +63,16 @@
                     "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
+                },
+                {
+                    "name": "CMAKE_MAKE_PROGRAM",
+                    "value": "${projectDir}\\scripts\\ninja_utf8.cmd",
+                    "type": "FILEPATH"
+                },
+                {
+                    "name": "CMAKE_PROJECT_INCLUDE_BEFORE",
+                    "value": "${projectDir}\\cmake\\MSVCUtf8.cmake",
+                    "type": "FILEPATH"
                 }
             ]
         },
@@ -81,6 +101,16 @@
                     "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
+                },
+                {
+                    "name": "CMAKE_MAKE_PROGRAM",
+                    "value": "${projectDir}\\scripts\\ninja_utf8.cmd",
+                    "type": "FILEPATH"
+                },
+                {
+                    "name": "CMAKE_PROJECT_INCLUDE_BEFORE",
+                    "value": "${projectDir}\\cmake\\MSVCUtf8.cmake",
+                    "type": "FILEPATH"
                 }
             ]
         },
@@ -109,6 +139,16 @@
                     "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
+                },
+                {
+                    "name": "CMAKE_MAKE_PROGRAM",
+                    "value": "${projectDir}\\scripts\\ninja_utf8.cmd",
+                    "type": "FILEPATH"
+                },
+                {
+                    "name": "CMAKE_PROJECT_INCLUDE_BEFORE",
+                    "value": "${projectDir}\\cmake\\MSVCUtf8.cmake",
+                    "type": "FILEPATH"
                 }
             ]
         },
@@ -137,6 +177,16 @@
                     "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
+                },
+                {
+                    "name": "CMAKE_MAKE_PROGRAM",
+                    "value": "${projectDir}\\scripts\\ninja_utf8.cmd",
+                    "type": "FILEPATH"
+                },
+                {
+                    "name": "CMAKE_PROJECT_INCLUDE_BEFORE",
+                    "value": "${projectDir}\\cmake\\MSVCUtf8.cmake",
+                    "type": "FILEPATH"
                 }
             ]
         },
@@ -165,6 +215,16 @@
                     "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
+                },
+                {
+                    "name": "CMAKE_MAKE_PROGRAM",
+                    "value": "${projectDir}\\scripts\\ninja_utf8.cmd",
+                    "type": "FILEPATH"
+                },
+                {
+                    "name": "CMAKE_PROJECT_INCLUDE_BEFORE",
+                    "value": "${projectDir}\\cmake\\MSVCUtf8.cmake",
+                    "type": "FILEPATH"
                 }
             ]
         }
