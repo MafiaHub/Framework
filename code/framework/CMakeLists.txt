@@ -53,6 +53,8 @@ set(FRAMEWORK_SRC
 
     src/jobs/job_system.cpp
     src/jobs/io_tasks.cpp
+
+    src/metrics/registry.cpp
 )
 
 set(FRAMEWORK_SERVER_SRC
@@ -301,7 +303,7 @@ target_compile_features(FrameworkV8Engine PRIVATE cxx_std_20)
 
 # Link the solutions based on the platform
 link_shared_deps(Framework)
-target_link_libraries(Framework v8 v8pp)
+target_link_libraries(Framework v8 v8pp prometheus-cpp-lite)
 if(LIBNODE_AVAILABLE)
     target_link_libraries(Framework libnode)
 endif()

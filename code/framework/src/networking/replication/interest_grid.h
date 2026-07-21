@@ -61,7 +61,7 @@ namespace Framework::Networking::Replication {
 
         // Fill `out` with the entities relevant to `viewer`: in range and dimension, owned, or
         // always-visible. The home of the server's relevance rule.
-        void CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out);
+        void CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out, size_t *candidatesOut = nullptr);
 
       private:
         // Range query on the configured ground plane; the set dedupes per-cell hits.

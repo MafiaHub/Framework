@@ -10,8 +10,64 @@
 
 #include <httplib.h>
 #include <logging/logger.h>
+#include <metrics/registry.h>
+
+#include <chrono>
 
 namespace Framework::HTTP {
+    namespace {
+        Metrics::Counter *RouteStatusCounter(const std::string &route, const char *codeClass) {
+            return Metrics::Registry::Get().RegisterCounter("fw_http_requests_total", "HTTP requests by route and status class", {{"route", route}, {"code", codeClass}});
+        }
+
+        struct RouteMetrics {
+            Metrics::Counter *c2xx       = nullptr;
+            Metrics::Counter *c4xx       = nullptr;
+            Metrics::Counter *c5xx       = nullptr;
+            Metrics::Counter *cother     = nullptr;
+            Metrics::Histogram *duration = nullptr;
+            Metrics::Gauge *inFlight     = nullptr;
+        };
+
+        RouteMetrics MakeRouteMetrics(const std::string &route) {
+            auto &reg = Metrics::Registry::Get();
+            RouteMetrics metrics {
+                RouteStatusCounter(route, "2xx"),
+                RouteStatusCounter(route, "4xx"),
+                RouteStatusCounter(route, "5xx"),
+                RouteStatusCounter(route, "other"),
+                reg.RegisterHistogram("fw_http_request_duration_seconds", "HTTP route handler duration", Metrics::Buckets::Exponential(0.0005, 2.0, 13), {{"route", route}}),
+                reg.RegisterGauge("fw_http_requests_in_flight", "HTTP requests currently executing a route handler", {{"route", route}}),
+            };
+            metrics.inFlight->Set(0.0);
+            return metrics;
+        }
+
+        void RecordRouteStatus(const RouteMetrics &c, int status) {
+            Metrics::Counter *sel = status >= 200 && status < 300 ? c.c2xx : status >= 400 && status < 500 ? c.c4xx : status >= 500 && status < 600 ? c.c5xx : c.cother;
+            if (sel) {
+                sel->Inc();
+            }
+        }
+
+        int EffectiveStatus(const httplib::Request &req, const httplib::Response &res) {
+            if (res.status != -1) {
+                return res.status;
+            }
+            return req.ranges.empty() ? 200 : 206;
+        }
+
+        void FinishRoute(const RouteMetrics &metrics, std::chrono::steady_clock::time_point startedAt, int status) {
+            RecordRouteStatus(metrics, status);
+            if (metrics.duration) {
+                metrics.duration->Observe(std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count());
+            }
+            if (metrics.inFlight) {
+                metrics.inFlight->Add(-1.0);
+            }
+        }
+    }
+
     Webserver::Webserver() {
         _server = std::make_shared<httplib::Server>();
     }
@@ -77,17 +133,51 @@ namespace Framework::HTTP {
     void Webserver::RegisterRequest(const std::string &path, const RequestCallback &callback) const {
         if (!_running)
             return;
-        if (!path.empty() && callback) {
-            _server->Get(path, callback);
-        }
+        if (path.empty() || !callback)
+            return;
+
+        const RouteMetrics metrics = MakeRouteMetrics(path);
+        RequestCallback userCb     = callback;
+        auto wrapped               = [userCb, metrics](const httplib::Request &req, httplib::Response &res) {
+            const auto startedAt = std::chrono::steady_clock::now();
+            if (metrics.inFlight) {
+                metrics.inFlight->Add(1.0);
+            }
+            try {
+                userCb(req, res);
+                FinishRoute(metrics, startedAt, EffectiveStatus(req, res));
+            }
+            catch (...) {
+                FinishRoute(metrics, startedAt, 500);
+                throw;
+            }
+        };
+        _server->Get(path, wrapped);
     }
 
     void Webserver::RegisterPostRequest(const std::string &path, const PostCallback &callback) const {
         if (!_running)
             return;
-        if (!path.empty() && callback) {
-            _server->Post(path, callback);
-        }
+        if (path.empty() || !callback)
+            return;
+
+        const RouteMetrics metrics = MakeRouteMetrics(path);
+        PostCallback userCb        = callback;
+        auto wrapped               = [userCb, metrics](const httplib::Request &req, httplib::Response &res, const httplib::ContentReader &reader) {
+            const auto startedAt = std::chrono::steady_clock::now();
+            if (metrics.inFlight) {
+                metrics.inFlight->Add(1.0);
+            }
+            try {
+                userCb(req, res, reader);
+                FinishRoute(metrics, startedAt, EffectiveStatus(req, res));
+            }
+            catch (...) {
+                FinishRoute(metrics, startedAt, 500);
+                throw;
+            }
+        };
+        _server->Post(path, wrapped);
     }
 
     void Webserver::ServeDirectory(const std::string &dir) {

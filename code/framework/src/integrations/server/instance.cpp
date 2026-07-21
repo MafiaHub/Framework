@@ -9,8 +9,8 @@
 #include "instance.h"
 
 #include <filesystem>
-#include <set>
 #include <fstream>
+#include <set>
 #include <sstream>
 
 #include "core_modules.h"
@@ -37,8 +37,8 @@
 #include "utils/command_processor.h"
 #include "utils/path.h"
 #include "utils/profiler.h"
-#include "utils/version.h"
 #include "utils/time.h"
+#include "utils/version.h"
 
 #include "cxxopts.hpp"
 #include <cppfs/FileHandle.h>
@@ -48,6 +48,7 @@
 namespace Framework::Integrations::Server {
 
     Instance::Instance(): _shuttingDown(false) {
+        _processStart     = std::chrono::steady_clock::now();
         _networkingEngine = std::make_unique<Networking::Engine>();
         _webServer        = std::make_unique<HTTP::Webserver>();
         _fileConfig       = std::make_unique<Utils::Config>();
@@ -187,6 +188,8 @@ namespace Framework::Integrations::Server {
         // Register the default endpoints
         InitEndpoints();
 
+        InitMetrics();
+
         // Initialize default messages
         InitNetworkingMessages();
 
@@ -195,7 +198,7 @@ namespace Framework::Integrations::Server {
 
         // Initialize mod subsystems
         PostInit();
-    
+
         const auto sdkCallback = [this](Framework::Scripting::Engine *engine) {
             this->RegisterScriptingBuiltins(engine);
         };
@@ -281,6 +284,57 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("All core endpoints have been registered!");
     }
 
+    void Instance::InitMetrics() {
+        auto &reg = Metrics::Registry::Get();
+
+        const std::string configLabel =
+#ifdef NDEBUG
+            "Release"
+#else
+            "Debug"
+#endif
+            ;
+        auto *buildInfo = reg.RegisterGauge("fw_build_info", "Framework build version and configuration", {{"version", Utils::Version::rel}, {"config", configLabel}});
+        buildInfo->Set(1.0);
+
+        _uptimeGauge = reg.RegisterGauge("fw_uptime_seconds", "Process uptime in seconds");
+        _uptimeGauge->Set(0.0);
+
+        _tickDurationHist = reg.RegisterHistogram("fw_server_tick_duration_seconds", "Server tick wall-clock duration in seconds", Metrics::Buckets::Exponential(0.0005, 2.0, 10));
+        _tickLatenessHist    = reg.RegisterHistogram("fw_server_tick_lateness_seconds", "Delay between the scheduled and actual tick start", Metrics::Buckets::Exponential(0.0001, 2.0, 12));
+        _tickIntervalHist    = reg.RegisterHistogram("fw_server_tick_interval_seconds", "Elapsed wall time between consecutive tick starts", Metrics::Buckets::Exponential(0.001, 2.0, 11));
+        _tickRateGauge       = reg.RegisterGauge("fw_server_tick_rate_hz", "Instantaneous achieved server tick rate");
+        _tickTargetRateGauge = reg.RegisterGauge("fw_server_tick_target_hz", "Configured target server tick rate");
+        _tickRateGauge->Set(0.0);
+        _tickTargetRateGauge->Set(_opts.worldConfig.tickInterval > 0.0f ? 1.0 / static_cast<double>(_opts.worldConfig.tickInterval) : 0.0);
+
+        _tickOverrunsCounter = reg.RegisterCounter("fw_server_tick_budget_overruns_total", "Ticks whose duration exceeded the configured tick interval");
+
+        _connFailAuth = reg.RegisterCounter("fw_net_connection_failures_total", "Connection failures by handshake stage", {{"stage", "auth"}});
+
+        _masterlistUpdates      = reg.RegisterCounter("fw_masterlist_connector_updates_total", "Server-info updates submitted to the masterlist connector");
+        _masterlistUpdateErrors = reg.RegisterCounter("fw_masterlist_connector_update_errors_total", "Synchronous masterlist connector update failures");
+
+        if (_opts.metrics.enabled && _opts.webServerEnabled && _webServer) {
+            const std::string token = _opts.metrics.token;
+            const std::string path  = _opts.metrics.path.empty() ? std::string("/metrics") : _opts.metrics.path;
+            _webServer->RegisterRequest(path, [token](const httplib::Request &req, httplib::Response &res) {
+                if (!token.empty()) {
+                    const std::string auth = req.get_header_value("Authorization");
+                    if (auth != "Bearer " + token) {
+                        res.status = 401;
+                        res.set_content("unauthorized\n", "text/plain; version=0.0.4");
+                        return;
+                    }
+                }
+                thread_local std::string buf;
+                Metrics::Registry::Get().Render(buf);
+                res.set_content(buf, "text/plain; version=0.0.4");
+                res.status = 200;
+            });
+            Logging::GetLogger(FRAMEWORK_INNER_HTTP)->info("Prometheus /metrics exporter mounted at {}", path);
+        }
+    }
 
     bool Instance::LoadConfigFromJSON() {
         const auto configHandle = cppfs::fs::open(_opts.modConfigFile);
@@ -307,6 +361,19 @@ namespace Framework::Integrations::Server {
             _opts.bindMapName   = _fileConfig->Get<std::string>("map");
             _opts.maxPlayers    = _fileConfig->Get<int>("maxplayers");
             _opts.bindSecretKey = _fileConfig->Get<std::string>("server-token");
+
+            if (const auto *doc = _fileConfig->GetDocument(); doc && doc->contains("metrics") && (*doc)["metrics"].is_object()) {
+                const auto &m = (*doc)["metrics"];
+                if (m.contains("enabled") && m["enabled"].is_boolean()) {
+                    _opts.metrics.enabled = m["enabled"].get<bool>();
+                }
+                if (m.contains("path") && m["path"].is_string()) {
+                    _opts.metrics.path = m["path"].get<std::string>();
+                }
+                if (m.contains("token") && m["token"].is_string()) {
+                    _opts.metrics.token = m["token"].get<std::string>();
+                }
+            }
         }
         catch (const std::exception &ex) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("JSON config has missing fields: {}", ex.what());
@@ -357,10 +424,13 @@ namespace Framework::Integrations::Server {
             const auto guid = packet->guid;
             if (!net->IsAuthenticated(guid)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring identity from unauthenticated peer {}", guid.g);
+                if (_connFailAuth) {
+                    _connFailAuth->Inc();
+                }
                 return;
             }
 
-            auto *replication = net->GetReplicationManager();
+            auto *replication   = net->GetReplicationManager();
             const auto peerGuid = MafiaNet::ToPeerGuid(guid);
             if (replication && (replication->GetConnectionByGUID(guid) || replication->GetViewer(peerGuid))) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring duplicate identity from {}", guid.g);
@@ -397,6 +467,7 @@ namespace Framework::Integrations::Server {
 
             // Gate opens: this connection now starts receiving the replicated world.
             net->PushReplicationConnection(guid);
+            net->MarkClientReady(guid);
 
             // Arm our half of the spawn barrier (the client armed its half before sending identity).
             const int eventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
@@ -488,8 +559,7 @@ namespace Framework::Integrations::Server {
             v8::TryCatch tryCatch(isolate);
             v8::Local<v8::String> jsonStr;
             v8::Local<v8::Value> parsed;
-            if (!v8::String::NewFromUtf8(isolate, payloadJson.c_str()).ToLocal(&jsonStr) ||
-                !v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
+            if (!v8::String::NewFromUtf8(isolate, payloadJson.c_str()).ToLocal(&jsonStr) || !v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropping client event '{}' from {}: malformed JSON payload", eventName, senderNetworkId);
                 return;
             }
@@ -509,8 +579,8 @@ namespace Framework::Integrations::Server {
         const auto net      = GetNetworkingEngine()->GetNetworkServer();
         const auto streamer = net->GetAssetStreamer();
 
-        const auto scripting     = GetScriptingModule();
-        const auto resourcesPath = scripting->GetResourcesPath();
+        const auto scripting         = GetScriptingModule();
+        const auto resourcesPath     = scripting->GetResourcesPath();
         const std::string assetsPath = Framework::Utils::GetAbsolutePathA(resourcesPath);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Resources directory: {}", assetsPath);
 
@@ -521,11 +591,13 @@ namespace Framework::Integrations::Server {
         if (resourceManager) {
             for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
                 const auto resource = resourceManager->GetResource(resourceName);
-                if (!resource) continue;
+                if (!resource)
+                    continue;
 
                 // Only process resources with client entry points
                 const auto &clientEntryRelative = resource->GetManifest().GetMafiaHubConfig().client;
-                if (clientEntryRelative.empty()) continue;
+                if (clientEntryRelative.empty())
+                    continue;
 
                 const auto resourcePath = resource->GetPath();
 
@@ -635,11 +707,11 @@ namespace Framework::Integrations::Server {
 
     void Instance::InitCommandListener() {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Setting up command listener and processor...");
-        
+
         _commandListener->SetCommandCallback([this](const std::string &command) {
             this->HandleCommand(command);
         });
-        
+
         _commandProcessor->RegisterCommand(
             "help", {},
             [this](cxxopts::ParseResult &) {
@@ -650,7 +722,7 @@ namespace Framework::Integrations::Server {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Available commands:\n{}", ss.str());
             },
             "Show this help message");
-            
+
         _commandProcessor->RegisterCommand(
             "quit", {},
             [this](cxxopts::ParseResult &) {
@@ -676,7 +748,8 @@ namespace Framework::Integrations::Server {
                 auto res = rm->StopResource(args[0]);
                 if (res) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopped resource '{}'", args[0]);
-                } else {
+                }
+                else {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to stop '{}': {}", args[0], res.GetError());
                 }
             },
@@ -688,9 +761,9 @@ namespace Framework::Integrations::Server {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Server status:");
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Name: {}", _opts.modName);
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Host: {}:{}", _opts.bindHost, _opts.bindPort);
-                
+
                 if (_networkingEngine) {
-                    const auto net = _networkingEngine->GetNetworkServer();
+                    const auto net  = _networkingEngine->GetNetworkServer();
                     const auto peer = net->GetPeer();
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Players: {}/{}", peer->NumberOfConnections(), _opts.maxPlayers);
                 }
@@ -713,35 +786,36 @@ namespace Framework::Integrations::Server {
                 auto res = op(rm, args[0]);
                 if (res) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}: '{}'", verb, args[0]);
-                } else {
+                }
+                else {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to {} '{}': {}", verb, args[0], res.GetError());
                 }
             };
         };
 
-        _commandProcessor->RegisterCommand(
-            "start", {},
-            resourceCommand("start", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
-                return rm->StartResource(n);
-            }),
+        _commandProcessor->RegisterCommand("start", {},
+            resourceCommand("start",
+                [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                    return rm->StartResource(n);
+                }),
             "Start a resource: start <resource>");
 
-        _commandProcessor->RegisterCommand(
-            "restart", {},
-            resourceCommand("restart", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
-                if (!rm->IsResourceRunning(n)) {
-                    return Framework::Scripting::ResourceOperationResult(std::string("resource is not running (use start)"));
-                }
-                return rm->RestartResource(n);
-            }),
+        _commandProcessor->RegisterCommand("restart", {},
+            resourceCommand("restart",
+                [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                    if (!rm->IsResourceRunning(n)) {
+                        return Framework::Scripting::ResourceOperationResult(std::string("resource is not running (use start)"));
+                    }
+                    return rm->RestartResource(n);
+                }),
             "Reload a running resource's code: restart <resource>");
 
         // Start-or-reload — the canonical verb FiveM/MTASA operators expect.
-        _commandProcessor->RegisterCommand(
-            "ensure", {},
-            resourceCommand("ensure", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
-                return rm->IsResourceRunning(n) ? rm->RefreshResource(n) : rm->StartResource(n);
-            }),
+        _commandProcessor->RegisterCommand("ensure", {},
+            resourceCommand("ensure",
+                [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                    return rm->IsResourceRunning(n) ? rm->RefreshResource(n) : rm->StartResource(n);
+                }),
             "Start or reload a resource: ensure <resource>");
 
         // Re-scan for new/changed resources (manifests), without restarting.
@@ -767,7 +841,8 @@ namespace Framework::Integrations::Server {
                 auto res = rm->RefreshAll();
                 if (res) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refreshed all resources ({} affected)", res.GetValue().size());
-                } else {
+                }
+                else {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to refresh all resources: {}", res.GetError());
                 }
             },
@@ -781,28 +856,21 @@ namespace Framework::Integrations::Server {
             auto result = _commandProcessor->ProcessCommand(command);
             if (result.GetError() != Utils::CommandProcessorError::COMMAND_NONE) {
                 switch (result.GetError()) {
-                    case Utils::CommandProcessorError::COMMAND_PRINT_HELP:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.GetValue());
-                        break;
-                    case Utils::CommandProcessorError::COMMAND_UNKNOWN: {
-                        // Not a built-in command; hand it to the mod override and the scripting layer.
-                        std::vector<std::string> tokens = Utils::CommandProcessor::Tokenize(command);
-                        if (!tokens.empty()) {
-                            const std::string name = std::move(tokens.front());
-                            tokens.erase(tokens.begin());
-                            OnConsoleCommand(std::string(command), name, tokens);
-                            EmitConsoleCommand(name, tokens);
-                        }
-                        break;
+                case Utils::CommandProcessorError::COMMAND_PRINT_HELP: Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.GetValue()); break;
+                case Utils::CommandProcessorError::COMMAND_UNKNOWN: {
+                    // Not a built-in command; hand it to the mod override and the scripting layer.
+                    std::vector<std::string> tokens = Utils::CommandProcessor::Tokenize(command);
+                    if (!tokens.empty()) {
+                        const std::string name = std::move(tokens.front());
+                        tokens.erase(tokens.begin());
+                        OnConsoleCommand(std::string(command), name, tokens);
+                        EmitConsoleCommand(name, tokens);
                     }
-                    case Utils::CommandProcessorError::COMMAND_EMPTY_INPUT:
-                        break;
-                    case Utils::CommandProcessorError::COMMAND_INTERNAL_ERROR:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, result.GetValue());
-                        break;
-                    default:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, static_cast<int>(result.GetError()));
-                        break;
+                    break;
+                }
+                case Utils::CommandProcessorError::COMMAND_EMPTY_INPUT: break;
+                case Utils::CommandProcessorError::COMMAND_INTERNAL_ERROR: Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, result.GetValue()); break;
+                default: Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, static_cast<int>(result.GetError())); break;
                 }
             }
         }
@@ -885,9 +953,24 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::Update() {
-        const auto start = std::chrono::high_resolution_clock::now();
+        const auto start = std::chrono::steady_clock::now();
         if (_nextTick <= start) {
             FW_PROFILE_SCOPE_N("Server::Tick");
+
+            if (_hasLastTickStart && _tickLatenessHist) {
+                _tickLatenessHist->Observe(std::chrono::duration<double>(start - _nextTick).count());
+            }
+            if (_hasLastTickStart) {
+                const double intervalSeconds = std::chrono::duration<double>(start - _lastTickStart).count();
+                if (_tickIntervalHist) {
+                    _tickIntervalHist->Observe(intervalSeconds);
+                }
+                if (_tickRateGauge && intervalSeconds > 0.0) {
+                    _tickRateGauge->Set(1.0 / intervalSeconds);
+                }
+            }
+            _lastTickStart    = start;
+            _hasLastTickStart = true;
 
             if (_networkingEngine) {
                 FW_PROFILE_SCOPE_N("Server::Networking");
@@ -912,17 +995,40 @@ namespace Framework::Integrations::Server {
                 info.version        = Utils::Version::rel;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
-                _masterlist->Ping(info);
+                try {
+                    _masterlist->Ping(info);
+                    if (_masterlistUpdates) {
+                        _masterlistUpdates->Inc();
+                    }
+                }
+                catch (...) {
+                    if (_masterlistUpdateErrors) {
+                        _masterlistUpdateErrors->Inc();
+                    }
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Masterlist connector update failed");
+                }
             }
 
             {
                 FW_PROFILE_SCOPE_N("Server::PostUpdate");
                 PostUpdate();
             }
+            
+            const auto tickEnd       = std::chrono::steady_clock::now();
+            const double tickSeconds = std::chrono::duration<double>(tickEnd - start).count();
+            if (_uptimeGauge) {
+                _uptimeGauge->Set(std::chrono::duration<double>(tickEnd - _processStart).count());
+            }
+            if (_tickDurationHist) {
+                _tickDurationHist->Observe(tickSeconds);
+            }
+            if (_tickOverrunsCounter && tickSeconds > _opts.worldConfig.tickInterval) {
+                _tickOverrunsCounter->Inc();
+            }
 
             FW_PROFILE_FRAME();
 
-            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
+            _nextTick = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
         }
         else {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));

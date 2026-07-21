@@ -12,6 +12,8 @@
 #include "entity_registry.h"
 #include "replication_connection.h"
 
+#include <chrono>
+
 namespace Framework::Networking::Replication {
     namespace {
         // Raw RPC: the tail is the entity's polymorphic SerializeForcedState payload.
@@ -34,7 +36,7 @@ namespace Framework::Networking::Replication {
         };
     } // namespace
 
-    ReplicationManager::ReplicationManager() = default;
+    ReplicationManager::ReplicationManager()  = default;
     ReplicationManager::~ReplicationManager() = default;
 
     void ReplicationManager::ConfigureGrid(float cellSize, float worldMin, float worldMax) {
@@ -72,6 +74,63 @@ namespace Framework::Networking::Replication {
             });
             _clientRPCsRegistered = true;
         }
+
+        InitMetrics();
+    }
+
+    void ReplicationManager::InitMetrics() {
+        auto &reg           = Metrics::Registry::Get();
+        _replCreated        = reg.RegisterCounter("fw_repl_entities_created_total", "Replicated entities created");
+        _replDestroyed      = reg.RegisterCounter("fw_repl_entities_destroyed_total", "Replicated entities destroyed");
+        _interestCandidates = reg.RegisterCounter("fw_repl_interest_candidates_total", "Entities evaluated for interest per query (pre-filter)");
+        _interestSelected   = reg.RegisterCounter("fw_repl_interest_selected_total", "Entities added to an interest set per query (post-filter)");
+        _interestRebuildDur        = reg.RegisterHistogram("fw_repl_interest_rebuild_duration_seconds", "Interest index rebuild duration", Metrics::Buckets::Exponential(0.00005, 2.0, 8));
+        _forcedStates              = reg.RegisterCounter("fw_repl_forced_states_total", "Server->owner forced-state overrides sent");
+        _ownerChanges              = reg.RegisterCounter("fw_repl_owner_changes_total", "Entity ownership changes");
+        _staleEpochTransform       = reg.RegisterCounter("fw_repl_stale_epoch_drops_total", "Owner updates dropped for stale state epoch", {{"channel", "transform"}});
+        _staleEpochState           = reg.RegisterCounter("fw_repl_stale_epoch_drops_total", "Owner updates dropped for stale state epoch", {{"channel", "state"}});
+        _rejectedNonOwner          = reg.RegisterCounter("fw_repl_rejected_nonowner_updates_total", "Updates rejected by the server authority gate (non-owner sender)");
+        _serializeDuration         = reg.RegisterHistogram("fw_repl_serialize_duration_seconds", "Per-entity replication serializer wall time", Metrics::Buckets::Exponential(0.00001, 4.0, 9));
+        _serializedEntities        = reg.RegisterCounter("fw_repl_serialized_entities_total", "Entity serializer invocations");
+        _serializedBytes           = reg.RegisterCounter("fw_repl_serialized_bytes_total", "Replication payload bytes produced before transport processing");
+        _serializedEntitiesPerTick = reg.RegisterHistogram("fw_repl_serialized_entities_per_tick", "Entity serializer invocations between network ticks", Metrics::Buckets::Explicit({1, 4, 16, 64, 256, 1024, 4096, 16384}));
+        _serializedBytesPerTick    = reg.RegisterHistogram("fw_repl_serialized_bytes_per_tick", "Replication payload bytes produced between network ticks", Metrics::Buckets::Explicit({64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304}));
+        _replEntities = reg.RegisterGauge("fw_repl_entities", "Live replicated entities");
+        _replEntities->Set(0.0);
+    }
+
+    void ReplicationManager::RecordStaleEpochDrop(int channel) {
+        if (channel == 0) {
+            if (_staleEpochTransform) {
+                _staleEpochTransform->Inc();
+            }
+        }
+        else if (_staleEpochState) {
+            _staleEpochState->Inc();
+        }
+    }
+
+    void ReplicationManager::RecordRejectedNonOwnerUpdate() {
+        if (_rejectedNonOwner) {
+            _rejectedNonOwner->Inc();
+        }
+    }
+
+    void ReplicationManager::RecordSerialization(double durationSeconds, uint64_t bytes) {
+        if (!_isServer) {
+            return;
+        }
+        if (_serializeDuration) {
+            _serializeDuration->Observe(durationSeconds);
+        }
+        if (_serializedEntities) {
+            _serializedEntities->Inc();
+        }
+        if (bytes && _serializedBytes) {
+            _serializedBytes->Inc(bytes);
+        }
+        _serializedEntitiesThisTick.fetch_add(1, std::memory_order_relaxed);
+        _serializedBytesThisTick.fetch_add(bytes, std::memory_order_relaxed);
     }
 
     void ReplicationManager::ForceState(NetworkEntity *entity) {
@@ -79,6 +138,9 @@ namespace Framework::Networking::Replication {
         // peer we aren't connected to (the shared scripting builtins call it on both sides).
         if (!entity || !_owner || !_isServer || entity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
             return;
+        }
+        if (_forcedStates) {
+            _forcedStates->Inc();
         }
         // The epoch fences the override: the owner echoes the new value back in its updates, and
         // Deserialize drops owner state still carrying the old one — in-flight packets sent before
@@ -97,6 +159,9 @@ namespace Framework::Networking::Replication {
     void ReplicationManager::SetOwner(NetworkEntity *entity, MafiaNet::PeerGuid guid) {
         if (!entity) {
             return;
+        }
+        if (_ownerChanges) {
+            _ownerChanges->Inc();
         }
         entity->ownerGUID = guid;
         // Serialize to an owner is withheld, so the grant can't ride normal replication: tell the new
@@ -123,12 +188,21 @@ namespace Framework::Networking::Replication {
         if (_onEntityCreated) {
             _onEntityCreated(entity->GetNetworkID());
         }
+        if (_replCreated) {
+            _replCreated->Inc();
+        }
+        if (_replEntities) {
+            _replEntities->Set(static_cast<double>(GetReplicaCount()));
+        }
         return entity;
     }
 
     void ReplicationManager::DestroyEntity(NetworkEntity *entity) {
         if (!entity) {
             return;
+        }
+        if (_replDestroyed) {
+            _replDestroyed->Inc();
         }
         // Erase by value, not by ownerGUID: the owner key may have been reassigned since SetViewer,
         // and on a respawn flow (SetViewer(newAvatar) then DestroyEntity(oldAvatar)) an erase by key
@@ -149,6 +223,9 @@ namespace Framework::Networking::Replication {
         // BroadcastDestruction must precede deletion; ~Replica3 dereferences automatically.
         entity->BroadcastDestruction();
         delete entity;
+        if (_replEntities) {
+            _replEntities->Set(static_cast<double>(GetReplicaCount()));
+        }
     }
 
     NetworkEntity *ReplicationManager::GetEntityByNetworkID(MafiaNet::NetworkID networkId) const {
@@ -201,14 +278,42 @@ namespace Framework::Networking::Replication {
         if (!_isServer) {
             return;
         }
+        const uint64_t entitiesLastTick = _serializedEntitiesThisTick.exchange(0, std::memory_order_relaxed);
+        const uint64_t bytesLastTick    = _serializedBytesThisTick.exchange(0, std::memory_order_relaxed);
+        if (_hasSerializationWindow) {
+            if (_serializedEntitiesPerTick) {
+                _serializedEntitiesPerTick->Observe(static_cast<double>(entitiesLastTick));
+            }
+            if (_serializedBytesPerTick) {
+                _serializedBytesPerTick->Observe(static_cast<double>(bytesLastTick));
+            }
+        }
+        _hasSerializationWindow = true;
+
+        const auto start = std::chrono::steady_clock::now();
         _interest.BeginRebuild();
         ForEachEntity([this](NetworkEntity *entity) {
             _interest.Insert(entity);
         });
+        if (_replEntities) {
+            _replEntities->Set(static_cast<double>(GetReplicaCount()));
+        }
+        if (_interestRebuildDur) {
+            const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            _interestRebuildDur->Observe(secs);
+        }
     }
 
     void ReplicationManager::CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out) {
-        _interest.CollectVisible(viewer, viewerGUID, out);
+        const size_t before = out.size();
+        size_t candidates   = 0;
+        _interest.CollectVisible(viewer, viewerGUID, out, &candidates);
+        if (_interestCandidates) {
+            _interestCandidates->Inc(static_cast<uint64_t>(candidates));
+        }
+        if (_interestSelected) {
+            _interestSelected->Inc(static_cast<uint64_t>(out.size() - before));
+        }
     }
 
     void ReplicationManager::OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) {
