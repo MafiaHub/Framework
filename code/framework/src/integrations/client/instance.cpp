@@ -110,7 +110,8 @@ namespace Framework::Integrations::Client {
                 args.push_back(parsed);
             }
 
-            resourceManager->GetEvents().EmitReserved(isolate, context, eventName, args);
+            Framework::Scripting::Builtins::Events &events = resourceManager->GetEvents();
+            events.EmitReserved(isolate, context, eventName, args);
         }
 
         // Reserved "chatMessage" event carrying { author, text, color }.
@@ -146,7 +147,8 @@ namespace Framework::Integrations::Client {
             obj->Set(context, v8::String::NewFromUtf8Literal(isolate, "color"), v8::Uint32::NewFromUnsigned(isolate, msg.color)).Check();
 
             std::vector<v8::Local<v8::Value>> args {obj};
-            resourceManager->GetEvents().EmitReserved(isolate, context, "chatMessage", args);
+            Framework::Scripting::Builtins::Events &events = resourceManager->GetEvents();
+            events.EmitReserved(isolate, context, "chatMessage", args);
         }
     } // namespace
 

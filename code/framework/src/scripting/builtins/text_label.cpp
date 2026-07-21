@@ -8,6 +8,7 @@
 
 #include "text_label.h"
 #include "../scripting_catalog.h"
+#include "color.h"
 
 #include <core_modules.h>
 
@@ -36,11 +37,15 @@ namespace Framework::Scripting::Builtins {
     }
 
     void TextLabel::SetColor(int r, int g, int b, int a) {
+        const auto clamp = [](int c) {
+            return static_cast<uint32_t>(std::clamp(c, 0, 255));
+        };
+        SetColorPacked((clamp(a) << 24) | (clamp(r) << 16) | (clamp(g) << 8) | clamp(b));
+    }
+
+    void TextLabel::SetColorPacked(uint32_t argb) {
         if (auto *label = ResolveLabel()) {
-            const auto clamp = [](int c) {
-                return static_cast<uint32_t>(std::clamp(c, 0, 255));
-            };
-            label->color = (clamp(a) << 24) | (clamp(r) << 16) | (clamp(g) << 8) | clamp(b);
+            label->color = argb;
         }
     }
 
@@ -123,11 +128,6 @@ namespace Framework::Scripting::Builtins {
             .function("toString", &TextLabel::ToString, v8pp::metadata::docs("string", {}, "Formats this label for logging and debugging.", "Text containing the label ID and current text."))
             .function("destroy", &TextLabel::Destroy, v8pp::metadata::docs("void", {}, "Destroys this replicated label; stale wrappers no longer resolve afterward."))
             .function("setText", &TextLabel::SetText, v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", false, "Replacement text replicated to clients.")}, "Changes the label's displayed text."))
-            .function("setColor", &TextLabel::SetColor,
-                v8pp::metadata::docs("void",
-                    {v8pp::metadata::param("r", "number", false, "Red byte, clamped from 0 to 255."), v8pp::metadata::param("g", "number", false, "Green byte, clamped from 0 to 255."), v8pp::metadata::param("b", "number", false, "Blue byte, clamped from 0 to 255."),
-                        v8pp::metadata::param("a", "number", false, "Alpha byte, clamped from 0 to 255.")},
-                    "Changes the label's packed ARGB color."))
             .function("setFontSize", &TextLabel::SetFontSize, v8pp::metadata::docs("void", {v8pp::metadata::param("size", "number", false, "Font size clamped from 6 to 128.")}, "Changes the rendered font size."))
             .function("setDrawDistance", &TextLabel::SetDrawDistance, v8pp::metadata::docs("void", {v8pp::metadata::param("distance", "number", false, "Maximum rendering distance, clamped from 1 to 1000 world units.")}, "Changes how far away clients can render the label."))
             .function("setFadeDistance", &TextLabel::SetFadeDistance,
@@ -139,6 +139,35 @@ namespace Framework::Scripting::Builtins {
             .property("drawDistance", &TextLabel::GetDrawDistance, v8pp::metadata::property_docs("number", "Current maximum rendering distance in world units."))
             .property("fadeDistance", &TextLabel::GetFadeDistance, v8pp::metadata::property_docs("number", "Current fade range in world units."))
             .property("style", &TextLabel::GetStyle, v8pp::metadata::property_docs("number", "Current framework text-label style enum value."));
+
+        // setColor accepts either a Core.Color or byte components (r, g, b, a from 0-255), so scripts
+        // don't have to hand-pack this API's ARGB layout. Registered as a raw prototype function
+        // because v8pp's typed binding can't express the Color|number overload.
+        cls->prototype_function(
+            "setColor",
+            [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                v8::Isolate *iso = info.GetIsolate();
+                auto *self       = v8pp::class_<TextLabel>::unwrap_object(iso, info.This());
+                if (!self) {
+                    return;
+                }
+                if (info.Length() >= 1) {
+                    if (auto *col = v8pp::class_<Color>::unwrap_object(iso, info[0])) {
+                        self->SetColorPacked(col->toARGB());
+                        return;
+                    }
+                }
+                v8::Local<v8::Context> ctx = iso->GetCurrentContext();
+                const auto num             = [&](int i, int fallback) {
+                    return (info.Length() > i && info[i]->IsNumber()) ? info[i]->Int32Value(ctx).FromMaybe(fallback) : fallback;
+                };
+                self->SetColor(num(0, 0), num(1, 0), num(2, 0), num(3, 255));
+            },
+            v8pp::metadata::docs("void",
+                {v8pp::metadata::param("colorOrR", "Color | number", false, "A Core.Color, or the red byte (0-255) when passing components."),
+                    v8pp::metadata::param("g", "number", true, "Green byte (0-255) when passing components."), v8pp::metadata::param("b", "number", true, "Blue byte (0-255) when passing components."),
+                    v8pp::metadata::param("a", "number", true, "Alpha byte (0-255) when passing components; defaults to 255.")},
+                "Changes the label's packed ARGB color from a Core.Color or byte components."));
 
         return *cls;
     }
@@ -169,13 +198,13 @@ namespace Framework::Scripting::Builtins {
         v8::HandleScope hs(isolate);
 
         if (info.Length() < 4 || !info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber() || !info[3]->IsString()) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "TextLabel.create: expected (x, y, z, text, fontSize?, drawDistance?, virtualWorld?)"));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "TextLabel.create: expected (x, y, z, text, fontSize?, drawDistance?, virtualWorld?)")));
             return;
         }
 
         auto *replication = CoreModules::GetReplication();
         if (!replication) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "TextLabel.create: replication unavailable"));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: replication unavailable")));
             return;
         }
 
@@ -184,13 +213,13 @@ namespace Framework::Scripting::Builtins {
             ++count;
         });
         if (count >= kMaxLabels) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "TextLabel.create: label limit reached"));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: label limit reached")));
             return;
         }
 
         auto *label = replication->CreateEntity<LabelEntity>();
         if (!label) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "TextLabel.create: failed to create entity (type not registered?)"));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: failed to create entity (type not registered?)")));
             return;
         }
 
@@ -211,5 +240,9 @@ namespace Framework::Scripting::Builtins {
         }
 
         info.GetReturnValue().Set(wrapped);
+    }
+
+    void TextLabel::UnregisterIsolate(v8::Isolate *isolate) {
+        _classes.erase(isolate);
     }
 } // namespace Framework::Scripting::Builtins

@@ -52,6 +52,13 @@ namespace Framework::Scripting::Builtins {
 
         static v8pp::class_<Player> &GetClass(v8::Isolate *isolate);
 
+        // Publish the Player constructor on a target object, like Entity::Register /
+        // TextLabel::Register. Games opt in; the framework itself exposes Player lazily
+        // through GetClass (see integrations/server/instance.cpp).
+        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+
+        static void UnregisterIsolate(v8::Isolate *isolate);
+
       protected:
         const Networking::RPC::ClientIdentity *ResolveIdentity() const;
 

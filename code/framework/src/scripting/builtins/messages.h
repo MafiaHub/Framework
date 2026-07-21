@@ -19,8 +19,10 @@
 #include <vector>
 
 namespace Framework::Scripting {
-
     class ResourceManager;
+}
+
+namespace Framework::Scripting::Builtins {
 
     /**
      * JavaScript messages system for request/response communication.
@@ -45,6 +47,15 @@ namespace Framework::Scripting {
         static void ProcessPendingResponses(v8::Isolate *isolate, v8::Local<v8::Context> context);
 
         /**
+         * Drop a stopped resource's registered handlers, and reject+erase every
+         * pending request it originated or targeted, so its Global<Function>
+         * handles don't dangle and awaiting `request(...)` Promises reject
+         * instead of hanging until isolate teardown. Needs an active
+         * isolate/context to settle those Promises. Mirrors Events::CleanupResource.
+         */
+        static void CleanupResource(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &resourceName);
+
+        /**
          * Cleanup all static V8 globals.
          * Must be called before the V8 isolate is disposed.
          */
@@ -56,19 +67,27 @@ namespace Framework::Scripting {
         static void RequestCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void SendCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
 
+        // A registered handler together with the isolate its Global<Function> is
+        // bound to. Requests/sends must not Get() a handler from a foreign isolate.
+        struct Handler {
+            v8::Isolate *isolate = nullptr;
+            v8::Global<v8::Function> function;
+        };
+
         // Message handler storage: resourceName -> messageType -> handler
-        static std::map<std::string, std::map<std::string, v8::Global<v8::Function>>> _handlers;
+        static std::map<std::string, std::map<std::string, Handler>> _handlers;
         static std::mutex _handlersMutex;
 
         // Pending request structure
         struct PendingRequest {
             uint64_t requestId;
             v8::Global<v8::Promise::Resolver> resolver;
-            std::string sourceResource;
+            std::string sourceResource; // resource awaiting the reply (owns the Promise)
+            std::string targetResource; // resource whose handler must reply
             std::atomic<bool> consumed{false}; // Prevents double-reply
 
-            PendingRequest(uint64_t id, v8::Global<v8::Promise::Resolver> res, std::string src)
-                : requestId(id), resolver(std::move(res)), sourceResource(std::move(src)), consumed(false) {}
+            PendingRequest(uint64_t id, v8::Global<v8::Promise::Resolver> res, std::string src, std::string tgt)
+                : requestId(id), resolver(std::move(res)), sourceResource(std::move(src)), targetResource(std::move(tgt)), consumed(false) {}
             PendingRequest(PendingRequest&&) = delete;
             PendingRequest& operator=(PendingRequest&&) = delete;
         };
@@ -87,8 +106,6 @@ namespace Framework::Scripting {
         static std::mutex _responseQueueMutex;
 
         static uint64_t _nextRequestId;
-
-        static ResourceManager *_resourceManager;
     };
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

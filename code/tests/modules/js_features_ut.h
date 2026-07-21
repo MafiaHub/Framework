@@ -12,6 +12,12 @@
 #include "scripting/builtins/builtins.h"
 #include "scripting/builtins/console.h"
 #include "scripting/builtins/events.h"
+#include "scripting/builtins/execution_environment.h"
+#include "scripting/builtins/exports.h"
+#include "scripting/builtins/imports.h"
+#include "scripting/builtins/messages.h"
+#include "scripting/builtins/player.h"
+#include "scripting/resource/resource.h"
 #include "scripting/resource/resource_manager.h"
 
 #include <cppfs/FileHandle.h>
@@ -129,6 +135,13 @@ static bool RunJSThrows(Framework::Scripting::NodeEngine &engine, const char *co
     return tryCatch.HasCaught();
 }
 
+// Run code and return the constructor name of whatever it throws ("TypeError", "Error", ...),
+// or "" when it does not throw. Used to assert the builtins' throw-idiom convention.
+static std::string RunJSErrorName(Framework::Scripting::NodeEngine &engine, const std::string &code) {
+    std::string wrapped = "(() => { try { " + code + "; return ''; } catch (e) { return (e && e.constructor && e.constructor.name) || 'Error'; } })()";
+    return RunJSString(engine, wrapped.c_str());
+}
+
 // Test helper for Events tests
 class EventsTestHelper {
   public:
@@ -160,6 +173,7 @@ class EventsTestHelper {
 
 MODULE(js_features, {
     using namespace Framework::Scripting;
+    using namespace Framework::Scripting::Builtins;
 
     // ========================================
     // BUILTIN TYPES TESTS (single engine to avoid v8pp caching bug)
@@ -182,7 +196,7 @@ MODULE(js_features, {
             context->Global()->Set(context,
                 v8::String::NewFromUtf8Literal(isolate, "Core"),
                 coreObj).Check();
-            Builtins::RegisterAll(isolate, coreObj);
+            Builtins::RegisterValueTypes(isolate, coreObj);
         }
 
         // Vector3 tests
@@ -216,6 +230,102 @@ MODULE(js_features, {
         EQUALS(RunJS(engine, "new Core.Color(255, 128, 64, 255).g"), 128);
 
         engine.Shutdown();
+    });
+
+    // Value-type parity: Quaternion gained length/lengthSquared (like Vector) and mul (renamed from
+    // multiply — the old name is gone); Color gained NewInstance so native C++ can return a Color.
+    IT("Quaternion length/mul parity and Color::NewInstance", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        v8::Isolate *isolate = engine.GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Core"), coreObj).Check();
+            RegisterValueTypes(isolate, coreObj);
+
+            // Native C++ hands a Color to JS via NewInstance (the native-SDK direction).
+            v8::Local<v8::Object> col = Color::NewInstance(isolate, glm::vec4(0.25f, 0.5f, 0.75f, 1.0f));
+            context->Global()->Set(context, v8pp::to_v8(isolate, "__col"), col).Check();
+        }
+
+        // length / lengthSquared, mirroring Vector.
+        EQUALS(RunJSBool(engine, "Math.abs(new Core.Quaternion(0,3,4,0).length - 5) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "Math.abs(new Core.Quaternion(0,3,4,0).lengthSquared - 25) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "Math.abs(Core.Quaternion.identity().length - 1) < 0.001"), true);
+
+        // mul is the (renamed) composition; multiply is gone.
+        EQUALS(RunJSBool(engine, "typeof new Core.Quaternion(1,0,0,0).mul === 'function'"), true);
+        EQUALS(RunJSBool(engine, "new Core.Quaternion(1,0,0,0).multiply === undefined"), true);
+        EQUALS(RunJSBool(engine, "Core.Quaternion.identity().mul(Core.Quaternion.identity()).w === 1"), true);
+
+        // Color::NewInstance produced a real, live Core.Color.
+        EQUALS(RunJSBool(engine, "__col instanceof Core.Color"), true);
+        EQUALS(RunJSBool(engine, "Math.abs(__col.r - 0.25) < 0.001 && Math.abs(__col.g - 0.5) < 0.001 && Math.abs(__col.b - 0.75) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "typeof __col.toHex === 'function'"), true);
+
+        engine.Shutdown();
+    });
+
+    // Doc/impl reconciliation (now user-facing via @mafiahub/types): toHex is lowercase, fromHex
+    // 3/4-digit shorthands are unsupported (yield white), Quaternion.normalize maps zero to identity,
+    // and the ctor is scalar-first (w, x, y, z).
+    IT("Color hex and Quaternion normalize/ctor match their docs", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Core"), coreObj).Check();
+            RegisterValueTypes(isolate, coreObj);
+        }
+
+        // The 3-argument constructor works and alpha defaults to 1 (v8pp optional-ctor fix).
+        EQUALS(RunJSBool(engine, "new Core.Color(0.25, 0.5, 0.75).a === 1"), true);
+
+        // toHex emits lowercase, as documented (exercised through the 3-arg ctor).
+        std::string hex = RunJSString(engine, "new Core.Color(1, 0.5, 0).toHex()");
+        STREQUALS(hex.c_str(), "#ff8000");
+        std::string hexA = RunJSString(engine, "new Core.Color(1, 0.5, 0).toHex(true)");
+        STREQUALS(hexA.c_str(), "#ff8000ff");
+
+        // Full-length hex parses; unsupported 3-digit shorthand falls back to opaque white.
+        EQUALS(RunJSBool(engine, "Math.abs(Core.Color.fromHex('#ff0000').r - 1) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "(() => { const c = Core.Color.fromHex('#f00'); return c.r === 1 && c.g === 1 && c.b === 1; })()"), true);
+
+        // normalize maps a zero quaternion to identity rather than NaN.
+        EQUALS(RunJSBool(engine, "(() => { const q = new Core.Quaternion(0,0,0,0).normalize(); return q.w === 1 && q.x === 0 && q.y === 0 && q.z === 0; })()"), true);
+
+        // Constructor is scalar-first: w is the first argument.
+        EQUALS(RunJSBool(engine, "(() => { const p = new Core.Quaternion(1,2,3,4); return p.w === 1 && p.x === 2 && p.y === 3 && p.z === 4; })()"), true);
+
+        engine.Shutdown();
+    });
+
+    // The two packed layouts Chat (RGBA) and TextLabel (ARGB) accept a Color through are computed by
+    // Color::toRGBA/toARGB. Their end-to-end use needs networking/replication (integration-tested);
+    // here we lock the byte ordering directly. Color(1, 0.5, 0, 1) -> R=255 G=128 B=0 A=255.
+    IT("Color packs to RGBA and ARGB with the documented byte order", {
+        Color c(1.0f, 0.5f, 0.0f, 1.0f);
+        // 0xRRGGBBAA
+        UEQUALS(c.toRGBA(), (uint32_t)0xFF80'00FFu);
+        // 0xAARRGGBB
+        UEQUALS(c.toARGB(), (uint32_t)0xFFFF'8000u);
+
+        // Fully opaque red, distinct in the two layouts.
+        Color red(1.0f, 0.0f, 0.0f, 1.0f);
+        UEQUALS(red.toRGBA(), (uint32_t)0xFF00'00FFu);
+        UEQUALS(red.toARGB(), (uint32_t)0xFFFF'0000u);
     });
 
     // ========================================
@@ -428,6 +538,69 @@ MODULE(js_features, {
         EventsTestHelper::Cleanup();
     });
 
+    // Throw-idiom convention: arg-shape errors are TypeError (not Error), and Events.off no longer
+    // swallows bad arguments — it throws like Events.on. Guards the builtins conventions sweep.
+    IT("Events arg-shape errors are TypeError and off is no longer silent", {
+        EventsTestHelper::Setup();
+
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Core"), coreObj).Check();
+            manager.GetEvents().Register(isolate, context, coreObj, &manager);
+            manager.SetCurrentResourceContext("testResource");
+        }
+
+        std::string err;
+        // Arg-shape failures throw TypeError.
+        err = RunJSErrorName(engine, "Core.Events.on()");
+        STREQUALS(err.c_str(), "TypeError");
+        err = RunJSErrorName(engine, "Core.Events.on(123, () => {})");
+        STREQUALS(err.c_str(), "TypeError");
+        err = RunJSErrorName(engine, "Core.Events.emit()");
+        STREQUALS(err.c_str(), "TypeError");
+        err = RunJSErrorName(engine, "Core.Events.emitTo('r')");
+        STREQUALS(err.c_str(), "TypeError");
+
+        // Events.off used to silently ignore bad arguments; it now throws TypeError like on().
+        err = RunJSErrorName(engine, "Core.Events.off('e', 'notafn')");
+        STREQUALS(err.c_str(), "TypeError");
+        err = RunJSErrorName(engine, "Core.Events.off('e')");
+        STREQUALS(err.c_str(), "TypeError");
+        // A well-formed off() with no matching handler stays a quiet no-op.
+        err = RunJSErrorName(engine, "Core.Events.off('e', () => {})");
+        STREQUALS(err.c_str(), "");
+
+        // State error: with no resource context, off() can't tell which resource's handler to drop,
+        // so it throws Exception::Error like Events.on — not a silent return (README idiom).
+        manager.SetCurrentResourceContext("");
+        err = RunJSErrorName(engine, "Core.Events.off('e', () => {})");
+        STREQUALS(err.c_str(), "Error");
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            manager.GetEvents().CleanupResource("testResource");
+        }
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
     // ========================================
     // CLIENT-EVENT CHANNEL TESTS (onClient)
     // ========================================
@@ -547,6 +720,433 @@ MODULE(js_features, {
         EQUALS(manager.GetEvents().GetClientListenerCount("e"), (size_t)0);
         EQUALS(manager.GetEvents().GetListenerCount("e"), (size_t)0);
 
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
+    // ALLSETTLED AGGREGATION ROBUSTNESS
+    // ========================================
+    // emit() aggregates via the script-mutable global Promise.allSettled, so its then-handler must
+    // not trust the record shape. These drive it with hostile shapes: pre-fix each aborts the
+    // process, post-fix each settles the emit() promise cleanly.
+
+    // Throwing `status` getter: pre-fix, Get("status").ToLocalChecked() aborts on the empty MaybeLocal.
+    IT("emit survives a Promise.allSettled whose records throw on access", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerEvents(engine, manager);
+
+        RunJS(engine, R"(
+            globalThis.__done = 0;
+            Promise.allSettled = function () {
+                return Promise.resolve([{ get status() { throw new Error('boom'); } }]);
+            };
+            Core.Events.on('hostile', () => 1);
+            Core.Events.emit('hostile').then(() => { globalThis.__done = 1; },
+                                             () => { globalThis.__done = 2; });
+            0
+        )");
+
+        // Drain microtasks so the then-handler and the emit() continuation run.
+        for (int i = 0; i < 8; ++i) engine.Tick();
+
+        // No crash, and the emit() promise settled — resolved, since no well-formed rejection.
+        EQUALS(RunJS(engine, "globalThis.__done"), 1);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // Non-array settled value: pre-fix it reaches info[0].As<v8::Array>() + Array::Length() (UB).
+    IT("emit survives a Promise.allSettled that resolves with a non-array", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerEvents(engine, manager);
+
+        RunJS(engine, R"(
+            globalThis.__done2 = 0;
+            Promise.allSettled = function () { return Promise.resolve("not-an-array"); };
+            Core.Events.on('hostile2', () => 1);
+            Core.Events.emit('hostile2').then(() => { globalThis.__done2 = 1; },
+                                              () => { globalThis.__done2 = 2; });
+            0
+        )");
+
+        for (int i = 0; i < 8; ++i) engine.Tick();
+
+        EQUALS(RunJS(engine, "globalThis.__done2"), 1);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // Non-Promise return: pre-fix, allSettledResult.ToLocalChecked().As<v8::Promise>()->Then()
+    // runs on a non-Promise handle and aborts. Post-fix the IsPromise() guard soft-resolves.
+    IT("emit survives a Promise.allSettled that returns a non-Promise", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerEvents(engine, manager);
+
+        RunJS(engine, R"(
+            globalThis.__done3 = 0;
+            Promise.allSettled = function () { return 42; };
+            Core.Events.on('hostile3', () => 1);
+            Core.Events.emit('hostile3').then(() => { globalThis.__done3 = 1; },
+                                              () => { globalThis.__done3 = 2; });
+            0
+        )");
+
+        for (int i = 0; i < 8; ++i) engine.Tick();
+
+        EQUALS(RunJS(engine, "globalThis.__done3"), 1);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // Sanity: the hardening must not swallow genuine, well-formed rejections.
+    IT("emit still rejects when a handler rejects (real allSettled)", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerEvents(engine, manager);
+
+        RunJS(engine, R"(
+            globalThis.__r = 0;
+            Core.Events.on('boom', () => { throw new Error('handler failed'); });
+            Core.Events.emit('boom').then(() => { globalThis.__r = 1; },
+                                          () => { globalThis.__r = 2; });
+            0
+        )");
+
+        for (int i = 0; i < 8; ++i) engine.Tick();
+
+        EQUALS(RunJS(engine, "globalThis.__r"), 2);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
+    // IMPORTS (real cross-resource values)
+    // ========================================
+    // imports.get must return an object of *real* export values keyed by name — mirroring
+    // Exports.get — not a placeholder listing export names. Regression guard for the old
+    // `_availableExports` stub that returned names instead of values.
+    IT("imports.get builds an object of real export values keyed by name", {
+        EventsTestHelper::Setup();
+
+        // Provider resource declaring two exports in its manifest.
+        std::string providerPath = EventsTestHelper::GetTestPath() + "/provider";
+        {
+            cppfs::FileHandle dir = cppfs::fs::open(providerPath);
+            if (!dir.exists()) dir.createDirectory();
+            std::ofstream pkg(providerPath + "/package.json");
+            pkg << R"({"name":"provider","version":"1.0.0","mafiahub":{"exports":["alpha","beta"]}})";
+        }
+
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        v8::Isolate *isolate = engine.GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+
+            Resource provider(providerPath);
+            provider.SetIsolate(isolate);
+            EQUALS(provider.RegisterExport("alpha", v8::Integer::New(isolate, 42)), true);
+            EQUALS(provider.RegisterExport("beta", v8pp::to_v8(isolate, std::string("hello"))), true);
+
+            v8::Local<v8::Object> imported = Imports::BuildImportsObject(isolate, context, &provider);
+            context->Global()->Set(context, v8pp::to_v8(isolate, "__imp"), imported).Check();
+        }
+
+        // Real values, not a name list.
+        EQUALS(RunJS(engine, "__imp.alpha"), 42);
+        EQUALS(RunJSBool(engine, "__imp.beta === 'hello'"), true);
+        // The old placeholder key must be gone, and only the two exports present.
+        EQUALS(RunJSBool(engine, "__imp._availableExports === undefined"), true);
+        EQUALS(RunJSBool(engine, "Object.keys(__imp).length === 2"), true);
+
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
+    // MESSAGES (handler lifecycle)
+    // ========================================
+    // messages.handle stores a Global<Function> per (resource, type). A stopped resource must not
+    // leave those handlers behind until full Shutdown — CleanupResource drops them eagerly, like
+    // Events. (The cross-isolate guard added alongside can only be exercised with two live isolates,
+    // which libnode cannot host in one process, so it is covered by integration testing.)
+    auto registerMessages = [](NodeEngine &engine, ResourceManager &manager) {
+        v8::Isolate *isolate = engine.GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine.GetContext();
+        v8::Context::Scope contextScope(context);
+        v8::Local<v8::Object> frameworkObj = v8::Object::New(isolate);
+        context->Global()->Set(context, v8pp::to_v8(isolate, "Framework"), frameworkObj).Check();
+        Messages::Register(isolate, context, frameworkObj, &manager);
+    };
+
+    auto pumpMessages = [](NodeEngine &engine) {
+        for (int i = 0; i < 8; ++i) {
+            {
+                v8::Isolate *isolate = engine.GetIsolate();
+                v8::Locker locker(isolate);
+                v8::Isolate::Scope isolateScope(isolate);
+                v8::HandleScope handleScope(isolate);
+                v8::Local<v8::Context> context = engine.GetContext();
+                v8::Context::Scope contextScope(context);
+                Messages::ProcessPendingResponses(isolate, context);
+            }
+            engine.Tick();
+        }
+    };
+
+    // A registered handler answers a same-isolate request; after CleanupResource the same request
+    // is rejected because the handler is gone — proving the resource's handlers were released.
+    IT("messages.request round-trips, and CleanupResource drops the handler", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerMessages(engine, manager);
+
+        // Arg-shape failures throw TypeError (convention), before any state checks.
+        std::string margErr;
+        margErr = RunJSErrorName(engine, "Framework.messages.request(123)");
+        STREQUALS(margErr.c_str(), "TypeError");
+        margErr = RunJSErrorName(engine, "Framework.messages.send('r')");
+        STREQUALS(margErr.c_str(), "TypeError");
+
+        // Register the handler as resource 'provider'.
+        manager.SetCurrentResourceContext("provider");
+        RunJS(engine, "Framework.messages.handle('ping', (payload, reply) => { reply(payload + 1); }); 0");
+
+        // Issue a request as resource 'consumer'.
+        manager.SetCurrentResourceContext("consumer");
+        RunJS(engine, R"(
+            globalThis.__reply = 0;
+            Framework.messages.request('provider', 'ping', 41).then(v => { globalThis.__reply = v; },
+                                                                    () => { globalThis.__reply = -1; });
+            0
+        )");
+        pumpMessages(engine);
+        EQUALS(RunJS(engine, "globalThis.__reply"), 42);
+
+        // A request whose target hasn't replied yet stays pending...
+        manager.SetCurrentResourceContext("provider");
+        RunJS(engine, "Framework.messages.handle('slow', (payload, reply) => { globalThis.__saved = reply; }); 0");
+        manager.SetCurrentResourceContext("consumer");
+        RunJS(engine, R"(
+            globalThis.__inflight = 0;
+            Framework.messages.request('provider', 'slow', 1).then(() => { globalThis.__inflight = 1; },
+                                                                   () => { globalThis.__inflight = 2; });
+            0
+        )");
+        pumpMessages(engine);
+        EQUALS(RunJS(engine, "globalThis.__inflight"), 0);
+
+        // Drop 'provider' handlers and reject requests tied to it as its resource stops.
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            Messages::CleanupResource(isolate, context, "provider");
+        }
+        pumpMessages(engine);
+        // ...and the in-flight Promise now rejects instead of hanging forever.
+        EQUALS(RunJS(engine, "globalThis.__inflight"), 2);
+
+        // A new request after cleanup also rejects: no handler remains for the target resource.
+        RunJS(engine, R"(
+            globalThis.__after = 0;
+            Framework.messages.request('provider', 'ping', 1).then(() => { globalThis.__after = 1; },
+                                                                   () => { globalThis.__after = 2; });
+            0
+        )");
+        pumpMessages(engine);
+        EQUALS(RunJS(engine, "globalThis.__after"), 2);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            Messages::Shutdown();
+        }
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
+    // REGISTRATION SHAPE
+    // ========================================
+    // RegisterValueTypes publishes only the value types; Player gained a Register that publishes its
+    // constructor like its handle-type siblings (Entity, TextLabel). Guards the registration sweep.
+    IT("RegisterValueTypes and Player::Register publish their constructors", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        v8::Isolate *isolate = engine.GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            v8::Local<v8::Object> target = context->Global();
+            Builtins::RegisterValueTypes(isolate, target);
+            Builtins::Player::Register(isolate, target);
+        }
+
+        // Value types published by RegisterValueTypes.
+        EQUALS(RunJSBool(engine, "typeof Vector3 === 'function'"), true);
+        EQUALS(RunJSBool(engine, "typeof Color === 'function'"), true);
+        // Player constructor published by the new Player::Register.
+        EQUALS(RunJSBool(engine, "typeof Player === 'function'"), true);
+
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
+    // JS-FACING NAMING
+    // ========================================
+    // The Framework.* namespace group uses one casing: exports joins the lowercase imports/messages
+    // (was Framework.Exports). The runtime-flags global is ExecutionEnvironment (was Environment) at
+    // the root, with camelCase isClient/isServer (were IsClient/IsServer). Guards the breaking
+    // renames; the old names must be gone.
+    IT("Framework.exports is lowercase and ExecutionEnvironment flags are camelCase", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            v8::Local<v8::Object> frameworkObj = v8::Object::New(isolate);
+            context->Global()->Set(context, v8pp::to_v8(isolate, "Framework"), frameworkObj).Check();
+            Exports::Register(isolate, context, frameworkObj, &manager);
+            // Registered at the global root, as production does.
+            ExecutionEnvironment::Register(isolate, context, context->Global(), /*isClient*/ true);
+        }
+
+        // exports: lowercase, matching imports/messages; the capitalized name is gone.
+        EQUALS(RunJSBool(engine, "typeof Framework.exports === 'object' && Framework.exports !== null"), true);
+        EQUALS(RunJSBool(engine, "typeof Framework.exports.register === 'function'"), true);
+        EQUALS(RunJSBool(engine, "typeof Framework.exports.get === 'function'"), true);
+        EQUALS(RunJSBool(engine, "Framework.Exports === undefined"), true);
+
+        // ExecutionEnvironment at root, camelCase flags; old Environment name and PascalCase are gone.
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.isClient === true"), true);
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.isServer === false"), true);
+        EQUALS(RunJSBool(engine, "typeof Environment === 'undefined'"), true);
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.IsClient === undefined"), true);
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.IsServer === undefined"), true);
+
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // ========================================
+    // RE-REGISTER SAFETY (callback-context reuse)
+    // ========================================
+    // A second Register() must not dangle the v8::Externals baked during the first one. Regression
+    // guard for the double-Register use-after-free: externals captured before the second call must
+    // still resolve to live memory afterwards.
+
+    // An unsubscribe closure from the first Register() must still remove its handler after a second.
+    IT("Second Register keeps a prior unsubscribe closure valid", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+
+        // Stash the unsubscribe closure from the first Register().
+        registerEvents(engine, manager);
+        RunJS(engine, "globalThis.oldUnsub = Core.Events.on('persist', () => {}); 0");
+        EQUALS(manager.GetEvents().GetListenerCount("persist"), (size_t)1);
+
+        // Re-register on the same Events instance (the path that previously freed the context
+        // out from under oldUnsub). Handler tables are untouched.
+        registerEvents(engine, manager);
+        EQUALS(manager.GetEvents().GetListenerCount("persist"), (size_t)1);
+
+        // The old closure still reaches the live context and removes its handler.
+        RunJS(engine, "globalThis.oldUnsub(); 0");
+        EQUALS(manager.GetEvents().GetListenerCount("persist"), (size_t)0);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // The old Core.Events.on function (its template data holds the context) must still dispatch
+    // into the same Events after a second Register(), and the new Core.Events must work too.
+    IT("Second Register keeps prior function-template externals valid", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+
+        // Capture the on() function from the first Register(), then re-register over it.
+        registerEvents(engine, manager);
+        RunJS(engine, "globalThis.oldOn = Core.Events.on; 0");
+        registerEvents(engine, manager);
+
+        // The captured function still registers into the same Events instance.
+        RunJS(engine, "globalThis.oldOn('again', () => {}); 0");
+        EQUALS(manager.GetEvents().GetListenerCount("again"), (size_t)1);
+
+        // And the freshly-installed Core.Events works too.
+        RunJS(engine, "Core.Events.on('fresh', () => {}); 0");
+        EQUALS(manager.GetEvents().GetListenerCount("fresh"), (size_t)1);
+
+        cleanupResource(engine, manager);
         engine.Shutdown();
         EventsTestHelper::Cleanup();
     });

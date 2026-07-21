@@ -257,7 +257,7 @@ namespace Framework::Scripting {
         /**
          * Get the Events instance owned by this manager.
          */
-        Events &GetEvents();
+        Builtins::Events &GetEvents();
 
         // Current Resource Context
 
@@ -422,7 +422,7 @@ namespace Framework::Scripting {
         std::chrono::steady_clock::time_point _lastFileWatchPoll{};
 
         // Events instance owned by this manager
-        Events _events;
+        Builtins::Events _events;
     };
 
 } // namespace Framework::Scripting

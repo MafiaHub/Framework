@@ -70,10 +70,16 @@ namespace Framework::Scripting {
     void Events::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager, bool isClient) {
         EnsureScriptMetrics();
 
-        // Create callback context that will be passed to all V8 callbacks
-        _callbackContext                  = std::make_unique<CallbackContext>();
+        // Reuse the context across repeated Register() calls; never reallocate. Its address is
+        // baked into non-owning v8::Externals (template data and on() unsubscribe closures) that
+        // outlive this call, so replacing it would dangle them. Contents are invariant anyway.
+        if (!_callbackContext) {
+            _callbackContext = std::make_unique<CallbackContext>();
+        }
+
         _callbackContext->events          = this;
         _callbackContext->resourceManager = resourceManager;
+        _callbackContext->valid.store(true, std::memory_order_release);
 
         v8::Local<v8::Object> eventsObj     = v8::Object::New(isolate);
         v8::Local<v8::External> contextData = v8::External::New(isolate, _callbackContext.get());
@@ -216,12 +222,12 @@ namespace Framework::Scripting {
     // Shared body for emitServer/emitAllClients: BroadcastRPC a named event + payload over the peer's
     // connections (a client peer reaches only the server, a server peer all clients). A string payload
     // is sent verbatim; any other value is JSON-serialized here. `api` names the caller in errors.
-    static void BroadcastLuaEvent(const v8::FunctionCallbackInfo<v8::Value> &args, const char *api) {
+    static void BroadcastScriptEvent(const v8::FunctionCallbackInfo<v8::Value> &args, const char *api) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 1 || !args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + " requires an eventName string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + " requires an eventName string")));
             return;
         }
         const std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
@@ -244,6 +250,8 @@ namespace Framework::Scripting {
 
         auto *peer = CoreModules::GetNetworkPeer();
         if (!peer) {
+            // Missing subsystem is a state error, not a stale receiver — throw (README idiom).
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": network peer unavailable")));
             return;
         }
         Framework::Integrations::Shared::RPC::EmitScriptEvent ev;
@@ -283,17 +291,17 @@ namespace Framework::Scripting {
         const char *api                = EventApiName(scope == HandlerScope::Client, "on");
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": eventName must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + ": eventName must be a string")));
             return;
         }
 
         if (!args[1]->IsFunction()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": handler must be a function")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + ": handler must be a function")));
             return;
         }
 
@@ -383,12 +391,12 @@ namespace Framework::Scripting {
 
     // Client -> server, dispatched there to onClient(name, (player, data)).
     void Events::EmitServerCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        BroadcastLuaEvent(args, "emitServer");
+        BroadcastScriptEvent(args, "emitServer");
     }
 
     // Server -> every client, arriving as Core.Events.on(name, data).
     void Events::EmitAllClientsCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        BroadcastLuaEvent(args, "emitAllClients");
+        BroadcastScriptEvent(args, "emitAllClients");
     }
 
     void Events::OnceImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope) {
@@ -397,12 +405,12 @@ namespace Framework::Scripting {
         const char *api = EventApiName(scope == HandlerScope::Client, "once");
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
             return;
         }
 
         if (!args[0]->IsString() || !args[1]->IsFunction()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": invalid arguments")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + ": invalid arguments")));
             return;
         }
 
@@ -432,16 +440,19 @@ namespace Framework::Scripting {
         const char *api = EventApiName(scope == HandlerScope::Client, "off");
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + " requires 2 arguments: eventName, handler")));
             return;
         }
 
+        // Bad arguments must throw, like Events.on — a silent no-op here hid caller bugs.
         if (!args[0]->IsString() || !args[1]->IsFunction()) {
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string("Events.") + api + ": eventName must be a string and handler a function")));
             return;
         }
 
         CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
         if (!ctx || !ctx->events || !ctx->resourceManager) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": context not available")));
             return;
         }
 
@@ -452,8 +463,10 @@ namespace Framework::Scripting {
         v8::Local<v8::Function> handler = args[1].As<v8::Function>();
         std::string resourceName        = GetResourceContextWithFallback(isolate, manager, handler);
 
-        // If no resource context, we can't determine which resource to remove handlers for
+        // No resource context: like Events.on, this is a state error, not a silent no-op — we can't
+        // determine which resource's handler to remove.
         if (resourceName.empty()) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": must be called from within a resource")));
             return;
         }
 
@@ -558,7 +571,15 @@ namespace Framework::Scripting {
             return;
         }
 
-        v8::Local<v8::Promise> allPromise = allSettledResult.ToLocalChecked().As<v8::Promise>();
+        // A script-replaced Promise.allSettled may return a non-Promise; guard before
+        // casting so we don't reach ->Then() on a bad handle. Soft-resolve like the siblings.
+        v8::Local<v8::Value> allSettledValue = allSettledResult.ToLocalChecked();
+        if (!allSettledValue->IsPromise()) {
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            return;
+        }
+
+        v8::Local<v8::Promise> allPromise = allSettledValue.As<v8::Promise>();
 
         // Allocate callback data and track it for cleanup on Events destruction
         // Use shared_ptr so the data survives until either:
@@ -574,34 +595,22 @@ namespace Framework::Scripting {
             _pendingCallbacks.insert(callbackData);
         }
 
-        // Store the shared_ptr in a weak reference via raw pointer in External,
-        // but we also need to ensure the shared_ptr stays alive. We do this by
-        // capturing it in the lambda below (via the closure's captured copy).
-        // The External just provides a way to access it from the V8 callback.
-        AllSettledCallbackData *rawData      = callbackData.get();
-        v8::Local<v8::External> resolverData = v8::External::New(isolate, rawData);
+        // Give the handler its own strong reference via the External, so ~Events() clearing
+        // _pendingCallbacks can't free the data out from under a still-pending microtask.
+        auto *handlerRef                     = new std::shared_ptr<AllSettledCallbackData>(callbackData);
+        v8::Local<v8::External> resolverData = v8::External::New(isolate, handlerRef);
 
-        // Prevent the shared_ptr from being destroyed when this function returns
-        // by creating a weak reference stored in V8's weak persistent handle mechanism.
-        // Actually, we need to ensure the then-handler lambda captures the shared_ptr.
-        // Since V8 callbacks can't directly capture, we use a persistent weak reference approach.
-        // Instead, we store the shared_ptr in a weak persistent handle that prevents GC.
-        //
-        // Simpler approach: We keep the shared_ptr in _pendingCallbacks (which we do).
-        // The then-handler will access via raw pointer but check cancelled flag before use.
-        // This is safe because:
-        // 1. If Events is alive, _pendingCallbacks keeps shared_ptr alive
-        // 2. If Events is destroyed, cancelled is set to true, then-handler bails out
-
-        v8::Local<v8::Function> thenHandler = v8::Function::New(
+        v8::MaybeLocal<v8::Function> maybeThenHandler = v8::Function::New(
             context,
             [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 v8::Isolate *iso           = info.GetIsolate();
                 v8::Local<v8::Context> ctx = iso->GetCurrentContext();
 
-                AllSettledCallbackData *data = static_cast<AllSettledCallbackData *>(info.Data().As<v8::External>()->Value());
+                // Own the data for this call, then free the heap holder (a then-handler runs once).
+                auto *handlerRef                             = static_cast<std::shared_ptr<AllSettledCallbackData> *>(info.Data().As<v8::External>()->Value());
+                std::shared_ptr<AllSettledCallbackData> data = *handlerRef;
+                delete handlerRef;
 
-                // Check if Events was destroyed before this callback ran
                 if (data->cancelled.load(std::memory_order_acquire)) {
                     return; // Events destroyed, bail out safely
                 }
@@ -609,17 +618,40 @@ namespace Framework::Scripting {
                 v8::Local<v8::Promise::Resolver> res = data->resolver.Get(iso);
                 std::string errorMsg                 = data->errorMessage;
 
-                v8::Local<v8::Array> results = info[0].As<v8::Array>();
                 std::vector<v8::Local<v8::Value>> rejections;
 
-                for (uint32_t i = 0; i < results->Length(); ++i) {
-                    v8::Local<v8::Object> item  = results->Get(ctx, i).ToLocalChecked().As<v8::Object>();
-                    v8::Local<v8::Value> status = item->Get(ctx, v8pp::to_v8(iso, "status")).ToLocalChecked();
-                    v8::String::Utf8Value statusStr(iso, status);
+                // Records come from the script-mutable global Promise.allSettled, so the shape is
+                // untrusted: validate each step and skip malformed records rather than aborting via
+                // an unchecked cast or an empty ToLocalChecked().
+                if (info.Length() > 0 && info[0]->IsArray()) {
+                    v8::Local<v8::Array> results = info[0].As<v8::Array>();
+                    for (uint32_t i = 0; i < results->Length(); ++i) {
+                        // Contain a throwing getter so it skips the record instead of poisoning
+                        // later MaybeLocals with a pending exception.
+                        v8::TryCatch tryCatch(iso);
 
-                    if (std::string(*statusStr) == "rejected") {
-                        v8::Local<v8::Value> reason = item->Get(ctx, v8pp::to_v8(iso, "reason")).ToLocalChecked();
-                        rejections.push_back(reason);
+                        v8::Local<v8::Value> itemVal;
+                        if (!results->Get(ctx, i).ToLocal(&itemVal) || !itemVal->IsObject()) {
+                            continue;
+                        }
+                        v8::Local<v8::Object> item = itemVal.As<v8::Object>();
+
+                        v8::Local<v8::Value> status;
+                        if (!item->Get(ctx, v8pp::to_v8(iso, "status")).ToLocal(&status)) {
+                            continue;
+                        }
+                        v8::String::Utf8Value statusStr(iso, status);
+                        if (!*statusStr || std::string(*statusStr) != "rejected") {
+                            continue;
+                        }
+
+                        v8::Local<v8::Value> reason;
+                        if (item->Get(ctx, v8pp::to_v8(iso, "reason")).ToLocal(&reason)) {
+                            rejections.push_back(reason);
+                        }
+                        else {
+                            rejections.push_back(v8::Undefined(iso));
+                        }
                     }
                 }
 
@@ -653,14 +685,24 @@ namespace Framework::Scripting {
                     res->Resolve(ctx, v8::Undefined(iso)).Check();
                 }
 
-                // Remove from tracking - the shared_ptr in _pendingCallbacks will be erased,
-                // releasing the last reference and freeing the data
-                data->owner->RemovePendingCallback(data);
+                data->owner->RemovePendingCallback(data.get());
             },
-            resolverData)
-                                                  .ToLocalChecked();
+            resolverData);
 
-        allPromise->Then(context, thenHandler).ToLocalChecked();
+        // Function::New / Promise::Then return empty on a terminating isolate; ToLocalChecked()
+        // would abort. Fail soft: the handler won't run, so free its holder and untrack here.
+        v8::Local<v8::Function> thenHandler;
+        if (!maybeThenHandler.ToLocal(&thenHandler)) {
+            delete handlerRef;
+            RemovePendingCallback(callbackData.get());
+            return;
+        }
+
+        if (allPromise->Then(context, thenHandler).IsEmpty()) {
+            delete handlerRef;
+            RemovePendingCallback(callbackData.get());
+            return;
+        }
     }
 
     v8::Local<v8::Promise> Events::EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource, HandlerScope scope) {
@@ -745,12 +787,12 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 1) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.emit requires at least 1 argument: eventName")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.emit requires at least 1 argument: eventName")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.emit: eventName must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.emit: eventName must be a string")));
             return;
         }
 
@@ -777,12 +819,12 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.emitTo requires at least 2 arguments: resourceName, eventName")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.emitTo requires at least 2 arguments: resourceName, eventName")));
             return;
         }
 
         if (!args[0]->IsString() || !args[1]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.emitTo: resourceName and eventName must be strings")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.emitTo: resourceName and eventName must be strings")));
             return;
         }
 
@@ -809,7 +851,7 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 2 || !args[0]->IsString() || !args[1]->IsFunction()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.onLocal requires 2 arguments: eventName, handler")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.onLocal requires 2 arguments: eventName, handler")));
             return;
         }
 
@@ -845,7 +887,7 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 1 || !args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Events.emitLocal requires at least 1 argument: eventName")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Events.emitLocal requires at least 1 argument: eventName")));
             return;
         }
 
@@ -988,4 +1030,4 @@ namespace Framework::Scripting {
         args.GetReturnValue().Set(static_cast<uint32_t>(count));
     }
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

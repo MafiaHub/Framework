@@ -16,8 +16,10 @@
 #include <string>
 
 namespace Framework::Scripting {
-
     class ResourceManager;
+}
+
+namespace Framework::Scripting::Builtins {
 
     /**
      * Console override that routes to Framework logger.
@@ -57,4 +59,4 @@ namespace Framework::Scripting {
 
     };
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

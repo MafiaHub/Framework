@@ -9,6 +9,7 @@
 #include "chat.h"
 
 #include "../scripting_catalog.h"
+#include "color.h"
 #include "entity.h"
 
 #include <core_modules.h>
@@ -38,15 +39,22 @@ namespace Framework::Scripting::Builtins {
                 author = v8pp::from_v8<std::string>(isolate, a);
             }
             v8::Local<v8::Value> c;
-            if (opts->Get(ctx, v8pp::to_v8(isolate, "color")).ToLocal(&c) && c->IsNumber()) {
-                color = c->Uint32Value(ctx).FromMaybe(0u);
+            if (opts->Get(ctx, v8pp::to_v8(isolate, "color")).ToLocal(&c)) {
+                if (c->IsNumber()) {
+                    color = c->Uint32Value(ctx).FromMaybe(0u);
+                }
+                else if (auto *col = v8pp::class_<Color>::unwrap_object(isolate, c)) {
+                    // Pack a Core.Color into Chat's 0xRRGGBBAA layout.
+                    color = col->toRGBA();
+                }
             }
         }
 
-        void Send(const std::string &text, const std::string &author, uint32_t color, MafiaNet::RakNetGUID target, bool broadcast) {
+        // Returns false when the network peer is unavailable so the caller can throw a state error.
+        bool Send(const std::string &text, const std::string &author, uint32_t color, MafiaNet::RakNetGUID target, bool broadcast) {
             auto *net = CoreModules::GetNetworkPeer();
             if (!net) {
-                return;
+                return false;
             }
             Networking::RPC::ChatMessage payload;
             payload.text   = text;
@@ -58,6 +66,7 @@ namespace Framework::Scripting::Builtins {
             else {
                 net->SendRPC(payload, target);
             }
+            return true;
         }
     } // namespace
 
@@ -79,14 +88,14 @@ namespace Framework::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("sendToAll", v8pp::metadata::docs("void",
                                                                                            {
                                                                                                v8pp::metadata::param("text", "string", false, "Message body broadcast to every connected client."),
-                                                                                               v8pp::metadata::param("options", "{ author?: string; color?: number }", true, "Optional author label and packed 0xRRGGBBAA color."),
+                                                                                               v8pp::metadata::param("options", "{ author?: string; color?: number | Color }", true, "Optional author label and color: a Core.Color or a packed 0xRRGGBBAA integer."),
                                                                                            },
                                                                                            "Broadcasts a structured chat message to all clients.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("sendToPlayer", v8pp::metadata::docs("void",
                                                                                               {
                                                                                                   v8pp::metadata::param("player", "Entity", false, "Player-owned entity identifying the destination connection."),
                                                                                                   v8pp::metadata::param("text", "string", false, "Message body sent to the player."),
-                                                                                                  v8pp::metadata::param("options", "{ author?: string; color?: number }", true, "Optional author label and packed 0xRRGGBBAA color."),
+                                                                                                  v8pp::metadata::param("options", "{ author?: string; color?: number | Color }", true, "Optional author label and color: a Core.Color or a packed 0xRRGGBBAA integer."),
                                                                                               },
                                                                                               "Sends a structured chat message to one player's owning connection.")));
     }
@@ -95,7 +104,7 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate = info.GetIsolate();
         v8::HandleScope hs(isolate);
         if (info.Length() < 1 || !info[0]->IsString()) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "Chat.sendToAll: expected (text, opts?)"));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Chat.sendToAll: expected (text, opts?)")));
             return;
         }
         std::string author;
@@ -103,22 +112,27 @@ namespace Framework::Scripting::Builtins {
         if (info.Length() >= 2) {
             ReadOptions(isolate, info[1], author, color);
         }
-        Send(v8pp::from_v8<std::string>(isolate, info[0]), author, color, MafiaNet::UNASSIGNED_RAKNET_GUID, true);
+        if (!Send(v8pp::from_v8<std::string>(isolate, info[0]), author, color, MafiaNet::UNASSIGNED_RAKNET_GUID, true)) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.sendToAll: network peer unavailable")));
+        }
     }
 
     void Chat::JS_SendToPlayer(const v8::FunctionCallbackInfo<v8::Value> &info) {
         v8::Isolate *isolate = info.GetIsolate();
         v8::HandleScope hs(isolate);
         if (info.Length() < 2 || !info[1]->IsString()) {
-            isolate->ThrowError(v8pp::to_v8(isolate, "Chat.sendToPlayer: expected (player, text, opts?)"));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Chat.sendToPlayer: expected (player, text, opts?)")));
             return;
         }
+        // Bad argument (not a player) is the caller's bug — throw, mirroring Entity.setVisibleTo.
         auto *entity = v8pp::class_<Entity>::unwrap_object(isolate, info[0]);
         if (!entity) {
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Chat.sendToPlayer: expected a Player")));
             return;
         }
         auto *handle = entity->GetHandle();
         if (!handle) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.sendToPlayer: player has no owning connection")));
             return;
         }
         std::string author;
@@ -126,6 +140,8 @@ namespace Framework::Scripting::Builtins {
         if (info.Length() >= 3) {
             ReadOptions(isolate, info[2], author, color);
         }
-        Send(v8pp::from_v8<std::string>(isolate, info[1]), author, color, MafiaNet::ToGuid(handle->ownerGUID), false);
+        if (!Send(v8pp::from_v8<std::string>(isolate, info[1]), author, color, MafiaNet::ToGuid(handle->ownerGUID), false)) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.sendToPlayer: network peer unavailable")));
+        }
     }
 } // namespace Framework::Scripting::Builtins

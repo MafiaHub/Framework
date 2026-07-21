@@ -9,6 +9,7 @@
 #include "v8_engine.h"
 #include "v8_engine_callbacks.h"
 #include "engine_helpers.h"
+#include "builtins/builtins.h"
 #include "builtins/messages.h"
 
 #include <logging/logger.h>
@@ -145,7 +146,7 @@ namespace Framework::Scripting {
             v8::Local<v8::Context> context = _context.Get(_isolate);
             v8::Context::Scope contextScope(context);
 
-            Messages::Shutdown();
+            Builtins::Messages::Shutdown();
         }
 
         // Clear all timer callbacks (prevent dangling references)
@@ -155,6 +156,9 @@ namespace Framework::Scripting {
 
         // Reset the persistent context handle
         _context.Reset();
+
+        // Drop cached builtin class wrappers before the isolate dies (avoids leak + stale reuse).
+        Builtins::UnregisterAll(_isolate);
 
         // Dispose the isolate
         _isolate->Dispose();

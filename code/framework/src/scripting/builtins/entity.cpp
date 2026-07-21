@@ -149,7 +149,7 @@ namespace Framework::Scripting::Builtins {
                 }
                 auto *targetEntity = target->Resolve();
                 if (!targetEntity || targetEntity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
-                    isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "setVisibleTo: target has no owning connection")));
+                    isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "setVisibleTo: target has no owning connection")));
                     return;
                 }
                 self->SetVisibleTo(targetEntity);
@@ -169,5 +169,9 @@ namespace Framework::Scripting::Builtins {
     Networking::Replication::NetworkEntity *Entity::Resolve() const {
         auto *replication = CoreModules::GetReplication();
         return replication ? replication->GetEntityByNetworkID(_id) : nullptr;
+    }
+
+    void Entity::UnregisterIsolate(v8::Isolate *isolate) {
+        _classes.erase(isolate);
     }
 } // namespace Framework::Scripting::Builtins

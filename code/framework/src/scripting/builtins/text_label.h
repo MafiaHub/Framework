@@ -39,6 +39,8 @@ namespace Framework::Scripting::Builtins {
 
         uint32_t GetColor() const;
         void SetColor(int r, int g, int b, int a);
+        // Write an already-packed ARGB value (e.g. from Color::toARGB()).
+        void SetColorPacked(uint32_t argb);
 
         float GetFontSize() const;
         void SetFontSize(float size);
@@ -59,6 +61,8 @@ namespace Framework::Scripting::Builtins {
         static v8pp::class_<TextLabel> &GetClass(v8::Isolate *isolate);
 
         static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+
+        static void UnregisterIsolate(v8::Isolate *isolate);
 
       private:
         // JS: TextLabel.create(x, y, z, text, fontSize?, drawDistance?, virtualWorld?) -> TextLabel

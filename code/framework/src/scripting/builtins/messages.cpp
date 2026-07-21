@@ -12,20 +12,17 @@
 
 #include <logging/logger.h>
 
-namespace Framework::Scripting {
+namespace Framework::Scripting::Builtins {
 
-    std::map<std::string, std::map<std::string, v8::Global<v8::Function>>> Messages::_handlers;
+    std::map<std::string, std::map<std::string, Messages::Handler>> Messages::_handlers;
     std::mutex Messages::_handlersMutex;
     std::map<uint64_t, Messages::PendingRequest> Messages::_pendingRequests;
     std::mutex Messages::_pendingRequestsMutex;
     std::vector<Messages::PendingResponse> Messages::_responseQueue;
     std::mutex Messages::_responseQueueMutex;
-    uint64_t Messages::_nextRequestId           = 1;
-    ResourceManager *Messages::_resourceManager = nullptr;
+    uint64_t Messages::_nextRequestId = 1;
 
     void Messages::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, ResourceManager *resourceManager) {
-        _resourceManager = resourceManager;
-
         v8::Local<v8::Object> messagesObj = v8::Object::New(isolate);
 
         // Store resource manager as external data for callbacks
@@ -74,17 +71,17 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.handle requires 2 arguments: messageType, handler")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.handle requires 2 arguments: messageType, handler")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.handle: messageType must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.handle: messageType must be a string")));
             return;
         }
 
         if (!args[1]->IsFunction()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.handle: handler must be a function")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.handle: handler must be a function")));
             return;
         }
 
@@ -106,7 +103,9 @@ namespace Framework::Scripting {
 
         {
             std::scoped_lock lock(_handlersMutex);
-            _handlers[resourceName][messageType].Reset(isolate, handler);
+            Handler &entry = _handlers[resourceName][messageType];
+            entry.isolate  = isolate;
+            entry.function.Reset(isolate, handler);
         }
     }
 
@@ -116,17 +115,17 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.request requires at least 2 arguments: resourceName, messageType")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.request requires at least 2 arguments: resourceName, messageType")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.request: resourceName must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.request: resourceName must be a string")));
             return;
         }
 
         if (!args[1]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.request: messageType must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.request: messageType must be a string")));
             return;
         }
 
@@ -164,7 +163,16 @@ namespace Framework::Scripting {
                 return;
             }
 
-            handler.Reset(isolate, handlerIt->second.Get(isolate));
+            // The handler's Global<Function> is bound to the isolate it was registered on.
+            // Getting it from a different isolate crashes, so reject cross-isolate requests
+            // (mirrors the Exports.get isolate-ownership guard).
+            if (handlerIt->second.isolate != isolate) {
+                resolver->Reject(context, v8pp::to_v8(isolate, "messages.request: cannot invoke handler '" + messageType + "' in resource '" + targetResource + "' - cross-isolate access is not supported. Both resources must share the same isolate.")).Check();
+                args.GetReturnValue().Set(promise);
+                return;
+            }
+
+            handler.Reset(isolate, handlerIt->second.function.Get(isolate));
         }
 
         // Generate request ID and store pending request
@@ -172,7 +180,7 @@ namespace Framework::Scripting {
         {
             std::scoped_lock lock(_pendingRequestsMutex);
             requestId = _nextRequestId++;
-            _pendingRequests.try_emplace(requestId, requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource);
+            _pendingRequests.try_emplace(requestId, requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource, targetResource);
         }
 
         // Create reply function - passes requestId as BigInt to avoid dangling pointer issues
@@ -249,17 +257,17 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.send requires at least 2 arguments: resourceName, messageType")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.send requires at least 2 arguments: resourceName, messageType")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.send: resourceName must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.send: resourceName must be a string")));
             return;
         }
 
         if (!args[1]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.send: messageType must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.send: messageType must be a string")));
             return;
         }
 
@@ -284,7 +292,14 @@ namespace Framework::Scripting {
                 return; // Silently ignore
             }
 
-            handler.Reset(isolate, handlerIt->second.Get(isolate));
+            // Cross-isolate handler: Getting its Global<Function> from this isolate would
+            // crash. Skip delivery (send is fire-and-forget) and warn (mirrors Exports.get).
+            if (handlerIt->second.isolate != isolate) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("messages.send to '{}' skipped: handler '{}' lives in a different isolate", targetResource, messageType);
+                return;
+            }
+
+            handler.Reset(isolate, handlerIt->second.function.Get(isolate));
         }
 
         // Create no-op reply function
@@ -344,6 +359,38 @@ namespace Framework::Scripting {
         }
     }
 
+    void Messages::CleanupResource(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &resourceName) {
+        // Drop the stopped resource's registered handlers so its Global<Function>
+        // handles are released now instead of lingering until Shutdown().
+        {
+            std::scoped_lock lock(_handlersMutex);
+            _handlers.erase(resourceName);
+        }
+
+        // Settle and drop every pending request tied to the stopped resource:
+        // - source: a request this resource made, whose reply it can no longer receive;
+        // - target: a request another resource is still awaiting a reply from this one.
+        // Reject the awaiting Promise first (so `await request(...)` rejects instead of hanging
+        // forever) before erasing, then release the resolver Global.
+        {
+            std::scoped_lock lock(_pendingRequestsMutex);
+            for (auto it = _pendingRequests.begin(); it != _pendingRequests.end();) {
+                PendingRequest &req = it->second;
+                if (req.sourceResource == resourceName || req.targetResource == resourceName) {
+                    // A request still in the table is not yet settled — ProcessPendingResponses
+                    // settles and erases atomically under this same mutex — so rejecting always
+                    // moves the awaiting Promise out of pending (and V8 ignores a reject on an
+                    // already-settled promise anyway). After erasing, a late reply() finds nothing.
+                    req.resolver.Get(isolate)->Reject(context, v8pp::to_v8(isolate, "messages.request: resource '" + resourceName + "' stopped before reply")).Check();
+                    it = _pendingRequests.erase(it);
+                }
+                else {
+                    ++it;
+                }
+            }
+        }
+    }
+
     void Messages::Shutdown() {
         {
             std::scoped_lock lock(_handlersMutex);
@@ -357,7 +404,6 @@ namespace Framework::Scripting {
             std::scoped_lock lock(_responseQueueMutex);
             _responseQueue.clear();
         }
-        _resourceManager = nullptr;
     }
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins

@@ -13,13 +13,9 @@
 
 #include <logging/logger.h>
 
-namespace Framework::Scripting {
-
-    ResourceManager *Exports::_resourceManager = nullptr;
+namespace Framework::Scripting::Builtins {
 
     void Exports::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, ResourceManager *resourceManager) {
-        _resourceManager = resourceManager;
-
         v8::Local<v8::Object> exportsObj = v8::Object::New(isolate);
 
         // Store resource manager as external data for callbacks
@@ -33,9 +29,9 @@ namespace Framework::Scripting {
         v8::Local<v8::FunctionTemplate> getTmpl = v8::FunctionTemplate::New(isolate, GetCallback, managerData);
         exportsObj->Set(context, v8pp::to_v8(isolate, "get"), getTmpl->GetFunction(context).ToLocalChecked()).Check();
 
-        frameworkObj->Set(context, v8pp::to_v8(isolate, "Exports"), exportsObj).Check();
+        frameworkObj->Set(context, v8pp::to_v8(isolate, "exports"), exportsObj).Check();
 
-        auto &metadata = GetScriptingCatalog(isolate).global_object("Exports", "Registration and lookup of cross-resource values through Framework.Exports.");
+        auto &metadata = GetScriptingCatalog(isolate).global_object("exports", "Registration and lookup of cross-resource values through Framework.exports.");
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("register", v8pp::metadata::docs("boolean",
                                                                                           {
                                                                                               v8pp::metadata::param("name", "string", false, "Export name, preferably declared in the current resource manifest."),
@@ -53,21 +49,20 @@ namespace Framework::Scripting {
     void Exports::RegisterCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.register requires 2 arguments: name, value")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "exports.register requires 2 arguments: name, value")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.register: name must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "exports.register: name must be a string")));
             return;
         }
 
         ResourceManager *manager = static_cast<ResourceManager *>(args.Data().As<v8::External>()->Value());
         if (!manager) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.register: resource manager not available")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "exports.register: resource manager not available")));
             return;
         }
 
@@ -77,7 +72,7 @@ namespace Framework::Scripting {
         // Get the current resource context (use stack fallback for async ES modules)
         Resource *currentResource = manager->GetCurrentResourceWithStackFallback(isolate);
         if (!currentResource) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.register: no resource context")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "exports.register: no resource context")));
             return;
         }
 
@@ -101,7 +96,7 @@ namespace Framework::Scripting {
             else {
                 // Export is in manifest but RegisterExport still failed - real error (isolate issue)
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Failed to register export '{}' - isolate initialization issue", currentResource->GetName(), exportName);
-                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.register: failed to register export '" + exportName + "' - internal error")));
+                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "exports.register: failed to register export '" + exportName + "' - internal error")));
             }
         }
         else {
@@ -113,21 +108,20 @@ namespace Framework::Scripting {
     void Exports::GetCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get requires 2 arguments: resourceName, exportName")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "exports.get requires 2 arguments: resourceName, exportName")));
             return;
         }
 
         if (!args[0]->IsString() || !args[1]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: resourceName and exportName must be strings")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "exports.get: resourceName and exportName must be strings")));
             return;
         }
 
         ResourceManager *manager = static_cast<ResourceManager *>(args.Data().As<v8::External>()->Value());
         if (!manager) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: resource manager not available")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "exports.get: resource manager not available")));
             return;
         }
 
@@ -137,13 +131,13 @@ namespace Framework::Scripting {
         // Get the target resource
         const Resource *resource = manager->GetResource(resourceName);
         if (!resource) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: resource '" + resourceName + "' not found")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "exports.get: resource '" + resourceName + "' not found")));
             return;
         }
 
         // Check if the resource is running
         if (!resource->IsRunning()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: resource '" + resourceName + "' is not running")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "exports.get: resource '" + resourceName + "' is not running")));
             return;
         }
 
@@ -152,18 +146,18 @@ namespace Framework::Scripting {
         if (resourceIsolate != isolate) {
             // Cross-isolate access is not supported - V8 values cannot be shared across isolates
             // This typically happens when resources run in separate isolates (e.g., different threads)
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: cannot access export '" + exportName + "' from resource '" + resourceName + "' - cross-isolate access is not supported. Both resources must share the same isolate.")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "exports.get: cannot access export '" + exportName + "' from resource '" + resourceName + "' - cross-isolate access is not supported. Both resources must share the same isolate.")));
             return;
         }
 
         // Get the export value (safe since we validated isolate ownership above)
         v8::Local<v8::Value> exportValue = resource->GetExportValue(exportName);
         if (exportValue.IsEmpty()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: export '" + exportName + "' not found in resource '" + resourceName + "'")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "exports.get: export '" + exportName + "' not found in resource '" + resourceName + "'")));
             return;
         }
 
         args.GetReturnValue().Set(exportValue);
     }
 
-} // namespace Framework::Scripting
+} // namespace Framework::Scripting::Builtins
