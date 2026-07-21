@@ -686,6 +686,12 @@ namespace Framework::Integrations::Client {
         OnConnectionPhaseChanged(phase);
     }
 
+    Utils::Result<void, Error> Instance::ConnectToServer(const std::string &host, int32_t port, const std::string &password) {
+        auto result = _networkingEngine->Connect(host, port, password);
+        SetConnectionPhase(result ? ConnectionPhase::Connecting : ConnectionPhase::Disconnected);
+        return result;
+    }
+
     void Instance::DownloadsAssetsFromConnectedServer() {
         const auto net = GetNetworkingEngine()->GetNetworkClient();
 

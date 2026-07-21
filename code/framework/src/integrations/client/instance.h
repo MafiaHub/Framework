@@ -227,6 +227,8 @@ namespace Framework::Integrations::Client {
 
         [[nodiscard]] Utils::Result<void, Error> RenderInit();
 
+        [[nodiscard]] Utils::Result<void, Error> ConnectToServer(const std::string &host, int32_t port, const std::string &password = "");
+
         void DownloadsAssetsFromConnectedServer();
 
       private:
