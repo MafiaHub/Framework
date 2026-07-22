@@ -72,8 +72,10 @@
 #include <functional>
 #include <sstream>
 #include <array>
+#include <charconv>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 #include "prometheus/atomic_floating.h"
 

@@ -95,7 +95,7 @@ namespace Framework::Integrations::Server {
         std::string httpServeDir;
 
         struct MetricsConfig {
-            bool enabled = true;
+            bool enabled = false;
             std::string path = "/metrics";
             std::string token;
         } metrics;

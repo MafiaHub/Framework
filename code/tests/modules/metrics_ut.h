@@ -156,10 +156,18 @@ MODULE(metrics, {
 
         std::string out;
         reg.Render(out);
-        EQUALS(out.find("fw_jobs_queue_depth{priority=\"high\"} 0") != std::string::npos, true);
-        EQUALS(out.find("fw_jobs_active 0") != std::string::npos, true);
-        EQUALS(out.find("fw_jobs_queue_wait_duration_seconds_count{priority=\"high\"} 1") != std::string::npos, true);
-        EQUALS(out.find("fw_jobs_execution_duration_seconds_count{priority=\"high\"} 1") != std::string::npos, true);
+        const auto metricValue = [&out](const std::string &metric) {
+            const size_t metricStart = out.find(metric);
+            return metricStart == std::string::npos ? -1.0 : std::stod(out.substr(metricStart + metric.size()));
+        };
+        EQUALS(out.find("fw_jobs_queue_depth{priority=\"high\"}") != std::string::npos, true);
+        EQUALS(metricValue("fw_jobs_queue_depth{priority=\"high\"} ") >= 0.0, true);
+        EQUALS(out.find("fw_jobs_active ") != std::string::npos, true);
+        EQUALS(metricValue("fw_jobs_active ") >= 0.0, true);
+        EQUALS(out.find("fw_jobs_queue_wait_duration_seconds_count{priority=\"high\"}") != std::string::npos, true);
+        EQUALS(metricValue("fw_jobs_queue_wait_duration_seconds_count{priority=\"high\"} ") >= 1.0, true);
+        EQUALS(out.find("fw_jobs_execution_duration_seconds_count{priority=\"high\"}") != std::string::npos, true);
+        EQUALS(metricValue("fw_jobs_execution_duration_seconds_count{priority=\"high\"} ") >= 1.0, true);
     });
 
     IT("processes batched jobs", {

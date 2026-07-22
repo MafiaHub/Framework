@@ -16,8 +16,8 @@
 
 namespace Framework::HTTP {
     namespace {
-        Metrics::Counter *RouteStatusCounter(const std::string &route, const char *codeClass) {
-            return Metrics::Registry::Get().RegisterCounter("fw_http_requests_total", "HTTP requests by route and status class", {{"route", route}, {"code", codeClass}});
+        Metrics::Counter *RouteStatusCounter(const std::string &route, const char *method, const char *codeClass) {
+            return Metrics::Registry::Get().RegisterCounter("fw_http_requests_total", "HTTP requests by route, method, and status class", {{"route", route}, {"method", method}, {"code", codeClass}});
         }
 
         struct RouteMetrics {
@@ -29,17 +29,16 @@ namespace Framework::HTTP {
             Metrics::Gauge *inFlight     = nullptr;
         };
 
-        RouteMetrics MakeRouteMetrics(const std::string &route) {
+        RouteMetrics MakeRouteMetrics(const std::string &route, const char *method) {
             auto &reg = Metrics::Registry::Get();
             RouteMetrics metrics {
-                RouteStatusCounter(route, "2xx"),
-                RouteStatusCounter(route, "4xx"),
-                RouteStatusCounter(route, "5xx"),
-                RouteStatusCounter(route, "other"),
-                reg.RegisterHistogram("fw_http_request_duration_seconds", "HTTP route handler duration", Metrics::Buckets::Exponential(0.0005, 2.0, 13), {{"route", route}}),
-                reg.RegisterGauge("fw_http_requests_in_flight", "HTTP requests currently executing a route handler", {{"route", route}}),
+                RouteStatusCounter(route, method, "2xx"),
+                RouteStatusCounter(route, method, "4xx"),
+                RouteStatusCounter(route, method, "5xx"),
+                RouteStatusCounter(route, method, "other"),
+                reg.RegisterHistogram("fw_http_request_duration_seconds", "HTTP route handler duration", Metrics::Buckets::Exponential(0.0005, 2.0, 13), {{"route", route}, {"method", method}}),
+                reg.RegisterGauge("fw_http_requests_in_flight", "HTTP requests currently executing a route handler", {{"route", route}, {"method", method}}),
             };
-            metrics.inFlight->Set(0.0);
             return metrics;
         }
 
@@ -50,11 +49,8 @@ namespace Framework::HTTP {
             }
         }
 
-        int EffectiveStatus(const httplib::Request &req, const httplib::Response &res) {
-            if (res.status != -1) {
-                return res.status;
-            }
-            return req.ranges.empty() ? 200 : 206;
+        int EffectiveStatus(const httplib::Response &res) {
+            return res.status == -1 ? 200 : res.status;
         }
 
         void FinishRoute(const RouteMetrics &metrics, std::chrono::steady_clock::time_point startedAt, int status) {
@@ -136,7 +132,7 @@ namespace Framework::HTTP {
         if (path.empty() || !callback)
             return;
 
-        const RouteMetrics metrics = MakeRouteMetrics(path);
+        const RouteMetrics metrics = MakeRouteMetrics(path, "GET");
         RequestCallback userCb     = callback;
         auto wrapped               = [userCb, metrics](const httplib::Request &req, httplib::Response &res) {
             const auto startedAt = std::chrono::steady_clock::now();
@@ -145,7 +141,7 @@ namespace Framework::HTTP {
             }
             try {
                 userCb(req, res);
-                FinishRoute(metrics, startedAt, EffectiveStatus(req, res));
+                FinishRoute(metrics, startedAt, EffectiveStatus(res));
             }
             catch (...) {
                 FinishRoute(metrics, startedAt, 500);
@@ -161,7 +157,7 @@ namespace Framework::HTTP {
         if (path.empty() || !callback)
             return;
 
-        const RouteMetrics metrics = MakeRouteMetrics(path);
+        const RouteMetrics metrics = MakeRouteMetrics(path, "POST");
         PostCallback userCb        = callback;
         auto wrapped               = [userCb, metrics](const httplib::Request &req, httplib::Response &res, const httplib::ContentReader &reader) {
             const auto startedAt = std::chrono::steady_clock::now();
@@ -170,7 +166,7 @@ namespace Framework::HTTP {
             }
             try {
                 userCb(req, res, reader);
-                FinishRoute(metrics, startedAt, EffectiveStatus(req, res));
+                FinishRoute(metrics, startedAt, EffectiveStatus(res));
             }
             catch (...) {
                 FinishRoute(metrics, startedAt, 500);

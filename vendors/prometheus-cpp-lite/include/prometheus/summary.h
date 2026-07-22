@@ -55,12 +55,15 @@ namespace prometheus {
       ++sample_count;
     }
 
-    /// @brief Takes a consistent snapshot of all current data under the mutex.
+    /// @brief Takes a consistent snapshot, retaining only the newest observations.
     /// @param out_obs   Output: copy of the observation buffer.
     /// @param out_sum   Output: current sum.
     /// @param out_count Output: current count.
-    void Snapshot(std::vector<T>& out_obs, T& out_sum, uint64_t& out_count) {
+    void Snapshot(std::vector<T>& out_obs, T& out_sum, uint64_t& out_count, size_t max_observations) {
       std::lock_guard<std::mutex> lock(mutex);
+      if (observations.size() > max_observations) {
+        observations.erase(observations.begin(), observations.begin() + static_cast<ptrdiff_t>(observations.size() - max_observations));
+      }
       out_obs   = observations;
       out_sum   = sample_sum;
       out_count = sample_count;
@@ -343,20 +346,13 @@ namespace prometheus {
       value_type              sum;
       uint64_t                count;
 
-      live_data.Snapshot(observations, sum, count);
+      live_data.Snapshot(observations, sum, count, max_observations);
 
       snapshot_count = count;
       snapshot_sum   = sum;
 
       // Sort observations for quantile computation.
       std::sort(observations.begin(), observations.end());
-
-      // Trim the buffer if it exceeds the sliding window size.
-      if (observations.size() > max_observations) {
-        size_t excess = observations.size() - max_observations;
-        observations.erase(observations.begin(),
-                           observations.begin() + static_cast<ptrdiff_t>(excess));
-      }
 
       // Compute each configured quantile from the sorted buffer.
       snapshot_quantiles.resize(quantile_defs.size());

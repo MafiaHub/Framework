@@ -333,7 +333,12 @@ namespace Framework::Integrations::Server {
                 res.set_content(buf, contentType);
                 res.status = 200;
             });
-            Logging::GetLogger(FRAMEWORK_INNER_HTTP)->info("Metrics exporter mounted at {}", path);
+            if (token.empty()) {
+                Logging::GetLogger(FRAMEWORK_INNER_HTTP)->warn("Metrics exporter mounted at {} without authentication", path);
+            }
+            else {
+                Logging::GetLogger(FRAMEWORK_INNER_HTTP)->info("Metrics exporter mounted at {}", path);
+            }
         }
     }
 
@@ -1029,7 +1034,7 @@ namespace Framework::Integrations::Server {
 
             FW_PROFILE_FRAME();
 
-            _nextTick = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
+            _nextTick = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(_opts.worldConfig.tickInterval));
         }
         else {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));

@@ -257,6 +257,9 @@ namespace Framework::Scripting {
         Framework::Integrations::Shared::RPC::EmitScriptEvent ev;
         ev.FromParameters(eventName, payload);
         peer->BroadcastRPC(ev);
+        if (g_scriptEventsOut) {
+            g_scriptEventsOut->Inc();
+        }
     }
 
     void Events::RegisterHandler(v8::Isolate *isolate, ResourceManager *manager, std::string_view eventName, v8::Local<v8::Function> handler, bool once, HandlerScope scope) {
@@ -713,10 +716,6 @@ namespace Framework::Scripting {
                 g_scriptEventsIn->Inc();
             }
         }
-        else if (g_scriptEventsOut) {
-            g_scriptEventsOut->Inc();
-        }
-
         // Create Promise resolver
         v8::Local<v8::Promise::Resolver> resolver = v8::Promise::Resolver::New(context).ToLocalChecked();
         v8::Local<v8::Promise> promise            = resolver->GetPromise();
@@ -940,7 +939,11 @@ namespace Framework::Scripting {
         }
 
         // Invoke handlers and collect results as promises
+        const auto invokeStart = std::chrono::steady_clock::now();
         v8::Local<v8::Array> promises = InvokeHandlersToPromiseArray(isolate, context, handlersToCall, eventArgs, eventName);
+        if (g_scriptEventDur) {
+            g_scriptEventDur->Observe(std::chrono::duration<double>(std::chrono::steady_clock::now() - invokeStart).count());
+        }
 
         // Aggregate results using Promise.allSettled
         events->AggregateWithAllSettled(isolate, context, promises, resolver, "One or more local event handlers failed");

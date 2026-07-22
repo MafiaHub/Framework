@@ -474,7 +474,7 @@ namespace Framework::Scripting {
             }
         }
         if (!affected.empty() && g_scriptRestarts) {
-            g_scriptRestarts->Inc();
+            g_scriptRestarts->Inc(affected.size());
         }
         return ResourceOperationResult::Ok(affected);
     }
@@ -556,7 +556,7 @@ namespace Framework::Scripting {
             }
         }
         if (!affected.empty() && g_scriptRestarts) {
-            g_scriptRestarts->Inc();
+            g_scriptRestarts->Inc(affected.size());
         }
         return ResourceOperationResult::Ok(affected);
     }
