@@ -11,7 +11,6 @@
 #include "errors.h"
 
 #include <ftl/fibtex.h>
-#include <ftl/parallel_for.h>
 #include <ftl/task_scheduler.h>
 #include <ftl/wait_group.h>
 
@@ -19,6 +18,8 @@
 #include <metrics/registry.h>
 
 #include <algorithm>
+#include <chrono>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -84,6 +85,14 @@ namespace Framework::Jobs {
     struct CompletedCallback {
         fu2::function<void()> callback;
     };
+
+    namespace Detail {
+        void RecordTaskScheduled(ftl::TaskPriority priority) noexcept;
+        void RecordTaskStarted(ftl::TaskPriority priority, std::chrono::steady_clock::time_point enqueuedAt, std::chrono::steady_clock::time_point startedAt) noexcept;
+        void RecordTaskFinished(ftl::TaskPriority priority, std::chrono::steady_clock::time_point startedAt) noexcept;
+        void ReportTaskException(const std::exception &exception);
+        void ReportUnknownTaskException();
+    } // namespace Detail
 
     /**
      * @brief Fiber-based job system built on FTL (Fiber Tasking Library)
@@ -178,19 +187,51 @@ namespace Framework::Jobs {
                 batchSize = 1;
             }
 
-            auto waitGroup = CreateWaitGroup();
-            for (size_t begin = 0; begin < items.size(); begin += batchSize) {
-                const size_t end = std::min(begin + batchSize, items.size());
-                Schedule(
-                    waitGroup.get(),
-                    [this, &items, &func, begin, end]() {
-                        for (size_t i = begin; i < end; ++i) {
-                            func(_scheduler.get(), &items[i]);
+            using Callable = std::remove_reference_t<Func>;
+            struct BatchTask {
+                T *items                   = nullptr;
+                size_t count               = 0;
+                Callable *func             = nullptr;
+                ftl::TaskPriority priority = ftl::TaskPriority::Normal;
+                std::chrono::steady_clock::time_point enqueuedAt;
+            };
+
+            const size_t batchCount = ((items.size() - 1) / batchSize) + 1;
+            std::vector<BatchTask> batches(batchCount);
+            ftl::WaitGroup waitGroup(_scheduler.get());
+            for (size_t batchIndex = 0; batchIndex < batchCount; ++batchIndex) {
+                const size_t begin = batchIndex * batchSize;
+                auto &batch        = batches[batchIndex];
+                batch.items        = items.data() + begin;
+                batch.count        = std::min(batchSize, items.size() - begin);
+                batch.func         = std::addressof(func);
+                batch.priority     = priority;
+                batch.enqueuedAt   = std::chrono::steady_clock::now();
+
+                ftl::Task task {};
+                task.ArgData  = &batch;
+                task.Function = [](ftl::TaskScheduler *scheduler, void *arg) {
+                    auto *batchTask      = static_cast<BatchTask *>(arg);
+                    const auto startedAt = std::chrono::steady_clock::now();
+                    Detail::RecordTaskStarted(batchTask->priority, batchTask->enqueuedAt, startedAt);
+                    try {
+                        for (size_t i = 0; i < batchTask->count; ++i) {
+                            (*batchTask->func)(scheduler, &batchTask->items[i]);
                         }
-                    },
-                    priority);
+                    }
+                    catch (const std::exception &e) {
+                        Detail::ReportTaskException(e);
+                    }
+                    catch (...) {
+                        Detail::ReportUnknownTaskException();
+                    }
+                    Detail::RecordTaskFinished(batchTask->priority, startedAt);
+                };
+
+                Detail::RecordTaskScheduled(priority);
+                _scheduler->AddTask(task, priority, &waitGroup);
             }
-            waitGroup->Wait();
+            waitGroup.Wait();
         }
 
         /**

@@ -1,6 +1,14 @@
 include(UpdateGitHash)
 update_git_version(FW "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/version.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/version.cpp")
 
+if(FW_METRICS_BACKEND STREQUAL "prometheus")
+    set(FRAMEWORK_METRICS_BACKEND_SOURCE src/metrics/backends/prometheus.cpp)
+elseif(FW_METRICS_BACKEND STREQUAL "none")
+    set(FRAMEWORK_METRICS_BACKEND_SOURCE src/metrics/backends/none.cpp)
+else()
+    message(FATAL_ERROR "Unsupported FW_METRICS_BACKEND: ${FW_METRICS_BACKEND}")
+endif()
+
 # List the source files
 set(FRAMEWORK_SRC
     src/logging/logger.cpp
@@ -56,6 +64,7 @@ set(FRAMEWORK_SRC
     src/jobs/io_tasks.cpp
 
     src/metrics/registry.cpp
+    ${FRAMEWORK_METRICS_BACKEND_SOURCE}
 )
 
 set(FRAMEWORK_SERVER_SRC
@@ -304,7 +313,10 @@ target_compile_features(FrameworkV8Engine PRIVATE cxx_std_20)
 
 # Link the solutions based on the platform
 link_shared_deps(Framework)
-target_link_libraries(Framework v8 v8pp prometheus-cpp-lite)
+target_link_libraries(Framework v8 v8pp)
+if(FW_METRICS_BACKEND STREQUAL "prometheus")
+    target_link_libraries(Framework prometheus-cpp-lite)
+endif()
 if(LIBNODE_AVAILABLE)
     target_link_libraries(Framework libnode)
 endif()

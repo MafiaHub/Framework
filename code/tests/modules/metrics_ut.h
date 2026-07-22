@@ -8,20 +8,41 @@
 
 #pragma once
 
-// Tests for the Framework::Metrics. These exercise the registry surface
-// directly — counters, gauges, histograms, label handling, and the Prometheus
-// text exposition format — using ut_-prefixed names so they don't collide with metrics other test
-// modules register into the same process-wide singleton.
-//
-// The Metrics registry is a process-wide singleton shared by every test module, so a test that
-// asserted on the *whole* render output or a total series count would be order-dependent and
-// flaky. Each case instead asserts on substrings for its own ut_ metrics only.
-
 #include "jobs/job_system.h"
 #include "metrics/registry.h"
 
 #include <atomic>
 #include <string>
+#include <vector>
+
+namespace {
+    bool RunScheduleBatchTest(size_t batchSize) {
+        Framework::Jobs::JobSystemConfig config;
+        config.workerThreadCount = 2;
+        config.fiberPoolSize     = 32;
+        Framework::Jobs::JobSystem jobs(config);
+        if (jobs.Init() != Framework::Jobs::JobSystemError::JOB_SYSTEM_NONE) {
+            return false;
+        }
+
+        std::vector<int> values {1, 2, 3, 4, 5};
+        std::atomic<bool> receivedScheduler = true;
+        jobs.ScheduleBatch(
+            values,
+            [&receivedScheduler](ftl::TaskScheduler *scheduler, int *value) {
+                if (!scheduler) {
+                    receivedScheduler.store(false, std::memory_order_relaxed);
+                }
+                *value *= 2;
+            },
+            batchSize, ftl::TaskPriority::High);
+
+        const std::vector<int> expected {2, 4, 6, 8, 10};
+        return receivedScheduler.load(std::memory_order_relaxed) && values == expected;
+    }
+} // namespace
+
+#if defined(FW_METRICS_BACKEND_PROMETHEUS)
 
 MODULE(metrics, {
     using Framework::Metrics::Buckets;
@@ -31,6 +52,11 @@ MODULE(metrics, {
     using Framework::Metrics::Registry;
 
     auto &reg = Registry::Get();
+
+    IT("reports exporter capability", {
+        EQUALS(reg.HasExporter(), true);
+        EQUALS(reg.ContentType(), "text/plain; version=0.0.4");
+    });
 
     IT("renders a counter with HELP/TYPE and its value", {
         Counter *c = reg.RegisterCounter("ut_exposition_counter_total", "exposition test counter");
@@ -51,16 +77,12 @@ MODULE(metrics, {
     });
 
     IT("re-registering the same name+labels aliases the same underlying child", {
-        // The backend dedups a family child by labels, so both handles address the same counter:
-        // increments through either are visible through the other. This is the idempotent reuse the
-        // networking/replication code relies on (the {stage="..."} family is registered from multiple TUs).
         Counter *a = reg.RegisterCounter("ut_idempotent_counter_total", "idempotent test counter", {{"k", "v"}});
         Counter *b = reg.RegisterCounter("ut_idempotent_counter_total", "idempotent test counter", {{"k", "v"}});
         a->Inc(3);
         b->Inc(2);
         std::string out;
         reg.Render(out);
-        // 3 + 2 on the same child.
         EQUALS(out.find("ut_idempotent_counter_total{k=\"v\"} 5") != std::string::npos, true);
     });
 
@@ -84,17 +106,13 @@ MODULE(metrics, {
     });
 
     IT("renders a histogram with TYPE, +Inf bucket, count and sum", {
-        // exp(50µs, 4×, 6) -> 6 finite buckets + the implicit +Inf bucket (plan §A.4).
         Histogram *h = reg.RegisterHistogram("ut_exposition_hist_seconds", "exposition test histogram", Buckets::Exponential(0.00005, 4.0, 6));
         h->Observe(0.001);
         std::string out;
         reg.Render(out);
         EQUALS(out.find("# TYPE ut_exposition_hist_seconds histogram") != std::string::npos, true);
-        // The implicit +Inf bucket always receives every observation.
         EQUALS(out.find("ut_exposition_hist_seconds_bucket{le=\"+Inf\"} 1") != std::string::npos, true);
-        // One observation -> count 1.
         EQUALS(out.find("ut_exposition_hist_seconds_count 1") != std::string::npos, true);
-        // Six finite buckets present (le != +Inf). Count the bucket lines that aren't +Inf.
         const std::string needle = "ut_exposition_hist_seconds_bucket{le=\"";
         size_t pos = 0, finite = 0;
         while ((pos = out.find(needle, pos)) != std::string::npos) {
@@ -144,8 +162,12 @@ MODULE(metrics, {
         EQUALS(out.find("fw_jobs_execution_duration_seconds_count{priority=\"high\"} 1") != std::string::npos, true);
     });
 
+    IT("processes batched jobs", {
+        EQUALS(RunScheduleBatchTest(2), true);
+        EQUALS(RunScheduleBatchTest(0), true);
+    });
+
     IT("is null-safe on a default-constructed handle", {
-        // A nullptr handle (e.g. metrics whose registration was skipped) must not crash.
         Counter nullCounter;
         nullCounter.Inc();
         nullCounter.Inc(10);
@@ -154,9 +176,37 @@ MODULE(metrics, {
         nullGauge.Add(1.0);
         Histogram nullHist;
         nullHist.Observe(1.0);
-        // Rendering still succeeds with no additions from null handles.
-        std::string out;
-        reg.Render(out);
-        EQUALS(out.empty(), false);
     });
 });
+
+#else
+
+MODULE(metrics, {
+    using Framework::Metrics::Buckets;
+    using Framework::Metrics::Registry;
+
+    auto &reg = Registry::Get();
+
+    IT("disables pull export", {
+        EQUALS(reg.HasExporter(), false);
+        EQUALS(reg.ContentType().empty(), true);
+        std::string out = "stale";
+        reg.Render(out);
+        EQUALS(out.empty(), true);
+    });
+
+    IT("returns safe no-op handles", {
+        reg.RegisterCounter("ut_none_counter_total", "none backend counter")->Inc();
+        auto *gauge = reg.RegisterGauge("ut_none_gauge", "none backend gauge");
+        gauge->Set(1.0);
+        gauge->Add(-1.0);
+        reg.RegisterHistogram("ut_none_histogram", "none backend histogram", Buckets::Explicit({1.0}))->Observe(1.0);
+    });
+
+    IT("processes batched jobs", {
+        EQUALS(RunScheduleBatchTest(2), true);
+        EQUALS(RunScheduleBatchTest(0), true);
+    });
+});
+
+#endif

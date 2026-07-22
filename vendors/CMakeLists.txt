@@ -73,10 +73,9 @@ add_subdirectory(sfd)
 # Build lua
 add_subdirectory(lua-5.4.4)
 
-# Build prometheus-cpp-lite (metrics registry + text exposition formatter, header-only).
-# We consume only the registry/formatter core. EXCLUDE_FROM_ALL keeps the unused
-# simpleapi target out of normal builds; the socket dependency is disabled.
-add_subdirectory(prometheus-cpp-lite EXCLUDE_FROM_ALL)
+if(FW_METRICS_BACKEND STREQUAL "prometheus")
+    add_subdirectory(prometheus-cpp-lite EXCLUDE_FROM_ALL)
+endif()
 
 # Build Tracy (profiler client)
 # TRACY_ENABLE follows FW_PROFILING; the TracyClient target is always available

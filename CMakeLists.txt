@@ -17,6 +17,14 @@ endif()
 # ON by default with on-demand mode - zero overhead until a profiler connects.
 option(FW_PROFILING "Enable Tracy profiler instrumentation" ON)
 
+set(FW_METRICS_BACKEND "prometheus" CACHE STRING "Metrics backend")
+set_property(CACHE FW_METRICS_BACKEND PROPERTY STRINGS prometheus none)
+string(TOLOWER "${FW_METRICS_BACKEND}" FW_METRICS_BACKEND)
+if(NOT FW_METRICS_BACKEND STREQUAL "prometheus" AND NOT FW_METRICS_BACKEND STREQUAL "none")
+    message(FATAL_ERROR "Unsupported FW_METRICS_BACKEND: ${FW_METRICS_BACKEND}")
+endif()
+message(STATUS "Metrics backend: ${FW_METRICS_BACKEND}")
+
 if (WIN32)
     if (MSVC)
         add_compile_options(

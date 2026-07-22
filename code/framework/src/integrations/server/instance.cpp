@@ -315,24 +315,25 @@ namespace Framework::Integrations::Server {
         _masterlistUpdates      = reg.RegisterCounter("fw_masterlist_connector_updates_total", "Server-info updates submitted to the masterlist connector");
         _masterlistUpdateErrors = reg.RegisterCounter("fw_masterlist_connector_update_errors_total", "Synchronous masterlist connector update failures");
 
-        if (_opts.metrics.enabled && _opts.webServerEnabled && _webServer) {
-            const std::string token = _opts.metrics.token;
-            const std::string path  = _opts.metrics.path.empty() ? std::string("/metrics") : _opts.metrics.path;
-            _webServer->RegisterRequest(path, [token](const httplib::Request &req, httplib::Response &res) {
+        if (_opts.metrics.enabled && reg.HasExporter() && _opts.webServerEnabled && _webServer) {
+            const std::string token       = _opts.metrics.token;
+            const std::string path        = _opts.metrics.path.empty() ? std::string("/metrics") : _opts.metrics.path;
+            const std::string contentType(reg.ContentType());
+            _webServer->RegisterRequest(path, [token, contentType](const httplib::Request &req, httplib::Response &res) {
                 if (!token.empty()) {
                     const std::string auth = req.get_header_value("Authorization");
                     if (auth != "Bearer " + token) {
                         res.status = 401;
-                        res.set_content("unauthorized\n", "text/plain; version=0.0.4");
+                        res.set_content("unauthorized\n", "text/plain");
                         return;
                     }
                 }
                 thread_local std::string buf;
                 Metrics::Registry::Get().Render(buf);
-                res.set_content(buf, "text/plain; version=0.0.4");
+                res.set_content(buf, contentType);
                 res.status = 200;
             });
-            Logging::GetLogger(FRAMEWORK_INNER_HTTP)->info("Prometheus /metrics exporter mounted at {}", path);
+            Logging::GetLogger(FRAMEWORK_INNER_HTTP)->info("Metrics exporter mounted at {}", path);
         }
     }
 

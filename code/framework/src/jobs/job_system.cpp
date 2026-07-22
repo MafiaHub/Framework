@@ -58,6 +58,53 @@ namespace Framework::Jobs {
         }
     } // namespace
 
+    namespace Detail {
+        void RecordTaskScheduled(ftl::TaskPriority priority) noexcept {
+            auto *counter = priority == ftl::TaskPriority::High ? g_jobsSchedHigh : g_jobsSchedNormal;
+            if (counter) {
+                counter->Inc();
+            }
+            if (auto *queue = QueueGauge(priority)) {
+                queue->Add(1.0);
+            }
+        }
+
+        void RecordTaskStarted(ftl::TaskPriority priority, std::chrono::steady_clock::time_point enqueuedAt, std::chrono::steady_clock::time_point startedAt) noexcept {
+            if (auto *queue = QueueGauge(priority)) {
+                queue->Add(-1.0);
+            }
+            if (g_jobsActive) {
+                g_jobsActive->Add(1.0);
+            }
+            if (auto *wait = WaitHistogram(priority)) {
+                wait->Observe(std::chrono::duration<double>(startedAt - enqueuedAt).count());
+            }
+        }
+
+        void RecordTaskFinished(ftl::TaskPriority priority, std::chrono::steady_clock::time_point startedAt) noexcept {
+            if (auto *execution = ExecutionHistogram(priority)) {
+                execution->Observe(std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count());
+            }
+            if (g_jobsActive) {
+                g_jobsActive->Add(-1.0);
+            }
+        }
+
+        void ReportTaskException(const std::exception &exception) {
+            if (g_jobsExceptions) {
+                g_jobsExceptions->Inc();
+            }
+            spdlog::error("Task threw exception: {}", exception.what());
+        }
+
+        void ReportUnknownTaskException() {
+            if (g_jobsExceptions) {
+                g_jobsExceptions->Inc();
+            }
+            spdlog::error("Task threw unknown exception");
+        }
+    } // namespace Detail
+
     // Helper struct to wrap fu2::function for FTL's C-style function pointer
     struct TaskWrapper {
         fu2::function<void()> func;
@@ -68,36 +115,17 @@ namespace Framework::Jobs {
     static void TaskWrapperFunc(ftl::TaskScheduler * /*scheduler*/, void *arg) {
         auto *wrapper        = static_cast<TaskWrapper *>(arg);
         const auto startedAt = std::chrono::steady_clock::now();
-        if (auto *queue = QueueGauge(wrapper->priority)) {
-            queue->Add(-1.0);
-        }
-        if (g_jobsActive) {
-            g_jobsActive->Add(1.0);
-        }
-        if (auto *wait = WaitHistogram(wrapper->priority)) {
-            wait->Observe(std::chrono::duration<double>(startedAt - wrapper->enqueuedAt).count());
-        }
+        Detail::RecordTaskStarted(wrapper->priority, wrapper->enqueuedAt, startedAt);
         try {
             wrapper->func();
         }
         catch (const std::exception &e) {
-            if (g_jobsExceptions) {
-                g_jobsExceptions->Inc();
-            }
-            spdlog::error("Task threw exception: {}", e.what());
+            Detail::ReportTaskException(e);
         }
         catch (...) {
-            if (g_jobsExceptions) {
-                g_jobsExceptions->Inc();
-            }
-            spdlog::error("Task threw unknown exception");
+            Detail::ReportUnknownTaskException();
         }
-        if (auto *execution = ExecutionHistogram(wrapper->priority)) {
-            execution->Observe(std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count());
-        }
-        if (g_jobsActive) {
-            g_jobsActive->Add(-1.0);
-        }
+        Detail::RecordTaskFinished(wrapper->priority, startedAt);
         delete wrapper;
     }
 
@@ -150,19 +178,13 @@ namespace Framework::Jobs {
     }
 
     void JobSystem::Schedule(fu2::function<void()> task, ftl::TaskPriority priority) {
-        if (priority == ftl::TaskPriority::High ? g_jobsSchedHigh : g_jobsSchedNormal) {
-            (priority == ftl::TaskPriority::High ? g_jobsSchedHigh : g_jobsSchedNormal)->Inc();
-        }
-
         auto *wrapper = new TaskWrapper {std::move(task), priority, std::chrono::steady_clock::now()};
 
         ftl::Task ftlTask;
         ftlTask.Function = TaskWrapperFunc;
         ftlTask.ArgData  = wrapper;
 
-        if (auto *queue = QueueGauge(priority)) {
-            queue->Add(1.0);
-        }
+        Detail::RecordTaskScheduled(priority);
         _scheduler->AddTask(ftlTask, priority);
     }
 
@@ -173,19 +195,13 @@ namespace Framework::Jobs {
     }
 
     void JobSystem::Schedule(ftl::WaitGroup *waitGroup, fu2::function<void()> task, ftl::TaskPriority priority) {
-        if (priority == ftl::TaskPriority::High ? g_jobsSchedHigh : g_jobsSchedNormal) {
-            (priority == ftl::TaskPriority::High ? g_jobsSchedHigh : g_jobsSchedNormal)->Inc();
-        }
-
         auto *wrapper = new TaskWrapper {std::move(task), priority, std::chrono::steady_clock::now()};
 
         ftl::Task ftlTask;
         ftlTask.Function = TaskWrapperFunc;
         ftlTask.ArgData  = wrapper;
 
-        if (auto *queue = QueueGauge(priority)) {
-            queue->Add(1.0);
-        }
+        Detail::RecordTaskScheduled(priority);
         _scheduler->AddTask(ftlTask, priority, waitGroup);
     }
 
