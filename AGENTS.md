@@ -8,6 +8,12 @@ MafiaHub Framework is a C++ framework for building multiplayer game modification
 
 ## Build Commands
 
+> **ALWAYS build from the CLI via `builds\build.bat <target> <arch>`.** This is the single
+> supported way to build any target in this repo from the command line. It loads the matching
+> `vcvars*.bat` and drives the canonical pre-configured build tree. Never invoke `cmake --build`
+> directly and never create ad-hoc/temporary build directories. See the **Mandatory Windows
+> build rule** below.
+
 **macOS/Linux:**
 ```bash
 cmake -B build              # Configure
@@ -17,10 +23,16 @@ cmake --build build --target RunFrameworkTests  # Run tests
 
 **Windows:**
 ```bash
-cmake -B build              # Configure
-cmake --build build         # Build
-cmake --build build --target RunFrameworkTests  # Run tests
+builds\build.bat <target> 64
 ```
+
+For HogwartsMP, build the debug client and server with:
+```bat
+builds\build.bat HogwartsMPClient 64
+builds\build.bat HogwartsMPServer 64
+```
+
+**Mandatory Windows build rule:** Always use `builds\build.bat`. Its canonical 64-bit debug build directory is `builds\build-64`, and its artifacts belong in that build's debug output. Never create or use ad-hoc CMake build directories (including any `codex-*`, `verify`, smoke, or temporary build folder) for repository builds. Do not invoke `cmake --build` directly when the build script can build the requested target. If the canonical build is broken, diagnose or repair it rather than creating a parallel build tree.
 
 Or use Visual Studio 2022 with CMake tools installed and open the repository folder for automatic setup.
 
