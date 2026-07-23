@@ -102,6 +102,11 @@ namespace Framework::Scripting::Builtins {
         void CleanupResource(std::string_view resourceName);
 
         /**
+         * Clear all per-session event state.
+         */
+        void Reset();
+
+        /**
          * Clear all handlers (called on shutdown).
          */
         void ClearAll();
@@ -200,6 +205,7 @@ namespace Framework::Scripting::Builtins {
         // Remove callback data from tracking (called when promise settles)
         // Takes raw pointer and finds the corresponding shared_ptr to remove
         void RemovePendingCallback(AllSettledCallbackData *data);
+        void CancelPendingCallbacks();
 
         // Global handlers: eventName -> handlers (FIFO order)
         std::map<std::string, std::vector<EventHandler>, std::less<>> _globalHandlers;

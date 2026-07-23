@@ -289,6 +289,47 @@ namespace Framework::Scripting {
         return ResourceOperationResult::Ok(stopped);
     }
 
+    void ResourceManager::Reset() {
+        const std::vector<std::string> resourceNames = GetAllResourceNames();
+        StopAll();
+
+        if (_jsEngine && _jsEngine->IsInitialized()) {
+            v8::Isolate *isolate = _jsEngine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = _jsEngine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            _events.Reset();
+            for (const std::string &resourceName : resourceNames) {
+                Builtins::Messages::CleanupResource(isolate, context, resourceName);
+            }
+            Builtins::Messages::Shutdown();
+        }
+        else {
+            _events.Reset();
+            Builtins::Messages::Shutdown();
+        }
+
+        {
+            std::scoped_lock lock(_graphMutex, _resourcesMutex);
+            _dependencies.clear();
+            _dependents.clear();
+            _resources.clear();
+        }
+        {
+            std::scoped_lock lock(_contextMutex);
+            _currentResourceContext.clear();
+        }
+        {
+            std::scoped_lock lock(_scheduledRestartsMutex);
+            _scheduledRestarts.clear();
+        }
+        _watchSnapshots.clear();
+        _lastFileWatchPoll = {};
+    }
+
     ResourceOperationResult ResourceManager::StartResource(std::string_view name) {
         Resource *resource = GetResourceMutable(name);
         if (!resource) {

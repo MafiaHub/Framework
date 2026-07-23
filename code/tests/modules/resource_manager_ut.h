@@ -135,6 +135,40 @@ MODULE(resource_manager, {
         engine.Shutdown();
     });
 
+    IT("Reset clears session state without replacing the manager", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("reset-me", R"({
+            "name": "reset-me",
+            "version": "1.0.0"
+        })");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+
+        EQUALS(manager.DiscoverResources(), 1u);
+        manager.SetCurrentResourceContext("reset-me");
+        EQUALS(engine.GetResourceManager(), &manager);
+
+        manager.Reset();
+
+        EQUALS(engine.GetResourceManager(), &manager);
+        EQUALS(manager.GetResourceCount(), 0u);
+        EQUALS(manager.GetRunningResourceCount(), 0u);
+        STREQUALS(manager.GetCurrentResourceContext().c_str(), "");
+
+        ResourceManagerConfig newConfig;
+        newConfig.resourcesPath = "/new/session/path";
+        manager.SetConfig(newConfig);
+        STREQUALS(manager.GetConfig().resourcesPath.c_str(), "/new/session/path");
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
     // ==================== Resource Discovery ====================
 
     IT("discovers resources in directory", {

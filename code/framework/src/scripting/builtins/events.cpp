@@ -34,10 +34,10 @@ namespace Framework::Scripting::Builtins {
             _callbackContext->valid.store(false, std::memory_order_release);
         }
 
-        // Mark all pending AllSettled callbacks as cancelled so any outstanding
-        // promise then-handlers will safely bail out. The shared_ptr ensures
-        // the data stays alive until the last reference (this set or the
-        // then-handler) releases it.
+        CancelPendingCallbacks();
+    }
+
+    void Events::CancelPendingCallbacks() {
         std::scoped_lock lock(_pendingCallbacksMutex);
         for (const auto &data : _pendingCallbacks) {
             data->cancelled.store(true, std::memory_order_release);
@@ -926,6 +926,11 @@ namespace Framework::Scripting::Builtins {
         if (localIt != _localHandlers.end()) {
             _localHandlers.erase(localIt);
         }
+    }
+
+    void Events::Reset() {
+        ClearAll();
+        CancelPendingCallbacks();
     }
 
     void Events::ClearAll() {

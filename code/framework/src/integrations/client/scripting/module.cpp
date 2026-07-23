@@ -79,20 +79,18 @@ namespace Framework::Integrations::Client::Scripting {
             return Framework::Scripting::ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
 
-        // Reusing an already initialized engine (reconnect/reset path):
-        // clear stale module cache and loader callback data before loading
-        // new resources.
-        if (engineAlreadyInitialized) {
-            _engine->ClearModuleCache();
-        }
-
         // Initialize ResourceManager with client-side config
         Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath         = _resourceCachePath;
         config.isClient              = true;
         config.cascadeStopDependents = true;
 
-        _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_engine.get(), config);
+        if (_resourceManager) {
+            _resourceManager->SetConfig(config);
+        }
+        else {
+            _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_engine.get(), config);
+        }
 
         // Web views and key binds created by a resource die with it (single callback slot).
         _resourceManager->SetOnResourceStopped([](const std::string &resourceName) {
@@ -100,16 +98,14 @@ namespace Framework::Integrations::Client::Scripting {
             Builtins::Keybinds::CleanupResource(resourceName);
         });
 
-        // Register Framework SDK bindings for the new ResourceManager
         RegisterFrameworkBindings();
 
-        // Initialize Framework SDK only on first init (not after Reset)
-        if (!engineAlreadyInitialized) {
+        if (!engineAlreadyInitialized || _contextNeedsSDKRegistration) {
             if (!_engine->InitFrameworkSDK()) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to initialize Framework SDK: {}", _engine->GetLastError());
-                _resourceManager.reset();
                 return Framework::Scripting::ScriptingError::SCRIPTING_SDK_INIT_FAILED;
             }
+            _contextNeedsSDKRegistration = false;
         }
 
         if (!v8pp::metadata::export_catalog_from_environment("framework-client", "FRAMEWORK_SCRIPTING_API_METADATA")) {
@@ -193,21 +189,24 @@ namespace Framework::Integrations::Client::Scripting {
     }
 
     void ClientScriptingModule::Reset() {
-        // Stop all resources but keep the engine running
         if (_resourceManager) {
-            _resourceManager->StopAll();
-            _resourceManager.reset();
+            _resourceManager->Reset();
         }
 
         Builtins::Web::Shutdown();
         Builtins::Keybinds::Shutdown();
 
         if (_engine && _engine->IsInitialized()) {
-            _engine->ClearModuleCache();
+            if (!_engine->ResetContext()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to reset V8 context: {}", _engine->GetLastError());
+            }
         }
 
+        _contextNeedsSDKRegistration = true;
         _serverResourceList.clear();
         _resourcesSynced = false;
+
+        Lifecycle::Shutdown();
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Client scripting module reset");
     }

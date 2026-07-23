@@ -84,6 +84,11 @@ namespace Framework::Scripting {
          */
         void ClearModuleCache();
 
+        /**
+         * Replace the current V8 context without recreating the isolate.
+         */
+        [[nodiscard]] bool ResetContext();
+
         // Evict cached modules (and require() backing data) under rootPath.
         void EvictModulesUnderPath(const std::string &rootPath) override;
 

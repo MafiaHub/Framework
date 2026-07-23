@@ -121,6 +121,11 @@ namespace Framework::Scripting {
         ResourceOperationResult StopAll();
 
         /**
+         * Clear all per-session resource state.
+         */
+        void Reset();
+
+        /**
          * Start a specific resource and its dependencies.
          * @param name Resource name
          * @return Result indicating success or failure

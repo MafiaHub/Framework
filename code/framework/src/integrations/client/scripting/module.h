@@ -63,9 +63,7 @@ namespace Framework::Integrations::Client::Scripting {
         void Shutdown() override;
 
         /**
-         * Reset the scripting module for reconnection.
-         * Stops all resources and clears state but keeps the engine running.
-         * Use this on disconnect to avoid expensive reinitialization.
+         * Reset scripting state for reconnection without recreating the V8 isolate.
          */
         void Reset();
 
@@ -188,6 +186,8 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Resource cache path
         std::string _resourceCachePath = "resources";
+
+        bool _contextNeedsSDKRegistration = true;
     };
 
 } // namespace Framework::Integrations::Client::Scripting

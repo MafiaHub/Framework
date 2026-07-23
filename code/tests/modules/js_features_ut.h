@@ -1151,6 +1151,37 @@ MODULE(js_features, {
         EventsTestHelper::Cleanup();
     });
 
+    IT("ResourceManager reset keeps prior callback externals safe", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+
+        registerEvents(engine, manager);
+        RunJS(engine, R"(
+            globalThis.oldOn = Core.Events.on;
+            globalThis.oldUnsub = Core.Events.on('beforeReset', () => {});
+            0
+        )");
+        EQUALS(manager.GetEvents().GetListenerCount("beforeReset"), (size_t)1);
+
+        manager.Reset();
+        EQUALS(manager.GetEvents().GetListenerCount("beforeReset"), (size_t)0);
+
+        registerEvents(engine, manager);
+        RunJS(engine, "globalThis.oldUnsub(); globalThis.oldOn('afterReset', () => {}); 0");
+        EQUALS(manager.GetEvents().GetListenerCount("afterReset"), (size_t)1);
+
+        RunJS(engine, "Core.Events.on('freshAfterReset', () => {}); 0");
+        EQUALS(manager.GetEvents().GetListenerCount("freshAfterReset"), (size_t)1);
+
+        cleanupResource(engine, manager);
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
     // ========================================
     // CONSOLE BUILTIN TESTS
     // ========================================

@@ -66,6 +66,42 @@ namespace Framework::Scripting {
         _requireDataStore.clear();
     }
 
+    bool V8Engine::ResetContext() {
+        if (!_initialized || !_isolate) {
+            _lastError = "Cannot reset an uninitialized V8 context";
+            return false;
+        }
+
+        _lastError.clear();
+
+        v8::Locker locker(_isolate);
+        v8::Isolate::Scope isolateScope(_isolate);
+        v8::HandleScope handleScope(_isolate);
+
+        v8::Local<v8::Context> newContext = v8::Context::New(_isolate);
+        if (newContext.IsEmpty()) {
+            _lastError = "Failed to create replacement V8 context";
+            return false;
+        }
+        newContext->AllowCodeGenerationFromStrings(false);
+
+        v8::Local<v8::Context> oldContext = _context.Get(_isolate);
+        if (!oldContext.IsEmpty()) {
+            v8::Context::Scope oldContextScope(oldContext);
+            _isolate->PerformMicrotaskCheckpoint();
+        }
+
+        Builtins::Messages::Shutdown();
+        _timers.clear();
+        _nextTimerId = 1;
+        ClearModuleCache();
+
+        _context.Reset(_isolate, newContext);
+        v8::Context::Scope newContextScope(newContext);
+        InstallGlobals();
+        return true;
+    }
+
     void V8Engine::EvictModulesUnderPath(const std::string &rootPath) {
         if (!_isolate) {
             return;
