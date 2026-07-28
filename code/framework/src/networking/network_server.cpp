@@ -101,9 +101,16 @@ namespace Framework::Networking {
             return true;
         };
 
-        // ReadyEvent: the server arms its half from the integration layer and takes no action on
-        // completion (the avatar already exists); consumed so they don't hit the unknown-packet path.
-        case ID_READY_EVENT_SET:
+        case ID_READY_EVENT_SET: {
+            MafiaNet::BitStream bs(_packet->data + _packetDataOffset, _packet->length - _packetDataOffset, false);
+            bs.IgnoreBytes(sizeof(MafiaNet::MessageID));
+            int eventId = 0;
+            if (bs.Read(eventId) && _onConnectionReadyCallback) {
+                _onConnectionReadyCallback(eventId, packet->guid);
+            }
+            return true;
+        };
+
         case ID_READY_EVENT_UNSET:
         case ID_READY_EVENT_ALL_SET:
         case ID_READY_EVENT_QUERY:

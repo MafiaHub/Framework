@@ -28,12 +28,14 @@
 
 namespace Framework::Networking {
     using ClientGuidCallback = fu2::function<void(MafiaNet::RakNetGUID) const>;
+    using ConnectionReadyCallback = fu2::function<void(int, MafiaNet::RakNetGUID) const>;
 
     class NetworkServer final: public NetworkPeer {
       private:
         PacketCallback _onPlayerConnectCallback;
         DisconnectPacketCallback _onPlayerDisconnectCallback;
         ClientGuidCallback _onClientAuthenticatedCallback;
+        ConnectionReadyCallback _onConnectionReadyCallback;
         MafiaNet::FileListTransfer _fileListTransfer;
 
         // Guids whose build challenge passed — the gate keeping unverified peers out of replication.
@@ -96,6 +98,10 @@ namespace Framework::Networking {
         // Fired when a peer's build challenge succeeds (integration responds with ServerResources).
         void SetOnClientAuthenticatedCallback(ClientGuidCallback callback) {
             _onClientAuthenticatedCallback = std::move(callback);
+        }
+
+        void SetOnConnectionReadyCallback(ConnectionReadyCallback callback) {
+            _onConnectionReadyCallback = std::move(callback);
         }
     };
 } // namespace Framework::Networking

@@ -43,8 +43,9 @@ namespace Framework::Networking {
         OnAssetsDownloadFailedCallback _onAssetsDownloadFailedCallback;
         fu2::function<void(int eventId) const> _onConnectionReadyCallback;
         AssetFileTransfer _fileListTransfer;
+        bool _initialReplicationDownloadComplete {};
+
       public:
-        
         NetworkClient();
 
         ~NetworkClient();
@@ -65,7 +66,11 @@ namespace Framework::Networking {
             return _state;
         }
 
-        AssetFileTransfer* GetFileListTransfer() {
+        bool IsInitialReplicationDownloadComplete() const {
+            return _initialReplicationDownloadComplete;
+        }
+
+        AssetFileTransfer *GetFileListTransfer() {
             return &_fileListTransfer;
         }
 

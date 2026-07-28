@@ -69,7 +69,8 @@ namespace Framework::Networking {
             }
         }
 
-        _state = PeerState::CONNECTING;
+        _initialReplicationDownloadComplete = false;
+        _state                              = PeerState::CONNECTING;
 
         const MafiaNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
         if (result != MafiaNet::CONNECTION_ATTEMPT_STARTED) {
@@ -101,6 +102,7 @@ namespace Framework::Networking {
             _onPlayerDisconnectedCallback(nullptr, DisconnectionReason::GRACEFUL_SHUTDOWN, "");
         }
         _state = PeerState::DISCONNECTED;
+        _initialReplicationDownloadComplete = false;
 
         return {};
     }
@@ -115,6 +117,10 @@ namespace Framework::Networking {
 
     bool NetworkClient::HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) {
         switch (packetID) {
+        case ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE:
+            _initialReplicationDownloadComplete = true;
+            return true;
+
         case ID_CONNECTION_REQUEST_ACCEPTED: {
             _state = PeerState::CONNECTED;
             if (_onPlayerConnectedCallback) {
@@ -157,6 +163,7 @@ namespace Framework::Networking {
                 _onPlayerDisconnectedCallback(_packet, reason, customReason);
             }
             _state = PeerState::DISCONNECTED;
+            _initialReplicationDownloadComplete = false;
             return true;
         };
 
@@ -165,6 +172,7 @@ namespace Framework::Networking {
                 _onPlayerDisconnectedCallback(_packet, DisconnectionReason::LOST, "");
             }
             _state = PeerState::DISCONNECTED;
+            _initialReplicationDownloadComplete = false;
             return true;
         };
 

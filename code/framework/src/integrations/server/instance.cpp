@@ -170,7 +170,9 @@ namespace Framework::Integrations::Server {
             // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
             // still resolvable) just before destroying and broadcasting the destruction of the avatar.
             replication->SetOnClientDisconnect([this](MafiaNet::PeerGuid guid) {
-                OnPlayerDisconnect(guid);
+                if (_readyPlayerGuids.contains(static_cast<uint64_t>(guid))) {
+                    OnPlayerDisconnect(guid);
+                }
             });
         }
 
@@ -342,13 +344,24 @@ namespace Framework::Integrations::Server {
             net->SendRPC(resources, guid);
         });
 
-        net->SetOnPlayerDisconnectCallback([net](MafiaNet::Packet *packet, Framework::Networking::DisconnectionReason reason, const std::string &) {
+        net->SetOnPlayerDisconnectCallback([this, net](MafiaNet::Packet *packet, Framework::Networking::DisconnectionReason reason, const std::string &) {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
+            _armedSpawnBarrierGuids.erase(guid.g);
+            _readyPlayerGuids.erase(guid.g);
 
             // Player notification and avatar teardown run in ReplicationManager::OnClosedConnection,
             // which RakNet fires before this packet is delivered; here we just finalise the connection.
             net->GetPeer()->CloseConnection(guid, true);
+        });
+
+        net->SetOnConnectionReadyCallback([this, net](int eventId, MafiaNet::RakNetGUID guid) {
+            if (eventId != Framework::Networking::NetworkServer::ReadyEventId(guid) || _armedSpawnBarrierGuids.erase(guid.g) == 0 || !_readyPlayerGuids.insert(guid.g).second) {
+                return;
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Client spawn ready for player guid {}", guid.g);
+            OnPlayerReady(MafiaNet::ToPeerGuid(guid));
+            net->GetReadyEvent()->SetEvent(eventId, true);
         });
 
         // Client announces itself after assets. Gated on authentication so an unverified peer can't
@@ -398,10 +411,10 @@ namespace Framework::Integrations::Server {
             // Gate opens: this connection now starts receiving the replicated world.
             net->PushReplicationConnection(guid);
 
-            // Arm our half of the spawn barrier (the client armed its half before sending identity).
             const int eventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
+            net->GetReadyEvent()->SetEvent(eventId, false);
             net->GetReadyEvent()->AddToWaitList(eventId, guid);
-            net->GetReadyEvent()->SetEvent(eventId, true);
+            _armedSpawnBarrierGuids.insert(guid.g);
         });
 
         // Incoming chat from clients. Sender resolution + command parsing happen here; the mod

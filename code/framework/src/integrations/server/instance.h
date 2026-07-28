@@ -34,6 +34,7 @@
 #include <sig.h>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -143,6 +144,8 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Utils::CommandListener> _commandListener;
         std::unique_ptr<Utils::CommandProcessor> _commandProcessor;
         std::unique_ptr<External::Sentry::Wrapper> _crashReporter;
+        std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
+        std::unordered_set<uint64_t> _readyPlayerGuids;
 
         void InitEndpoints();
         void InitNetworkingMessages();
@@ -177,6 +180,9 @@ namespace Framework::Integrations::Server {
 
         virtual void OnPlayerConnect(const PlayerConnectionData &data) {
             (void)data;
+        }
+        virtual void OnPlayerReady(MafiaNet::PeerGuid guid) {
+            (void)guid;
         }
         virtual void OnPlayerDisconnect(MafiaNet::PeerGuid guid) {
             (void)guid;

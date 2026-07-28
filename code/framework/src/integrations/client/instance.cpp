@@ -449,6 +449,7 @@ namespace Framework::Integrations::Client {
         if (_networkingEngine) {
             FW_PROFILE_SCOPE_N("Client::Networking");
             _networkingEngine->Update();
+            TrySignalConnectionSpawnReady();
         }
 
         if (_scriptingModule) {
@@ -595,6 +596,7 @@ namespace Framework::Integrations::Client {
                 return;
             }
             _connectionFinalized = true;
+            _spawnBarrierArmed   = false;
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection ready (event {}), finalizing", eventId);
             // tickInterval is in seconds; SetAutoSerializeInterval wants milliseconds.
             if (auto *replication = net->GetReplicationManager()) {
@@ -632,6 +634,8 @@ namespace Framework::Integrations::Client {
             _initialDownloadDone = false;
             _downloadStatus      = {};
             _connectionFinalized = false;
+            _spawnBarrierArmed   = false;
+            _projectSpawnReady   = false;
             SetConnectionPhase(ConnectionPhase::Disconnected);
             
             // Entity teardown is native: ReplicaManager3 deletes server-created replicas when the
@@ -890,14 +894,37 @@ namespace Framework::Integrations::Client {
             identity.hardwareId = Framework::Utils::GetHardwareId();
             net->SendRPC(identity, serverGuid);
 
+            net->GetReadyEvent()->SetEvent(_readyEventId, false);
             net->GetReadyEvent()->AddToWaitList(_readyEventId, serverGuid);
-            net->GetReadyEvent()->SetEvent(_readyEventId, true);
+            _spawnBarrierArmed = true;
+            _projectSpawnReady = !RequiresExplicitConnectionSpawnReady();
+            TrySignalConnectionSpawnReady();
         }
 
         _downloadStatus = {};
 
         // Let the mod-level know assets have just been finished processing
         OnAssetsDownloadFinished(success);
+    }
+
+    void Instance::SignalConnectionSpawnReady() {
+        _projectSpawnReady = true;
+        TrySignalConnectionSpawnReady();
+    }
+
+    void Instance::TrySignalConnectionSpawnReady() {
+        if (!_spawnBarrierArmed || !_projectSpawnReady || _connectionFinalized || !_networkingEngine) {
+            return;
+        }
+
+        Framework::Networking::NetworkClient *net = _networkingEngine->GetNetworkClient();
+        if (!net || !net->IsInitialReplicationDownloadComplete()) {
+            return;
+        }
+
+        _spawnBarrierArmed = false;
+        net->GetReadyEvent()->SetEvent(_readyEventId, true);
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Initial replication download and project spawn are ready (event {})", _readyEventId);
     }
 
     void Instance::RegisterResourceSchemeHandler() {

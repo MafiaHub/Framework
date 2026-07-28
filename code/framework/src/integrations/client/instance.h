@@ -156,6 +156,8 @@ namespace Framework::Integrations::Client {
         float _serverTickRate {};
         // One-shot latch so a stray ready-event completion can't re-run the mod's finalization.
         bool _connectionFinalized {};
+        bool _spawnBarrierArmed {};
+        bool _projectSpawnReady {};
 
         // Human-readable reason for the last remote disconnection; empty when it was locally
         // initiated (user quit). Set before OnConnectionClosed() fires.
@@ -178,6 +180,7 @@ namespace Framework::Integrations::Client {
         void SyncResourceUpdatesFromServer();
         void InitCacheAssetFolders();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
+        void TrySignalConnectionSpawnReady();
 
       public:
         Instance();
@@ -205,6 +208,9 @@ namespace Framework::Integrations::Client {
         virtual void OnConnectionFinalized(float serverTickRate) {
             (void)serverTickRate;
         }
+        virtual bool RequiresExplicitConnectionSpawnReady() const {
+            return false;
+        }
         virtual void OnConnectionClosed() {}
         virtual void OnAssetsDownloadFinished(bool success) {
             (void)success;
@@ -230,6 +236,7 @@ namespace Framework::Integrations::Client {
         [[nodiscard]] Utils::Result<void, Error> ConnectToServer(const std::string &host, int32_t port, const std::string &password = "");
 
         void DownloadsAssetsFromConnectedServer();
+        void SignalConnectionSpawnReady();
 
       private:
         // Cancel any in-flight transfer and kick off a fresh asset download from the connected
