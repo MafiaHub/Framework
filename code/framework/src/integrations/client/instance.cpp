@@ -746,6 +746,7 @@ namespace Framework::Integrations::Client {
         }
 
         if (!cacheDirHandle.exists()) {
+            InitCacheAssetFolders();
             if (cacheDirHandle.createDirectory()) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client asset cache: {}", _currentState.serverIDHash);
             }
