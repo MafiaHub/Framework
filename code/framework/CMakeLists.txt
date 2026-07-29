@@ -66,6 +66,8 @@ set(FRAMEWORK_SERVER_SRC
 
     # JavaScript scripting (server module)
     src/integrations/server/scripting/module.cpp
+
+    src/voice/server/voice_router.cpp
 )
 
 set(FRAMEWORK_CLIENT_SRC
