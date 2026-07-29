@@ -2682,4 +2682,9 @@ The three pure components carry real automated coverage. The device and codec la
 
 ## Known Local Constraint
 
-A full Framework build does not currently succeed on the development Mac (AppleClang 21 against the bundled fmt). Tasks 1–6 are verifiable through the `FrameworkTests` target if it configures; Tasks 7–10 need the Windows build via `builds\build.bat`.
+`FrameworkClient` is declared inside a `WIN32` guard (`code/framework/CMakeLists.txt:144-172`), so **no client target exists on macOS or Linux** — neither `FrameworkClient` nor `M2OClient`.
+
+- **Tasks 1–6 and 8** build and test on macOS. Verified baseline before any task: `RunFrameworkTests` passes 158 tests across 12 modules.
+- **Tasks 7, 9 and 10** are client-side and can only be built, run, and hardware-verified on Windows via `builds\build.bat`.
+
+Task 6 compiles `mixer.cpp` directly into `FrameworkTests` rather than linking `FrameworkClient`, which is what lets the mixer's unit tests run on every platform despite living in the client source list.
