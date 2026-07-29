@@ -21,6 +21,10 @@ namespace Framework::Networking::Replication {
 } // namespace Framework::Networking::Replication
 
 
+namespace Framework::Voice {
+    class VoiceServer;
+} // namespace Framework::Voice
+
 namespace Framework::GUI {
     class Manager;
 } // namespace Framework::GUI
@@ -48,6 +52,7 @@ namespace Framework {
         static void Reset() noexcept {
             _networkPeer      = nullptr;
             _replication      = nullptr;
+            _voiceServer      = nullptr;
             _scriptingModule  = nullptr;
             _webManager       = nullptr;
             _input            = nullptr;
@@ -64,6 +69,11 @@ namespace Framework {
         static void SetReplication(Networking::Replication::ReplicationManager *replication) {
             FW_ASSERT_MODULE_REGISTRATION(_replication, replication, "Replication");
             _replication = replication;
+        }
+
+        static void SetVoiceServer(Voice::VoiceServer *voice) {
+            FW_ASSERT_MODULE_REGISTRATION(_voiceServer, voice, "VoiceServer");
+            _voiceServer = voice;
         }
 
         static void SetScriptingModule(Scripting::ScriptingModule *module) {
@@ -99,6 +109,10 @@ namespace Framework {
             return _replication;
         }
 
+        static Voice::VoiceServer *GetVoiceServer() noexcept {
+            return _voiceServer;
+        }
+
         static Scripting::ScriptingModule *GetScriptingModule() noexcept {
             return _scriptingModule;
         }
@@ -122,6 +136,7 @@ namespace Framework {
       private:
         static inline Networking::NetworkPeer *_networkPeer {};
         static inline Networking::Replication::ReplicationManager *_replication {};
+        static inline Voice::VoiceServer *_voiceServer {};
         static inline Scripting::ScriptingModule *_scriptingModule {};
         static inline GUI::Manager *_webManager {};
         static inline Input::IInput *_input {};

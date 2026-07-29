@@ -17,6 +17,7 @@
 #include "logging/logger.h"
 #include "networking/engine.h"
 #include "scripting/module.h"
+#include "voice/server/voice_server.h"
 
 #include <external/sentry/wrapper.h>
 
@@ -144,6 +145,9 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Utils::CommandListener> _commandListener;
         std::unique_ptr<Utils::CommandProcessor> _commandProcessor;
         std::unique_ptr<External::Sentry::Wrapper> _crashReporter;
+        // Proximity voice relay. Value member: it holds no resources until Init attaches it to
+        // the peer, so a mod that never enables voice pays nothing beyond the empty maps.
+        Voice::VoiceServer _voiceServer;
         std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
         std::unordered_set<uint64_t> _readyPlayerGuids;
 
