@@ -108,12 +108,26 @@ if(MSVC)
     message(STATUS "MafiaNet CRT pin: parent CMAKE_MSVC_RUNTIME_LIBRARY='${CMAKE_MSVC_RUNTIME_LIBRARY}', forcing '${_fw_msvc_runtime}'")
     message(STATUS "MafiaNet CRT pin: CMAKE_CXX_FLAGS_DEBUG='${CMAKE_CXX_FLAGS_DEBUG}'")
 
+    # Read the flags as they stand inside MafiaNet's own directory scope, which is
+    # where the debug CRT is getting in. This is the one value the previous round
+    # of diagnostics could not see.
+    get_directory_property(_fw_mn_flags DIRECTORY "${mafianet_SOURCE_DIR}"
+        DEFINITION CMAKE_CXX_FLAGS_DEBUG)
+    message(STATUS "MafiaNet CRT pin: mafianet scope CMAKE_CXX_FLAGS_DEBUG='${_fw_mn_flags}'")
+
     foreach(_mafianet_target MafiaNetStatic MafiaNet opus rnnoise)
         if(TARGET ${_mafianet_target})
             set_property(TARGET ${_mafianet_target} PROPERTY
                 MSVC_RUNTIME_LIBRARY "${_fw_msvc_runtime}")
+            # The property alone proved insufficient: CI showed it correctly applied
+            # while the objects still came out MDd, so something inside those
+            # subprojects' scopes puts the debug CRT in the flags directly. A
+            # compile option is appended after CMAKE_<LANG>_FLAGS, and for MSVC the
+            # last runtime switch wins, so this overrides it whatever the source.
+            target_compile_options(${_mafianet_target} PRIVATE /MD)
+
             get_target_property(_fw_applied ${_mafianet_target} MSVC_RUNTIME_LIBRARY)
-            message(STATUS "MafiaNet CRT pin: ${_mafianet_target} -> ${_fw_applied}")
+            message(STATUS "MafiaNet CRT pin: ${_mafianet_target} -> ${_fw_applied} (+/MD)")
         else()
             message(STATUS "MafiaNet CRT pin: target ${_mafianet_target} NOT FOUND")
         endif()
