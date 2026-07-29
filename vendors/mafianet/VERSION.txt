@@ -1,2 +1,7 @@
 MafiaNet vendored from https://github.com/MafiaHub/MafiaNet
 Pinned: tag v0.10.0 (commit 0ab32ce519398443c122afb99597e1af1fb7fbd9)
+
+Additionally vendored (not in v0.10.0): Source/src/RakVoice.cpp and
+Source/include/mafianet/RakVoice.h, taken from MafiaNet master for voice chat
+support. Opus and RNNoise are vendored separately under vendors/opus and
+vendors/rnnoise rather than fetched, because the Framework uses no FetchContent.

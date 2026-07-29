@@ -1,0 +1,2 @@
+Opus vendored from https://github.com/xiph/opus
+Pinned: tag v1.5.2 (commit 5ec2f3c915d0529b94a3a302969c673531654824)

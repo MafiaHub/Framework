@@ -1,3 +1,7 @@
+# Opus and RNNoise are C libraries; the top-level project() only enables
+# CXX, so the C toolchain must be enabled explicitly before configuring them.
+enable_language(C)
+
 set(BUILD_SHARED_LIBS CACHE BOOL OFF)
 set(BUILD_SAMPLES CACHE BOOL OFF)
 
@@ -50,6 +54,18 @@ set(OPENSSL_USE_STATIC_LIBS ON)
 set(HTTPLIB_REQUIRE_OPENSSL ON)
 set(HTTPLIB_COMPILE ON)
 add_subdirectory(httplib)
+
+# Build Opus and RNNoise (voice codec + noise suppression, used by RakVoice)
+set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+add_subdirectory(opus)
+add_subdirectory(rnnoise)
+
+# Build miniaudio (client audio device I/O)
+add_subdirectory(miniaudio)
 
 # Build MafiaNet (networking, vendored fork of RakNet/SLikeNet)
 add_subdirectory(mafianet)

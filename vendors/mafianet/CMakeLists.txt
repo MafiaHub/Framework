@@ -23,7 +23,7 @@ if(NOT TARGET OpenSSL::SSL)
 endif()
 find_package(Threads REQUIRED)
 
-target_link_libraries(MafiaNet PUBLIC OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
+target_link_libraries(MafiaNet PUBLIC OpenSSL::SSL OpenSSL::Crypto Threads::Threads opus rnnoise)
 
 if(WIN32)
     target_link_libraries(MafiaNet PUBLIC ws2_32)

@@ -1,0 +1,13 @@
+RNNoise vendored from https://github.com/xiph/rnnoise
+Pinned: default branch "main" (commit 70f1d256acd4b34a572f999a05c87bf00b67730d)
+
+Model weights (src/rnnoise_data.c, src/rnnoise_data.h,
+src/rnnoise_data_little.c, src/rnnoise_data_little.h) are not checked into
+upstream git; they are shipped separately and fetched by upstream's own
+download_model.sh (invoked from autogen.sh), keyed by the hash in
+model_version. Fetched here from:
+https://media.xiph.org/rnnoise/models/rnnoise_data-0a8755f8e2d834eff6a54714ecc7d75f9932e845df35f8b59bc52a7cfe6e8b37.tar.gz
+SHA-256: 0a8755f8e2d834eff6a54714ecc7d75f9932e845df35f8b59bc52a7cfe6e8b37
+(matches vendors/rnnoise/model_version) and extracted in place; the tarball
+itself and the accompanying .pth PyTorch training checkpoints it also
+contains are not committed.
