@@ -396,9 +396,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         args.GetReturnValue().Set(presence && presence->IsInitialized());
     }
 
-    void Discord::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, Framework::Scripting::ResourceManager *resourceManager) {
+    void Discord::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
         (void)resourceManager;
-        if (!isolate || context.IsEmpty() || frameworkObj.IsEmpty()) {
+        if (!isolate || context.IsEmpty() || target.IsEmpty()) {
             return;
         }
 
@@ -448,9 +448,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         attach("getUserId", &Discord::GetUserIdCallback);
         attach("isAvailable", &Discord::IsAvailableCallback);
 
-        frameworkObj->Set(context, v8pp::to_v8(isolate, "Discord"), discordObj).Check();
+        target->Set(context, v8pp::to_v8(isolate, "Discord"), discordObj).Check();
 
-        auto &metadata   = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Discord", "Client-only Discord rich-presence composer exposed as Framework.Discord; setters stage values until update or setPresence publishes them.");
+        auto &metadata   = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Discord", "Client-only Discord rich-presence composer exposed as the global Discord; setters stage values until update or setPresence publishes them.");
         const auto field = [&](const char *name, const char *type, const char *parameter, const char *description) {
             metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>(name, v8pp::metadata::docs("void", {v8pp::metadata::param(parameter, type, false, description)}, std::string("Stages ") + description)));
         };

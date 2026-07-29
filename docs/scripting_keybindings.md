@@ -1,20 +1,20 @@
-# Client Keybindings (`Framework.Key`)
+# Client Keybindings (`Key`)
 
 The client scripting layer lets a resource bind physical keys to handlers via
-the `Framework.Key` API. It is the framework's answer to MTA:SA's `bindKey` and
+the `Key` API. It is the framework's answer to MTA:SA's `bindKey` and
 FiveM's `RegisterKeyMapping`: a resource asks for a key, and a callback fires
 when that key goes down and/or up.
 
-`Framework.Key` is **client-side only** — it does not exist on the server. Put
+`Key` is **client-side only** — it does not exist on the server. Put
 your `Key.bind` calls in a resource's client script.
 
 ## API
 
 ```ts
-Framework.Key.bind(key, state, handler)   // state: "down" | "up" | "both"
-Framework.Key.bind(key, handler)           // state defaults to "down"
-Framework.Key.unbind(key, state?, handler?)
-Framework.Key.isDown(key) -> boolean
+Key.bind(key, state, handler)   // state: "down" | "up" | "both"
+Key.bind(key, handler)           // state defaults to "down"
+Key.unbind(key, state?, handler?)
+Key.isDown(key) -> boolean
 ```
 
 - **`bind(key, state, handler)`** — registers `handler`. It is called as
@@ -34,27 +34,27 @@ Framework.Key.isDown(key) -> boolean
 
 ```js
 // Toggle a HUD panel on F6:
-Framework.Key.bind("f6", "down", () => toggleHud());
+Key.bind("f6", "down", () => toggleHud());
 
 // Hold-to-aim: one handler, both edges. `state` tells you which edge.
-Framework.Key.bind("b", "both", (key, state) => {
+Key.bind("b", "both", (key, state) => {
     setAiming(state === "down");
 });
 
 // Fire-and-forget on key-down (state omitted):
-Framework.Key.bind("h", () => honk());
+Key.bind("h", () => honk());
 
 // Poll a modifier from inside another handler:
-Framework.Key.bind("e", "down", () => {
-    if (Framework.Key.isDown("lshift")) openContextMenu();
+Key.bind("e", "down", () => {
+    if (Key.isDown("lshift")) openContextMenu();
     else interact();
 });
 
 // Remove a specific bind later:
 const onJump = () => jump();
-Framework.Key.bind("space", "down", onJump);
+Key.bind("space", "down", onJump);
 // ...
-Framework.Key.unbind("space", "down", onJump);
+Key.unbind("space", "down", onJump);
 ```
 
 ## Key names
@@ -81,7 +81,7 @@ Handlers fire only when the player is actually in control of the game:
 
 - the client is in an active session,
 - no UI is capturing input — chat box open, a menu open, or a focused web view
-  (`Framework.Web.focusView`), and
+  (`Web.focusView`), and
 - the game window is in the foreground.
 
 While any of those hold, key edges are **swallowed** — a key pressed with the
@@ -102,7 +102,7 @@ its binds are removed automatically — you do not need to `unbind` them in a
 
 - Binds are dispatched by polling once per frame, so this is edge detection on
   the game's frame rate — fine for gameplay actions, not for text entry (use a
-  `Framework.Web` view for typed input).
+  `Web` view for typed input).
 - There is no user-facing rebinding UI yet: the key a resource asks for is the
   key it gets. A default-plus-rebind model (FiveM-style) may be added later.
 - Server-driven binds (a server telling a specific client to bind a key) are

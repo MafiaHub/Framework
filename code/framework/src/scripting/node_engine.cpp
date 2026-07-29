@@ -208,7 +208,6 @@ namespace Framework::Scripting {
             _env,
             "const publicRequire = require('node:module').createRequire(process.cwd() + '/');"
             "globalThis.require = publicRequire;"
-            "globalThis.Framework = {};"
             "globalThis.Core = {};"
             // Capture the real require.cache before sandboxing hides it, so
             // C++ can evict a resource's modules on reload.

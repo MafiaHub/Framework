@@ -45,6 +45,11 @@ Rules:
 
 ## Registration
 
+`target` is always the context's global root — there is no namespace object to
+nest under, so every builtin is reachable as a bare global (`Web`, `Key`,
+`Exports`, …). Names that Node's CommonJS module scope would shadow are
+capitalized for that reason: `Exports`, not `exports`.
+
 There are two legitimate `Register` shapes; a builtin uses the one that matches
 what it needs, and nothing else diverges:
 

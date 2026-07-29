@@ -133,7 +133,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     std::function<bool()> Keybinds::_activeCallback;
     Framework::Scripting::ResourceManager *Keybinds::_resourceManager = nullptr;
 
-    void Keybinds::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, Framework::Scripting::ResourceManager *resourceManager) {
+    void Keybinds::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
         {
             std::scoped_lock lock(_mutex);
             _buckets.clear();
@@ -151,9 +151,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         bind("unbind", UnbindCallback);
         bind("isDown", IsDownCallback);
 
-        frameworkObj->Set(context, v8pp::to_v8(isolate, "Key"), keyObj).Check();
+        target->Set(context, v8pp::to_v8(isolate, "Key"), keyObj).Check();
 
-        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Key", "Client-only, resource-owned physical key bindings exposed as Framework.Key.");
+        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Key", "Client-only, resource-owned physical key bindings exposed as the global Key.");
         metadata.record(
             v8pp::metadata::function_of<v8::FunctionCallback>("bind", v8pp::metadata::docs("boolean",
                                                                           {
