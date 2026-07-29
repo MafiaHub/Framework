@@ -38,6 +38,21 @@ class RakPeerInterface;
 #define FRAME_OUTGOING_BUFFER_COUNT 100
 #define FRAME_INCOMING_BUFFER_COUNT 100
 
+// Wire layout of an ID_RAKVOICE_RELAY_DATA frame:
+// [id][origin guid][channel id][sequence][opus payload]
+// Single source of truth for both the writer (Update) and the readers
+// (ReadRelayOrigin, OnRelayVoiceData).
+constexpr unsigned RAKVOICE_RELAY_OFFSET_ORIGIN = sizeof(unsigned char);
+constexpr unsigned RAKVOICE_RELAY_OFFSET_CHANNEL_ID = RAKVOICE_RELAY_OFFSET_ORIGIN + sizeof(uint64_t);
+constexpr unsigned RAKVOICE_RELAY_OFFSET_SEQUENCE = RAKVOICE_RELAY_OFFSET_CHANNEL_ID + sizeof(uint16_t);
+constexpr unsigned RAKVOICE_RELAY_HEADER_SIZE = RAKVOICE_RELAY_OFFSET_SEQUENCE + sizeof(unsigned short);
+
+// Codec-level backstop for reaping relay speakers we have stopped hearing from.
+// Relay speakers are peers of the server, not of us, so OnClosedConnection never fires
+// for them and nothing else would ever free their channels. Deliberately much longer
+// than the speaker timeout the client layer applies on top, so the two do not fight.
+constexpr MafiaNet::TimeMS RAKVOICE_RELAY_CHANNEL_TIMEOUT_MS = 30000;
+
 /// \internal
 struct VoiceChannel
 {
@@ -67,6 +82,8 @@ struct VoiceChannel
 	unsigned short incomingMessageNumber;
 
 	MafiaNet::TimeMS lastSend;
+	// When we last decoded a frame into this channel. Drives the relay-mode reap in Update().
+	MafiaNet::TimeMS lastDecode;
 };
 int VoiceChannelComp( const RakNetGUID &key, VoiceChannel * const &data );
 
@@ -185,6 +202,38 @@ public:
 	/// \return true if enabled, false otherwise.
 	bool IsLoopbackMode(void) const;
 
+	/// \brief Routes all outgoing frames through a relay server instead of directly to peers.
+	/// In relay mode SendFrame() sends to the relay target and stamps our own GUID as the
+	/// frame origin, and incoming frames are keyed by that origin rather than the sender.
+	void SetRelayMode(bool enable);
+
+	/// \brief Sets the server that relay-mode frames are sent to.
+	void SetRelayTarget(RakNetGUID server);
+
+	/// \brief Marks this peer as the relay host (the server).
+	/// A relay host never decodes: incoming ID_RAKVOICE_RELAY_DATA packets are passed
+	/// through to the application loop so they can be handed back to RelayFrame().
+	/// Distinct from SetRelayMode(), which is what a talking/listening client enables.
+	void SetRelayHost(bool enable);
+
+	/// \brief Forwards a received relay frame to a set of recipients without decoding it.
+	/// Costs one Send per recipient; no codec state is touched.
+	void RelayFrame(Packet *packet, const RakNetGUID *recipients, int count);
+
+	/// \brief Reads the origin GUID out of an ID_RAKVOICE_RELAY_DATA packet.
+	static RakNetGUID ReadRelayOrigin(Packet *packet);
+
+	/// \brief Stops ReceiveFrame() mixing speakers together, so each can be pulled separately.
+	void SetPerSpeakerOutput(bool enable);
+
+	/// \brief Pulls one decoded frame for a single speaker.
+	/// \param[out] out Buffer of at least GetBufferSizeBytes() bytes.
+	/// \return true if a frame was written, false if that speaker has no buffered audio.
+	bool ReceiveFrameFrom(RakNetGUID origin, void *out);
+
+	/// \brief Lists speakers that currently have a decoder allocated.
+	void GetActiveSpeakers(DataStructures::List<RakNetGUID> &out);
+
 	// --------------------------------------------------------------------------------------------
 	// Message handling functions
 	// --------------------------------------------------------------------------------------------
@@ -201,6 +250,10 @@ protected:
 	void FreeChannelMemory(RakNetGUID recipient);
 	void FreeChannelMemory(unsigned index, bool removeIndex);
 	void WriteOutputToChannel(VoiceChannel *channel, char *dataToWrite, int bytesToWrite);
+	void DecodeIntoChannel(VoiceChannel *channel, unsigned short packetMessageNumber,
+		const unsigned char *payload, unsigned payloadLength);
+	VoiceChannel *GetOrCreateChannel(RakNetGUID origin);
+	void OnRelayVoiceData(Packet *packet);
 
 	/// Get frame size in samples for the given sample rate (20ms frames)
 	static int GetFrameSizeSamples(int sampleRate);
@@ -216,6 +269,10 @@ protected:
 	bool defaultVBRState;
 	int defaultSignalType;
 	bool loopbackMode;
+	bool relayMode;
+	bool relayHost;
+	bool perSpeakerOutput;
+	RakNetGUID relayTarget;
 };
 
 } // namespace MafiaNet
