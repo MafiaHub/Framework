@@ -85,51 +85,39 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(MafiaNet)
 
-# Pin the fetched dependencies to this build's MSVC runtime.
+# Reconcile the fetched dependencies with this build's CRT convention.
 #
-# FrameworkSetup forces the release CRT (MultiThreadedDLL) even in Debug builds,
-# and replaces CMAKE_CXX_FLAGS_DEBUG outright so no /MDd survives. MafiaNet, Opus
-# and RNNoise are each their own CMake project with their own project() call,
-# which re-initialises compiler flags in that scope from the cache and so falls
-# back to MultiThreadedDebugDLL under a Debug configuration. Linking a /MDd static
-# library into /MD objects fails with LNK2038 on _ITERATOR_DEBUG_LEVEL and
-# RuntimeLibrary.
+# Framework uses the RELEASE CRT even in Debug builds: FrameworkSetup forces
+# CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreadedDLL and replaces
+# CMAKE_CXX_FLAGS_DEBUG outright, so no /MDd and no _DEBUG reach its objects.
 #
-# This did not arise while MafiaNet was vendored: that copy was a bare
-# add_library() with no project() of its own, so it simply inherited this scope.
+# MafiaNet follows the ordinary convention instead -- Source/CMakeLists.txt does
+# target_compile_definitions(... $<$<CONFIG:Debug>:_DEBUG>). Defining _DEBUG makes
+# MSVC select the debug CRT semantics in the object itself: _ITERATOR_DEBUG_LEVEL
+# becomes 2 and the object records MDd_DynamicDebug. Linking that against
+# Framework's MD_DynamicRelease objects fails with LNK2038, and no flag or
+# MSVC_RUNTIME_LIBRARY property can override it, because the definition is what
+# drives it. CI confirmed exactly that: the property was applied correctly and the
+# objects still came out MDd.
 #
-# The value is spelled out rather than read from CMAKE_MSVC_RUNTIME_LIBRARY so it
-# cannot silently become empty across the subproject boundary -- an empty property
-# means "use the default", which is exactly the MDd we are trying to avoid. Keep it
-# in step with cmake/FrameworkSetup.cmake.
+# So drop the definition on the fetched targets rather than fighting the symptom.
+# This is Framework adapting to its own unusual choice, not a defect upstream --
+# MafiaNet is right to define _DEBUG when it is built normally.
+#
+# Nothing analogous was needed while MafiaNet was vendored: that copy was a bare
+# add_library() with no target_compile_definitions of its own.
 if(MSVC)
-    set(_fw_msvc_runtime "MultiThreadedDLL")
-
-    message(STATUS "MafiaNet CRT pin: parent CMAKE_MSVC_RUNTIME_LIBRARY='${CMAKE_MSVC_RUNTIME_LIBRARY}', forcing '${_fw_msvc_runtime}'")
-    message(STATUS "MafiaNet CRT pin: CMAKE_CXX_FLAGS_DEBUG='${CMAKE_CXX_FLAGS_DEBUG}'")
-
-    # Read the flags as they stand inside MafiaNet's own directory scope, which is
-    # where the debug CRT is getting in. This is the one value the previous round
-    # of diagnostics could not see.
-    get_directory_property(_fw_mn_flags DIRECTORY "${mafianet_SOURCE_DIR}"
-        DEFINITION CMAKE_CXX_FLAGS_DEBUG)
-    message(STATUS "MafiaNet CRT pin: mafianet scope CMAKE_CXX_FLAGS_DEBUG='${_fw_mn_flags}'")
-
     foreach(_mafianet_target MafiaNetStatic MafiaNet opus rnnoise)
         if(TARGET ${_mafianet_target})
             set_property(TARGET ${_mafianet_target} PROPERTY
-                MSVC_RUNTIME_LIBRARY "${_fw_msvc_runtime}")
-            # The property alone proved insufficient: CI showed it correctly applied
-            # while the objects still came out MDd, so something inside those
-            # subprojects' scopes puts the debug CRT in the flags directly. A
-            # compile option is appended after CMAKE_<LANG>_FLAGS, and for MSVC the
-            # last runtime switch wins, so this overrides it whatever the source.
-            target_compile_options(${_mafianet_target} PRIVATE /MD)
+                MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
-            get_target_property(_fw_applied ${_mafianet_target} MSVC_RUNTIME_LIBRARY)
-            message(STATUS "MafiaNet CRT pin: ${_mafianet_target} -> ${_fw_applied} (+/MD)")
-        else()
-            message(STATUS "MafiaNet CRT pin: target ${_mafianet_target} NOT FOUND")
+            get_target_property(_fw_defs ${_mafianet_target} COMPILE_DEFINITIONS)
+            if(_fw_defs)
+                list(REMOVE_ITEM _fw_defs "$<$<CONFIG:Debug>:_DEBUG>" "_DEBUG")
+                set_property(TARGET ${_mafianet_target} PROPERTY
+                    COMPILE_DEFINITIONS ${_fw_defs})
+            endif()
         endif()
     endforeach()
 endif()
