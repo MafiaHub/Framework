@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#include "imports.h"
+#include "Imports.h"
 #include "../resource/resource.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
@@ -15,7 +15,7 @@
 
 namespace Framework::Scripting::Builtins {
 
-    void Imports::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, ResourceManager *resourceManager) {
+    void Imports::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager) {
         v8::Local<v8::Object> importsObj = v8::Object::New(isolate);
 
         // Store resource manager as external data for callbacks
@@ -25,9 +25,9 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::FunctionTemplate> getTmpl = v8::FunctionTemplate::New(isolate, GetCallback, managerData);
         importsObj->Set(context, v8pp::to_v8(isolate, "get"), getTmpl->GetFunction(context).ToLocalChecked()).Check();
 
-        frameworkObj->Set(context, v8pp::to_v8(isolate, "imports"), importsObj).Check();
+        target->Set(context, v8pp::to_v8(isolate, "Imports"), importsObj).Check();
 
-        auto &metadata = GetScriptingCatalog(isolate).global_object("imports", "Bulk access to values exported by another running resource through Framework.imports.");
+        auto &metadata = GetScriptingCatalog(isolate).global_object("Imports", "Bulk access to values exported by another running resource through the global Imports object.");
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("get",
             v8pp::metadata::docs("Record<string, unknown>",
                 {
@@ -42,18 +42,18 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 1) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "imports.get requires 1 argument: resourceName")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Imports.get requires 1 argument: resourceName")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "imports.get: resourceName must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Imports.get: resourceName must be a string")));
             return;
         }
 
         ResourceManager *manager = static_cast<ResourceManager *>(args.Data().As<v8::External>()->Value());
         if (!manager) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get: resource manager not available")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Imports.get: resource manager not available")));
             return;
         }
 
@@ -63,13 +63,13 @@ namespace Framework::Scripting::Builtins {
         // Check if target resource exists
         const Resource *resource = manager->GetResource(resourceName);
         if (!resource) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get: resource '" + resourceName + "' not found")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Imports.get: resource '" + resourceName + "' not found")));
             return;
         }
 
         // Check if target resource is running
         if (!resource->IsRunning()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get: resource '" + resourceName + "' is not running")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Imports.get: resource '" + resourceName + "' is not running")));
             return;
         }
 
@@ -85,7 +85,7 @@ namespace Framework::Scripting::Builtins {
         // Mirrors Exports::GetCallback: V8 values cannot be shared across isolates.
         v8::Isolate *resourceIsolate = resource->GetIsolate();
         if (resourceIsolate != isolate) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get: cannot access exports from resource '" + resourceName + "' - cross-isolate access is not supported. Both resources must share the same isolate.")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Imports.get: cannot access exports from resource '" + resourceName + "' - cross-isolate access is not supported. Both resources must share the same isolate.")));
             return;
         }
 

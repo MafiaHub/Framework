@@ -105,7 +105,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     std::mutex Web::_mutex;
     Framework::Scripting::ResourceManager *Web::_resourceManager = nullptr;
 
-    void Web::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, Framework::Scripting::ResourceManager *resourceManager) {
+    void Web::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
         {
             std::scoped_lock lock(_mutex);
             _handlers.clear();
@@ -134,9 +134,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         bind("emit", EmitCallback);
         bind("getScreenSize", GetScreenSizeCallback);
 
-        frameworkObj->Set(context, v8pp::to_v8(isolate, "Web"), webObj).Check();
+        target->Set(context, v8pp::to_v8(isolate, "Web"), webObj).Check();
 
-        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Web", "Client-only, resource-owned CEF web-view API exposed as Framework.Web.");
+        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Web", "Client-only, resource-owned CEF web-view API exposed as the global Web.");
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("createView",
             v8pp::metadata::docs("number",
                 {v8pp::metadata::param("url", "string", false, "Resource-relative URL or allowed absolute URL loaded into the view."),

@@ -25,7 +25,7 @@ namespace Framework::GUI {
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
 
-    // Client-side web view API, exposed as Framework.Web:
+    // Client-side web view API, exposed as the global Web:
     //   createView(url, {width, height, x, y, zIndex, visible, focus}?) -> id
     //   destroyView / showView / hideView / focusView / isViewVisible
     //   loadURL(id, url) / resizeView(id, w, h) / setViewPosition(id, x, y)
@@ -40,7 +40,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
       public:
         static void Register(v8::Isolate *isolate,
                              v8::Local<v8::Context> context,
-                             v8::Local<v8::Object> frameworkObj,
+                             v8::Local<v8::Object> target,
                              Framework::Scripting::ResourceManager *resourceManager);
 
         static void CleanupResource(const std::string &resourceName);

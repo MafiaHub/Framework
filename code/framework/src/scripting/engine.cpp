@@ -61,23 +61,6 @@ namespace Framework::Scripting {
         return true;
     }
 
-    v8::Local<v8::Object> Engine::GetFrameworkObject() const {
-        v8::Local<v8::Context> context = GetContext();
-        if (context.IsEmpty()) {
-            return v8::Local<v8::Object>();
-        }
-        v8::Isolate *isolate = GetIsolate();
-        v8::Local<v8::Value> frameworkValue;
-        if (!context->Global()
-                ->Get(context, v8::String::NewFromUtf8(isolate, "Framework").ToLocalChecked())
-                .ToLocal(&frameworkValue) ||
-            !frameworkValue->IsObject()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("globalThis.Framework is missing or not an object");
-            return v8::Local<v8::Object>();
-        }
-        return frameworkValue.As<v8::Object>();
-    }
-
     v8::Local<v8::Object> Engine::GetCoreObject() const {
         v8::Local<v8::Context> context = GetContext();
         if (context.IsEmpty()) {

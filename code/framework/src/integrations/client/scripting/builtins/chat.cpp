@@ -73,10 +73,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         args.GetReturnValue().Set(box && box->IsInputActive());
     }
 
-    void Chat::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, Framework::Scripting::ResourceManager *resourceManager) {
-        (void)frameworkObj;
+    void Chat::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
         (void)resourceManager;
-        if (!isolate || context.IsEmpty()) {
+        if (!isolate || context.IsEmpty() || target.IsEmpty()) {
             return;
         }
 
@@ -92,7 +91,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         attach(chatObj, "open", &Chat::OpenCallback);
         attach(chatObj, "close", &Chat::CloseCallback);
         attach(chatObj, "isOpen", &Chat::IsOpenCallback);
-        context->Global()->Set(context, v8pp::to_v8(isolate, "Chat"), chatObj).Check();
+        target->Set(context, v8pp::to_v8(isolate, "Chat"), chatObj).Check();
 
         auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Chat", "Client chat transport and native chat-box controls.");
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("send",

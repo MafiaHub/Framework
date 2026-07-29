@@ -180,13 +180,13 @@ keeping the same networking:
 ```js
 // client resource
 Chat.setUIVisible(false);                              // hide the built-in overlay
-const view = Framework.Web.create("chat.html");
+const view = Web.create("chat.html");
 Core.Events.on("chatMessage", (msg) => view.emit("chat:add", msg)); // {author,text,color}
-Framework.Web.on(view, "chat:send", (text) => Chat.send(text));     // input box → server
+Web.on(view, "chat:send", (text) => Chat.send(text));     // input box → server
 ```
 
 The CEF view's keyboard focus already participates in the client's input gate
-(`Framework.Web.focusView`), so movement/keybinds pause while the box is
+(`Web.focusView`), so movement/keybinds pause while the box is
 focused, exactly as with the built-in overlay.
 
 On the server, format lines yourself from `playerChat` and — if the mod exposes

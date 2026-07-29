@@ -22,7 +22,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
       public:
         static void Register(v8::Isolate *isolate,
                              v8::Local<v8::Context> context,
-                             v8::Local<v8::Object> frameworkObj,
+                             v8::Local<v8::Object> target,
                              Framework::Scripting::ResourceManager *resourceManager);
 
       private:

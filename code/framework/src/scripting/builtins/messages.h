@@ -24,21 +24,13 @@ namespace Framework::Scripting {
 
 namespace Framework::Scripting::Builtins {
 
-    /**
-     * JavaScript messages system for request/response communication.
-     * Provides Framework.messages API:
-     * - handle(messageType, handler) - Register handler
-     * - request(resourceName, messageType, payload) - Returns Promise
-     * - send(resourceName, messageType, payload) - Fire and forget
-     */
+    // Global Messages: request/response and fire-and-forget channel between local resources.
+    //   handle(messageType, handler) / request(resource, type, payload) -> Promise / send(...)
     class Messages final {
       public:
-        /**
-         * Register the Framework.messages object in a context.
-         */
         static void Register(v8::Isolate *isolate,
                             v8::Local<v8::Context> context,
-                            v8::Local<v8::Object> frameworkObj,
+                            v8::Local<v8::Object> target,
                             ResourceManager *resourceManager);
 
         /**

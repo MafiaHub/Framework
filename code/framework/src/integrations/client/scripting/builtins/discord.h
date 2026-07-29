@@ -16,14 +16,14 @@ namespace Framework::Scripting {
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
 
-    // Client-side Discord rich presence API (Framework.Discord); see types/framework/discord.d.ts.
+    // Client-side Discord rich presence API (global Discord); see types/framework/discord.d.ts.
     // Setters stage onto a pending activity; update()/setPresence() publish it (full-object replace,
     // rate-limited, so callers batch then commit once).
     class Discord final {
       public:
         static void Register(v8::Isolate *isolate,
                              v8::Local<v8::Context> context,
-                             v8::Local<v8::Object> frameworkObj,
+                             v8::Local<v8::Object> target,
                              Framework::Scripting::ResourceManager *resourceManager);
 
       private:

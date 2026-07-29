@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#include "messages.h"
+#include "Messages.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
 
@@ -22,7 +22,7 @@ namespace Framework::Scripting::Builtins {
     std::mutex Messages::_responseQueueMutex;
     uint64_t Messages::_nextRequestId = 1;
 
-    void Messages::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> frameworkObj, ResourceManager *resourceManager) {
+    void Messages::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager) {
         v8::Local<v8::Object> messagesObj = v8::Object::New(isolate);
 
         // Store resource manager as external data for callbacks
@@ -40,9 +40,9 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::FunctionTemplate> sendTmpl = v8::FunctionTemplate::New(isolate, SendCallback, managerData);
         messagesObj->Set(context, v8pp::to_v8(isolate, "send"), sendTmpl->GetFunction(context).ToLocalChecked()).Check();
 
-        frameworkObj->Set(context, v8pp::to_v8(isolate, "messages"), messagesObj).Check();
+        target->Set(context, v8pp::to_v8(isolate, "Messages"), messagesObj).Check();
 
-        auto &metadata = GetScriptingCatalog(isolate).global_object("messages", "Typed request and notification channel between local resources through Framework.messages.");
+        auto &metadata = GetScriptingCatalog(isolate).global_object("Messages", "Typed request and notification channel between local resources through the global Messages object.");
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("handle",
             v8pp::metadata::docs("void",
                 {
@@ -71,23 +71,23 @@ namespace Framework::Scripting::Builtins {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.handle requires 2 arguments: messageType, handler")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.handle requires 2 arguments: messageType, handler")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.handle: messageType must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.handle: messageType must be a string")));
             return;
         }
 
         if (!args[1]->IsFunction()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.handle: handler must be a function")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.handle: handler must be a function")));
             return;
         }
 
         ResourceManager *manager = static_cast<ResourceManager *>(args.Data().As<v8::External>()->Value());
         if (!manager) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.handle: resource manager not available")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Messages.handle: resource manager not available")));
             return;
         }
 
@@ -95,7 +95,7 @@ namespace Framework::Scripting::Builtins {
         std::string resourceName = manager->GetCurrentResourceContext();
 
         if (resourceName.empty()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.handle: must be called from within a resource")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Messages.handle: must be called from within a resource")));
             return;
         }
 
@@ -115,23 +115,23 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.request requires at least 2 arguments: resourceName, messageType")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.request requires at least 2 arguments: resourceName, messageType")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.request: resourceName must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.request: resourceName must be a string")));
             return;
         }
 
         if (!args[1]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.request: messageType must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.request: messageType must be a string")));
             return;
         }
 
         ResourceManager *manager = static_cast<ResourceManager *>(args.Data().As<v8::External>()->Value());
         if (!manager) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.request: resource manager not available")));
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Messages.request: resource manager not available")));
             return;
         }
 
@@ -167,7 +167,7 @@ namespace Framework::Scripting::Builtins {
             // Getting it from a different isolate crashes, so reject cross-isolate requests
             // (mirrors the Exports.get isolate-ownership guard).
             if (handlerIt->second.isolate != isolate) {
-                resolver->Reject(context, v8pp::to_v8(isolate, "messages.request: cannot invoke handler '" + messageType + "' in resource '" + targetResource + "' - cross-isolate access is not supported. Both resources must share the same isolate.")).Check();
+                resolver->Reject(context, v8pp::to_v8(isolate, "Messages.request: cannot invoke handler '" + messageType + "' in resource '" + targetResource + "' - cross-isolate access is not supported. Both resources must share the same isolate.")).Check();
                 args.GetReturnValue().Set(promise);
                 return;
             }
@@ -257,17 +257,17 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.send requires at least 2 arguments: resourceName, messageType")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.send requires at least 2 arguments: resourceName, messageType")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.send: resourceName must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.send: resourceName must be a string")));
             return;
         }
 
         if (!args[1]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "messages.send: messageType must be a string")));
+            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.send: messageType must be a string")));
             return;
         }
 
@@ -295,7 +295,7 @@ namespace Framework::Scripting::Builtins {
             // Cross-isolate handler: Getting its Global<Function> from this isolate would
             // crash. Skip delivery (send is fire-and-forget) and warn (mirrors Exports.get).
             if (handlerIt->second.isolate != isolate) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("messages.send to '{}' skipped: handler '{}' lives in a different isolate", targetResource, messageType);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Messages.send to '{}' skipped: handler '{}' lives in a different isolate", targetResource, messageType);
                 return;
             }
 
@@ -381,7 +381,7 @@ namespace Framework::Scripting::Builtins {
                     // settles and erases atomically under this same mutex — so rejecting always
                     // moves the awaiting Promise out of pending (and V8 ignores a reject on an
                     // already-settled promise anyway). After erasing, a late reply() finds nothing.
-                    req.resolver.Get(isolate)->Reject(context, v8pp::to_v8(isolate, "messages.request: resource '" + resourceName + "' stopped before reply")).Check();
+                    req.resolver.Get(isolate)->Reject(context, v8pp::to_v8(isolate, "Messages.request: resource '" + resourceName + "' stopped before reply")).Check();
                     it = _pendingRequests.erase(it);
                 }
                 else {

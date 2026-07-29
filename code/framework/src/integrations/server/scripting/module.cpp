@@ -102,49 +102,18 @@ namespace Framework::Integrations::Server::Scripting {
         v8::Local<v8::Context> context = _nodeEngine->GetContext();
         v8::Context::Scope contextScope(context);
 
-        // Get or create Framework global object
         v8::Local<v8::Object> global = context->Global();
         Framework::Scripting::SetScriptingCatalog(isolate, "framework-server");
-        v8::Local<v8::String> frameworkKey = v8::String::NewFromUtf8(isolate, "Framework").ToLocalChecked();
 
-        v8::Local<v8::Object> frameworkObj;
-        v8::Local<v8::Value> existingFramework;
-        if (global->Get(context, frameworkKey).ToLocal(&existingFramework) && existingFramework->IsObject()) {
-            frameworkObj = existingFramework.As<v8::Object>();
-        }
-        else {
-            frameworkObj = v8::Object::New(isolate);
-            global->Set(context, frameworkKey, frameworkObj).Check();
-        }
-
-        // Get or create Core global object
-        v8::Local<v8::String> coreKey = v8::String::NewFromUtf8(isolate, "Core").ToLocalChecked();
-        v8::Local<v8::Object> coreObj;
-        v8::Local<v8::Value> existingCore;
-        if (global->Get(context, coreKey).ToLocal(&existingCore) && existingCore->IsObject()) {
-            coreObj = existingCore.As<v8::Object>();
-        }
-        else {
-            coreObj = v8::Object::New(isolate);
-            global->Set(context, coreKey, coreObj).Check();
-        }
-
-        // Register value-type builtins at the global root (new Vector3, not new Core.Vector3)
+        // Every builtin registers at the global root (new Vector3, not new Core.Vector3).
         Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
 
-        // Register communication APIs
         _resourceManager->GetEvents().Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
-        Framework::Scripting::Builtins::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());
-        Framework::Scripting::Builtins::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());
-
-        // Register console override
+        Framework::Scripting::Builtins::Messages::Register(isolate, context, global, _resourceManager.get());
+        Framework::Scripting::Builtins::Imports::Register(isolate, context, global, _resourceManager.get());
+        Framework::Scripting::Builtins::Exports::Register(isolate, context, global, _resourceManager.get());
         Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
-
-        // Register environment info at the global root
         Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, false);
-
-        // Register the chat API on the global object (Chat.sendToAll / Chat.sendToPlayer)
         Framework::Scripting::Builtins::Chat::Register(isolate, global);
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework JS bindings");

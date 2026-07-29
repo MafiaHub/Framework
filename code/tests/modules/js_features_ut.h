@@ -910,9 +910,7 @@ MODULE(js_features, {
         v8::HandleScope handleScope(isolate);
         v8::Local<v8::Context> context = engine.GetContext();
         v8::Context::Scope contextScope(context);
-        v8::Local<v8::Object> frameworkObj = v8::Object::New(isolate);
-        context->Global()->Set(context, v8pp::to_v8(isolate, "Framework"), frameworkObj).Check();
-        Messages::Register(isolate, context, frameworkObj, &manager);
+        Messages::Register(isolate, context, context->Global(), &manager);
     };
 
     auto pumpMessages = [](NodeEngine &engine) {
@@ -943,20 +941,20 @@ MODULE(js_features, {
 
         // Arg-shape failures throw TypeError (convention), before any state checks.
         std::string margErr;
-        margErr = RunJSErrorName(engine, "Framework.messages.request(123)");
+        margErr = RunJSErrorName(engine, "Messages.request(123)");
         STREQUALS(margErr.c_str(), "TypeError");
-        margErr = RunJSErrorName(engine, "Framework.messages.send('r')");
+        margErr = RunJSErrorName(engine, "Messages.send('r')");
         STREQUALS(margErr.c_str(), "TypeError");
 
         // Register the handler as resource 'provider'.
         manager.SetCurrentResourceContext("provider");
-        RunJS(engine, "Framework.messages.handle('ping', (payload, reply) => { reply(payload + 1); }); 0");
+        RunJS(engine, "Messages.handle('ping', (payload, reply) => { reply(payload + 1); }); 0");
 
         // Issue a request as resource 'consumer'.
         manager.SetCurrentResourceContext("consumer");
         RunJS(engine, R"(
             globalThis.__reply = 0;
-            Framework.messages.request('provider', 'ping', 41).then(v => { globalThis.__reply = v; },
+            Messages.request('provider', 'ping', 41).then(v => { globalThis.__reply = v; },
                                                                     () => { globalThis.__reply = -1; });
             0
         )");
@@ -965,11 +963,11 @@ MODULE(js_features, {
 
         // A request whose target hasn't replied yet stays pending...
         manager.SetCurrentResourceContext("provider");
-        RunJS(engine, "Framework.messages.handle('slow', (payload, reply) => { globalThis.__saved = reply; }); 0");
+        RunJS(engine, "Messages.handle('slow', (payload, reply) => { globalThis.__saved = reply; }); 0");
         manager.SetCurrentResourceContext("consumer");
         RunJS(engine, R"(
             globalThis.__inflight = 0;
-            Framework.messages.request('provider', 'slow', 1).then(() => { globalThis.__inflight = 1; },
+            Messages.request('provider', 'slow', 1).then(() => { globalThis.__inflight = 1; },
                                                                    () => { globalThis.__inflight = 2; });
             0
         )");
@@ -993,7 +991,7 @@ MODULE(js_features, {
         // A new request after cleanup also rejects: no handler remains for the target resource.
         RunJS(engine, R"(
             globalThis.__after = 0;
-            Framework.messages.request('provider', 'ping', 1).then(() => { globalThis.__after = 1; },
+            Messages.request('provider', 'ping', 1).then(() => { globalThis.__after = 1; },
                                                                    () => { globalThis.__after = 2; });
             0
         )");
@@ -1045,11 +1043,10 @@ MODULE(js_features, {
     // ========================================
     // JS-FACING NAMING
     // ========================================
-    // The Framework.* namespace group uses one casing: exports joins the lowercase imports/messages
-    // (was Framework.Exports). The runtime-flags global is ExecutionEnvironment (was Environment) at
-    // the root, with camelCase isClient/isServer (were IsClient/IsServer). Guards the breaking
-    // renames; the old names must be gone.
-    IT("Framework.exports is lowercase and ExecutionEnvironment flags are camelCase", {
+    // Guards the breaking renames — the old names must be gone. Everything the Framework namespace
+    // object carried now sits at the global root, and the object itself is deleted. The runtime-flags
+    // global is ExecutionEnvironment (was Environment) with camelCase isClient/isServer.
+    IT("Framework namespace bindings moved to the global root", {
         EventsTestHelper::Setup();
         NodeEngine engine({});
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
@@ -1064,18 +1061,15 @@ MODULE(js_features, {
             v8::HandleScope handleScope(isolate);
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
-            v8::Local<v8::Object> frameworkObj = v8::Object::New(isolate);
-            context->Global()->Set(context, v8pp::to_v8(isolate, "Framework"), frameworkObj).Check();
-            Exports::Register(isolate, context, frameworkObj, &manager);
             // Registered at the global root, as production does.
+            Exports::Register(isolate, context, context->Global(), &manager);
             ExecutionEnvironment::Register(isolate, context, context->Global(), /*isClient*/ true);
         }
 
-        // exports: lowercase, matching imports/messages; the capitalized name is gone.
-        EQUALS(RunJSBool(engine, "typeof Framework.exports === 'object' && Framework.exports !== null"), true);
-        EQUALS(RunJSBool(engine, "typeof Framework.exports.register === 'function'"), true);
-        EQUALS(RunJSBool(engine, "typeof Framework.exports.get === 'function'"), true);
-        EQUALS(RunJSBool(engine, "Framework.Exports === undefined"), true);
+        EQUALS(RunJSBool(engine, "typeof Exports === 'object' && Exports !== null"), true);
+        EQUALS(RunJSBool(engine, "typeof Exports.register === 'function'"), true);
+        EQUALS(RunJSBool(engine, "typeof Exports.get === 'function'"), true);
+        EQUALS(RunJSBool(engine, "typeof Framework === 'undefined'"), true);
 
         // ExecutionEnvironment at root, camelCase flags; old Environment name and PascalCase are gone.
         EQUALS(RunJSBool(engine, "ExecutionEnvironment.isClient === true"), true);

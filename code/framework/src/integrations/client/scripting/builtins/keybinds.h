@@ -23,14 +23,14 @@ namespace Framework::Scripting {
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
 
-    // Client-side keybinding API, exposed as Framework.Key. See docs/scripting_keybindings.md.
+    // Client-side keybinding API, exposed as the global Key. See docs/scripting_keybindings.md.
     // Polled once per frame via Update(); the host mod supplies the input gate through
     // SetActiveCallback so binds stay quiet while UI owns input.
     class Keybinds final {
       public:
         static void Register(v8::Isolate *isolate,
                              v8::Local<v8::Context> context,
-                             v8::Local<v8::Object> frameworkObj,
+                             v8::Local<v8::Object> target,
                              Framework::Scripting::ResourceManager *resourceManager);
 
         // Poll physical keys, detect edges, dispatch matching handlers into JS.
