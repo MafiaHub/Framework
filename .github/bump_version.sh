@@ -47,7 +47,10 @@ minor_paths=(
 # Check for major bump directories
 for file in "${changed_files[@]}"; do
     for major in "${major_paths[@]}"; do
-        if [[ "$file" == "$major"* ]]; then
+        # Exact file match, or anything genuinely beneath a directory entry. A bare
+        # "$major"* prefix would also fire on a sibling that merely starts with the
+        # same characters -- cmake/MafiaNetPin.cmake.bak, or .../replication2/foo.
+        if [[ "$file" == "$major" || "$file" == "$major/"* ]]; then
             BUMP_TYPE="major"
             break 2
         fi
@@ -58,7 +61,7 @@ done
 if [[ "$BUMP_TYPE" != "major" ]]; then
     for file in "${changed_files[@]}"; do
         for minor in "${minor_paths[@]}"; do
-            if [[ "$file" == "$minor"* ]]; then
+            if [[ "$file" == "$minor" || "$file" == "$minor/"* ]]; then
                 BUMP_TYPE="minor"
                 break 2
             fi
