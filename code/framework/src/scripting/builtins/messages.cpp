@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#include "Messages.h"
+#include "messages.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
 

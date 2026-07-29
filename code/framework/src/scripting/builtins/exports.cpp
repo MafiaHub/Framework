@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#include "Exports.h"
+#include "exports.h"
 #include "../resource/resource.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
