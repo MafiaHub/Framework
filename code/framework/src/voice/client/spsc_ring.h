@@ -22,7 +22,9 @@ namespace Framework::Voice {
     // Capacity must be a power of two so the wrap is a mask rather than a modulo.
     template <typename T, size_t Capacity>
     class SpscRing final {
-        static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of two");
+        // Capacity 0 would satisfy the power-of-two test on its own, leaving kMask as
+        // SIZE_MAX and Push writing into zero-length storage.
+        static_assert(Capacity >= 2 && (Capacity & (Capacity - 1)) == 0, "Capacity must be a power of two and at least 2");
 
       public:
         // Producer side. Returns false and writes nothing if the data would not fit.

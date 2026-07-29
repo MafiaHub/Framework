@@ -47,11 +47,33 @@ MODULE(voice_router, {
     IT("never delivers a talker's own voice back to them", {
         VoiceRouter router;
         router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        // A second player in range is what makes this test able to fail: with only the
+        // talker registered, an empty result would also be produced by "nobody is here".
+        router.SetPlayerPosition(2, glm::vec3(1, 0, 0));
 
         std::vector<uint64_t> out;
         router.ComputeRecipients(1, out);
 
-        EQUALS(out.size(), static_cast<size_t>(0));
+        EQUALS(out.size(), static_cast<size_t>(1));
+        EQUALS(RouterContains(out, 2), true);
+        EQUALS(RouterContains(out, 1), false);
+    });
+
+    IT("returns every listener in range with no server-side cap", {
+        VoiceRouter router;
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+
+        // Comfortably more than kMaxAudibleTalkers, which is a client mixer slot count and
+        // must not bound what the router returns.
+        constexpr uint64_t kListeners = 20;
+        for (uint64_t i = 2; i < 2 + kListeners; i++) {
+            router.SetPlayerPosition(i, glm::vec3(static_cast<float>(i % 5), 0, 0));
+        }
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+
+        EQUALS(out.size(), static_cast<size_t>(kListeners));
     });
 
     IT("honours a per-talker range override", {

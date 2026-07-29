@@ -26,9 +26,16 @@ fi
 BUMP_TYPE="patch"
 
 # Define arrays for directories that trigger a major or minor bump
+# Matched as path prefixes against `git diff --name-only`, so a directory entry
+# covers everything beneath it and a file entry matches that file exactly.
 major_paths=(
-    "code/framework/src/networking/messages"
+    # Replaces the long-gone code/framework/src/networking/messages: replication is
+    # where the sync flow lives now.
+    "code/framework/src/networking/replication"
     "code/framework/src/networking/rpc"
+    # Packet ids are positional; inserting one shifts every id after it and breaks
+    # every peer built against the old header.
+    "vendors/mafianet/Source/include/mafianet/MessageIdentifiers.h"
 )
 minor_paths=(
     "code/framework/src/scripting/builtins"

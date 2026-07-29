@@ -32,7 +32,8 @@
 using namespace MafiaNet;
 
 #define SAMPLESIZE 2
-#define MAX_OPUS_PACKET_SIZE 4000
+// Single definition lives in RakVoice.h so relay hosts can bound inbound frames.
+#define MAX_OPUS_PACKET_SIZE ((int)MafiaNet::RAKVOICE_MAX_OPUS_PACKET_SIZE)
 
 // RNNoise frame size is fixed at 480 samples (10ms at 48kHz)
 #define RNNOISE_FRAME_SIZE 480
@@ -56,6 +57,7 @@ RakVoice::RakVoice()
 	zeroBufferedOutput = false;
 	defaultVADState = true;
 	defaultDENOISEState = false;
+	defaultBitrate = 0;
 	defaultVBRState = false;
 	defaultSignalType = OPUS_SIGNAL_VOICE;
 	loopbackMode = false;
@@ -164,7 +166,12 @@ void RakVoice::SetPerSpeakerOutput(bool enable)
 
 RakNetGUID RakVoice::ReadRelayOrigin(Packet *packet)
 {
+	// Offsets are derived in RakVoice.h, so this stays correct as the header grows.
 	if (packet == nullptr || packet->length < RAKVOICE_RELAY_OFFSET_ORIGIN + sizeof(uint64_t))
+		return UNASSIGNED_RAKNET_GUID;
+
+	// Reject unknown wire formats before trusting any field position.
+	if (packet->data[RAKVOICE_RELAY_OFFSET_VERSION] != RAKVOICE_RELAY_FORMAT_VERSION)
 		return UNASSIGNED_RAKNET_GUID;
 
 	RakNetGUID origin;
@@ -485,6 +492,13 @@ void RakVoice::Update(void)
 					{
 						// RNNoise works at 48kHz with 480 sample frames
 						// For other sample rates, we skip denoising (or could resample)
+						//
+						// NOTE: unreachable at the MafiaHub Framework's frame size.
+						// GetFrameSizeSamples() returns sampleRate/50, i.e. 960 (20ms) at 48kHz,
+						// which is what Framework::Voice::kFrameSamples uses, so this branch never
+						// runs and voice ships undenoised. Fixing it means either 10ms frames or
+						// running RNNoise twice per frame with shared state; see the voice design
+						// spec, deferred to M2.
 						if (sampleRate == 48000 && channel->frameSizeSamples == RNNOISE_FRAME_SIZE)
 						{
 							float floatSamples[RNNOISE_FRAME_SIZE];
@@ -522,12 +536,13 @@ void RakVoice::Update(void)
 
 					if (relayMode)
 					{
-						// Build packet: ID (1 byte) + origin guid (8 bytes) + channel id (2 bytes)
-						// + message number (2 bytes) + encoded data
+						// Build packet: ID (1 byte) + format version (1 byte) + origin guid (8 bytes)
+						// + channel id (2 bytes) + message number (2 bytes) + encoded data
 						RakNetGUID self = rakPeerInterface->GetMyGUID();
 						uint16_t channelId = 0; // M1: proximity only. M2 sets this per channel.
 
 						tempOutput[0] = ID_RAKVOICE_RELAY_DATA;
+						tempOutput[RAKVOICE_RELAY_OFFSET_VERSION] = (char)RAKVOICE_RELAY_FORMAT_VERSION;
 						memcpy(tempOutput + RAKVOICE_RELAY_OFFSET_ORIGIN, &self.g, sizeof(uint64_t));
 						memcpy(tempOutput + RAKVOICE_RELAY_OFFSET_CHANNEL_ID, &channelId, sizeof(uint16_t));
 						memcpy(tempOutput + RAKVOICE_RELAY_OFFSET_SEQUENCE, &channel->outgoingMessageNumber, sizeof(unsigned short));
@@ -730,6 +745,8 @@ void RakVoice::OpenChannel(Packet *packet)
 		opus_encoder_ctl(channel->encoder, OPUS_SET_VBR(defaultVBRState ? 1 : 0));
 		opus_encoder_ctl(channel->encoder, OPUS_SET_DTX(defaultVADState ? 1 : 0));
 		opus_encoder_ctl(channel->encoder, OPUS_SET_SIGNAL(defaultSignalType));
+		if (defaultBitrate > 0)
+			opus_encoder_ctl(channel->encoder, OPUS_SET_BITRATE(defaultBitrate));
 	}
 
 	// Create RNNoise denoiser (only works well at 48kHz)
@@ -774,6 +791,19 @@ void RakVoice::SetVAD(bool enable)
 void RakVoice::SetNoiseFilter(bool enable)
 {
 	defaultDENOISEState = enable;
+}
+
+void RakVoice::SetEncoderBitrate(int bitsPerSecond)
+{
+	defaultBitrate = bitsPerSecond;
+	for (unsigned int index = 0; index < voiceChannels.Size(); index++)
+	{
+		// Decode-only relay channels have no encoder.
+		if (voiceChannels[index]->encoder == nullptr)
+			continue;
+		if (bitsPerSecond > 0)
+			opus_encoder_ctl(voiceChannels[index]->encoder, OPUS_SET_BITRATE(bitsPerSecond));
+	}
 }
 
 void RakVoice::SetVBR(bool enable)
@@ -943,6 +973,10 @@ VoiceChannel *RakVoice::GetOrCreateChannel(RakNetGUID origin)
 void RakVoice::OnRelayVoiceData(Packet *packet)
 {
 	if (packet->length <= RAKVOICE_RELAY_HEADER_SIZE)
+		return;
+
+	// Unknown wire format: drop silently and early, before reading any other field.
+	if (packet->data[RAKVOICE_RELAY_OFFSET_VERSION] != RAKVOICE_RELAY_FORMAT_VERSION)
 		return;
 
 	RakNetGUID origin = ReadRelayOrigin(packet);

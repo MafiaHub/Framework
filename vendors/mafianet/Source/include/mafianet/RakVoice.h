@@ -38,11 +38,20 @@ class RakPeerInterface;
 #define FRAME_OUTGOING_BUFFER_COUNT 100
 #define FRAME_INCOMING_BUFFER_COUNT 100
 
+// Largest Opus packet we will ever produce or accept for a single frame.
+// Exposed here (rather than only in RakVoice.cpp) so a relay host can bound an
+// inbound frame without duplicating the literal.
+constexpr unsigned RAKVOICE_MAX_OPUS_PACKET_SIZE = 4000;
+
 // Wire layout of an ID_RAKVOICE_RELAY_DATA frame:
-// [id][origin guid][channel id][sequence][opus payload]
+// [id][format version][origin guid][channel id][sequence][opus payload]
 // Single source of truth for both the writer (Update) and the readers
-// (ReadRelayOrigin, OnRelayVoiceData).
-constexpr unsigned RAKVOICE_RELAY_OFFSET_ORIGIN = sizeof(unsigned char);
+// (ReadRelayOrigin, OnRelayVoiceData). Every offset is derived from the one before
+// it, so a layout change is a single edit here.
+constexpr unsigned char RAKVOICE_RELAY_FORMAT_VERSION = 1;
+
+constexpr unsigned RAKVOICE_RELAY_OFFSET_VERSION = sizeof(unsigned char);
+constexpr unsigned RAKVOICE_RELAY_OFFSET_ORIGIN = RAKVOICE_RELAY_OFFSET_VERSION + sizeof(uint8_t);
 constexpr unsigned RAKVOICE_RELAY_OFFSET_CHANNEL_ID = RAKVOICE_RELAY_OFFSET_ORIGIN + sizeof(uint64_t);
 constexpr unsigned RAKVOICE_RELAY_OFFSET_SEQUENCE = RAKVOICE_RELAY_OFFSET_CHANNEL_ID + sizeof(uint16_t);
 constexpr unsigned RAKVOICE_RELAY_HEADER_SIZE = RAKVOICE_RELAY_OFFSET_SEQUENCE + sizeof(unsigned short);
@@ -123,6 +132,13 @@ public:
 	/// \brief Sets the signal type hint for Opus encoder
 	/// \param[in] signalType OPUS_SIGNAL_VOICE (default) or OPUS_SIGNAL_MUSIC
 	void SetSignalType(int signalType);
+
+	/// \brief Sets the target Opus encoder bitrate, in bits per second.
+	/// Applied to channels opened after this call. Pass 0 to leave Opus at its own
+	/// default. Callers that care about bandwidth must set this: Opus otherwise picks a
+	/// rate from the sample rate alone.
+	/// \param[in] bitsPerSecond target bitrate, or 0 for the Opus default
+	void SetEncoderBitrate(int bitsPerSecond);
 
 	/// \brief Returns current state of VAD (DTX).
 	/// \return true if VAD is enabled, false otherwise
@@ -266,6 +282,8 @@ protected:
 	bool zeroBufferedOutput;
 	bool defaultVADState;
 	bool defaultDENOISEState;
+	/// Target encoder bitrate in bits per second; 0 leaves Opus at its own default.
+	int defaultBitrate;
 	bool defaultVBRState;
 	int defaultSignalType;
 	bool loopbackMode;

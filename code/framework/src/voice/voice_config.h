@@ -20,11 +20,15 @@ namespace Framework::Voice {
     constexpr uint32_t kFrameBytes   = kFrameSamples * sizeof(int16_t);
 
     // Target Opus bitrate. 24kbps is transparent for speech and keeps a full lobby of
-    // talkers within a few hundred kbps of server egress.
+    // talkers within a few hundred kbps of server egress. Opus picks its own rate unless
+    // told otherwise, so the client half must pass this to RakVoice::SetEncoderBitrate
+    // before opening its encode channel; the server never encodes.
     constexpr uint32_t kBitrate = 24000;
 
-    // Per-listener cap on simultaneously audible talkers, nearest first. Without it a
-    // crowded spawn point floods every client's downstream.
+    // How many concurrent speakers one client decodes and mixes: the number of speaker
+    // slots the client-side mixer allocates. This is NOT a server-side guard -- the router
+    // returns every listener in range, and proximity is the only fan-out bound. A true
+    // per-listener bound on inbound streams is an M2 item.
     constexpr uint32_t kMaxAudibleTalkers = 6;
 
     // Recipient sets are recomputed on this interval rather than per frame; at 50 frames

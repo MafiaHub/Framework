@@ -8,8 +8,6 @@
 
 #include "voice_router.h"
 
-#include <algorithm>
-
 namespace Framework::Voice {
     void VoiceRouter::SetPlayerPosition(uint64_t guid, const glm::vec3 &pos) {
         _players[guid].position = pos;
@@ -59,9 +57,9 @@ namespace Framework::Voice {
         const float range       = talkerState.range > 0.0f ? talkerState.range : kDefaultProximityRange;
         const float rangeSq     = range * range;
 
-        // Collected with distance so the cap can keep the nearest listeners.
-        std::vector<std::pair<float, uint64_t>> candidates;
-        candidates.reserve(_players.size());
+        // Every eligible listener in range receives the frame; proximity is the only
+        // fan-out bound. Order is unspecified -- callers must not read anything into it.
+        out.reserve(_players.size());
 
         for (const auto &[guid, state] : _players) {
             if (guid == talker || state.deaf) {
@@ -77,16 +75,6 @@ namespace Framework::Voice {
                 continue;
             }
 
-            candidates.emplace_back(distSq, guid);
-        }
-
-        if (candidates.size() > kMaxAudibleTalkers) {
-            std::partial_sort(candidates.begin(), candidates.begin() + kMaxAudibleTalkers, candidates.end());
-            candidates.resize(kMaxAudibleTalkers);
-        }
-
-        out.reserve(candidates.size());
-        for (const auto &[distSq, guid] : candidates) {
             out.push_back(guid);
         }
     }

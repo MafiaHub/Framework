@@ -5,3 +5,66 @@ Additionally vendored (not in v0.10.0): Source/src/RakVoice.cpp and
 Source/include/mafianet/RakVoice.h, taken from MafiaNet master for voice chat
 support. Opus and RNNoise are vendored separately under vendors/opus and
 vendors/rnnoise rather than fetched, because the Framework uses no FetchContent.
+
+LOCAL MODIFICATIONS -- DO NOT RE-VENDOR BLINDLY
+===============================================
+Three files below this directory now differ from upstream and carry changes the
+Framework depends on. A plain re-copy from MafiaNet would silently delete the
+entire voice relay protocol and reintroduce two real undefined-behaviour bugs.
+Every item here must be re-applied on top of the new upstream, or upstreamed
+first and the pin moved forward.
+
+Modified files:
+  Source/include/mafianet/RakVoice.h
+  Source/src/RakVoice.cpp
+  Source/include/mafianet/MessageIdentifiers.h
+
+1. MessageIdentifiers.h -- ID_RAKVOICE_RELAY_DATA inserted directly after
+   ID_RAKVOICE_DATA. This is a positional enum: the insertion shifts every id
+   after it (ID_READY_EVENT_SET, ID_RPC_REMOTE_ERROR, the two-way-auth ids,
+   ID_USER_PACKET_ENUM), so it is wire-breaking: a peer built against the old
+   header misparses everything past ID_RAKVOICE_DATA. Re-vendoring must re-insert
+   it at the same position.
+
+   Because it is wire-breaking, any change to this file must ship as a MAJOR
+   release. The Framework does not hand-edit VERSION -- CI raises it on merge
+   from .github/bump_version.sh, which classifies the release by changed path.
+   That script's major_paths array therefore lists this header explicitly; if
+   this file is ever moved or renamed, that entry must move with it or the next
+   wire break will silently release as a patch.
+
+2. Relay protocol, from Framework commit e23ef4cc ("MafiaNet: add RakVoice relay
+   mode and per-speaker output"):
+     - Relay frame header and its derived offset constants in RakVoice.h
+       (RAKVOICE_RELAY_OFFSET_*, RAKVOICE_RELAY_HEADER_SIZE), plus the
+       RAKVOICE_RELAY_CHANNEL_TIMEOUT_MS reap constant.
+     - SetRelayMode / SetRelayHost / SetRelayTarget / SetPerSpeakerOutput,
+       RelayFrame, ReadRelayOrigin, OnRelayVoiceData.
+     - GetOrCreateChannel and DecodeIntoChannel, extracted so relay speakers can
+       be resolved and decoded without an OpenChannel handshake.
+     - Per-speaker output path (ReceiveFrameFrom) instead of a single mixed
+       output buffer.
+     - Relay channel reap in Update(), since OnClosedConnection never fires for
+       speakers that are peers of the server rather than of us.
+
+3. Correctness fixes, from Framework commit e8464243 ("Voice: wire proximity
+   relay into the server instance"). These fix real UB and must not be dropped:
+     - Constructor now initialises zeroBufferedOutput and bufferedOutputCount,
+       which were read uninitialised.
+     - Update() early-outs when IsInitialized() is false, so a plugin attached
+       without Init() (which is exactly how the relay host attaches) does not
+       walk null codec state.
+     - CloseVoiceChannel() guards on the channel actually existing.
+
+4. Relay header format version byte, and encoder bitrate control, added in the
+   final pre-merge fix pass:
+     - RAKVOICE_RELAY_FORMAT_VERSION (value 1) written immediately after the
+       packet id and validated by both ReadRelayOrigin and OnRelayVoiceData,
+       which reject any other value silently. All later offsets are derived from
+       it, so writer and readers cannot drift.
+     - RAKVOICE_MAX_OPUS_PACKET_SIZE promoted from a RakVoice.cpp #define to a
+       header constant so a relay host can bound inbound frame size.
+     - SetEncoderBitrate() / defaultBitrate, applied via OPUS_SET_BITRATE at
+       channel creation. Upstream never sets a bitrate at all.
+     - Comment recording that the RNNoise denoise branch is unreachable at the
+       Framework's 20ms/960-sample frame size.

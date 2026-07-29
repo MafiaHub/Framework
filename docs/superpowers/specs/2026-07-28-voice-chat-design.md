@@ -6,7 +6,8 @@ Status: Approved, pending implementation plan
 ## Goal
 
 Add customizable, scriptable voice chat to the MafiaHub Framework, built on MafiaNet's
-`RakVoice` plugin (Opus + RNNoise), with a working sample integration in the M2O project.
+`RakVoice` plugin (Opus; RNNoise is vendored but inactive in M1 — see Constraints), with a
+working sample integration in the M2O project.
 
 Reference implementations studied: FiveM (server-owned voice channels, submixes) and
 MTA:SA (numeric channels, two-tier muting).
@@ -14,9 +15,19 @@ MTA:SA (numeric channels, two-tier muting).
 ## Constraints from the existing code
 
 `RakVoice` (`MafiaNet/Source/src/RakVoice.cpp`) provides Opus encode/decode, DTX voice
-activity detection, VBR, RNNoise denoising, 20ms framing, a per-peer jitter buffer, and
-packet-loss concealment. It does **not** provide microphone capture, speaker output, 3D
-positioning, channels, or permissions.
+activity detection, VBR, 20ms framing, a per-peer jitter buffer, and packet-loss
+concealment. It does **not** provide microphone capture, speaker output, 3D positioning,
+channels, or permissions.
+
+It also carries RNNoise wiring, but **that wiring does not run at this framework's frame
+size and M1 therefore ships without denoising.** RakVoice denoises only when
+`sampleRate == 48000 && frameSizeSamples == RNNOISE_FRAME_SIZE` (480, i.e. 10ms), while
+`GetFrameSizeSamples()` returns `sampleRate / 50` — 960 samples, the VoIP-standard 20ms,
+matching `Framework::Voice::kFrameSamples`. The denoiser is allocated per channel and
+never invoked. The frame size is not being changed to suit it: 20ms is the right
+latency/overhead trade-off and is what the whole pipeline is sized around. Resolving this
+— dropping to 10ms frames, or running RNNoise twice per 20ms frame with shared state — is
+an M2 decision.
 
 Two structural facts drive the design:
 
@@ -33,7 +44,7 @@ Two structural facts drive the design:
 |---|---|---|
 | Topology | Server relay, opaque frames | Server stays authoritative over who hears whom without running a codec. A hacked client cannot hear players it is not allowed to hear, because it never receives their bytes. |
 | Playback | Framework-owned miniaudio mixer behind a sink interface | Portable across projects and testable headless; the interface leaves room for a game-engine sink later without rewriting transport, codec, or scripting. |
-| Codec layer | Extend `RakVoice` in MafiaNet | Reuses working jitter buffer, PLC, DTX and RNNoise wiring instead of reimplementing them. |
+| Codec layer | Extend `RakVoice` in MafiaNet | Reuses a working jitter buffer, PLC and DTX instead of reimplementing them. (Its RNNoise wiring is *not* a reason: see Constraints — it is unreachable at 20ms frames and M1 ships undenoised.) |
 | Scope | Proximity MVP first | The proximity path exercises the entire pipeline; channels and radio are policy layered on the same routing. |
 
 Rejected: server-side decode/mix (roughly a full core burned on codecs at 64 players, plus
@@ -176,8 +187,18 @@ Two properties keep routing cheap:
   pure function of positions and membership, which is what makes it unit-testable without a
   server.
 
-Bandwidth guard: a per-listener cap on concurrent audible talkers (default 6), nearest
-first. Without it, a crowded spawn point becomes a downstream flood.
+Bandwidth guard, as shipped in M1: **none beyond proximity.** The router returns every
+eligible listener inside the talker's range, and the range is the only fan-out bound.
+`kMaxAudibleTalkers` (default 6) survives as the client mixer's speaker-slot count — the
+number of concurrent speakers one listener decodes and mixes — which incidentally bounds
+a listener's decode cost but not its inbound bandwidth.
+
+An earlier revision of this document described a per-listener cap on concurrent audible
+talkers, and the first implementation truncated to the 6 nearest *recipients*, which is a
+cap on how many listeners one talker reaches — the opposite thing, and silently mutes a
+talker to everyone else in a crowd. That truncation has been removed. A genuine
+per-listener bound cannot be computed per talker in isolation; it needs a listener-keyed
+pass over all active talkers, and is an M2 item.
 
 ## 4. Script API
 
@@ -228,7 +249,7 @@ No M2O server-side code is required; the scripting builtin lives in the Framewor
 
 ## 6. Milestones
 
-**M1 — proximity MVP.** Capture → denoise → encode → relay → route by distance →
+**M1 — proximity MVP.** Capture → encode → relay → route by distance →
 per-speaker decode → 3D mix → output. Push-to-talk and local mute. This is the complete
 pipeline; everything after it is policy on top of routing.
 

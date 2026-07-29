@@ -48,7 +48,8 @@ namespace Framework::Voice {
         void SetPlayerDeaf(uint64_t guid, bool deaf);
 
         // Fills `out` with the GUIDs that should receive `talker`'s frames. Clears `out`
-        // first. Capped at kMaxAudibleTalkers, nearest first.
+        // first. Every eligible listener in range is returned -- there is no server-side
+        // cap on fan-out, and the order is unspecified.
         void ComputeRecipients(uint64_t talker, std::vector<uint64_t> &out) const;
 
       private:

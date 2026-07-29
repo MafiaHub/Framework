@@ -1,6 +1,7 @@
 # miniaudio - single-header audio capture/playback backend.
-# The implementation is compiled once inside FrameworkClient
-# (audio_device.cpp defines MINIAUDIO_IMPLEMENTATION).
+# Header-only for now: nothing defines MINIAUDIO_IMPLEMENTATION on this branch. The
+# client milestone will compile the implementation exactly once inside FrameworkClient
+# (audio_device.cpp), which does not exist yet.
 add_library(miniaudio INTERFACE)
 target_include_directories(miniaudio INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 

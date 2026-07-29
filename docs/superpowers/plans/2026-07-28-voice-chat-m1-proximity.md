@@ -355,12 +355,14 @@ void RakVoice::RelayFrame(Packet *packet, const RakNetGUID *recipients, int coun
 	for (int i = 0; i < count; i++)
 	{
 		rakPeerInterface->Send((const char*)packet->data, packet->length,
-			HIGH_PRIORITY, UNRELIABLE_SEQUENCED, 0, recipients[i], false);
+			MafiaNet::Priority::High, MafiaNet::Reliability::Unreliable, 0, recipients[i], false);
 	}
 }
 ```
 
-`UNRELIABLE_SEQUENCED` is correct for voice: a late frame is worse than a lost one, and Opus PLC already covers gaps.
+`Unreliable` — **not** `UnreliableSequenced` — is correct on this hop, and this is what shipped. Sequencing would be right if each speaker had its own stream, but every relayed frame reaches a recipient from a single sender (the server) on ordering channel 0, so all speakers share one sequence counter and whichever speaker loses the race gets discarded whenever two people talk at once. The relay header carries a per-speaker sequence number that already drives PLC, so ordering is resolved a layer up. A late frame is still worse than a lost one; that is handled by the per-speaker jitter/PLC logic, not by the transport.
+
+(The client→server hop in Step 6 below is a different case: there is only one speaker on it, so `UnreliableSequenced` remains correct there.)
 
 - [ ] **Step 6: Send relay frames from Update()**
 
@@ -888,7 +890,8 @@ namespace Framework::Voice {
         void SetPlayerDeaf(uint64_t guid, bool deaf);
 
         // Fills `out` with the GUIDs that should receive `talker`'s frames. Clears `out`
-        // first. Capped at kMaxAudibleTalkers, nearest first.
+        // first. NOTE: the cap described here was removed before merge -- every eligible
+        // listener in range is returned, in unspecified order. See the note in Task 8.
         void ComputeRecipients(uint64_t talker, std::vector<uint64_t> &out) const;
 
       private:
@@ -992,6 +995,9 @@ namespace Framework::Voice {
             candidates.emplace_back(distSq, guid);
         }
 
+        // REMOVED BEFORE MERGE -- this truncated to the nearest kMaxAudibleTalkers
+        // *recipients*, which caps how many listeners a talker reaches rather than how
+        // many talkers a listener hears. Shipped code keeps every candidate. See Task 8.
         if (candidates.size() > kMaxAudibleTalkers) {
             std::partial_sort(candidates.begin(), candidates.begin() + kMaxAudibleTalkers, candidates.end());
             candidates.resize(kMaxAudibleTalkers);
@@ -1813,7 +1819,28 @@ Connect the router to the network: attach `RakVoice` in relay mode, keep the pos
 - Modify: `code/framework/CMakeLists.txt`, `code/framework/src/core_modules.h`, `code/framework/src/integrations/server/instance.cpp`
 
 **Interfaces:**
-- Consumes: `VoiceRouter` (Task 4), `RakVoice::SetRelayMode` / `RelayFrame` / `ReadRelayOrigin` (Task 2), `kRecipientRefreshMs` (Task 3).
+- Consumes: `VoiceRouter` (Task 4), `RakVoice::SetRelayHost` / `RelayFrame` / `ReadRelayOrigin` (Task 2), `kRecipientRefreshMs` (Task 3).
+
+> **Changed after this plan was written — the code below is not literally what shipped:**
+>
+> - **The server-side audible-talker cap is gone.** `VoiceRouter::ComputeRecipients` used
+>   to `partial_sort` and truncate to `kMaxAudibleTalkers` nearest recipients. That capped
+>   how many *listeners a talker reaches* — the opposite of the intended per-listener
+>   bound — and silently muted a talker to everyone past the sixth nearest person. It was
+>   removed; the router now returns every eligible listener in range, in unspecified
+>   order, and proximity is the only fan-out bound. `kMaxAudibleTalkers` now means only
+>   the client mixer's speaker-slot count (see Task 9).
+> - **The relay header gained a format-version byte.** Layout is now
+>   `[id][format version = 1][origin guid][channel id][sequence][opus payload]`, with
+>   `RAKVOICE_RELAY_OFFSET_VERSION` added and every later offset plus
+>   `RAKVOICE_RELAY_HEADER_SIZE` derived from it in `RakVoice.h`. Never hand-edit an
+>   offset. Both readers (`ReadRelayOrigin`, `OnRelayVoiceData`) reject a frame whose
+>   version byte is not 1, silently, before touching any other field.
+> - **`OnVoiceFrame` bounds frame size on both ends**, rejecting
+>   `length > RAKVOICE_RELAY_HEADER_SIZE + RAKVOICE_MAX_OPUS_PACKET_SIZE` as well as the
+>   header-only case, so a modified client cannot get an oversized payload amplified
+>   across the whole proximity set.
+> - **The server sets `SetRelayHost(true)` only**, never `SetRelayMode(true)`.
 - Produces:
   - `Framework::Voice::VoiceServer` with `bool Init(Networking::NetworkServer *server)`, `void Update()`, `void Shutdown()`, `VoiceRouter &GetRouter()`
   - `CoreModules::SetVoiceServer(Voice::VoiceServer *)` / `CoreModules::GetVoiceServer()`
@@ -1915,11 +1942,20 @@ namespace Framework::Voice {
 
         _server = server;
 
-        // Relay mode only: no Init() call, so no encoder or decoder is ever allocated here.
-        _voice.SetRelayMode(true);
+        // Relay HOST only: no Init() call, so no encoder or decoder is ever allocated here.
+        // SetRelayHost is mandatory — without it RakVoice swallows ID_RAKVOICE_RELAY_DATA
+        // inside RakPeer::Receive and OnVoiceFrame never fires.
+        //
+        // SetRelayMode is deliberately NOT set here. It is the *client* flag: it opens a
+        // self-keyed encoder channel and drives the relay reap branch in Update(). A host
+        // neither encodes nor decodes, and RelayFrame ignores relayMode entirely, so
+        // setting it would only put the plugin in a contradictory state. (An earlier
+        // revision of this plan called SetRelayMode(true) here; shipped code does not.)
+        _voice.SetRelayHost(true);
         server->GetPeer()->AttachPlugin(&_voice);
 
-        Framework::Logging::GetLogger("Voice")->info("Voice relay attached");
+        // Debug, not info: until the client half lands, nothing can produce a frame.
+        Framework::Logging::GetLogger("Voice")->debug("Voice relay attached");
         return true;
     }
 
@@ -2064,6 +2100,27 @@ git commit -m "Voice: wire proximity relay into the server instance"
 ## Task 9: Client voice pipeline
 
 The piece that makes sound come out: capture, gate on push-to-talk, encode, send, receive per speaker, position, mix.
+
+> **Carry-notes from the server half — read before starting:**
+>
+> - **`SetLoopbackMode` is a no-op in relay mode.** `OnRelayVoiceData` drops any frame
+>   whose origin GUID equals our own, which is exactly what a loopback frame is. This
+>   invalidates **Step 8's loopback verification as written** — holding push-to-talk with
+>   loopback on will produce silence, and that is not evidence of a bug in your pipeline.
+>   Either add a self-origin exemption to `OnRelayVoiceData` gated on `loopbackMode`, or
+>   verify the roundtrip with a relay-aware path (two peers, or a stub host that echoes
+>   the frame back). Decide which before writing Step 8.
+> - **`kMaxSpeakerSlots = kMaxAudibleTalkers` is now the only enforcement of the
+>   per-listener bound.** The server-side cap was removed (see the note in Task 8), so the
+>   router will happily send a listener every talker in range. The slot array below is
+>   what keeps decode cost bounded; sizing it, and choosing which speaker gets evicted
+>   when all slots are full, is now a real decision rather than a redundant safety net.
+>   It bounds decode, not inbound bandwidth — a true bandwidth bound is M2.
+> - **Set the encoder bitrate explicitly.** `RakVoice::SetEncoderBitrate(kBitrate)` was
+>   added for this; without it Opus picks its own rate and the spec's 24kbps figure is
+>   fiction. Call it after `Init()`, before speaking.
+> - **RNNoise does not run** at `kFrameSamples` (960). M1 ships undenoised by decision;
+>   see the design spec's Constraints section. Do not "fix" it by changing the frame size.
 
 **Files:**
 - Create: `code/framework/src/voice/client/i_voice_sink.h`, `code/framework/src/voice/client/voice_client.h`, `code/framework/src/voice/client/voice_client.cpp`

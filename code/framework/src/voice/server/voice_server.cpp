@@ -35,7 +35,9 @@ namespace Framework::Voice {
         server->GetPeer()->AttachPlugin(&_voice);
         _attached = true;
 
-        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->info("Voice relay attached");
+        // Debug, not info: no client on any platform can produce or consume a frame until the
+        // client half lands, so announcing this on every server would only mislead operators.
+        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Voice relay attached");
         return true;
     }
 
@@ -95,9 +97,16 @@ namespace Framework::Voice {
 
         // A frame carrying nothing past the relay header is useless to every receiver, which
         // drops it on the same test. Rejecting it here denies an amplification primitive: the
-        // fan-out below multiplies one inbound packet into up to kMaxAudibleTalkers sends, so
+        // fan-out below multiplies one inbound packet into one send per in-range listener, so
         // a client spamming header-only frames would cost the server that multiple in egress.
         if (packet->length <= MafiaNet::RAKVOICE_RELAY_HEADER_SIZE) {
+            return;
+        }
+
+        // Upper bound for the same reason: RelayFrame forwards the payload verbatim once per
+        // recipient, so an oversized "frame" from a modified client would be amplified across
+        // the whole proximity set. No legitimate frame exceeds one maximum Opus packet.
+        if (packet->length > MafiaNet::RAKVOICE_RELAY_HEADER_SIZE + MafiaNet::RAKVOICE_MAX_OPUS_PACKET_SIZE) {
             return;
         }
 
