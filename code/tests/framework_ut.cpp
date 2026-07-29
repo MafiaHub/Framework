@@ -19,6 +19,7 @@
 #include "modules/persistent_config_ut.h"
 #include "modules/snapshot_buffer_ut.h"
 #include "modules/voice_router_ut.h"
+#include "modules/spsc_ring_ut.h"
 
 // Scripting tests
 #include "modules/engine_ut.h"
@@ -40,6 +41,7 @@ int main() {
     UNIT_MODULE(persistent_config);
     UNIT_MODULE(snapshot_buffer);
     UNIT_MODULE(voice_router);
+    UNIT_MODULE(spsc_ring);
 
     // Scripting tests
     UNIT_MODULE(engine);
