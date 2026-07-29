@@ -85,6 +85,28 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(MafiaNet)
 
+# Pin the fetched targets to this build's MSVC runtime.
+#
+# FrameworkSetup forces CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreadedDLL -- the
+# release CRT, even in Debug builds. MafiaNet, Opus and RNNoise are each their own
+# CMake project with their own project() call, so they do not pick that override up
+# and default to MultiThreadedDebugDLL under a Debug configuration. Linking a /MDd
+# static library into /MD objects fails at link time with LNK2038 on
+# _ITERATOR_DEBUG_LEVEL and RuntimeLibrary.
+#
+# This did not arise while MafiaNet was vendored: that copy was a bare
+# add_library() with no project() of its own, so it simply inherited the parent
+# scope. Setting the property per target is deterministic and does not depend on
+# how a subproject's scope was established.
+if(MSVC)
+    foreach(_mafianet_target MafiaNetStatic MafiaNet opus rnnoise)
+        if(TARGET ${_mafianet_target})
+            set_property(TARGET ${_mafianet_target} PROPERTY
+                MSVC_RUNTIME_LIBRARY "${CMAKE_MSVC_RUNTIME_LIBRARY}")
+        endif()
+    endforeach()
+endif()
+
 # Build sentry
 set(CURL_STATICLIB ON)
 add_subdirectory(sentry)
