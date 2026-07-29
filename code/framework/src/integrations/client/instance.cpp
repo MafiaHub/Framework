@@ -150,6 +150,37 @@ namespace Framework::Integrations::Client {
             Framework::Scripting::Builtins::Events &events = resourceManager->GetEvents();
             events.EmitReserved(isolate, context, "chatMessage", args);
         }
+
+        // Reserved "chatSend" event. False means a handler blocked the line; no scripting, no veto.
+        bool EmitChatSendEvent(const std::string &text) {
+            auto *scriptingModule = static_cast<Client::Scripting::ClientScriptingModule *>(Framework::CoreModules::GetScriptingModule());
+            if (!scriptingModule) {
+                return true;
+            }
+            auto resourceManager = scriptingModule->GetResourceManager();
+            if (!resourceManager) {
+                return true;
+            }
+            auto *engine = scriptingModule->GetEngine();
+            if (!engine || !engine->IsInitialized()) {
+                return true;
+            }
+
+            v8::Isolate *isolate = engine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            v8::Local<v8::String> textStr;
+            if (!v8::String::NewFromUtf8(isolate, text.c_str()).ToLocal(&textStr)) {
+                return true;
+            }
+
+            std::vector<v8::Local<v8::Value>> args {textStr};
+            return resourceManager->GetEvents().EmitReservedSync(isolate, context, "chatSend", args);
+        }
     } // namespace
 
     void Instance::DispatchReceivedChat(const Framework::Networking::RPC::ChatMessage &msg) {
@@ -219,7 +250,12 @@ namespace Framework::Integrations::Client {
         _webManager = std::make_unique<Framework::GUI::Manager>();
         _crashReporter = std::make_unique<External::Sentry::Wrapper>();
 
+        // Typed lines go through "chatSend" first; Chat.send is the raw path, so a handler can
+        // veto and resend without re-entering itself.
         _chatBox.SetSubmitHandler([this](const std::string &text) {
+            if (!EmitChatSendEvent(text)) {
+                return;
+            }
             SendChatMessage(text);
         });
     }

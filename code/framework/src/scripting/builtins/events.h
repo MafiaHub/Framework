@@ -86,6 +86,16 @@ namespace Framework::Scripting::Builtins {
                                             const std::vector<v8::Local<v8::Value>> &args);
 
         /**
+         * Synchronous EmitReserved. Every handler runs; returning literal false vetoes, and this
+         * returns false when any did. A returned Promise is ignored — the caller needs its answer
+         * before it returns, so async handlers cannot veto.
+         */
+        bool EmitReservedSync(v8::Isolate *isolate,
+                              v8::Local<v8::Context> context,
+                              const std::string &eventName,
+                              const std::vector<v8::Local<v8::Value>> &args);
+
+        /**
          * Emit a client-originated event from native code. Dispatched ONLY to onClient()
          * handlers, which live in a table separate from the native/global bus — so a
          * client-supplied event name can never resolve to an on() handler. Returns a Promise
@@ -164,6 +174,13 @@ namespace Framework::Scripting::Builtins {
 
         // Returns the handler table backing the given scope.
         std::map<std::string, std::vector<EventHandler>, std::less<>> &HandlerTable(HandlerScope scope);
+
+        // Snapshot (callback, resourceName) pairs for an event, consuming once handlers, so
+        // dispatch runs outside the table lock.
+        std::vector<std::pair<v8::Global<v8::Function>, std::string>> CollectHandlers(v8::Isolate *isolate,
+                                                                                      const std::string &eventName,
+                                                                                      const std::string &targetResource,
+                                                                                      HandlerScope scope);
 
         // Internal registration helper
         void RegisterHandler(v8::Isolate *isolate,

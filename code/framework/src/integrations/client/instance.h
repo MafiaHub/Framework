@@ -279,7 +279,8 @@ namespace Framework::Integrations::Client {
         // Emits the reserved "chatMessage" script event, then calls OnChatMessageReceived.
         void DispatchReceivedChat(const Framework::Networking::RPC::ChatMessage &msg);
 
-        // Send a chat line to the server (the local player's outgoing text).
+        // Send a chat line to the server (the local player's outgoing text). Raw transport: the
+        // "chatSend" event only guards lines typed into the overlay.
         void SendChatMessage(const std::string &text);
 
         // Built-in chat overlay, inert until a mod renders it. Driven by the Chat scripting builtin.

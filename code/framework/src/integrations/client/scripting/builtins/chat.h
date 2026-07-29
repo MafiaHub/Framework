@@ -17,7 +17,9 @@ namespace Framework::Scripting {
 namespace Framework::Integrations::Client::Scripting::Builtins {
 
     // Global Chat: send(text), setUIVisible(bool)/isUIVisible(), open()/close()/isOpen(). Incoming
-    // lines arrive as the reserved "chatMessage" event. Overlay verbs drive the Instance's ChatBox.
+    // lines arrive as the reserved "chatMessage" event; typed lines are first offered to
+    // "chatSend", which blocks the send by returning false. Overlay verbs drive the Instance's
+    // ChatBox.
     class Chat final {
       public:
         static void Register(v8::Isolate *isolate,

@@ -677,6 +677,43 @@ namespace Framework::Scripting::Builtins {
         }
     }
 
+    std::vector<std::pair<v8::Global<v8::Function>, std::string>> Events::CollectHandlers(v8::Isolate *isolate, const std::string &eventName, const std::string &targetResource, HandlerScope scope) {
+        std::vector<std::pair<v8::Global<v8::Function>, std::string>> handlersToCall;
+        std::vector<size_t> indicesToRemove;
+
+        std::scoped_lock lock(_handlersMutex);
+        auto &table = HandlerTable(scope);
+        auto it     = table.find(eventName);
+        if (it == table.end()) {
+            return handlersToCall;
+        }
+
+        for (size_t idx = 0; idx < it->second.size(); ++idx) {
+            const auto &handler = it->second[idx];
+
+            // Filter by target resource if specified
+            if (!targetResource.empty() && handler.resourceName != targetResource) {
+                continue;
+            }
+
+            // Copy the callback for calling outside the lock
+            v8::Global<v8::Function> callbackCopy;
+            callbackCopy.Reset(isolate, handler.callback.Get(isolate));
+            handlersToCall.emplace_back(std::move(callbackCopy), handler.resourceName);
+
+            if (handler.once) {
+                indicesToRemove.push_back(idx);
+            }
+        }
+
+        // Remove once handlers (in reverse order to preserve indices)
+        for (auto rit = indicesToRemove.rbegin(); rit != indicesToRemove.rend(); ++rit) {
+            it->second.erase(it->second.begin() + static_cast<std::ptrdiff_t>(*rit));
+        }
+
+        return handlersToCall;
+    }
+
     v8::Local<v8::Promise> Events::EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource, HandlerScope scope) {
         v8::EscapableHandleScope handleScope(isolate);
 
@@ -684,39 +721,7 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Promise::Resolver> resolver = v8::Promise::Resolver::New(context).ToLocalChecked();
         v8::Local<v8::Promise> promise            = resolver->GetPromise();
 
-        // Collect handlers to call and track which ones to remove (once handlers)
-        std::vector<std::pair<v8::Global<v8::Function>, std::string>> handlersToCall;
-        std::vector<size_t> indicesToRemove;
-
-        {
-            std::scoped_lock lock(_handlersMutex);
-            auto &table = HandlerTable(scope);
-            auto it     = table.find(eventName);
-            if (it != table.end()) {
-                for (size_t idx = 0; idx < it->second.size(); ++idx) {
-                    const auto &handler = it->second[idx];
-
-                    // Filter by target resource if specified
-                    if (!targetResource.empty() && handler.resourceName != targetResource) {
-                        continue;
-                    }
-
-                    // Copy the callback for calling outside the lock
-                    v8::Global<v8::Function> callbackCopy;
-                    callbackCopy.Reset(isolate, handler.callback.Get(isolate));
-                    handlersToCall.emplace_back(std::move(callbackCopy), handler.resourceName);
-
-                    if (handler.once) {
-                        indicesToRemove.push_back(idx);
-                    }
-                }
-
-                // Remove once handlers (in reverse order to preserve indices)
-                for (auto rit = indicesToRemove.rbegin(); rit != indicesToRemove.rend(); ++rit) {
-                    it->second.erase(it->second.begin() + static_cast<std::ptrdiff_t>(*rit));
-                }
-            }
-        }
+        auto handlersToCall = CollectHandlers(isolate, eventName, targetResource, scope);
 
         if (handlersToCall.empty()) {
             resolver->Resolve(context, v8::Undefined(isolate)).Check();
@@ -734,6 +739,35 @@ namespace Framework::Scripting::Builtins {
 
     v8::Local<v8::Promise> Events::EmitReserved(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args) {
         return EmitInternal(isolate, context, eventName, args, "", HandlerScope::Global);
+    }
+
+    bool Events::EmitReservedSync(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args) {
+        v8::HandleScope handleScope(isolate);
+
+        auto handlersToCall = CollectHandlers(isolate, eventName, "", HandlerScope::Global);
+        bool proceed        = true;
+
+        for (auto &[callback, logContext] : handlersToCall) {
+            v8::TryCatch tryCatch(isolate);
+            std::vector<v8::Local<v8::Value>> argv(args.begin(), args.end());
+
+            v8::MaybeLocal<v8::Value> maybeResult = callback.Get(isolate)->Call(context, context->Global(), static_cast<int>(argv.size()), argv.empty() ? nullptr : argv.data());
+
+            if (tryCatch.HasCaught()) {
+                std::string errorStr = FormatV8Exception(isolate, tryCatch, "Unknown error in event handler");
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Event '{}' handler error: {}", logContext, eventName, errorStr);
+                tryCatch.Reset();
+                continue;
+            }
+
+            // Literal false only, so a handler that forgets to return can't silently veto.
+            v8::Local<v8::Value> result;
+            if (maybeResult.ToLocal(&result) && result->IsBoolean() && !result->IsTrue()) {
+                proceed = false;
+            }
+        }
+
+        return proceed;
     }
 
     v8::Local<v8::Promise> Events::EmitClient(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args) {

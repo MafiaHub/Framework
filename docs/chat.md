@@ -95,10 +95,42 @@ Chat.isOpen(): boolean                 // overlay input box focused?
 **Incoming lines** arrive as the reserved **`chatMessage`** event:
 
 ```js
-Core.Events.on("chatMessage", (msg) => {
+Events.on("chatMessage", (msg) => {
     // msg = { author: string, text: string, color: number /* 0xRRGGBBAA, 0 = default */ }
 });
 ```
+
+**Outgoing lines** are offered to the reserved **`chatSend`** event *before* they
+reach the server — the client-side counterpart of MTA:SA's cancellable
+`onClientChatMessage`. The handler receives the submitted line and returns
+`false` to keep it client-side:
+
+```js
+// Intercept a client-only command so it never reaches the server
+Events.on("chatSend", (text) => {
+    if (text.startsWith("/waypoint ")) {
+        setWaypoint(text.slice(10));
+        return false;
+    }
+});
+
+Events.on("chatSend", (text) => !text.includes("badword"));
+```
+
+Semantics:
+
+- Fires for **every line the player submits** in the overlay, `/`-commands
+  included — that is what makes client-side commands possible.
+- **`Chat.send` does not fire it.** It is the raw transport, so a handler can
+  block a line and send its own without re-entering itself. That is also how you
+  rewrite a message: `return false`, then `Chat.send(edited)`.
+- Dispatch is **synchronous**, unlike the rest of `Events`: the client needs
+  the verdict before it sends. An `async` handler's promise is not awaited, so it
+  **cannot block** the line — decide synchronously.
+- Every handler runs even after one returns `false`, and only a **literal
+  `false`** blocks (a handler that forgets to return a value can't silently eat
+  chat).
+- A throwing handler is logged and skipped; it does not block the line.
 
 ### Server — global `Chat`
 
@@ -119,8 +151,8 @@ Chat.sendToPlayer(player: Entity, text: string,
 M2O those are the reserved **`playerChat`** and **`playerCommand`** events:
 
 ```js
-Core.Events.on("playerChat", (player, text) => { /* ... */ });
-Core.Events.on("playerCommand", (player, command, args) => { /* ... */ });
+Events.on("playerChat", (player, text) => { /* ... */ });
+Events.on("playerCommand", (player, command, args) => { /* ... */ });
 ```
 
 ---
@@ -181,7 +213,7 @@ keeping the same networking:
 // client resource
 Chat.setUIVisible(false);                              // hide the built-in overlay
 const view = Web.create("chat.html");
-Core.Events.on("chatMessage", (msg) => view.emit("chat:add", msg)); // {author,text,color}
+Events.on("chatMessage", (msg) => view.emit("chat:add", msg)); // {author,text,color}
 Web.on(view, "chat:send", (text) => Chat.send(text));     // input box → server
 ```
 
@@ -195,7 +227,7 @@ it — turn off the mod's default relay so only your formatting goes out:
 ```js
 // server resource (M2O: Chat.setDefaultRelay is a mod-provided toggle)
 Chat.setDefaultRelay(false);
-Core.Events.on("playerChat", (player, text) =>
+Events.on("playerChat", (player, text) =>
     Chat.sendToAll(text, { author: player.name, color: 0x9CA8FFFF }));
 ```
 

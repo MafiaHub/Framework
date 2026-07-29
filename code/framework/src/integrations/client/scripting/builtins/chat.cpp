@@ -95,7 +95,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Chat", "Client chat transport and native chat-box controls.");
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("send",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", false, "Player-authored chat text sent to the server.")}, "Submits a chat line to the server; incoming lines arrive through the reserved chatMessage event.")));
+            v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", false, "Player-authored chat text sent to the server.")}, "Sends a chat line to the server, bypassing the chatSend event; incoming lines arrive through the reserved chatMessage event.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setUIVisible",
             v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "Whether the chat overlay is rendered.")}, "Changes visibility of the native chat overlay without opening its input field.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isUIVisible", v8pp::metadata::docs("boolean", {}, "Checks whether the native chat overlay is visible.", "True when the overlay is currently rendered.")));
