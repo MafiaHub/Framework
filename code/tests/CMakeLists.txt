@@ -1,4 +1,4 @@
-add_executable(FrameworkTests framework_ut.cpp)
+add_executable(FrameworkTests framework_ut.cpp ../framework/src/voice/client/mixer.cpp)
 
 target_include_directories(FrameworkTests PRIVATE . ../framework/src)
 target_link_libraries(FrameworkTests Framework FrameworkServer libnode)

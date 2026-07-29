@@ -95,6 +95,8 @@ set(FRAMEWORK_CLIENT_SRC
     src/integrations/client/scripting/builtins/keybinds.cpp
     src/integrations/client/scripting/builtins/chat.cpp
     src/integrations/client/scripting/builtins/discord.cpp
+
+    src/voice/client/mixer.cpp
 )
 
 # GUI (CEF-based)
