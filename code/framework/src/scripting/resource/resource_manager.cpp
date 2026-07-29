@@ -11,16 +11,28 @@
 #include "../builtins/events.h"
 #include "../builtins/messages.h"
 
+#include <metrics/registry.h>
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <mutex>
 #include <queue>
 #include <stack>
 
 namespace Framework::Scripting {
     namespace {
+        Metrics::Counter *g_scriptRestarts  = nullptr;
+        std::once_flag g_scriptRestartOnce;
+
+        void EnsureScriptRestartCounter() {
+            std::call_once(g_scriptRestartOnce, [] {
+                g_scriptRestarts = Metrics::Registry::Get().RegisterCounter("fw_script_resource_restarts_total", "Script resource restarts (manual, auto, and hot-reload)");
+            });
+        }
+
         bool IsPathInsideRoot(const std::filesystem::path &path, const std::filesystem::path &root) {
             auto canonicalRoot = std::filesystem::weakly_canonical(root);
             auto canonicalPath = std::filesystem::weakly_canonical(path);
@@ -85,6 +97,7 @@ namespace Framework::Scripting {
     ResourceManager::ResourceManager(Engine *jsEngine, const ResourceManagerConfig &config)
         : _config(config)
         , _jsEngine(jsEngine) {
+        EnsureScriptRestartCounter();
         if (_jsEngine) {
             _jsEngine->SetResourceManager(this);
         }
@@ -501,6 +514,9 @@ namespace Framework::Scripting {
                 affected.insert(affected.end(), a.begin(), a.end());
             }
         }
+        if (!affected.empty() && g_scriptRestarts) {
+            g_scriptRestarts->Inc(affected.size());
+        }
         return ResourceOperationResult::Ok(affected);
     }
 
@@ -579,6 +595,9 @@ namespace Framework::Scripting {
                 const auto &a = result.GetValue();
                 affected.insert(affected.end(), a.begin(), a.end());
             }
+        }
+        if (!affected.empty() && g_scriptRestarts) {
+            g_scriptRestarts->Inc(affected.size());
         }
         return ResourceOperationResult::Ok(affected);
     }

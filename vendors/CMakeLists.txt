@@ -73,6 +73,10 @@ add_subdirectory(sfd)
 # Build lua
 add_subdirectory(lua-5.4.4)
 
+if(FW_METRICS_BACKEND STREQUAL "prometheus")
+    add_subdirectory(prometheus-cpp-lite EXCLUDE_FROM_ALL)
+endif()
+
 # Build Tracy (profiler client)
 # TRACY_ENABLE follows FW_PROFILING; the TracyClient target is always available
 # so Framework can link it unconditionally - it compiles to no-ops when disabled.

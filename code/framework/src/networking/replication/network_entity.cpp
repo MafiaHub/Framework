@@ -13,6 +13,8 @@
 #include <mafianet/GetTime.h>
 #include <utils/time.h>
 
+#include <chrono>
+
 namespace Framework::Networking::Replication {
     namespace {
         // Serialize channel split: the pose rides an unreliable-sequenced channel (a dropped frame is
@@ -151,6 +153,7 @@ namespace Framework::Networking::Replication {
     }
 
     MafiaNet::RM3SerializationResult NetworkEntity::Serialize(MafiaNet::SerializeParameters *serializeParameters) {
+        const auto serializeStart             = std::chrono::steady_clock::now();
         serializeParameters->messageTimestamp = MafiaNet::GetTime();
 
         // The epoch rides raw at the head of each channel: it must be present in every update (a VDS
@@ -174,8 +177,13 @@ namespace Framework::Networking::Replication {
         SerializeBaseFields(fields);
         SerializeFields(fields);
         _vds.EndSerialize(&ctx);
-        serializeParameters->pro[kStateChannel].reliability    = MafiaNet::Reliability::ReliableOrdered;
+        serializeParameters->pro[kStateChannel].reliability     = MafiaNet::Reliability::ReliableOrdered;
         serializeParameters->pro[kStateChannel].orderingChannel = kStateChannel;
+
+        if (auto *manager = Manager()) {
+            const uint64_t bytes = static_cast<uint64_t>(serializeParameters->outputBitstream[kTransformChannel].GetNumberOfBytesUsed()) + static_cast<uint64_t>(serializeParameters->outputBitstream[kStateChannel].GetNumberOfBytesUsed());
+            manager->RecordSerialization(std::chrono::duration<double>(std::chrono::steady_clock::now() - serializeStart).count(), bytes);
+        }
 
         // Both channels carry recipient-identical bytes, so broadcast-identically: ReplicaManager3
         // serializes once per tick, reuses the bytes for every connection, and suppresses each channel
@@ -188,6 +196,9 @@ namespace Framework::Networking::Replication {
         // Server authority gate (applies to both channels): only accept updates from the entity's
         // current owner, rejecting a stale owner whose in-flight packets land after a handover.
         if (IsServerPeer() && deserializeParameters->sourceConnection && MafiaNet::ToPeerGuid(deserializeParameters->sourceConnection->GetRakNetGUID()) != ownerGUID) {
+            if (auto *mgr = Manager()) {
+                mgr->RecordRejectedNonOwnerUpdate();
+            }
             return;
         }
 
@@ -203,6 +214,9 @@ namespace Framework::Networking::Replication {
                 SerializeTransform(transform);
                 transformUpdated = true;
             }
+            else if (auto *mgr = Manager()) {
+                mgr->RecordStaleEpochDrop(kTransformChannel);
+            }
         }
 
         // Channel 1 — state.
@@ -216,6 +230,9 @@ namespace Framework::Networking::Replication {
                 SerializeBaseFields(fields);
                 SerializeFields(fields);
                 _vds.EndDeserialize(&ctx);
+            }
+            else if (auto *mgr = Manager()) {
+                mgr->RecordStaleEpochDrop(kStateChannel);
             }
         }
 

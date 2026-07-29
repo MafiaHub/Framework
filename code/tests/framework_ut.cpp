@@ -18,6 +18,7 @@
 #include "modules/state_machine_ut.h"
 #include "modules/persistent_config_ut.h"
 #include "modules/snapshot_buffer_ut.h"
+#include "modules/metrics_ut.h"
 
 // Scripting tests
 #include "modules/engine_ut.h"
@@ -38,6 +39,7 @@ int main() {
     UNIT_MODULE(state_machine);
     UNIT_MODULE(persistent_config);
     UNIT_MODULE(snapshot_buffer);
+    UNIT_MODULE(metrics);
 
     // Scripting tests
     UNIT_MODULE(engine);

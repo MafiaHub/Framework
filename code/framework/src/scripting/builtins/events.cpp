@@ -14,9 +14,30 @@
 #include <core_modules.h>
 #include <integrations/shared/rpc/emit_script_event.h>
 #include <logging/logger.h>
+#include <metrics/registry.h>
 #include <networking/network_peer.h>
 
-namespace Framework::Scripting::Builtins {
+#include <chrono>
+#include <mutex>
+
+namespace Framework::Scripting {
+    namespace {
+        Metrics::Counter   *g_scriptEventsIn  = nullptr;
+        Metrics::Counter   *g_scriptEventsOut = nullptr;
+        Metrics::Histogram *g_scriptEventDur  = nullptr;
+        Metrics::Counter   *g_scriptErrors    = nullptr;
+        std::once_flag g_scriptMetricsOnce;
+
+        void EnsureScriptMetrics() {
+            std::call_once(g_scriptMetricsOnce, [] {
+                auto &reg = Metrics::Registry::Get();
+                g_scriptEventsIn  = reg.RegisterCounter("fw_script_events_total", "Script events dispatched", {{"direction", "inbound"}});
+                g_scriptEventsOut = reg.RegisterCounter("fw_script_events_total", "Script events dispatched", {{"direction", "outbound"}});
+                g_scriptEventDur  = reg.RegisterHistogram("fw_script_event_duration_seconds", "Synchronous script event handler dispatch duration", Metrics::Buckets::Exponential(0.00005, 4.0, 6));
+                g_scriptErrors    = reg.RegisterCounter("fw_script_errors_total", "Script event handlers that threw");
+            });
+        }
+    } // namespace
 
     // Context for AllSettled callback - holds resolver, error message, and owner for cleanup
     // Defined early so destructor can access it
@@ -47,12 +68,15 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Events::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager, bool isClient) {
+        EnsureScriptMetrics();
+
         // Reuse the context across repeated Register() calls; never reallocate. Its address is
         // baked into non-owning v8::Externals (template data and on() unsubscribe closures) that
         // outlive this call, so replacing it would dangle them. Contents are invariant anyway.
         if (!_callbackContext) {
             _callbackContext = std::make_unique<CallbackContext>();
         }
+
         _callbackContext->events          = this;
         _callbackContext->resourceManager = resourceManager;
         _callbackContext->valid.store(true, std::memory_order_release);
@@ -233,6 +257,9 @@ namespace Framework::Scripting::Builtins {
         Framework::Integrations::Shared::RPC::EmitScriptEvent ev;
         ev.FromParameters(eventName, payload);
         peer->BroadcastRPC(ev);
+        if (g_scriptEventsOut) {
+            g_scriptEventsOut->Inc();
+        }
     }
 
     void Events::RegisterHandler(v8::Isolate *isolate, ResourceManager *manager, std::string_view eventName, v8::Local<v8::Function> handler, bool once, HandlerScope scope) {
@@ -479,6 +506,10 @@ namespace Framework::Scripting::Builtins {
                 std::string errorStr = FormatV8Exception(isolate, tryCatch, "Unknown error in event handler");
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Event '{}' handler error: {}", logContext, eventName, errorStr);
 
+                if (g_scriptErrors) {
+                    g_scriptErrors->Inc();
+                }
+
                 // Create rejected promise for this handler
                 v8::Local<v8::Promise::Resolver> errResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
                 errResolver->Reject(context, tryCatch.Exception()).Check();
@@ -680,6 +711,11 @@ namespace Framework::Scripting::Builtins {
     v8::Local<v8::Promise> Events::EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource, HandlerScope scope) {
         v8::EscapableHandleScope handleScope(isolate);
 
+        if (scope == HandlerScope::Client) {
+            if (g_scriptEventsIn) {
+                g_scriptEventsIn->Inc();
+            }
+        }
         // Create Promise resolver
         v8::Local<v8::Promise::Resolver> resolver = v8::Promise::Resolver::New(context).ToLocalChecked();
         v8::Local<v8::Promise> promise            = resolver->GetPromise();
@@ -724,7 +760,11 @@ namespace Framework::Scripting::Builtins {
         }
 
         // Invoke handlers and collect results as promises
+        const auto invokeStart = std::chrono::steady_clock::now();
         v8::Local<v8::Array> promises = InvokeHandlersToPromiseArray(isolate, context, handlersToCall, args, eventName);
+        if (g_scriptEventDur) {
+            g_scriptEventDur->Observe(std::chrono::duration<double>(std::chrono::steady_clock::now() - invokeStart).count());
+        }
 
         // Aggregate results using Promise.allSettled
         AggregateWithAllSettled(isolate, context, promises, resolver, "One or more event handlers failed");
@@ -899,7 +939,11 @@ namespace Framework::Scripting::Builtins {
         }
 
         // Invoke handlers and collect results as promises
+        const auto invokeStart = std::chrono::steady_clock::now();
         v8::Local<v8::Array> promises = InvokeHandlersToPromiseArray(isolate, context, handlersToCall, eventArgs, eventName);
+        if (g_scriptEventDur) {
+            g_scriptEventDur->Observe(std::chrono::duration<double>(std::chrono::steady_clock::now() - invokeStart).count());
+        }
 
         // Aggregate results using Promise.allSettled
         events->AggregateWithAllSettled(isolate, context, promises, resolver, "One or more local event handlers failed");

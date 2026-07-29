@@ -22,9 +22,11 @@
 #include <mafianet/TwoWayAuthentication.h>
 #include <mafianet/NetworkIDManager.h>
 #include <logging/logger.h>
+#include <metrics/registry.h>
 #include <utils/lifecycle.h>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <utils/hashing.h>
 #include <vector>
@@ -78,6 +80,11 @@ namespace Framework::Networking {
         }
 
         bool RegisterBuildToken();
+        void RecordRpcSignal() noexcept {
+            if (_netRpcSignalsTx) {
+                _netRpcSignalsTx->Inc();
+            }
+        }
 
       public:
         // TwoWayAuthentication identifier under which the build token is registered/challenged.
@@ -116,6 +123,7 @@ namespace Framework::Networking {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
             _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, except, true, false);
+            RecordRpcSignal();
         }
 
         // Send an RPC payload to a single system.
@@ -124,6 +132,7 @@ namespace Framework::Networking {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
             _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, guid, false, false);
+            RecordRpcSignal();
         }
 
         // Raw variant of RegisterRPC for handlers that decode the bitstream themselves (e.g. a
@@ -140,6 +149,7 @@ namespace Framework::Networking {
         // Send a pre-encoded bitstream under a raw identifier (pairs with RegisterRawRPC).
         void SendRawRPC(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
             _rpc.Signal(identifier, &bs, priority, reliability, 0, guid, false, false);
+            RecordRpcSignal();
         }
 
         void Update() override;
@@ -224,5 +234,20 @@ namespace Framework::Networking {
         Replication::ReplicationManager *GetReplicationManager() const noexcept {
             return _replicationManager.get();
         }
+
+      private:
+        void InitMetrics();
+        void SampleTransportStats();
+
+        Metrics::Counter   *_netBytesRx = nullptr, *_netBytesTx = nullptr;
+        Metrics::Counter   *_netPacketsRx = nullptr, *_netRpcSignalsTx = nullptr;
+        Metrics::Counter   *_netUnknownPackets = nullptr;
+        Metrics::Histogram *_netPingSeconds = nullptr;
+        Metrics::Gauge     *_netPacketLoss = nullptr, *_netConnections = nullptr;
+        Metrics::Gauge     *_netPendingResend = nullptr, *_netPendingSend = nullptr;
+
+        std::unordered_map<uint64_t, uint64_t> _lastBytesRx;
+        std::unordered_map<uint64_t, uint64_t> _lastBytesTx;
+        MafiaNet::Time _lastPingSampleMs = 0;
     };
 } // namespace Framework::Networking

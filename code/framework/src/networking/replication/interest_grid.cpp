@@ -112,8 +112,11 @@ namespace Framework::Networking::Replication {
         return it != _ownedByGuid.end() ? &it->second : nullptr;
     }
 
-    void InterestGrid::CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out) {
+    void InterestGrid::CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out, size_t *candidatesOut) {
         if (!viewer) {
+            if (candidatesOut) {
+                *candidatesOut = 0;
+            }
             return;
         }
         if (!_ready) {
@@ -121,12 +124,25 @@ namespace Framework::Networking::Replication {
                 _warnedNotReady = true;
                 Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("InterestGrid queried before its first RebuildInterest(); no entities will replicate. Call ReplicationManager::RebuildInterest() once per server tick.");
             }
+            if (candidatesOut) {
+                *candidatesOut = 0;
+            }
             return;
         }
         const auto observerWorld = viewer->GetVirtualWorld();
 
         _inRange.clear();
         QueryRadius(viewer->position, viewer->streaming.range, _inRange);
+
+        if (candidatesOut) {
+            size_t candidates = _inRange.size();
+            if (const auto *owned = OwnedBy(viewerGUID)) {
+                candidates += owned->size();
+            }
+            candidates += AlwaysVisible().size();
+            candidates += 1;
+            *candidatesOut = candidates;
+        }
 
         // A private entity (targetGUID set) is only ever relevant to its target connection, and for
         // that viewer the target stands in for the dimension gate.

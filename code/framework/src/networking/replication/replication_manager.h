@@ -17,9 +17,11 @@
 #include <mafianet/ReplicaManager3.h>
 #include <mafianet/peerinterface.h>
 
-#include <glm/glm.hpp>
 #include <function2.hpp>
+#include <glm/glm.hpp>
+#include <metrics/registry.h>
 
+#include <atomic>
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
@@ -35,7 +37,7 @@ namespace Framework::Networking::Replication {
     // creates/destroys entities, resolves them by NetworkID, tracks each connection's "viewer"
     // entity, and drives an InterestGrid that ReplicationConnection::QueryReplicaList reads for
     // interest management.
-    class ReplicationManager final : public MafiaNet::ReplicaManager3 {
+    class ReplicationManager final: public MafiaNet::ReplicaManager3 {
       public:
         ReplicationManager();
         ~ReplicationManager();
@@ -141,19 +143,45 @@ namespace Framework::Networking::Replication {
         MafiaNet::Connection_RM3 *AllocConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID) const override;
         void DeallocConnection(MafiaNet::Connection_RM3 *connection) const override;
 
+        void RecordStaleEpochDrop(int channel);
+        void RecordRejectedNonOwnerUpdate();
+        void RecordSerialization(double durationSeconds, uint64_t bytes);
+
       private:
-        bool _isServer    = false;
-        MafiaNet::PeerGuid _myGUID  = MafiaNet::UNASSIGNED_PEER_GUID;
+        bool _isServer             = false;
+        MafiaNet::PeerGuid _myGUID = MafiaNet::UNASSIGNED_PEER_GUID;
         // Server-side monotonic NetworkID allocator. Starts at 1 (0 reads as "none" in game code) and
         // stays well within JavaScript's safe-integer range so scripting can hold ids as plain numbers.
         // Bumped only from CreateEntity on the sim thread, so it needs no synchronization.
-        uint64_t _nextNetworkId = 0;
-        NetworkPeer *_owner = nullptr;
+        uint64_t _nextNetworkId    = 0;
+        NetworkPeer *_owner        = nullptr;
         bool _clientRPCsRegistered = false;
         InterestGrid _interest;
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
         fu2::function<void(MafiaNet::PeerGuid) const> _onClientDisconnect;
         fu2::function<void(uint64_t) const> _onEntityCreated;
         fu2::function<void(uint64_t) const> _onEntityDestroyed;
+
+        Metrics::Counter *_replCreated                 = nullptr;
+        Metrics::Counter *_replDestroyed               = nullptr;
+        Metrics::Gauge *_replEntities                  = nullptr;
+        Metrics::Counter *_interestCandidates          = nullptr;
+        Metrics::Counter *_interestSelected            = nullptr;
+        Metrics::Histogram *_interestRebuildDur        = nullptr;
+        Metrics::Counter *_forcedStates                = nullptr;
+        Metrics::Counter *_ownerChanges                = nullptr;
+        Metrics::Counter *_staleEpochTransform         = nullptr;
+        Metrics::Counter *_staleEpochState             = nullptr;
+        Metrics::Counter *_rejectedNonOwner            = nullptr;
+        Metrics::Histogram *_serializeDuration         = nullptr;
+        Metrics::Counter *_serializedEntities          = nullptr;
+        Metrics::Counter *_serializedBytes             = nullptr;
+        Metrics::Histogram *_serializedEntitiesPerTick = nullptr;
+        Metrics::Histogram *_serializedBytesPerTick    = nullptr;
+        std::atomic<uint64_t> _serializedEntitiesThisTick {0};
+        std::atomic<uint64_t> _serializedBytesThisTick {0};
+        bool _hasSerializationWindow = false;
+
+        void InitMetrics();
     };
 } // namespace Framework::Networking::Replication

@@ -15,16 +15,17 @@
 
 #include "http/webserver.h"
 #include "logging/logger.h"
+#include "metrics/registry.h"
 #include "networking/engine.h"
 #include "scripting/module.h"
 
 #include <external/sentry/wrapper.h>
 
-#include <mafianet/types.h>
 #include "services/masterlist.h"
-#include "utils/config.h"
 #include "utils/command_listener.h"
 #include "utils/command_processor.h"
+#include "utils/config.h"
+#include <mafianet/types.h>
 
 #include <utils/lifecycle.h>
 
@@ -47,7 +48,6 @@ namespace v8 {
 
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
-
         std::string modSlug;
         std::string modHelpText;
         std::string modName;
@@ -84,7 +84,7 @@ namespace Framework::Integrations::Server {
 
         // MafiaHub Services
         struct Services {
-            std::string apiUrl = "https://api.mafiahub.dev";
+            std::string apiUrl        = "https://api.mafiahub.dev";
             std::string masterlistUrl = "";
         } services;
 
@@ -94,6 +94,12 @@ namespace Framework::Integrations::Server {
 
         int32_t maxPlayers;
         std::string httpServeDir;
+
+        struct MetricsConfig {
+            bool enabled = false;
+            std::string path = "/metrics";
+            std::string token;
+        } metrics;
 
         bool enableSignals;
 
@@ -112,7 +118,6 @@ namespace Framework::Integrations::Server {
         // args
         int argc;
         char **argv;
-
     };
 
     // Connection metadata handed to the player-connect callback so the game can create and fully
@@ -127,12 +132,26 @@ namespace Framework::Integrations::Server {
         std::string discordId;
     };
 
-    class Instance : public Framework::Lifecycle {
+    class Instance: public Framework::Lifecycle {
       private:
         std::atomic<bool> _shuttingDown;
         // Set after the initial StartAll; gates runtime broadcasts to clients.
         bool _resourcesBooted = false;
-        std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
+        std::chrono::time_point<std::chrono::steady_clock> _nextTick;
+        std::chrono::time_point<std::chrono::steady_clock> _processStart;
+        std::chrono::time_point<std::chrono::steady_clock> _lastTickStart;
+        bool _hasLastTickStart = false;
+
+        Metrics::Histogram *_tickDurationHist     = nullptr;
+        Metrics::Histogram *_tickLatenessHist     = nullptr;
+        Metrics::Histogram *_tickIntervalHist     = nullptr;
+        Metrics::Gauge *_tickRateGauge            = nullptr;
+        Metrics::Gauge *_tickTargetRateGauge      = nullptr;
+        Metrics::Gauge *_uptimeGauge              = nullptr;
+        Metrics::Counter *_tickOverrunsCounter    = nullptr;
+        Metrics::Counter *_connFailAuth           = nullptr;
+        Metrics::Counter *_masterlistUpdates      = nullptr;
+        Metrics::Counter *_masterlistUpdateErrors = nullptr;
 
         InstanceOptions _opts;
 
@@ -148,6 +167,7 @@ namespace Framework::Integrations::Server {
         std::unordered_set<uint64_t> _readyPlayerGuids;
 
         void InitEndpoints();
+        void InitMetrics();
         void InitNetworkingMessages();
         void InitAssetStreamer();
         // Re-sync a hot-reloaded/started client resource to connected clients.
@@ -157,7 +177,7 @@ namespace Framework::Integrations::Server {
         void InitCommandListener();
         bool LoadConfigFromJSON();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
-        
+
         void HandleCommand(std::string_view command);
         void EmitConsoleCommand(const std::string &command, const std::vector<std::string> &args);
 

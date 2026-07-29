@@ -10,8 +10,8 @@
 
 #include <cstdint>
 
-#include "errors.h"
 #include "connection.h"
+#include "errors.h"
 #include "network_peer.h"
 #include "rpc/client_identity.h"
 #include "rpc/rpc.h"
@@ -19,8 +19,8 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
-#include <mafianet/types.h>
 #include <mafianet/peerinterface.h>
+#include <mafianet/types.h>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -40,11 +40,24 @@ namespace Framework::Networking {
 
         // Guids whose build challenge passed — the gate keeping unverified peers out of replication.
         std::unordered_set<uint64_t> _authenticatedClients;
+        std::unordered_set<uint64_t> _acceptedClients;
+        std::unordered_set<uint64_t> _readyClients;
 
         // Identities announced via ClientIdentity, kept for the connection's lifetime.
         std::unordered_map<uint64_t, RPC::ClientIdentity> _peerIdentities;
 
+        std::unordered_map<DisconnectionReason, Metrics::Counter *> _kickCounters;
+        std::unordered_map<DisconnectionReason, Metrics::Counter *> _closedCounters;
+        Metrics::Counter *_connFailVersion        = nullptr;
+        Metrics::Counter *_connFailReady          = nullptr;
+        Metrics::Counter *_connectionsAccepted    = nullptr;
+        Metrics::Counter *_connectionsReady       = nullptr;
+        Metrics::Gauge *_authenticatedConnections = nullptr;
+        Metrics::Gauge *_readyConnections         = nullptr;
+
+        void InitMetrics();
         void ClearClientState(MafiaNet::RakNetGUID guid);
+        void RecordConnectionClosed(MafiaNet::RakNetGUID guid, DisconnectionReason reason);
 
       public:
         NetworkServer(): NetworkPeer() {}
@@ -65,6 +78,8 @@ namespace Framework::Networking {
         bool IsAuthenticated(MafiaNet::RakNetGUID guid) const {
             return _authenticatedClients.contains(guid.g);
         }
+
+        void MarkClientReady(MafiaNet::RakNetGUID guid);
 
         // Start replicating to an authenticated peer (idempotent). Replication begins for no peer
         // until this is called — connections are not auto-managed (see Init).
