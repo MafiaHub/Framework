@@ -44,9 +44,11 @@ MODULE(voice_mixer, {
     });
 
     IT("attenuates with distance", {
-        const auto near = ComputeGain(OriginListener(), glm::vec3(0.0f, 0.0f, 5.0f), 25.0f);
-        const auto far  = ComputeGain(OriginListener(), glm::vec3(0.0f, 0.0f, 20.0f), 25.0f);
-        EQUALS(near.left > far.left, true);
+        // Not `near`/`far`: both are legacy macros from windows.h, so those names
+        // expand to nothing under MSVC and the declarations stop parsing.
+        const auto nearGain = ComputeGain(OriginListener(), glm::vec3(0.0f, 0.0f, 5.0f), 25.0f);
+        const auto farGain  = ComputeGain(OriginListener(), glm::vec3(0.0f, 0.0f, 20.0f), 25.0f);
+        EQUALS(nearGain.left > farGain.left, true);
     });
 
     IT("pans a speaker on the right louder in the right ear", {

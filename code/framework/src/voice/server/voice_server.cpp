@@ -11,6 +11,7 @@
 #include "voice/voice_config.h"
 
 #include <logging/logger.h>
+#include <mafianet/MessageIdentifiers.h>
 #include <networking/network_server.h>
 #include <utils/time.h>
 
@@ -91,7 +92,18 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::OnVoiceFrame(MafiaNet::Packet *packet) {
-        if (packet == nullptr) {
+        if (packet == nullptr || packet->length == 0) {
+            return;
+        }
+
+        // The relay format is defined from byte 0: MafiaNet writes the id there and both of
+        // its readers use fixed offsets from it, so a timestamp-prefixed relay frame cannot
+        // be parsed at all. The dispatcher upstream identifies packets through
+        // GetPacketDataOffset(), which skips an ID_TIMESTAMP prefix, so the two would
+        // disagree if such a frame ever arrived. Assert the invariant here rather than
+        // threading an offset through a format that has nowhere to put it -- MafiaNet's
+        // RelayFrame rejects the same mismatch, so today this is belt and braces.
+        if (packet->data[0] != ID_RAKVOICE_RELAY_DATA) {
             return;
         }
 
