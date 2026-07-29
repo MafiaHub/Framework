@@ -446,11 +446,7 @@ namespace Framework::Integrations::Client {
             _presence->Update();
         }
 
-        if (_networkingEngine) {
-            FW_PROFILE_SCOPE_N("Client::Networking");
-            _networkingEngine->Update();
-            TrySignalConnectionSpawnReady();
-        }
+        UpdateNetworking();
 
         if (_scriptingModule) {
             FW_PROFILE_SCOPE_N("Client::Scripting");
@@ -478,6 +474,16 @@ namespace Framework::Integrations::Client {
         }
 
         FW_PROFILE_FRAME();
+    }
+
+    void Instance::UpdateNetworking() {
+        if (!_networkingEngine) {
+            return;
+        }
+
+        FW_PROFILE_SCOPE_N("Client::Networking");
+        _networkingEngine->Update();
+        TrySignalConnectionSpawnReady();
     }
 
     void Instance::Render() {
@@ -520,6 +526,9 @@ namespace Framework::Integrations::Client {
         // Server's resource list. Store it (survives a scripting module reset) and start the asset
         // phase; the ready-event id and tick rate are held until the spawn barrier completes.
         net->RegisterRPC<Framework::Networking::RPC::ServerResources>([this](const Framework::Networking::RPC::ServerResources &payload, MafiaNet::Packet *) {
+            ++_assetProcessingGeneration;
+            _deferredInitialAssetProcessingGeneration = 0;
+            _resumingDeferredInitialAssetProcessing    = false;
             _readyEventId   = payload.readyEventId;
             _serverTickRate = payload.tickRate;
 
@@ -631,11 +640,14 @@ namespace Framework::Integrations::Client {
             _lastDisconnectionReason = packet ? reason : "";
 
             // Reset initial asset download state
-            _initialDownloadDone = false;
-            _downloadStatus      = {};
-            _connectionFinalized = false;
-            _spawnBarrierArmed   = false;
-            _projectSpawnReady   = false;
+            ++_assetProcessingGeneration;
+            _deferredInitialAssetProcessingGeneration = 0;
+            _resumingDeferredInitialAssetProcessing    = false;
+            _initialDownloadDone                       = false;
+            _downloadStatus                            = {};
+            _connectionFinalized                       = false;
+            _spawnBarrierArmed                         = false;
+            _projectSpawnReady                         = false;
             SetConnectionPhase(ConnectionPhase::Disconnected);
             
             // Entity teardown is native: ReplicaManager3 deletes server-created replicas when the
@@ -788,6 +800,11 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::OnAssetsDownloaded(bool success) {
+        if (success && _deferredInitialAssetProcessingGeneration != 0 && !_resumingDeferredInitialAssetProcessing) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Ignoring duplicate initial asset completion while generation {} is deferred", _deferredInitialAssetProcessingGeneration);
+            return;
+        }
+
         const auto net = GetNetworkingEngine()->GetNetworkClient();
         if (success) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("All the assets have been downloaded!");
@@ -826,6 +843,19 @@ namespace Framework::Integrations::Client {
             }
             // A refresh that raced an initial connect falls through to full init.
             _pendingRefreshResources.clear();
+
+            if (!_resumingDeferredInitialAssetProcessing) {
+                const uint64_t generation = _assetProcessingGeneration;
+                if (OnInitialAssetDownloadReady(generation, _downloadStatus) == InitialAssetProcessingDecision::Defer) {
+                    if (generation != _assetProcessingGeneration || net->GetConnectionState() != Framework::Networking::PeerState::CONNECTED) {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Initial asset processing generation {} requested deferral after the connection became stale", generation);
+                        return;
+                    }
+                    _deferredInitialAssetProcessingGeneration = generation;
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Initial asset processing deferred for generation {} before scripting startup", generation);
+                    return;
+                }
+            }
 
             SetConnectionPhase(ConnectionPhase::Starting);
 
@@ -866,6 +896,8 @@ namespace Framework::Integrations::Client {
             }
         }
         else {
+            _deferredInitialAssetProcessingGeneration = 0;
+            _resumingDeferredInitialAssetProcessing    = false;
             (void)net->Disconnect();
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
@@ -905,6 +937,27 @@ namespace Framework::Integrations::Client {
 
         // Let the mod-level know assets have just been finished processing
         OnAssetsDownloadFinished(success);
+    }
+
+    bool Instance::CompleteDeferredInitialAssetProcessing(uint64_t generation, bool success) {
+        if (generation == 0 || _deferredInitialAssetProcessingGeneration != generation || _assetProcessingGeneration != generation) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Ignoring stale deferred initial asset completion for generation {} (current {}, deferred {})", generation, _assetProcessingGeneration, _deferredInitialAssetProcessingGeneration);
+            return false;
+        }
+
+        Framework::Networking::NetworkClient *net = GetNetworkingEngine() ? GetNetworkingEngine()->GetNetworkClient() : nullptr;
+        if (success && (!net || net->GetConnectionState() != Framework::Networking::PeerState::CONNECTED)) {
+            _deferredInitialAssetProcessingGeneration = 0;
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Cannot resume deferred initial asset processing for generation {} after the connection closed", generation);
+            return false;
+        }
+
+        _deferredInitialAssetProcessingGeneration = 0;
+        _resumingDeferredInitialAssetProcessing    = true;
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("{} deferred initial asset processing for generation {}", success ? "Resuming" : "Failing", generation);
+        OnAssetsDownloaded(success);
+        _resumingDeferredInitialAssetProcessing = false;
+        return true;
     }
 
     void Instance::SignalConnectionSpawnReady() {

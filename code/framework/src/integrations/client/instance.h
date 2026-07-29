@@ -116,6 +116,11 @@ namespace Framework::Integrations::Client {
         InGame,
     };
 
+    enum class InitialAssetProcessingDecision {
+        Continue,
+        Defer,
+    };
+
     class Instance : public Framework::Lifecycle {
       private:
         bool _renderInitialized = false;
@@ -143,6 +148,9 @@ namespace Framework::Integrations::Client {
         ConnectionPhase _connectionPhase = ConnectionPhase::Disconnected;
         std::string _assetCachePath;
         bool _initialDownloadDone {};
+        uint64_t _assetProcessingGeneration {};
+        uint64_t _deferredInitialAssetProcessingGeneration {};
+        bool _resumingDeferredInitialAssetProcessing {};
 
         // Pending resources from server (stored here to survive scripting module reset)
         std::vector<Client::Scripting::ServerResourceInfo> _pendingServerResources;
@@ -191,10 +199,11 @@ namespace Framework::Integrations::Client {
 
         void Render();
         void Update() override;
+        void UpdateNetworking();
 
         // Override what you need; this is the whole extension surface (no Set*Callback setters).
         // Order: Init -> PostInit; tick: Update -> PostUpdate, Render -> PostRender; Shutdown -> PreShutdown.
-        // On connect: assets -> scripting init (ModuleRegister) -> PostScriptInit -> OnConnectionFinalized.
+        // On connect: assets -> OnInitialAssetDownloadReady -> scripting init (ModuleRegister) -> PostScriptInit -> OnConnectionFinalized.
         virtual void PostInit() {}
         virtual void PostUpdate() {}
         virtual void PostRender() {}
@@ -214,6 +223,11 @@ namespace Framework::Integrations::Client {
         virtual void OnConnectionClosed() {}
         virtual void OnAssetsDownloadFinished(bool success) {
             (void)success;
+        }
+        virtual InitialAssetProcessingDecision OnInitialAssetDownloadReady(uint64_t generation, const AssetDownloadStatus &status) {
+            (void)generation;
+            (void)status;
+            return InitialAssetProcessingDecision::Continue;
         }
         virtual void OnAssetsDownloadProgress(const AssetDownloadStatus &status) {
             (void)status;
@@ -237,6 +251,7 @@ namespace Framework::Integrations::Client {
 
         void DownloadsAssetsFromConnectedServer();
         void SignalConnectionSpawnReady();
+        bool CompleteDeferredInitialAssetProcessing(uint64_t generation, bool success);
 
       private:
         // Cancel any in-flight transfer and kick off a fresh asset download from the connected
@@ -309,6 +324,14 @@ namespace Framework::Integrations::Client {
 
         AssetDownloadStatus &GetAssetDownloadStatus() {
             return _downloadStatus;
+        }
+
+        uint64_t GetAssetProcessingGeneration() const {
+            return _assetProcessingGeneration;
+        }
+
+        bool IsInitialAssetProcessingDeferred() const {
+            return _deferredInitialAssetProcessingGeneration != 0;
         }
 
         ConnectionPhase GetConnectionPhase() const {
