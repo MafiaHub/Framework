@@ -68,6 +68,7 @@ set(FRAMEWORK_SERVER_SRC
     src/integrations/server/scripting/module.cpp
 
     src/voice/server/voice_router.cpp
+    src/voice/server/voice_server.cpp
 )
 
 set(FRAMEWORK_CLIENT_SRC

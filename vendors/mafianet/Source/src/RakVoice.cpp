@@ -49,6 +49,11 @@ int MafiaNet::VoiceChannelComp( const RakNetGUID &key, VoiceChannel * const &dat
 RakVoice::RakVoice()
 {
 	bufferedOutput = nullptr;
+	// Only assigned in Init(), but Update() reads them and a relay host never calls Init().
+	// Leaving them indeterminate makes that read UB, and a non-zero zeroBufferedOutput would
+	// send the zeroing loop through the null bufferedOutput for a garbage count.
+	bufferedOutputCount = 0;
+	zeroBufferedOutput = false;
 	defaultVADState = true;
 	defaultDENOISEState = false;
 	defaultVBRState = false;
@@ -196,6 +201,13 @@ void RakVoice::RequestVoiceChannel(RakNetGUID recipient)
 
 void RakVoice::CloseVoiceChannel(RakNetGUID recipient)
 {
+	// Tested before FreeChannelMemory, which removes the entry. Without this a peer that
+	// never opened a channel -- every peer on a server that attaches RakVoice purely as a
+	// relay host -- would still be sent ID_RAKVOICE_CLOSE_CHANNEL on a clean disconnect,
+	// which a client with no RakVoice attached sees as an unknown packet id.
+	if (!voiceChannels.HasData(recipient))
+		return;
+
 	FreeChannelMemory(recipient);
 	MafiaNet::BitStream out;
 	out.Write((unsigned char)ID_RAKVOICE_CLOSE_CHANNEL);
@@ -389,6 +401,15 @@ void RakVoice::Update(void)
 	unsigned char encodedBuffer[MAX_OPUS_PACKET_SIZE];
 	char tempOutput[2048];
 	static const int headerSize = sizeof(unsigned char) + sizeof(unsigned short);
+
+	// A relay host attaches the plugin without ever calling Init(): it forwards payloads
+	// through RelayFrame() and owns no codec. Everything below operates on the buffered
+	// output and the voice channels, neither of which exists before Init(), so there is
+	// genuinely nothing to do -- including for a relay host, whose channel list is always
+	// empty (OnOpenChannelRequest refuses to open one while bufferedOutput is null).
+	if (!IsInitialized())
+		return;
+
 	tempOutput[0] = ID_RAKVOICE_DATA;
 
 	MafiaNet::TimeMS currentTime = MafiaNet::GetTimeMS();
