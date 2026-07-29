@@ -51,8 +51,39 @@ set(HTTPLIB_REQUIRE_OPENSSL ON)
 set(HTTPLIB_COMPILE ON)
 add_subdirectory(httplib)
 
-# Build MafiaNet (networking, vendored fork of RakNet/SLikeNet)
-add_subdirectory(mafianet)
+# MafiaNet (networking) - fetched, not vendored.
+#
+# MafiaNet owns RakVoice, and therefore owns RakVoice's Opus and RNNoise
+# dependencies, which its own build fetches. Vendoring MafiaNet here would mean
+# hoisting those two a level up into this repository: ~85 MB of third-party
+# source, a collision with this repo's `vendors/**/*.cmake` ignore rule, and a
+# re-vendor split across three trees that have to stay in lockstep. Fetching the
+# release instead keeps the dependency boundary where it belongs.
+#
+# This is the only FetchContent in the Framework build; everything else under
+# vendors/ is genuinely vendored in-tree. Building therefore needs network access
+# on a cold configure (the fetch is cached in the build tree afterwards).
+include(FetchContent)
+
+# Framework links the static library only; samples and MafiaNet's own test suite
+# are not our concern.
+set(MAFIANET_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(MAFIANET_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(MAFIANET_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+set(MAFIANET_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+
+# Pinned to a release tag, never a branch: the message-id enum is positional, so
+# an unpinned bump would silently change the wire format. The pin lives in
+# cmake/MafiaNetPin.cmake so the release tooling can watch that one path.
+include(MafiaNetPin)
+
+FetchContent_Declare(
+    MafiaNet
+    GIT_REPOSITORY https://github.com/MafiaHub/MafiaNet.git
+    GIT_TAG        ${MAFIANET_PIN}
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(MafiaNet)
 
 # Build sentry
 set(CURL_STATICLIB ON)

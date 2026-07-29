@@ -25,10 +25,19 @@ fi
 # Default bump type is patch
 BUMP_TYPE="patch"
 
-# Define arrays for directories that trigger a major or minor bump
+# Define arrays for directories that trigger a major or minor bump.
+# Matched as path prefixes against `git diff --name-only`, so a directory entry
+# covers everything beneath it and a file entry matches that file exactly.
 major_paths=(
-    "code/framework/src/networking/messages"
+    # Replaces the long-gone code/framework/src/networking/messages: replication
+    # is where the sync flow lives now.
+    "code/framework/src/networking/replication"
     "code/framework/src/networking/rpc"
+    # MafiaNet is fetched, not vendored, so its headers are not in this tree and a
+    # wire break cannot be detected by path. The pin is the proxy: message ids are
+    # positional, so moving MafiaNet can shift every id and break every peer built
+    # against the old header.
+    "cmake/MafiaNetPin.cmake"
 )
 minor_paths=(
     "code/framework/src/scripting/builtins"

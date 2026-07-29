@@ -66,6 +66,9 @@ set(FRAMEWORK_SERVER_SRC
 
     # JavaScript scripting (server module)
     src/integrations/server/scripting/module.cpp
+
+    src/voice/server/voice_router.cpp
+    src/voice/server/voice_server.cpp
 )
 
 set(FRAMEWORK_CLIENT_SRC
@@ -93,6 +96,8 @@ set(FRAMEWORK_CLIENT_SRC
     src/integrations/client/scripting/builtins/keybinds.cpp
     src/integrations/client/scripting/builtins/chat.cpp
     src/integrations/client/scripting/builtins/discord.cpp
+
+    src/voice/client/mixer.cpp
 )
 
 # GUI (CEF-based)
@@ -195,7 +200,6 @@ macro(link_shared_deps target_name)
         ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
         ${CMAKE_SOURCE_DIR}/vendors/fmt/include
         ${CMAKE_SOURCE_DIR}/vendors/fu2                    # function2 (used in network_peer.h)
-        ${CMAKE_SOURCE_DIR}/vendors/mafianet/Source/include # Networking / MafiaNet (used in connection.h)
         ${CMAKE_SOURCE_DIR}/vendors/cxxopts                # Command-line parsing (used in integrations)
         ${CMAKE_SOURCE_DIR}/vendors                        # sentry, etc.
     )
@@ -221,7 +225,7 @@ macro(link_shared_deps target_name)
     endif()
 
     # Global libraries (v8/v8pp excluded - linked explicitly to scripting targets only)
-    target_link_libraries(${target_name} MafiaNet glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl semver Hash ftl Tracy::TracyClient)
+    target_link_libraries(${target_name} MafiaNet::MafiaNetStatic glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl semver Hash ftl Tracy::TracyClient)
 
     # Required libraries for windows
     if(WIN32)
