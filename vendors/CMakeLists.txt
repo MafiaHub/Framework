@@ -172,6 +172,10 @@ add_subdirectory(v8pp)
 # Build OS specific libraries
 if (WIN32)
     # Build other win32 deps
+    # miniaudio backs the voice capture/playback devices. Scoped to WIN32 because its only
+    # consumer is FrameworkClient, which is itself Windows-only; the library is portable and
+    # can move out of this block whenever a client is built for another platform.
+    add_subdirectory(miniaudio)
     add_subdirectory(minhook)
     add_subdirectory(steamworks)
     add_subdirectory(udis86)

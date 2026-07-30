@@ -89,4 +89,59 @@ MODULE(voice_mixer, {
 
         EQUALS(NearlyEqual(out[0], 1.0f), true);
     });
+
+    IT("leaves normal levels untouched through the limiter", {
+        float out[2] = {0.5f, -0.5f};
+
+        LimitStereoBuffer(out, 1, 1.0f);
+
+        EQUALS(NearlyEqual(out[0], 0.5f), true);
+        EQUALS(NearlyEqual(out[1], -0.5f), true);
+    });
+
+    IT("keeps summed speakers inside the ceiling", {
+        float out[2] = {3.5f, -3.5f};
+
+        LimitStereoBuffer(out, 1, 1.0f);
+
+        EQUALS(out[0] <= 1.0f, true);
+        EQUALS(out[1] >= -1.0f, true);
+        // Still loud, not collapsed towards the knee.
+        EQUALS(out[0] > 0.75f, true);
+    });
+
+    IT("never exceeds the ceiling for any input, including the absurd", {
+        float out[8] = {0.9f, 1.0f, 2.0f, 25.0f, 1000.0f, -1000.0f, -7.5f, -1.2f};
+
+        LimitStereoBuffer(out, 4, 4.0f); // maximum master volume
+
+        for (int i = 0; i < 8; i++) {
+            EQUALS(out[i] <= 1.0f, true);
+            EQUALS(out[i] >= -1.0f, true);
+        }
+    });
+
+    IT("stays monotonic across the knee so loudness still tracks input", {
+        float quiet[2] = {0.70f, 0.0f};
+        float knee[2]  = {0.80f, 0.0f};
+        float loud[2]  = {1.60f, 0.0f};
+
+        LimitStereoBuffer(quiet, 1, 1.0f);
+        LimitStereoBuffer(knee, 1, 1.0f);
+        LimitStereoBuffer(loud, 1, 1.0f);
+
+        EQUALS(knee[0] > quiet[0], true);
+        EQUALS(loud[0] > knee[0], true);
+    });
+
+    IT("applies master volume before limiting", {
+        float half[2] = {0.5f, 0.0f};
+        float muted[2] = {0.5f, 0.0f};
+
+        LimitStereoBuffer(half, 1, 0.5f);
+        LimitStereoBuffer(muted, 1, 0.0f);
+
+        EQUALS(NearlyEqual(half[0], 0.25f), true);
+        EQUALS(NearlyEqual(muted[0], 0.0f), true);
+    });
 });

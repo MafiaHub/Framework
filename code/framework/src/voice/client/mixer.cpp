@@ -23,6 +23,24 @@ namespace Framework::Voice {
         // How far the pan is allowed to swing. A full hard pan sounds wrong on headphones
         // for a speaker only slightly off-axis, so the effect is deliberately partial.
         constexpr float kMaxPan = 0.6f;
+
+        // Where the limiter stops being transparent; above it sums are bent towards the
+        // ceiling instead of sliced off.
+        constexpr float kLimiterKnee = 0.75f;
+
+        // Unity gain and C1-continuous at the knee, asymptotic to the ceiling above it, so
+        // no input can exceed 1.0 and there is no audible seam where limiting begins.
+        float SoftLimit(float sample) {
+            const float magnitude = std::fabs(sample);
+            if (magnitude <= kLimiterKnee) {
+                return sample;
+            }
+
+            const float headroom = 1.0f - kLimiterKnee;
+            const float excess   = (magnitude - kLimiterKnee) / headroom;
+            const float limited  = kLimiterKnee + headroom * (excess / (1.0f + excess));
+            return sample < 0.0f ? -limited : limited;
+        }
     } // namespace
 
     SpeakerGain ComputeGain(const ListenerTransform &listener, const glm::vec3 &speakerPos, float range) {
@@ -71,6 +89,13 @@ namespace Framework::Voice {
             const float sample = static_cast<float>(monoIn[i]) * kInt16Scale;
             stereoOut[i * 2]     += sample * gain.left;
             stereoOut[i * 2 + 1] += sample * gain.right;
+        }
+    }
+
+    void LimitStereoBuffer(float *stereoOut, uint32_t samples, float volume) {
+        const size_t values = static_cast<size_t>(samples) * 2;
+        for (size_t i = 0; i < values; i++) {
+            stereoOut[i] = SoftLimit(stereoOut[i] * volume);
         }
     }
 } // namespace Framework::Voice
