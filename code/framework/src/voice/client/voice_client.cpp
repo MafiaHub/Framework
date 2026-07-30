@@ -242,15 +242,16 @@ namespace Framework::Voice {
         _attached = true;
 
         _sink = &_localSink;
-        if (!_localSink.Start()) {
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: playback unavailable; remote players will be inaudible");
-        }
 
-        if (!_capture.Start()) {
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: no microphone; push-to-talk will do nothing");
-        }
-
-        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Voice client ready (microphone: {}, playback: {})", _capture.IsRunning(), _localSink.IsRunning());
+        // Devices are deliberately NOT opened here. A client Instance is initialized from inside
+        // the host game's startup, which for an injected mod can be before the game has run any of
+        // its own: miniaudio's WASAPI backend calls CoInitializeEx(COINIT_MULTITHREADED) on the
+        // calling thread and holds it for the device's lifetime, so opening one here claims the
+        // host's main thread for the MTA. A game that then wants an STA main thread -- Unreal
+        // OleInitializes one for drag-and-drop -- gets RPC_E_CHANGED_MODE and never finishes
+        // booting. Waiting for the session means the host has established its own apartment first
+        // and miniaudio inherits it.
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Voice client attached; devices open with the session");
         return true;
     }
 
@@ -304,7 +305,8 @@ namespace Framework::Voice {
         _voice.SetRelayTarget(server);
 
         _sessionOpen = true;
-        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Voice session open (relay {}, self {})", server.g, _self.g);
+        StartDevices();
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Voice session open (relay {}, self {}, microphone {}, playback {})", server.g, _self.g, _capture.IsRunning(), _localSink.IsRunning());
     }
 
     void VoiceClient::CloseSession() {
@@ -327,7 +329,27 @@ namespace Framework::Voice {
         _sessionOpen  = false;
         _transmitting = false;
 
+        // Nothing to capture or play between servers, and holding the microphone open there would
+        // leave the OS recording indicator lit in the main menu.
+        StopDevices();
+
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Voice session closed");
+    }
+
+    void VoiceClient::StartDevices() {
+        // Idempotent: both return true when already running.
+        if (_sink == &_localSink && !_localSink.Start()) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: playback unavailable; remote players will be inaudible");
+        }
+
+        if (!_capture.Start()) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: no microphone; push-to-talk will do nothing");
+        }
+    }
+
+    void VoiceClient::StopDevices() {
+        _capture.Stop();
+        _localSink.Stop();
     }
 
     void VoiceClient::UpdateSession() {
@@ -581,7 +603,10 @@ namespace Framework::Voice {
         _sink = next;
 
         if (next == &_localSink) {
-            _localSink.Start();
+            // Outside a session there is no device open to hand back to; OpenSession starts it.
+            if (_sessionOpen) {
+                _localSink.Start();
+            }
         }
         else {
             // Only one renderer at a time.

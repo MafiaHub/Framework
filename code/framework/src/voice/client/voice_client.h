@@ -116,8 +116,7 @@ namespace Framework::Voice {
         VoiceClient(const VoiceClient &)            = delete;
         VoiceClient &operator=(const VoiceClient &) = delete;
 
-        // Attaches to the peer and opens the audio devices. A missing microphone still
-        // returns true: the client degrades to listen-only.
+        // Attaches to the peer. The audio devices open with the relay session rather than here.
         bool Init(Networking::NetworkClient *client);
         // Idempotent.
         void Shutdown();
@@ -135,7 +134,8 @@ namespace Framework::Voice {
             return _pushToTalkHeld;
         }
 
-        // False when there is no capture device; the client is listen-only.
+        // False outside a session, and inside one when there is no capture device -- the client is
+        // listen-only.
         bool HasMicrophone() const {
             return _capture.IsRunning();
         }
@@ -207,6 +207,12 @@ namespace Framework::Voice {
         void UpdateSession();
         void OpenSession();
         void CloseSession();
+
+        // Opened with the session, not at Init: miniaudio's WASAPI backend CoInitializes the
+        // calling thread into the MTA and holds it, and an injected mod's Init can run before the
+        // host game has chosen its own apartment. See Init.
+        void StartDevices();
+        void StopDevices();
 
         void PumpCapture();
         void PumpSpeakers();
