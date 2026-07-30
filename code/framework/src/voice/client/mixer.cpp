@@ -15,10 +15,12 @@ namespace Framework::Voice {
     namespace {
         constexpr float kInt16Scale = 1.0f / 32768.0f;
 
-        // Below this distance a speaker is at full volume; attenuation starts beyond it.
-        // Without it, a speaker standing on top of the listener produces a division blow-up
-        // and an unpleasant volume spike as they cross the origin.
-        constexpr float kMinDistance = 1.0f;
+        // Within this fraction of `range` a speaker is at full volume; beyond it attenuation
+        // starts, and the floor keeps a speaker crossing the listener's own position from blowing
+        // up the division. A fraction rather than an absolute distance so the curve is scale
+        // invariant: a centimetre-scale game passes a proportionally larger range and gets the
+        // same rolloff in physical terms. 1/25 leaves the default range's radius at 1.0.
+        constexpr float kFullVolumeFraction = 1.0f / 25.0f;
 
         // How far the pan is allowed to swing. A full hard pan sounds wrong on headphones
         // for a speaker only slightly off-axis, so the effect is deliberately partial.
@@ -55,8 +57,9 @@ namespace Framework::Voice {
 
         // Inverse-distance rolloff, normalised so it reaches zero exactly at `range` rather
         // than trailing off asymptotically and leaving a faint always-audible tail.
-        const float clamped     = std::max(distance, kMinDistance);
-        const float rolloff     = kMinDistance / clamped;
+        const float fullVolume  = range * kFullVolumeFraction;
+        const float clamped     = std::max(distance, fullVolume);
+        const float rolloff     = fullVolume / clamped;
         const float edgeFade    = 1.0f - (distance / range);
         const float attenuation = std::clamp(rolloff * edgeFade, 0.0f, 1.0f);
 
