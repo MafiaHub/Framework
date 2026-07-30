@@ -77,11 +77,14 @@ set(MAFIANET_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 # cmake/MafiaNetPin.cmake so the release tooling can watch that one path.
 include(MafiaNetPin)
 
+# No GIT_SHALLOW: it makes CMake clone the default branch at depth 1 and then check the
+# pin out of it, which only resolves while the pinned commit is still that branch's tip.
+# Any later MafiaNet commit leaves the pin unreachable and a cold configure dies with
+# "unable to read tree". A full clone is the cost of pinning by commit at all.
 FetchContent_Declare(
     MafiaNet
     GIT_REPOSITORY https://github.com/MafiaHub/MafiaNet.git
     GIT_TAG        ${MAFIANET_PIN}
-    GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(MafiaNet)
 
