@@ -35,4 +35,10 @@ namespace Framework::Voice {
     // applying `gain`. Adds rather than assigns so several speakers can be layered.
     // `stereoOut` must hold at least samples * 2 floats.
     void MixFrameInto(float *stereoOut, const int16_t *monoIn, uint32_t samples, SpeakerGain gain);
+
+    // Applies `volume` and bends the result into [-1, 1]. The counterpart to MixFrameInto's
+    // deliberate lack of clamping, which cannot know how many speakers will sum. Transparent
+    // at normal levels rather than slicing peaks flat the way a hard clamp does.
+    // `stereoOut` holds samples * 2 floats. Pure: no state, safe on the audio thread.
+    void LimitStereoBuffer(float *stereoOut, uint32_t samples, float volume);
 } // namespace Framework::Voice

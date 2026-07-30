@@ -21,6 +21,7 @@
 #include "networking/engine.h"
 #include "networking/rpc/chat_message.h"
 #include "integrations/client/ui/chat_box.h"
+#include "voice/client/voice_client.h"
 #include <mafianet/FileListTransferCBInterface.h>
 
 #include <cstdint>
@@ -179,6 +180,10 @@ namespace Framework::Integrations::Client {
 
         UI::ChatBox _chatBox;
 
+        // Unconditional: no InstanceOptions switch. A client with no microphone degrades to
+        // listen-only rather than opting out.
+        Voice::VoiceClient _voiceClient;
+
         void InitNetworkingMessages();
         void InitAssetDownloader();
         void InitProtocolHandler();
@@ -293,6 +298,10 @@ namespace Framework::Integrations::Client {
 
         Networking::Engine *GetNetworkingEngine() const {
             return _networkingEngine.get();
+        }
+
+        Voice::VoiceClient &GetVoiceClient() {
+            return _voiceClient;
         }
 
         External::Discord::Wrapper *GetPresence() const {

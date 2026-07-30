@@ -98,6 +98,8 @@ set(FRAMEWORK_CLIENT_SRC
     src/integrations/client/scripting/builtins/discord.cpp
 
     src/voice/client/mixer.cpp
+    src/voice/client/audio_device.cpp
+    src/voice/client/voice_client.cpp
 )
 
 # GUI (CEF-based)
@@ -362,6 +364,10 @@ if(WIN32)
 
     set(CLIENT_SHARED_LIBS minhook SteamSDK udis86)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} ${FREETYPE_LIBRARY})
+
+    # Voice capture/playback. PUBLIC on the miniaudio side, so the feature-trimming defines
+    # and the include directory reach anything that pulls in the voice client.
+    target_link_libraries(FrameworkClient miniaudio)
 
     # FrameworkClient-specific includes (Windows graphics, hooking, external services)
     target_include_directories(FrameworkClient PRIVATE

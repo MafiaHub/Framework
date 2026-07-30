@@ -24,4 +24,4 @@
 # tree, so bumping the pin here and rebuilding incrementally would silently keep
 # fetching the old revision. This file is the single source of truth, and there is
 # no reason to let -D override the wire format of the protocol.
-set(MAFIANET_PIN "a515c827e01868ecc6be26ee82e4da7a04955f77") # v0.13.0
+set(MAFIANET_PIN "caf9469af4bdb7dfc83616aa3a660a5511181f5f") # v0.13.0 + RakVoice::SetMaxDecodedSpeakers

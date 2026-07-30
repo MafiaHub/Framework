@@ -326,6 +326,15 @@ namespace Framework::Integrations::Client {
             }
             CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkClient());
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Networking engine initialized");
+
+            // Attaches RakVoice to the live peer, so it must follow the networking engine.
+            // The relay session itself opens later, on connect.
+            if (_voiceClient.Init(_networkingEngine->GetNetworkClient())) {
+                CoreModules::SetVoiceClient(&_voiceClient);
+            }
+            else {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice client unavailable; voice chat disabled");
+            }
         }
 
         CoreModules::SetWebManager(_webManager.get());
@@ -440,6 +449,9 @@ namespace Framework::Integrations::Client {
             _presence->Shutdown();
         }
 
+        // Before the networking engine: this detaches the plugin from the peer.
+        _voiceClient.Shutdown();
+
         if (_networkingEngine) {
             _networkingEngine->Shutdown();
         }
@@ -458,6 +470,7 @@ namespace Framework::Integrations::Client {
 
         CoreModules::SetScriptingModule(nullptr);
         CoreModules::SetWebManager(nullptr);
+        CoreModules::SetVoiceClient(nullptr);
         CoreModules::SetNetworkPeer(nullptr);
         CoreModules::SetReplication(nullptr);
         CoreModules::SetInput(nullptr);
@@ -520,6 +533,31 @@ namespace Framework::Integrations::Client {
         FW_PROFILE_SCOPE_N("Client::Networking");
         _networkingEngine->Update();
         TrySignalConnectionSpawnReady();
+
+        // After the peer pump: RakVoice decodes inbound frames from inside RakPeer::Receive,
+        // so draining speakers here picks up this tick's audio rather than last tick's.
+        {
+            FW_PROFILE_SCOPE_N("Client::Voice");
+
+            // The chat box and web views belong to the framework, so it enforces this itself
+            // rather than trusting every mod to remember.
+            _voiceClient.SetInputSuppressed(_chatBox.IsInputActive() || (_webManager && _webManager->IsAnyViewFocused()));
+
+            // Speaker positions come from the replicated entity set, as the server's voice
+            // router gets them: an owner GUID means a player-controlled entity. Done here so
+            // a mod only has to supply the listener transform.
+            if (auto *replication = _networkingEngine->GetNetworkClient()->GetReplicationManager()) {
+                _voiceClient.BeginSpeakerUpdate();
+                replication->ForEachEntity([this](Framework::Networking::Replication::NetworkEntity *entity) {
+                    if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+                        _voiceClient.SetSpeakerPosition(static_cast<uint64_t>(entity->ownerGUID), entity->position);
+                    }
+                });
+                _voiceClient.EndSpeakerUpdate();
+            }
+
+            _voiceClient.Update();
+        }
     }
 
     void Instance::Render() {
