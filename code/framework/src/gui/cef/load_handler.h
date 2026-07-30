@@ -8,30 +8,22 @@
 
 #pragma once
 
-#include <fu2/function2.hpp>
-#include <string>
+#include "gui/view_events.h"
 
 #include "include/cef_load_handler.h"
 
 namespace Framework::GUI::CEF {
-    using OnDOMReadyCallback          = fu2::function<void(const std::string &, bool, const std::string &)>;
-    using OnWindowObjectReadyCallback = fu2::function<void(const std::string &, bool, const std::string &)>;
-
     class LoadHandler final: public CefLoadHandler {
       private:
-        OnDOMReadyCallback _onDOMReadyCallback;
-        OnWindowObjectReadyCallback _onWindowObjectReadyCallback;
+        OnViewEventCallback _onViewEvent;
 
       public:
-        void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override;
         void OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transitionType) override;
+        void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override;
+        void OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode, const CefString &errorText, const CefString &failedUrl) override;
 
-        void SetOnDOMReadyCallback(OnDOMReadyCallback cb) {
-            _onDOMReadyCallback = std::move(cb);
-        }
-
-        void SetOnWindowObjectReadyCallback(OnWindowObjectReadyCallback cb) {
-            _onWindowObjectReadyCallback = std::move(cb);
+        void SetViewEventCallback(OnViewEventCallback cb) {
+            _onViewEvent = std::move(cb);
         }
 
         IMPLEMENT_REFCOUNTING(LoadHandler);

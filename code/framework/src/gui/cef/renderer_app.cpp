@@ -47,4 +47,31 @@ namespace Framework::GUI::CEF {
         CefRefPtr<CefV8Value> func    = CefV8Value::CreateFunction("callEvent", handler);
         global->SetValue("callEvent", func, V8_PROPERTY_ATTRIBUTE_NONE);
     }
+
+    // The DOM is only reachable here, so the browser process cannot decide this for itself.
+    void RendererApp::OnFocusedNodeChanged(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefDOMNode> node) {
+        if (!browser) {
+            return;
+        }
+
+        const bool typing = node && node->GetType() == CefDOMNode::Type::DOM_NODE_TYPE_ELEMENT && node->GetFormControlElementType() != CefDOMNode::FormControlType::DOM_FORM_CONTROL_TYPE_UNSUPPORTED;
+
+        bool &previous = _inputFocus[browser->GetIdentifier()];
+        if (previous == typing) {
+            return;
+        }
+        previous = typing;
+
+        auto message = CefProcessMessage::Create("InputFocus");
+        message->GetArgumentList()->SetBool(0, typing);
+        if (auto mainFrame = browser->GetMainFrame()) {
+            mainFrame->SendProcessMessage(PID_BROWSER, message);
+        }
+    }
+
+    void RendererApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) {
+        if (browser) {
+            _inputFocus.erase(browser->GetIdentifier());
+        }
+    }
 } // namespace Framework::GUI::CEF

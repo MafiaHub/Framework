@@ -38,15 +38,43 @@ namespace Framework::GUI::CEF {
             break;
         }
 
-        if (_onConsoleMessageCallback) {
-            _onConsoleMessageCallback(msg, static_cast<uint32_t>(line), 0, src);
+        if (_onViewEvent) {
+            ViewEventData data;
+            data.event    = ViewEvent::ConsoleMessage;
+            data.message  = msg;
+            data.source   = src;
+            data.line     = line;
+            data.severity = static_cast<int>(level);
+            _onViewEvent(data);
         }
 
         return true;
     }
 
     bool DisplayHandler::OnCursorChange(CefRefPtr<CefBrowser> browser, CefCursorHandle cursor, cef_cursor_type_t type, const CefCursorInfo &customCursorInfo) {
+        const bool changed = _currentCursorType != type;
         _currentCursorType = type;
+
+        // Blink re-asserts the cursor every hover tick; report transitions only.
+        if (changed && _onViewEvent) {
+            ViewEventData data;
+            data.event      = ViewEvent::CursorChange;
+            data.cursorType = static_cast<int>(type);
+            _onViewEvent(data);
+        }
+
+        return true;
+    }
+
+    bool DisplayHandler::OnTooltip(CefRefPtr<CefBrowser> browser, CefString &text) {
+        if (_onViewEvent) {
+            ViewEventData data;
+            data.event   = ViewEvent::Tooltip;
+            data.tooltip = text.ToString();
+            _onViewEvent(data);
+        }
+
+        // windowless: no window to host a native tooltip, the script draws it
         return true;
     }
 } // namespace Framework::GUI::CEF

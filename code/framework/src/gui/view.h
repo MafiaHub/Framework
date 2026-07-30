@@ -25,6 +25,7 @@
 
 #include "graphics/renderer.h"
 #include "sdk.h"
+#include "view_events.h"
 
 #include "include/cef_browser.h"
 
@@ -35,17 +36,14 @@
 #include "cef/render_handler.h"
 
 namespace Framework::GUI {
-    using OnConsoleMessageCallback    = fu2::function<void(const std::string &, uint32_t, uint32_t, const std::string &)>;
-    using OnDOMReadyCallback          = fu2::function<void(const std::string &, bool, const std::string &)>;
-    using OnWindowObjectReadyCallback = fu2::function<void(const std::string &, bool, const std::string &)>;
-
     class Manager;
 
     class View {
       private:
-        OnConsoleMessageCallback _onConsoleMessageCallback;
-        OnDOMReadyCallback _onDOMReadyCallback;
-        OnWindowObjectReadyCallback _onWindowObjectReadyCallback;
+        OnViewEventCallback _onViewEventCallback;
+
+        // CEF raises Created inside Init, before any caller can subscribe.
+        bool _created = false;
 
       protected:
         CefRefPtr<CefBrowser> _browser;
@@ -80,6 +78,8 @@ namespace Framework::GUI {
         glm::vec2 _cursorPos {};
         bool _isMouseDown = false;
         int _id;
+
+        void EmitViewEvent(const ViewEventData &data);
 
       public:
         View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);
@@ -203,16 +203,13 @@ namespace Framework::GUI {
             return CT_POINTER;
         }
 
-        inline void SetOnConsoleMessageCallback(OnConsoleMessageCallback proc) {
-            _onConsoleMessageCallback = std::move(proc);
+        // Single slot. Runs on the CEF-pumping thread, inside a CEF handler.
+        inline void SetOnViewEventCallback(OnViewEventCallback proc) {
+            _onViewEventCallback = std::move(proc);
         }
 
-        inline void SetOnDOMReadyCallback(OnDOMReadyCallback proc) {
-            _onDOMReadyCallback = std::move(proc);
-        }
-
-        inline void SetOnWindowObjectReadyCallback(OnWindowObjectReadyCallback proc) {
-            _onWindowObjectReadyCallback = std::move(proc);
+        bool IsCreated() const {
+            return _created;
         }
 
         inline void SetOnBeforeBrowseCallback(CEF::OnBeforeBrowseCallback cb) {

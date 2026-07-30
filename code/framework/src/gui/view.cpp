@@ -69,29 +69,16 @@ namespace Framework::GUI {
             }
         }
 
-        // Wire up callbacks through handlers
-        _loadHandler->SetOnDOMReadyCallback([this](const std::string &frameId, bool isMainFrame, const std::string &frameUrl) {
-            if (_onDOMReadyCallback) {
-                _onDOMReadyCallback(frameId, isMainFrame, frameUrl);
-            }
-        });
-        _loadHandler->SetOnWindowObjectReadyCallback([this](const std::string &frameId, bool isMainFrame, const std::string &frameUrl) {
-            // Initialize SDK when window object is ready
-            if (_sdk && _browser) {
-                (void)_sdk->Init(_browser);
-            }
-            if (_onWindowObjectReadyCallback) {
-                _onWindowObjectReadyCallback(frameId, isMainFrame, frameUrl);
-            }
-        });
-        _displayHandler->SetOnConsoleMessageCallback([this](const std::string &msg, uint32_t line, uint32_t col, const std::string &source) {
-            if (_onConsoleMessageCallback) {
-                _onConsoleMessageCallback(msg, line, col, source);
-            }
-        });
+        const auto forward = [this](const ViewEventData &data) {
+            EmitViewEvent(data);
+        };
+        _loadHandler->SetViewEventCallback(forward);
+        _displayHandler->SetViewEventCallback(forward);
+        _lifeSpanHandler->SetViewEventCallback(forward);
 
         // Create CEF client
         _cefClient = new CEF::Client(_renderHandler, _lifeSpanHandler, _loadHandler, _displayHandler, _sdk.get());
+        _cefClient->SetViewEventCallback(forward);
 
         // Configure windowless rendering
         CefWindowInfo windowInfo;
@@ -129,6 +116,21 @@ namespace Framework::GUI {
         }
     }
 
+    void View::EmitViewEvent(const ViewEventData &data) {
+        if (data.event == ViewEvent::Created) {
+            _created = true;
+        }
+
+        // window object exists from main-frame load start; bind before anything talks to the page
+        if (data.event == ViewEvent::LoadingStart && data.isMainFrame && _sdk && _browser) {
+            (void)_sdk->Init(_browser);
+        }
+
+        if (_onViewEventCallback) {
+            _onViewEventCallback(data);
+        }
+    }
+
     void View::LockToOrigin(const std::string &url) {
         if (!_lifeSpanHandler) {
             return;
@@ -139,7 +141,17 @@ namespace Framework::GUI {
             Framework::Logging::GetLogger("Web")->warn("View {}: cannot derive origin from '{}', locking view down", _id, url);
             origin = "null";
         }
-        _lifeSpanHandler->SetAllowedOrigin(std::move(origin));
+
+        if (_lifeSpanHandler->GetAllowedOrigin() == origin) {
+            return;
+        }
+        _lifeSpanHandler->SetAllowedOrigin(origin);
+
+        ViewEventData data;
+        data.event  = ViewEvent::OriginChange;
+        data.origin = std::move(origin);
+        data.url    = url;
+        EmitViewEvent(data);
     }
 
     void View::LoadURL(const std::string &url) {

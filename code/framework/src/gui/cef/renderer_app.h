@@ -9,8 +9,11 @@
 #pragma once
 
 #include "include/cef_app.h"
+#include "include/cef_dom.h"
 #include "include/cef_render_process_handler.h"
 #include "include/cef_v8.h"
+
+#include <unordered_map>
 
 namespace Framework::GUI::CEF {
     class CallEventHandler final: public CefV8Handler {
@@ -26,12 +29,18 @@ namespace Framework::GUI::CEF {
     };
 
     class RendererApp final: public CefApp, public CefRenderProcessHandler {
+      private:
+        // browser id -> form control focused; a renderer process can host several browsers
+        std::unordered_map<int, bool> _inputFocus;
+
       public:
         CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override {
             return this;
         }
 
         void OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) override;
+        void OnFocusedNodeChanged(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefDOMNode> node) override;
+        void OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) override;
 
         IMPLEMENT_REFCOUNTING(RendererApp);
     };

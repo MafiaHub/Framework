@@ -10,6 +10,8 @@
 
 #include <utils/safe_win32.h>
 
+#include "gui/view_events.h"
+
 #include "include/cef_client.h"
 
 #include "display_handler.h"
@@ -29,6 +31,7 @@ namespace Framework::GUI::CEF {
         CefRefPtr<LoadHandler> _loadHandler;
         CefRefPtr<DisplayHandler> _displayHandler;
         SDK *_sdk = nullptr;
+        OnViewEventCallback _onViewEvent;
 
       public:
         Client(CefRefPtr<RenderHandler> renderHandler, CefRefPtr<LifeSpanHandler> lifeSpanHandler, CefRefPtr<LoadHandler> loadHandler, CefRefPtr<DisplayHandler> displayHandler, SDK *sdk);
@@ -54,6 +57,10 @@ namespace Framework::GUI::CEF {
         }
 
         bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId sourceProcess, CefRefPtr<CefProcessMessage> message) override;
+
+        void SetViewEventCallback(OnViewEventCallback cb) {
+            _onViewEvent = std::move(cb);
+        }
 
         IMPLEMENT_REFCOUNTING(Client);
     };

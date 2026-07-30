@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "gui/view_events.h"
+
 #include "include/cef_life_span_handler.h"
 #include "include/cef_request_handler.h"
 #include <atomic>
@@ -16,15 +18,15 @@
 
 namespace Framework::GUI::CEF {
     using OnBeforeBrowseCallback = std::function<bool(CefURLParts, CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, bool, bool)>;
-    
+
     class LifeSpanHandler final
         : public CefLifeSpanHandler
         , public CefRequestHandler {
       private:
         CefRefPtr<CefBrowser> _browser;
 
-        std::function<void(CefRefPtr<CefBrowser>)> _onAfterCreated;
         OnBeforeBrowseCallback _onBeforeBrowse;
+        OnViewEventCallback _onViewEvent;
 
         // Non-empty = origin lock: rejects cross-origin main-frame navigation and page events.
         std::string _allowedOrigin;
@@ -37,11 +39,12 @@ namespace Framework::GUI::CEF {
             return s_liveBrowserCount.load();
         }
 
-        void SetOnAfterCreatedCallback(std::function<void(CefRefPtr<CefBrowser>)> cb) {
-            _onAfterCreated = std::move(cb);
-        }
         void SetOnBeforeBrowseCallback(OnBeforeBrowseCallback cb) {
             _onBeforeBrowse = std::move(cb);
+        }
+
+        void SetViewEventCallback(OnViewEventCallback cb) {
+            _onViewEvent = std::move(cb);
         }
 
         void SetAllowedOrigin(std::string origin) {
@@ -54,6 +57,9 @@ namespace Framework::GUI::CEF {
 
         // "scheme://host[:port]" lowercased, empty when unparsable (data:, about:).
         static std::string OriginFromURL(const CefString &url);
+
+        // Host component of a URL, empty when unparsable. Names the blocked party in ResourceBlocked.
+        static std::string HostFromURL(const CefString &url);
 
         void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
         bool OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int popupId, const CefString &targetUrl, const CefString &targetFrameName, CefLifeSpanHandler::WindowOpenDisposition targetDisposition, bool userGesture, const CefPopupFeatures &popupFeatures, CefWindowInfo &windowInfo, CefRefPtr<CefClient> &client, CefBrowserSettings &settings, CefRefPtr<CefDictionaryValue> &extraInfo, bool *noJavascriptAccess) override;

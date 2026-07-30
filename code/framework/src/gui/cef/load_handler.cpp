@@ -9,23 +9,42 @@
 #include "load_handler.h"
 
 namespace Framework::GUI::CEF {
-    void LoadHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) {
-        if (!frame->IsMain()) {
+    void LoadHandler::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transitionType) {
+        if (!_onViewEvent || !frame) {
             return;
         }
 
-        if (_onDOMReadyCallback) {
-            _onDOMReadyCallback(frame->GetIdentifier().ToString(), true, frame->GetURL().ToString());
-        }
+        ViewEventData data;
+        data.event       = ViewEvent::LoadingStart;
+        data.url         = frame->GetURL().ToString();
+        data.isMainFrame = frame->IsMain();
+        _onViewEvent(data);
     }
 
-    void LoadHandler::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transitionType) {
-        if (!frame->IsMain()) {
+    void LoadHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) {
+        // main frame only: sub-frames finish independently of "the document is ready"
+        if (!_onViewEvent || !frame || !frame->IsMain()) {
             return;
         }
 
-        if (_onWindowObjectReadyCallback) {
-            _onWindowObjectReadyCallback(frame->GetIdentifier().ToString(), true, frame->GetURL().ToString());
+        ViewEventData data;
+        data.event       = ViewEvent::DocumentReady;
+        data.url         = frame->GetURL().ToString();
+        data.isMainFrame = true;
+        _onViewEvent(data);
+    }
+
+    void LoadHandler::OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode, const CefString &errorText, const CefString &failedUrl) {
+        if (!_onViewEvent) {
+            return;
         }
+
+        ViewEventData data;
+        data.event       = ViewEvent::LoadingFailed;
+        data.url         = failedUrl.ToString();
+        data.description = errorText.ToString();
+        data.errorCode   = static_cast<int>(errorCode);
+        data.isMainFrame = frame && frame->IsMain();
+        _onViewEvent(data);
     }
 } // namespace Framework::GUI::CEF
