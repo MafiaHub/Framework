@@ -218,8 +218,9 @@ namespace Framework::Integrations::Client::Scripting {
                 Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);
             }
 
-            // Poll keys and dispatch key binds (self-scopes the isolate).
+            // Both self-scope the isolate.
             Builtins::Keybinds::Update();
+            Builtins::Web::Update();
         }
     }
 

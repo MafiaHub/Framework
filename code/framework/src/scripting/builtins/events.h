@@ -96,6 +96,17 @@ namespace Framework::Scripting::Builtins {
                               const std::vector<v8::Local<v8::Value>> &args);
 
         /**
+         * Emit a native event to the global handlers of one resource only, for events the
+         * framework can attribute to an owner. Returns a Promise that resolves when all
+         * handlers complete.
+         */
+        v8::Local<v8::Promise> EmitReservedTo(v8::Isolate *isolate,
+                                              v8::Local<v8::Context> context,
+                                              const std::string &eventName,
+                                              const std::vector<v8::Local<v8::Value>> &args,
+                                              const std::string &resourceName);
+
+        /**
          * Emit a client-originated event from native code. Dispatched ONLY to onClient()
          * handlers, which live in a table separate from the native/global bus — so a
          * client-supplied event name can never resolve to an on() handler. Returns a Promise

@@ -770,6 +770,10 @@ namespace Framework::Scripting::Builtins {
         return proceed;
     }
 
+    v8::Local<v8::Promise> Events::EmitReservedTo(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &resourceName) {
+        return EmitInternal(isolate, context, eventName, args, resourceName, HandlerScope::Global);
+    }
+
     v8::Local<v8::Promise> Events::EmitClient(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args) {
         return EmitInternal(isolate, context, eventName, args, "", HandlerScope::Client);
     }

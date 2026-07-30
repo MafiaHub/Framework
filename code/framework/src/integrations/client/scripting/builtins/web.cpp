@@ -13,6 +13,7 @@
 #include <gui/manager.h>
 #include <gui/view.h>
 
+#include <scripting/builtins/events.h>
 #include <scripting/engine.h>
 #include <scripting/engine_helpers.h>
 #include <scripting/resource/resource.h>
@@ -24,11 +25,100 @@
 #include <v8pp/convert.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
+#include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
     namespace {
+        // Keep in sync with the payload builder, the catalog metadata, and the docs.
+        constexpr std::array<std::pair<Framework::GUI::ViewEvent, std::string_view>, 12> kViewEventNames {{
+            {Framework::GUI::ViewEvent::Created, "browserCreated"},
+            {Framework::GUI::ViewEvent::LoadingStart, "browserLoadingStart"},
+            {Framework::GUI::ViewEvent::DocumentReady, "browserDocumentReady"},
+            {Framework::GUI::ViewEvent::LoadingFailed, "browserLoadingFailed"},
+            {Framework::GUI::ViewEvent::Navigate, "browserNavigate"},
+            {Framework::GUI::ViewEvent::Popup, "browserPopup"},
+            {Framework::GUI::ViewEvent::CursorChange, "browserCursorChange"},
+            {Framework::GUI::ViewEvent::Tooltip, "browserTooltip"},
+            {Framework::GUI::ViewEvent::InputFocusChange, "browserInputFocusChange"},
+            {Framework::GUI::ViewEvent::ResourceBlocked, "browserResourceBlocked"},
+            {Framework::GUI::ViewEvent::ConsoleMessage, "browserConsoleMessage"},
+            {Framework::GUI::ViewEvent::OriginChange, "browserOriginChange"},
+        }};
+
+        std::string_view ViewEventName(Framework::GUI::ViewEvent event) {
+            for (const auto &[value, name] : kViewEventNames) {
+                if (value == event) {
+                    return name;
+                }
+            }
+            return {};
+        }
+
+        const char *BlockReasonName(Framework::GUI::ViewBlockReason reason) {
+            switch (reason) {
+            case Framework::GUI::ViewBlockReason::CrossOrigin: return "cross-origin";
+            case Framework::GUI::ViewBlockReason::InvalidURL: return "invalid-url";
+            case Framework::GUI::ViewBlockReason::HostFilter: return "host-filter";
+            case Framework::GUI::ViewBlockReason::ForeignEvent: return "foreign-event";
+            }
+            return "unknown";
+        }
+
+        // Panning and drag-and-drop shapes have no CSS name; they report as "custom".
+        const char *CursorTypeName(int type) {
+            switch (static_cast<cef_cursor_type_t>(type)) {
+            case CT_POINTER: return "default";
+            case CT_CROSS: return "crosshair";
+            case CT_HAND: return "pointer";
+            case CT_IBEAM: return "text";
+            case CT_WAIT: return "wait";
+            case CT_HELP: return "help";
+            case CT_EASTRESIZE: return "e-resize";
+            case CT_NORTHRESIZE: return "n-resize";
+            case CT_NORTHEASTRESIZE: return "ne-resize";
+            case CT_NORTHWESTRESIZE: return "nw-resize";
+            case CT_SOUTHRESIZE: return "s-resize";
+            case CT_SOUTHEASTRESIZE: return "se-resize";
+            case CT_SOUTHWESTRESIZE: return "sw-resize";
+            case CT_WESTRESIZE: return "w-resize";
+            case CT_NORTHSOUTHRESIZE: return "ns-resize";
+            case CT_EASTWESTRESIZE: return "ew-resize";
+            case CT_NORTHEASTSOUTHWESTRESIZE: return "nesw-resize";
+            case CT_NORTHWESTSOUTHEASTRESIZE: return "nwse-resize";
+            case CT_COLUMNRESIZE: return "col-resize";
+            case CT_ROWRESIZE: return "row-resize";
+            case CT_MOVE: return "move";
+            case CT_VERTICALTEXT: return "vertical-text";
+            case CT_CELL: return "cell";
+            case CT_CONTEXTMENU: return "context-menu";
+            case CT_ALIAS: return "alias";
+            case CT_PROGRESS: return "progress";
+            case CT_NODROP: return "no-drop";
+            case CT_COPY: return "copy";
+            case CT_NONE: return "none";
+            case CT_NOTALLOWED: return "not-allowed";
+            case CT_ZOOMIN: return "zoom-in";
+            case CT_ZOOMOUT: return "zoom-out";
+            case CT_GRAB: return "grab";
+            case CT_GRABBING: return "grabbing";
+            default: return "custom";
+            }
+        }
+
+        const char *ConsoleSeverityName(int severity) {
+            switch (static_cast<cef_log_severity_t>(severity)) {
+            case LOGSEVERITY_DEBUG: return "debug";
+            case LOGSEVERITY_WARNING: return "warning";
+            case LOGSEVERITY_ERROR: return "error";
+            case LOGSEVERITY_FATAL: return "fatal";
+            default: return "info";
+            }
+        }
+
         void ThrowError(v8::Isolate *isolate, const std::string &message) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, message)));
         }
@@ -98,10 +188,78 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
             return out;
         }
+
+        v8::Local<v8::Object> BuildViewEventPayload(v8::Isolate *isolate, v8::Local<v8::Context> context, int viewId, const Framework::GUI::ViewEventData &data) {
+            v8::Local<v8::Object> payload = v8::Object::New(isolate);
+            const auto set                = [&](const char *key, v8::Local<v8::Value> value) {
+                payload->Set(context, v8pp::to_v8(isolate, key), value).Check();
+            };
+            const auto setString = [&](const char *key, const std::string &value) {
+                set(key, v8pp::to_v8(isolate, value));
+            };
+
+            set("viewId", v8pp::to_v8(isolate, viewId));
+
+            switch (data.event) {
+            case Framework::GUI::ViewEvent::Created:
+                setString("url", data.url);
+                break;
+            case Framework::GUI::ViewEvent::LoadingStart:
+                setString("url", data.url);
+                set("isMainFrame", v8pp::to_v8(isolate, data.isMainFrame));
+                break;
+            case Framework::GUI::ViewEvent::DocumentReady:
+                setString("url", data.url);
+                break;
+            case Framework::GUI::ViewEvent::LoadingFailed:
+                setString("url", data.url);
+                setString("description", data.description);
+                set("errorCode", v8pp::to_v8(isolate, data.errorCode));
+                set("isMainFrame", v8pp::to_v8(isolate, data.isMainFrame));
+                break;
+            case Framework::GUI::ViewEvent::Navigate:
+                setString("url", data.url);
+                set("isMainFrame", v8pp::to_v8(isolate, data.isMainFrame));
+                set("blocked", v8pp::to_v8(isolate, data.blocked));
+                break;
+            case Framework::GUI::ViewEvent::Popup:
+                setString("url", data.url);
+                setString("openerUrl", data.openerUrl);
+                break;
+            case Framework::GUI::ViewEvent::CursorChange:
+                setString("cursor", CursorTypeName(data.cursorType));
+                set("cursorType", v8pp::to_v8(isolate, data.cursorType));
+                break;
+            case Framework::GUI::ViewEvent::Tooltip:
+                setString("text", data.tooltip);
+                break;
+            case Framework::GUI::ViewEvent::InputFocusChange:
+                set("focused", v8pp::to_v8(isolate, data.focused));
+                break;
+            case Framework::GUI::ViewEvent::ResourceBlocked:
+                setString("url", data.url);
+                setString("domain", data.domain);
+                setString("reason", BlockReasonName(data.reason));
+                break;
+            case Framework::GUI::ViewEvent::ConsoleMessage:
+                setString("message", data.message);
+                setString("source", data.source);
+                set("line", v8pp::to_v8(isolate, data.line));
+                setString("severity", ConsoleSeverityName(data.severity));
+                break;
+            case Framework::GUI::ViewEvent::OriginChange:
+                setString("origin", data.origin);
+                setString("url", data.url);
+                break;
+            }
+
+            return payload;
+        }
     } // anonymous namespace
 
     std::map<int, std::map<std::string, std::vector<Web::Handler>>> Web::_handlers;
     std::map<int, std::string> Web::_viewOwners;
+    std::deque<Web::QueuedViewEvent> Web::_pendingViewEvents;
     std::mutex Web::_mutex;
     Framework::Scripting::ResourceManager *Web::_resourceManager = nullptr;
 
@@ -110,6 +268,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             std::scoped_lock lock(_mutex);
             _handlers.clear();
             _viewOwners.clear();
+            _pendingViewEvents.clear();
         }
         _resourceManager = resourceManager;
 
@@ -175,6 +334,51 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                                                                                           v8pp::metadata::param("payload", "unknown", true, "Optional JSON-serializable event detail.")},
                                                                                       "Dispatches a CustomEvent into an owned view.", "True when the dispatch script was queued.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getScreenSize", v8pp::metadata::docs("{ width: number; height: number }", {}, "Returns the current client viewport size.", "Width and height in physical pixels.")));
+
+        RegisterViewEventMetadata(isolate);
+    }
+
+    void Web::RegisterViewEventMetadata(v8::Isolate *isolate) {
+        auto &catalog = Framework::Scripting::GetScriptingCatalog(isolate);
+        auto &events  = catalog.data_type("EventMap", "Native events dispatched through `Events.on`. Each property is the exact callback argument tuple for that event.");
+
+        const auto describe = [&](Framework::GUI::ViewEvent event, const char *typeName, const char *typeDescription, const std::vector<std::tuple<const char *, const char *, const char *>> &fields, const char *eventDescription) {
+            auto &payload = catalog.data_type(typeName, typeDescription);
+            payload.add_property("viewId", "number", "Identifier of the view the event belongs to.");
+            for (const auto &[name, type, description] : fields) {
+                payload.add_property(name, type, description);
+            }
+            events.add_property(std::string(ViewEventName(event)), std::string("[event: ") + typeName + "]", eventDescription);
+        };
+
+        describe(Framework::GUI::ViewEvent::Created, "BrowserCreatedEvent", "A web view's browser finished being created.", {{"url", "string", "URL the view was created with."}},
+            "Dispatched once per view, before any navigation, to the resource that created it.");
+        describe(Framework::GUI::ViewEvent::LoadingStart, "BrowserLoadingStartEvent", "A frame inside a web view started loading.",
+            {{"url", "string", "URL being loaded."}, {"isMainFrame", "boolean", "False for sub-frame loads."}}, "Dispatched when any frame of an owned view begins loading.");
+        describe(Framework::GUI::ViewEvent::DocumentReady, "BrowserDocumentReadyEvent", "A web view's main frame finished loading.", {{"url", "string", "URL that finished loading."}},
+            "Dispatched when an owned view's main document is ready; the earliest point at which the page can receive Web.emit.");
+        describe(Framework::GUI::ViewEvent::LoadingFailed, "BrowserLoadingFailedEvent", "A load inside a web view was aborted.",
+            {{"url", "string", "URL that failed to load."}, {"description", "string", "CEF error text, such as ERR_CONNECTION_REFUSED."}, {"errorCode", "number", "CEF error code."}, {"isMainFrame", "boolean", "False for sub-frame failures."}},
+            "Dispatched when a frame of an owned view fails to load.");
+        describe(Framework::GUI::ViewEvent::Navigate, "BrowserNavigateEvent", "A web view was asked to navigate.",
+            {{"url", "string", "Requested URL."}, {"isMainFrame", "boolean", "False for sub-frame navigation."}, {"blocked", "boolean", "Whether the request was refused."}},
+            "Dispatched for every navigation an owned view is asked to perform, refused or not.");
+        describe(Framework::GUI::ViewEvent::Popup, "BrowserPopupEvent", "A page tried to open a new window or tab.", {{"url", "string", "Target URL of the blocked popup."}, {"openerUrl", "string", "URL of the frame that requested it."}},
+            "Dispatched when an owned view blocks a popup; windowless views cannot host one, so handle the URL yourself.");
+        describe(Framework::GUI::ViewEvent::CursorChange, "BrowserCursorChangeEvent", "The cursor shape a page is asking for.",
+            {{"cursor", "string", "CSS-style cursor name, or \"custom\" for shapes without one."}, {"cursorType", "number", "Raw CEF cursor type."}}, "Dispatched when an owned view's requested cursor shape changes.");
+        describe(Framework::GUI::ViewEvent::Tooltip, "BrowserTooltipEvent", "A page wants to display a tooltip.", {{"text", "string", "Tooltip text; empty when the tooltip is dismissed."}},
+            "Dispatched when an owned view requests a tooltip; windowless rendering draws none, so the script must.");
+        describe(Framework::GUI::ViewEvent::InputFocusChange, "BrowserInputFocusChangeEvent", "A form control inside a page gained or lost focus.", {{"focused", "boolean", "True while the page holds keyboard input."}},
+            "Dispatched when focus enters or leaves an editable element of an owned view; use it to stop routing keys to the game.");
+        describe(Framework::GUI::ViewEvent::ResourceBlocked, "BrowserResourceBlockedEvent", "A web view refused a request.",
+            {{"url", "string", "URL that was refused."}, {"domain", "string", "Host component of that URL, empty when unparsable."}, {"reason", "\"cross-origin\" | \"invalid-url\" | \"host-filter\" | \"foreign-event\"", "Why the request was refused."}},
+            "Dispatched when an owned view rejects a navigation or a page event from outside its locked origin.");
+        describe(Framework::GUI::ViewEvent::ConsoleMessage, "BrowserConsoleMessageEvent", "A console call made by a page.",
+            {{"message", "string", "Console message body."}, {"source", "string", "Script URL that logged it."}, {"line", "number", "Line number within that script."}, {"severity", "\"debug\" | \"info\" | \"warning\" | \"error\" | \"fatal\"", "Console severity."}},
+            "Dispatched for console output of an owned view; the framework logs these regardless.");
+        describe(Framework::GUI::ViewEvent::OriginChange, "BrowserOriginChangeEvent", "A web view's allowed origin changed.", {{"origin", "string", "New locked origin, or \"null\" when the URL has none."}, {"url", "string", "URL the lock was derived from."}},
+            "Dispatched on view creation and whenever Web.loadURL re-locks an owned view to a different origin.");
     }
 
     Framework::GUI::View *Web::GetOwnedView(int viewId) {
@@ -239,19 +443,21 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
+        {
+            std::scoped_lock lock(_mutex);
+            _viewOwners[id] = owner;
+        }
+
         if (auto *view = gui->GetView(id)) {
             view->SetGarbageCollected(true);
+            // before LockToOrigin, so its originChange is queued too
+            AttachViewEvents(view, id);
             view->LockToOrigin(url);
             view->SetZIndex(zIndex);
             view->Display(visible);
             if (focus) {
                 view->Focus(true);
             }
-        }
-
-        {
-            std::scoped_lock lock(_mutex);
-            _viewOwners[id] = owner;
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Created web view {} ({})", owner, id, url);
@@ -462,7 +668,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         if (firstForEvent) {
             view->AddEventListener(eventName, [id, eventName](const std::string &payload) {
-                DispatchViewEvent(id, eventName, payload);
+                DispatchPageEvent(id, eventName, payload);
             });
         }
     }
@@ -584,7 +790,80 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         args.GetReturnValue().Set(result);
     }
 
-    void Web::DispatchViewEvent(int viewId, const std::string &eventName, const std::string &payload) {
+    void Web::AttachViewEvents(Framework::GUI::View *view, int viewId) {
+        view->SetOnViewEventCallback([viewId](const Framework::GUI::ViewEventData &data) {
+            QueueViewEvent(viewId, data);
+        });
+
+        // CreateView is synchronous, so the real Created already fired; replay it.
+        if (view->IsCreated()) {
+            Framework::GUI::ViewEventData created;
+            created.event = Framework::GUI::ViewEvent::Created;
+            QueueViewEvent(viewId, created);
+        }
+    }
+
+    void Web::QueueViewEvent(int viewId, const Framework::GUI::ViewEventData &data) {
+        // bounded: a reload storm outruns a stalled scripting tick
+        constexpr size_t kMaxPendingViewEvents = 1024;
+
+        std::scoped_lock lock(_mutex);
+        if (_pendingViewEvents.size() >= kMaxPendingViewEvents) {
+            _pendingViewEvents.pop_front();
+        }
+        _pendingViewEvents.push_back({viewId, data});
+    }
+
+    void Web::Update() {
+        auto *manager = _resourceManager;
+        if (!manager) {
+            return;
+        }
+        auto *engine = manager->GetJSEngine();
+        if (!engine || !engine->IsInitialized()) {
+            return;
+        }
+
+        std::deque<QueuedViewEvent> pending;
+        {
+            std::scoped_lock lock(_mutex);
+            if (_pendingViewEvents.empty()) {
+                return;
+            }
+            pending.swap(_pendingViewEvents);
+        }
+
+        v8::Isolate *isolate = engine->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine->GetContext();
+        v8::Context::Scope contextScope(context);
+
+        auto &events = manager->GetEvents();
+        for (const auto &queued : pending) {
+            DispatchViewEvent(isolate, context, events, queued);
+        }
+    }
+
+    void Web::DispatchViewEvent(v8::Isolate *isolate, v8::Local<v8::Context> context, Framework::Scripting::Builtins::Events &events, const QueuedViewEvent &queued) {
+        // Owner-scoped; a destroyed view has none, dropping its still-queued events.
+        std::string owner;
+        {
+            std::scoped_lock lock(_mutex);
+            const auto it = _viewOwners.find(queued.viewId);
+            if (it == _viewOwners.end()) {
+                return;
+            }
+            owner = it->second;
+        }
+
+        const std::string eventName(ViewEventName(queued.data.event));
+        std::vector<v8::Local<v8::Value>> args {BuildViewEventPayload(isolate, context, queued.viewId, queued.data)};
+        (void)events.EmitReservedTo(isolate, context, eventName, args, owner);
+    }
+
+    void Web::DispatchPageEvent(int viewId, const std::string &eventName, const std::string &payload) {
         auto *manager = _resourceManager;
         if (!manager) {
             return;
@@ -648,6 +927,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 return false;
             }
             _handlers.erase(viewId);
+            std::erase_if(_pendingViewEvents, [viewId](const QueuedViewEvent &queued) {
+                return queued.viewId == viewId;
+            });
         }
         if (auto *gui = CoreModules::GetWebManager()) {
             gui->DestroyView(viewId);
@@ -705,6 +987,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         std::scoped_lock lock(_mutex);
         _handlers.clear();
         _viewOwners.clear();
+        _pendingViewEvents.clear();
         _resourceManager = nullptr;
     }
 
