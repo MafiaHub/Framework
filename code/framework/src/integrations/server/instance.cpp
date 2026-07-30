@@ -176,6 +176,15 @@ namespace Framework::Integrations::Server {
             });
         }
 
+        // Voice relay: attaches RakVoice to the live peer, so it must come up after the networking
+        // engine. Failure is not fatal — the server simply runs without voice.
+        if (_voiceServer.Init(_networkingEngine->GetNetworkServer())) {
+            CoreModules::SetVoiceServer(&_voiceServer);
+        }
+        else {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Voice relay unavailable; voice chat disabled");
+        }
+
         if (!_opts.bindPublicServer || !_masterlist->Init(_opts.services.masterlistUrl, _opts.bindSecretKey)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
         }
@@ -349,6 +358,9 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
             _armedSpawnBarrierGuids.erase(guid.g);
             _readyPlayerGuids.erase(guid.g);
+            // Drop voice state unconditionally: a peer that never reached the ready barrier can
+            // still have been registered in the router by a position push.
+            _voiceServer.OnPlayerDisconnect(guid.g);
 
             // Player notification and avatar teardown run in ReplicationManager::OnClosedConnection,
             // which RakNet fires before this packet is delivered; here we just finalise the connection.
@@ -451,6 +463,20 @@ namespace Framework::Integrations::Server {
                 return;
             }
             OnClientEvent(sender->GetNetworkID(), name, payload.GetPayload());
+        });
+
+        // Voice frames are not RPCs: RakVoice writes a raw message id, so they surface on the
+        // unknown-packet path (the relay host deliberately declines to consume them itself).
+        net->SetUnknownPacketHandler([this, net](MafiaNet::Packet *packet) {
+            // GetPacketDataOffset() is the offset the peer resolved for this very packet, so an
+            // ID_TIMESTAMP prefix is already skipped.
+            const int offset = net->GetPacketDataOffset();
+            if (offset < 0 || static_cast<uint32_t>(offset) >= packet->length) {
+                return;
+            }
+            if (packet->data[offset] == ID_RAKVOICE_RELAY_DATA) {
+                _voiceServer.OnVoiceFrame(packet);
+            }
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
@@ -865,6 +891,9 @@ namespace Framework::Integrations::Server {
             _scriptingModule->PreShutdown();
         }
 
+        // Detach from the peer before the networking engine tears it down.
+        _voiceServer.Shutdown();
+
         if (_networkingEngine) {
             _networkingEngine->Shutdown();
         }
@@ -891,6 +920,7 @@ namespace Framework::Integrations::Server {
 
         CoreModules::SetNetworkPeer(nullptr);
         CoreModules::SetReplication(nullptr);
+        CoreModules::SetVoiceServer(nullptr);
         CoreModules::SetScriptingModule(nullptr);
         CoreModules::Reset();
 
@@ -905,6 +935,21 @@ namespace Framework::Integrations::Server {
             if (_networkingEngine) {
                 FW_PROFILE_SCOPE_N("Server::Networking");
                 _networkingEngine->Update();
+            }
+
+            // Refresh the voice router's world view from the replicated entities. Every entity
+            // carrying an owner GUID is a player-controlled one, which is exactly the set the
+            // proximity rule keys on; ForEachEntity avoids the per-entity dynamic_cast that
+            // ForEach<NetworkEntity> would cost for no added selectivity.
+            if (auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr) {
+                FW_PROFILE_SCOPE_N("Server::VoicePositions");
+                auto &router = _voiceServer.GetRouter();
+                replication->ForEachEntity([&router](Framework::Networking::Replication::NetworkEntity *entity) {
+                    if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+                        router.SetPlayerPosition(static_cast<uint64_t>(entity->ownerGUID), entity->position);
+                    }
+                });
+                _voiceServer.Update();
             }
 
             if (_scriptingModule) {

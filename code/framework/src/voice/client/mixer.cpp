@@ -1,0 +1,76 @@
+/*
+ * MafiaHub OSS license
+ * Copyright (c) 2026, MafiaHub. All rights reserved.
+ *
+ * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
+ * See LICENSE file in the source repository for information regarding licensing.
+ */
+
+#include "mixer.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace Framework::Voice {
+    namespace {
+        constexpr float kInt16Scale = 1.0f / 32768.0f;
+
+        // Below this distance a speaker is at full volume; attenuation starts beyond it.
+        // Without it, a speaker standing on top of the listener produces a division blow-up
+        // and an unpleasant volume spike as they cross the origin.
+        constexpr float kMinDistance = 1.0f;
+
+        // How far the pan is allowed to swing. A full hard pan sounds wrong on headphones
+        // for a speaker only slightly off-axis, so the effect is deliberately partial.
+        constexpr float kMaxPan = 0.6f;
+    } // namespace
+
+    SpeakerGain ComputeGain(const ListenerTransform &listener, const glm::vec3 &speakerPos, float range) {
+        SpeakerGain gain;
+
+        const glm::vec3 delta = speakerPos - listener.position;
+        const float distance  = glm::length(delta);
+
+        if (range <= 0.0f || distance > range) {
+            return gain; // silent
+        }
+
+        // Inverse-distance rolloff, normalised so it reaches zero exactly at `range` rather
+        // than trailing off asymptotically and leaving a faint always-audible tail.
+        const float clamped     = std::max(distance, kMinDistance);
+        const float rolloff     = kMinDistance / clamped;
+        const float edgeFade    = 1.0f - (distance / range);
+        const float attenuation = std::clamp(rolloff * edgeFade, 0.0f, 1.0f);
+
+        // Pan on the listener's right axis. cross(up, forward) — not cross(forward, up),
+        // which yields the left axis in a right-handed system and inverts the whole pan.
+        // Degenerate transforms fall back to centred.
+        float pan = 0.0f;
+        if (distance > 0.0001f) {
+            const glm::vec3 right = glm::cross(listener.up, listener.forward);
+            const float rightLen  = glm::length(right);
+            if (rightLen > 0.0001f) {
+                pan = glm::dot(delta / distance, right / rightLen) * kMaxPan;
+            }
+        }
+
+        // Constant-power pan: gains follow a quarter-circle so total energy stays flat as a
+        // speaker sweeps across, instead of dipping in the middle as linear panning does.
+        // A centred speaker therefore sits at cos(45 degrees) = ~0.707 per ear, not 1.0 —
+        // that is the property that keeps perceived loudness constant, so it is not
+        // normalised away.
+        const float angle = (pan + 1.0f) * 0.25f * 3.14159265358979323846f;
+
+        gain.left  = std::clamp(attenuation * std::cos(angle), 0.0f, 1.0f);
+        gain.right = std::clamp(attenuation * std::sin(angle), 0.0f, 1.0f);
+        return gain;
+    }
+
+    void MixFrameInto(float *stereoOut, const int16_t *monoIn, uint32_t samples, SpeakerGain gain) {
+        for (uint32_t i = 0; i < samples; i++) {
+            const float sample = static_cast<float>(monoIn[i]) * kInt16Scale;
+            stereoOut[i * 2]     += sample * gain.left;
+            stereoOut[i * 2 + 1] += sample * gain.right;
+        }
+    }
+} // namespace Framework::Voice

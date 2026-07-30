@@ -51,8 +51,76 @@ set(HTTPLIB_REQUIRE_OPENSSL ON)
 set(HTTPLIB_COMPILE ON)
 add_subdirectory(httplib)
 
-# Build MafiaNet (networking, vendored fork of RakNet/SLikeNet)
-add_subdirectory(mafianet)
+# MafiaNet (networking) - fetched, not vendored.
+#
+# MafiaNet owns RakVoice, and therefore owns RakVoice's Opus and RNNoise
+# dependencies, which its own build fetches. Vendoring MafiaNet here would mean
+# hoisting those two a level up into this repository: ~85 MB of third-party
+# source, a collision with this repo's `vendors/**/*.cmake` ignore rule, and a
+# re-vendor split across three trees that have to stay in lockstep. Fetching the
+# release instead keeps the dependency boundary where it belongs.
+#
+# This is the only FetchContent in the Framework build; everything else under
+# vendors/ is genuinely vendored in-tree. Building therefore needs network access
+# on a cold configure (the fetch is cached in the build tree afterwards).
+include(FetchContent)
+
+# Framework links the static library only; samples and MafiaNet's own test suite
+# are not our concern.
+set(MAFIANET_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(MAFIANET_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(MAFIANET_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+set(MAFIANET_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+
+# Pinned to a release tag, never a branch: the message-id enum is positional, so
+# an unpinned bump would silently change the wire format. The pin lives in
+# cmake/MafiaNetPin.cmake so the release tooling can watch that one path.
+include(MafiaNetPin)
+
+FetchContent_Declare(
+    MafiaNet
+    GIT_REPOSITORY https://github.com/MafiaHub/MafiaNet.git
+    GIT_TAG        ${MAFIANET_PIN}
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(MafiaNet)
+
+# Reconcile the fetched dependencies with this build's CRT convention.
+#
+# Framework uses the RELEASE CRT even in Debug builds: FrameworkSetup forces
+# CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreadedDLL and replaces
+# CMAKE_CXX_FLAGS_DEBUG outright, so no /MDd and no _DEBUG reach its objects.
+#
+# MafiaNet follows the ordinary convention instead -- Source/CMakeLists.txt does
+# target_compile_definitions(... $<$<CONFIG:Debug>:_DEBUG>). Defining _DEBUG makes
+# MSVC select the debug CRT semantics in the object itself: _ITERATOR_DEBUG_LEVEL
+# becomes 2 and the object records MDd_DynamicDebug. Linking that against
+# Framework's MD_DynamicRelease objects fails with LNK2038, and no flag or
+# MSVC_RUNTIME_LIBRARY property can override it, because the definition is what
+# drives it. CI confirmed exactly that: the property was applied correctly and the
+# objects still came out MDd.
+#
+# So drop the definition on the fetched targets rather than fighting the symptom.
+# This is Framework adapting to its own unusual choice, not a defect upstream --
+# MafiaNet is right to define _DEBUG when it is built normally.
+#
+# Nothing analogous was needed while MafiaNet was vendored: that copy was a bare
+# add_library() with no target_compile_definitions of its own.
+if(MSVC)
+    foreach(_mafianet_target MafiaNetStatic MafiaNet opus rnnoise)
+        if(TARGET ${_mafianet_target})
+            set_property(TARGET ${_mafianet_target} PROPERTY
+                MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+            get_target_property(_fw_defs ${_mafianet_target} COMPILE_DEFINITIONS)
+            if(_fw_defs)
+                list(REMOVE_ITEM _fw_defs "$<$<CONFIG:Debug>:_DEBUG>" "_DEBUG")
+                set_property(TARGET ${_mafianet_target} PROPERTY
+                    COMPILE_DEFINITIONS ${_fw_defs})
+            endif()
+        endif()
+    endforeach()
+endif()
 
 # Build sentry
 set(CURL_STATICLIB ON)
