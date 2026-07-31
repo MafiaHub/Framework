@@ -47,8 +47,26 @@ namespace Framework::Voice {
             return _router;
         }
 
+        // Server-wide audibility radius, mirrored to connected clients. <= 0 restores
+        // kDefaultProximityRange.
+        void SetProximityRange(float meters);
+
+        float GetProximityRange() const {
+            return _router.GetDefaultRange();
+        }
+
+        // One talker's override of the radius above, likewise mirrored. <= 0 returns them to
+        // the server-wide range.
+        void SetPlayerRange(uint64_t guid, float meters);
+
+        // The range plus every override in effect, for a freshly connected client.
+        void SendSettingsTo(MafiaNet::RakNetGUID guid);
+
         // Called by the network layer for every ID_RAKVOICE_RELAY_DATA packet.
         void OnVoiceFrame(MafiaNet::Packet *packet);
+
+        // The client's own voice setting, from the VoicePreference RPC.
+        void OnPlayerPreference(uint64_t guid, bool enabled);
 
         void OnPlayerDisconnect(uint64_t guid);
 
@@ -61,6 +79,10 @@ namespace Framework::Voice {
         };
 
         const std::vector<MafiaNet::RakNetGUID> &RecipientsFor(uint64_t talker);
+
+        // A rule changed, so every cached set is suspect -- not just the talker's own, since
+        // one player's change removes them from everyone else's.
+        void InvalidateRecipients();
 
         Networking::NetworkServer *_server = nullptr;
         bool _attached                     = false;

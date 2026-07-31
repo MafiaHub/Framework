@@ -11,10 +11,15 @@
 #include "voice/server/voice_router.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace {
     bool RouterContains(const std::vector<uint64_t> &v, uint64_t id) {
         return std::find(v.begin(), v.end(), id) != v.end();
+    }
+
+    bool NearlyEqualRange(float a, float b) {
+        return std::fabs(a - b) < 0.01f;
     }
 } // namespace
 
@@ -146,5 +151,65 @@ MODULE(voice_router, {
         router.ComputeRecipients(99, out);
 
         EQUALS(out.size(), static_cast<size_t>(0));
+    });
+
+    IT("applies a configured default range to talkers with no override", {
+        VoiceRouter router;
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(60, 0, 0));
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+        EQUALS(out.size(), static_cast<size_t>(0));
+
+        router.SetDefaultRange(100.0f);
+        router.ComputeRecipients(1, out);
+        EQUALS(out.size(), static_cast<size_t>(1));
+    });
+
+    IT("restores the built-in default range for a non-positive value", {
+        VoiceRouter router;
+        router.SetDefaultRange(100.0f);
+        router.SetDefaultRange(0.0f);
+
+        EQUALS(NearlyEqualRange(router.GetDefaultRange(), kDefaultProximityRange), true);
+    });
+
+    IT("keeps a per-talker override winning over the default range", {
+        VoiceRouter router;
+        router.SetDefaultRange(100.0f);
+        router.SetPlayerRange(1, 10.0f);
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(50, 0, 0));
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+
+        EQUALS(out.size(), static_cast<size_t>(0));
+        EQUALS(NearlyEqualRange(router.GetEffectivePlayerRange(1), 10.0f), true);
+        EQUALS(NearlyEqualRange(router.GetEffectivePlayerRange(2), 100.0f), true);
+    });
+
+    IT("silences a player who turned voice chat off, in both directions", {
+        VoiceRouter router;
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(5, 0, 0));
+        router.SetPlayerVoiceDisabled(2, true);
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+        EQUALS(out.size(), static_cast<size_t>(0));
+
+        router.ComputeRecipients(2, out);
+        EQUALS(out.size(), static_cast<size_t>(0));
+    });
+
+    IT("keeps the player's own setting apart from an administrative mute", {
+        VoiceRouter router;
+        router.SetPlayerMuted(1, true);
+        router.SetPlayerVoiceDisabled(1, false);
+
+        EQUALS(router.IsPlayerMuted(1), true);
+        EQUALS(router.IsPlayerVoiceDisabled(1), false);
     });
 });

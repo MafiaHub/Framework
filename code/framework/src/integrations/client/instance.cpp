@@ -12,6 +12,7 @@
 
 #include "networking/rpc/rpc.h"
 #include "networking/rpc/chat_message.h"
+#include "networking/rpc/voice_settings.h"
 #include "networking/rpc/client_identity.h"
 #include "networking/rpc/resource_refresh.h"
 #include "networking/rpc/server_resources.h"
@@ -751,6 +752,15 @@ namespace Framework::Integrations::Client {
         // Chat lines from the server are forwarded to the mod's UI via the received callback.
         net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, MafiaNet::Packet *) {
             DispatchReceivedChat(payload);
+        });
+
+        // The server's voice ranges, so the mixer fades a talker out where the frames stop.
+        net->RegisterRPC<Framework::Networking::RPC::VoiceSettings>([this](const Framework::Networking::RPC::VoiceSettings &payload, MafiaNet::Packet *) {
+            _voiceClient.SetDefaultSpeakerRange(payload.proximityRange);
+        });
+
+        net->RegisterRPC<Framework::Networking::RPC::VoiceSpeakerRange>([this](const Framework::Networking::RPC::VoiceSpeakerRange &payload, MafiaNet::Packet *) {
+            _voiceClient.SetSpeakerRange(payload.player, payload.range);
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Networking messages registered");

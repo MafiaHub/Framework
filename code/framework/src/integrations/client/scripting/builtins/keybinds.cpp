@@ -17,12 +17,12 @@
 #include <scripting/scripting_catalog.h>
 
 #include <logging/logger.h>
+#include <utils/key_names.h>
 
 #include <v8pp/convert.hpp>
 
 #include <algorithm>
 #include <cctype>
-#include <unordered_map>
 #include <utility>
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
@@ -51,68 +51,6 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 return static_cast<char>(std::tolower(c));
             });
             return s;
-        }
-
-        // Fixed name -> Win32 virtual-key table. Case-insensitive; several friendly aliases.
-        const std::unordered_map<std::string, int> &KeyTable() {
-            static const std::unordered_map<std::string, int> table = [] {
-                std::unordered_map<std::string, int> t;
-                for (char c = 'a'; c <= 'z'; ++c) {
-                    t[std::string(1, c)] = 'A' + (c - 'a');
-                }
-                for (char c = '0'; c <= '9'; ++c) {
-                    t[std::string(1, c)] = c;
-                }
-                for (int i = 1; i <= 12; ++i) {
-                    t["f" + std::to_string(i)] = VK_F1 + (i - 1);
-                }
-                for (int i = 0; i <= 9; ++i) {
-                    const int vk                    = VK_NUMPAD0 + i;
-                    t["numpad" + std::to_string(i)] = vk;
-                    t["num" + std::to_string(i)]    = vk;
-                }
-                t["space"]     = VK_SPACE;
-                t["enter"]     = VK_RETURN;
-                t["return"]    = VK_RETURN;
-                t["escape"]    = VK_ESCAPE;
-                t["esc"]       = VK_ESCAPE;
-                t["tab"]       = VK_TAB;
-                t["backspace"] = VK_BACK;
-                t["capslock"]  = VK_CAPITAL;
-                t["shift"]     = VK_SHIFT;
-                t["lshift"]    = VK_LSHIFT;
-                t["rshift"]    = VK_RSHIFT;
-                t["ctrl"]      = VK_CONTROL;
-                t["control"]   = VK_CONTROL;
-                t["lctrl"]     = VK_LCONTROL;
-                t["rctrl"]     = VK_RCONTROL;
-                t["alt"]       = VK_MENU;
-                t["lalt"]      = VK_LMENU;
-                t["ralt"]      = VK_RMENU;
-                t["up"]        = VK_UP;
-                t["down"]      = VK_DOWN;
-                t["left"]      = VK_LEFT;
-                t["right"]     = VK_RIGHT;
-                t["insert"]    = VK_INSERT;
-                t["delete"]    = VK_DELETE;
-                t["home"]      = VK_HOME;
-                t["end"]       = VK_END;
-                t["pageup"]    = VK_PRIOR;
-                t["pagedown"]  = VK_NEXT;
-                t["mouse1"]    = VK_LBUTTON;
-                t["mouse2"]    = VK_RBUTTON;
-                t["mouse3"]    = VK_MBUTTON;
-                t["mouse4"]    = VK_XBUTTON1;
-                t["mouse5"]    = VK_XBUTTON2;
-                return t;
-            }();
-            return table;
-        }
-
-        int NameToVk(const std::string &lowerName) {
-            const auto &table = KeyTable();
-            const auto it     = table.find(lowerName);
-            return it == table.end() ? -1 : it->second;
         }
 
         bool IsPhysicallyDown(int vk) {
@@ -235,7 +173,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         const std::string keyName = ToLower(v8pp::from_v8<std::string>(isolate, args[0]));
-        const int vk              = NameToVk(keyName);
+        const int vk              = Utils::KeyNames::ToVirtualKey(keyName);
         if (vk < 0) {
             ThrowError(isolate, "Key.bind: unknown key name '" + keyName + "'");
             return;
@@ -331,7 +269,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         const std::string keyName = ToLower(v8pp::from_v8<std::string>(isolate, args[0]));
-        const int vk              = NameToVk(keyName);
+        const int vk              = Utils::KeyNames::ToVirtualKey(keyName);
         if (vk < 0) {
             ThrowError(isolate, "Key.isDown: unknown key name '" + keyName + "'");
             return;

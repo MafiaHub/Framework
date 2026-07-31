@@ -10,6 +10,7 @@
 
 #include <logging/logger.h>
 #include <networking/network_client.h>
+#include <networking/rpc/voice_settings.h>
 #include <utils/time.h>
 
 #include <algorithm>
@@ -269,18 +270,12 @@ namespace Framework::Voice {
         _client   = nullptr;
         _sink     = nullptr;
         _placements.clear();
+        _speakerRanges.clear();
         _published.clear();
     }
 
     void VoiceClient::OpenSession() {
         MafiaNet::RakPeerInterface *peer = _client->GetPeer();
-
-        // A client is joined to exactly one server, so index 0 is it. Unassigned means the
-        // connection has not settled; retry next tick rather than key the session on nothing.
-        const MafiaNet::RakNetGUID server = peer->GetGUIDFromIndex(0);
-        if (server == MafiaNet::UNASSIGNED_RAKNET_GUID) {
-            return;
-        }
 
         _self = peer->GetMyGUID();
         if (_self == MafiaNet::UNASSIGNED_RAKNET_GUID) {
@@ -302,11 +297,11 @@ namespace Framework::Voice {
         _voice.SetMaxDecodedSpeakers(kMaxDecodedTalkers);
 
         // No SetNoiseFilter: RNNoise needs 480-sample frames and voice runs at 960.
-        _voice.SetRelayTarget(server);
+        _voice.SetRelayTarget(_server);
 
         _sessionOpen = true;
         StartDevices();
-        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Voice session open (relay {}, self {}, microphone {}, playback {})", server.g, _self.g, _capture.IsRunning(), _localSink.IsRunning());
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Voice session open (relay {}, self {}, microphone {}, playback {})", _server.g, _self.g, _capture.IsRunning(), _localSink.IsRunning());
     }
 
     void VoiceClient::CloseSession() {
@@ -324,6 +319,7 @@ namespace Framework::Voice {
 
         // The same peer GUID may be a different player on the next server.
         _placements.clear();
+        _speakerRanges.clear();
 
         _self         = MafiaNet::UNASSIGNED_RAKNET_GUID;
         _sessionOpen  = false;
@@ -355,12 +351,83 @@ namespace Framework::Voice {
     void VoiceClient::UpdateSession() {
         const bool connected = _client->GetConnectionState() == Networking::PeerState::CONNECTED;
 
-        if (connected && !_sessionOpen) {
+        if (!connected) {
+            if (_sessionOpen) {
+                CloseSession();
+            }
+
+            // The next server inherits nothing from this one.
+            _server              = MafiaNet::UNASSIGNED_RAKNET_GUID;
+            _preferenceSent      = false;
+            _defaultSpeakerRange = kDefaultProximityRange;
+            return;
+        }
+
+        if (_server == MafiaNet::UNASSIGNED_RAKNET_GUID) {
+            // A client is joined to exactly one server, so index 0 is it. Unassigned means the
+            // connection has not settled; retry next tick rather than key the session on nothing.
+            _server = _client->GetPeer()->GetGUIDFromIndex(0);
+            if (_server == MafiaNet::UNASSIGNED_RAKNET_GUID) {
+                return;
+            }
+        }
+
+        // Announced whether or not a session follows: voice being off is exactly what lets
+        // the server stop relaying frames we would drop.
+        if (!_preferenceSent) {
+            PublishPreference();
+        }
+
+        if (_enabled && !_sessionOpen) {
             OpenSession();
         }
-        else if (!connected && _sessionOpen) {
+        else if (!_enabled && _sessionOpen) {
             CloseSession();
         }
+    }
+
+    void VoiceClient::PublishPreference() {
+        if (_client == nullptr || _server == MafiaNet::UNASSIGNED_RAKNET_GUID) {
+            return;
+        }
+
+        Networking::RPC::VoicePreference payload;
+        payload.enabled = _enabled;
+        _client->SendRPC(payload, _server);
+        _preferenceSent = true;
+    }
+
+    void VoiceClient::SetEnabled(bool enabled) {
+        if (_enabled == enabled) {
+            return;
+        }
+
+        _enabled = enabled;
+
+        // Cleared before the attempt so a send that cannot land yet is retried, not lost.
+        _preferenceSent = false;
+        PublishPreference();
+
+        // Re-enabling reopens from UpdateSession, once the connection is confirmed.
+        if (!enabled) {
+            CloseSession();
+        }
+    }
+
+    void VoiceClient::SetHearingRange(float range) {
+        _hearingRange = range > 0.0f ? range : 0.0f;
+    }
+
+    void VoiceClient::SetDefaultSpeakerRange(float range) {
+        _defaultSpeakerRange = range > 0.0f ? range : kDefaultProximityRange;
+    }
+
+    float VoiceClient::ResolveRange(uint64_t speaker) const {
+        const auto it   = _speakerRanges.find(speaker);
+        const float own = it != _speakerRanges.end() ? it->second : 0.0f;
+        const float range = own > 0.0f ? own : _defaultSpeakerRange;
+
+        return _hearingRange > 0.0f ? std::min(range, _hearingRange) : range;
     }
 
     void VoiceClient::Update() {
@@ -452,6 +519,7 @@ namespace Framework::Voice {
             }
 
             _published.push_back(it->second.placement);
+            _published.back().range = ResolveRange(admitted.id);
         }
 
         // Without a listener every gain is computed against the origin, so a mod that forgot
@@ -573,14 +641,17 @@ namespace Framework::Voice {
             return;
         }
 
-        PlacementEntry &entry   = _placements[speaker];
-        entry.placement.speaker = speaker;
-        entry.placement.range   = range > 0.0f ? range : kDefaultProximityRange;
-        entry.generation        = _placementGeneration;
+        if (range > 0.0f) {
+            _speakerRanges[speaker] = range;
+        }
+        else {
+            _speakerRanges.erase(speaker);
+        }
     }
 
     void VoiceClient::RemoveSpeaker(uint64_t speaker) {
         _placements.erase(speaker);
+        _speakerRanges.erase(speaker);
 
         const int slot = FindAdmitted(speaker);
         if (slot >= 0) {

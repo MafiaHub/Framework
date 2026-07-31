@@ -22,6 +22,7 @@
 #include "networking/rpc/client_identity.h"
 #include "networking/rpc/resource_refresh.h"
 #include "networking/rpc/server_resources.h"
+#include "networking/rpc/voice_settings.h"
 
 #include "networking/connection.h"
 
@@ -351,6 +352,10 @@ namespace Framework::Integrations::Server {
                 }
             }
             net->SendRPC(resources, guid);
+
+            // Travels with the resource list: a client that learns the ranges only when
+            // someone speaks would misjudge the first words it hears.
+            _voiceServer.SendSettingsTo(guid);
         });
 
         net->SetOnPlayerDisconnectCallback([this, net](MafiaNet::Packet *packet, Framework::Networking::DisconnectionReason reason, const std::string &) {
@@ -463,6 +468,15 @@ namespace Framework::Integrations::Server {
                 return;
             }
             OnClientEvent(sender->GetNetworkID(), name, payload.GetPayload());
+        });
+
+        // A client announcing whether its player left voice chat on. The GUID is the packet's,
+        // never a field, so a peer can only ever speak for itself.
+        net->RegisterRPC<Framework::Networking::RPC::VoicePreference>([this, net](const Framework::Networking::RPC::VoicePreference &payload, MafiaNet::Packet *packet) {
+            if (!net->IsAuthenticated(packet->guid)) {
+                return;
+            }
+            _voiceServer.OnPlayerPreference(static_cast<uint64_t>(MafiaNet::ToPeerGuid(packet->guid)), payload.enabled);
         });
 
         // Voice frames are not RPCs: RakVoice writes a raw message id, so they surface on the

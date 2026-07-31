@@ -69,6 +69,10 @@ namespace Framework::Voice {
         // Applied after mixing, before limiting. Clamped to [0, 4].
         void SetMasterVolume(float volume);
 
+        float GetMasterVolume() const {
+            return _masterVolume.load(std::memory_order_relaxed);
+        }
+
       private:
         struct Slot {
             // 0 = free. Published last on acquire, cleared first on release.
@@ -124,6 +128,31 @@ namespace Framework::Voice {
         // Once per client tick.
         void Update();
 
+        // --- player settings ---
+
+        // Off closes the session outright: no capture, playback or decode, and the server is
+        // told to stop relaying to this client.
+        void SetEnabled(bool enabled);
+
+        bool IsEnabled() const {
+            return _enabled;
+        }
+
+        // Ceiling on how far this client hears, in world units; <= 0 for none. Can only
+        // narrow the server's range -- a talker past that is never relayed in the first place.
+        void SetHearingRange(float range);
+
+        float GetHearingRange() const {
+            return _hearingRange;
+        }
+
+        // The server's radius, for talkers with no override. Set from the VoiceSettings RPC.
+        void SetDefaultSpeakerRange(float range);
+
+        float GetDefaultSpeakerRange() const {
+            return _defaultSpeakerRange;
+        }
+
         // --- microphone ---
 
         void SetPushToTalk(bool held) {
@@ -132,6 +161,16 @@ namespace Framework::Voice {
 
         bool IsPushToTalkHeld() const {
             return _pushToTalkHeld;
+        }
+
+        // The push-to-talk binding, as a Win32 virtual-key code. Stored, not polled: the host
+        // mod polls it and feeds the result back through SetPushToTalk, under its own gating.
+        void SetPushToTalkKey(int virtualKey) {
+            _pushToTalkKey = virtualKey;
+        }
+
+        int GetPushToTalkKey() const {
+            return _pushToTalkKey;
         }
 
         // False outside a session, and inside one when there is no capture device -- the client is
@@ -165,7 +204,7 @@ namespace Framework::Voice {
         // Speakers with no known position are still heard, but are evicted first. Our own
         // GUID is ignored.
         void SetSpeakerPosition(uint64_t speaker, const glm::vec3 &position);
-        // <= 0 restores kDefaultProximityRange.
+        // <= 0 restores the server's default range.
         void SetSpeakerRange(uint64_t speaker, float range);
         void RemoveSpeaker(uint64_t speaker);
 
@@ -186,8 +225,13 @@ namespace Framework::Voice {
             return _sink;
         }
 
+        // Built-in mixer only; a custom sink applies its own gain.
         void SetMasterVolume(float volume) {
             _localSink.SetMasterVolume(volume);
+        }
+
+        float GetMasterVolume() const {
+            return _localSink.GetMasterVolume();
         }
 
       private:
@@ -207,6 +251,12 @@ namespace Framework::Voice {
         void UpdateSession();
         void OpenSession();
         void CloseSession();
+
+        // Tells the server whether to keep relaying to us. No-op until the connection settles.
+        void PublishPreference();
+
+        // Own override, else the server default, then narrowed by the hearing range.
+        float ResolveRange(uint64_t speaker) const;
 
         // Opened with the session, not at Init: miniaudio's WASAPI backend CoInitializes the
         // calling thread into the MTA and holds it, and an injected mod's Init can run before the
@@ -230,10 +280,14 @@ namespace Framework::Voice {
         MafiaNet::RakVoice _voice;
         bool _attached        = false;
         bool _sessionOpen     = false;
+        bool _enabled         = true;
         bool _pushToTalkHeld  = false;
         bool _inputSuppressed = false;
         bool _transmitting    = false;
+        bool _preferenceSent  = false;
+        int _pushToTalkKey    = kDefaultPushToTalkKey;
         MafiaNet::RakNetGUID _self {};
+        MafiaNet::RakNetGUID _server {};
 
         CaptureDevice _capture;
         LocalVoiceSink _localSink;
@@ -244,7 +298,11 @@ namespace Framework::Voice {
         bool _listenerWarned = false;
 
         std::unordered_map<uint64_t, PlacementEntry> _placements;
+        // Not generational, unlike _placements: a range must outlive the talker streaming out.
+        std::unordered_map<uint64_t, float> _speakerRanges;
         uint32_t _placementGeneration = 0;
+        float _hearingRange           = 0.0f;
+        float _defaultSpeakerRange    = kDefaultProximityRange;
         std::array<AdmittedSpeaker, kMaxAudibleTalkers> _admitted {};
 
         // Reused every tick so the per-frame path never allocates.

@@ -22,6 +22,7 @@
 #include "builtins/chat.h"
 #include "builtins/discord.h"
 #include "builtins/keybinds.h"
+#include "builtins/voice.h"
 #include "builtins/web.h"
 
 #include <algorithm>
@@ -149,6 +150,7 @@ namespace Framework::Integrations::Client::Scripting {
         Builtins::Keybinds::Register(isolate, context, global, _resourceManager.get());
         Builtins::Chat::Register(isolate, context, global, _resourceManager.get());
         Builtins::Discord::Register(isolate, context, global, _resourceManager.get());
+        Builtins::Voice::Register(isolate, context, global, _resourceManager.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
     }

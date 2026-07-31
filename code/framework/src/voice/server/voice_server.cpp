@@ -13,6 +13,7 @@
 #include <logging/logger.h>
 #include <mafianet/MessageIdentifiers.h>
 #include <networking/network_server.h>
+#include <networking/rpc/voice_settings.h>
 #include <utils/time.h>
 
 namespace Framework::Voice {
@@ -69,6 +70,68 @@ namespace Framework::Voice {
     void VoiceServer::OnPlayerDisconnect(uint64_t guid) {
         _router.RemovePlayer(guid);
         _cache.erase(guid);
+        InvalidateRecipients();
+    }
+
+    void VoiceServer::InvalidateRecipients() {
+        for (auto &entry : _cache) {
+            entry.second.computedAtMs = 0;
+        }
+    }
+
+    void VoiceServer::SetProximityRange(float meters) {
+        _router.SetDefaultRange(meters);
+        InvalidateRecipients();
+
+        if (_server == nullptr) {
+            return;
+        }
+
+        Networking::RPC::VoiceSettings payload;
+        payload.proximityRange = _router.GetDefaultRange();
+        _server->BroadcastRPC(payload);
+    }
+
+    void VoiceServer::SetPlayerRange(uint64_t guid, float meters) {
+        _router.SetPlayerRange(guid, meters);
+        InvalidateRecipients();
+
+        if (_server == nullptr) {
+            return;
+        }
+
+        // Broadcast, not sent to the talker: it is every listener's mixer that has to know
+        // how far this voice carries.
+        Networking::RPC::VoiceSpeakerRange payload;
+        payload.player = guid;
+        payload.range  = _router.GetPlayerRange(guid);
+        _server->BroadcastRPC(payload);
+    }
+
+    void VoiceServer::SendSettingsTo(MafiaNet::RakNetGUID guid) {
+        if (_server == nullptr) {
+            return;
+        }
+
+        Networking::RPC::VoiceSettings settings;
+        settings.proximityRange = _router.GetDefaultRange();
+        _server->SendRPC(settings, guid);
+
+        for (const uint64_t player : _router.GetPlayersWithRangeOverride()) {
+            Networking::RPC::VoiceSpeakerRange payload;
+            payload.player = player;
+            payload.range  = _router.GetPlayerRange(player);
+            _server->SendRPC(payload, guid);
+        }
+    }
+
+    void VoiceServer::OnPlayerPreference(uint64_t guid, bool enabled) {
+        if (_router.IsPlayerVoiceDisabled(guid) == !enabled) {
+            return;
+        }
+
+        _router.SetPlayerVoiceDisabled(guid, !enabled);
+        InvalidateRecipients();
     }
 
     const std::vector<MafiaNet::RakNetGUID> &VoiceServer::RecipientsFor(uint64_t talker) {

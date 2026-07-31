@@ -39,8 +39,12 @@ namespace Framework::Voice {
     // changes slowly.
     constexpr uint32_t kRecipientRefreshMs = 250;
 
-    // Default proximity audibility radius, in world units.
+    // Starting proximity audibility radius, in world units. A server overrides it through
+    // VoiceServer::SetProximityRange.
     constexpr float kDefaultProximityRange = 25.0f;
+
+    // Default push-to-talk binding, as a Win32 virtual-key code ('V').
+    constexpr int kDefaultPushToTalkKey = 0x56;
 
     // A speaker's decoder is released after this long without a frame.
     constexpr uint32_t kSpeakerSilenceTimeoutMs = 2000;

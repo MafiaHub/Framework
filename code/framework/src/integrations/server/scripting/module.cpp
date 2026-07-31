@@ -12,6 +12,8 @@
 
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/chat.h>
+
+#include "builtins/voice.h"
 #include <scripting/builtins/console.h>
 #include <scripting/builtins/execution_environment.h>
 #include <scripting/builtins/events.h>
@@ -115,6 +117,7 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
         Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, false);
         Framework::Scripting::Builtins::Chat::Register(isolate, global);
+        Builtins::Voice::Register(isolate, global);
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework JS bindings");
     }

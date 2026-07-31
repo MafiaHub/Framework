@@ -66,6 +66,7 @@ set(FRAMEWORK_SERVER_SRC
 
     # JavaScript scripting (server module)
     src/integrations/server/scripting/module.cpp
+    src/integrations/server/scripting/builtins/voice.cpp
 
     src/voice/server/voice_router.cpp
     src/voice/server/voice_server.cpp
@@ -96,6 +97,9 @@ set(FRAMEWORK_CLIENT_SRC
     src/integrations/client/scripting/builtins/keybinds.cpp
     src/integrations/client/scripting/builtins/chat.cpp
     src/integrations/client/scripting/builtins/discord.cpp
+    src/integrations/client/scripting/builtins/voice.cpp
+
+    src/utils/key_names.cpp
 
     src/voice/client/mixer.cpp
     src/voice/client/audio_device.cpp
