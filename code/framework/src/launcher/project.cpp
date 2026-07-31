@@ -8,6 +8,7 @@
 
 #include "project.h"
 
+#include "external/epic/manifest.h"
 #include "loaders/exe_ldr.h"
 #include "logging/logger.h"
 #include "sfd.h"
@@ -18,6 +19,7 @@
 #include <Psapi.h>
 #include <ShellScalingApi.h>
 #include <Windows.h>
+#include <algorithm>
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <cstdlib>
@@ -267,6 +269,11 @@ namespace Framework::Launcher {
                 return false;
             }
         }
+        else if (_config.platform == ProjectPlatform::EPIC) {
+            if (!RunInnerEpicChecks()) {
+                return false;
+            }
+        }
         else {
             if (!RunInnerClassicChecks()) {
                 return false;
@@ -456,6 +463,30 @@ namespace Framework::Launcher {
 
         // Now we have everything we want, just say goodbye
         _steamWrapper->Shutdown();
+        return true;
+    }
+
+    bool Project::RunInnerEpicChecks() {
+        // Locate the game via the Epic launcher's plaintext manifests — no SDK or running client
+        // needed, just Epic having installed it once. Matched by AppName, else by exe file name.
+        const auto exeName = Utils::StringUtils::WideToNormal(_config.executableName);
+        const auto appName = Utils::StringUtils::WideToNormal(_config.epicAppName);
+
+        const auto app = External::Epic::FindInstalledApp(exeName, appName);
+        if (!app.IsValid()) {
+            MessageBox(nullptr, "The destination game is not installed through the Epic Games Launcher", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
+        _gamePath = Utils::StringUtils::NormalToWide(app.installLocation);
+        std::ranges::replace(_gamePath, L'\\', L'/');
+
+        // Mirror the Steam path: the launch code appends executableName to this root, and we
+        // stash it in classicGamePath purely so it lands in the persisted JSON config.
+        _config.classicGamePath = _gamePath;
+
+        // Unlike Steam there's no runtime DLL to inject or app-id file to drop; any Epic launch
+        // args go through ProjectConfiguration::additionalLaunchArguments.
         return true;
     }
 

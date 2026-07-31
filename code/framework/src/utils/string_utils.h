@@ -9,6 +9,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cctype>
 #include <locale>
 #include <regex>
 #include <string>
@@ -41,5 +42,18 @@ namespace Framework::Utils::StringUtils {
 
     inline std::string Trim(std::string_view s) {
         return LeftTrim(RightTrim(s));
+    }
+
+    inline std::string ToLower(std::string s) {
+        std::ranges::transform(s, s.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        return s;
+    }
+
+    // File name (portion after the last / or \) of a possibly-relative path.
+    inline std::string FileName(std::string_view path) {
+        const auto pos = path.find_last_of("/\\");
+        return std::string(pos == std::string_view::npos ? path : path.substr(pos + 1));
     }
 } // namespace Framework::Utils::StringUtils
