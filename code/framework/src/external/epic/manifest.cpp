@@ -8,31 +8,17 @@
 
 #include "manifest.h"
 
+#include "utils/string_utils.h"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <ranges>
 
 namespace Framework::External::Epic {
-    namespace {
-        std::string ToLower(std::string s) {
-            std::ranges::transform(s, s.begin(), [](unsigned char c) {
-                return static_cast<char>(std::tolower(c));
-            });
-            return s;
-        }
-
-        // File name (portion after the last / or \) of a possibly-relative path.
-        std::string FileName(const std::string &path) {
-            const auto pos = path.find_last_of("/\\");
-            return pos == std::string::npos ? path : path.substr(pos + 1);
-        }
-    } // namespace
-
     std::string GetManifestsDir() {
         std::string base = "C:\\ProgramData";
         if (const char *pd = std::getenv("PROGRAMDATA"); pd && *pd) {
@@ -96,14 +82,14 @@ namespace Framework::External::Epic {
     InstalledApp FindInstalledApp(const std::string &exeFileName, const std::string &appName) {
         // Strip the directory off both sides: the manifest's launch exe is install-root-relative,
         // and exeFileName isn't guaranteed bare elsewhere in the launcher.
-        const std::string wantExe = ToLower(FileName(exeFileName));
+        const std::string wantExe = Utils::StringUtils::ToLower(Utils::StringUtils::FileName(exeFileName));
         const auto apps           = EnumerateInstalledApps();
 
         const auto it = std::ranges::find_if(apps, [&](const InstalledApp &app) {
             if (!appName.empty()) {
                 return app.appName == appName;
             }
-            return !wantExe.empty() && ToLower(FileName(app.launchExecutable)) == wantExe;
+            return !wantExe.empty() && Utils::StringUtils::ToLower(Utils::StringUtils::FileName(app.launchExecutable)) == wantExe;
         });
         return it != apps.end() ? *it : InstalledApp {};
     }
