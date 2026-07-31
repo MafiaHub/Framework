@@ -96,15 +96,15 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             v8pp::metadata::function_of<v8::FunctionCallback>("bind", v8pp::metadata::docs("boolean",
                                                                           {
                                                                               v8pp::metadata::param("key", "string", false, "Case-insensitive supported keyboard or mouse key name."),
-                                                                              v8pp::metadata::param("stateOrHandler", "\"down\" | \"up\" | \"both\" | ((key: string, state: \"down\" | \"up\") => void)", false, "Trigger state, or the handler itself to use the default down state."),
-                                                                              v8pp::metadata::param("handler", "(key: string, state: \"down\" | \"up\") => void", true, "Handler required when an explicit trigger state is provided."),
+                                                                              v8pp::metadata::param("stateOrHandler", "\"down\" | \"up\" | \"both\" | KeyHandler", false, "Trigger state, or the handler itself to use the default down state."),
+                                                                              v8pp::metadata::param("handler", "KeyHandler", true, "Handler required when an explicit trigger state is provided."),
                                                                           },
                                                                           "Binds a resource-owned handler that fires while the game has foreground input and no UI is capturing it.", "True after the binding is installed; invalid keys or states throw.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("unbind", v8pp::metadata::docs("boolean",
                                                                                         {
                                                                                             v8pp::metadata::param("key", "string", false, "Case-insensitive supported key name."),
                                                                                             v8pp::metadata::param("state", "\"down\" | \"up\" | \"both\"", true, "Optional trigger-state filter."),
-                                                                                            v8pp::metadata::param("handler", "(key: string, state: \"down\" | \"up\") => void", true, "Optional exact handler filter."),
+                                                                                            v8pp::metadata::param("handler", "KeyHandler", true, "Optional exact handler filter."),
                                                                                         },
                                                                                         "Removes matching bindings owned by the calling resource; omitting filters removes every binding for the key.", "True when at least one binding was removed.")));
         metadata.record(

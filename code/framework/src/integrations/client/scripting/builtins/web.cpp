@@ -323,11 +323,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 "Moves an owned view on screen.", "True when the view exists and was moved.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("on", v8pp::metadata::docs("void",
                                                                                     {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("eventName", "string", false, "Page-to-script event name."),
-                                                                                        v8pp::metadata::param("handler", "(payload: unknown) => void", false, "Resource-owned callback invoked by the view's callEvent bridge.")},
+                                                                                        v8pp::metadata::param("handler", "WebEventHandler", false, "Resource-owned callback invoked by the view's callEvent bridge.")},
                                                                                     "Registers a handler for an event emitted by an owned same-origin page.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("off", v8pp::metadata::docs("boolean",
                                                                                      {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("eventName", "string", false, "Page-to-script event name."),
-                                                                                         v8pp::metadata::param("handler", "(payload: unknown) => void", true, "Optional exact callback; omitting it removes every matching handler owned by the resource.")},
+                                                                                         v8pp::metadata::param("handler", "WebEventHandler", true, "Optional exact callback; omitting it removes every matching handler owned by the resource.")},
                                                                                      "Removes page-event handlers from an owned view.", "True when at least one handler was removed.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("emit", v8pp::metadata::docs("boolean",
                                                                                       {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("eventName", "string", false, "CustomEvent name dispatched in the page."),

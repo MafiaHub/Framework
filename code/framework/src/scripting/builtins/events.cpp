@@ -121,11 +121,11 @@ namespace Framework::Scripting::Builtins {
             return v8pp::metadata::docs(returnType,
                 {
                     v8pp::metadata::param("eventName", "string", false, "Case-sensitive event name."),
-                    v8pp::metadata::param("handler", "(...args: unknown[]) => unknown | Promise<unknown>", false, "Resource-owned callback invoked with the emitted arguments."),
+                    v8pp::metadata::param("handler", "EventHandler", false, "Resource-owned callback invoked with the emitted arguments."),
                 },
                 description, returnDescription);
         };
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("on", handlerDocs("() => void", "Registers a persistent handler in the shared event namespace.", "Function that removes this exact subscription.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("on", handlerDocs("Unsubscribe", "Registers a persistent handler in the shared event namespace.", "Function that removes this exact subscription.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("once", handlerDocs("void", "Registers a handler that is removed before its first invocation.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("off", handlerDocs("void", "Removes a matching handler owned by the calling resource.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("emit",
@@ -142,7 +142,7 @@ namespace Framework::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("listenerCount",
             v8pp::metadata::docs("number", {v8pp::metadata::param("eventName", "string", false, "Shared event name to inspect.")}, "Counts persistent and one-shot shared handlers across resources.", "Number of matching handlers.")));
         metadata.record(
-            v8pp::metadata::function_of<v8::FunctionCallback>("onClient", handlerDocs("() => void", "Registers a persistent server handler for events originating from clients; this namespace is isolated from native events.", "Function that removes this exact subscription.")));
+            v8pp::metadata::function_of<v8::FunctionCallback>("onClient", handlerDocs("Unsubscribe", "Registers a persistent server handler for events originating from clients; this namespace is isolated from native events.", "Function that removes this exact subscription.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("onceClient", handlerDocs("void", "Registers a one-shot server handler for a client-originated event.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("offClient", handlerDocs("void", "Removes a matching client-originated event handler owned by the calling resource.")));
         if (isClient) {

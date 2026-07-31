@@ -47,7 +47,7 @@ namespace Framework::Scripting::Builtins {
             v8pp::metadata::docs("void",
                 {
                     v8pp::metadata::param("messageType", "string", false, "Message type unique within the receiving resource."),
-                    v8pp::metadata::param("handler", "(payload: unknown, reply: (value: unknown) => void) => void", false, "Handler invoked with the payload and a reply callback; the reply is ignored for notifications."),
+                    v8pp::metadata::param("handler", "MessageHandler", false, "Handler invoked with the payload and a reply callback; the reply is ignored for notifications."),
                 },
                 "Registers or replaces a message handler owned by the calling resource.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("request", v8pp::metadata::docs("Promise<unknown>",
