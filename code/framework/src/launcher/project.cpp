@@ -19,6 +19,7 @@
 #include <Psapi.h>
 #include <ShellScalingApi.h>
 #include <Windows.h>
+#include <algorithm>
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <cstdlib>
@@ -478,7 +479,7 @@ namespace Framework::Launcher {
         }
 
         _gamePath = Utils::StringUtils::NormalToWide(app.installLocation);
-        std::replace(_gamePath.begin(), _gamePath.end(), '\\', '/');
+        std::ranges::replace(_gamePath, L'\\', L'/');
 
         // Mirror the Steam path: the launch code appends executableName to this root, and we
         // stash it in classicGamePath purely so it lands in the persisted JSON config.
