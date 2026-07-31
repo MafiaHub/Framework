@@ -13,11 +13,21 @@
 #include <cmath>
 
 namespace {
+    // glm's basis: -Z forward, +Y up, so +X is the right ear.
     Framework::Voice::ListenerTransform OriginListener() {
         Framework::Voice::ListenerTransform t;
         t.position = glm::vec3(0.0f, 0.0f, 0.0f);
-        t.forward  = glm::vec3(0.0f, 0.0f, 1.0f);
+        t.forward  = glm::vec3(0.0f, 0.0f, -1.0f);
         t.up       = glm::vec3(0.0f, 1.0f, 0.0f);
+        return t;
+    }
+
+    // What a Z-up game (Mafia 2) publishes: facing +Y, head towards +Z, so +X is again right.
+    Framework::Voice::ListenerTransform ZUpListener() {
+        Framework::Voice::ListenerTransform t;
+        t.position = glm::vec3(0.0f, 0.0f, 0.0f);
+        t.forward  = glm::vec3(0.0f, 1.0f, 0.0f);
+        t.up       = glm::vec3(0.0f, 0.0f, 1.0f);
         return t;
     }
 
@@ -62,8 +72,39 @@ MODULE(voice_mixer, {
     });
 
     IT("keeps a speaker dead ahead centred", {
-        const auto gain = ComputeGain(OriginListener(), glm::vec3(0.0f, 0.0f, 5.0f), 25.0f);
+        const auto gain = ComputeGain(OriginListener(), glm::vec3(0.0f, 0.0f, -5.0f), 25.0f);
         EQUALS(NearlyEqual(gain.left, gain.right), true);
+    });
+
+    IT("pans a Z-up listener on the same side as the speaker", {
+        // Regression: cross(up, forward) mirrored both of these.
+        const auto rightSide = ComputeGain(ZUpListener(), glm::vec3(5.0f, 0.0f, 0.0f), 25.0f);
+        EQUALS(rightSide.right > rightSide.left, true);
+
+        const auto leftSide = ComputeGain(ZUpListener(), glm::vec3(-5.0f, 0.0f, 0.0f), 25.0f);
+        EQUALS(leftSide.left > leftSide.right, true);
+    });
+
+    IT("keeps a Z-up listener's speaker dead ahead centred", {
+        const auto gain = ComputeGain(ZUpListener(), glm::vec3(0.0f, 5.0f, 0.0f), 25.0f);
+        EQUALS(NearlyEqual(gain.left, gain.right), true);
+    });
+
+    IT("prefers an explicitly published right axis over the derived one", {
+        // How a left-handed game mirrors the pan without tilting the frame.
+        auto listener  = OriginListener();
+        listener.right = glm::vec3(-1.0f, 0.0f, 0.0f);
+
+        const auto gain = ComputeGain(listener, glm::vec3(5.0f, 0.0f, 0.0f), 25.0f);
+        EQUALS(gain.left > gain.right, true);
+    });
+
+    IT("falls back to the derived axis when the published right is degenerate", {
+        auto listener  = OriginListener();
+        listener.right = glm::vec3(0.0f, 0.0f, 0.0f);
+
+        const auto gain = ComputeGain(listener, glm::vec3(5.0f, 0.0f, 0.0f), 25.0f);
+        EQUALS(gain.right > gain.left, true);
     });
 
     IT("accumulates a frame into the stereo output", {

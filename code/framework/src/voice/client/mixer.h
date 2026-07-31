@@ -14,11 +14,13 @@
 
 namespace Framework::Voice {
     // Where the local player is listening from. Published by the game each frame; consumed
-    // by the audio thread through an atomically swapped snapshot.
+    // by the audio thread through an atomically swapped snapshot. Right-handed, like glm:
+    // the ear axis is cross(forward, up). A left-handed game publishes `right` instead.
     struct ListenerTransform {
         glm::vec3 position {0.0f};
-        glm::vec3 forward {0.0f, 0.0f, 1.0f};
+        glm::vec3 forward {0.0f, 0.0f, -1.0f};
         glm::vec3 up {0.0f, 1.0f, 0.0f};
+        glm::vec3 right {0.0f}; // zero -> derived from forward and up
     };
 
     // Per-ear linear gain for one speaker, in [0, 1].

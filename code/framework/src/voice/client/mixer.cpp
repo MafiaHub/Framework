@@ -63,13 +63,15 @@ namespace Framework::Voice {
         const float edgeFade    = 1.0f - (distance / range);
         const float attenuation = std::clamp(rolloff * edgeFade, 0.0f, 1.0f);
 
-        // Pan on the listener's right axis. cross(up, forward) — not cross(forward, up),
-        // which yields the left axis in a right-handed system and inverts the whole pan.
-        // Degenerate transforms fall back to centred.
+        // Pan on the listener's right axis. Degenerate transforms fall back to centred.
         float pan = 0.0f;
         if (distance > 0.0001f) {
-            const glm::vec3 right = glm::cross(listener.up, listener.forward);
-            const float rightLen  = glm::length(right);
+            glm::vec3 right = listener.right;
+            if (glm::dot(right, right) <= 0.0001f) {
+                right = glm::cross(listener.forward, listener.up);
+            }
+
+            const float rightLen = glm::length(right);
             if (rightLen > 0.0001f) {
                 pan = glm::dot(delta / distance, right / rightLen) * kMaxPan;
             }
