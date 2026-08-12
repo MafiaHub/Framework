@@ -262,7 +262,13 @@ namespace Framework::External::Epic {
                     }
                 }
                 catch (const std::exception &) {
-                    // fall through to plain trim
+                    // not clean JSON (e.g. browser-rendered) — scan for the value directly
+                }
+                const size_t k = s.find("authorizationCode");
+                const size_t q1 = s.find('"', s.find(':', k) + 1);
+                const size_t q2 = q1 == std::string::npos ? q1 : s.find('"', q1 + 1);
+                if (q1 != std::string::npos && q2 != std::string::npos) {
+                    return s.substr(q1 + 1, q2 - q1 - 1);
                 }
             }
             trim(s);
@@ -324,6 +330,26 @@ namespace Framework::External::Epic {
             return false;
         }
         SaveRefreshToken(out.refreshToken);
+        return true;
+    }
+
+    std::wstring GetLoginUrl() {
+        return kLoginUrl;
+    }
+
+    bool SignInWithAuthorizationCode(const std::string &pageTextOrCode) {
+        const std::string code = ExtractAuthCode(pageTextOrCode);
+        if (code.empty()) {
+            Log("webauth: no authorization code in page");
+            return false;
+        }
+        Tokens out;
+        if (!AuthCodeGrant(code, out)) {
+            Log("webauth: authorization_code grant failed");
+            return false;
+        }
+        SaveRefreshToken(out.refreshToken);
+        Log("webauth: success");
         return true;
     }
 

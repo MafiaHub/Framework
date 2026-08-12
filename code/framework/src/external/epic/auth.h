@@ -36,6 +36,11 @@ namespace Framework::External::Epic {
     // Mint a fresh single-use exchange code from a valid access token (expires in ~5 min).
     bool GetExchangeCode(const Tokens &tokens, std::string &outCode);
 
+    // Embedded-webview sign-in: navigate to GetLoginUrl(), then hand the resulting redirect-page
+    // text (or a bare authorizationCode) to SignInWithAuthorizationCode to mint + persist tokens.
+    std::wstring GetLoginUrl();
+    bool SignInWithAuthorizationCode(const std::string &pageTextOrCode);
+
     // Build the "-AUTH_TYPE=exchangecode ..." command-line fragment (leading space) the game's
     // EOS init consumes. appName/sandboxId come from the game's Epic manifest (AppName /
     // CatalogNamespace); installDir is the game root, used to locate the ownership-verification
