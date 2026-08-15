@@ -48,8 +48,8 @@ namespace Framework::Voice {
     SpeakerGain ComputeGain(const ListenerTransform &listener, const glm::vec3 &speakerPos, float range) {
         SpeakerGain gain;
 
-        const glm::vec3 delta = speakerPos - listener.position;
-        const float distance  = glm::length(delta);
+        const glm::vec3 attenuationFrom = glm::dot(listener.attenuationPosition, listener.attenuationPosition) > 0.0f ? listener.attenuationPosition : listener.position;
+        const float distance            = glm::length(speakerPos - attenuationFrom);
 
         if (range <= 0.0f || distance > range) {
             return gain; // silent
@@ -63,9 +63,13 @@ namespace Framework::Voice {
         const float edgeFade    = 1.0f - (distance / range);
         const float attenuation = std::clamp(rolloff * edgeFade, 0.0f, 1.0f);
 
-        // Pan on the listener's right axis. Degenerate transforms fall back to centred.
+        // Pan on the listener's right axis, measured from the pan origin rather than the distance
+        // origin: direction should follow what the player is looking from.
+        const glm::vec3 panDelta = speakerPos - listener.position;
+        const float panDistance  = glm::length(panDelta);
+
         float pan = 0.0f;
-        if (distance > 0.0001f) {
+        if (panDistance > 0.0001f) {
             glm::vec3 right = listener.right;
             if (glm::dot(right, right) <= 0.0001f) {
                 right = glm::cross(listener.forward, listener.up);
@@ -73,7 +77,7 @@ namespace Framework::Voice {
 
             const float rightLen = glm::length(right);
             if (rightLen > 0.0001f) {
-                pan = glm::dot(delta / distance, right / rightLen) * kMaxPan;
+                pan = glm::dot(panDelta / panDistance, right / rightLen) * kMaxPan;
             }
         }
 
