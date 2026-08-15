@@ -63,6 +63,7 @@ namespace Framework::GUI {
 
         bool _gpuAccelerated  = false;
         bool _hasFocus        = false;
+        bool _textInputFocused = false;
         int _x;
         int _y;
         int _z;
@@ -107,6 +108,13 @@ namespace Framework::GUI {
             if (_browser) {
                 _browser->GetHost()->SetFocus(enable);
             }
+        }
+
+        // True while an editable element inside the page holds the caret. Distinct from HasFocus:
+        // a focused HUD captures no text, and this stays true for a view CEF types into without
+        // the framework's focus flag set (the chat box does exactly that).
+        bool IsTextInputFocused() const {
+            return _textInputFocused;
         }
 
         bool HasFocus() const {
