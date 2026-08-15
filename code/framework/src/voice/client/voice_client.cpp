@@ -134,12 +134,19 @@ namespace Framework::Voice {
         _masterVolume.store(std::clamp(volume, 0.0f, 4.0f), std::memory_order_relaxed);
     }
 
+    void LocalVoiceSink::SetFullVolumeFraction(float fraction) {
+        _fullVolumeFraction.store(std::clamp(fraction, 0.0001f, 1.0f), std::memory_order_relaxed);
+    }
+
     void LocalVoiceSink::Render(float *stereoOut, uint32_t frameCount, void *user) {
         static_cast<LocalVoiceSink *>(user)->RenderInto(stereoOut, frameCount);
     }
 
     void LocalVoiceSink::RenderInto(float *stereoOut, uint32_t frameCount) {
         const World &world = _world[_publishedSlot.load(std::memory_order_acquire)];
+
+        // Read once per callback so every speaker in this buffer is mixed against the same curve.
+        const float fullVolumeFraction = _fullVolumeFraction.load(std::memory_order_relaxed);
 
         int16_t scratch[kRenderChunkSamples];
         bool mixedAnything = false;
@@ -191,7 +198,7 @@ namespace Framework::Voice {
 
             SpeakerGain gain;
             if (positioned) {
-                gain = ComputeGain(world.listener, world.position[i], world.range[i]);
+                gain = ComputeGain(world.listener, world.position[i], world.range[i], fullVolumeFraction);
             }
 
             const bool audible = gain.left > 0.0f || gain.right > 0.0f;

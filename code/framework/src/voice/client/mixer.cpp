@@ -15,13 +15,6 @@ namespace Framework::Voice {
     namespace {
         constexpr float kInt16Scale = 1.0f / 32768.0f;
 
-        // Within this fraction of `range` a speaker is at full volume; beyond it attenuation
-        // starts, and the floor keeps a speaker crossing the listener's own position from blowing
-        // up the division. A fraction rather than an absolute distance so the curve is scale
-        // invariant: a centimetre-scale game passes a proportionally larger range and gets the
-        // same rolloff in physical terms. 1/25 leaves the default range's radius at 1.0.
-        constexpr float kFullVolumeFraction = 1.0f / 25.0f;
-
         // How far the pan is allowed to swing. A full hard pan sounds wrong on headphones
         // for a speaker only slightly off-axis, so the effect is deliberately partial.
         constexpr float kMaxPan = 0.6f;
@@ -45,7 +38,7 @@ namespace Framework::Voice {
         }
     } // namespace
 
-    SpeakerGain ComputeGain(const ListenerTransform &listener, const glm::vec3 &speakerPos, float range) {
+    SpeakerGain ComputeGain(const ListenerTransform &listener, const glm::vec3 &speakerPos, float range, float fullVolumeFraction) {
         SpeakerGain gain;
 
         const glm::vec3 attenuationFrom = glm::dot(listener.attenuationPosition, listener.attenuationPosition) > 0.0f ? listener.attenuationPosition : listener.position;
@@ -57,7 +50,7 @@ namespace Framework::Voice {
 
         // Inverse-distance rolloff, normalised so it reaches zero exactly at `range` rather
         // than trailing off asymptotically and leaving a faint always-audible tail.
-        const float fullVolume  = range * kFullVolumeFraction;
+        const float fullVolume  = range * std::clamp(fullVolumeFraction, 0.0001f, 1.0f);
         const float clamped     = std::max(distance, fullVolume);
         const float rolloff     = fullVolume / clamped;
         const float edgeFade    = 1.0f - (distance / range);
