@@ -105,6 +105,7 @@ set(FRAMEWORK_CLIENT_SRC
 
     src/voice/client/mixer.cpp
     src/voice/client/audio_device.cpp
+    src/voice/client/voice_bench.cpp
     src/voice/client/voice_client.cpp
 )
 
