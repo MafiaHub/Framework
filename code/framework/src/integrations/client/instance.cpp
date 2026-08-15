@@ -518,6 +518,11 @@ namespace Framework::Integrations::Client {
             _webManager->Update();
         }
 
+        // After the CEF pump, which is what delivers InputFocusChange: reading this in
+        // UpdateNetworking saw last tick's focus. The chat box and views belong to the framework,
+        // so it enforces suppression itself rather than trusting every mod to remember.
+        _voiceClient.SetInputSuppressed(_chatBox.IsInputActive() || (_webManager && _webManager->IsAnyTextInputFocused()));
+
         {
             FW_PROFILE_SCOPE_N("Client::PostUpdate");
             PostUpdate();
@@ -539,12 +544,6 @@ namespace Framework::Integrations::Client {
         // so draining speakers here picks up this tick's audio rather than last tick's.
         {
             FW_PROFILE_SCOPE_N("Client::Voice");
-
-            // The chat box and web views belong to the framework, so it enforces this itself
-            // rather than trusting every mod to remember.
-            // Only actual text entry, not mere view focus: a focused HUD or menu must not mute the
-            // player. A page taking keystrokes reports it through ViewEvent::InputFocusChange.
-            _voiceClient.SetInputSuppressed(_chatBox.IsInputActive() || (_webManager && _webManager->IsAnyTextInputFocused()));
 
             // Speaker positions come from the replicated entity set, as the server's voice
             // router gets them: an owner GUID means a player-controlled entity. Done here so
