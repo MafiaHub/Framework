@@ -21,6 +21,11 @@ namespace Framework::Voice {
         glm::vec3 forward {0.0f, 0.0f, -1.0f};
         glm::vec3 up {0.0f, 1.0f, 0.0f};
         glm::vec3 right {0.0f}; // zero -> derived from forward and up
+
+        // Distance origin, when it differs from the pan origin above: a third-person game puts the
+        // camera in `position` and the character here, or two touching characters sound a boom
+        // apart. Zero -> use position, as with `right`.
+        glm::vec3 attenuationPosition {0.0f};
     };
 
     // Per-ear linear gain for one speaker, in [0, 1].
