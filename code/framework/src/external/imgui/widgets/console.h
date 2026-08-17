@@ -14,6 +14,7 @@
 
 #include <function2.hpp>
 #include <memory>
+#include <spdlog/sinks/ringbuffer_sink.h>
 #include <spdlog/spdlog.h>
 #include <vector>
 
@@ -23,9 +24,22 @@ namespace Framework::External::ImGUI::Widgets {
         using MenuBarProc = fu2::function<void() const>;
 
       protected:
+        struct LogSegment {
+            ImVec4 color;
+            bool colored;
+            std::string text;
+        };
+        using LogLine = std::vector<LogSegment>;
+
         std::shared_ptr<Utils::CommandProcessor> _commandProcessor;
 
-        spdlog::logger *_logger;
+        std::shared_ptr<spdlog::logger> _logger;
+
+        std::vector<LogLine> _cachedLogLines;
+
+        uint64_t _cachedLogEventCount = 0;
+
+        bool _logCacheValid = false;
 
         bool _autoScroll = true;
 
@@ -53,7 +67,11 @@ namespace Framework::External::ImGUI::Widgets {
 
         void SendCommand(const std::string &command) const;
 
-        static void FormatLog(std::string log);
+        void RefreshLogCache(const std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> &ringBuffer);
+
+        static LogLine ParseLog(const std::string &log);
+
+        static void DrawLog(const LogLine &line);
 
       public:
         explicit Console(std::shared_ptr<Utils::CommandProcessor> commandProcessor);

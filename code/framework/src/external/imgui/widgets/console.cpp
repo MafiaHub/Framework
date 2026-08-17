@@ -18,7 +18,7 @@
 #include <logging/logger.h>
 
 namespace Framework::External::ImGUI::Widgets {
-    Console::Console(std::shared_ptr<Utils::CommandProcessor> commandProcessor): _commandProcessor(commandProcessor), _logger(Logging::GetLogger("Console").get()) {}
+    Console::Console(std::shared_ptr<Utils::CommandProcessor> commandProcessor): _commandProcessor(commandProcessor), _logger(Logging::GetLogger("Console")) {}
 
     void Console::OnOpen() {
         _focusOnInput = true;
@@ -83,9 +83,9 @@ namespace Framework::External::ImGUI::Widgets {
             const float reservedHeight = AreControlsLocked() ? -(ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing()) : 0;
             ImGui::BeginChild("##logs", ImVec2(0, reservedHeight), 0, AreControlsLocked() ? ImGuiWindowFlags_HorizontalScrollbar : ImGuiWindowFlags_NoScrollbar);
             if (ringBuffer != nullptr) {
-                std::vector<std::string> log_message = ringBuffer->last_formatted();
-                for (std::string &log : log_message) {
-                    FormatLog(log);
+                RefreshLogCache(ringBuffer);
+                for (const LogLine &line : _cachedLogLines) {
+                    DrawLog(line);
                 }
             }
 
@@ -273,51 +273,79 @@ namespace Framework::External::ImGUI::Widgets {
         }
     }
 
-    void Console::FormatLog(std::string log) {
-        std::regex brackets_regex("\\[.*?\\]", std::regex_constants::ECMAScript);
+    void Console::RefreshLogCache(const std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> &ringBuffer) {
+        const auto logEventCount = Logging::GetInstance()->GetLogEventCount();
+        if (_logCacheValid && logEventCount == _cachedLogEventCount) {
+            return;
+        }
+
+        _cachedLogLines.clear();
+        for (const std::string &log : ringBuffer->last_formatted()) {
+            _cachedLogLines.push_back(ParseLog(log));
+        }
+        _cachedLogEventCount = logEventCount;
+        _logCacheValid       = true;
+    }
+
+    Console::LogLine Console::ParseLog(const std::string &log) {
+        static const std::regex brackets_regex("\\[.*?\\]", std::regex_constants::ECMAScript);
 
         auto brackets_begin = std::sregex_iterator(log.begin(), log.end(), brackets_regex);
         auto brackets_end   = std::sregex_iterator();
 
+        LogLine line;
         int logCount = 1;
         for (std::sregex_iterator i = brackets_begin; i != brackets_end; ++i) {
             const std::smatch &match = *i;
             std::string match_str    = match.str();
 
             if (logCount == 1) {
-                ImGui::TextColored(ImVec4(0.5f, 1, 1, 1), "%s", match_str.c_str());
-                ImGui::SameLine();
+                line.push_back({ImVec4(0.5f, 1, 1, 1), true, match_str});
             }
 
             if (logCount == 2) {
-                ImGui::TextColored(ImVec4(0.5f, 0.5f, 1, 1), "%s", match_str.c_str());
-                ImGui::SameLine();
+                line.push_back({ImVec4(0.5f, 0.5f, 1, 1), true, match_str});
             }
 
             if (logCount == 3) {
+                ImVec4 levelColor(1, 0, 0.5f, 1);
                 if (match_str == "[info]")
-                    ImGui::TextColored(ImVec4(0, 1, 0, 1), "%s", match_str.c_str());
+                    levelColor = ImVec4(0, 1, 0, 1);
                 else if (match_str == "[debug]")
-                    ImGui::TextColored(ImVec4(0, 0, 1, 1), "%s", match_str.c_str());
+                    levelColor = ImVec4(0, 0, 1, 1);
                 else if (match_str == "[error]")
-                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", match_str.c_str());
+                    levelColor = ImVec4(1, 0, 0, 1);
                 else if (match_str == "[warning]")
-                    ImGui::TextColored(ImVec4(1, 1, 0, 1), "%s", match_str.c_str());
+                    levelColor = ImVec4(1, 1, 0, 1);
                 else if (match_str == "[trace]")
-                    ImGui::TextColored(ImVec4(0.5f, 0, 1, 1), "%s", match_str.c_str());
+                    levelColor = ImVec4(0.5f, 0, 1, 1);
                 else if (match_str == "[critical]")
-                    ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "%s", match_str.c_str());
-                else
-                    ImGui::TextColored(ImVec4(1, 0, 0.5f, 1), "%s", match_str.c_str());
+                    levelColor = ImVec4(1, 0.5f, 0, 1);
+                line.push_back({levelColor, true, match_str});
 
-                ImGui::SameLine();
                 const auto &suffix = match.suffix();
                 if (suffix.length() > 0) {
-                    ImGui::Text("%s", suffix.str().c_str());
+                    line.push_back({ImVec4(), false, suffix.str()});
                 }
             }
 
             logCount++;
+        }
+        return line;
+    }
+
+    void Console::DrawLog(const LogLine &line) {
+        for (size_t i = 0; i < line.size(); i++) {
+            if (i > 0) {
+                ImGui::SameLine();
+            }
+            const LogSegment &segment = line[i];
+            if (segment.colored) {
+                ImGui::TextColored(segment.color, "%s", segment.text.c_str());
+            }
+            else {
+                ImGui::Text("%s", segment.text.c_str());
+            }
         }
     }
 } // namespace Framework::External::ImGUI::Widgets
