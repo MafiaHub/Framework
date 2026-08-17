@@ -106,7 +106,17 @@ namespace Framework::Networking::Replication {
 
     void NetworkEntity::SerializeDestruction(MafiaNet::BitStream *, MafiaNet::Connection_RM3 *) {}
 
-    bool NetworkEntity::DeserializeDestruction(MafiaNet::BitStream *, MafiaNet::Connection_RM3 *) {
+    bool NetworkEntity::DeserializeDestruction(MafiaNet::BitStream *, MafiaNet::Connection_RM3 *sourceConnection) {
+        // Server authority gate (mirrors Deserialize): the base ReplicaManager3 destruction dispatch
+        // resolves the target by a NetworkID taken straight from the packet body and deletes it the
+        // moment this returns true, with no ownership check of its own. Without this gate any client
+        // could despawn arbitrary entities — other players' avatars, server-owned objects — and, via
+        // QueryRelayDestruction, have the server relay that deletion to everyone. Only honour a
+        // destruction from the entity's current owner; fail closed on a missing connection. Returning
+        // false keeps the entity alive. Clients still accept the server's authoritative destructions.
+        if (IsServerPeer() && (!sourceConnection || MafiaNet::ToPeerGuid(sourceConnection->GetRakNetGUID()) != ownerGUID)) {
+            return false;
+        }
         return true;
     }
 
