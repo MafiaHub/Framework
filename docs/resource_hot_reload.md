@@ -95,8 +95,8 @@ Clients that haven't finished connecting ignore `ResourceRefresh`/`ResourceStop`
 
 ## Design notes (vs FiveM / MTASA)
 
-FiveM and MTASA run **each resource in its own script runtime** (Lua state / V8
-isolate / Mono domain). Reloading destroys and recreates that runtime, so
+FiveM and MTASA run **each resource in its own script runtime** (V8 isolate /
+Mono domain / native script state). Reloading destroys and recreates that runtime, so
 modules, timers, and event listeners are freed automatically — there is no
 cache to evict or timer to cancel.
 
