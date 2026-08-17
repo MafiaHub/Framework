@@ -479,6 +479,10 @@ namespace Framework::Integrations::Client {
         CoreModules::Reset();
 
         Lifecycle::Shutdown();
+
+        // Last: flush and tear down the async logging thread pool before static
+        // destruction can race it.
+        Logging::GetInstance()->Shutdown();
     }
 
     void Instance::Update() {
