@@ -8,7 +8,7 @@ The MafiaHub Framework is currently at version 2.3.1. It has established core co
 ### Core Systems
 - ✅ ECS (Entity Component System) architecture
 - ✅ Networking infrastructure (client-server model)
-- ✅ Lua scripting integration
+- ✅ JavaScript/TypeScript scripting integration
 - ✅ Logging and error reporting
 - ✅ GUI systems with Ultralight and ImGui
 - ✅ Input handling and event system
@@ -73,7 +73,7 @@ The MafiaHub Framework is currently at version 2.3.1. It has established core co
 
 ### Short-term (v2.4.0)
 - Improve network synchronization reliability
-- Enhance Lua scripting capabilities
+- Enhance scripting capabilities
 - Fix critical bugs reported by the community
 
 ### Medium-term (v2.5.0)

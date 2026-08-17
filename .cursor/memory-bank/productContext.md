@@ -35,7 +35,7 @@ While providing robust defaults, the framework is designed to be extended. Game-
 - The framework initializes core systems (networking, ECS, scripting)
 - Game-specific code registers entities, components, and systems
 - Network synchronization happens automatically for registered components
-- Lua scripting allows for runtime modification of game behavior
+- JavaScript/TypeScript scripting allows for runtime modification of game behavior
 
 ## User Experience Goals
 

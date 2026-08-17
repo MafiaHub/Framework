@@ -4,7 +4,7 @@
 
 ### Languages
 - **C++17**: Primary development language
-- **Lua 5.4**: Scripting language for game logic
+- **JavaScript/TypeScript**: Scripting language for game logic (libnode/V8)
 - **CMake 3.20+**: Build system
 
 ### Build Tools
@@ -57,7 +57,6 @@ glm                  - Mathematics
 spdlog               - Logging
 mafianet             - Networking
 json                 - Data serialization
-lua                  - Scripting
 sdl2                 - Window management
 sentry               - Error reporting
 imgui                - GUI
