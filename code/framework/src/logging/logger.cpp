@@ -142,7 +142,7 @@ namespace Framework::Logging {
     void Logger::Shutdown() {
         // Ordered against Get() so no logger can bind the thread pool mid-teardown.
         std::lock_guard lock(_creationMutex);
-        _cacheGeneration.fetch_add(1, std::memory_order_relaxed);
+        _cacheGeneration.fetch_add(1, std::memory_order_release);
         spdlog::apply_all([](const std::shared_ptr<spdlog::logger> &logger) {
             logger->flush();
         });

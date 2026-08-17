@@ -108,8 +108,12 @@ namespace Framework::Logging {
         }
 
         void PauseLogging(bool state) {
+            // The mutex orders the flag against Get(); the release increment publishes
+            // it to the lock-free cache path, whose acquire generation load then cannot
+            // pair a new generation with a stale pause flag.
+            std::lock_guard lock(_creationMutex);
             _loggingPaused.store(state, std::memory_order_relaxed);
-            _cacheGeneration.fetch_add(1, std::memory_order_relaxed);
+            _cacheGeneration.fetch_add(1, std::memory_order_release);
         }
 
         void SetMaxFileCount(size_t count) {
@@ -138,7 +142,7 @@ namespace Framework::Logging {
         }
 
         static uint32_t GetCacheGeneration() {
-            return _cacheGeneration.load(std::memory_order_relaxed);
+            return _cacheGeneration.load(std::memory_order_acquire);
         }
     };
 
