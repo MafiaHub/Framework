@@ -19,7 +19,7 @@ namespace Framework::Networking::RPC {
     // empty = notice line; color is packed 0xRRGGBBAA, 0 = client theme default. '/'-prefixed lines
     // are parsed into a command on the server.
     struct ChatMessage {
-        static constexpr const char *kIdentifier = "Framework::ChatMessage";
+        static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::ChatMessage");
 
         std::string text;
         std::string author;
