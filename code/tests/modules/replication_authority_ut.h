@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "networking/network_client.h"
+#include "networking/network_server.h"
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
 
@@ -24,16 +24,18 @@
 // (true -> the base deletes + relays the destruction, false -> the entity is kept), so a return of
 // true for a non-owner connection reproduces the vulnerability and a return of false proves the fix.
 MODULE(replication_authority, {
-    using Framework::Networking::NetworkClient;
+    using Framework::Networking::NetworkServer;
     using Framework::Networking::Replication::NetworkEntity;
     using Framework::Networking::Replication::ReplicationManager;
 
     // Two in-memory peers, never started (no socket bound): one manager put into server mode, one
-    // into client mode. Only ReplicationManager::IsServer() is exercised by the gate, and Init()
-    // just flips that flag, records the peer's guid, and attaches the plugin — none of which needs a
-    // live connection.
-    NetworkClient serverPeer;
-    NetworkClient clientPeer;
+    // into client mode. NetworkServer is used for both because the tests link Framework +
+    // FrameworkServer (NetworkClient lives in FrameworkClient, which they do not link); the server
+    // vs client role is decided by ReplicationManager::Init's flag, not by the peer type. Only
+    // ReplicationManager::IsServer() is exercised by the gate, and Init() just flips that flag,
+    // records the peer's guid, and attaches the plugin — none of which needs a live connection.
+    NetworkServer serverPeer;
+    NetworkServer clientPeer;
     auto *serverManager = serverPeer.GetReplicationManager();
     auto *clientManager = clientPeer.GetReplicationManager();
     serverManager->Init(&serverPeer, true);
