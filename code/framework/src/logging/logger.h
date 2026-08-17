@@ -42,7 +42,7 @@ namespace Framework::Logging {
         std::string _logFolder = "logs";
         size_t _maxFileSize    = 1024 * 1024 * 10;
         size_t _maxFileCount   = 10;
-        bool _loggingPaused    = false;
+        std::atomic<bool> _loggingPaused {false};
         std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> _ringbufferSink;
         static inline size_t _maxRingBufferSize = 128;
 
@@ -104,11 +104,11 @@ namespace Framework::Logging {
         }
 
         bool IsLoggingPaused() const {
-            return _loggingPaused;
+            return _loggingPaused.load(std::memory_order_relaxed);
         }
 
         void PauseLogging(bool state) {
-            _loggingPaused = state;
+            _loggingPaused.store(state, std::memory_order_relaxed);
             _cacheGeneration.fetch_add(1, std::memory_order_relaxed);
         }
 

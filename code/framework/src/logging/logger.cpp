@@ -20,7 +20,7 @@
 
 namespace Framework::Logging {
     namespace {
-        class ForwardingSink final : public spdlog::sinks::base_sink<std::mutex> {
+        class ForwardingSink final: public spdlog::sinks::base_sink<std::mutex> {
           public:
             explicit ForwardingSink(Logger *owner): _owner(owner) {}
 
@@ -36,7 +36,7 @@ namespace Framework::Logging {
         };
 
         // Only touches an atomic, so no locking is needed.
-        class CountingSink final : public spdlog::sinks::base_sink<spdlog::details::null_mutex> {
+        class CountingSink final: public spdlog::sinks::base_sink<spdlog::details::null_mutex> {
           public:
             explicit CountingSink(Logger *owner): _owner(owner) {}
 
@@ -90,14 +90,13 @@ namespace Framework::Logging {
     }
 
     std::shared_ptr<spdlog::logger> Logger::Get(const char *logName, bool async) {
-        // Handle pause mode logs
-        if (_loggingPaused) {
-            constexpr auto suppressedLogger = "_suppressed_logger";
-            if (auto logger = spdlog::get(suppressedLogger)) {
-                return logger;
-            }
+        // The per-thread cache in GetLogger absorbs the hot path, so this can hold the
+        // mutex throughout; that also keeps creation ordered against Shutdown().
+        std::lock_guard lock(_creationMutex);
 
-            std::lock_guard lock(_creationMutex);
+        // Handle pause mode logs
+        if (_loggingPaused.load(std::memory_order_relaxed)) {
+            constexpr auto suppressedLogger = "_suppressed_logger";
             if (auto logger = spdlog::get(suppressedLogger)) {
                 return logger;
             }
@@ -105,11 +104,6 @@ namespace Framework::Logging {
         }
 
         // If the logger already exists, return it
-        if (auto logger = spdlog::get(logName)) {
-            return logger;
-        }
-
-        std::lock_guard lock(_creationMutex);
         if (auto logger = spdlog::get(logName)) {
             return logger;
         }
@@ -146,6 +140,8 @@ namespace Framework::Logging {
     }
 
     void Logger::Shutdown() {
+        // Ordered against Get() so no logger can bind the thread pool mid-teardown.
+        std::lock_guard lock(_creationMutex);
         _cacheGeneration.fetch_add(1, std::memory_order_relaxed);
         spdlog::apply_all([](const std::shared_ptr<spdlog::logger> &logger) {
             logger->flush();
@@ -180,8 +176,9 @@ namespace Framework::Logging {
 
     std::shared_ptr<spdlog::logger> GetLogger(const char *name, bool async) {
         // spdlog::get locks the global registry per call, so cache handles per thread.
+        // Keyed by name value, not pointer: callers may pass transient buffers.
         struct CacheEntry {
-            const char *name;
+            std::string name;
             bool async;
             uint32_t generation;
             std::shared_ptr<spdlog::logger> logger;
