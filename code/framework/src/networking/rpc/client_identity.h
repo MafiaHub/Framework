@@ -16,7 +16,7 @@ namespace Framework::Networking::RPC {
     // Client -> server after assets download: announces the player. Only honoured for an
     // authenticated connection (NetworkServer::IsAuthenticated).
     struct ClientIdentity {
-        static constexpr const char *kIdentifier = "Framework::ClientIdentity";
+        static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::ClientIdentity");
 
         std::string name;
         std::string steamId;

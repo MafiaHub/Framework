@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "rpc_identifier.h"
+
 #include <mafianet/BitStream.h>
 
 #include <concepts>

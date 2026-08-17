@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 16
+#define UNIT_MAX_MODULES 24
 #include "logging/logger.h"
 #include "unit.h"
 
@@ -15,6 +15,7 @@
 #include "modules/interpolator_ut.h"
 #include "modules/result_ut.h"
 #include "modules/network_packets_ut.h"
+#include "modules/rpc_identifier_ut.h"
 #include "modules/state_machine_ut.h"
 #include "modules/persistent_config_ut.h"
 #include "modules/snapshot_buffer_ut.h"
@@ -38,6 +39,7 @@ int main() {
     UNIT_MODULE(interpolator);
     UNIT_MODULE(result);
     UNIT_MODULE(network_packets);
+    UNIT_MODULE(rpc_identifier);
     UNIT_MODULE(state_machine);
     UNIT_MODULE(persistent_config);
     UNIT_MODULE(snapshot_buffer);
