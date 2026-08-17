@@ -12,7 +12,7 @@ The MafiaHub Framework is an opinionated suite of tools and libraries designed t
 ## Key Features
 - **Networking**: Tools to synchronize data between players
 - **ECS (Entity Component System)**: Robust framework for entity management and world streaming
-- **Scripting**: Lua scripting layer for creating and managing game modes
+- **Scripting**: JavaScript/TypeScript scripting layer for creating and managing game modes
 - **Logging**: System for tracking actions and errors
 - **GUI**: Interface creation using Ultralight and DearImGUI libraries
 - **Sentry**: Error and exception reporting service integration

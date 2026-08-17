@@ -55,7 +55,7 @@ Some core managers and services use the singleton pattern for global access wher
 - Supports serialization for network transmission and persistence
 
 ### Scripting Subsystem
-- Exposes framework functionality to Lua scripts
+- Exposes framework functionality to JavaScript/TypeScript scripts
 - Provides hooks for game-specific logic
 - Manages script execution and error handling
 
@@ -81,7 +81,7 @@ Some core managers and services use the singleton pattern for global access wher
 ## Extension Mechanisms
 - Custom components can be registered to extend entity capabilities
 - New systems can be added to implement game-specific logic
-- Lua scripts can modify behavior at runtime
+- Scripts can modify behavior at runtime
 - Event handlers can be registered for custom event processing
 
 ## Best Practices
@@ -89,4 +89,4 @@ Some core managers and services use the singleton pattern for global access wher
 - Register components and systems during initialization
 - Use events for loose coupling between subsystems
 - Leverage the ECS pattern for game objects
-- Use Lua for dynamic, game-specific logic 
+- Use scripting for dynamic, game-specific logic 

@@ -141,9 +141,6 @@ add_subdirectory(libsig)
 # Build sfd
 add_subdirectory(sfd)
 
-# Build lua
-add_subdirectory(lua-5.4.4)
-
 # Build Tracy (profiler client)
 # TRACY_ENABLE follows FW_PROFILING; the TracyClient target is always available
 # so Framework can link it unconditionally - it compiles to no-ops when disabled.
