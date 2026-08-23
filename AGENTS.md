@@ -2,6 +2,56 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+## Non-negotiable rules
+
+These are not suggestions. Do not weaken, re-litigate, or "defensively" work
+around them.
+
+### 1. Never null-check a resolved pattern address
+
+Signature scanning is validated at scan time. `hook::get_pattern` and friends
+resolve during `Patterns::InitPatterns()`, before anything uses the result. If
+a signature does not match, that fails there and then — loudly, at startup.
+
+**Therefore: if the mod is running, every `gPatterns.*` entry is valid.** A
+zero/null test on one is dead code that can never be true. It buys nothing,
+hides the real failure point, and adds a fake error path that has to be read,
+reviewed, and maintained forever.
+
+```cpp
+// FORBIDDEN — dead branch, never taken
+IInput *IInput::GetInstance() {
+    if (gPatterns.SSystemGlobalEnvironment__Base == 0) {
+        return nullptr;
+    }
+    return *reinterpret_cast<IInput **>(gPatterns.SSystemGlobalEnvironment__Base + 0x40);
+}
+
+// CORRECT
+IInput *IInput::GetInstance() {
+    return *reinterpret_cast<IInput **>(gPatterns.SSystemGlobalEnvironment__Base + 0x40);
+}
+```
+
+The same applies to hook installation. Call `MH_CreateHook` on
+`gPatterns.<Symbol>` directly; do not stage it through a local and test it, and
+do not log a "was not resolved" warning that cannot fire.
+
+This extends to anything else already guaranteed by construction: console
+variable names verified against the binary, vtable slots proven against the
+game's own call sites, and singletons whose lifetime the call site already
+establishes. Guard genuine runtime conditions — a game-owned pointer that is
+legitimately null at that moment, a bounds check, an index the caller supplies.
+Never guard a fact.
+
+### 2. Never touch files outside the repository
+
+Do not create, edit, or delete anything in the user's game install, home
+directory, or any other user-space location. That includes `user.cfg`,
+`system.cfg`, save games, and profile data. Reading them for diagnosis is fine;
+writing is not. If a change needs to happen there, tell the user and let them
+make it. Configuration the mod needs belongs in the mod, applied in-process.
+
 ## Project Overview
 
 MafiaHub Framework is a C++ framework for building multiplayer game modifications. It provides networking, ECS (Entity Component System), scripting, GUI, and other essential components for synchronized multiplayer experiences.
