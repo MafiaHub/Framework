@@ -133,6 +133,7 @@ if(WIN32)
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
+        src/utils/game_module.cpp
         src/utils/memory.cpp
         src/utils/minidump.cpp
     )
