@@ -14,6 +14,7 @@
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/voice_settings.h"
 #include "networking/rpc/client_identity.h"
+#include "networking/rpc/nametag.h"
 #include "networking/rpc/resource_refresh.h"
 #include "networking/rpc/server_resources.h"
 
@@ -22,6 +23,7 @@
 
 #include "networking/state.h"
 #include "networking/replication/replication_manager.h"
+#include "networking/replication/nametag_state.h"
 
 #include <cppfs/cppfs.h>
 #include <cppfs/FilePath.h>
@@ -765,6 +767,22 @@ namespace Framework::Integrations::Client {
 
         net->RegisterRPC<Framework::Networking::RPC::VoiceSpeakerRange>([this](const Framework::Networking::RPC::VoiceSpeakerRange &payload, MafiaNet::Packet *) {
             _voiceClient.SetSpeakerRange(payload.player, payload.range);
+        });
+
+        // Scripted nametag state for our own avatar; our next upstream update carries it to the others.
+        net->RegisterRPC<Framework::Networking::RPC::SetNametagState>([](const Framework::Networking::RPC::SetNametagState &payload, MafiaNet::Packet *) {
+            auto *replication = CoreModules::GetReplication();
+            auto *entity      = replication ? replication->GetEntityByNetworkID(payload.networkId) : nullptr;
+            if (!entity || !entity->IsOwner()) {
+                return;
+            }
+            auto *nametag = entity->GetNametag();
+            if (!nametag) {
+                return;
+            }
+            nametag->components = payload.components;
+            nametag->color      = payload.color;
+            nametag->text       = payload.text;
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Networking messages registered");

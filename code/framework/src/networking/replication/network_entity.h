@@ -20,6 +20,7 @@
 namespace Framework::Networking::Replication {
     class ReplicationManager;
     class EntityRegistry;
+    struct NametagState;
 
     class FieldSerializer final {
       public:
@@ -164,6 +165,11 @@ namespace Framework::Networking::Replication {
 
         // Called on the owning client after SerializeForcedState has applied the forced fields.
         virtual void OnStateForced() {}
+
+        // This entity's nametag state, for entities that carry one (games embed and serialize it).
+        virtual NametagState *GetNametag() {
+            return nullptr;
+        }
 
         // Server: push this entity's forced state to its owner. No-op for unowned (server-owned)
         // entities, which replicate to everyone normally.
