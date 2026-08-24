@@ -31,6 +31,8 @@
 
 #include "scripting/module.h"
 
+#include <nlohmann/json.hpp>
+
 #include <gui/manager.h>
 
 #include <input/input.h>
@@ -160,6 +162,11 @@ namespace Framework::Integrations::Client {
         // asset re-sync completes (dev mode). Empty on a normal connect.
         std::vector<Client::Scripting::ServerResourceInfo> _pendingRefreshResources;
 
+        // The server's replicated server.json subset, decoded from the MafiaNet session payload the
+        // moment the connection surfaces. Available before the asset phase and before any client
+        // script runs, which is what lets a project pick what to load from it.
+        nlohmann::json _serverConfig;
+
         // Handshake state carried from ServerResources until the ReadyEvent spawn barrier completes.
         int _readyEventId {};
         float _serverTickRate {};
@@ -264,6 +271,16 @@ namespace Framework::Integrations::Client {
         void StartAssetDownload();
 
       public:
+        // Server-published config for the current connection. Empty object when disconnected, when
+        // the server published nothing, or when what it published was not a JSON object.
+        //
+        // The contents are remote input: the server chose them and MafiaNet does not inspect them.
+        // Validate before use, and never treat a value as a path, command, or format string without
+        // resolving it against a known root first.
+        const nlohmann::json &GetServerConfig() const {
+            return _serverConfig;
+        }
+
         InstanceOptions &GetOptions() {
             return _opts;
         }

@@ -599,8 +599,30 @@ namespace Framework::Integrations::Client {
             net->SetBuildToken(Framework::Networking::NetworkPeer::kBuildVerificationDisabledToken);
         }
 
-        net->SetOnPlayerConnectedCallback([this](MafiaNet::Packet *) {
+        net->SetOnPlayerConnectedCallback([this, net](MafiaNet::Packet *packet) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, verifying build");
+
+            // ID_CONNECTION_REQUEST_ACCEPTED is withheld by MafiaNet until the session handshake
+            // completes, so the server's payload is already in hand here -- earlier than the
+            // resource list, the asset download, or any client script.
+            _serverConfig = nlohmann::json::object();
+            if (packet && net->GetPeer()) {
+                unsigned int length = 0;
+                const char *raw     = net->GetPeer()->GetRemoteSessionConfig(packet->guid, &length);
+                if (raw && length > 0) {
+                    // Remote input: a server can publish anything at all here, so a parse failure is
+                    // an ordinary outcome rather than an error worth dropping the connection over.
+                    auto parsed = nlohmann::json::parse(raw, raw + length, nullptr, false);
+                    if (parsed.is_discarded() || !parsed.is_object()) {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Server config is not a JSON object; ignoring {} byte(s)", length);
+                    }
+                    else {
+                        _serverConfig = std::move(parsed);
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received {} server config key(s)", _serverConfig.size());
+                    }
+                }
+            }
+
             SetConnectionPhase(ConnectionPhase::Authenticating);
         });
 
@@ -724,6 +746,7 @@ namespace Framework::Integrations::Client {
             ++_assetProcessingGeneration;
             _deferredInitialAssetProcessingGeneration = 0;
             _resumingDeferredInitialAssetProcessing    = false;
+            _serverConfig                              = nlohmann::json::object();
             _initialDownloadDone                       = false;
             _downloadStatus                            = {};
             _connectionFinalized                       = false;

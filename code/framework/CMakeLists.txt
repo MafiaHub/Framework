@@ -8,6 +8,7 @@ set(FRAMEWORK_SRC
     ${CMAKE_CURRENT_BINARY_DIR}/version.cpp
     src/utils/delay_scope.cpp
     src/utils/config.cpp
+    src/utils/config_schema.cpp
     src/utils/persistent_config.cpp
     src/utils/interpolator.cpp
     src/utils/time.cpp
