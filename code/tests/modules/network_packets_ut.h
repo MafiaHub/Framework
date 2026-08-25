@@ -81,6 +81,9 @@ MODULE(network_packets, {
         out.steamId    = "steam-1";
         out.discordId  = "discord-2";
         out.hardwareId = "hw-3";
+        out.capabilityProtocolVersion = RPC::ClientIdentity::kCapabilityProtocolVersion;
+        out.clientKind = RPC::ClientKind::Headless;
+        out.capabilities = RPC::ClientCapability::HeadlessDefaults;
 
         MafiaNet::BitStream bs;
         out.Serialize(&bs, true);
@@ -89,6 +92,11 @@ MODULE(network_packets, {
         STREQUALS(in.steamId.c_str(), "steam-1");
         STREQUALS(in.discordId.c_str(), "discord-2");
         STREQUALS(in.hardwareId.c_str(), "hw-3");
+        EQUALS(in.capabilityProtocolVersion, RPC::ClientIdentity::kCapabilityProtocolVersion);
+        EQUALS(in.clientKind, RPC::ClientKind::Headless);
+        EQUALS(in.capabilities, RPC::ClientCapability::HeadlessDefaults);
+        EQUALS(in.HasCapability(RPC::ClientCapability::Replication), true);
+        EQUALS(in.HasCapability(RPC::ClientCapability::NativePlayer), false);
     });
 
     IT("round-trips a ServerResources payload with a resource list", {

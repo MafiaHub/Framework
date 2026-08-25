@@ -1057,6 +1057,9 @@ namespace Framework::Integrations::Client {
             identity.steamId    = steamId;
             identity.discordId  = _presence ? _presence->GetUserId() : "";
             identity.hardwareId = Framework::Utils::GetHardwareId();
+            identity.capabilityProtocolVersion = Framework::Networking::RPC::ClientIdentity::kCapabilityProtocolVersion;
+            identity.clientKind                = Framework::Networking::RPC::ClientKind::Game;
+            identity.capabilities              = Framework::Networking::RPC::ClientCapability::GameDefaults;
             net->SendRPC(identity, serverGuid);
 
             net->GetReadyEvent()->SetEvent(_readyEventId, false);

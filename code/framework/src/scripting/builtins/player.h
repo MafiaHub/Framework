@@ -46,6 +46,10 @@ namespace Framework::Scripting::Builtins {
         std::string GetSteamId() const;
         std::string GetDiscordId() const;
         std::string GetHardwareId() const;
+        std::string GetClientKind() const;
+        uint16_t GetCapabilityProtocolVersion() const;
+        uint32_t GetCapabilityFlags() const;
+        v8::Local<v8::Object> GetCapabilities(v8::Isolate *isolate) const;
 
         // Connection's average round-trip time in ms. Server-only; -1 when unavailable.
         int GetPing() const;

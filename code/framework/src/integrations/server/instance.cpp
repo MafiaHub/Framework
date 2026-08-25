@@ -495,6 +495,14 @@ namespace Framework::Integrations::Server {
             digits(identity.steamId, 32);
             digits(identity.discordId, 32);
             digits(identity.hardwareId, 128);
+            if (identity.clientKind != Framework::Networking::RPC::ClientKind::Game
+                && identity.clientKind != Framework::Networking::RPC::ClientKind::Headless) {
+                identity.clientKind = Framework::Networking::RPC::ClientKind::Game;
+            }
+            identity.capabilities &= Framework::Networking::RPC::ClientCapability::KnownMask;
+            if (identity.clientKind == Framework::Networking::RPC::ClientKind::Headless) {
+                identity.capabilities &= Framework::Networking::RPC::ClientCapability::HeadlessDefaults;
+            }
             net->SetPeerIdentity(guid, identity);
 
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {}", identity.name, guid.g, identity.hardwareId);

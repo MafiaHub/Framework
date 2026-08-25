@@ -63,6 +63,45 @@ namespace Framework::Scripting::Builtins {
         return identity ? identity->hardwareId : "";
     }
 
+    std::string Player::GetClientKind() const {
+        const auto *identity = ResolveIdentity();
+        if (!identity) {
+            return "unknown";
+        }
+        return identity->clientKind == Networking::RPC::ClientKind::Headless ? "headless" : "game";
+    }
+
+    uint16_t Player::GetCapabilityProtocolVersion() const {
+        const auto *identity = ResolveIdentity();
+        return identity ? identity->capabilityProtocolVersion : 0;
+    }
+
+    uint32_t Player::GetCapabilityFlags() const {
+        const auto *identity = ResolveIdentity();
+        return identity ? identity->capabilities : 0;
+    }
+
+    v8::Local<v8::Object> Player::GetCapabilities(v8::Isolate *isolate) const {
+        auto context = isolate->GetCurrentContext();
+        auto value   = v8::Object::New(isolate);
+        const uint32_t flags = GetCapabilityFlags();
+        const auto set = [&](const char *key, v8::Local<v8::Value> field) {
+            (void)value->Set(context, v8pp::to_v8(isolate, key), field);
+        };
+        const auto boolean = [&](uint32_t flag) {
+            return v8::Boolean::New(isolate, (flags & flag) == flag);
+        };
+        set("clientKind", v8pp::to_v8(isolate, GetClientKind()));
+        set("protocolVersion", v8pp::to_v8(isolate, GetCapabilityProtocolVersion()));
+        set("scriptEvents", boolean(Networking::RPC::ClientCapability::ScriptEvents));
+        set("replication", boolean(Networking::RPC::ClientCapability::Replication));
+        set("gameWorld", boolean(Networking::RPC::ClientCapability::GameWorld));
+        set("nativePlayer", boolean(Networking::RPC::ClientCapability::NativePlayer));
+        set("ui", boolean(Networking::RPC::ClientCapability::UI));
+        set("input", boolean(Networking::RPC::ClientCapability::Input));
+        return value;
+    }
+
     int Player::GetPing() const {
         const auto *entity = Resolve();
         if (!entity) {
@@ -218,6 +257,8 @@ namespace Framework::Scripting::Builtins {
             .property("steamId", &Player::GetSteamId, v8pp::metadata::property_docs("string", "Authenticated Steam identifier, or an empty string when unavailable."))
             .property("discordId", &Player::GetDiscordId, v8pp::metadata::property_docs("string", "Authenticated Discord identifier, or an empty string when unavailable."))
             .property("hardwareId", &Player::GetHardwareId, v8pp::metadata::property_docs("string", "Framework hardware identifier, or an empty string when unavailable."))
+            .property("clientKind", &Player::GetClientKind, v8pp::metadata::property_docs("\"game\" | \"headless\" | \"unknown\"", "Client implementation announced during the connection handshake; informational, not authorization."))
+            .property("capabilities", &Player::GetCapabilities, v8pp::metadata::property_options{"Negotiated client features; client-announced and informational, never an authorization source.", "PlayerCapabilities", true})
             .property("ping", &Player::GetPing, v8pp::metadata::property_docs("number", "Current round-trip latency in milliseconds, or -1 when unavailable."))
             .property("ip", &Player::GetAddress, v8pp::metadata::property_docs("string", "Current remote network address, or an empty string when unavailable."));
         return *cls;
