@@ -393,8 +393,7 @@ namespace Framework::Integrations::Server {
         _replicatedModConfig  = replicated.dump();
 
         auto *net = _networkingEngine ? _networkingEngine->GetNetworkServer() : nullptr;
-        auto *peer = net ? net->GetPeer() : nullptr;
-        if (!peer) {
+        if (!net) {
             return;
         }
 
@@ -402,7 +401,8 @@ namespace Framework::Integrations::Server {
         // connection. A client therefore has this in hand the moment it sees
         // ID_CONNECTION_REQUEST_ACCEPTED, which is before the asset phase and before any client
         // script runs -- the whole point of putting it there rather than in an ordinary message.
-        peer->SetSessionConfig(_replicatedModConfig.c_str(), static_cast<unsigned int>(_replicatedModConfig.size()));
+        // A mod wanting a shape of its own replaces this from PostInit, which runs after Init.
+        net->SetSessionConfig(_replicatedModConfig);
 
         if (!replicated.empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Publishing {} replicated config key(s) to clients", replicated.size());

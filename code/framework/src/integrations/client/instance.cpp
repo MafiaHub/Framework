@@ -606,15 +606,14 @@ namespace Framework::Integrations::Client {
             // completes, so the server's payload is already in hand here -- earlier than the
             // resource list, the asset download, or any client script.
             _serverConfig = nlohmann::json::object();
-            if (packet && net->GetPeer()) {
-                unsigned int length = 0;
-                const char *raw     = net->GetPeer()->GetRemoteSessionConfig(packet->guid, &length);
-                if (raw && length > 0) {
+            if (packet) {
+                const std::string_view raw = net->GetRemoteSessionConfig(packet->guid);
+                if (!raw.empty()) {
                     // Remote input: a server can publish anything at all here, so a parse failure is
                     // an ordinary outcome rather than an error worth dropping the connection over.
-                    auto parsed = nlohmann::json::parse(raw, raw + length, nullptr, false);
+                    auto parsed = nlohmann::json::parse(raw.begin(), raw.end(), nullptr, false);
                     if (parsed.is_discarded() || !parsed.is_object()) {
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Server config is not a JSON object; ignoring {} byte(s)", length);
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Server config is not a JSON object; ignoring {} byte(s)", raw.size());
                     }
                     else {
                         _serverConfig = std::move(parsed);
