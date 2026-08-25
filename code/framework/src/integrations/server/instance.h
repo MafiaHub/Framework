@@ -83,6 +83,8 @@ namespace Framework::Integrations::Server {
         std::string sentryRelease;
         // Deployment environment ("retail" / "dev" / "ci"); empty leaves it unset.
         std::string sentryEnvironment;
+        // Extra files registered before sentry_init.
+        std::vector<std::string> sentryAttachments;
 
         std::string bindHost;
         std::string bindSecretKey;
@@ -156,7 +158,8 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Services::MasterlistConnector> _masterlist;
         std::unique_ptr<Utils::CommandListener> _commandListener;
         std::unique_ptr<Utils::CommandProcessor> _commandProcessor;
-        std::unique_ptr<External::Sentry::Wrapper> _crashReporter;
+        // Not owned; the reporter is process-wide.
+        External::Sentry::Wrapper *_crashReporter = nullptr;
         // Proximity voice relay. Value member: it holds no resources until Init attaches it to
         // the peer, so a mod that never enables voice pays nothing beyond the empty maps.
         Voice::VoiceServer _voiceServer;
@@ -252,7 +255,7 @@ namespace Framework::Integrations::Server {
         }
 
         External::Sentry::Wrapper *GetCrashReporter() const {
-            return _crashReporter.get();
+            return _crashReporter;
         }
 
         Networking::Engine *GetNetworkingEngine() const {

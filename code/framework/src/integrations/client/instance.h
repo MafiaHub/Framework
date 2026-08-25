@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 #include <utility>
 
 #include "scripting/module.h"
@@ -80,6 +81,8 @@ namespace Framework::Integrations::Client {
         std::string sentryRelease;
         // Deployment environment ("retail" / "dev" / "ci"); empty leaves it unset.
         std::string sentryEnvironment;
+        // Extra files registered before sentry_init.
+        std::vector<std::string> sentryAttachments;
 
         // Optional UI font (TTF). Empty -> ImGui's embedded ASCII-only font.
         // A Unicode-covering font enables non-Latin scripts (e.g. Cyrillic).
@@ -135,7 +138,8 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<Graphics::RenderIO> _renderIO;
         std::unique_ptr<Client::Scripting::ClientScriptingModule> _scriptingModule;
         std::unique_ptr<Framework::GUI::Manager> _webManager;
-        std::unique_ptr<External::Sentry::Wrapper> _crashReporter;
+        // Not owned; the reporter is process-wide.
+        External::Sentry::Wrapper *_crashReporter = nullptr;
 
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
@@ -330,7 +334,7 @@ namespace Framework::Integrations::Client {
         }
 
         External::Sentry::Wrapper *GetCrashReporter() const {
-            return _crashReporter.get();
+            return _crashReporter;
         }
 
         Framework::GUI::Manager *GetWebManager() const {

@@ -251,7 +251,7 @@ namespace Framework::Integrations::Client {
         _renderIO         = std::make_unique<Graphics::RenderIO>();
         _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>();
         _webManager = std::make_unique<Framework::GUI::Manager>();
-        _crashReporter = std::make_unique<External::Sentry::Wrapper>();
+        _crashReporter = &External::Sentry::GetCrashReporter();
 
         // Typed lines go through "chatSend" first; Chat.send is the raw path, so a handler can
         // veto and resend without re-entering itself.
@@ -275,13 +275,16 @@ namespace Framework::Integrations::Client {
         CoreModules::SetClientInstance(this);
 
         // Crash reporting comes up first so its handler is installed before anything else can fault.
+        // An entry-point InitCrashReporter already installed it; this is then a no-op and only the
+        // decoration below applies.
         if (_crashReporter && !opts.sentryDSN.empty()) {
             External::Sentry::InitOptions sentryOpts;
             sentryOpts.dsn         = opts.sentryDSN;
             sentryOpts.handlerPath = opts.sentryModulePath.empty() ? "." : opts.sentryModulePath;
             sentryOpts.release     = opts.sentryRelease.empty() ? opts.gameName + "@" + opts.gameVersion : opts.sentryRelease;
             sentryOpts.environment = opts.sentryEnvironment;
-            if (auto sentryResult = _crashReporter->Init(sentryOpts); !sentryResult) {
+            sentryOpts.attachments = opts.sentryAttachments;
+            if (auto sentryResult = External::Sentry::InitCrashReporter(sentryOpts); !sentryResult) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Crash reporting disabled: {}", sentryResult.GetError().message);
             }
             else {
@@ -293,7 +296,7 @@ namespace Framework::Integrations::Client {
                 const auto *logger = Logging::GetInstance();
                 _crashReporter->AddAttachment(logger->GetLogFolder() + "/" + logger->GetLogName() + ".log");
 
-                auto *reporter = _crashReporter.get();
+                auto *reporter = _crashReporter;
                 Logging::GetInstance()->SetLogForwarder([reporter](int level, const std::string &name, const std::string &message) {
                     External::Sentry::Level mapped = External::Sentry::Level::Info;
                     if (level >= spdlog::level::critical) {
@@ -467,8 +470,9 @@ namespace Framework::Integrations::Client {
             _imguiApp->Shutdown();
         }
 
+        // Drain, never close: the reporter outlives this instance.
         if (_crashReporter && _crashReporter->IsInitialized()) {
-            _crashReporter->Shutdown();
+            _crashReporter->Flush();
         }
 
         CoreModules::SetScriptingModule(nullptr);

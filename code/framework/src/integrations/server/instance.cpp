@@ -57,7 +57,7 @@ namespace Framework::Integrations::Server {
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
         _commandListener  = std::make_unique<Utils::CommandListener>();
         _commandProcessor = std::make_unique<Utils::CommandProcessor>();
-        _crashReporter    = std::make_unique<External::Sentry::Wrapper>();
+        _crashReporter    = &External::Sentry::GetCrashReporter();
     }
 
     Instance::~Instance() {
@@ -72,13 +72,16 @@ namespace Framework::Integrations::Server {
         }
 
         // Crash reporting comes up first so its handler is installed before anything else can fault.
+        // An entry-point InitCrashReporter already installed it; this is then a no-op and only the
+        // decoration below applies.
         if (_crashReporter && !opts.sentryDSN.empty()) {
             External::Sentry::InitOptions sentryOpts;
             sentryOpts.dsn         = opts.sentryDSN;
             sentryOpts.handlerPath = opts.sentryModulePath.empty() ? "." : opts.sentryModulePath;
             sentryOpts.release     = opts.sentryRelease.empty() ? opts.gameName + "@" + opts.gameVersion : opts.sentryRelease;
             sentryOpts.environment = opts.sentryEnvironment;
-            if (auto sentryResult = _crashReporter->Init(sentryOpts); !sentryResult) {
+            sentryOpts.attachments = opts.sentryAttachments;
+            if (auto sentryResult = External::Sentry::InitCrashReporter(sentryOpts); !sentryResult) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Crash reporting disabled: {}", sentryResult.GetError().message);
             }
             else {
@@ -87,7 +90,7 @@ namespace Framework::Integrations::Server {
                 _crashReporter->SetTag("build.game_version", opts.gameVersion);
                 _crashReporter->SetTag("build.mod_version", opts.modVersion);
 
-                auto *reporter = _crashReporter.get();
+                auto *reporter = _crashReporter;
                 Logging::GetInstance()->SetLogForwarder([reporter](int level, const std::string &name, const std::string &message) {
                     External::Sentry::Level mapped = External::Sentry::Level::Info;
                     if (level >= spdlog::level::critical) {
@@ -682,7 +685,7 @@ namespace Framework::Integrations::Server {
 
                 // If the client entry is in a subdirectory, add all script and web-view asset files
                 // from that directory (pages served to views via http://resources/<resource>/<file>)
-                static const std::set<std::string> kClientAssetExtensions = {".js", ".mjs", ".ts", ".json", ".html", ".htm", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".ttf", ".otf", ".woff", ".woff2"};
+                static const std::set<std::string> kClientAssetExtensions = {".js", ".mjs", ".ts", ".json", ".html", ".htm", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".ttf", ".otf", ".woff", ".woff2", ".patch"};
                 std::filesystem::path clientDir = clientEntryPath.parent_path();
                 if (clientDir != resourcePath && std::filesystem::exists(clientDir)) {
                     for (const auto &entry : std::filesystem::recursive_directory_iterator(clientDir)) {
@@ -1006,8 +1009,9 @@ namespace Framework::Integrations::Server {
             _commandListener->Shutdown();
         }
 
+        // Drain, never close: the reporter outlives this instance.
         if (_crashReporter && _crashReporter->IsInitialized()) {
-            _crashReporter->Shutdown();
+            _crashReporter->Flush();
         }
 
         // Detach signal handlers

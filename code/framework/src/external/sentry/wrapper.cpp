@@ -93,11 +93,23 @@ namespace Framework::External::Sentry {
         const std::string cefLog = std::filesystem::absolute(std::filesystem::path(options.handlerPath) / "logs" / "cef.log").string();
         sentry_options_add_attachment(opts, cefLog.c_str());
 
+        for (const auto &attachment : options.attachments) {
+            const std::string absolute = std::filesystem::absolute(std::filesystem::path(attachment)).string();
+            sentry_options_add_attachment(opts, absolute.c_str());
+        }
+
         if (sentry_init(opts) != 0) {
             return Framework::Error("Failed to initialize Sentry");
         }
         _initialized = true;
         return {};
+    }
+
+    bool Wrapper::Flush(uint32_t timeoutMs) const {
+        if (!_initialized) {
+            return false;
+        }
+        return sentry_flush(static_cast<uint64_t>(timeoutMs)) == 0;
     }
 
     void Wrapper::Shutdown() {
@@ -221,5 +233,31 @@ namespace Framework::External::Sentry {
         }
         sentry_capture_event(sentry_value_new_message_event(static_cast<sentry_level_e>(level), logger.c_str(), payload.c_str()));
         return {};
+    }
+
+    Wrapper &GetCrashReporter() {
+        // Leaked: must outlive every static destructor, or a fault during teardown races the
+        // handler being freed.
+        static Wrapper *reporter = new Wrapper();
+        return *reporter;
+    }
+
+    Utils::Result<void, Framework::Error> InitCrashReporter(const InitOptions &options) {
+        Wrapper &reporter = GetCrashReporter();
+        if (reporter.IsInitialized()) {
+            return {};
+        }
+        return reporter.Init(options);
+    }
+
+    bool IsCrashReporterReady() {
+        return GetCrashReporter().IsInitialized();
+    }
+
+    void ShutdownCrashReporter() {
+        Wrapper &reporter = GetCrashReporter();
+        if (reporter.IsInitialized()) {
+            reporter.Shutdown();
+        }
     }
 } // namespace Framework::External::Sentry
