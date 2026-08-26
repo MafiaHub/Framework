@@ -89,14 +89,18 @@ namespace Framework::Voice {
 
         _sweepElapsedMs += static_cast<float>(deltaMs);
         if (_sweepElapsedMs >= _sweepDurationMs) {
-            if (_sweepPingPong) {
-                _sweepElapsedMs -= _sweepDurationMs;
-                std::swap(_sweepFrom, _sweepTo);
-            }
-            else {
+            if (!_sweepPingPong) {
                 _sweepActive = false;
                 _position    = _sweepTo;
                 return;
+            }
+
+            // One tick can cross several durations when the sweep is shorter than the frame time.
+            // Each crossing is one reversal, and leaving the excess would burn a lap per tick.
+            const float laps = std::floor(_sweepElapsedMs / _sweepDurationMs);
+            _sweepElapsedMs -= laps * _sweepDurationMs;
+            if (static_cast<long long>(laps) % 2 != 0) {
+                std::swap(_sweepFrom, _sweepTo);
             }
         }
 

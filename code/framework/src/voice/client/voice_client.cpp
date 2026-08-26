@@ -257,6 +257,8 @@ namespace Framework::Voice {
     }
 
     void VoiceClient::Shutdown() {
+        // Before the sink pointer goes: a custom sink would otherwise keep the bench's slot.
+        BenchStop();
         CloseSession();
 
         _capture.Stop();
@@ -704,10 +706,15 @@ namespace Framework::Voice {
         const float range = ResolveRange(kBenchSpeakerId);
         // Walk out from the distance origin, so a plotted point at x really is x away.
         const glm::vec3 origin = glm::dot(_listener.attenuationPosition, _listener.attenuationPosition) > 0.0f ? _listener.attenuationPosition : _listener.position;
+        // The curve's x axis is a distance, so the step must be unit length; ListenerTransform
+        // promises no such thing, and a degenerate forward would sample the origin every time.
+        const float forwardLen = glm::length(_listener.forward);
+        const glm::vec3 step   = forwardLen > 0.0001f ? _listener.forward / forwardLen : glm::vec3(0.0f, 0.0f, -1.0f);
+
         curve.reserve(samples);
         for (size_t i = 0; i < samples; i++) {
             const float distance   = maxDistance * (static_cast<float>(i) / static_cast<float>(samples - 1));
-            const SpeakerGain gain = ComputeGain(_listener, origin + _listener.forward * distance, range);
+            const SpeakerGain gain = ComputeGain(_listener, origin + step * distance, range);
             // Constant-power pan makes left^2 + right^2 the attenuation, independent of bearing.
             curve.push_back(std::sqrt(gain.left * gain.left + gain.right * gain.right));
         }
@@ -736,6 +743,12 @@ namespace Framework::Voice {
         // left holding voices it will not be told to release.
         for (size_t i = 0; i < _admitted.size(); i++) {
             ReleaseAdmitted(static_cast<int>(i));
+        }
+
+        // The bench never enters _admitted, so the loop above does not cover it. UpdateBench
+        // re-submits on the next tick, which acquires a slot on the replacement.
+        if (_bench.IsActive() && _sink != nullptr) {
+            _sink->ReleaseSpeaker(kBenchSpeakerId);
         }
 
         _sink = next;
