@@ -81,11 +81,18 @@ namespace Framework::Utils {
             }
         }
 
-        // Interpolated/extrapolated snapshot at renderTime. Returns false only when the buffer is
-        // empty.
-        bool Sample(MafiaNet::Time renderTime, TSnapshot &out) const {
+        // Returns false only when empty. When supplied, held identifies a
+        // fixed pose (startup, before history, or the extrapolation cap), so
+        // presentation can stop movement without changing received state.
+        bool Sample(MafiaNet::Time renderTime, TSnapshot &out, bool *held = nullptr) const {
+            if (held != nullptr) {
+                *held = false;
+            }
             if (_count == 0) {
                 return false;
+            }
+            if (held != nullptr) {
+                *held = true;
             }
             if (_count == 1) {
                 out = At(0).snapshot;
@@ -108,6 +115,9 @@ namespace Framework::Utils {
                 if (dt > cap) {
                     dt = cap;
                 }
+                if (held != nullptr) {
+                    *held = dt >= cap;
+                }
                 out = TPolicy::Extrapolate(newest.snapshot, static_cast<float>(dt));
                 return true;
             }
@@ -120,6 +130,9 @@ namespace Framework::Utils {
                     const float span  = static_cast<float>(b.time - a.time);
                     const float alpha = span > 0.0f ? static_cast<float>(renderTime - a.time) / span : 0.0f;
                     out               = TPolicy::Blend(a.snapshot, b.snapshot, alpha, span);
+                    if (held != nullptr) {
+                        *held = false;
+                    }
                     return true;
                 }
             }
