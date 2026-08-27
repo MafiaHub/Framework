@@ -404,18 +404,12 @@ namespace Framework::Integrations::Client {
                     return renderResult;
                 }
 
+                // Renderer::Init already built and initialized the backend for the
+                // configured API; initializing it a second time here rebuilt every
+                // descriptor heap, allocator and command list, leaking the first set
+                // along with a device reference.
                 _renderer->SetWindow(_opts.rendererOptions.windowHandle);
 
-                bool backendInitOk = false;
-                switch (_opts.rendererOptions.backend) {
-                case Graphics::RendererBackend::BACKEND_D3D_9: backendInitOk = _renderer->GetD3D9Backend()->Init(_opts.rendererOptions); break;
-                case Graphics::RendererBackend::BACKEND_D3D_11: backendInitOk = _renderer->GetD3D11Backend()->Init(_opts.rendererOptions); break;
-                case Graphics::RendererBackend::BACKEND_D3D_12: backendInitOk = _renderer->GetD3D12Backend()->Init(_opts.rendererOptions); break;
-                default: Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented"); break;
-                }
-                if (!backendInitOk) {
-                    return Error("Failed to initialize graphics backend");
-                }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Rendering systems initialized");
             }
 
