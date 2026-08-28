@@ -32,24 +32,39 @@ namespace Framework::Networking::Replication {
             return _serialize != nullptr || (_plain != nullptr && _writePlain);
         }
 
+        bool Good() const {
+            return _good;
+        }
+
         template <typename T>
         void Field(T &value) {
+            if (!_good) {
+                return;
+            }
             if (_plain) {
-                _plain->Serialize(_writePlain, value);
+                _good = _plain->Serialize(_writePlain, value);
             }
             else if (_serialize) {
                 _vds->SerializeVariable(_serialize, value);
             }
             else {
-                _vds->DeserializeVariable(_deserialize, value);
+                // DeserializeVariable returns "changed", not read success.
+                bool changed = false;
+                _good = _deserialize->bitStream->Read(changed);
+                if (_good && changed) {
+                    _good = _deserialize->bitStream->Read(value);
+                }
             }
         }
 
         // Quantized writers — meaningful only on the plain-bitstream (transform-channel) path; on the
         // VDS delta path they fall back to full precision so a single Serialize body can serve both.
         void Float16(float &value, float min, float max) {
+            if (!_good) {
+                return;
+            }
             if (_plain) {
-                _plain->SerializeFloat16(_writePlain, value, min, max);
+                _good = _plain->SerializeFloat16(_writePlain, value, min, max);
             }
             else {
                 Field(value);
@@ -58,8 +73,11 @@ namespace Framework::Networking::Replication {
 
         template <typename T>
         void BitsRange(T &value, T min, T max) {
+            if (!_good) {
+                return;
+            }
             if (_plain) {
-                _plain->SerializeBitsFromIntegerRange(_writePlain, value, min, max);
+                _good = _plain->SerializeBitsFromIntegerRange(_writePlain, value, min, max);
             }
             else {
                 Field(value);
@@ -68,6 +86,9 @@ namespace Framework::Networking::Replication {
 
         // Fixed-point float in [min,max] over `bits` bits (plain path only; VDS keeps full precision).
         void FloatBits(float &value, float min, float max, int bits) {
+            if (!_good) {
+                return;
+            }
             if (!_plain) {
                 Field(value);
                 return;
@@ -82,12 +103,14 @@ namespace Framework::Networking::Replication {
                     a = 1.0f;
                 }
                 uint32_t q = static_cast<uint32_t>(a * static_cast<float>(maxQ) + 0.5f);
-                _plain->SerializeBitsFromIntegerRange(true, q, 0u, maxQ);
+                _good = _plain->SerializeBitsFromIntegerRange(true, q, 0u, maxQ);
             }
             else {
                 uint32_t q = 0;
-                _plain->SerializeBitsFromIntegerRange(false, q, 0u, maxQ);
-                value = min + (static_cast<float>(q) / static_cast<float>(maxQ)) * (max - min);
+                _good = _plain->SerializeBitsFromIntegerRange(false, q, 0u, maxQ);
+                if (_good) {
+                    value = min + (static_cast<float>(q) / static_cast<float>(maxQ)) * (max - min);
+                }
             }
         }
 
@@ -97,6 +120,7 @@ namespace Framework::Networking::Replication {
         MafiaNet::VariableDeltaSerializer::DeserializationContext *_deserialize = nullptr;
         MafiaNet::BitStream *_plain                                             = nullptr;
         bool _writePlain                                                        = false;
+        bool _good                                                              = true;
     };
 
     // A replicated game object. Game entities derive from this and override SerializeFields (per-tick
