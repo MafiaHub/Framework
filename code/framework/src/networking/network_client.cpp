@@ -235,6 +235,15 @@ namespace Framework::Networking {
         return false;
     }
 
+    std::string_view NetworkClient::GetRemoteSessionConfig(MafiaNet::RakNetGUID guid) const {
+        if (!_peer) {
+            return {};
+        }
+        unsigned int length = 0;
+        const char *raw     = _peer->GetRemoteSessionConfig(guid, &length);
+        return raw && length > 0 ? std::string_view(raw, length) : std::string_view {};
+    }
+
     int NetworkClient::GetPing() const {
         if (!_peer || _state != PeerState::CONNECTED) {
             return 0;

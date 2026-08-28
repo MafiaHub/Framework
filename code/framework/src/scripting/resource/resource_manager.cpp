@@ -18,9 +18,104 @@
 #include <filesystem>
 #include <queue>
 #include <stack>
+#include <thread>
 
 namespace Framework::Scripting {
     namespace {
+        enum class LifecyclePromiseStatus {
+            Fulfilled,
+            Rejected,
+            TimedOut,
+        };
+
+        struct LifecyclePromiseResult {
+            LifecyclePromiseStatus status = LifecyclePromiseStatus::Fulfilled;
+            std::string error;
+        };
+
+        std::string StringifyPromiseRejection(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> reason) {
+            v8::TryCatch tryCatch(isolate);
+            const auto stringify = [&](v8::Local<v8::Value> value) {
+                v8::Local<v8::String> text;
+                if (value.IsEmpty() || !value->ToString(context).ToLocal(&text)) {
+                    tryCatch.Reset();
+                    return std::string("Promise rejected");
+                }
+                v8::String::Utf8Value utf8(isolate, text);
+                return *utf8 ? std::string(*utf8, utf8.length()) : std::string("Promise rejected");
+            };
+
+            std::string result = stringify(reason);
+            if (!reason.IsEmpty() && reason->IsObject()) {
+                v8::Local<v8::Value> errorsValue;
+                if (reason.As<v8::Object>()->Get(context, v8::String::NewFromUtf8Literal(isolate, "errors")).ToLocal(&errorsValue) && errorsValue->IsArray()) {
+                    auto errors = errorsValue.As<v8::Array>();
+                    for (uint32_t i = 0; i < errors->Length(); ++i) {
+                        v8::Local<v8::Value> item;
+                        if (errors->Get(context, i).ToLocal(&item)) {
+                            result += i == 0 ? ": " : "; ";
+                            result += stringify(item);
+                        }
+                    }
+                }
+            }
+            if (tryCatch.HasCaught()) {
+                tryCatch.Reset();
+            }
+            return result;
+        }
+
+        // Lifecycle entry points remain synchronous to their C++ callers, but the JS work they gate
+        // is asynchronous. Pump the shared scripting engine so microtasks, timers, and Node/libuv I/O
+        // can make progress; a plain blocking wait here would deadlock every meaningful async handler.
+        LifecyclePromiseResult AwaitLifecyclePromise(Engine *engine, Builtins::Events &events, v8::Global<v8::Promise> &promise, int timeoutMs) {
+            if (!engine || !engine->IsInitialized() || promise.IsEmpty()) {
+                return {};
+            }
+
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(timeoutMs, 1));
+            for (;;) {
+                {
+                    v8::Isolate *isolate = engine->GetIsolate();
+                    v8::Locker locker(isolate);
+                    v8::Isolate::Scope isolateScope(isolate);
+                    v8::HandleScope handleScope(isolate);
+                    v8::Local<v8::Context> context = engine->GetContext();
+                    v8::Context::Scope contextScope(context);
+                    auto local = promise.Get(isolate);
+                    if (local.IsEmpty()) {
+                        promise.Reset();
+                        return {};
+                    }
+                    if (local->State() == v8::Promise::PromiseState::kFulfilled) {
+                        promise.Reset();
+                        return {};
+                    }
+                    if (local->State() == v8::Promise::PromiseState::kRejected) {
+                        auto error = StringifyPromiseRejection(isolate, context, local->Result());
+                        promise.Reset();
+                        return {LifecyclePromiseStatus::Rejected, std::move(error)};
+                    }
+                }
+
+                if (std::chrono::steady_clock::now() >= deadline) {
+                    v8::Isolate *isolate = engine->GetIsolate();
+                    v8::Locker locker(isolate);
+                    v8::Isolate::Scope isolateScope(isolate);
+                    v8::HandleScope handleScope(isolate);
+                    auto local = promise.Get(isolate);
+                    if (!local.IsEmpty()) {
+                        events.CancelPendingEmission(isolate, local);
+                    }
+                    promise.Reset();
+                    return {LifecyclePromiseStatus::TimedOut, {}};
+                }
+
+                engine->Tick();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }
+
         bool IsPathInsideRoot(const std::filesystem::path &path, const std::filesystem::path &root) {
             auto canonicalRoot = std::filesystem::weakly_canonical(root);
             auto canonicalPath = std::filesystem::weakly_canonical(path);
@@ -359,12 +454,14 @@ namespace Framework::Scripting {
         // Execute the entry point script
         std::string error;
         if (!ExecuteResourceScript(*resource, error)) {
+            CleanupResourceRuntime(*resource, name);
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
             return ResourceOperationResult(error);
         }
 
         // Emit resourceStart event (bypass running check since resource is still Loading)
+        v8::Global<v8::Promise> startPromise;
         if (_jsEngine && _jsEngine->IsInitialized()) {
             v8::Isolate *isolate = _jsEngine->GetIsolate();
             v8::Locker locker(isolate);
@@ -378,8 +475,20 @@ namespace Framework::Scripting {
             args.push_back(v8pp::to_v8(isolate, nameStr));
 
             SetCurrentResourceContext(nameStr);
-            _events.EmitReserved(isolate, context, "resourceStart", args);
+            auto emitted = _events.EmitReserved(isolate, context, "resourceStart", args);
+            emitted->MarkAsHandled(); // C++ observes State()/Result(); avoid an unhandled-rejection echo
+            startPromise.Reset(isolate, emitted);
             SetCurrentResourceContext("");
+        }
+
+        const auto startLifecycle = AwaitLifecyclePromise(_jsEngine, _events, startPromise, _config.resourceStartTimeoutMs);
+        if (startLifecycle.status != LifecyclePromiseStatus::Fulfilled) {
+            error = startLifecycle.status == LifecyclePromiseStatus::TimedOut ? "resourceStart timed out after " + std::to_string(std::max(_config.resourceStartTimeoutMs, 1)) + "ms" : "resourceStart rejected: " + startLifecycle.error;
+            CleanupResourceRuntime(*resource, name);
+            resource->SetError(error);
+            FireOnResourceError(std::string(name), error);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start JS resource '{}': {}", name, error);
+            return ResourceOperationResult(error);
         }
 
         // Transition to Running
@@ -426,6 +535,7 @@ namespace Framework::Scripting {
         resource->TransitionTo(ResourceState::Stopping);
 
         // Emit resourceStop event before cleanup
+        v8::Global<v8::Promise> stopPromise;
         if (_jsEngine && _jsEngine->IsInitialized()) {
             v8::Isolate *isolate = _jsEngine->GetIsolate();
             v8::Locker locker(isolate);
@@ -439,20 +549,21 @@ namespace Framework::Scripting {
             args.push_back(v8pp::to_v8(isolate, nameStr));
 
             SetCurrentResourceContext(nameStr);
-            _events.EmitReserved(isolate, context, "resourceStop", args);
+            auto emitted = _events.EmitReserved(isolate, context, "resourceStop", args);
+            emitted->MarkAsHandled();
+            stopPromise.Reset(isolate, emitted);
             SetCurrentResourceContext("");
         }
 
-        // Call cleanup (removes handlers)
-        CallResourceStop(name);
-
-        // Cancel timers the resource left running.
-        if (_jsEngine) {
-            _jsEngine->ClearResourceTimers(std::string(name));
+        const auto stopLifecycle = AwaitLifecyclePromise(_jsEngine, _events, stopPromise, _config.resourceStopTimeoutMs);
+        if (stopLifecycle.status == LifecyclePromiseStatus::Rejected) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("resourceStop for '{}' rejected; forcing cleanup: {}", name, stopLifecycle.error);
+        }
+        else if (stopLifecycle.status == LifecyclePromiseStatus::TimedOut) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("resourceStop for '{}' timed out after {}ms; forcing cleanup", name, std::max(_config.resourceStopTimeoutMs, 1));
         }
 
-        // Clear exports
-        resource->ClearExports();
+        CleanupResourceRuntime(*resource, name);
 
         // Transition to Stopped
         resource->TransitionTo(ResourceState::Stopped);
@@ -773,6 +884,14 @@ namespace Framework::Scripting {
             Builtins::Messages::CleanupResource(isolate, context, std::string(resourceName));
         }
         return true;
+    }
+
+    void ResourceManager::CleanupResourceRuntime(Resource &resource, std::string_view resourceName) {
+        CallResourceStop(resourceName);
+        if (_jsEngine) {
+            _jsEngine->ClearResourceTimers(std::string(resourceName));
+        }
+        resource.ClearExports();
     }
 
     std::vector<std::string> ResourceManager::GetAllResourceNames() const {

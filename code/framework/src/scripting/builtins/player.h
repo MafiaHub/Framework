@@ -23,6 +23,11 @@ namespace Framework::Networking::RPC {
     struct ClientIdentity;
 } // namespace Framework::Networking::RPC
 
+namespace Framework::Networking::Replication {
+    enum class NametagComponent : uint8_t;
+    struct NametagState;
+} // namespace Framework::Networking::Replication
+
 namespace Framework::Scripting::Builtins {
     // A connection's player entity. Connection-level ops (kick, ...) live here, not on Entity, so
     // they stay off non-player entities. Mods derive via inherit<Player>().
@@ -48,6 +53,21 @@ namespace Framework::Scripting::Builtins {
         // Connection's remote IP address (no port). Server-only; empty when unavailable.
         std::string GetAddress() const;
 
+        // Nametag over this player's avatar (games whose entity carries a NametagState). Server-only:
+        // the owner applies and replicates the change, so a getter reflects a set a round-trip later.
+        void SetNametagVisible(bool visible);
+        bool IsNametagVisible() const;
+        void SetNametagHealthVisible(bool visible);
+        bool IsNametagHealthVisible() const;
+
+        // Empty restores the game's own label.
+        void SetNametagText(const std::string &text);
+        std::string GetNametagText() const;
+
+        // Packed 0xAARRGGBB.
+        void SetNametagColor(uint32_t color);
+        uint32_t GetNametagColor() const;
+
         std::string ToString() const override;
 
         static v8pp::class_<Player> &GetClass(v8::Isolate *isolate);
@@ -61,6 +81,11 @@ namespace Framework::Scripting::Builtins {
 
       protected:
         const Networking::RPC::ClientIdentity *ResolveIdentity() const;
+
+        Networking::Replication::NametagState *ResolveNametag() const;
+        void SendNametag(const Networking::Replication::NametagState &state) const;
+        void SetNametagComponent(Networking::Replication::NametagComponent component, bool enabled);
+        bool HasNametagComponent(Networking::Replication::NametagComponent component) const;
 
         inline static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Player>>> _classes;
     };

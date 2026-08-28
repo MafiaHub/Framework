@@ -33,6 +33,7 @@ namespace Framework::Networking {
     class NetworkServer final: public NetworkPeer {
       private:
         PacketCallback _onPlayerConnectCallback;
+        std::string _sessionConfig;
         DisconnectPacketCallback _onPlayerDisconnectCallback;
         ClientGuidCallback _onClientAuthenticatedCallback;
         ConnectionReadyCallback _onConnectionReadyCallback;
@@ -69,6 +70,15 @@ namespace Framework::Networking {
         // Start replicating to an authenticated peer (idempotent). Replication begins for no peer
         // until this is called — connections are not auto-managed (see Init).
         void PushReplicationConnection(MafiaNet::RakNetGUID guid);
+
+        // Payload MafiaNet answers every connection request with, before either side reports a
+        // connection. Opaque bytes; set it before the first client connects. False (and unpublished)
+        // if it exceeds MAXIMUM_SESSION_CONFIG_SIZE.
+        bool SetSessionConfig(std::string payload);
+
+        const std::string &GetSessionConfig() const noexcept {
+            return _sessionConfig;
+        }
 
         // Send a Kick RPC then close the connection.
         void KickPlayer(MafiaNet::RakNetGUID guid, DisconnectionReason reason, const std::string &customReason = "") override;

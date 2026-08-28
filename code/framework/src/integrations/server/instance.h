@@ -21,9 +21,12 @@
 
 #include <external/sentry/wrapper.h>
 
+#include <nlohmann/json.hpp>
+
 #include <mafianet/types.h>
 #include "services/masterlist.h"
 #include "utils/config.h"
+#include "utils/config_schema.h"
 #include "utils/command_listener.h"
 #include "utils/command_processor.h"
 
@@ -54,6 +57,11 @@ namespace Framework::Integrations::Server {
         std::string modName;
         std::string modVersion;
         std::string modConfigFile = "server.json";
+        // Mod-declared server.json keys, read from the file's "mod" object. Validated at Init, so a
+        // bad config fails before the port opens rather than at the first connect. Fields marked
+        // replicated are published to clients during the MafiaNet session handshake, which lands
+        // before the asset phase and before the client reports a connection.
+        Framework::Utils::ConfigSchema modConfigSchema;
         std::string resourcesPath = "resources";
 
         // Development mode: watch resource files and hot-reload on change.
@@ -75,6 +83,8 @@ namespace Framework::Integrations::Server {
         std::string sentryRelease;
         // Deployment environment ("retail" / "dev" / "ci"); empty leaves it unset.
         std::string sentryEnvironment;
+        // Extra files registered before sentry_init.
+        std::vector<std::string> sentryAttachments;
 
         std::string bindHost;
         std::string bindSecretKey;
@@ -141,10 +151,15 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Networking::Engine> _networkingEngine;
         std::unique_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<Utils::Config> _fileConfig;
+        // Resolved mod config and the subset that goes on the wire. Held separately so the
+        // replicated view cannot drift from what was declared replicated.
+        nlohmann::json _modConfig;
+        std::string _replicatedModConfig;
         std::unique_ptr<Services::MasterlistConnector> _masterlist;
         std::unique_ptr<Utils::CommandListener> _commandListener;
         std::unique_ptr<Utils::CommandProcessor> _commandProcessor;
-        std::unique_ptr<External::Sentry::Wrapper> _crashReporter;
+        // Not owned; the reporter is process-wide.
+        External::Sentry::Wrapper *_crashReporter = nullptr;
         // Proximity voice relay. Value member: it holds no resources until Init attaches it to
         // the peer, so a mod that never enables voice pays nothing beyond the empty maps.
         Voice::VoiceServer _voiceServer;
@@ -160,6 +175,12 @@ namespace Framework::Integrations::Server {
         void BroadcastResourceStop(const std::string &name);
         void InitCommandListener();
         bool LoadConfigFromJSON();
+        // Publish the replicated subset as this peer's session payload. Called once, before the
+        // networking engine starts accepting connections.
+        void PublishSessionConfig();
+        // server.json as it would be written on a first run: framework keys from the current
+        // options, mod keys from the schema defaults.
+        nlohmann::json BuildDefaultConfigFile() const;
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
         
         void HandleCommand(std::string_view command);
@@ -223,12 +244,18 @@ namespace Framework::Integrations::Server {
             return _opts;
         }
 
+        // The resolved "mod" object: declared defaults filled in, types and allowed values already
+        // checked, so a declared key always reads back as its declared type.
+        Framework::Utils::ConfigView GetModConfig() const {
+            return Framework::Utils::ConfigView(&_modConfig);
+        }
+
         Scripting::ServerScriptingModule *GetScriptingModule() const {
             return _scriptingModule.get();
         }
 
         External::Sentry::Wrapper *GetCrashReporter() const {
-            return _crashReporter.get();
+            return _crashReporter;
         }
 
         Networking::Engine *GetNetworkingEngine() const {

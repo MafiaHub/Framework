@@ -12,6 +12,7 @@
 
 #include <mafianet/BitStream.h>
 #include <mafianet/MessageIdentifiers.h>
+#include <mafianet/defines.h>
 #include <mafianet/guid_util.h>
 #include <logging/logger.h>
 
@@ -56,6 +57,20 @@ namespace Framework::Networking {
 
         _initialized = true;
         return {};
+    }
+
+    bool NetworkServer::SetSessionConfig(std::string payload) {
+        if (payload.size() > MAXIMUM_SESSION_CONFIG_SIZE) {
+            // Truncating would hand clients a payload that doesn't parse; refuse instead.
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Session payload is {} bytes, over the {} byte handshake limit; not published", payload.size(), MAXIMUM_SESSION_CONFIG_SIZE);
+            return false;
+        }
+
+        _sessionConfig = std::move(payload);
+        if (_peer) {
+            _peer->SetSessionConfig(_sessionConfig.c_str(), static_cast<unsigned int>(_sessionConfig.size()));
+        }
+        return true;
     }
 
     bool NetworkServer::HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) {

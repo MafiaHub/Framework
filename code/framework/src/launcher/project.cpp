@@ -10,6 +10,7 @@
 
 #include "external/epic/manifest.h"
 #include "loaders/exe_ldr.h"
+#include "loaders/process_identity.h"
 #include "logging/logger.h"
 #include "sfd.h"
 #include "utils/hashing.h"
@@ -838,6 +839,10 @@ namespace Framework::Launcher {
             entry_point = static_cast<void (*)()>(loader.GetEntryPoint());
 
             hook::set_base(reinterpret_cast<uintptr_t>(base));
+
+            // Must run before the game does: modules it loads later resolve their own
+            // install directory through the process identity.
+            Loaders::ApplyMappedImageIdentity(_gamePath);
 
             if (SynchronizeUCRTCommandLine()) {
                 Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info(

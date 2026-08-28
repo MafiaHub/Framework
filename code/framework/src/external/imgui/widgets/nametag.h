@@ -13,8 +13,45 @@
 #include <imgui/imgui.h>
 
 #include <algorithm>
+#include <cstdint>
 
 namespace Framework::External::ImGUI::Widgets {
+    // Wire values are shared with Networking::Replication::NametagComponent; keep in sync.
+    enum class NameTagComponent : uint8_t {
+        Name   = 1 << 0,
+        Health = 1 << 1,
+    };
+
+    // The viewer's own switches over every tag they see, driven by the client Nametags builtin.
+    struct NameTagView {
+        inline static bool showTags   = true;
+        inline static bool showHealth = true;
+    };
+
+    // Distance behaviour of a world-anchored tag.
+    struct NameTagLayout {
+        float drawDistance = 50.0f; // hard cull
+        float fadeStart    = 35.0f; // alpha ramp start; <=0 derives from drawDistance
+        float nearScale    = 1.35f;
+        float farScale     = 0.75f;
+        float scaleStart   = 10.0f; // scale ramp runs nearScale -> farScale between these
+        float scaleEnd     = 70.0f;
+        float shiftStart   = 15.0f; // lift ramp start, keeps the bar clear of the head
+        float shiftMax     = 20.0f; // pixels, at drawDistance
+    };
+
+    inline bool NameTagHasComponent(uint8_t components, NameTagComponent component) {
+        return (components & static_cast<uint8_t>(component)) != 0;
+    }
+
+    // The fade a tag would draw at, 0 when culled. Cheap pre-check before a bone lookup or projection.
+    inline float NameTagAlpha(float distance, uint8_t components, const NameTagLayout &layout = {}) {
+        if (!NameTagView::showTags || !NameTagHasComponent(components, NameTagComponent::Name)) {
+            return 0.0f;
+        }
+        return WorldTextAlpha(distance, layout.drawDistance, layout.fadeStart);
+    }
+
     struct NameTagStyle {
         ImU32 textColor       = IM_COL32(255, 255, 255, 255);
         ImU32 bgColor         = IM_COL32(0, 0, 0, 153);
@@ -62,5 +99,33 @@ namespace Framework::External::ImGUI::Widgets {
         const ImU32 fillRight = WorldTextModulateAlpha(
             IM_COL32(80 + static_cast<int>(175.0f * t), static_cast<int>(40.0f * t), static_cast<int>(80.0f * t), 255), alpha);
         drawList->AddRectFilledMultiColor(barMin, ImVec2(barMin.x + style.healthBarWidth * t, barMax.y), fillLeft, fillRight, fillRight, fillLeft);
+    }
+
+    // Draw a replicated avatar's tag at a projected screen position, fading, scaling and lifting it
+    // with distance. Returns false when culled; healthPercent < 0 draws no bar.
+    inline bool DrawNameTagAt(ImDrawList *drawList, ImVec2 screenPos, float distance, const char *name, uint8_t components, ImU32 color, float healthPercent = -1.0f, const NameTagLayout &layout = {}, NameTagStyle style = {}) {
+        const float alpha = NameTagAlpha(distance, components, layout);
+        if (alpha <= 0.0f) {
+            return false;
+        }
+
+        const float scaleSpan   = layout.scaleEnd - layout.scaleStart;
+        const float scaleFactor = scaleSpan > 0.0f ? std::clamp((distance - layout.scaleStart) / scaleSpan, 0.0f, 1.0f) : 0.0f;
+        const float scale       = layout.nearScale + (layout.farScale - layout.nearScale) * scaleFactor;
+
+        style.textColor = color;
+        style.fontSize  = (style.fontSize > 0.0f ? style.fontSize : ImGui::GetFontSize()) * scale;
+        style.rounding *= scale;
+        style.padding *= scale;
+        style.healthBarWidth *= scale;
+        style.healthBarHeight *= scale;
+
+        const float shiftSpan   = layout.drawDistance - layout.shiftStart;
+        const float shiftFactor = shiftSpan > 0.0f ? std::clamp((distance - layout.shiftStart) / shiftSpan, 0.0f, 1.0f) : 0.0f;
+        screenPos.y -= shiftFactor * layout.shiftMax;
+
+        const bool drawHealth = NameTagView::showHealth && NameTagHasComponent(components, NameTagComponent::Health);
+        DrawNameTag(drawList, screenPos, name, style, alpha, drawHealth ? healthPercent : -1.0f);
+        return true;
     }
 } // namespace Framework::External::ImGUI::Widgets

@@ -13,6 +13,8 @@
 #include <integrations/shared/rpc/emit_script_event.h>
 #include <networking/network_peer.h>
 #include <networking/rpc/client_identity.h>
+#include <networking/rpc/nametag.h>
+#include <networking/replication/nametag_state.h>
 
 #include <sstream>
 
@@ -79,6 +81,93 @@ namespace Framework::Scripting::Builtins {
         return peer ? peer->GetAddress(MafiaNet::ToGuid(entity->ownerGUID)) : "";
     }
 
+    Networking::Replication::NametagState *Player::ResolveNametag() const {
+        auto *entity = Resolve();
+        return entity ? entity->GetNametag() : nullptr;
+    }
+
+    void Player::SendNametag(const Networking::Replication::NametagState &state) const {
+        // Server-only, like Kick; the getters still read the local replica.
+        if (CoreModules::GetClientInstance()) {
+            return;
+        }
+        auto *entity = Resolve();
+        if (!entity) {
+            return;
+        }
+        auto *peer = CoreModules::GetNetworkPeer();
+        if (!peer) {
+            return;
+        }
+        Networking::RPC::SetNametagState msg;
+        msg.networkId  = entity->GetNetworkID();
+        msg.components = state.components;
+        msg.color      = state.color;
+        msg.text       = state.text;
+        peer->SendRPC(msg, MafiaNet::ToGuid(entity->ownerGUID));
+    }
+
+    void Player::SetNametagComponent(Networking::Replication::NametagComponent component, bool enabled) {
+        const auto *current = ResolveNametag();
+        if (!current) {
+            return;
+        }
+        Networking::Replication::NametagState next = *current;
+        next.Set(component, enabled);
+        SendNametag(next);
+    }
+
+    bool Player::HasNametagComponent(Networking::Replication::NametagComponent component) const {
+        const auto *state = ResolveNametag();
+        return state != nullptr && state->Has(component);
+    }
+
+    void Player::SetNametagVisible(bool visible) {
+        SetNametagComponent(Networking::Replication::NametagComponent::Name, visible);
+    }
+
+    bool Player::IsNametagVisible() const {
+        return HasNametagComponent(Networking::Replication::NametagComponent::Name);
+    }
+
+    void Player::SetNametagHealthVisible(bool visible) {
+        SetNametagComponent(Networking::Replication::NametagComponent::Health, visible);
+    }
+
+    bool Player::IsNametagHealthVisible() const {
+        return HasNametagComponent(Networking::Replication::NametagComponent::Health);
+    }
+
+    void Player::SetNametagText(const std::string &text) {
+        const auto *current = ResolveNametag();
+        if (!current) {
+            return;
+        }
+        Networking::Replication::NametagState next = *current;
+        next.text                                  = text;
+        SendNametag(next);
+    }
+
+    std::string Player::GetNametagText() const {
+        const auto *state = ResolveNametag();
+        return state ? state->text : "";
+    }
+
+    void Player::SetNametagColor(uint32_t color) {
+        const auto *current = ResolveNametag();
+        if (!current) {
+            return;
+        }
+        Networking::Replication::NametagState next = *current;
+        next.color                                 = color;
+        SendNametag(next);
+    }
+
+    uint32_t Player::GetNametagColor() const {
+        const auto *state = ResolveNametag();
+        return state ? state->color : 0xFFFFFFFF;
+    }
+
     std::string Player::ToString() const {
         std::ostringstream ss;
         ss << "Player{ id: " << _id << " }";
@@ -106,6 +195,26 @@ namespace Framework::Scripting::Builtins {
                 v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Client event name."), v8pp::metadata::param("payloadJson", "string", true, "Optional JSON payload forwarded verbatim to the owning client.")},
                     "Emits a named script event to this player's client connection."))
             .function("getIP", &Player::GetAddress, v8pp::metadata::docs("string", {}, "Returns this player's current remote network address.", "Address string, or an empty string when the player or peer is unavailable."))
+            .function("setNametagVisible", &Player::SetNametagVisible,
+                v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "True to show this player's nametag to everyone, false to hide it.")},
+                    "Shows or hides the name over this player's head for every other player. The health bar has its own switch, and each player can still hide all nametags locally."))
+            .function("isNametagVisible", &Player::IsNametagVisible,
+                v8pp::metadata::docs("boolean", {}, "Checks whether this player's nametag is shown to other players.", "True unless the nametag was hidden; false also when this game has no nametags."))
+            .function("setNametagHealthVisible", &Player::SetNametagHealthVisible,
+                v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "True to show the health bar under this player's name, false to hide it.")},
+                    "Shows or hides the health bar under this player's nametag, leaving the name itself alone."))
+            .function("isNametagHealthVisible", &Player::IsNametagHealthVisible,
+                v8pp::metadata::docs("boolean", {}, "Checks whether the health bar under this player's nametag is shown.", "True unless the health bar was hidden; false also when this game has no nametags."))
+            .function("setNametagText", &Player::SetNametagText,
+                v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", true, "Text to show instead of the player's name; empty or omitted restores the name.")},
+                    "Overrides the text drawn on this player's nametag."))
+            .function("getNametagText", &Player::GetNametagText,
+                v8pp::metadata::docs("string", {}, "Reads this player's nametag text override.", "The override, or an empty string when the player's own name is drawn."))
+            .function("setNametagColor", &Player::SetNametagColor,
+                v8pp::metadata::docs("void", {v8pp::metadata::param("color", "number", false, "Packed 0xAARRGGBB color.")},
+                    "Tints the text on this player's nametag."))
+            .function("getNametagColor", &Player::GetNametagColor,
+                v8pp::metadata::docs("number", {}, "Reads this player's nametag color.", "Packed 0xAARRGGBB color; opaque white when untinted."))
             .property("steamId", &Player::GetSteamId, v8pp::metadata::property_docs("string", "Authenticated Steam identifier, or an empty string when unavailable."))
             .property("discordId", &Player::GetDiscordId, v8pp::metadata::property_docs("string", "Authenticated Discord identifier, or an empty string when unavailable."))
             .property("hardwareId", &Player::GetHardwareId, v8pp::metadata::property_docs("string", "Framework hardware identifier, or an empty string when unavailable."))

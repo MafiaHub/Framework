@@ -45,6 +45,9 @@ namespace Framework::Graphics {
                 return Error("Failed to initialize the D3D12 graphics backend");
             }
         }
+        else {
+            return Error("Renderer backend is not implemented");
+        }
 
         _initialized = true;
         return {};

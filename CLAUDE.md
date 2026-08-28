@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Read `AGENTS.md` in the repository root before doing anything else.**
+> Its "Non-negotiable rules" section is binding and takes precedence over
+> everything in this file. It is the single source of truth for those rules —
+> they are not duplicated here, so go read them.
+
 ## Project Overview
 
 MafiaHub Framework is a C++ framework for building multiplayer game modifications. It provides networking, ECS (Entity Component System), scripting, GUI, and other essential components for synchronized multiplayer experiences.

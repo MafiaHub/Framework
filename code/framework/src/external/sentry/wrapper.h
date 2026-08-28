@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <vector>
 
 namespace Framework::External::Sentry {
     // Mirrors sentry_level_e.
@@ -52,6 +53,8 @@ namespace Framework::External::Sentry {
         std::string release;
         std::string environment;
         int maxBreadcrumbs = 100;
+        // Registered before sentry_init; one added later only rides on subsequent events.
+        std::vector<std::string> attachments;
     };
 
     struct SystemInformation {
@@ -84,6 +87,11 @@ namespace Framework::External::Sentry {
     class Wrapper final : public Framework::Lifecycle {
       public:
         [[nodiscard]] Utils::Result<void, Framework::Error> Init(const InitOptions &);
+
+        // Drains the send queue and leaves the client usable.
+        bool Flush(uint32_t timeoutMs = 2000) const;
+
+        // Terminal: nothing reports through the client afterwards.
         void Shutdown() override;
 
         Utils::Result<void, Framework::Error> CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const;
@@ -105,4 +113,15 @@ namespace Framework::External::Sentry {
             return IsInitialized();
         }
     };
+
+    // Process-wide reporter, so the handler can be installed before any Instance exists.
+    Wrapper &GetCrashReporter();
+
+    // Idempotent, first-caller-wins.
+    [[nodiscard]] Utils::Result<void, Framework::Error> InitCrashReporter(const InitOptions &);
+
+    bool IsCrashReporterReady();
+
+    // For the owner of the process lifetime; a subsystem teardown wants Flush.
+    void ShutdownCrashReporter();
 } // namespace Framework::External::Sentry

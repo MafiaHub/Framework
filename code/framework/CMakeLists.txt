@@ -8,6 +8,7 @@ set(FRAMEWORK_SRC
     ${CMAKE_CURRENT_BINARY_DIR}/version.cpp
     src/utils/delay_scope.cpp
     src/utils/config.cpp
+    src/utils/config_schema.cpp
     src/utils/persistent_config.cpp
     src/utils/interpolator.cpp
     src/utils/time.cpp
@@ -98,6 +99,7 @@ set(FRAMEWORK_CLIENT_SRC
     src/integrations/client/scripting/builtins/chat.cpp
     src/integrations/client/scripting/builtins/discord.cpp
     src/integrations/client/scripting/builtins/voice.cpp
+    src/integrations/client/scripting/builtins/nametags.cpp
 
     src/utils/key_names.cpp
 
@@ -133,6 +135,7 @@ if(WIN32)
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
+        src/utils/game_module.cpp
         src/utils/memory.cpp
         src/utils/minidump.cpp
     )
@@ -161,6 +164,7 @@ if(WIN32)
         src/launcher/rgl_bypass.cpp
         src/utils/minidump.cpp
         src/launcher/loaders/exe_ldr.cpp
+        src/launcher/loaders/process_identity.cpp
         src/external/steam/wrapper.cpp
         src/external/epic/manifest.cpp
         src/utils/hooking/hook_function.cpp

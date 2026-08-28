@@ -16,8 +16,10 @@ MODULE(snapshot_buffer, {
     IT("returns false when empty", {
         TransformSnapshotBuffer buffer;
         TransformSnapshot out;
+        bool held = true;
         EQUALS(buffer.Empty(), true);
-        EQUALS(buffer.Sample(1000, out), false);
+        EQUALS(buffer.Sample(1000, out, &held), false);
+        EQUALS(held, false);
     });
 
     IT("latches a single sample regardless of render time", {
@@ -26,9 +28,12 @@ MODULE(snapshot_buffer, {
         snap.position = glm::vec3(5.0f, 0.0f, 0.0f);
         buffer.Push(snap, 1000);
         TransformSnapshot out;
-        EQUALS(buffer.Sample(500, out), true);
+        bool held = false;
+        EQUALS(buffer.Sample(500, out, &held), true);
+        EQUALS(held, true);
         EQUALS(out.position, snap.position);
-        EQUALS(buffer.Sample(2000, out), true);
+        EQUALS(buffer.Sample(2000, out, &held), true);
+        EQUALS(held, true);
         EQUALS(out.position, snap.position);
     });
 
@@ -41,7 +46,9 @@ MODULE(snapshot_buffer, {
         buffer.Push(a, 1000);
         buffer.Push(b, 1100);
         TransformSnapshot out;
-        EQUALS(buffer.Sample(1050, out), true);
+        bool held = true;
+        EQUALS(buffer.Sample(1050, out, &held), true);
+        EQUALS(held, false);
         EQUALS(out.position, glm::vec3(5.0f, 0.0f, 0.0f));
     });
 
@@ -66,7 +73,9 @@ MODULE(snapshot_buffer, {
         buffer.Push(a, 1000);
         buffer.Push(b, 1100);
         TransformSnapshot out;
-        EQUALS(buffer.Sample(500, out), true);
+        bool held = false;
+        EQUALS(buffer.Sample(500, out, &held), true);
+        EQUALS(held, true);
         EQUALS(out.position, a.position);
     });
 
@@ -79,7 +88,9 @@ MODULE(snapshot_buffer, {
         buffer.Push(a, 1000);
         buffer.Push(b, 1100);
         TransformSnapshot out;
-        EQUALS(buffer.Sample(1200, out), true); // 100ms past newest at 10 u/s -> +1.0
+        bool held = true;
+        EQUALS(buffer.Sample(1200, out, &held), true); // 100ms past newest at 10 u/s -> +1.0
+        EQUALS(held, false);
         EQUALS(out.position, glm::vec3(2.0f, 0.0f, 0.0f));
     });
 
@@ -93,8 +104,19 @@ MODULE(snapshot_buffer, {
         buffer.Push(a, 1000);
         buffer.Push(b, 1100);
         TransformSnapshot out;
-        EQUALS(buffer.Sample(5000, out), true); // way past newest, clamped to 100ms -> +1.0
+        bool held = true;
+        EQUALS(buffer.Sample(1199, out, &held), true);
+        EQUALS(held, false);
+        EQUALS(buffer.Sample(1200, out, &held), true);
+        EQUALS(held, true);
+        EQUALS(buffer.Sample(5000, out, &held), true); // way past newest, clamped to 100ms -> +1.0
+        EQUALS(held, true);
         EQUALS(out.position, glm::vec3(2.0f, 0.0f, 0.0f));
+
+        b.position = glm::vec3(2.0f, 0.0f, 0.0f);
+        buffer.Push(b, 1200);
+        EQUALS(buffer.Sample(1250, out, &held), true);
+        EQUALS(held, false);
     });
 
     IT("treats a large jump as teleport and clears history", {

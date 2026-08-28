@@ -27,9 +27,12 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 #include <utility>
 
 #include "scripting/module.h"
+
+#include <nlohmann/json.hpp>
 
 #include <gui/manager.h>
 
@@ -78,6 +81,8 @@ namespace Framework::Integrations::Client {
         std::string sentryRelease;
         // Deployment environment ("retail" / "dev" / "ci"); empty leaves it unset.
         std::string sentryEnvironment;
+        // Extra files registered before sentry_init.
+        std::vector<std::string> sentryAttachments;
 
         // Optional UI font (TTF). Empty -> ImGui's embedded ASCII-only font.
         // A Unicode-covering font enables non-Latin scripts (e.g. Cyrillic).
@@ -133,7 +138,8 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<Graphics::RenderIO> _renderIO;
         std::unique_ptr<Client::Scripting::ClientScriptingModule> _scriptingModule;
         std::unique_ptr<Framework::GUI::Manager> _webManager;
-        std::unique_ptr<External::Sentry::Wrapper> _crashReporter;
+        // Not owned; the reporter is process-wide.
+        External::Sentry::Wrapper *_crashReporter = nullptr;
 
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
@@ -159,6 +165,11 @@ namespace Framework::Integrations::Client {
         // Client resources the server hot-reloaded; refreshed after the next
         // asset re-sync completes (dev mode). Empty on a normal connect.
         std::vector<Client::Scripting::ServerResourceInfo> _pendingRefreshResources;
+
+        // The server's replicated server.json subset, decoded from the MafiaNet session payload the
+        // moment the connection surfaces. Available before the asset phase and before any client
+        // script runs, which is what lets a project pick what to load from it.
+        nlohmann::json _serverConfig;
 
         // Handshake state carried from ServerResources until the ReadyEvent spawn barrier completes.
         int _readyEventId {};
@@ -264,6 +275,16 @@ namespace Framework::Integrations::Client {
         void StartAssetDownload();
 
       public:
+        // Server-published config for the current connection. Empty object when disconnected, when
+        // the server published nothing, or when what it published was not a JSON object.
+        //
+        // The contents are remote input: the server chose them and MafiaNet does not inspect them.
+        // Validate before use, and never treat a value as a path, command, or format string without
+        // resolving it against a known root first.
+        const nlohmann::json &GetServerConfig() const {
+            return _serverConfig;
+        }
+
         InstanceOptions &GetOptions() {
             return _opts;
         }
@@ -313,7 +334,7 @@ namespace Framework::Integrations::Client {
         }
 
         External::Sentry::Wrapper *GetCrashReporter() const {
-            return _crashReporter.get();
+            return _crashReporter;
         }
 
         Framework::GUI::Manager *GetWebManager() const {

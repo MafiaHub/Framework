@@ -19,6 +19,7 @@
 #include <mafianet/types.h>
 #include <mafianet/peerinterface.h>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 
@@ -61,6 +62,10 @@ namespace Framework::Networking {
         [[nodiscard]] Utils::Result<void, Error> Disconnect();
 
         int GetPing() const;
+
+        // The server's session payload, empty when it published none. Valid from
+        // ID_CONNECTION_REQUEST_ACCEPTED until the connection drops. Remote input: validate it.
+        std::string_view GetRemoteSessionConfig(MafiaNet::RakNetGUID guid) const;
 
         PeerState GetConnectionState() const {
             return _state;

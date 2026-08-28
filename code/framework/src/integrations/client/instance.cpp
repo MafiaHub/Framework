@@ -14,6 +14,7 @@
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/voice_settings.h"
 #include "networking/rpc/client_identity.h"
+#include "networking/rpc/nametag.h"
 #include "networking/rpc/resource_refresh.h"
 #include "networking/rpc/server_resources.h"
 
@@ -22,6 +23,7 @@
 
 #include "networking/state.h"
 #include "networking/replication/replication_manager.h"
+#include "networking/replication/nametag_state.h"
 
 #include <cppfs/cppfs.h>
 #include <cppfs/FilePath.h>
@@ -249,7 +251,7 @@ namespace Framework::Integrations::Client {
         _renderIO         = std::make_unique<Graphics::RenderIO>();
         _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>();
         _webManager = std::make_unique<Framework::GUI::Manager>();
-        _crashReporter = std::make_unique<External::Sentry::Wrapper>();
+        _crashReporter = &External::Sentry::GetCrashReporter();
 
         // Typed lines go through "chatSend" first; Chat.send is the raw path, so a handler can
         // veto and resend without re-entering itself.
@@ -273,13 +275,16 @@ namespace Framework::Integrations::Client {
         CoreModules::SetClientInstance(this);
 
         // Crash reporting comes up first so its handler is installed before anything else can fault.
+        // An entry-point InitCrashReporter already installed it; this is then a no-op and only the
+        // decoration below applies.
         if (_crashReporter && !opts.sentryDSN.empty()) {
             External::Sentry::InitOptions sentryOpts;
             sentryOpts.dsn         = opts.sentryDSN;
             sentryOpts.handlerPath = opts.sentryModulePath.empty() ? "." : opts.sentryModulePath;
             sentryOpts.release     = opts.sentryRelease.empty() ? opts.gameName + "@" + opts.gameVersion : opts.sentryRelease;
             sentryOpts.environment = opts.sentryEnvironment;
-            if (auto sentryResult = _crashReporter->Init(sentryOpts); !sentryResult) {
+            sentryOpts.attachments = opts.sentryAttachments;
+            if (auto sentryResult = External::Sentry::InitCrashReporter(sentryOpts); !sentryResult) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Crash reporting disabled: {}", sentryResult.GetError().message);
             }
             else {
@@ -291,7 +296,7 @@ namespace Framework::Integrations::Client {
                 const auto *logger = Logging::GetInstance();
                 _crashReporter->AddAttachment(logger->GetLogFolder() + "/" + logger->GetLogName() + ".log");
 
-                auto *reporter = _crashReporter.get();
+                auto *reporter = _crashReporter;
                 Logging::GetInstance()->SetLogForwarder([reporter](int level, const std::string &name, const std::string &message) {
                     External::Sentry::Level mapped = External::Sentry::Level::Info;
                     if (level >= spdlog::level::critical) {
@@ -399,18 +404,12 @@ namespace Framework::Integrations::Client {
                     return renderResult;
                 }
 
+                // Renderer::Init already built and initialized the backend for the
+                // configured API; initializing it a second time here rebuilt every
+                // descriptor heap, allocator and command list, leaking the first set
+                // along with a device reference.
                 _renderer->SetWindow(_opts.rendererOptions.windowHandle);
 
-                bool backendInitOk = false;
-                switch (_opts.rendererOptions.backend) {
-                case Graphics::RendererBackend::BACKEND_D3D_9: backendInitOk = _renderer->GetD3D9Backend()->Init(_opts.rendererOptions); break;
-                case Graphics::RendererBackend::BACKEND_D3D_11: backendInitOk = _renderer->GetD3D11Backend()->Init(_opts.rendererOptions); break;
-                case Graphics::RendererBackend::BACKEND_D3D_12: backendInitOk = _renderer->GetD3D12Backend()->Init(_opts.rendererOptions); break;
-                default: Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented"); break;
-                }
-                if (!backendInitOk) {
-                    return Error("Failed to initialize graphics backend");
-                }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Rendering systems initialized");
             }
 
@@ -465,8 +464,9 @@ namespace Framework::Integrations::Client {
             _imguiApp->Shutdown();
         }
 
+        // Drain, never close: the reporter outlives this instance.
         if (_crashReporter && _crashReporter->IsInitialized()) {
-            _crashReporter->Shutdown();
+            _crashReporter->Flush();
         }
 
         CoreModules::SetScriptingModule(nullptr);
@@ -597,8 +597,29 @@ namespace Framework::Integrations::Client {
             net->SetBuildToken(Framework::Networking::NetworkPeer::kBuildVerificationDisabledToken);
         }
 
-        net->SetOnPlayerConnectedCallback([this](MafiaNet::Packet *) {
+        net->SetOnPlayerConnectedCallback([this, net](MafiaNet::Packet *packet) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, verifying build");
+
+            // ID_CONNECTION_REQUEST_ACCEPTED is withheld by MafiaNet until the session handshake
+            // completes, so the server's payload is already in hand here -- earlier than the
+            // resource list, the asset download, or any client script.
+            _serverConfig = nlohmann::json::object();
+            if (packet) {
+                const std::string_view raw = net->GetRemoteSessionConfig(packet->guid);
+                if (!raw.empty()) {
+                    // Remote input: a server can publish anything at all here, so a parse failure is
+                    // an ordinary outcome rather than an error worth dropping the connection over.
+                    auto parsed = nlohmann::json::parse(raw.begin(), raw.end(), nullptr, false);
+                    if (parsed.is_discarded() || !parsed.is_object()) {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Server config is not a JSON object; ignoring {} byte(s)", raw.size());
+                    }
+                    else {
+                        _serverConfig = std::move(parsed);
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received {} server config key(s)", _serverConfig.size());
+                    }
+                }
+            }
+
             SetConnectionPhase(ConnectionPhase::Authenticating);
         });
 
@@ -722,6 +743,7 @@ namespace Framework::Integrations::Client {
             ++_assetProcessingGeneration;
             _deferredInitialAssetProcessingGeneration = 0;
             _resumingDeferredInitialAssetProcessing    = false;
+            _serverConfig                              = nlohmann::json::object();
             _initialDownloadDone                       = false;
             _downloadStatus                            = {};
             _connectionFinalized                       = false;
@@ -765,6 +787,22 @@ namespace Framework::Integrations::Client {
 
         net->RegisterRPC<Framework::Networking::RPC::VoiceSpeakerRange>([this](const Framework::Networking::RPC::VoiceSpeakerRange &payload, MafiaNet::Packet *) {
             _voiceClient.SetSpeakerRange(payload.player, payload.range);
+        });
+
+        // Scripted nametag state for our own avatar; our next upstream update carries it to the others.
+        net->RegisterRPC<Framework::Networking::RPC::SetNametagState>([](const Framework::Networking::RPC::SetNametagState &payload, MafiaNet::Packet *) {
+            auto *replication = CoreModules::GetReplication();
+            auto *entity      = replication ? replication->GetEntityByNetworkID(payload.networkId) : nullptr;
+            if (!entity || !entity->IsOwner()) {
+                return;
+            }
+            auto *nametag = entity->GetNametag();
+            if (!nametag) {
+                return;
+            }
+            nametag->components = payload.components;
+            nametag->color      = payload.color;
+            nametag->text       = payload.text;
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Networking messages registered");
