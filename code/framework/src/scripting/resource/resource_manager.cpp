@@ -33,9 +33,7 @@ namespace Framework::Scripting {
             std::string error;
         };
 
-        std::string StringifyPromiseRejection(v8::Isolate *isolate,
-                                              v8::Local<v8::Context> context,
-                                              v8::Local<v8::Value> reason) {
+        std::string StringifyPromiseRejection(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> reason) {
             v8::TryCatch tryCatch(isolate);
             const auto stringify = [&](v8::Local<v8::Value> value) {
                 v8::Local<v8::String> text;
@@ -50,9 +48,7 @@ namespace Framework::Scripting {
             std::string result = stringify(reason);
             if (!reason.IsEmpty() && reason->IsObject()) {
                 v8::Local<v8::Value> errorsValue;
-                if (reason.As<v8::Object>()->Get(context,
-                        v8::String::NewFromUtf8Literal(isolate, "errors")).ToLocal(&errorsValue)
-                    && errorsValue->IsArray()) {
+                if (reason.As<v8::Object>()->Get(context, v8::String::NewFromUtf8Literal(isolate, "errors")).ToLocal(&errorsValue) && errorsValue->IsArray()) {
                     auto errors = errorsValue.As<v8::Array>();
                     for (uint32_t i = 0; i < errors->Length(); ++i) {
                         v8::Local<v8::Value> item;
@@ -72,16 +68,12 @@ namespace Framework::Scripting {
         // Lifecycle entry points remain synchronous to their C++ callers, but the JS work they gate
         // is asynchronous. Pump the shared scripting engine so microtasks, timers, and Node/libuv I/O
         // can make progress; a plain blocking wait here would deadlock every meaningful async handler.
-        LifecyclePromiseResult AwaitLifecyclePromise(Engine *engine,
-                                                      Builtins::Events &events,
-                                                      v8::Global<v8::Promise> &promise,
-                                                      int timeoutMs) {
+        LifecyclePromiseResult AwaitLifecyclePromise(Engine *engine, Builtins::Events &events, v8::Global<v8::Promise> &promise, int timeoutMs) {
             if (!engine || !engine->IsInitialized() || promise.IsEmpty()) {
                 return {};
             }
 
-            const auto deadline = std::chrono::steady_clock::now()
-                + std::chrono::milliseconds(std::max(timeoutMs, 1));
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(timeoutMs, 1));
             for (;;) {
                 {
                     v8::Isolate *isolate = engine->GetIsolate();
@@ -489,17 +481,13 @@ namespace Framework::Scripting {
             SetCurrentResourceContext("");
         }
 
-        const auto startLifecycle = AwaitLifecyclePromise(
-            _jsEngine, _events, startPromise, _config.resourceStartTimeoutMs);
+        const auto startLifecycle = AwaitLifecyclePromise(_jsEngine, _events, startPromise, _config.resourceStartTimeoutMs);
         if (startLifecycle.status != LifecyclePromiseStatus::Fulfilled) {
-            error = startLifecycle.status == LifecyclePromiseStatus::TimedOut
-                ? "resourceStart timed out after " + std::to_string(std::max(_config.resourceStartTimeoutMs, 1)) + "ms"
-                : "resourceStart rejected: " + startLifecycle.error;
+            error = startLifecycle.status == LifecyclePromiseStatus::TimedOut ? "resourceStart timed out after " + std::to_string(std::max(_config.resourceStartTimeoutMs, 1)) + "ms" : "resourceStart rejected: " + startLifecycle.error;
             CleanupResourceRuntime(*resource, name);
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "Failed to start JS resource '{}': {}", name, error);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start JS resource '{}': {}", name, error);
             return ResourceOperationResult(error);
         }
 
@@ -567,16 +555,12 @@ namespace Framework::Scripting {
             SetCurrentResourceContext("");
         }
 
-        const auto stopLifecycle = AwaitLifecyclePromise(
-            _jsEngine, _events, stopPromise, _config.resourceStopTimeoutMs);
+        const auto stopLifecycle = AwaitLifecyclePromise(_jsEngine, _events, stopPromise, _config.resourceStopTimeoutMs);
         if (stopLifecycle.status == LifecyclePromiseStatus::Rejected) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "resourceStop for '{}' rejected; forcing cleanup: {}", name, stopLifecycle.error);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("resourceStop for '{}' rejected; forcing cleanup: {}", name, stopLifecycle.error);
         }
         else if (stopLifecycle.status == LifecyclePromiseStatus::TimedOut) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "resourceStop for '{}' timed out after {}ms; forcing cleanup",
-                name, std::max(_config.resourceStopTimeoutMs, 1));
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("resourceStop for '{}' timed out after {}ms; forcing cleanup", name, std::max(_config.resourceStopTimeoutMs, 1));
         }
 
         CleanupResourceRuntime(*resource, name);
@@ -902,8 +886,7 @@ namespace Framework::Scripting {
         return true;
     }
 
-    void ResourceManager::CleanupResourceRuntime(Resource &resource,
-                                                 std::string_view resourceName) {
+    void ResourceManager::CleanupResourceRuntime(Resource &resource, std::string_view resourceName) {
         CallResourceStop(resourceName);
         if (_jsEngine) {
             _jsEngine->ClearResourceTimers(std::string(resourceName));

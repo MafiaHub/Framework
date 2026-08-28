@@ -68,8 +68,7 @@ class TestManagerHelper {
         scriptFile.close();
     }
 
-    static void RegisterEvents(Framework::Scripting::NodeEngine &engine,
-                               Framework::Scripting::ResourceManager &manager) {
+    static void RegisterEvents(Framework::Scripting::NodeEngine &engine, Framework::Scripting::ResourceManager &manager) {
         v8::Isolate *isolate = engine.GetIsolate();
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
@@ -77,12 +76,9 @@ class TestManagerHelper {
         v8::Local<v8::Context> context = engine.GetContext();
         v8::Context::Scope contextScope(context);
         v8::Local<v8::Value> coreValue;
-        if (!context->Global()->Get(context,
-                v8::String::NewFromUtf8Literal(isolate, "Core")).ToLocal(&coreValue)
-            || !coreValue->IsObject()) {
+        if (!context->Global()->Get(context, v8::String::NewFromUtf8Literal(isolate, "Core")).ToLocal(&coreValue) || !coreValue->IsObject()) {
             coreValue = v8::Object::New(isolate);
-            context->Global()->Set(context,
-                v8::String::NewFromUtf8Literal(isolate, "Core"), coreValue).Check();
+            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Core"), coreValue).Check();
         }
         manager.GetEvents().Register(isolate, context, coreValue.As<v8::Object>(), &manager);
     }
@@ -96,8 +92,7 @@ class TestManagerHelper {
         v8::Context::Scope contextScope(context);
         v8::TryCatch tryCatch(isolate);
         v8::Local<v8::Script> script;
-        if (!v8::Script::Compile(context,
-                v8::String::NewFromUtf8(isolate, source).ToLocalChecked()).ToLocal(&script)) {
+        if (!v8::Script::Compile(context, v8::String::NewFromUtf8(isolate, source).ToLocalChecked()).ToLocal(&script)) {
             return -1;
         }
         v8::Local<v8::Value> result;
@@ -551,7 +546,6 @@ MODULE(resource_manager, {
     });
 
     // ==================== Callbacks ====================
-
 });
 
 MODULE(resource_lifecycle, {
@@ -715,11 +709,11 @@ MODULE(resource_lifecycle, {
     IT("forces stop cleanup after async rejection or timeout", {
         const auto runCase = [](const std::string &name, const std::string &stopBody) {
             TestManagerHelper::Cleanup();
-            TestManagerHelper::CreateTestResource(name, "{\"name\":\"" + name
-                + "\",\"version\":\"1.0.0\",\"mafiahub\":{\"server\":\"main.js\"}}");
+            TestManagerHelper::CreateTestResource(name, "{\"name\":\"" + name + "\",\"version\":\"1.0.0\",\"mafiahub\":{\"server\":\"main.js\"}}");
             TestManagerHelper::CreateTestScript(name, "main.js",
                 "Core.Events.on('force-cleanup-listener', () => {});"
-                "Core.Events.on('resourceStop', (name) => name === '" + name + "' ? (" + stopBody + ") : undefined);");
+                "Core.Events.on('resourceStop', (name) => name === '"
+                    + name + "' ? (" + stopBody + ") : undefined);");
 
             NodeEngine engine;
             bool ok = engine.Init() == ScriptingError::SCRIPTING_NONE;
