@@ -36,7 +36,7 @@ namespace Framework::External::ImGUI::Widgets {
         float farScale     = 0.75f;
         float scaleStart   = 10.0f; // scale ramp runs nearScale -> farScale between these
         float scaleEnd     = 70.0f;
-        float shiftStart   = 15.0f; // lift ramp start, keeps the bar clear of the head
+        float shiftStart   = 15.0f; // distance where the pixel lift starts
         float shiftMax     = 20.0f; // pixels, at drawDistance
     };
 
@@ -52,6 +52,11 @@ namespace Framework::External::ImGUI::Widgets {
         return WorldTextAlpha(distance, layout.drawDistance, layout.fadeStart);
     }
 
+    enum class NameTagAnchor {
+        TextCenter,
+        BottomCenter,
+    };
+
     struct NameTagStyle {
         ImU32 textColor       = IM_COL32(255, 255, 255, 255);
         ImU32 bgColor         = IM_COL32(0, 0, 0, 153);
@@ -60,11 +65,10 @@ namespace Framework::External::ImGUI::Widgets {
         float padding         = 4.0f;
         float healthBarWidth  = 50.0f; // used when a healthPercent is supplied
         float healthBarHeight = 5.0f;
+        NameTagAnchor anchor  = NameTagAnchor::TextCenter;
     };
 
-    // Draw a name tag centered on screenPos (pixels): the name over a rounded background box, and an
-    // optional health bar below it when healthPercent is in [0, 100]. color alphas are multiplied by
-    // `alpha` (distance fade, see WorldTextAlpha).
+    // BottomCenter anchors the full widget, including the health bar.
     inline void DrawNameTag(ImDrawList *drawList, ImVec2 screenPos, const char *name, const NameTagStyle &style = {}, float alpha = 1.0f, float healthPercent = -1.0f) {
         if (!drawList || !name || !name[0] || alpha <= 0.0f) {
             return;
@@ -73,31 +77,28 @@ namespace Framework::External::ImGUI::Widgets {
         ImFont *font   = ImGui::GetFont();
         float fontSize = style.fontSize > 0.0f ? style.fontSize : ImGui::GetFontSize();
 
-        const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, name);
-        const ImVec2 textPos(screenPos.x - textSize.x * 0.5f, screenPos.y - textSize.y * 0.5f);
+        const bool drawHealth    = healthPercent >= 0.0f && style.healthBarWidth > 0.0f && style.healthBarHeight > 0.0f;
+        const ImVec2 textSize    = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, name);
+        const float bottomOffset = style.anchor == NameTagAnchor::BottomCenter ? textSize.y * 0.5f + style.padding + (drawHealth ? 3.0f + style.healthBarHeight : 0.0f) : 0.0f;
+        const ImVec2 textPos(screenPos.x - textSize.x * 0.5f, screenPos.y - textSize.y * 0.5f - bottomOffset);
 
-        drawList->AddRectFilled(
-            ImVec2(textPos.x - style.padding, textPos.y - style.padding),
-            ImVec2(textPos.x + textSize.x + style.padding, textPos.y + textSize.y + style.padding),
-            WorldTextModulateAlpha(style.bgColor, alpha),
-            style.rounding);
+        drawList->AddRectFilled(ImVec2(textPos.x - style.padding, textPos.y - style.padding), ImVec2(textPos.x + textSize.x + style.padding, textPos.y + textSize.y + style.padding), WorldTextModulateAlpha(style.bgColor, alpha), style.rounding);
         drawList->AddText(font, fontSize, textPos, WorldTextModulateAlpha(style.textColor, alpha), name);
 
-        if (healthPercent < 0.0f || style.healthBarWidth <= 0.0f || style.healthBarHeight <= 0.0f) {
+        if (!drawHealth) {
             return;
         }
 
-        const float t             = std::clamp(healthPercent / 100.0f, 0.0f, 1.0f);
-        const float halfBarWidth  = style.healthBarWidth * 0.5f;
-        const float barTop        = textPos.y + textSize.y + style.padding + 3.0f;
+        const float t            = std::clamp(healthPercent / 100.0f, 0.0f, 1.0f);
+        const float halfBarWidth = style.healthBarWidth * 0.5f;
+        const float barTop       = textPos.y + textSize.y + style.padding + 3.0f;
         const ImVec2 barMin(screenPos.x - halfBarWidth, barTop);
         const ImVec2 barMax(screenPos.x + halfBarWidth, barTop + style.healthBarHeight);
 
         drawList->AddRectFilled(barMin, barMax, WorldTextModulateAlpha(IM_COL32(0, 0, 0, 175), alpha), style.rounding * 0.5f);
 
         const ImU32 fillLeft  = WorldTextModulateAlpha(IM_COL32(80, 0, 0, 255), alpha);
-        const ImU32 fillRight = WorldTextModulateAlpha(
-            IM_COL32(80 + static_cast<int>(175.0f * t), static_cast<int>(40.0f * t), static_cast<int>(80.0f * t), 255), alpha);
+        const ImU32 fillRight = WorldTextModulateAlpha(IM_COL32(80 + static_cast<int>(175.0f * t), static_cast<int>(40.0f * t), static_cast<int>(80.0f * t), 255), alpha);
         drawList->AddRectFilledMultiColor(barMin, ImVec2(barMin.x + style.healthBarWidth * t, barMax.y), fillLeft, fillRight, fillRight, fillLeft);
     }
 
