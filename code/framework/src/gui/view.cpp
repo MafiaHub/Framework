@@ -111,9 +111,12 @@ namespace Framework::GUI {
     }
 
     void View::RequestBeginFrame() {
-        if (_browser) {
-            _browser->GetHost()->SendExternalBeginFrame();
+        // A hidden view that still animates composites and memcpys a full-viewport
+        // frame per tick, on the pump (main) thread. Display(false) means stop.
+        if (!_browser || !_shouldDisplay) {
+            return;
         }
+        _browser->GetHost()->SendExternalBeginFrame();
     }
 
     void View::EmitViewEvent(const ViewEventData &data) {

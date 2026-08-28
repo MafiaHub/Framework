@@ -10,6 +10,7 @@
 
 #include <logging/logger.h>
 #include <utils/process_shutdown.h>
+#include <utils/profiler.h>
 
 #include "gui/backend/view_d3d11.h"
 #include "gui/backend/view_d3d12.h"
@@ -155,18 +156,35 @@ namespace Framework::GUI {
 
         // Pump OUTSIDE _renderMutex: it dispatches window messages that can block
         // on the render thread (exit-flow RHI flush) and deadlock against Render.
-        if (!PumpCefMessageLoopGuarded()) {
-            _cefPumpFailed = true;
-            Framework::Logging::GetLogger("Web")->warn("CEF message pump faulted (exit teardown race) — disabling further pumps");
-            return;
+        {
+            // OnPaint runs inside here, on this thread: its zone nests under this one.
+            FW_PROFILE_SCOPE_N("Cef::Pump");
+            if (!PumpCefMessageLoopGuarded()) {
+                _cefPumpFailed = true;
+                Framework::Logging::GetLogger("Web")->warn("CEF message pump faulted (exit teardown race) — disabling further pumps");
+                return;
+            }
         }
 
-        std::scoped_lock lock(_renderMutex);
+        // Render() takes the same mutex from the Present hook, so this can be a stall
+        // rather than work; time it separately from what it guards.
+        std::unique_lock<std::recursive_mutex> lock;
+        {
+            FW_PROFILE_SCOPE_N("Cef::LockWait");
+            lock = std::unique_lock<std::recursive_mutex>(_renderMutex);
+        }
 
         // One external begin frame per render frame bounds CEF's cadence to our loop.
-        for (auto &view : _views) {
-            view->RequestBeginFrame();
-            view->Update();
+        {
+            FW_PROFILE_SCOPE_N("Cef::BeginFrames");
+            int visible = 0;
+            for (auto &view : _views) {
+                view->RequestBeginFrame();
+                view->Update();
+                visible += view->ShouldDisplay() ? 1 : 0;
+            }
+            FW_PROFILE_PLOT("cef.views", static_cast<int64_t>(_views.size()));
+            FW_PROFILE_PLOT("cef.views.visible", static_cast<int64_t>(visible));
         }
 
         // Free retired views once in-flight frames referencing their textures drained

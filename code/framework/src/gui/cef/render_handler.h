@@ -28,9 +28,12 @@ namespace Framework::GUI::CEF {
         HANDLE _sharedHandle = nullptr;
 
         // OnPaint (CEF pump thread) writes, views read on the render thread —
-        // both under LockPixels().
+        // both under LockPixels(). _pixelData is a persistent accumulator: OnPaint
+        // only refreshes the dirty rects, so its dimensions must be tracked.
         std::mutex _pixelMutex;
         std::vector<uint8_t> _pixelData;
+        int _pixelWidth      = 0;
+        int _pixelHeight     = 0;
         bool _pixelDataDirty = false;
 
         ID3D11Device *_device = nullptr;
