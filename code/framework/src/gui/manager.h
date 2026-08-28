@@ -51,6 +51,7 @@ namespace Framework::GUI {
 
         std::unique_ptr<SystemClipboard> _clipboard;
         Graphics::Renderer *_graphicsRenderer {};
+        HANDLE _cacheProfileLock = INVALID_HANDLE_VALUE;
         bool _gpuAccelerated = false;
         int _id              = 0;
 
