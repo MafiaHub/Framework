@@ -67,7 +67,7 @@ namespace Framework::Scripting {
          * Process pending timers and microtasks.
          * Call this from game loop to process async operations.
          */
-        void Tick();
+        void Tick() override;
 
         v8::Isolate *GetIsolate() const override;
         v8::Local<v8::Context> GetContext() const override;

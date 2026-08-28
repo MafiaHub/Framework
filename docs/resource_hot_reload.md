@@ -31,6 +31,42 @@ opts.developmentMode = true; // enable the file watcher
 The watcher interval defaults to 1s (`ResourceManagerConfig::fileWatchIntervalMs`)
 and skips `node_modules`/`.git`.
 
+## Asynchronous lifecycle handlers
+
+The existing `resourceStart` and `resourceStop` events are Promise-aware. The
+resource manager pumps the scripting runtime while it waits, so handlers may do
+real asynchronous work such as database migrations, final saves, or connection
+shutdown:
+
+```js
+Events.on("resourceStart", async (resourceName) => {
+    if (resourceName !== "my-resource") return;
+    await database.migrate();
+});
+
+Events.on("resourceStop", async (resourceName) => {
+    if (resourceName !== "my-resource") return;
+    await saveInventory();
+    await database.close();
+});
+```
+
+Startup does not transition the resource to `Running`, invoke its started
+callback, or start a dependent resource until every matching handler settles.
+If a start handler rejects or exceeds the timeout, startup fails and the
+partially loaded resource's handlers, messages, timers, and exports are cleaned
+up.
+
+Shutdown waits before removing those runtime-owned objects, allowing the stop
+handler to use them during finalization. A rejected or timed-out stop is logged
+loudly, then cleanup is forced so one resource cannot indefinitely block a
+reload or server shutdown.
+
+The defaults are 30 seconds for start and 10 seconds for stop. Native hosts can
+override them with `ResourceManagerConfig::resourceStartTimeoutMs` and
+`ResourceManagerConfig::resourceStopTimeoutMs`; non-positive values are treated
+as a 1ms bounded timeout.
+
 ## What a reload does
 
 `ResourceManager::RefreshResource(name)` (and `RefreshAll`):
@@ -83,6 +119,11 @@ Clients that haven't finished connecting ignore `ResourceRefresh`/`ResourceStop`
 
 ## Limitations
 
+- **Timeouts cannot cancel arbitrary JavaScript work.** The manager releases its
+  native wait state and cleans up the resource after a lifecycle timeout, but a
+  third-party Promise has no general cancellation mechanism. Code after a late
+  external I/O completion may still resume and must tolerate the resource
+  already being stopped.
 - **CommonJS only.** Module-cache eviction covers the framework's CJS load path.
   Resources loaded via dynamic ESM `import()` are not in `require.cache` and
   won't be re-read on reload.

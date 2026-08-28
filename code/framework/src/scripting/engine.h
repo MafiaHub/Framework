@@ -64,6 +64,10 @@ namespace Framework::Scripting {
          */
         virtual bool ExecuteFile(std::string_view filepath) = 0;
 
+        // Advance microtasks, timers, and host I/O without blocking. Resource lifecycle barriers use
+        // this while awaiting async resourceStart/resourceStop handlers.
+        virtual void Tick() = 0;
+
         // Evict cached modules under a resource dir so hot-reload re-reads
         // edited files. No-op without a module cache; call only after stop.
         virtual void EvictModulesUnderPath(const std::string &rootPath) {}
