@@ -68,6 +68,45 @@ class TestManagerHelper {
         scriptFile.close();
     }
 
+    static void RegisterEvents(Framework::Scripting::NodeEngine &engine,
+                               Framework::Scripting::ResourceManager &manager) {
+        v8::Isolate *isolate = engine.GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine.GetContext();
+        v8::Context::Scope contextScope(context);
+        v8::Local<v8::Value> coreValue;
+        if (!context->Global()->Get(context,
+                v8::String::NewFromUtf8Literal(isolate, "Core")).ToLocal(&coreValue)
+            || !coreValue->IsObject()) {
+            coreValue = v8::Object::New(isolate);
+            context->Global()->Set(context,
+                v8::String::NewFromUtf8Literal(isolate, "Core"), coreValue).Check();
+        }
+        manager.GetEvents().Register(isolate, context, coreValue.As<v8::Object>(), &manager);
+    }
+
+    static int32_t EvalInt(Framework::Scripting::NodeEngine &engine, const char *source) {
+        v8::Isolate *isolate = engine.GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine.GetContext();
+        v8::Context::Scope contextScope(context);
+        v8::TryCatch tryCatch(isolate);
+        v8::Local<v8::Script> script;
+        if (!v8::Script::Compile(context,
+                v8::String::NewFromUtf8(isolate, source).ToLocalChecked()).ToLocal(&script)) {
+            return -1;
+        }
+        v8::Local<v8::Value> result;
+        if (!script->Run(context).ToLocal(&result) || !result->IsNumber()) {
+            return -1;
+        }
+        return result->Int32Value(context).FromMaybe(-1);
+    }
+
     static void Cleanup() {
         cppfs::FileHandle testDir = cppfs::fs::open(GetTestResourcePath());
         if (testDir.exists()) {
@@ -105,6 +144,8 @@ MODULE(resource_manager, {
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
         config.isClient = true;
         config.cascadeStopDependents = false;
+        config.resourceStartTimeoutMs = 1234;
+        config.resourceStopTimeoutMs  = 5678;
 
         ResourceManager manager(&engine, config);
 
@@ -112,6 +153,8 @@ MODULE(resource_manager, {
         STREQUALS(retrievedConfig.resourcesPath.c_str(), config.resourcesPath.c_str());
         EQUALS(retrievedConfig.isClient, true);
         EQUALS(retrievedConfig.cascadeStopDependents, false);
+        EQUALS(retrievedConfig.resourceStartTimeoutMs, 1234);
+        EQUALS(retrievedConfig.resourceStopTimeoutMs, 5678);
 
         engine.Shutdown();
     });
@@ -508,6 +551,200 @@ MODULE(resource_manager, {
     });
 
     // ==================== Callbacks ====================
+
+});
+
+MODULE(resource_lifecycle, {
+    using namespace Framework::Scripting;
+
+    IT("awaits async resourceStart before starting dependents", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("async-dependency", R"({
+            "name": "async-dependency",
+            "version": "1.0.0",
+            "mafiahub": { "server": "main.js" }
+        })");
+        TestManagerHelper::CreateTestScript("async-dependency", "main.js", R"(
+            globalThis.__dependencyReady = 0;
+            Core.Events.on("resourceStart", async (name) => {
+                if (name !== "async-dependency") return;
+                await new Promise((resolve) => setTimeout(resolve, 15));
+                globalThis.__dependencyReady = 1;
+            });
+        )");
+        TestManagerHelper::CreateTestResource("async-dependent", R"({
+            "name": "async-dependent",
+            "version": "1.0.0",
+            "mafiahub": {
+                "server": "main.js",
+                "resourceDependencies": [{"name": "async-dependency"}]
+            }
+        })");
+        TestManagerHelper::CreateTestScript("async-dependent", "main.js", R"(
+            globalThis.__dependentSawReady = globalThis.__dependencyReady === 1 ? 1 : 0;
+        )");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath          = TestManagerHelper::GetTestResourcePath();
+        config.resourceStartTimeoutMs = 250;
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 2u);
+
+        const auto result = manager.StartResource("async-dependent");
+        EQUALS((bool)result, true);
+        EQUALS(manager.IsResourceRunning("async-dependency"), true);
+        EQUALS(manager.IsResourceRunning("async-dependent"), true);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__dependencyReady"), 1);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__dependentSawReady"), 1);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("awaits async resourceStop before removing handlers and timers", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("async-stop", R"({
+            "name": "async-stop",
+            "version": "1.0.0",
+            "mafiahub": { "server": "main.js" }
+        })");
+        TestManagerHelper::CreateTestScript("async-stop", "main.js", R"(
+            globalThis.__stopFinished = 0;
+            globalThis.__stopSawOwnedListener = 0;
+            Core.Events.on("owned-listener", () => {});
+            Core.Events.on("resourceStop", async (name) => {
+                if (name !== "async-stop") return;
+                await new Promise((resolve) => setTimeout(resolve, 15));
+                globalThis.__stopSawOwnedListener = Core.Events.listenerCount("owned-listener");
+                globalThis.__stopFinished = 1;
+            });
+        )");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath         = TestManagerHelper::GetTestResourcePath();
+        config.resourceStopTimeoutMs = 250;
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("async-stop"), true);
+
+        const auto result = manager.StopResource("async-stop");
+        EQUALS((bool)result, true);
+        EQUALS(manager.GetResourceState("async-stop"), ResourceState::Stopped);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__stopFinished"), 1);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__stopSawOwnedListener"), 1);
+        EQUALS(manager.GetEvents().GetListenerCount("owned-listener"), static_cast<size_t>(0));
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("fails and cleans a resource whose async start rejects", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("reject-start", R"({
+            "name": "reject-start",
+            "version": "1.0.0",
+            "mafiahub": { "server": "main.js" }
+        })");
+        TestManagerHelper::CreateTestScript("reject-start", "main.js", R"(
+            Core.Events.on("leaked-start-listener", () => {});
+            Core.Events.on("resourceStart", async (name) => {
+                if (name !== "reject-start") return;
+                await Promise.resolve();
+                throw new Error("migration failed");
+            });
+        )");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath          = TestManagerHelper::GetTestResourcePath();
+        config.resourceStartTimeoutMs = 250;
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 1u);
+
+        const auto result = manager.StartResource("reject-start");
+        EQUALS((bool)result, false);
+        EQUALS(result.GetError().find("migration failed") != std::string::npos, true);
+        EQUALS(manager.GetResourceState("reject-start"), ResourceState::Error);
+        EQUALS(manager.GetEvents().GetListenerCount("leaked-start-listener"), static_cast<size_t>(0));
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("bounds async start and cleans a timed-out partial resource", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("timeout-start", R"({
+            "name": "timeout-start",
+            "version": "1.0.0",
+            "mafiahub": { "server": "main.js" }
+        })");
+        TestManagerHelper::CreateTestScript("timeout-start", "main.js", R"(
+            Core.Events.on("leaked-timeout-listener", () => {});
+            Core.Events.on("resourceStart", (name) =>
+                name === "timeout-start" ? new Promise(() => {}) : undefined);
+        )");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath          = TestManagerHelper::GetTestResourcePath();
+        config.resourceStartTimeoutMs = 10;
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 1u);
+
+        const auto result = manager.StartResource("timeout-start");
+        EQUALS((bool)result, false);
+        EQUALS(result.GetError().find("timed out") != std::string::npos, true);
+        EQUALS(manager.GetResourceState("timeout-start"), ResourceState::Error);
+        EQUALS(manager.GetEvents().GetListenerCount("leaked-timeout-listener"), static_cast<size_t>(0));
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("forces stop cleanup after async rejection or timeout", {
+        const auto runCase = [](const std::string &name, const std::string &stopBody) {
+            TestManagerHelper::Cleanup();
+            TestManagerHelper::CreateTestResource(name, "{\"name\":\"" + name
+                + "\",\"version\":\"1.0.0\",\"mafiahub\":{\"server\":\"main.js\"}}");
+            TestManagerHelper::CreateTestScript(name, "main.js",
+                "Core.Events.on('force-cleanup-listener', () => {});"
+                "Core.Events.on('resourceStop', (name) => name === '" + name + "' ? (" + stopBody + ") : undefined);");
+
+            NodeEngine engine;
+            bool ok = engine.Init() == ScriptingError::SCRIPTING_NONE;
+            ResourceManagerConfig config;
+            config.resourcesPath         = TestManagerHelper::GetTestResourcePath();
+            config.resourceStopTimeoutMs = 10;
+            ResourceManager manager(&engine, config);
+            TestManagerHelper::RegisterEvents(engine, manager);
+            ok = ok && manager.DiscoverResources() == 1u;
+            ok = ok && static_cast<bool>(manager.StartResource(name));
+            ok = ok && static_cast<bool>(manager.StopResource(name));
+            ok = ok && manager.GetResourceState(name) == ResourceState::Stopped;
+            ok = ok && manager.GetEvents().GetListenerCount("force-cleanup-listener") == 0u;
+            engine.Shutdown();
+            TestManagerHelper::Cleanup();
+            return ok;
+        };
+
+        EQUALS(runCase("reject-stop", "Promise.reject(new Error('final save failed'))"), true);
+        EQUALS(runCase("timeout-stop", "new Promise(() => {})"), true);
+    });
+});
+
+MODULE(resource_manager_callbacks, {
+    using namespace Framework::Scripting;
 
     IT("fires OnResourceStarted callback", {
         TestManagerHelper::CreateTestResource("callback-start", R"({

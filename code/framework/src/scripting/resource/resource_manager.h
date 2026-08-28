@@ -53,6 +53,11 @@ namespace Framework::Scripting {
 
         // Minimum interval between file-change polls, in milliseconds.
         int fileWatchIntervalMs = 1000;
+
+        // Maximum time lifecycle handlers may delay the corresponding transition. Start rejection
+        // or timeout fails startup; stop rejection or timeout logs and then forces cleanup.
+        int resourceStartTimeoutMs = 30'000;
+        int resourceStopTimeoutMs  = 10'000;
     };
 
     /**
@@ -362,6 +367,10 @@ namespace Framework::Scripting {
 
         // Call resource onResourceStop lifecycle function
         bool CallResourceStop(std::string_view resourceName);
+
+        // Removes runtime-owned handlers, requests, timers, and exports. Lifecycle handlers must
+        // settle (or time out) before this is called.
+        void CleanupResourceRuntime(Resource &resource, std::string_view resourceName);
 
         // Build dependency graph from discovered resources
         void BuildDependencyGraph();

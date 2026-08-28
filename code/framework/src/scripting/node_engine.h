@@ -100,7 +100,7 @@ namespace Framework::Scripting {
          * Process pending Node.js events (non-blocking).
          * Call this from game loop to process async operations.
          */
-        void Tick();
+        void Tick() override;
 
         /**
          * Pending uncaught error from process.on('uncaughtException') or

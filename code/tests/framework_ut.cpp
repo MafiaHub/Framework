@@ -51,6 +51,8 @@ int main() {
     UNIT_MODULE(engine);
     UNIT_MODULE(resource);
     UNIT_MODULE(resource_manager);
+    UNIT_MODULE(resource_lifecycle);
+    UNIT_MODULE(resource_manager_callbacks);
     UNIT_MODULE(js_features);
     UNIT_MODULE(timer_context);
 

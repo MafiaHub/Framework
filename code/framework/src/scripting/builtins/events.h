@@ -118,6 +118,12 @@ namespace Framework::Scripting::Builtins {
                                           const std::vector<v8::Local<v8::Value>> &args);
 
         /**
+         * Release the native resolver retained for one emitted Promise. Used by bounded native
+         * callers when they stop waiting; unrelated event emissions remain intact.
+         */
+        void CancelPendingEmission(v8::Isolate *isolate, v8::Local<v8::Promise> promise);
+
+        /**
          * Clean up all handlers for a resource (called on resource stop).
          */
         void CleanupResource(std::string_view resourceName);

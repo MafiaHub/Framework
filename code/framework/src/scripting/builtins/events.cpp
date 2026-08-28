@@ -519,6 +519,28 @@ namespace Framework::Scripting::Builtins {
         }
     }
 
+    void Events::CancelPendingEmission(v8::Isolate *isolate, v8::Local<v8::Promise> promise) {
+        if (!isolate || promise.IsEmpty()) {
+            return;
+        }
+
+        std::scoped_lock lock(_pendingCallbacksMutex);
+        for (auto it = _pendingCallbacks.begin(); it != _pendingCallbacks.end(); ++it) {
+            const auto &data = *it;
+            if (data->resolver.IsEmpty()) {
+                continue;
+            }
+
+            auto resolver = data->resolver.Get(isolate);
+            if (!resolver.IsEmpty() && resolver->GetPromise()->StrictEquals(promise)) {
+                data->cancelled.store(true, std::memory_order_release);
+                data->resolver.Reset();
+                _pendingCallbacks.erase(it);
+                return;
+            }
+        }
+    }
+
     void Events::AggregateWithAllSettled(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Array> promises, v8::Local<v8::Promise::Resolver> resolver, const std::string &aggregateErrorMessage) {
         // Get Promise.allSettled
         v8::MaybeLocal<v8::Value> maybePromiseCtor = context->Global()->Get(context, v8pp::to_v8(isolate, "Promise"));
