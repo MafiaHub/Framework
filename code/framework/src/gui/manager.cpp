@@ -39,11 +39,14 @@ namespace Framework::GUI {
         }
 
         std::optional<std::pair<std::filesystem::path, HANDLE>> ClaimCefCacheProfile(const std::string &rootDir) {
-            const std::filesystem::path profilesRoot = std::filesystem::absolute(std::filesystem::path(rootDir) / "cache" / "profiles");
+            std::error_code error;
+            const std::filesystem::path profilesRoot = std::filesystem::absolute(std::filesystem::path(rootDir) / "cache" / "profiles", error);
+            if (error) {
+                return std::nullopt;
+            }
 
             for (std::size_t index = 0; index < kMaxCefCacheProfiles; ++index) {
                 const std::filesystem::path profileRoot = profilesRoot / std::to_string(index);
-                std::error_code error;
                 std::filesystem::create_directories(profileRoot, error);
                 if (error) {
                     return std::nullopt;
@@ -118,6 +121,8 @@ namespace Framework::GUI {
             _cefInitialized = false;
         }
 
+        // A skipped CefShutdown can leave CEF owning the profile until process
+        // exit. Keep our lock too so another client cannot claim that root.
         if (cefStopped && _cacheProfileLock != INVALID_HANDLE_VALUE) {
             CloseHandle(_cacheProfileLock);
             _cacheProfileLock = INVALID_HANDLE_VALUE;
