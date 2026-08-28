@@ -19,9 +19,13 @@
 #include "include/cef_scheme.h"
 
 #include <filesystem>
+#include <optional>
+#include <utility>
 
 namespace Framework::GUI {
     namespace {
+        constexpr std::size_t kMaxCefCacheProfiles = 16;
+
         // Guard the pump: some exit paths tear CEF down before our Shutdown runs.
         // TODO(cef-exit): an exit-path-independent Shutdown trigger would remove this.
         bool PumpCefMessageLoopGuarded() {
@@ -32,6 +36,30 @@ namespace Framework::GUI {
             __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
                 return false;
             }
+        }
+
+        std::optional<std::pair<std::filesystem::path, HANDLE>> ClaimCefCacheProfile(const std::string &rootDir) {
+            std::error_code error;
+            const std::filesystem::path profilesRoot = std::filesystem::absolute(std::filesystem::path(rootDir) / "cache" / "profiles", error);
+            if (error) {
+                return std::nullopt;
+            }
+
+            for (std::size_t index = 0; index < kMaxCefCacheProfiles; ++index) {
+                const std::filesystem::path profileRoot = profilesRoot / std::to_string(index);
+                std::filesystem::create_directories(profileRoot, error);
+                if (error) {
+                    return std::nullopt;
+                }
+
+                const std::filesystem::path lockPath = profileRoot / ".framework-profile.lock";
+                HANDLE profileLock = CreateFileW(lockPath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_HIDDEN, nullptr);
+                if (profileLock != INVALID_HANDLE_VALUE) {
+                    return std::make_pair(profileRoot, profileLock);
+                }
+            }
+
+            return std::nullopt;
         }
     } // namespace
     Manager::Manager() {
@@ -45,6 +73,7 @@ namespace Framework::GUI {
     }
 
     void Manager::Shutdown() {
+        bool cefStopped = false;
         {
             std::scoped_lock lock(_renderMutex);
             for (auto &view : _views) {
@@ -82,6 +111,7 @@ namespace Framework::GUI {
 
                 if (pumpOk) {
                     CefShutdown();
+                    cefStopped = true;
                 }
                 else {
                     _cefPumpFailed = true;
@@ -89,6 +119,13 @@ namespace Framework::GUI {
                 }
             }
             _cefInitialized = false;
+        }
+
+        // A skipped CefShutdown can leave CEF owning the profile until process
+        // exit. Keep our lock too so another client cannot claim that root.
+        if (cefStopped && _cacheProfileLock != INVALID_HANDLE_VALUE) {
+            CloseHandle(_cacheProfileLock);
+            _cacheProfileLock = INVALID_HANDLE_VALUE;
         }
 
         Lifecycle::Shutdown();
@@ -110,15 +147,7 @@ namespace Framework::GUI {
         settings.no_sandbox                   = true;
         settings.log_severity                 = LOGSEVERITY_ERROR;
 
-        // CEF >=120 holds a process-singleton lock on root_cache_path. Two clients on the
-        // same machine sharing it would trigger the singleton relay (a stray blank browser
-        // window) and a startup crash in the second instance. Scope the cache per-process so
-        // dual-client debugging works. The path must be absolute; cache_path must equal or be
-        // a child of root_cache_path.
-        std::filesystem::path cacheRoot = std::filesystem::absolute(std::filesystem::path(rootDir) / "cache" / std::to_string(GetCurrentProcessId()));
-        CefString(&settings.root_cache_path) = cacheRoot.wstring();
-        CefString(&settings.cache_path)      = cacheRoot.wstring();
-        CefString(&settings.log_file)        = rootDir + "/logs/cef.log";
+        CefString(&settings.log_file) = rootDir + "/logs/cef.log";
 
         // CEF requires an absolute path for the subprocess executable
         // Resolve next to THIS module (injected DLL), not the process exe.
@@ -133,6 +162,19 @@ namespace Framework::GUI {
         std::filesystem::path subprocessPath = std::filesystem::path(exePath).parent_path() / "cef_subprocess.exe";
         CefString(&settings.browser_subprocess_path) = subprocessPath.wstring();
 
+        // CEF holds a process-singleton lock on root_cache_path. Stable numbered
+        // profiles keep browser storage across launches while the extra lock
+        // gives concurrent clients different roots. The OS releases it after a
+        // crash, so the lowest available profile is reusable on the next run.
+        const auto cacheProfile = ClaimCefCacheProfile(rootDir);
+        if (!cacheProfile) {
+            return Error("Failed to claim a persistent CEF cache profile");
+        }
+        const std::filesystem::path &cacheRoot = cacheProfile->first;
+        _cacheProfileLock                     = cacheProfile->second;
+        CefString(&settings.root_cache_path)  = cacheRoot.wstring();
+        CefString(&settings.cache_path)       = cacheRoot.wstring();
+
         // Create the CEF app
         _cefApp = new CEF::App();
         _cefApp->SetGPUAccelerated(gpuAccelerated);
@@ -140,11 +182,14 @@ namespace Framework::GUI {
         // Initialize CEF
         CefMainArgs mainArgs(GetModuleHandle(nullptr));
         if (!CefInitialize(mainArgs, settings, _cefApp, nullptr)) {
+            CloseHandle(_cacheProfileLock);
+            _cacheProfileLock = INVALID_HANDLE_VALUE;
             return Error("Failed to initialize CEF");
         }
 
         _cefInitialized = true;
         _initialized    = true;
+        Framework::Logging::GetLogger("Web")->debug("Using persistent CEF cache profile '{}'", cacheRoot.string());
         Framework::Logging::GetLogger("Web")->info("CEF initialized successfully");
         return {};
     }
