@@ -113,15 +113,6 @@ if(NOT EXISTS "${_mafianet_root}/lib/cmake/MafiaNet/MafiaNetConfig.cmake")
     file(REMOVE "${_mafianet_archive}")
 endif()
 
-# The archives carry a single Release configuration, compiled with the /MD
-# runtime on Windows -- exactly the CRT FrameworkSetup forces even in Debug
-# builds -- so the old _DEBUG/CRT reconciliation the source build needed is gone
-# with it. Map every consumer configuration onto that Release config; the
-# variables seed MAP_IMPORTED_CONFIG_* on the imported targets find_package
-# creates, and are cleared right after so no other target is affected.
-set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release)
-set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release)
-set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL Release)
 # Resolves OpenSSL through find_dependency: on Windows that is the vendored
 # OpenSSL forced above, elsewhere the system one -- either way OpenSSL 3, which
 # is what the archives were compiled against.
@@ -129,16 +120,29 @@ find_package(MafiaNet ${MAFIANET_PIN_VERSION} CONFIG REQUIRED
     PATHS "${_mafianet_root}"
     NO_DEFAULT_PATH
 )
-unset(CMAKE_MAP_IMPORTED_CONFIG_DEBUG)
-unset(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO)
-unset(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL)
 
-# find_package imports are scoped to this directory; the consumers live under
-# code/ (a sibling), which could see the old add_subdirectory alias targets but
-# not these. Promote everything the package exports.
+# Two per-target fixups, on the MafiaNet targets ONLY -- deliberately not via
+# the CMAKE_MAP_IMPORTED_CONFIG_* variables, which would also seed the
+# OpenSSL::SSL/Crypto targets that find_dependency creates inside the same
+# find_package call; those carry a single config-less IMPORTED_LOCATION, and a
+# mapping they cannot satisfy fails the configure ("IMPORTED_LOCATION not set
+# for ... configuration Debug").
+#
+#  - MAP_IMPORTED_CONFIG_*: the archives carry a single Release configuration,
+#    compiled with the /MD runtime on Windows -- exactly the CRT FrameworkSetup
+#    forces even in Debug builds -- so every consumer configuration maps onto
+#    it (and the old _DEBUG/CRT reconciliation the source build needed is gone).
+#  - IMPORTED_GLOBAL: find_package imports are scoped to this directory; the
+#    consumers live under code/ (a sibling), which could see the old
+#    add_subdirectory alias targets but not these.
 foreach(_mafianet_target MafiaNet::MafiaNetStatic MafiaNet::MafiaNet MafiaNet::opus MafiaNet::rnnoise)
     if(TARGET ${_mafianet_target})
-        set_target_properties(${_mafianet_target} PROPERTIES IMPORTED_GLOBAL TRUE)
+        set_target_properties(${_mafianet_target} PROPERTIES
+            IMPORTED_GLOBAL TRUE
+            MAP_IMPORTED_CONFIG_DEBUG Release
+            MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
+            MAP_IMPORTED_CONFIG_MINSIZEREL Release
+        )
     endif()
 endforeach()
 
