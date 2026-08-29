@@ -16,12 +16,22 @@
 # Note it must NOT live under vendors/: .gitignore carries `vendors/**/*.cmake`,
 # which would silently exclude it from the repository.
 
-# Pinned by commit, not by tag. A tag is a mutable ref -- repointing it would
-# change what every future build fetches while this file still reads the same --
-# whereas a commit is what it is. Keep the human-readable release beside it.
+# The pin names a MafiaNet release whose precompiled per-platform archives are
+# downloaded at configure time (see vendors/CMakeLists.txt). A tag is a mutable
+# ref, so the version alone would not pin anything; the SHA-256 of each archive
+# is what actually fixes the content -- file(DOWNLOAD EXPECTED_HASH) fails the
+# configure if an archive is ever repointed or tampered with. When bumping,
+# update the version and all five hashes together (they are printed by the
+# MafiaNet release pipeline, or: shasum -a 256 MafiaNet-<ver>-*).
 #
-# Plain set(), not a CACHE entry: a cached value survives in an existing build
-# tree, so bumping the pin here and rebuilding incrementally would silently keep
-# fetching the old revision. This file is the single source of truth, and there is
-# no reason to let -D override the wire format of the protocol.
-set(MAFIANET_PIN "46fd83581e24037b0535a545b6204248e4a90c28") # v0.18.0 -- RakVoice::SetOrderingChannels (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
+# Plain set(), not CACHE entries: a cached value survives in an existing build
+# tree, so bumping the pin here and reconfiguring incrementally would silently
+# keep the old release. This file is the single source of truth, and there is no
+# reason to let -D override the wire format of the protocol.
+set(MAFIANET_PIN_VERSION "0.18.0") # RakVoice::SetOrderingChannels (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
+
+set(MAFIANET_PIN_SHA256_linux-x86_64 "2b5aff6acb3cb8495cedafb94361c987836c61b40c748b860a4f07bf29dbd2c7")
+set(MAFIANET_PIN_SHA256_macos-arm64 "08628084f65f6d635c9e2ca69301fd3465e50818c930b12ed6c52f931c2e725d")
+set(MAFIANET_PIN_SHA256_macos-x86_64 "6489025e3045510d5c2ef37c494820570762582d0be24522740e4b745198ddbd")
+set(MAFIANET_PIN_SHA256_windows-x64 "abe7533eacf9ae5f929d39e003f0e1c3638cb851cae7d799b6058bc037a02368")
+set(MAFIANET_PIN_SHA256_windows-x86 "2766995cf725b2b682a9bf42c04e8d25ebcb273d653d690357210930d460b40a")
