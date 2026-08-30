@@ -689,7 +689,7 @@ namespace Framework::Integrations::Server {
                 }
 
                 // If the client entry is in a subdirectory, add all script and web-view asset files
-                // from that directory (pages served to views via http://resources/<resource>/<file>)
+                // from that directory (pages served to views via fw://resources/<resource>/<file>)
                 static const std::set<std::string> kClientAssetExtensions = {".js", ".mjs", ".ts", ".json", ".html", ".htm", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".ttf", ".otf", ".woff", ".woff2", ".patch"};
                 std::filesystem::path clientDir = clientEntryPath.parent_path();
                 if (clientDir != resourcePath && std::filesystem::exists(clientDir)) {

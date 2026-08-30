@@ -30,10 +30,6 @@
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 
-#include "include/cef_parser.h"
-#include "include/cef_request.h"
-#include "include/wrapper/cef_stream_resource_handler.h"
-
 #include <filesystem>
 
 #include <logging/logger.h>
@@ -1108,56 +1104,28 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::RegisterResourceSchemeHandler() {
-        if (_resourceSchemeRegistered || !_webManager || !_webManager->IsInitialized()) {
+        if (!_webManager || !_webManager->IsInitialized() || GetAssetCachePath().empty()) {
+            return;
+        }
+
+        // Internal origin for scripted web views: fw://resources/<resource>/<file>
+        // is served straight from the per-server asset cache, so resources can ship
+        // their own pages.
+        if (!_resourceProvider) {
+            _resourceProvider = std::make_shared<Framework::GUI::Resources::DirectoryProvider>(GetAssetCachePath());
+        }
+        else {
+            // Reconnecting somewhere else moves the cache under the same origin.
+            _resourceProvider->SetRoot(GetAssetCachePath());
+        }
+
+        if (_resourceSchemeRegistered) {
             return;
         }
         _resourceSchemeRegistered = true;
 
-        // Internal origin for scripted web views: http://resources/<resource>/<file> is served
-        // straight from the per-server asset cache, so resources can ship their own pages.
-        _webManager->RegisterSchemeHandlerFactory("http", "resources", [this](CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, const CefString &, CefRefPtr<CefRequest> request) -> CefRefPtr<CefResourceHandler> {
-            CefURLParts parts;
-            if (!CefParseURL(request->GetURL(), parts)) {
-                return nullptr;
-            }
-            const std::string decoded = CefURIDecode(CefString(&parts.path), true, static_cast<cef_uri_unescape_rule_t>(UU_SPACES | UU_URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS)).ToString();
-            const std::string cacheRoot = GetAssetCachePath();
-            if (cacheRoot.empty() || decoded.size() < 2 || decoded.front() != '/') {
-                return nullptr;
-            }
-
-            std::error_code ec;
-            const auto root = std::filesystem::weakly_canonical(std::filesystem::absolute(cacheRoot), ec);
-            if (ec) {
-                return nullptr;
-            }
-            const auto file = std::filesystem::weakly_canonical(root / decoded.substr(1), ec);
-            if (ec || !std::filesystem::is_regular_file(file, ec)) {
-                return nullptr;
-            }
-            // reject anything resolving outside the cache root
-            const auto rel = std::filesystem::relative(file, root, ec);
-            if (ec || rel.empty() || rel.native().rfind(L"..", 0) == 0) {
-                return nullptr;
-            }
-
-            std::string ext = file.extension().string();
-            if (!ext.empty() && ext.front() == '.') {
-                ext.erase(0, 1);
-            }
-            std::string mime = CefGetMimeType(ext).ToString();
-            if (mime.empty()) {
-                mime = "application/octet-stream";
-            }
-
-            CefRefPtr<CefStreamReader> stream = CefStreamReader::CreateForFile(file.string());
-            if (!stream) {
-                return nullptr;
-            }
-            return new CefStreamResourceHandler(mime, stream);
-        });
-
-        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Registered http://resources scheme handler over the asset cache");
+        _webManager->RegisterResourceRoot("resources", _resourceProvider);
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Serving {}://resources from the asset cache", Framework::GUI::Resources::kResourceScheme);
     }
 
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {

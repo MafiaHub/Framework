@@ -8,6 +8,9 @@ object.
 Web views are **client-side only**. Put these handlers in a resource's client
 script.
 
+A resource's own pages are served at `fw://resources/<resource>/<file>`; see
+[`local_resource_scheme.md`](local_resource_scheme.md).
+
 ```js
 Events.on("browserDocumentReady", ({ viewId, url }) => {
     if (viewId !== myView) return;
@@ -101,7 +104,7 @@ Every payload carries `viewId` in addition to the fields below.
 ## Examples
 
 ```js
-const view = Web.createView("http://resources/my-ui/index.html", { width: 0, height: 0 });
+const view = Web.createView("fw://resources/my-ui/index.html", { width: 0, height: 0 });
 const mine = (p) => p.viewId === view;
 
 // Wait for the page before pushing state into it.
