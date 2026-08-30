@@ -7,6 +7,9 @@
  */
 
 #include "app.h"
+
+#include "gui/resources/scheme.h"
+
 #include "include/cef_parser.h"
 
 namespace Framework::GUI::CEF {
@@ -52,6 +55,10 @@ namespace Framework::GUI::CEF {
         // would silently block all sound (Web Audio / <audio>). This opts the embedded browser out.
         commandLine->AppendSwitchWithValue("autoplay-policy", "no-user-gesture-required");
         // No internal begin-frame scheduler: rendering uses external begin frames.
+    }
+
+    void App::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) {
+        Resources::RegisterCustomSchemes(registrar);
     }
 
     void App::OnContextInitialized() {

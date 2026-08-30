@@ -1,4 +1,14 @@
-add_executable(FrameworkTests framework_ut.cpp ../framework/src/voice/client/mixer.cpp)
+# The GUI resource units under test are free of any CEF dependency on purpose,
+# so they compile straight into the test binary rather than pulling in
+# FrameworkClient and a browser.
+add_executable(FrameworkTests
+        framework_ut.cpp
+        ../framework/src/voice/client/mixer.cpp
+        ../framework/src/gui/resources/resource_path.cpp
+        ../framework/src/gui/resources/mime.cpp
+        ../framework/src/gui/resources/resource_stream.cpp
+        ../framework/src/gui/resources/directory_provider.cpp
+        ../framework/src/gui/resources/memory_provider.cpp)
 
 target_include_directories(FrameworkTests PRIVATE . ../framework/src)
 target_link_libraries(FrameworkTests Framework FrameworkServer libnode)
