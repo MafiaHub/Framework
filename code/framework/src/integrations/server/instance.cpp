@@ -1072,7 +1072,7 @@ namespace Framework::Integrations::Server {
                 Services::ServerInfo info {};
                 info.port           = _opts.bindPort;
                 info.gameMode       = _opts.modName;
-                info.version        = Utils::Version::rel;
+                info.version        = _opts.modVersion;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
                 _masterlist->Ping(info);
