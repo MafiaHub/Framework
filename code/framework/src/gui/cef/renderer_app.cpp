@@ -8,7 +8,15 @@
 
 #include "renderer_app.h"
 
+#include "gui/resources/scheme.h"
+
 namespace Framework::GUI::CEF {
+    void RendererApp::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) {
+        // Identical to App's registration on purpose: a custom scheme missing
+        // from one process of a CEF instance is unusable in that process.
+        Resources::RegisterCustomSchemes(registrar);
+    }
+
     bool CallEventHandler::Execute(const CefString &name, CefRefPtr<CefV8Value> object, const CefV8ValueList &arguments, CefRefPtr<CefV8Value> &retval, CefString &exception) {
         if (arguments.size() != 2) {
             exception = "Invalid argument count: callEvent(string, string | null)";

@@ -38,6 +38,7 @@ namespace Framework::GUI::CEF {
             return this;
         }
 
+        void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override;
         void OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) override;
         void OnFocusedNodeChanged(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefDOMNode> node) override;
         void OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) override;

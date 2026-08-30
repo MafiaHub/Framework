@@ -124,6 +124,14 @@ list(APPEND FRAMEWORK_CLIENT_SRC
     src/gui/cef/life_span_handler.cpp
     src/gui/cef/load_handler.cpp
     src/gui/cef/display_handler.cpp
+    src/gui/resources/scheme.cpp
+    src/gui/resources/mime.cpp
+    src/gui/resources/resource_path.cpp
+    src/gui/resources/resource_stream.cpp
+    src/gui/resources/directory_provider.cpp
+    src/gui/resources/memory_provider.cpp
+    src/gui/resources/resource_handler.cpp
+    src/gui/resources/resource_registry.cpp
 )
 
 # Append the platform-dependent files to the related lists
@@ -428,11 +436,15 @@ if(WIN32)
     )
 
     # CEF subprocess executable
+    # The renderer process must register the very same custom schemes as the
+    # browser process, so it compiles the same registration unit.
     add_executable(cef_subprocess
         src/gui/cef/subprocess_main.cpp
         src/gui/cef/renderer_app.cpp
+        src/gui/resources/scheme.cpp
     )
     target_link_libraries(cef_subprocess CEF)
+    target_include_directories(cef_subprocess PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_compile_definitions(cef_subprocess PRIVATE _USE_MATH_DEFINES NOMINMAX)
     set_target_properties(cef_subprocess PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"

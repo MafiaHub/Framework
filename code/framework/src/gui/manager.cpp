@@ -15,6 +15,7 @@
 #include "gui/backend/view_d3d11.h"
 #include "gui/backend/view_d3d12.h"
 #include "gui/backend/view_d3d9.h"
+#include "gui/resources/scheme.h"
 
 #include "include/cef_scheme.h"
 
@@ -63,7 +64,8 @@ namespace Framework::GUI {
         }
     } // namespace
     Manager::Manager() {
-        _clipboard = std::make_unique<SystemClipboard>();
+        _clipboard        = std::make_unique<SystemClipboard>();
+        _resourceRegistry = new Resources::ResourceRegistry();
     }
 
     Manager::~Manager() {
@@ -186,6 +188,10 @@ namespace Framework::GUI {
             _cacheProfileLock = INVALID_HANDLE_VALUE;
             return Error("Failed to initialize CEF");
         }
+
+        // One factory for the whole scheme: an empty domain matches every host,
+        // and the registry routes them. CEF never learns about a root.
+        CefRegisterSchemeHandlerFactory(Resources::kResourceScheme, "", _resourceRegistry);
 
         _cefInitialized = true;
         _initialized    = true;
@@ -468,5 +474,21 @@ namespace Framework::GUI {
     void Manager::RegisterSchemeHandlerFactory(const std::string &schema, const std::string &domain, Framework::GUI::CEF::SchemaHandlerFactoryCallback callback) {
         _cefApp->RegisterSchemeHandlerFactory(schema, domain, callback);
         CefRegisterSchemeHandlerFactory(schema, domain, _cefApp);
+    }
+
+    void Manager::RegisterResourceRoot(const std::string &host, std::shared_ptr<Resources::ResourceProvider> provider) {
+        _resourceRegistry->RegisterRoot(host, std::move(provider));
+    }
+
+    void Manager::RegisterResourceDirectory(const std::string &host, const std::filesystem::path &root) {
+        RegisterResourceRoot(host, std::make_shared<Resources::DirectoryProvider>(root));
+    }
+
+    bool Manager::UnregisterResourceRoot(const std::string &host) {
+        return _resourceRegistry->UnregisterRoot(host);
+    }
+
+    std::string Manager::ResourceURL(const std::string &host, const std::string &path) {
+        return Resources::MakeResourceURL(host, path);
     }
 } // namespace Framework::GUI

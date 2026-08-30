@@ -14,6 +14,7 @@
 #include <utils/safe_win32.h>
 
 #include <atomic>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -23,6 +24,10 @@
 #include "cef/app.h"
 #include "clipboard.h"
 #include "graphics/renderer.h"
+#include "resources/directory_provider.h"
+#include "resources/memory_provider.h"
+#include "resources/resource_registry.h"
+#include "resources/scheme.h"
 #include "view.h"
 
 namespace Framework::GUI {
@@ -50,6 +55,12 @@ namespace Framework::GUI {
         std::vector<std::pair<std::unique_ptr<View>, int>> _dyingViews;
 
         std::unique_ptr<SystemClipboard> _clipboard;
+
+        // Backs the framework resource scheme. Registered with CEF once during
+        // Init; roots are added and removed against it at any time, before or
+        // after that, without touching CEF again.
+        CefRefPtr<Resources::ResourceRegistry> _resourceRegistry;
+
         Graphics::Renderer *_graphicsRenderer {};
         HANDLE _cacheProfileLock = INVALID_HANDLE_VALUE;
         bool _gpuAccelerated = false;
@@ -101,5 +112,19 @@ namespace Framework::GUI {
         View *GetView(int id) const;
 
         void RegisterSchemeHandlerFactory(const std::string &schema, const std::string &domain, Framework::GUI::CEF::SchemaHandlerFactoryCallback callback);
+
+        // Serves "fw://<host>/..." from |provider|. This is the supported way to
+        // put local content in front of a view: it gives the page a secure
+        // origin, keeps every read off the CEF IO thread, and answers a missing
+        // file with a real 404 instead of a scheme-level load failure.
+        void RegisterResourceRoot(const std::string &host, std::shared_ptr<Resources::ResourceProvider> provider);
+
+        // Convenience for the common case of a directory on disk.
+        void RegisterResourceDirectory(const std::string &host, const std::filesystem::path &root);
+
+        bool UnregisterResourceRoot(const std::string &host);
+
+        // URL of a path under a registered root, e.g. ResourceURL("ui", "index.html").
+        static std::string ResourceURL(const std::string &host, const std::string &path);
     };
 } // namespace Framework::GUI
