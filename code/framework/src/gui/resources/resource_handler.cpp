@@ -17,6 +17,8 @@
 #include "include/cef_response.h"
 #include "include/cef_task.h"
 
+#include <algorithm>
+#include <cctype>
 #include <functional>
 #include <utility>
 
@@ -30,6 +32,23 @@ namespace Framework::GUI::Resources {
 
         bool IsReadOnlyMethod(const std::string &method) {
             return method == "GET" || method == "HEAD";
+        }
+
+        // Only a page already on this scheme may read across hosts. A view can
+        // be pointed at any URL, including a remote one, and the asset cache
+        // behind fw://resources is not something a remote page gets to read, so
+        // every other origin is answered without an allow-origin header at all.
+        bool IsResourceSchemeOrigin(const std::string &origin) {
+            const std::string prefix = std::string(kResourceScheme) + "://";
+            if (origin.size() <= prefix.size()) {
+                return false;
+            }
+            for (std::size_t index = 0; index < prefix.size(); ++index) {
+                if (std::tolower(static_cast<unsigned char>(origin[index])) != prefix[index]) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         // CEF ships base::BindOnce for this, but its bind internals do not
@@ -70,8 +89,21 @@ namespace Framework::GUI::Resources {
 
     bool ResourceHandler::Open(CefRefPtr<CefRequest> request, bool &handleRequest, CefRefPtr<CefCallback> callback) {
         handleRequest = true;
+        _origin       = request->GetHeaderByName("Origin").ToString();
 
         const std::string method = request->GetMethod().ToString();
+        if (method == "OPTIONS") {
+            // A cross-host fetch carrying a non-safelisted header is preflighted
+            // first. Refusing it would block the request that follows, and the
+            // allow-methods header below already advertises OPTIONS.
+            _preflight        = true;
+            _requestedHeaders = request->GetHeaderByName("Access-Control-Request-Headers").ToString();
+            _status           = 204;
+            _stat             = ResourceStat {};
+            _stream           = std::make_unique<MemoryStream>(std::string {});
+            return true;
+        }
+
         if (!IsReadOnlyMethod(method)) {
             // A write method against a static root is a bug in the page, not a
             // resource that happens to be missing. Say so rather than 404.
@@ -117,17 +149,31 @@ namespace Framework::GUI::Resources {
         CefResponse::HeaderMap headers;
         response->GetHeaderMap(headers);
 
-        // Chromium guesses the encoding from the locale when the charset is
-        // absent, so every text type states it.
-        headers.emplace("content-type", MimeTypeIsTextual(_mimeType) ? _mimeType + "; charset=utf-8" : _mimeType);
+        if (!_mimeType.empty()) {
+            // Chromium guesses the encoding from the locale when the charset is
+            // absent, so every text type states it.
+            headers.emplace("content-type", MimeTypeIsTextual(_mimeType) ? _mimeType + "; charset=utf-8" : _mimeType);
 
-        // The scheme is CORS-enabled, so one root fetching another needs this;
-        // there is nothing behind it a page in this process may not read.
-        headers.emplace("access-control-allow-origin", "*");
-        headers.emplace("access-control-allow-methods", "GET, HEAD, OPTIONS");
+            // The MIME type above is authoritative; never let a sniff override it.
+            headers.emplace("x-content-type-options", "nosniff");
+        }
 
-        // The MIME type above is authoritative; never let a sniff override it.
-        headers.emplace("x-content-type-options", "nosniff");
+        // The answer differs by origin even when there is no origin to allow, so
+        // a cache must not serve one page's response to another.
+        headers.emplace("vary", "origin");
+
+        if (IsResourceSchemeOrigin(_origin)) {
+            headers.emplace("access-control-allow-origin", _origin);
+            headers.emplace("access-control-allow-methods", "GET, HEAD, OPTIONS");
+            if (_preflight) {
+                // Echoing what was asked for is safe against a read-only root
+                // that has already restricted the origin to this scheme.
+                if (!_requestedHeaders.empty()) {
+                    headers.emplace("access-control-allow-headers", _requestedHeaders);
+                }
+                headers.emplace("access-control-max-age", "600");
+            }
+        }
 
         if (_status == 200 && _stat.immutable) {
             headers.emplace("cache-control", "public, max-age=31536000, immutable");

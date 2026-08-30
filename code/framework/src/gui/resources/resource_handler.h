@@ -42,6 +42,13 @@ namespace Framework::GUI::Resources {
         int _rejectStatus = 0;
         std::string _rejectMessage;
 
+        // Read from the request in Open(), because GetResponseHeaders() is not
+        // given one. Empty origin means the request was same-origin or a plain
+        // navigation, neither of which needs a CORS answer.
+        std::string _origin;
+        std::string _requestedHeaders;
+        bool _preflight = false;
+
         int _status = 200;
         std::string _mimeType;
         ResourceStat _stat;

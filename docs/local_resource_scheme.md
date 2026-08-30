@@ -76,8 +76,12 @@ flight at once.
   can show.
 - Text types are tagged `charset=utf-8`. Without it Chromium guesses from the
   locale and non-ASCII content renders as mojibake.
-- Responses carry `x-content-type-options: nosniff`, and
-  `access-control-allow-origin: *` so one host can fetch another.
+- Responses carry `x-content-type-options: nosniff`. Cross-origin reads are
+  allowed **only for pages already on `fw://`**, so one host can fetch another
+  while a remote page loaded into a view — `Web.createView` accepts any URL —
+  gets no `access-control-allow-origin` at all and cannot read the asset cache.
+  A preflight `OPTIONS` is answered `204` with the methods and requested headers
+  for those origins.
 - Loose files are `no-cache, must-revalidate`, so editing one and reloading shows
   the edit. A subtree marked with `DirectoryProvider::MarkImmutable` — a bundler's
   content-hashed output — gets a one-year immutable cache instead.

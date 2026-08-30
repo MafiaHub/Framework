@@ -1104,7 +1104,11 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::RegisterResourceSchemeHandler() {
-        if (!_webManager || !_webManager->IsInitialized() || GetAssetCachePath().empty()) {
+        // Deliberately not gated on the manager being initialized: the registry
+        // exists from its constructor and the scheme is registered with CEF in
+        // Manager::Init, so a root claimed before then is already in place when
+        // the first request arrives.
+        if (!_webManager || GetAssetCachePath().empty()) {
             return;
         }
 

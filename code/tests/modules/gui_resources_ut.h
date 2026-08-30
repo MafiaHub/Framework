@@ -149,6 +149,14 @@ MODULE(gui_resources, {
         EQUALS(MimeTypeIsTextual("application/wasm"), false);
     });
 
+    IT("matches a media type regardless of its case", {
+        // A provider override is whatever its caller passed, and type/subtype
+        // are case-insensitive, so this decides whether a charset is sent.
+        EQUALS(MimeTypeIsTextual("Application/JSON"), true);
+        EQUALS(MimeTypeIsTextual("TEXT/HTML; Charset=x"), true);
+        EQUALS(MimeTypeIsTextual("Image/PNG"), false);
+    });
+
     // --- streams ---
 
     IT("reads a memory stream to completion in chunks", {

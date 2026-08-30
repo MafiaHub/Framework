@@ -98,7 +98,10 @@ namespace Framework::GUI::Resources {
 
     bool MimeTypeIsTextual(const std::string &mimeType) {
         // Trim any parameters a provider may have supplied ("text/html; v=1").
-        const std::string base = mimeType.substr(0, mimeType.find(';'));
+        // A type and subtype are case-insensitive, and a provider override is
+        // whatever its caller passed, so normalize before matching.
+        std::string base = mimeType.substr(0, mimeType.find(';'));
+        std::transform(base.begin(), base.end(), base.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         if (base.rfind("text/", 0) == 0) {
             return true;
         }
