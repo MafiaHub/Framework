@@ -354,6 +354,14 @@ namespace Framework::GUI {
         }
 
         std::scoped_lock lock(_renderMutex);
+
+        // Callers hand us a size per window message, so the same size arrives many
+        // times over a drag-resize. Re-applying it costs a CEF relayout per view and,
+        // on the next Render(), a GPU drain plus texture reallocation.
+        if (width == _viewportConfiguration.width && height == _viewportConfiguration.height) {
+            return;
+        }
+
         _viewportConfiguration.width  = width;
         _viewportConfiguration.height = height;
 
