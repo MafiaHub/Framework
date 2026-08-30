@@ -27,14 +27,11 @@ namespace Framework::GUI::Resources {
             return -1;
         }
 
-        // Percent-decoding written out rather than delegated, so the rule about
-        // what may not come out of an escape is stated once and cannot drift
-        // with a library's unescape flags.
-        //
-        // An escape that would produce a path separator or a NUL is rejected
-        // outright instead of being passed through: %2F and %5C exist in a
-        // request only to smuggle a separator past the segment split below, and
-        // a NUL only to truncate the name a syscall finally sees.
+        // Written out rather than delegated so the rule cannot drift with a
+        // library's unescape flags: an escape producing a separator or a NUL is
+        // refused, never passed through. %2F and %5C exist only to smuggle a
+        // separator past the segment split, and %00 only to truncate the name a
+        // syscall finally sees.
         bool PercentDecode(const std::string &input, std::string &output) {
             output.clear();
             output.reserve(input.size());
@@ -65,10 +62,9 @@ namespace Framework::GUI::Resources {
             return true;
         }
 
-        // A segment that can only exist to leave the root, or to mean something
-        // different to the filesystem than it does to the URL. A backslash is a
-        // separator on Windows and a colon opens a drive or an NTFS alternate
-        // stream, so neither may survive into a path a provider resolves.
+        // A backslash is a separator on Windows and a colon opens a drive or an
+        // NTFS alternate stream, so a segment means something different to the
+        // filesystem than it does to the URL.
         bool IsUnsafeSegment(const std::string &segment) {
             if (segment == "." || segment == "..") {
                 return true;

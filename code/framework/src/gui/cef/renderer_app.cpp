@@ -12,8 +12,8 @@
 
 namespace Framework::GUI::CEF {
     void RendererApp::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) {
-        // Identical to App's registration on purpose: a custom scheme missing
-        // from one process of a CEF instance is unusable in that process.
+        // Identical to App's on purpose: a scheme missing from one process of a
+        // CEF instance is unusable there.
         Resources::RegisterCustomSchemes(registrar);
     }
 

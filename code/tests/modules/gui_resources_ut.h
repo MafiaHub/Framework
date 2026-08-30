@@ -27,15 +27,14 @@ MODULE(gui_resources, {
     using Framework::GUI::Resources::NormalizeResourcePath;
     using Framework::GUI::Resources::ResourceStat;
 
-    // Normalizes and returns the result, or "!" when the path was rejected. Lets
-    // a case state its expectation as one comparison either way.
+    // Returns the normalized path, or "!" when it was rejected.
     auto normalize = [](const std::string &urlPath) -> std::string {
         std::string out;
         return NormalizeResourcePath(urlPath, out) ? out : "!";
     };
 
-    // Everything the tests write lives under the working directory, which is the
-    // build tree, and is removed again at the end of the directory case.
+    // Under the working directory, which is the build tree. Removed again by the
+    // last directory case.
     const std::filesystem::path sandbox = std::filesystem::current_path() / "framework_ut_gui_resources";
 
     auto writeFile = [](const std::filesystem::path &path, const std::string &contents) {
@@ -99,8 +98,7 @@ MODULE(gui_resources, {
     });
 
     IT("rejects an escaped separator rather than decoding it", {
-        // %2F would otherwise become a separator only after the segment split,
-        // which is how a single segment smuggles a whole extra path.
+        // Decoded, %2F would become a separator only after the segment split.
         STREQUALS(normalize("/menu%2f..%2fsecret").c_str(), "!");
         STREQUALS(normalize("/menu%5c..%5csecret").c_str(), "!");
     });
@@ -150,8 +148,8 @@ MODULE(gui_resources, {
     });
 
     IT("matches a media type regardless of its case", {
-        // A provider override is whatever its caller passed, and type/subtype
-        // are case-insensitive, so this decides whether a charset is sent.
+        // A provider override is whatever its caller passed, and this decides
+        // whether a charset is sent.
         EQUALS(MimeTypeIsTextual("Application/JSON"), true);
         EQUALS(MimeTypeIsTextual("TEXT/HTML; Charset=x"), true);
         EQUALS(MimeTypeIsTextual("Image/PNG"), false);
@@ -165,7 +163,7 @@ MODULE(gui_resources, {
         EQUALS(stream.Read(buffer, 4), 4);
         EQUALS(stream.Read(buffer, 4), 4);
         EQUALS(stream.Read(buffer, 4), 2);
-        // Zero, not a failure, is what tells the handler the body is finished.
+        // Zero, not a failure, is what ends the body.
         EQUALS(stream.Read(buffer, 4), 0);
     });
 
@@ -225,9 +223,9 @@ MODULE(gui_resources, {
         DirectoryProvider provider(sandbox / "ui");
 
         ResourceStat stat;
-        // Normalization would already have refused this shape; the provider
-        // refuses it again against the resolved path, because that is the only
-        // guard a symlink pointing out of the root ever meets.
+        // Normalization refuses this shape already; the provider refuses it again
+        // against the resolved path, the only guard a symlink out of the root
+        // ever meets.
         EQUALS(provider.Open("../secret.txt", stat) == nullptr, true);
         EQUALS(provider.Open("missing.html", stat) == nullptr, true);
         // A directory is not a body.
@@ -242,15 +240,14 @@ MODULE(gui_resources, {
         EQUALS(asset != nullptr, true);
         EQUALS(asset->Skip(8), 8);
         STREQUALS(drain(*asset).c_str(), "log(1);");
-        // Nothing left to skip: zero, which the handler turns into the range
-        // failure CEF expects rather than a silent short response.
+        // Nothing left to skip; the handler turns zero into the range failure CEF
+        // expects rather than a short response.
         EQUALS(asset->Skip(4), 0);
     });
 
     IT("releases the file once the stream is dropped", {
-        // The handle is held open for the life of the response, so a caller that
-        // has finished with it must be able to delete what it was reading. This
-        // is exactly what a failed cleanup here would prove broken.
+        // The handle is held for the life of the response, so dropping the stream
+        // has to release the file. A failed cleanup here is what proves it does not.
         DirectoryProvider provider(sandbox / "ui");
 
         ResourceStat stat;

@@ -186,8 +186,8 @@ namespace Framework::Integrations::Client {
         // One-shot: serve fw://resources/<resource>/<file> from the asset cache (scripted web views).
         bool _resourceSchemeRegistered {};
 
-        // Backs that origin. The root is registered once; it follows the asset
-        // cache, which moves when the client reconnects somewhere else.
+        // Backs that origin, following the asset cache as it moves between
+        // servers.
         std::shared_ptr<Framework::GUI::Resources::DirectoryProvider> _resourceProvider;
 
         // Cold-start deep-link URL; delivered to OnProtocolLaunch from Update().
@@ -203,8 +203,8 @@ namespace Framework::Integrations::Client {
         void InitAssetDownloader();
         void InitProtocolHandler();
         void OnAssetsDownloaded(bool success);
-        // Registers the origin on the first call and re-points it at the current
-        // asset cache on every call.
+        // Registers the origin once, and re-points it at the current asset cache
+        // on every call.
         void RegisterResourceSchemeHandler();
         // Targeted delta re-sync for a hot-reload (does not stop all resources).
         void SyncResourceUpdatesFromServer();

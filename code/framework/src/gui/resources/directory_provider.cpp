@@ -48,8 +48,9 @@ namespace Framework::GUI::Resources {
             return nullptr;
         }
 
-        // Escape check against the resolved path: relative() starts with ".."
-        // exactly when |file| lies outside |root|.
+        // relative() starts with ".." exactly when |file| is outside |root|. The
+        // URL check already refused an encoded "..", but only this one catches a
+        // symlink inside the root pointing out of it.
         const std::filesystem::path relative = std::filesystem::relative(file, root, error);
         if (error || relative.empty() || *relative.begin() == "..") {
             return nullptr;

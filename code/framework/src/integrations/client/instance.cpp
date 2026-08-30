@@ -1104,22 +1104,20 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::RegisterResourceSchemeHandler() {
-        // Deliberately not gated on the manager being initialized: the registry
-        // exists from its constructor and the scheme is registered with CEF in
-        // Manager::Init, so a root claimed before then is already in place when
-        // the first request arrives.
+        // Not gated on the manager being initialized: the registry exists from
+        // its constructor, so a root claimed before Manager::Init is in place by
+        // the time the first request arrives.
         if (!_webManager || GetAssetCachePath().empty()) {
             return;
         }
 
         // Internal origin for scripted web views: fw://resources/<resource>/<file>
-        // is served straight from the per-server asset cache, so resources can ship
-        // their own pages.
+        // comes from the per-server asset cache, so a resource can ship its own
+        // pages. Reconnecting elsewhere moves that cache under the same origin.
         if (!_resourceProvider) {
             _resourceProvider = std::make_shared<Framework::GUI::Resources::DirectoryProvider>(GetAssetCachePath());
         }
         else {
-            // Reconnecting somewhere else moves the cache under the same origin.
             _resourceProvider->SetRoot(GetAssetCachePath());
         }
 

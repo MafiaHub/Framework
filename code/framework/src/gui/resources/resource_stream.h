@@ -16,26 +16,19 @@
 #include <utility>
 
 namespace Framework::GUI::Resources {
-    // A pull-based byte source for one response body.
-    //
-    // Read() and Skip() are driven from a CEF file-thread task, never from the
-    // IO thread, so an implementation is free to block on real disk access.
-    // Both are called in sequence for a given stream, so no internal locking is
-    // needed, but the calls may arrive on different threads.
+    // Byte source for one response body. Driven from a CEF file thread, never
+    // the IO thread, so an implementation may block.
     class ResourceStream {
       public:
         virtual ~ResourceStream() = default;
 
-        // Copies at most |bytesToRead| bytes into |out|. Returns the count
-        // copied; 0 means end of stream and a negative value means failure.
+        // Returns the count copied; 0 is end of stream, negative is failure.
         virtual std::int64_t Read(void *out, std::size_t bytesToRead) = 0;
 
-        // Discards at most |bytesToSkip| bytes, same return convention as Read().
+        // Same return convention as Read().
         virtual std::int64_t Skip(std::int64_t bytesToSkip) = 0;
     };
 
-    // Serves a body that is already in memory: generated pages, error documents,
-    // and anything a MemoryProvider holds.
     class MemoryStream final: public ResourceStream {
       private:
         std::string _data;
@@ -48,9 +41,8 @@ namespace Framework::GUI::Resources {
         std::int64_t Skip(std::int64_t bytesToSkip) override;
     };
 
-    // Serves a body straight off disk. The file handle is held open for the
-    // lifetime of the response, which is what keeps Read() a plain sequential
-    // read rather than a re-open per chunk.
+    // Holds the file open for the life of the response, so Read() stays a plain
+    // sequential read rather than a re-open per chunk.
     class FileStream final: public ResourceStream {
       private:
         std::ifstream _file;

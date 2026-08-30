@@ -15,10 +15,9 @@
 #include <unordered_map>
 
 namespace Framework::GUI::Resources {
-    // Serves a host out of bytes held in the process: a page built at runtime, a
-    // bundle unpacked from the executable, or a fixture in a test. Entries may
-    // be added or replaced while responses are in flight; a response already
-    // opened keeps serving the bytes it started with.
+    // Serves a host out of bytes held in the process. Entries may be replaced
+    // while responses are in flight; an open response keeps the bytes it
+    // started with.
     class MemoryProvider final: public ResourceProvider {
       private:
         struct Entry {
@@ -33,8 +32,8 @@ namespace Framework::GUI::Resources {
       public:
         explicit MemoryProvider(std::string name): _name(std::move(name)) {}
 
-        // |path| is the request path without its leading slash, e.g. "index.html".
-        // An empty |mimeType| leaves the type to the extension table.
+        // |path| has no leading slash, e.g. "index.html". An empty |mimeType|
+        // leaves the type to the extension table.
         void Set(const std::string &path, std::string data, std::string mimeType = {});
         bool Erase(const std::string &path);
 

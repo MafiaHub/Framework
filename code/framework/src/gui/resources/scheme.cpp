@@ -10,12 +10,10 @@
 
 namespace Framework::GUI::Resources {
     void RegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) {
-        // STANDARD gives the scheme a real origin, which is what makes the
-        // origin lock, relative URLs and the same-origin policy work at all.
-        // SECURE puts it on the trusted list beside https, so a page gets the
-        // secure-context APIs and is never treated as mixed content. CORS lets
-        // one host fetch another, and FETCH lets fetch() reach the scheme in
-        // the first place.
+        // STANDARD gives the scheme a real origin, without which the origin lock
+        // and relative URLs do not work. SECURE buys the secure-context APIs and
+        // avoids mixed content. CORS allows a cross-host read and FETCH lets
+        // fetch() reach the scheme at all.
         registrar->AddCustomScheme(kResourceScheme, CEF_SCHEME_OPTION_STANDARD | CEF_SCHEME_OPTION_SECURE | CEF_SCHEME_OPTION_CORS_ENABLED | CEF_SCHEME_OPTION_FETCH_ENABLED);
     }
 

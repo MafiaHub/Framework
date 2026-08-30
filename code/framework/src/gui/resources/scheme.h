@@ -13,18 +13,16 @@
 #include <string>
 
 namespace Framework::GUI::Resources {
-    // The scheme the framework serves local content on. One fixed name rather
-    // than a per-project one, because cef_subprocess.exe is a single shared
-    // binary and every process in a CEF instance has to register the exact
-    // same set of custom schemes. Projects claim hosts under it instead.
+    // One scheme for the whole framework: cef_subprocess.exe is a single shared
+    // binary and every process must register an identical set of custom
+    // schemes. Projects claim hosts under it.
     inline constexpr const char *kResourceScheme = "fw";
 
-    // Must be called from CefApp::OnRegisterCustomSchemes in *every* process. A
-    // custom scheme registered only in the browser process is treated as opaque
-    // in the renderer, which costs the page its origin and every API gated on
-    // one.
+    // Call from CefApp::OnRegisterCustomSchemes in every process. A scheme
+    // registered only in the browser process is opaque in the renderer, which
+    // costs the page its origin.
     void RegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar);
 
-    // Builds "fw://<host>/<path>" with exactly one separating slash.
+    // "fw://<host>/<path>"
     std::string MakeResourceURL(const std::string &host, const std::string &path);
 } // namespace Framework::GUI::Resources

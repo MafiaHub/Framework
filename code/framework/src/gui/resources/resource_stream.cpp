@@ -40,8 +40,8 @@ namespace Framework::GUI::Resources {
         _file.read(static_cast<char *>(out), static_cast<std::streamsize>(bytesToRead));
         const std::streamsize count = _file.gcount();
 
-        // eof alongside a short read is the normal end of a body; only a bad
-        // bit that is not eof means the read itself failed.
+        // eof with a short read is a normal end of body; a bad bit that is not
+        // eof is a real failure.
         if (_file.bad() || (_file.fail() && !_file.eof())) {
             return -1;
         }
@@ -56,9 +56,8 @@ namespace Framework::GUI::Resources {
             return -1;
         }
 
-        // Seeking past the end of an input stream succeeds and only fails on the
-        // next read, so the distance is clamped here instead. Otherwise a Range
-        // request would be told bytes were skipped that were never there.
+        // Seeking past the end succeeds and only fails on the next read, so the
+        // distance is clamped here rather than reported as skipped.
         const std::streampos current = _file.tellg();
         _file.seekg(0, std::ios::end);
         const std::streampos end = _file.tellg();

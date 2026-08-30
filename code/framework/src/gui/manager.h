@@ -56,9 +56,8 @@ namespace Framework::GUI {
 
         std::unique_ptr<SystemClipboard> _clipboard;
 
-        // Backs the framework resource scheme. Registered with CEF once during
-        // Init; roots are added and removed against it at any time, before or
-        // after that, without touching CEF again.
+        // Registered with CEF once during Init; roots may be added or removed
+        // against it at any time, before or after that.
         CefRefPtr<Resources::ResourceRegistry> _resourceRegistry;
 
         Graphics::Renderer *_graphicsRenderer {};
@@ -113,10 +112,9 @@ namespace Framework::GUI {
 
         void RegisterSchemeHandlerFactory(const std::string &schema, const std::string &domain, Framework::GUI::CEF::SchemaHandlerFactoryCallback callback);
 
-        // Serves "fw://<host>/..." from |provider|. This is the supported way to
-        // put local content in front of a view: it gives the page a secure
-        // origin, keeps every read off the CEF IO thread, and answers a missing
-        // file with a real 404 instead of a scheme-level load failure.
+        // Serves "fw://<host>/..." from |provider|. The supported way to put
+        // local content in front of a view: a secure origin, reads off the CEF
+        // IO thread, and a real 404 for a file that is not there.
         void RegisterResourceRoot(const std::string &host, std::shared_ptr<Resources::ResourceProvider> provider);
 
         // Convenience for the common case of a directory on disk.

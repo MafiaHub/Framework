@@ -18,20 +18,17 @@
 #include <unordered_map>
 
 namespace Framework::GUI::Resources {
-    // Maps the hosts of the framework resource scheme onto providers, and turns
-    // each request into a handler. Registered once with CEF for the whole
-    // scheme; roots come and go behind it without touching CEF again.
+    // Maps the scheme's hosts onto providers. Registered with CEF once for the
+    // whole scheme; roots come and go behind it without touching CEF again.
     class ResourceRegistry final: public CefSchemeHandlerFactory {
       private:
-        // Create() runs on the CEF IO thread per request; roots are registered
-        // from the game thread.
+        // Create() runs on the CEF IO thread, registration on the game thread.
         mutable std::mutex _mutex;
         std::unordered_map<std::string, std::shared_ptr<ResourceProvider>> _roots;
 
       public:
-        // Claims |host| for |provider|, replacing whatever held it. Responses
-        // already in flight from the previous provider keep it alive and finish
-        // against it.
+        // Replaces whatever held |host|. Responses already in flight keep the
+        // previous provider alive and finish against it.
         void RegisterRoot(const std::string &host, std::shared_ptr<ResourceProvider> provider);
         bool UnregisterRoot(const std::string &host);
         bool HasRoot(const std::string &host) const;

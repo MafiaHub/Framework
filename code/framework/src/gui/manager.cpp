@@ -189,8 +189,8 @@ namespace Framework::GUI {
             return Error("Failed to initialize CEF");
         }
 
-        // One factory for the whole scheme: an empty domain matches every host,
-        // and the registry routes them. CEF never learns about a root.
+        // One factory for the whole scheme; an empty domain matches every host
+        // and the registry routes them, so CEF never learns about a root.
         CefRegisterSchemeHandlerFactory(Resources::kResourceScheme, "", _resourceRegistry);
 
         _cefInitialized = true;

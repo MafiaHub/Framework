@@ -17,7 +17,6 @@
 #include "include/cef_response.h"
 #include "include/cef_task.h"
 
-#include <algorithm>
 #include <cctype>
 #include <functional>
 #include <utility>
@@ -26,18 +25,16 @@ namespace Framework::GUI::Resources {
     namespace {
         constexpr const char *kLogger = "Web";
 
-        // CEF's own convention for "the read failed" is a negative count
-        // carrying a Chromium net error, of which ERR_FAILED is -2.
-        constexpr int kReadFailed = -2;
+        // CEF reports a failed read as a negative Chromium net error.
+        constexpr int kReadFailed = -2; // ERR_FAILED
 
         bool IsReadOnlyMethod(const std::string &method) {
             return method == "GET" || method == "HEAD";
         }
 
-        // Only a page already on this scheme may read across hosts. A view can
-        // be pointed at any URL, including a remote one, and the asset cache
-        // behind fw://resources is not something a remote page gets to read, so
-        // every other origin is answered without an allow-origin header at all.
+        // Only a page already on this scheme may read across hosts: a view can be
+        // pointed at any URL, and a remote page does not get to read the asset
+        // cache behind fw://resources.
         bool IsResourceSchemeOrigin(const std::string &origin) {
             const std::string prefix = std::string(kResourceScheme) + "://";
             if (origin.size() <= prefix.size()) {
@@ -52,8 +49,7 @@ namespace Framework::GUI::Resources {
         }
 
         // CEF ships base::BindOnce for this, but its bind internals do not
-        // compile under the toolchain settings this framework builds with, so
-        // the work is wrapped in a plain CefTask instead.
+        // compile under this framework's toolchain settings.
         class CallbackTask final: public CefTask {
           private:
             std::function<void()> _work;
@@ -68,8 +64,8 @@ namespace Framework::GUI::Resources {
             IMPLEMENT_REFCOUNTING(CallbackTask);
         };
 
-        // TID_FILE_BACKGROUND is CEF's low-priority blocking-IO pool, the one
-        // place in the process where a synchronous disk read belongs.
+        // TID_FILE_BACKGROUND is CEF's blocking-IO pool, the one place a
+        // synchronous disk read belongs.
         void PostToFileThread(std::function<void()> work) {
             CefPostTask(TID_FILE_BACKGROUND, CefRefPtr<CefTask>(new CallbackTask(std::move(work))));
         }
@@ -93,20 +89,18 @@ namespace Framework::GUI::Resources {
 
         const std::string method = request->GetMethod().ToString();
         if (method == "OPTIONS") {
-            // A cross-host fetch carrying a non-safelisted header is preflighted
-            // first. Refusing it would block the request that follows, and the
-            // allow-methods header below already advertises OPTIONS.
+            // A cross-host fetch with a non-safelisted header preflights first,
+            // and refusing that blocks the request behind it.
             _preflight        = true;
             _requestedHeaders = request->GetHeaderByName("Access-Control-Request-Headers").ToString();
             _status           = 204;
-            _stat             = ResourceStat {};
             _stream           = std::make_unique<MemoryStream>(std::string {});
             return true;
         }
 
         if (!IsReadOnlyMethod(method)) {
-            // A write method against a static root is a bug in the page, not a
-            // resource that happens to be missing. Say so rather than 404.
+            // A write against a static root is a bug in the page, not a missing
+            // file, so it is not a 404.
             ServeInline(405, "405 Method Not Allowed");
             return true;
         }
@@ -116,7 +110,7 @@ namespace Framework::GUI::Resources {
             return true;
         }
 
-        // The provider is about to touch the disk, so leave the IO thread.
+        // The provider is about to touch the disk; leave the IO thread.
         handleRequest = false;
         PostToFileThread([self = CefRefPtr<ResourceHandler>(this), callback] { self->OpenOnFileThread(callback); });
         return true;
@@ -150,24 +144,22 @@ namespace Framework::GUI::Resources {
         response->GetHeaderMap(headers);
 
         if (!_mimeType.empty()) {
-            // Chromium guesses the encoding from the locale when the charset is
-            // absent, so every text type states it.
+            // Without a charset Chromium guesses from the locale. The type is
+            // authoritative, so nosniff keeps a sniff from overriding it.
             headers.emplace("content-type", MimeTypeIsTextual(_mimeType) ? _mimeType + "; charset=utf-8" : _mimeType);
-
-            // The MIME type above is authoritative; never let a sniff override it.
             headers.emplace("x-content-type-options", "nosniff");
         }
 
-        // The answer differs by origin even when there is no origin to allow, so
-        // a cache must not serve one page's response to another.
+        // The answer differs by origin even when there is none to allow, so a
+        // cache must not serve one page's response to another.
         headers.emplace("vary", "origin");
 
         if (IsResourceSchemeOrigin(_origin)) {
             headers.emplace("access-control-allow-origin", _origin);
             headers.emplace("access-control-allow-methods", "GET, HEAD, OPTIONS");
             if (_preflight) {
-                // Echoing what was asked for is safe against a read-only root
-                // that has already restricted the origin to this scheme.
+                // Safe to echo: a read-only root, and the origin is already
+                // restricted to this scheme.
                 if (!_requestedHeaders.empty()) {
                     headers.emplace("access-control-allow-headers", _requestedHeaders);
                 }
@@ -179,8 +171,7 @@ namespace Framework::GUI::Resources {
             headers.emplace("cache-control", "public, max-age=31536000, immutable");
         }
         else {
-            // Loose files change under the same URL whenever a developer edits
-            // one, so the default has to be revalidate-always.
+            // A loose file changes under the same URL whenever it is edited.
             headers.emplace("cache-control", "no-cache, must-revalidate");
         }
 
@@ -231,7 +222,7 @@ namespace Framework::GUI::Resources {
             return;
         }
 
-        // Zero completes the response; anything positive asks for another Read.
+        // Zero completes the response; positive asks for another Read.
         callback->Continue(static_cast<int>(read));
     }
 
