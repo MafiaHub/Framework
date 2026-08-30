@@ -288,7 +288,8 @@ namespace Framework::Integrations::Server {
             nlohmann::json root;
             root["mod_name"]          = _opts.modName;
             root["mod_slug"]          = _opts.modSlug;
-            root["mod_version"]       = Utils::Version::rel;
+            root["mod_version"]       = _opts.modVersion;
+            root["framework_version"] = Utils::Version::rel;
             root["host"]              = _opts.bindHost;
             root["port"]              = _opts.bindPort;
             root["password_required"] = !_opts.bindPassword.empty();
@@ -1071,7 +1072,7 @@ namespace Framework::Integrations::Server {
                 Services::ServerInfo info {};
                 info.port           = _opts.bindPort;
                 info.gameMode       = _opts.modName;
-                info.version        = Utils::Version::rel;
+                info.version        = _opts.modVersion;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
                 _masterlist->Ping(info);
