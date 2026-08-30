@@ -149,6 +149,10 @@ namespace Framework::Integrations::Server {
         if (_opts.maxPlayers <= 0) {
             return Error("maxPlayers must be greater than 0 (got " + std::to_string(_opts.maxPlayers) + ")");
         }
+        if (_opts.maxPlayersHardCap > 0 && _opts.maxPlayers > _opts.maxPlayersHardCap) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("maxplayers {} exceeds this build's hard cap; running with {}", _opts.maxPlayers, _opts.maxPlayersHardCap);
+            _opts.maxPlayers = _opts.maxPlayersHardCap;
+        }
 
         // Initialize the logging instance with the mod slug name
         Logging::GetInstance()->SetLogName(_opts.modSlug);
