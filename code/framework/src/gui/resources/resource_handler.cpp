@@ -64,10 +64,18 @@ namespace Framework::GUI::Resources {
             IMPLEMENT_REFCOUNTING(CallbackTask);
         };
 
-        // TID_FILE_BACKGROUND is CEF's blocking-IO pool, the one place a
-        // synchronous disk read belongs.
+        // CEF's blocking-IO pool, at the priority a renderer is parked at.
+        //
+        // Not TID_FILE_BACKGROUND, whose contract is that "the user won't
+        // notice if the task takes an arbitrarily long time": it is
+        // BEST_EFFORT, and Chromium holds BEST_EFFORT work behind a startup
+        // fence that lifts on a timer. A view's first request -- its own
+        // document -- then sits unread for five seconds, and nothing reports
+        // a delay, because from Chromium's side the response has simply not
+        // arrived. A resource a page is blocked on is user-blocking, the one
+        // priority the fence does not defer.
         void PostToFileThread(std::function<void()> work) {
-            CefPostTask(TID_FILE_BACKGROUND, CefRefPtr<CefTask>(new CallbackTask(std::move(work))));
+            CefPostTask(TID_FILE_USER_BLOCKING, CefRefPtr<CefTask>(new CallbackTask(std::move(work))));
         }
     } // namespace
 
@@ -131,6 +139,7 @@ namespace Framework::GUI::Resources {
             _status   = 200;
             _stat     = stat;
             _mimeType = stat.mimeType.empty() ? MimeTypeForPath(_path) : stat.mimeType;
+            Framework::Logging::GetLogger(kLogger)->debug("Resource opened: {}://{}/{} ({} bytes, {})", kResourceScheme, _host, _path, _stat.size, _mimeType);
         }
 
         callback->Continue();
