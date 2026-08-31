@@ -52,6 +52,12 @@ namespace Framework::External::ImGUI::Widgets {
         return WorldTextAlpha(distance, layout.drawDistance, layout.fadeStart);
     }
 
+    // Step a 0..1 occlusion fade toward `visible`; speed is full fades per second.
+    inline float NameTagFadeStep(float current, bool visible, float deltaTime, float speed = 8.0f) {
+        const float step = deltaTime > 0.0f ? deltaTime * speed : 1.0f;
+        return std::clamp(visible ? current + step : current - step, 0.0f, 1.0f);
+    }
+
     enum class NameTagAnchor {
         TextCenter,
         BottomCenter,
@@ -103,9 +109,10 @@ namespace Framework::External::ImGUI::Widgets {
     }
 
     // Draw a replicated avatar's tag at a projected screen position, fading, scaling and lifting it
-    // with distance. Returns false when culled; healthPercent < 0 draws no bar.
-    inline bool DrawNameTagAt(ImDrawList *drawList, ImVec2 screenPos, float distance, const char *name, uint8_t components, ImU32 color, float healthPercent = -1.0f, const NameTagLayout &layout = {}, NameTagStyle style = {}) {
-        const float alpha = NameTagAlpha(distance, components, layout);
+    // with distance. Returns false when culled; healthPercent < 0 draws no bar; alphaScale multiplies
+    // the distance fade.
+    inline bool DrawNameTagAt(ImDrawList *drawList, ImVec2 screenPos, float distance, const char *name, uint8_t components, ImU32 color, float healthPercent = -1.0f, const NameTagLayout &layout = {}, NameTagStyle style = {}, float alphaScale = 1.0f) {
+        const float alpha = NameTagAlpha(distance, components, layout) * alphaScale;
         if (alpha <= 0.0f) {
             return false;
         }
