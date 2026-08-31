@@ -132,6 +132,12 @@ namespace Framework::Voice {
     }
 
     void LocalVoiceSink::SetMasterVolume(float volume) {
+        // Same NaN hole as the fraction below, and the same answer: keep the last good volume
+        // rather than store a value that silences the mix.
+        if (!std::isfinite(volume)) {
+            return;
+        }
+
         _masterVolume.store(std::clamp(volume, 0.0f, 4.0f), std::memory_order_relaxed);
     }
 

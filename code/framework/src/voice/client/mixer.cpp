@@ -99,9 +99,12 @@ namespace Framework::Voice {
     }
 
     void LimitStereoBuffer(float *stereoOut, uint32_t samples, float volume) {
+        // SoftLimit's ceiling does not hold for NaN: its comparisons are false, so a NaN volume
+        // writes NaN samples out to the device instead of being bent towards the ceiling.
+        const float scale   = std::isfinite(volume) ? volume : 1.0f;
         const size_t values = static_cast<size_t>(samples) * 2;
         for (size_t i = 0; i < values; i++) {
-            stereoOut[i] = SoftLimit(stereoOut[i] * volume);
+            stereoOut[i] = SoftLimit(stereoOut[i] * scale);
         }
     }
 } // namespace Framework::Voice

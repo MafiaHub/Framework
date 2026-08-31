@@ -162,6 +162,18 @@ MODULE(voice_mixer, {
         EQUALS(out[0] > 0.75f, true);
     });
 
+    IT("treats a non-finite master volume as unity rather than writing NaN to the device", {
+        // The soft limiter cannot bend NaN towards the ceiling -- every comparison inside it is
+        // false -- so an unguarded NaN volume reaches the audio device unclamped.
+        float out[2] = {0.5f, -0.5f};
+
+        LimitStereoBuffer(out, 1, std::numeric_limits<float>::quiet_NaN());
+
+        EQUALS(std::isfinite(out[0]), true);
+        EQUALS(std::isfinite(out[1]), true);
+        EQUALS(NearlyEqual(out[0], 0.5f), true);
+    });
+
     IT("never exceeds the ceiling for any input, including the absurd", {
         float out[8] = {0.9f, 1.0f, 2.0f, 25.0f, 1000.0f, -1000.0f, -7.5f, -1.2f};
 
