@@ -11,6 +11,7 @@
 #include "audio_device.h"
 #include "i_voice_sink.h"
 #include "mixer.h"
+#include "voice_bench.h"
 #include "voice/voice_config.h"
 
 #include <mafianet/RakVoice.h>
@@ -234,6 +235,30 @@ namespace Framework::Voice {
             return _localSink.GetMasterVolume();
         }
 
+        // --- diagnostics ---
+
+        // Single-client test bench: a synthetic speaker mixed as if it had been relayed. Needs an
+        // open session, since the playback device opens with one.
+        void BenchStart(const BenchConfig &config) {
+            _bench.Start(config);
+        }
+        void BenchStop();
+        void BenchSetPosition(const glm::vec3 &position) {
+            _bench.SetPosition(position);
+        }
+        void BenchSweep(const glm::vec3 &from, const glm::vec3 &to, float seconds, bool pingPong) {
+            _bench.Sweep(from, to, seconds, pingPong);
+        }
+        BenchState GetBenchState() const;
+
+        // Attenuation at `samples` evenly spaced distances over [0, maxDistance], sampled from
+        // ComputeGain itself so a diagnostic plot cannot drift from what the mixer applies.
+        std::vector<float> BenchSampleCurve(float maxDistance, size_t samples) const;
+
+        bool IsInputSuppressed() const {
+            return _inputSuppressed;
+        }
+
       private:
         struct AdmittedSpeaker {
             uint64_t id       = 0;
@@ -267,6 +292,7 @@ namespace Framework::Voice {
         void PumpCapture();
         void PumpSpeakers();
         void PublishWorld();
+        void UpdateBench();
 
         int FindAdmitted(uint64_t speaker) const;
         bool IsSelf(uint64_t speaker) const;
@@ -304,6 +330,9 @@ namespace Framework::Voice {
         float _hearingRange           = 0.0f;
         float _defaultSpeakerRange    = kDefaultProximityRange;
         std::array<AdmittedSpeaker, kMaxAudibleTalkers> _admitted {};
+
+        VoiceBench _bench;
+        std::array<int16_t, kFrameSamples> _benchFrame {};
 
         // Reused every tick so the per-frame path never allocates.
         std::array<int16_t, kFrameSamples> _frame {};

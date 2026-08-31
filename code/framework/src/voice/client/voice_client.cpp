@@ -257,6 +257,8 @@ namespace Framework::Voice {
     }
 
     void VoiceClient::Shutdown() {
+        // Before the sink pointer goes: a custom sink would otherwise keep the bench's slot.
+        BenchStop();
         CloseSession();
 
         _capture.Stop();
@@ -438,6 +440,9 @@ namespace Framework::Voice {
         UpdateSession();
         PumpCapture();
         PumpSpeakers();
+        // Before PublishWorld: the sink allocates the bench's slot on its first Submit, and
+        // PublishWorld places speakers by the slot they already hold.
+        UpdateBench();
         PublishWorld();
     }
 
@@ -520,6 +525,15 @@ namespace Framework::Voice {
 
             _published.push_back(it->second.placement);
             _published.back().range = ResolveRange(admitted.id);
+        }
+
+        // Placed outside _placements so a game's per-tick speaker pass cannot retire it.
+        if (_bench.IsActive()) {
+            SpeakerPlacement bench;
+            bench.speaker  = kBenchSpeakerId;
+            bench.position = _bench.GetPosition();
+            bench.range    = ResolveRange(kBenchSpeakerId);
+            _published.push_back(bench);
         }
 
         // Without a listener every gain is computed against the origin, so a mod that forgot
@@ -659,6 +673,66 @@ namespace Framework::Voice {
         }
     }
 
+    void VoiceClient::BenchStop() {
+        if (!_bench.IsActive()) {
+            return;
+        }
+
+        _bench.Stop();
+        if (_sink != nullptr) {
+            _sink->ReleaseSpeaker(kBenchSpeakerId);
+        }
+    }
+
+    BenchState VoiceClient::GetBenchState() const {
+        BenchState state;
+        state.active   = _bench.IsActive();
+        state.sweeping = _bench.IsSweeping();
+        state.position = _bench.GetPosition();
+        // Report against the distance origin, so the readout cannot disagree with what is heard.
+        state.listener = glm::dot(_listener.attenuationPosition, _listener.attenuationPosition) > 0.0f ? _listener.attenuationPosition : _listener.position;
+        state.distance = glm::length(state.position - state.listener);
+        state.range    = ResolveRange(kBenchSpeakerId);
+        state.gain     = ComputeGain(_listener, state.position, state.range);
+        return state;
+    }
+
+    std::vector<float> VoiceClient::BenchSampleCurve(float maxDistance, size_t samples) const {
+        std::vector<float> curve;
+        if (samples < 2 || maxDistance <= 0.0f) {
+            return curve;
+        }
+
+        const float range = ResolveRange(kBenchSpeakerId);
+        // Walk out from the distance origin, so a plotted point at x really is x away.
+        const glm::vec3 origin = glm::dot(_listener.attenuationPosition, _listener.attenuationPosition) > 0.0f ? _listener.attenuationPosition : _listener.position;
+        // The curve's x axis is a distance, so the step must be unit length; ListenerTransform
+        // promises no such thing, and a degenerate forward would sample the origin every time.
+        const float forwardLen = glm::length(_listener.forward);
+        const glm::vec3 step   = forwardLen > 0.0001f ? _listener.forward / forwardLen : glm::vec3(0.0f, 0.0f, -1.0f);
+
+        curve.reserve(samples);
+        for (size_t i = 0; i < samples; i++) {
+            const float distance   = maxDistance * (static_cast<float>(i) / static_cast<float>(samples - 1));
+            const SpeakerGain gain = ComputeGain(_listener, origin + step * distance, range);
+            // Constant-power pan makes left^2 + right^2 the attenuation, independent of bearing.
+            curve.push_back(std::sqrt(gain.left * gain.left + gain.right * gain.right));
+        }
+
+        return curve;
+    }
+
+    void VoiceClient::UpdateBench() {
+        if (!_bench.IsActive() || _sink == nullptr) {
+            return;
+        }
+
+        _bench.Advance(Utils::Time::GetTime());
+        while (_bench.NextFrame(_benchFrame.data())) {
+            _sink->Submit(kBenchSpeakerId, _benchFrame.data(), kFrameSamples);
+        }
+    }
+
     void VoiceClient::SetSink(IVoiceSink *sink) {
         IVoiceSink *next = sink != nullptr ? sink : static_cast<IVoiceSink *>(&_localSink);
         if (next == _sink) {
@@ -669,6 +743,12 @@ namespace Framework::Voice {
         // left holding voices it will not be told to release.
         for (size_t i = 0; i < _admitted.size(); i++) {
             ReleaseAdmitted(static_cast<int>(i));
+        }
+
+        // The bench never enters _admitted, so the loop above does not cover it. UpdateBench
+        // re-submits on the next tick, which acquires a slot on the replacement.
+        if (_bench.IsActive() && _sink != nullptr) {
+            _sink->ReleaseSpeaker(kBenchSpeakerId);
         }
 
         _sink = next;
