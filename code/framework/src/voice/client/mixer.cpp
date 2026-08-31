@@ -50,7 +50,11 @@ namespace Framework::Voice {
 
         // Inverse-distance rolloff, normalised so it reaches zero exactly at `range` rather
         // than trailing off asymptotically and leaving a faint always-audible tail.
-        const float fullVolume  = range * std::clamp(fullVolumeFraction, 0.0001f, 1.0f);
+        // std::clamp returns NaN unchanged — every comparison against it is false — and a NaN
+        // reaches both gains, where the caller's `> 0.0f` audibility check reads as inaudible and
+        // consumes the speaker's audio without mixing it.
+        const float fraction    = std::isfinite(fullVolumeFraction) ? std::clamp(fullVolumeFraction, 0.0001f, 1.0f) : kDefaultFullVolumeFraction;
+        const float fullVolume  = range * fraction;
         const float clamped     = std::max(distance, fullVolume);
         const float rolloff     = fullVolume / clamped;
         const float edgeFade    = 1.0f - (distance / range);

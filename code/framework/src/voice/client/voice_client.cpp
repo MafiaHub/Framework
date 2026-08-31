@@ -14,6 +14,7 @@
 #include <utils/time.h>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace Framework::Voice {
@@ -135,6 +136,12 @@ namespace Framework::Voice {
     }
 
     void LocalVoiceSink::SetFullVolumeFraction(float fraction) {
+        // Dropped rather than clamped: std::clamp passes NaN through, and the last good value is a
+        // better answer for a settings UI that reads it back than a curve that silences everyone.
+        if (!std::isfinite(fraction)) {
+            return;
+        }
+
         _fullVolumeFraction.store(std::clamp(fraction, 0.0001f, 1.0f), std::memory_order_relaxed);
     }
 
