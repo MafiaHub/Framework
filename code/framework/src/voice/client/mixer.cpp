@@ -15,13 +15,6 @@ namespace Framework::Voice {
     namespace {
         constexpr float kInt16Scale = 1.0f / 32768.0f;
 
-        // Within this fraction of `range` a speaker is at full volume; beyond it attenuation
-        // starts, and the floor keeps a speaker crossing the listener's own position from blowing
-        // up the division. A fraction rather than an absolute distance so the curve is scale
-        // invariant: a centimetre-scale game passes a proportionally larger range and gets the
-        // same rolloff in physical terms. 1/25 leaves the default range's radius at 1.0.
-        constexpr float kFullVolumeFraction = 1.0f / 25.0f;
-
         // How far the pan is allowed to swing. A full hard pan sounds wrong on headphones
         // for a speaker only slightly off-axis, so the effect is deliberately partial.
         constexpr float kMaxPan = 0.6f;
@@ -45,7 +38,7 @@ namespace Framework::Voice {
         }
     } // namespace
 
-    SpeakerGain ComputeGain(const ListenerTransform &listener, const glm::vec3 &speakerPos, float range) {
+    SpeakerGain ComputeGain(const ListenerTransform &listener, const glm::vec3 &speakerPos, float range, float fullVolumeFraction) {
         SpeakerGain gain;
 
         const glm::vec3 attenuationFrom = glm::dot(listener.attenuationPosition, listener.attenuationPosition) > 0.0f ? listener.attenuationPosition : listener.position;
@@ -57,7 +50,11 @@ namespace Framework::Voice {
 
         // Inverse-distance rolloff, normalised so it reaches zero exactly at `range` rather
         // than trailing off asymptotically and leaving a faint always-audible tail.
-        const float fullVolume  = range * kFullVolumeFraction;
+        // std::clamp returns NaN unchanged — every comparison against it is false — and a NaN
+        // reaches both gains, where the caller's `> 0.0f` audibility check reads as inaudible and
+        // consumes the speaker's audio without mixing it.
+        const float fraction    = std::isfinite(fullVolumeFraction) ? std::clamp(fullVolumeFraction, 0.0001f, 1.0f) : kDefaultFullVolumeFraction;
+        const float fullVolume  = range * fraction;
         const float clamped     = std::max(distance, fullVolume);
         const float rolloff     = fullVolume / clamped;
         const float edgeFade    = 1.0f - (distance / range);
@@ -102,9 +99,12 @@ namespace Framework::Voice {
     }
 
     void LimitStereoBuffer(float *stereoOut, uint32_t samples, float volume) {
+        // SoftLimit's ceiling does not hold for NaN: its comparisons are false, so a NaN volume
+        // writes NaN samples out to the device instead of being bent towards the ceiling.
+        const float scale   = std::isfinite(volume) ? volume : 1.0f;
         const size_t values = static_cast<size_t>(samples) * 2;
         for (size_t i = 0; i < values; i++) {
-            stereoOut[i] = SoftLimit(stereoOut[i] * volume);
+            stereoOut[i] = SoftLimit(stereoOut[i] * scale);
         }
     }
 } // namespace Framework::Voice

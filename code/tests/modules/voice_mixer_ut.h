@@ -11,6 +11,7 @@
 #include "voice/client/mixer.h"
 
 #include <cmath>
+#include <limits>
 
 namespace {
     // glm's basis: -Z forward, +Y up, so +X is the right ear.
@@ -45,6 +46,16 @@ MODULE(voice_mixer, {
         const auto gain = ComputeGain(OriginListener(), glm::vec3(0.0f, 0.0f, 0.0f), 25.0f);
         EQUALS(NearlyEqual(gain.left, 0.707f), true);
         EQUALS(NearlyEqual(gain.right, 0.707f), true);
+    });
+
+    IT("falls back to the default rolloff on a non-finite full-volume fraction", {
+        // A NaN would survive the clamp and reach both gains, where the mixer's `> 0.0f` audibility
+        // check reads as inaudible: the speaker's audio is consumed and never mixed.
+        const auto expected = ComputeGain(OriginListener(), glm::vec3(0.0f, 0.0f, 5.0f), 25.0f);
+        const auto gain     = ComputeGain(OriginListener(), glm::vec3(0.0f, 0.0f, 5.0f), 25.0f, std::numeric_limits<float>::quiet_NaN());
+        EQUALS(NearlyEqual(gain.left, expected.left), true);
+        EQUALS(NearlyEqual(gain.right, expected.right), true);
+        EQUALS(gain.left > 0.0f, true);
     });
 
     IT("silences a speaker beyond the range", {
@@ -149,6 +160,18 @@ MODULE(voice_mixer, {
         EQUALS(out[1] >= -1.0f, true);
         // Still loud, not collapsed towards the knee.
         EQUALS(out[0] > 0.75f, true);
+    });
+
+    IT("treats a non-finite master volume as unity rather than writing NaN to the device", {
+        // The soft limiter cannot bend NaN towards the ceiling -- every comparison inside it is
+        // false -- so an unguarded NaN volume reaches the audio device unclamped.
+        float out[2] = {0.5f, -0.5f};
+
+        LimitStereoBuffer(out, 1, std::numeric_limits<float>::quiet_NaN());
+
+        EQUALS(std::isfinite(out[0]), true);
+        EQUALS(std::isfinite(out[1]), true);
+        EQUALS(NearlyEqual(out[0], 0.5f), true);
     });
 
     IT("never exceeds the ceiling for any input, including the absurd", {

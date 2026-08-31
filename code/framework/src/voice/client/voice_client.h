@@ -73,6 +73,14 @@ namespace Framework::Voice {
             return _masterVolume.load(std::memory_order_relaxed);
         }
 
+        // Full-volume radius as a fraction of range. Atomic: the audio thread reads it per frame
+        // while the game sets it from a settings UI. Clamped to (0, 1].
+        void SetFullVolumeFraction(float fraction);
+
+        float GetFullVolumeFraction() const {
+            return _fullVolumeFraction.load(std::memory_order_relaxed);
+        }
+
       private:
         struct Slot {
             // 0 = free. Published last on acquire, cleared first on release.
@@ -107,6 +115,7 @@ namespace Framework::Voice {
         uint32_t _previousSlot = 0;
 
         std::atomic<float> _masterVolume {1.0f};
+        std::atomic<float> _fullVolumeFraction {kDefaultFullVolumeFraction};
     };
 
     // Client half of voice: the RakVoice relay session, push-to-talk, and speaker admission.
@@ -232,6 +241,17 @@ namespace Framework::Voice {
 
         float GetMasterVolume() const {
             return _localSink.GetMasterVolume();
+        }
+
+        // Rolloff shape: the fraction of range within which a speaker is at full volume. Raising
+        // it flattens the near field without moving the cutoff, which is the knob a player who
+        // says "I can't hear anyone standing next to me" actually needs.
+        void SetFullVolumeFraction(float fraction) {
+            _localSink.SetFullVolumeFraction(fraction);
+        }
+
+        float GetFullVolumeFraction() const {
+            return _localSink.GetFullVolumeFraction();
         }
 
       private:
