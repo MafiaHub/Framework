@@ -17,6 +17,9 @@ namespace Framework::Networking {
         // How long Shutdown() blocks to flush the disconnection notification to the server, in ms.
         // Short because it is a single Immediate-priority packet to one peer.
         constexpr unsigned int kShutdownBlockDurationMs = 100;
+
+        // The client talks to one server at a time, so the peer reserves a single slot.
+        constexpr unsigned short kMaxConnections = 1;
     } // namespace
 
     NetworkClient::NetworkClient(): NetworkPeer(), _state(PeerState::DISCONNECTED) {}
@@ -27,7 +30,7 @@ namespace Framework::Networking {
 
     Utils::Result<void, Error> NetworkClient::Init() {
         MafiaNet::SocketDescriptor sd {};
-        const MafiaNet::StartupResult result = _peer->Startup(1, &sd, 1);
+        const MafiaNet::StartupResult result = _peer->Startup(kMaxConnections, &sd, 1);
         if (result != MafiaNet::RAKNET_STARTED && result != MafiaNet::RAKNET_ALREADY_STARTED) {
             return Error(std::string("Failed to start networking peer: ") + GetStartupResultString(result));
         }
@@ -61,6 +64,14 @@ namespace Framework::Networking {
 
         if (!_peer) {
             return Error("Cannot connect: network peer is null");
+        }
+
+        // RakNet reports Connect() as started even when no slot is free, so a connection still
+        // occupying one (CloseConnection is asynchronous) would fail this attempt silently.
+        if (_peer->IsActive() && _peer->NumberOfConnections() > 0) {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("A previous connection was still open; resetting the networking peer before connecting");
+            _peer->Shutdown(kShutdownBlockDurationMs, 0, MafiaNet::Priority::Immediate);
+            _registeredToken.clear();
         }
 
         if (!_peer->IsActive()) {
@@ -101,14 +112,45 @@ namespace Framework::Networking {
             // Locally initiated: there is no inbound packet, so pass null rather than a stale _packet.
             _onPlayerDisconnectedCallback(nullptr, DisconnectionReason::GRACEFUL_SHUTDOWN, "");
         }
-        _state = PeerState::DISCONNECTED;
-        _initialReplicationDownloadComplete = false;
+        ResetConnectionState();
 
         return {};
     }
 
+    void NetworkClient::ResetConnectionState() {
+        if (_peer) {
+            MafiaNet::SystemAddress systems[kMaxConnections];
+            unsigned short count = kMaxConnections;
+            if (_peer->GetConnectionList(systems, &count)) {
+                for (unsigned short i = 0; i < count; ++i) {
+                    _peer->CloseConnection(systems[i], true);
+                }
+            }
+        }
+
+        _state                              = PeerState::DISCONNECTED;
+        _initialReplicationDownloadComplete = false;
+    }
+
+    void NetworkClient::DrainStalePackets() {
+        if (!_peer) {
+            return;
+        }
+
+        // Receive() runs the plugin update pass, so the plugins still see what we discard.
+        MafiaNet::Packet *packet = _peer->Receive();
+        while (packet) {
+            _peer->DeallocatePacket(packet);
+            packet = _peer->Receive();
+        }
+        _packet = nullptr;
+    }
+
     void NetworkClient::Update() {
         if (_state != PeerState::CONNECTING && _state != PeerState::CONNECTED) {
+            // The peer keeps running, so its queue still has to be emptied: anything left in it is
+            // dispatched by the next Connect() and read as an event of the new session.
+            DrainStalePackets();
             return;
         }
 
@@ -133,8 +175,7 @@ namespace Framework::Networking {
                 if (_onPlayerDisconnectedCallback) {
                     _onPlayerDisconnectedCallback(_packet, DisconnectionReason::WRONG_VERSION, "");
                 }
-                _peer->CloseConnection(_packet->guid, true);
-                _state = PeerState::DISCONNECTED;
+                ResetConnectionState();
             }
             return true;
         };
@@ -143,7 +184,7 @@ namespace Framework::Networking {
             if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, DisconnectionReason::NO_FREE_SLOT, "");
             }
-            _state = PeerState::DISCONNECTED;
+            ResetConnectionState();
             return true;
         };
 
@@ -162,8 +203,7 @@ namespace Framework::Networking {
                 }
                 _onPlayerDisconnectedCallback(_packet, reason, customReason);
             }
-            _state = PeerState::DISCONNECTED;
-            _initialReplicationDownloadComplete = false;
+            ResetConnectionState();
             return true;
         };
 
@@ -171,8 +211,7 @@ namespace Framework::Networking {
             if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, DisconnectionReason::LOST, "");
             }
-            _state = PeerState::DISCONNECTED;
-            _initialReplicationDownloadComplete = false;
+            ResetConnectionState();
             return true;
         };
 
@@ -180,7 +219,7 @@ namespace Framework::Networking {
             if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, DisconnectionReason::FAILED, "");
             }
-            _state = PeerState::DISCONNECTED;
+            ResetConnectionState();
             return true;
         };
 
@@ -188,7 +227,7 @@ namespace Framework::Networking {
             if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, DisconnectionReason::INVALID_PASSWORD, "");
             }
-            _state = PeerState::DISCONNECTED;
+            ResetConnectionState();
             return true;
         };
 
@@ -196,7 +235,7 @@ namespace Framework::Networking {
             if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, DisconnectionReason::BANNED, "");
             }
-            _state = PeerState::DISCONNECTED;
+            ResetConnectionState();
             return true;
         };
 
@@ -211,7 +250,7 @@ namespace Framework::Networking {
             if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, DisconnectionReason::WRONG_VERSION, "");
             }
-            _state = PeerState::DISCONNECTED;
+            ResetConnectionState();
             return true;
         };
 

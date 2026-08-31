@@ -46,6 +46,12 @@ namespace Framework::Networking {
         AssetFileTransfer _fileListTransfer;
         bool _initialReplicationDownloadComplete {};
 
+        // Single teardown for every terminal disconnect: drops the connection and clears the flags.
+        void ResetConnectionState();
+
+        // Empties the peer's receive queue without dispatching.
+        void DrainStalePackets();
+
       public:
         NetworkClient();
 
