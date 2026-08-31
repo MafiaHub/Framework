@@ -24,4 +24,4 @@
 # tree, so bumping the pin here and rebuilding incrementally would silently keep
 # fetching the old revision. This file is the single source of truth, and there is
 # no reason to let -D override the wire format of the protocol.
-set(MAFIANET_PIN "2221f074cc32bf305c181d145fe4ba1550bab1b7") # v0.15.0 -- session handshake (RAKNET_PROTOCOL_VERSION 7)
+set(MAFIANET_PIN "667fa4e927b908a8c2ca67b4477e4beca4b1b259") # v0.16.0 -- MTU capped at 1400 (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
