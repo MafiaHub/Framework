@@ -14,6 +14,7 @@
 #include <utils/time.h>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace Framework::Voice {
@@ -131,7 +132,23 @@ namespace Framework::Voice {
     }
 
     void LocalVoiceSink::SetMasterVolume(float volume) {
+        // Same NaN hole as the fraction below, and the same answer: keep the last good volume
+        // rather than store a value that silences the mix.
+        if (!std::isfinite(volume)) {
+            return;
+        }
+
         _masterVolume.store(std::clamp(volume, 0.0f, 4.0f), std::memory_order_relaxed);
+    }
+
+    void LocalVoiceSink::SetFullVolumeFraction(float fraction) {
+        // Dropped rather than clamped: std::clamp passes NaN through, and the last good value is a
+        // better answer for a settings UI that reads it back than a curve that silences everyone.
+        if (!std::isfinite(fraction)) {
+            return;
+        }
+
+        _fullVolumeFraction.store(std::clamp(fraction, 0.0001f, 1.0f), std::memory_order_relaxed);
     }
 
     void LocalVoiceSink::Render(float *stereoOut, uint32_t frameCount, void *user) {
@@ -140,6 +157,9 @@ namespace Framework::Voice {
 
     void LocalVoiceSink::RenderInto(float *stereoOut, uint32_t frameCount) {
         const World &world = _world[_publishedSlot.load(std::memory_order_acquire)];
+
+        // Read once per callback so every speaker in this buffer is mixed against the same curve.
+        const float fullVolumeFraction = _fullVolumeFraction.load(std::memory_order_relaxed);
 
         int16_t scratch[kRenderChunkSamples];
         bool mixedAnything = false;
@@ -191,7 +211,7 @@ namespace Framework::Voice {
 
             SpeakerGain gain;
             if (positioned) {
-                gain = ComputeGain(world.listener, world.position[i], world.range[i]);
+                gain = ComputeGain(world.listener, world.position[i], world.range[i], fullVolumeFraction);
             }
 
             const bool audible = gain.left > 0.0f || gain.right > 0.0f;

@@ -34,9 +34,14 @@ namespace Framework::Voice {
         float right = 0.0f;
     };
 
+    // Fraction of `range` within which a speaker is at full volume. A fraction rather than an
+    // absolute distance so the curve is scale invariant: a centimetre-scale game passes a
+    // proportionally larger range and gets the same rolloff in physical terms.
+    constexpr float kDefaultFullVolumeFraction = 1.0f / 25.0f;
+
     // Distance attenuation and constant-power stereo pan for one speaker relative to the
     // listener. Returns silence beyond `range`. Pure: no state, safe on the audio thread.
-    SpeakerGain ComputeGain(const ListenerTransform &listener, const glm::vec3 &speakerPos, float range);
+    SpeakerGain ComputeGain(const ListenerTransform &listener, const glm::vec3 &speakerPos, float range, float fullVolumeFraction = kDefaultFullVolumeFraction);
 
     // Accumulates `samples` mono int16 samples into an interleaved stereo float buffer,
     // applying `gain`. Adds rather than assigns so several speakers can be layered.
