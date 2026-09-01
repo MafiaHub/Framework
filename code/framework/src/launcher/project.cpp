@@ -25,6 +25,7 @@
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <cstdlib>
+#include <filesystem>
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <ostream>
@@ -269,20 +270,8 @@ namespace Framework::Launcher {
         }
 
         // Run platform-dependent platform checks and init steps
-        if (_config.platform == ProjectPlatform::STEAM) {
-            if (!RunInnerSteamChecks()) {
-                return false;
-            }
-        }
-        else if (_config.platform == ProjectPlatform::EPIC) {
-            if (!RunInnerEpicChecks()) {
-                return false;
-            }
-        }
-        else {
-            if (!RunInnerClassicChecks()) {
-                return false;
-            }
+        if (!RunPlatformChecks()) {
+            return false;
         }
 
         // Load the destination DLL
@@ -398,7 +387,38 @@ namespace Framework::Launcher {
         }
     }
 
-    bool Project::RunInnerSteamChecks() {
+    bool Project::RunPlatformChecks() {
+        if (_config.platform == ProjectPlatform::CLASSIC) {
+            return RunInnerClassicChecks();
+        }
+
+        const bool canFallBack = _config.allowManualGamePathFallback;
+
+        // a remembered manual pick wins over the store
+        if (canFallBack && _manualGamePath && GameExecutableExistsIn(_config.classicGamePath)) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Using the manually selected game path from the launcher config");
+            _config.platform = ProjectPlatform::CLASSIC;
+            return RunInnerClassicChecks();
+        }
+
+        const auto status = (_config.platform == ProjectPlatform::STEAM) ? RunInnerSteamChecks(!canFallBack) : RunInnerEpicChecks(!canFallBack);
+        if (status == PlatformCheckStatus::OK) {
+            _manualGamePath = false;
+            return true;
+        }
+
+        if (status == PlatformCheckStatus::ABORT || !canFallBack) {
+            return false;
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Store lookup did not resolve the game, falling back to the manual game path");
+        _config.platform         = ProjectPlatform::CLASSIC;
+        _config.promptForGameExe = true;
+        _config.preferSteam      = false;
+        return RunInnerClassicChecks();
+    }
+
+    PlatformCheckStatus Project::RunInnerSteamChecks(bool reportErrors) {
         // are we a steam child ?
         const auto child_part    = L"-steamchild:";
         const wchar_t *cmd_match = wcsstr(GetCommandLineW(), child_part);
@@ -417,13 +437,21 @@ namespace Framework::Launcher {
                 CloseHandle(handle);
             }
 
-            return false;
+            return PlatformCheckStatus::ABORT;
         }
+
+        const auto unavailable = [&](const std::string &reason) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->warn("Steam lookup failed: {}", reason);
+            if (reportErrors) {
+                MessageBox(nullptr, reason.c_str(), _config.name.c_str(), MB_ICONERROR);
+            }
+            return PlatformCheckStatus::UNAVAILABLE;
+        };
 
         // Make sure we have our required files
         const std::vector<std::string> requiredFiles = {"fw_steam_api64.dll", "fw_steam_api.dll"};
         if (!EnsureAtLeastOneFileExists(requiredFiles)) {
-            return false;
+            return unavailable("The Steam runtime bridge is missing from the launcher directory");
         }
 
         // If we don't have the app id file, create it
@@ -433,21 +461,20 @@ namespace Framework::Launcher {
         // Initialize the steam wrapper
         const auto initResult = _steamWrapper->Init();
         if (!initResult) {
-            MessageBox(nullptr, fmt::format("Failed to init the bridge with steam, are you sure the Steam Client is running? {}", initResult.GetError().message).c_str(), _config.name.c_str(), MB_ICONERROR);
-            return false;
+            return unavailable(fmt::format("Failed to init the bridge with steam, are you sure the Steam Client is running? {}", initResult.GetError().message));
         }
 
         // Make sure steam has the game inside the library
         if (!_steamWrapper->IsAppInstalled(_config.steamAppId)) {
-            MessageBox(nullptr, "The destination game is not installed", _config.name.c_str(), MB_ICONERROR);
-            return false;
+            _steamWrapper->Shutdown();
+            return unavailable("The destination game is not installed in your Steam library");
         }
 
         // Ask the game path from steam
         const auto installDir = _steamWrapper->GetAppInstallDir(_config.steamAppId);
         if (installDir.empty()) {
-            MessageBox(nullptr, "Steam returned an empty install directory for the destination game", _config.name.c_str(), MB_ICONERROR);
-            return false;
+            _steamWrapper->Shutdown();
+            return unavailable("Steam returned an empty install directory for the destination game");
         }
         _gamePath = Utils::StringUtils::NormalToWide(installDir);
         std::replace(_gamePath.begin(), _gamePath.end(), '\\', '/');
@@ -468,19 +495,23 @@ namespace Framework::Launcher {
 
         // Now we have everything we want, just say goodbye
         _steamWrapper->Shutdown();
-        return true;
+        return PlatformCheckStatus::OK;
     }
 
-    bool Project::RunInnerEpicChecks() {
-        // Locate the game via the Epic launcher's plaintext manifests — no SDK or running client
+    PlatformCheckStatus Project::RunInnerEpicChecks(bool reportErrors) {
+        // Locate the game via the Epic launcher's plaintext manifests - no SDK or running client
         // needed, just Epic having installed it once. Matched by AppName, else by exe file name.
         const auto exeName = Utils::StringUtils::WideToNormal(_config.executableName);
         const auto appName = Utils::StringUtils::WideToNormal(_config.epicAppName);
 
         const auto app = External::Epic::FindInstalledApp(exeName, appName);
         if (!app.IsValid()) {
-            MessageBox(nullptr, "The destination game is not installed through the Epic Games Launcher", _config.name.c_str(), MB_ICONERROR);
-            return false;
+            const std::string reason = "The destination game is not installed through the Epic Games Launcher";
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->warn("Epic lookup failed: {}", reason);
+            if (reportErrors) {
+                MessageBox(nullptr, reason.c_str(), _config.name.c_str(), MB_ICONERROR);
+            }
+            return PlatformCheckStatus::UNAVAILABLE;
         }
 
         _gamePath = Utils::StringUtils::NormalToWide(app.installLocation);
@@ -492,64 +523,132 @@ namespace Framework::Launcher {
 
         // Unlike Steam there's no runtime DLL to inject or app-id file to drop; any Epic launch
         // args go through ProjectConfiguration::additionalLaunchArguments.
+        return PlatformCheckStatus::OK;
+    }
+
+    std::wstring Project::GetGameWorkDir(const std::wstring &gameRoot) const {
+        std::filesystem::path path(gameRoot);
+        if (_config.useAlternativeWorkDir && !_config.alternativeWorkDir.empty()) {
+            path /= _config.alternativeWorkDir;
+        }
+        return path.wstring();
+    }
+
+    bool Project::GameExecutableExistsIn(const std::wstring &gameRoot) const {
+        if (gameRoot.empty()) {
+            return false;
+        }
+
+        std::error_code ec;
+        return std::filesystem::is_regular_file(std::filesystem::path(GetGameWorkDir(gameRoot)) / _config.executableName, ec);
+    }
+
+    bool Project::ResolveGamePathFromPrompt() {
+        const auto startPath = Utils::StringUtils::WideToNormal(gProjectDllPath);
+
+        sfd_Options sfd = {};
+        sfd.path        = startPath.c_str();
+        sfd.extension   = _config.promptExtension.c_str();
+        sfd.filter_name = _config.promptFilterName.c_str();
+        sfd.filter      = _config.promptFilter.c_str();
+        sfd.title       = _config.promptTitle.c_str();
+
+        const char *picked = sfd_open_dialog(&sfd);
+
+        // the dialog leaves the working directory wherever the player browsed to
+        SetCurrentDirectoryW(gProjectDllPath);
+
+        if (!picked) {
+            return false;
+        }
+
+        const std::filesystem::path exePath(Utils::StringUtils::NormalToWide(picked));
+
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(exePath, ec)) {
+            MessageBoxA(nullptr, ("Cannot find a game executable by given path:\n" + std::string(picked) + "\n\n Please check your path and try again!").c_str(), _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
+        const auto expectedName = Utils::StringUtils::WideToNormal(_config.executableName);
+        if (_wcsicmp(exePath.filename().c_str(), _config.executableName.c_str()) != 0) {
+            MessageBoxA(nullptr, ("Please select " + expectedName + ", not " + Utils::StringUtils::WideToNormal(exePath.filename().wstring()) + ".").c_str(), _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
+        // stores hand back the game root, so strip the work dir off the picked executable's folder
+        auto gameRoot = exePath.parent_path();
+        if (_config.useAlternativeWorkDir && !_config.alternativeWorkDir.empty()) {
+            std::vector<std::wstring> parts;
+            for (const auto &part : std::filesystem::path(_config.alternativeWorkDir)) {
+                if (!part.empty()) {
+                    parts.push_back(part.wstring());
+                }
+            }
+
+            auto stripped = gameRoot;
+            bool matched  = !parts.empty();
+            for (auto it = parts.rbegin(); matched && it != parts.rend(); ++it) {
+                if (_wcsicmp(stripped.filename().c_str(), it->c_str()) != 0) {
+                    matched = false;
+                    break;
+                }
+
+                stripped = stripped.parent_path();
+            }
+
+            if (matched) {
+                gameRoot = stripped;
+            }
+        }
+
+        auto gamePath = gameRoot.wstring();
+        std::replace(gamePath.begin(), gamePath.end(), L'\\', L'/');
+
+        if (_config.promptSelectionFunctor) {
+            gamePath = _config.promptSelectionFunctor(gamePath);
+        }
+
+        if (!GameExecutableExistsIn(gamePath)) {
+            MessageBoxA(nullptr, ("Cannot find " + expectedName + " inside the selected game directory:\n" + Utils::StringUtils::WideToNormal(gamePath)).c_str(), _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
+        _config.classicGamePath = gamePath;
+        _manualGamePath         = true;
         return true;
     }
 
     bool Project::RunInnerClassicChecks() {
-        cppfs::FileHandle handle = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath));
-        if (!handle.isDirectory() && !_config.promptForGameExe) {
+        if (GameExecutableExistsIn(_config.classicGamePath)) {
+            _gamePath = _config.classicGamePath;
+            return true;
+        }
+
+        if (!_config.promptForGameExe) {
             MessageBoxA(nullptr, "Please specify game path", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
-        if (!handle.isDirectory()) {
-            const auto exePath = Utils::StringUtils::WideToNormal(gProjectDllPath);
+        if (!ResolveGamePathFromPrompt()) {
+            return false;
+        }
 
-            sfd_Options sfd = {};
-            sfd.path        = exePath.c_str();
-            sfd.extension   = _config.promptExtension.c_str();
-            sfd.filter_name = _config.promptFilterName.c_str();
-            sfd.filter      = _config.promptFilter.c_str();
-            sfd.title       = _config.promptTitle.c_str();
-
-            const char *path = sfd_open_dialog(&sfd);
-            if (path) {
-                // Reset working directory
-                SetCurrentDirectoryW(gProjectDllPath);
-
-                handle = cppfs::fs::open(path);
-
-                if (!handle.isFile()) {
-                    MessageBoxA(nullptr, ("Cannot find a game executable by given path:\n" + std::string(path) + "\n\n Please check your path and try again!").c_str(), _config.name.c_str(), MB_ICONERROR);
-                    return false;
-                }
-
-                _config.classicGamePath = Utils::StringUtils::NormalToWide(path);
-
-                std::replace(_config.classicGamePath.begin(), _config.classicGamePath.end(), '\\', '/');
-
-                _config.classicGamePath = _config.classicGamePath.substr(0, _config.classicGamePath.length() - _config.executableName.length());
-
-                if (_config.promptSelectionFunctor)
-                    _config.classicGamePath = _config.promptSelectionFunctor(_config.classicGamePath);
-
-                if (_config.preferSteam) {
+        if (_config.preferSteam) {
 #ifdef _M_IX86
-                    auto steamDllName = "/steam_api.dll";
+            const auto steamDllName = L"steam_api.dll";
 #else
-                    auto steamDllName = "/steam_api64.dll";
+            const auto steamDllName = L"steam_api64.dll";
 #endif
-                    const auto steamDll = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath) + steamDllName);
-
-                    if (steamDll.exists()) {
-                        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Steam dll found in the game directory, switching to steam platform");
-                        _config.platform = ProjectPlatform::STEAM;
-                        return RunInnerSteamChecks();
-                    }
+            std::error_code ec;
+            if (std::filesystem::is_regular_file(std::filesystem::path(GetGameWorkDir(_config.classicGamePath)) / steamDllName, ec)) {
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Steam dll found in the game directory, switching to steam platform");
+                _config.platform = ProjectPlatform::STEAM;
+                if (RunInnerSteamChecks(false) == PlatformCheckStatus::OK) {
+                    return true;
                 }
-            }
-            else {
-                ExitProcess(0);
+
+                _config.platform = ProjectPlatform::CLASSIC;
             }
         }
 
@@ -956,6 +1055,7 @@ namespace Framework::Launcher {
             // Retrieve fields and overwrite ProjectConfiguration defaults
             Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loading launcher settings from JSON config file...");
             _config.classicGamePath    = _fileConfig->GetDefault<std::wstring>("game_path", _config.classicGamePath);
+            _manualGamePath            = _fileConfig->GetDefault<bool>("game_path_manual", _manualGamePath);
             _config.steamAppId         = _fileConfig->GetDefault<AppId_t>("steam_app_id", _config.steamAppId);
             _config.executableName     = _fileConfig->GetDefault<std::wstring>("game_executable_name", _config.executableName);
             _config.destinationDllName = _fileConfig->GetDefault<std::wstring>("mod_dll_name", _config.destinationDllName);
@@ -973,6 +1073,7 @@ namespace Framework::Launcher {
 
         // Retrieve fields from ProjectConfiguration and store data into a persistent config file
         _fileConfig->Set<std::wstring>("game_path", _config.classicGamePath);
+        _fileConfig->Set<bool>("game_path_manual", _manualGamePath);
         _fileConfig->Set<AppId_t>("steam_app_id", _config.steamAppId);
         _fileConfig->Set<std::wstring>("game_executable_name", _config.executableName);
         _fileConfig->Set<std::wstring>("mod_dll_name", _config.destinationDllName);

@@ -44,6 +44,13 @@ namespace Framework::Launcher {
         INJECT_LIBRARY_OPEN_PROCESS_FAIL
     };
 
+    // UNAVAILABLE: the store could not resolve the game, the manual prompt can still recover
+    enum class PlatformCheckStatus {
+        OK,
+        ABORT,
+        UNAVAILABLE
+    };
+
     struct ProjectConfiguration {
         using DialogPromptSelectorProc = fu2::function<std::wstring(std::wstring gameExePath) const>;
 
@@ -61,6 +68,9 @@ namespace Framework::Launcher {
 
         // if promptForGameExe is true, and steam dll is found in the game's library, switch to steam platform
         bool preferSteam = false;
+
+        // STEAM/EPIC: fall back to the manual game exe prompt when the store cannot resolve the game
+        bool allowManualGamePathFallback = false;
 
         // EPIC platform: Epic catalog id ("AppName") of the destination game. Optional — when
         // empty the Epic manifest is matched by the launch executable's file name instead.
@@ -84,7 +94,7 @@ namespace Framework::Launcher {
         bool useAlternativeWorkDir = false; // Uses the game's root directory by default
         std::wstring alternativeWorkDir;
 
-        // prompt for game exe (only if CLASSIC platform is set)
+        // prompt for game exe (CLASSIC platform, or the store fallback above)
         bool promptForGameExe        = false;
         std::string promptTitle      = "Select your game's executable";
         std::string promptFilter     = "Game.exe";
@@ -126,6 +136,7 @@ namespace Framework::Launcher {
         ProjectConfiguration _config;
         std::unique_ptr<Utils::Config> _fileConfig;
         std::wstring _gamePath;
+        bool _manualGamePath = false;
         std::unique_ptr<External::Steam::Wrapper> _steamWrapper;
         std::unique_ptr<Utils::MiniDump> _minidump;
 
@@ -163,9 +174,14 @@ namespace Framework::Launcher {
         bool EnsureGameExecutableIsCompatible(uint32_t);
         uint32_t GetGameVersion() const;
 
-        bool RunInnerSteamChecks();
-        bool RunInnerEpicChecks();
+        bool RunPlatformChecks();
+        PlatformCheckStatus RunInnerSteamChecks(bool reportErrors);
+        PlatformCheckStatus RunInnerEpicChecks(bool reportErrors);
         bool RunInnerClassicChecks();
+        bool ResolveGamePathFromPrompt();
+
+        std::wstring GetGameWorkDir(const std::wstring &gameRoot) const;
+        bool GameExecutableExistsIn(const std::wstring &gameRoot) const;
 
         // Extracts a launch URL from the command line into the environment for the client.
         void HandleUrlProtocolLaunch();

@@ -85,6 +85,27 @@ attach/detach callbacks and normal execution are unaffected.
 
 If you encounter crashes related to TLS (often manifesting as NULL pointer access at small offsets like 0x14, 0x24), try switching approaches.
 
+## Game Path Resolution
+
+The launcher resolves the game directory from the configured `platform`:
+
+- `STEAM` - the Steam client is asked for the app's install directory (`steamAppId`).
+- `EPIC` - the Epic launcher's manifests are matched by `epicAppName`, else by `executableName`.
+- `CLASSIC` - the stored `classicGamePath` is used, or the player is prompted for the game executable when `promptForGameExe` is set.
+
+Store lookups fail for players who own the game outside that store (or simply do not have the client running). Set `allowManualGamePathFallback` to keep the store as the primary path and drop to the manual prompt instead of aborting:
+
+```cpp
+config.platform                    = Framework::Launcher::ProjectPlatform::STEAM;
+config.steamAppId                  = 50130;
+config.allowManualGamePathFallback = true;
+config.promptTitle                 = "Select your game executable";
+config.promptFilter                = "game.exe";
+config.promptFilterName            = "game.exe";
+```
+
+The picked file must be named `executableName`, and when `useAlternativeWorkDir` is set the work dir is stripped back off so the resulting path is the game root - the same thing Steam and Epic hand back. A manual pick is remembered in the launcher's JSON config (`game_path` plus `game_path_manual`) and takes priority over the store on later runs, so the prompt only appears once.
+
 ## Files
 
 - `project.cpp` / `project.h` - Main launcher project class and configuration
