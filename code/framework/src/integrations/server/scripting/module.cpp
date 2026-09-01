@@ -106,6 +106,7 @@ namespace Framework::Integrations::Server::Scripting {
 
         v8::Local<v8::Object> global = context->Global();
         Framework::Scripting::SetScriptingCatalog(isolate, "framework-server");
+        Framework::Scripting::SetScriptingEnvironment(isolate, /*isClient*/ false);
 
         // Every builtin registers at the global root (new Vector3, not new Core.Vector3).
         Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);

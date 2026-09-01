@@ -95,7 +95,6 @@ namespace Framework::Scripting::Builtins {
         cls->auto_wrap_objects(true);
         cls->ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a script wrapper for an existing entity with this ID; it does not spawn an entity."))
             .function("toString", &Entity::ToString, v8pp::metadata::docs("string", {}, "Formats this entity handle for logging and debugging.", "Text containing the network entity ID."))
-            .function("setVirtualWorld", &Entity::SetVirtualWorld, v8pp::metadata::docs("void", {v8pp::metadata::param("world", "number", false, "Virtual-world identifier used to partition replication and visibility.")}, "Moves this entity into another virtual world."))
             .property("id", &Entity::GetId, v8pp::metadata::property_docs("number", "Immutable network entity identifier."))
             .property("virtualWorld", &Entity::GetVirtualWorld, v8pp::metadata::property_docs("number", "Current virtual-world identifier."))
             .property("position", &Entity::GetPosition, &Entity::SetPosition, v8pp::metadata::property_docs("Vector3", "Authoritative world-space position; assignment forces replicated state."));
@@ -128,6 +127,13 @@ namespace Framework::Scripting::Builtins {
             });
             cls->accessor_property("rotation", rotationGetter, rotationSetter, v8pp::metadata::property_docs("Quaternion | Vector3", "Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees."));
         }
+
+        // Replication placement is the server's to decide; a client writes only its own replica.
+        if (IsClientScripting(isolate)) {
+            return *cls;
+        }
+
+        cls->function("setVirtualWorld", &Entity::SetVirtualWorld, v8pp::metadata::docs("void", {v8pp::metadata::param("world", "number", false, "Virtual-world identifier used to partition replication and visibility.")}, "Moves this entity into another virtual world."));
 
         // setVisibleTo(player|null): restrict streaming to one player's connection.
         cls->prototype_function(

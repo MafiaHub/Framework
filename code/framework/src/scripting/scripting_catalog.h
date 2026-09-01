@@ -28,6 +28,11 @@ namespace Framework::Scripting {
             static std::unordered_map<v8::Isolate *, v8pp::metadata::registry *> catalogs;
             return catalogs;
         }
+
+        inline std::unordered_map<v8::Isolate *, bool> &ScriptingEnvironments() {
+            static std::unordered_map<v8::Isolate *, bool> environments;
+            return environments;
+        }
     } // namespace detail
 
     inline void SetScriptingCatalog(v8::Isolate *isolate, std::string_view name) {
@@ -48,6 +53,28 @@ namespace Framework::Scripting {
         const auto &catalogs = detail::ScriptingCatalogs();
         const auto it        = catalogs.find(isolate);
         return it == catalogs.end() ? v8pp::metadata::catalog("framework") : *it->second;
+    }
+
+    // Which runtime an isolate belongs to. Set before any builtin registers, so a binding shared by
+    // both sides can leave its server-only members off the client's class. Unset reads as server.
+    inline void SetScriptingEnvironment(v8::Isolate *isolate, bool isClient) {
+        if (!isolate) {
+            throw std::invalid_argument("SetScriptingEnvironment requires an isolate");
+        }
+
+        std::scoped_lock lock(detail::ScriptingCatalogMutex());
+        detail::ScriptingEnvironments()[isolate] = isClient;
+    }
+
+    inline bool IsClientScripting(v8::Isolate *isolate) {
+        if (!isolate) {
+            return false;
+        }
+
+        std::scoped_lock lock(detail::ScriptingCatalogMutex());
+        const auto &environments = detail::ScriptingEnvironments();
+        const auto it            = environments.find(isolate);
+        return it != environments.end() && it->second;
     }
 
     // Adds the symbols `source` defines and `destination` does not, so a project exporting its
@@ -114,5 +141,6 @@ namespace Framework::Scripting {
 
         std::scoped_lock lock(detail::ScriptingCatalogMutex());
         detail::ScriptingCatalogs().erase(isolate);
+        detail::ScriptingEnvironments().erase(isolate);
     }
 } // namespace Framework::Scripting
