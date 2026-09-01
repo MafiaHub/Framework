@@ -45,6 +45,12 @@ namespace Framework::GUI::CEF {
             // takes the whole browser down ("GPU process isn't usable")
             commandLine->AppendSwitch("disable-gpu");
         }
+        else {
+            // The GPU process is its own process, so the launcher's forcing does not
+            // reach it and it would pick the low-power adapter. A mismatch is silent:
+            // the shared texture belongs to the other adapter and never opens.
+            commandLine->AppendSwitch("force-high-performance-gpu");
+        }
         commandLine->AppendSwitch("disable-extensions");
         commandLine->AppendSwitch("disable-pdf-extension");
         commandLine->AppendSwitch("disable-spell-checking");
