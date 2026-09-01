@@ -168,6 +168,7 @@ if(WIN32)
     add_library(FrameworkLoader
         STATIC
         src/utils/hashing.cpp
+        src/launcher/gpu_preference.cpp
         src/launcher/project.cpp
         src/launcher/rgl_bypass.cpp
         src/utils/minidump.cpp

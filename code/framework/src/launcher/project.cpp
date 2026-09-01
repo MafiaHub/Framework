@@ -9,6 +9,7 @@
 #include "project.h"
 
 #include "external/epic/manifest.h"
+#include "gpu_preference.h"
 #include "loaders/exe_ldr.h"
 #include "loaders/process_identity.h"
 #include "logging/logger.h"
@@ -32,7 +33,8 @@
 
 #include <utils/hooking/jitasm.h>
 
-// Enforce discrete GPU on mobile units.
+// Only survives DLL injection: PE loading maps the game over this image and takes the
+// export directory with it, which is what ForceHighPerformanceGPU() works around.
 extern "C" {
 __declspec(dllexport) unsigned long NvOptimusEnablement        = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
@@ -249,6 +251,8 @@ namespace Framework::Launcher {
     }
 
     bool Project::Launch() {
+        ForceHighPerformanceGPU();
+
         if (!_config.urlProtocolScheme.empty()) {
             HandleUrlProtocolLaunch();
         }
