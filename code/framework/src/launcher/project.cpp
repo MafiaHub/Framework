@@ -362,6 +362,12 @@ namespace Framework::Launcher {
         // Update the game path to include the executable name;
         _gamePath += std::wstring(L"/") + _config.executableName;
 
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(_gamePath, ec)) {
+            MessageBoxA(nullptr, ("The game executable could not be found:\n" + Utils::StringUtils::WideToNormal(_gamePath)).c_str(), _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
         // Acquire the game version
         const auto checksum = GetGameVersion();
 
@@ -418,6 +424,14 @@ namespace Framework::Launcher {
         return RunInnerClassicChecks();
     }
 
+    PlatformCheckStatus Project::ReportStoreUnavailable(const char *store, const std::string &reason, bool reportErrors) const {
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->warn("{} lookup failed: {}", store, reason);
+        if (reportErrors) {
+            MessageBox(nullptr, reason.c_str(), _config.name.c_str(), MB_ICONERROR);
+        }
+        return PlatformCheckStatus::UNAVAILABLE;
+    }
+
     PlatformCheckStatus Project::RunInnerSteamChecks(bool reportErrors) {
         // are we a steam child ?
         const auto child_part    = L"-steamchild:";
@@ -441,11 +455,7 @@ namespace Framework::Launcher {
         }
 
         const auto unavailable = [&](const std::string &reason) {
-            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->warn("Steam lookup failed: {}", reason);
-            if (reportErrors) {
-                MessageBox(nullptr, reason.c_str(), _config.name.c_str(), MB_ICONERROR);
-            }
-            return PlatformCheckStatus::UNAVAILABLE;
+            return ReportStoreUnavailable("Steam", reason, reportErrors);
         };
 
         // Make sure we have our required files
@@ -476,8 +486,16 @@ namespace Framework::Launcher {
             _steamWrapper->Shutdown();
             return unavailable("Steam returned an empty install directory for the destination game");
         }
-        _gamePath = Utils::StringUtils::NormalToWide(installDir);
-        std::replace(_gamePath.begin(), _gamePath.end(), '\\', '/');
+
+        auto installPath = Utils::StringUtils::NormalToWide(installDir);
+        std::replace(installPath.begin(), installPath.end(), '\\', '/');
+
+        if (!GameExecutableExistsIn(installPath)) {
+            _steamWrapper->Shutdown();
+            return unavailable(fmt::format("Steam points at {}, but the game executable is not there", Utils::StringUtils::WideToNormal(installPath)));
+        }
+
+        _gamePath = installPath;
 
         // Set classic game path to the one found by Steam just for sake of having that information stored in the config
         // file.
@@ -499,6 +517,10 @@ namespace Framework::Launcher {
     }
 
     PlatformCheckStatus Project::RunInnerEpicChecks(bool reportErrors) {
+        const auto unavailable = [&](const std::string &reason) {
+            return ReportStoreUnavailable("Epic", reason, reportErrors);
+        };
+
         // Locate the game via the Epic launcher's plaintext manifests - no SDK or running client
         // needed, just Epic having installed it once. Matched by AppName, else by exe file name.
         const auto exeName = Utils::StringUtils::WideToNormal(_config.executableName);
@@ -506,16 +528,17 @@ namespace Framework::Launcher {
 
         const auto app = External::Epic::FindInstalledApp(exeName, appName);
         if (!app.IsValid()) {
-            const std::string reason = "The destination game is not installed through the Epic Games Launcher";
-            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->warn("Epic lookup failed: {}", reason);
-            if (reportErrors) {
-                MessageBox(nullptr, reason.c_str(), _config.name.c_str(), MB_ICONERROR);
-            }
-            return PlatformCheckStatus::UNAVAILABLE;
+            return unavailable("The destination game is not installed through the Epic Games Launcher");
         }
 
-        _gamePath = Utils::StringUtils::NormalToWide(app.installLocation);
-        std::ranges::replace(_gamePath, L'\\', L'/');
+        auto installPath = Utils::StringUtils::NormalToWide(app.installLocation);
+        std::ranges::replace(installPath, L'\\', L'/');
+
+        if (!GameExecutableExistsIn(installPath)) {
+            return unavailable(fmt::format("Epic points at {}, but the game executable is not there", Utils::StringUtils::WideToNormal(installPath)));
+        }
+
+        _gamePath = installPath;
 
         // Mirror the Steam path: the launch code appends executableName to this root, and we
         // stash it in classicGamePath purely so it lands in the persisted JSON config.

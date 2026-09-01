@@ -175,6 +175,7 @@ namespace Framework::Launcher {
         uint32_t GetGameVersion() const;
 
         bool RunPlatformChecks();
+        PlatformCheckStatus ReportStoreUnavailable(const char *store, const std::string &reason, bool reportErrors) const;
         PlatformCheckStatus RunInnerSteamChecks(bool reportErrors);
         PlatformCheckStatus RunInnerEpicChecks(bool reportErrors);
         bool RunInnerClassicChecks();
