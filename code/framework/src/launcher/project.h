@@ -137,6 +137,7 @@ namespace Framework::Launcher {
         std::unique_ptr<Utils::Config> _fileConfig;
         std::wstring _gamePath;
         bool _manualGamePath = false;
+        ProjectPlatform _configuredPlatform = ProjectPlatform::CLASSIC;
         std::unique_ptr<External::Steam::Wrapper> _steamWrapper;
         std::unique_ptr<Utils::MiniDump> _minidump;
 
@@ -180,6 +181,7 @@ namespace Framework::Launcher {
         PlatformCheckStatus RunInnerEpicChecks(bool reportErrors);
         bool RunInnerClassicChecks();
         bool ResolveGamePathFromPrompt();
+        void PrepareSteamAppIdentity() const;
 
         std::wstring GetGameWorkDir(const std::wstring &gameRoot) const;
         bool GameExecutableExistsIn(const std::wstring &gameRoot) const;

@@ -233,7 +233,7 @@ BOOL WINAPI GetModuleHandleExA_Hook(DWORD dwFlags, LPSTR lpModuleName, HMODULE *
 }
 
 namespace Framework::Launcher {
-    Project::Project(ProjectConfiguration &cfg): _config(cfg) {
+    Project::Project(ProjectConfiguration &cfg): _config(cfg), _configuredPlatform(cfg.platform) {
         gConfig = &_config;
         // Fetch the current working directory
         GetCurrentDirectoryW(32768, gProjectDllPath);
@@ -464,9 +464,7 @@ namespace Framework::Launcher {
             return unavailable("The Steam runtime bridge is missing from the launcher directory");
         }
 
-        // If we don't have the app id file, create it
-        cppfs::FileHandle appIdFile = cppfs::fs::open("steam_appid.txt");
-        appIdFile.writeFile(std::to_string(_config.steamAppId) + "\n");
+        PrepareSteamAppIdentity();
 
         // Initialize the steam wrapper
         const auto initResult = _steamWrapper->Init();
@@ -500,10 +498,6 @@ namespace Framework::Launcher {
         // Set classic game path to the one found by Steam just for sake of having that information stored in the config
         // file.
         _config.classicGamePath = _gamePath;
-
-        // Make sure Steam is aware of himself
-        const auto appId = std::to_wstring(_config.steamAppId);
-        SetProcessEnvironmentVariable(L"SteamAppId", appId);
 
         // Hand the account id to the in-process client (ClientIdentity); the wrapper is gone by then.
         const auto steamId = _steamWrapper->GetSteamID().ConvertToUint64();
@@ -642,7 +636,17 @@ namespace Framework::Launcher {
         return true;
     }
 
+    void Project::PrepareSteamAppIdentity() const {
+        cppfs::FileHandle appIdFile = cppfs::fs::open("steam_appid.txt");
+        appIdFile.writeFile(std::to_string(_config.steamAppId) + "\n");
+        SetProcessEnvironmentVariable(L"SteamAppId", std::to_wstring(_config.steamAppId));
+    }
+
     bool Project::RunInnerClassicChecks() {
+        if (_configuredPlatform == ProjectPlatform::STEAM) {
+            PrepareSteamAppIdentity();
+        }
+
         if (GameExecutableExistsIn(_config.classicGamePath)) {
             _gamePath = _config.classicGamePath;
             return true;
