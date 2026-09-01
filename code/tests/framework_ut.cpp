@@ -22,6 +22,7 @@
 #include "modules/voice_router_ut.h"
 #include "modules/spsc_ring_ut.h"
 #include "modules/voice_mixer_ut.h"
+#include "modules/voice_ptt_gate_ut.h"
 #include "modules/gui_resources_ut.h"
 
 // Scripting tests
@@ -47,6 +48,7 @@ int main() {
     UNIT_MODULE(voice_router);
     UNIT_MODULE(spsc_ring);
     UNIT_MODULE(voice_mixer);
+    UNIT_MODULE(voice_ptt_gate);
     UNIT_MODULE(gui_resources);
 
     // Scripting tests

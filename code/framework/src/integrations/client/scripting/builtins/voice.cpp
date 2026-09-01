@@ -115,6 +115,25 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         args.GetReturnValue().Set(v8pp::to_v8(isolate, Utils::KeyNames::FromVirtualKey(vk)));
     }
 
+    void Voice::SetPushToTalkReleaseDelayCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+        if (args.Length() < 1 || !args[0]->IsNumber()) {
+            ThrowError(isolate, "Voice.setPushToTalkReleaseDelay: expected (milliseconds)");
+            return;
+        }
+
+        const double ms = args[0]->NumberValue(isolate->GetCurrentContext()).FromMaybe(0.0);
+        if (auto *voice = Resolve()) {
+            voice->SetPushToTalkReleaseDelay(ms > 0.0 ? static_cast<uint32_t>(ms) : 0u);
+        }
+    }
+
+    void Voice::GetPushToTalkReleaseDelayCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        auto *voice = Resolve();
+        args.GetReturnValue().Set(static_cast<uint32_t>(voice != nullptr ? voice->GetPushToTalkReleaseDelay() : Framework::Voice::kDefaultPushToTalkReleaseMs));
+    }
+
     void Voice::IsTalkingCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
         auto *voice = Resolve();
         args.GetReturnValue().Set(voice != nullptr && voice->IsTransmitting());
@@ -146,6 +165,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         attach(voiceObj, "getRange", &Voice::GetRangeCallback);
         attach(voiceObj, "setPushToTalkKey", &Voice::SetPushToTalkKeyCallback);
         attach(voiceObj, "getPushToTalkKey", &Voice::GetPushToTalkKeyCallback);
+        attach(voiceObj, "setPushToTalkReleaseDelay", &Voice::SetPushToTalkReleaseDelayCallback);
+        attach(voiceObj, "getPushToTalkReleaseDelay", &Voice::GetPushToTalkReleaseDelayCallback);
         attach(voiceObj, "isTalking", &Voice::IsTalkingCallback);
         attach(voiceObj, "hasMicrophone", &Voice::HasMicrophoneCallback);
         target->Set(context, v8pp::to_v8(isolate, "Voice"), voiceObj).Check();
@@ -168,7 +189,12 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             v8pp::metadata::docs("void", {v8pp::metadata::param("key", "string", false, "Case-insensitive key name, using the same names as Key.bind.")},
                 "Rebinds push-to-talk. Unknown key names throw.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPushToTalkKey", v8pp::metadata::docs("string", {}, "Reads the push-to-talk binding.", "Canonical key name, e.g. \"v\".")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isTalking", v8pp::metadata::docs("boolean", {}, "Checks whether the local player is transmitting right now.", "True while push-to-talk is held and the microphone is producing audio.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPushToTalkReleaseDelay",
+            v8pp::metadata::docs("void", {v8pp::metadata::param("milliseconds", "number", false, "How long to keep transmitting after the key goes up. Clamped to 0..2000.")},
+                "Sets how long transmission continues after push-to-talk is released, so letting go slightly early does not clip the end of a word. Muting, turning voice off and losing input focus still stop it at once.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPushToTalkReleaseDelay",
+            v8pp::metadata::docs("number", {}, "Reads the push-to-talk release delay.", "Delay in milliseconds; 0 when transmission stops the moment the key is released.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isTalking", v8pp::metadata::docs("boolean", {}, "Checks whether the local player is transmitting right now.", "True while push-to-talk is open -- held, or still inside the release delay -- and the microphone is producing audio.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("hasMicrophone", v8pp::metadata::docs("boolean", {}, "Checks whether a capture device opened for this session.", "False when the player has no working microphone, i.e. they are listen-only.")));
     }
 

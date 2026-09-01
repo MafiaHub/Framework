@@ -11,6 +11,7 @@
 #include "audio_device.h"
 #include "i_voice_sink.h"
 #include "mixer.h"
+#include "push_to_talk_gate.h"
 #include "voice/voice_config.h"
 
 #include <mafianet/RakVoice.h>
@@ -164,16 +165,25 @@ namespace Framework::Voice {
 
         // --- microphone ---
 
-        void SetPushToTalk(bool held) {
-            _pushToTalkHeld = held;
-        }
+        // The raw key state. Gating conditions belong in SetTransmitBlocked: folded in here they
+        // would extend the release delay rather than cut it.
+        void SetPushToTalk(bool held);
 
         bool IsPushToTalkHeld() const {
-            return _pushToTalkHeld;
+            return _ptt.IsHeld();
+        }
+
+        // Milliseconds, clamped to kMaxPushToTalkReleaseMs. 0 stops on release.
+        void SetPushToTalkReleaseDelay(uint32_t ms) {
+            _ptt.SetReleaseDelay(ms);
+        }
+
+        uint32_t GetPushToTalkReleaseDelay() const {
+            return _ptt.GetReleaseDelay();
         }
 
         // The push-to-talk binding, as a Win32 virtual-key code. Stored, not polled: the host
-        // mod polls it and feeds the result back through SetPushToTalk, under its own gating.
+        // mod polls it and feeds the result back through SetPushToTalk.
         void SetPushToTalkKey(int virtualKey) {
             _pushToTalkKey = virtualKey;
         }
@@ -217,12 +227,13 @@ namespace Framework::Voice {
         void SetSpeakerRange(uint64_t speaker, float range);
         void RemoveSpeaker(uint64_t speaker);
 
-        // Blocks transmission regardless of push-to-talk. Set by the client Instance while
-        // its chat box has the caret or a web view holds focus; mods AND their own
-        // conditions into SetPushToTalk instead.
-        void SetInputSuppressed(bool suppressed) {
-            _inputSuppressed = suppressed;
-        }
+        // Blocks transmission regardless of push-to-talk, cutting the release delay short. Set by
+        // the client Instance while its chat box has the caret or a web view holds focus.
+        void SetInputSuppressed(bool suppressed);
+
+        // The mod-owned half of the same block: window focus, a game menu, locked controls. Ored
+        // with the framework's, so neither side clears the other's.
+        void SetTransmitBlocked(bool blocked);
 
         // --- output ---
 
@@ -301,11 +312,12 @@ namespace Framework::Voice {
         bool _attached        = false;
         bool _sessionOpen     = false;
         bool _enabled         = true;
-        bool _pushToTalkHeld  = false;
         bool _inputSuppressed = false;
+        bool _transmitBlocked = false;
         bool _transmitting    = false;
         bool _preferenceSent  = false;
         int _pushToTalkKey    = kDefaultPushToTalkKey;
+        PushToTalkGate _ptt {};
         MafiaNet::RakNetGUID _self {};
         MafiaNet::RakNetGUID _server {};
 

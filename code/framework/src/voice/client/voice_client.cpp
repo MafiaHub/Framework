@@ -277,6 +277,7 @@ namespace Framework::Voice {
     }
 
     void VoiceClient::Shutdown() {
+        _ptt.Cut();
         CloseSession();
 
         _capture.Stop();
@@ -344,6 +345,7 @@ namespace Framework::Voice {
         _self         = MafiaNet::UNASSIGNED_RAKNET_GUID;
         _sessionOpen  = false;
         _transmitting = false;
+        _ptt.Cut();
 
         // Nothing to capture or play between servers, and holding the microphone open there would
         // leave the OS recording indicator lit in the main menu.
@@ -430,7 +432,26 @@ namespace Framework::Voice {
 
         // Re-enabling reopens from UpdateSession, once the connection is confirmed.
         if (!enabled) {
+            _ptt.Cut();
             CloseSession();
+        }
+    }
+
+    void VoiceClient::SetPushToTalk(bool held) {
+        _ptt.SetHeld(held, Utils::Time::GetTime());
+    }
+
+    void VoiceClient::SetInputSuppressed(bool suppressed) {
+        _inputSuppressed = suppressed;
+        if (suppressed) {
+            _ptt.Cut();
+        }
+    }
+
+    void VoiceClient::SetTransmitBlocked(bool blocked) {
+        _transmitBlocked = blocked;
+        if (blocked) {
+            _ptt.Cut();
         }
     }
 
@@ -466,7 +487,7 @@ namespace Framework::Voice {
             return;
         }
 
-        const bool transmit = _sessionOpen && _pushToTalkHeld && !_inputSuppressed;
+        const bool transmit = _sessionOpen && !_inputSuppressed && !_transmitBlocked && _ptt.IsOpen(Utils::Time::GetTime());
 
         // Drained whether or not we transmit: left alone the ring fills, and the next
         // push-to-talk press would send all of it before anything the player just said.

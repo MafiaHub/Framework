@@ -33,6 +33,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static void GetRangeCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void SetPushToTalkKeyCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void GetPushToTalkKeyCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void SetPushToTalkReleaseDelayCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void GetPushToTalkReleaseDelayCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void IsTalkingCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void HasMicrophoneCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
     };

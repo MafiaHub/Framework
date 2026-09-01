@@ -46,6 +46,11 @@ namespace Framework::Voice {
     // Default push-to-talk binding, as a Win32 virtual-key code ('V').
     constexpr int kDefaultPushToTalkKey = 0x56;
 
+    // Transmission continues this long after push-to-talk is released, so letting go a touch
+    // early does not clip the last syllable. A silent tail costs nothing: VAD drops it.
+    constexpr uint32_t kDefaultPushToTalkReleaseMs = 100;
+    constexpr uint32_t kMaxPushToTalkReleaseMs     = 2000;
+
     // A speaker's decoder is released after this long without a frame.
     constexpr uint32_t kSpeakerSilenceTimeoutMs = 2000;
 
