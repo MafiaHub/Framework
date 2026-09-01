@@ -16,6 +16,8 @@
 #include <scripting/resource/resource_manager.h>
 #include <scripting/scripting_catalog.h>
 
+#include <core_modules.h>
+#include <input/input.h>
 #include <logging/logger.h>
 #include <utils/key_names.h>
 
@@ -53,7 +55,16 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return s;
         }
 
+        const Input::IInput *PhysicalKeySource() {
+            const auto *input = CoreModules::GetInput();
+            return input && input->ProvidesPhysicalKeyState() ? input : nullptr;
+        }
+
         bool IsPhysicallyDown(int vk) {
+            // Device state is already window-scoped and layout-mapped, so it skips both guards below.
+            if (const auto *input = PhysicalKeySource()) {
+                return !input->IsStateStale() && input->IsKeyDown(vk);
+            }
             if ((::GetAsyncKeyState(vk) & 0x8000) == 0) {
                 return false;
             }
@@ -70,12 +81,14 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     std::mutex Keybinds::_mutex;
     std::function<bool()> Keybinds::_activeCallback;
     Framework::Scripting::ResourceManager *Keybinds::_resourceManager = nullptr;
+    bool Keybinds::_stateWasStale                                     = false;
 
     void Keybinds::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
         {
             std::scoped_lock lock(_mutex);
             _buckets.clear();
         }
+        _stateWasStale   = false;
         _resourceManager = resourceManager;
 
         v8::Local<v8::Object> keyObj = v8::Object::New(isolate);
@@ -289,6 +302,17 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
+        // A frozen source reads every key up: right for dispatch, a lie to edge detection. Latching
+        // it would fire a phantom "down" for a key still held when the freeze lifts, so hold the
+        // detector and re-seed prevDown on the first fresh frame instead.
+        const auto *input = PhysicalKeySource();
+        if (input && input->IsStateStale()) {
+            _stateWasStale = true;
+            return;
+        }
+        const bool resync = _stateWasStale;
+        _stateWasStale    = false;
+
         // Phase 1: edge-detect without touching V8.
         struct Edge {
             std::string keyName;
@@ -303,6 +327,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             const bool allowed = GateAllowed();
             for (auto &[keyName, bucket] : _buckets) {
                 const bool down = IsPhysicallyDown(bucket.vk);
+                if (resync) {
+                    bucket.prevDown = down;
+                    continue;
+                }
                 if (down == bucket.prevDown) {
                     continue;
                 }
@@ -310,7 +338,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 // Alt+Enter / Alt+Space), not a script keystroke. Drop it WITHOUT latching prevDown so
                 // the later release fires no stray "up" and a genuine press after Alt releases still
                 // registers. Held keys (prevDown already set) and releases are unaffected.
-                if (down && bucket.vk != VK_MENU && (::GetAsyncKeyState(VK_MENU) & 0x8000)) {
+                if (down && bucket.vk != VK_MENU && IsPhysicallyDown(VK_MENU)) {
                     continue;
                 }
                 bucket.prevDown = down;
@@ -396,6 +424,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     void Keybinds::Shutdown() {
         std::scoped_lock lock(_mutex);
         _buckets.clear();
+        _stateWasStale = false;
         // NOTE: do NOT reset _activeCallback here. It is a HOST gate (installed via SetActiveCallback)
         // that captures host state living for the whole process — well beyond a single scripting session.
         // Clearing it on every Shutdown (disconnect) dropped keybind suppression after a RECONNECT (the

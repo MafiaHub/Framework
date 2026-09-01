@@ -69,6 +69,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // canonical (lowercased) key name -> its poll bucket
         static std::map<std::string, Bucket> _buckets;
         static std::mutex _mutex;
+
+        // Update() only.
+        static bool _stateWasStale;
+
         static std::function<bool()> _activeCallback;
 
         static Framework::Scripting::ResourceManager *_resourceManager;

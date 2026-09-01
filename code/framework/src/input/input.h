@@ -27,6 +27,17 @@ namespace Framework::Input {
         virtual void SetInputLocked(bool locked)            = 0;
         virtual bool IsInputLocked() const                  = 0;
 
+        // Opt-in: WndProc-fed modules can't answer a physical poll (no mouse VKs, no left/right
+        // modifiers, and keys latch when a focus loss eats their WM_KEYUP).
+        virtual bool ProvidesPhysicalKeyState() const {
+            return false;
+        }
+
+        // Device state frozen rather than idle; callers edge-detecting must hold, not latch.
+        virtual bool IsStateStale() const {
+            return false;
+        }
+
         virtual bool IsKeyDown(int key) const     = 0;
         virtual bool IsKeyUp(int key) const       = 0;
         virtual bool IsKeyPressed(int key) const  = 0;
