@@ -19,6 +19,8 @@
 
 #include "include/cef_scheme.h"
 
+#include <imgui/imgui.h>
+
 #include <filesystem>
 #include <optional>
 #include <utility>
@@ -26,6 +28,41 @@
 namespace Framework::GUI {
     namespace {
         constexpr std::size_t kMaxCefCacheProfiles = 16;
+
+        // ImGui has no wait/help/crosshair/zoom shapes; those fall back to the arrow.
+        ImGuiMouseCursor ToImGuiCursor(cef_cursor_type_t type) {
+            switch (type) {
+            case CT_IBEAM:
+            case CT_VERTICALTEXT: return ImGuiMouseCursor_TextInput;
+            case CT_HAND:
+            case CT_GRAB:
+            case CT_GRABBING: return ImGuiMouseCursor_Hand;
+            case CT_NODROP:
+            case CT_NOTALLOWED:
+            case CT_DND_NONE: return ImGuiMouseCursor_NotAllowed;
+            case CT_CELL:
+            case CT_MIDDLEPANNING:
+            case CT_MOVE: return ImGuiMouseCursor_ResizeAll;
+            case CT_MIDDLE_PANNING_VERTICAL:
+            case CT_NORTHRESIZE:
+            case CT_NORTHSOUTHRESIZE:
+            case CT_ROWRESIZE:
+            case CT_SOUTHRESIZE: return ImGuiMouseCursor_ResizeNS;
+            case CT_COLUMNRESIZE:
+            case CT_EASTRESIZE:
+            case CT_EASTWESTRESIZE:
+            case CT_MIDDLE_PANNING_HORIZONTAL:
+            case CT_WESTRESIZE: return ImGuiMouseCursor_ResizeEW;
+            case CT_NORTHEASTRESIZE:
+            case CT_NORTHEASTSOUTHWESTRESIZE:
+            case CT_SOUTHWESTRESIZE: return ImGuiMouseCursor_ResizeNESW;
+            case CT_NORTHWESTRESIZE:
+            case CT_NORTHWESTSOUTHEASTRESIZE:
+            case CT_SOUTHEASTRESIZE: return ImGuiMouseCursor_ResizeNWSE;
+            case CT_NONE: return ImGuiMouseCursor_None;
+            default: return ImGuiMouseCursor_Arrow;
+            }
+        }
 
         // Guard the pump: some exit paths tear CEF down before our Shutdown runs.
         // TODO(cef-exit): an exit-path-independent Shutdown trigger would remove this.
@@ -268,8 +305,19 @@ namespace Framework::GUI {
 
         std::scoped_lock lock(_renderMutex);
 
+        const View *cursorOwner = nullptr;
         for (auto *view : GetViewsByZIndex()) {
             view->SubmitImGuiDraw();
+            if (view->HasFocus() && view->ShouldDisplay()) {
+                cursorOwner = view;
+            }
+        }
+
+        // Blink's cursor is set on the OS cursor, which a host drawing ImGui's software cursor
+        // never shows, so mirror the focused view's shape onto that instead. Topmost focused view
+        // wins; ImGui resets to the arrow each frame, so this only has to hold while one is up.
+        if (cursorOwner && ImGui::GetCurrentContext()) {
+            ImGui::SetMouseCursor(ToImGuiCursor(cursorOwner->GetCursorType()));
         }
     }
 
