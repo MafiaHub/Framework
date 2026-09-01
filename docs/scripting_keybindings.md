@@ -88,9 +88,11 @@ While any of those hold, key edges are **swallowed** — a key pressed with the
 chat box open does not fire a bind when the chat closes, and `isDown` returns
 `false`. This keeps typing in a text field from triggering gameplay actions.
 
-Each host game supplies this gate, so the exact "UI is open" conditions are
-mod-specific, but the rule of thumb holds everywhere: binds fire only when the
-player could otherwise be driving/walking.
+That baseline is the framework's own (`Instance::IsLocalInputAvailable`), so it
+holds in every mod. A host game overrides the predicate to add its input owners
+— a control lock, a debug menu, a gameplay-ready flag — so the exact "UI is
+open" conditions are mod-specific on top of it, but the rule of thumb holds
+everywhere: binds fire only when the player could otherwise be driving/walking.
 
 ## Lifecycle
 

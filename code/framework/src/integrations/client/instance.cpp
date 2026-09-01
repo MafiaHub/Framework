@@ -18,6 +18,8 @@
 #include "networking/rpc/resource_refresh.h"
 #include "networking/rpc/server_resources.h"
 
+#include "integrations/client/scripting/builtins/keybinds.h"
+
 #include "scripting/resource/resource_manager.h"
 #include "scripting/builtins/events.h"
 
@@ -359,6 +361,12 @@ namespace Framework::Integrations::Client {
         // Store reference to the input system
         CoreModules::SetInput(GetBaseInput());
 
+        // Default gate, so a mod overrides IsLocalInputAvailable() instead of wiring a callback
+        // that drifts from it.
+        Client::Scripting::Builtins::Keybinds::SetActiveCallback([this]() {
+            return IsLocalInputAvailable();
+        });
+
         Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client has been initialized");
         _initialized = true;
         return {};
@@ -370,6 +378,29 @@ namespace Framework::Integrations::Client {
         GetNetworkingEngine()->GetNetworkClient()->SetOnAssetsDownloadFailedCallback([this]() {
             this->OnAssetsDownloaded(false);
         });
+    }
+
+    bool Instance::IsLocalInputAvailable() const {
+        // The chat box's session flag is the framework's own record of "connected and finalized".
+        if (!_chatBox.IsSessionActive() || _chatBox.IsInputActive()) {
+            return false;
+        }
+        if (_webManager && _webManager->IsAnyViewFocused()) {
+            return false;
+        }
+#ifdef _WIN32
+        const HWND foreground = ::GetForegroundWindow();
+        if (const HWND window = _renderer ? _renderer->GetWindow() : nullptr) {
+            return foreground == window;
+        }
+        // No window to compare (renderer not up yet, or a mod running without one): owning the
+        // foreground at all beats reporting the whole process backgrounded.
+        DWORD pid = 0;
+        ::GetWindowThreadProcessId(foreground, &pid);
+        return pid == ::GetCurrentProcessId();
+#else
+        return true;
+#endif
     }
 
     void Instance::InitProtocolHandler() {
@@ -472,6 +503,7 @@ namespace Framework::Integrations::Client {
         CoreModules::SetReplication(nullptr);
         CoreModules::SetInput(nullptr);
         CoreModules::SetClientInstance(nullptr);
+        Client::Scripting::Builtins::Keybinds::SetActiveCallback(nullptr); // captures `this`
         CoreModules::Reset();
 
         Lifecycle::Shutdown();

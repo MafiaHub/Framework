@@ -359,6 +359,11 @@ namespace Framework::Integrations::Client {
             return nullptr;
         }
 
+        // True while the player is driving the game rather than typing at it. Scripted keybinds
+        // dispatch behind this and push-to-talk wants the same answer; mods override to AND in
+        // their own input owners instead of restating the baseline.
+        virtual bool IsLocalInputAvailable() const;
+
         AssetDownloadStatus &GetAssetDownloadStatus() {
             return _downloadStatus;
         }
