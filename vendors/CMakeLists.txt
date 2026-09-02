@@ -193,6 +193,12 @@ set(PHYSFS_BUILD_TEST OFF CACHE BOOL "" FORCE)
 set(PHYSFS_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(PHYSFS_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
 add_subdirectory(physfs)
+# physfs FORCEs CMAKE_SKIP_RPATH ON into the cache under GCC/Clang. That leaks out of the
+# subdirectory and disables rpath for every target in the build, including M2OServer's
+# $ORIGIN - without which libnode.so shipped next to the binary no longer resolves. Clear it
+# here rather than editing the vendored tree. Not a snapshot/restore: on an already-configured
+# build the cached value is physfs's own ON, so restoring it would just preserve the bug.
+set(CMAKE_SKIP_RPATH OFF CACHE BOOL "Skip RPATH" FORCE)
 
 # Build miniz (MIT) - ZIP writing for the server-side resource packager. PhysicsFS bundles its
 # own miniz for reading only, and it is private to that library.
