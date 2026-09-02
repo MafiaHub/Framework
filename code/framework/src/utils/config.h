@@ -63,7 +63,8 @@ namespace Framework::Utils {
             std::string key(field);
             Document &doc = *_document;
             if constexpr (std::is_same_v<T, std::wstring>) {
-                return Utils::StringUtils::NormalToWide(doc[key]);
+                const std::string narrow = doc[key];
+                return Utils::StringUtils::UTF8ToWide(narrow);
             }
             return doc[key];
         }
@@ -79,7 +80,8 @@ namespace Framework::Utils {
                 std::string key(field);
                 Document &doc = *_document;
                 if constexpr (std::is_same_v<T, std::wstring>) {
-                    return Utils::StringUtils::NormalToWide(doc[key]);
+                    const std::string narrow = doc[key];
+                    return Utils::StringUtils::UTF8ToWide(narrow);
                 }
                 return doc[key];
             }
@@ -94,7 +96,7 @@ namespace Framework::Utils {
                 return;
             Document &doc = *_document;
             if constexpr (std::is_same_v<T, std::wstring>) {
-                doc[field] = Utils::StringUtils::WideToNormal(value);
+                doc[field] = Utils::StringUtils::WideToUTF8(value);
                 return;
             }
             doc[field] = value;

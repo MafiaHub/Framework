@@ -112,7 +112,7 @@ namespace Framework::Utils {
             UnregisterNotification();
 
             const auto logger     = Logging::GetLogger(FRAMEWORK_INNER_CLIENT);
-            const auto moduleName = StringUtils::WideToNormal(gWatch.moduleName);
+            const auto moduleName = StringUtils::WideToUTF8(gWatch.moduleName);
             const auto gameModule = signalled ? GetModuleHandleW(gWatch.moduleName.c_str()) : nullptr;
             if (!gameModule) {
                 logger->error("Game module {} did not load within {} ms, the game SDK will not be initialised", moduleName, GameModule::kWaitTimeoutMs);

@@ -16,21 +16,15 @@
 #include <string_view>
 
 namespace Framework::Utils::StringUtils {
-    inline std::wstring NormalToWide(const std::string &str) {
-        std::wstring wstr(str.length(), 0);
-        std::transform(str.begin(), str.end(), wstr.begin(), [](char c) {
-            return (wchar_t)c;
-        });
-        return wstr;
-    }
-
-    inline std::string WideToNormal(const std::wstring &wstr) {
-        std::string str(wstr.length(), 0);
-        std::transform(wstr.begin(), wstr.end(), str.begin(), [](wchar_t c) {
-            return (char)c;
-        });
-        return str;
-    }
+#ifdef _WIN32
+    // A narrow string on Windows carries one of two encodings. UTF-8 is what cppfs,
+    // std::filesystem, nlohmann and CEF read; the ACP is what the CRT's narrow file
+    // APIs and the ANSI Win32 calls read. Name the one you mean at every call site.
+    std::string WideToUTF8(std::wstring_view wide);
+    std::wstring UTF8ToWide(std::string_view utf8);
+    std::string WideToACP(std::wstring_view wide);
+    std::wstring ACPToWide(std::string_view acp);
+#endif
 
     inline std::string LeftTrim(std::string_view s) {
         return std::regex_replace(std::string(s), std::regex("^\\s+"), std::string(""));

@@ -112,8 +112,10 @@ LPWSTR BuildGameCommandLineW() {
 
 LPSTR BuildGameCommandLineA() {
     static char buffer[32768] = {};
-    const auto commandLine    = Framework::Utils::StringUtils::WideToNormal(BuildGameCommandLineW());
-    strcpy_s(buffer, commandLine.c_str());
+    const auto commandLine    = Framework::Utils::StringUtils::WideToACP(BuildGameCommandLineW());
+    // A DBCS code page can spend two bytes on one wchar_t, so the ACP form can outgrow
+    // the wide one; truncate like the wide side rather than trip strcpy_s's handler.
+    strncpy_s(buffer, commandLine.c_str(), _TRUNCATE);
     return buffer;
 }
 
@@ -158,7 +160,7 @@ LPSTR WINAPI GetCommandLineA_Stub() {
 
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
     if (!hModule || hModule == GetModuleHandle(nullptr)) {
-        const auto gamePath = Framework::Utils::StringUtils::WideToNormal(gImagePath);
+        const auto gamePath = Framework::Utils::StringUtils::WideToACP(gImagePath);
         strcpy_s(lpFilename, nSize, gamePath.c_str());
 
         return (DWORD)gamePath.size();
@@ -169,7 +171,7 @@ DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nS
 
 DWORD WINAPI GetModuleFileNameExA_Hook(HANDLE hProcess, HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
     if (!hModule || hModule == GetModuleHandle(nullptr)) {
-        const auto gamePath = Framework::Utils::StringUtils::WideToNormal(gImagePath);
+        const auto gamePath = Framework::Utils::StringUtils::WideToACP(gImagePath);
         strcpy_s(lpFilename, nSize, gamePath.c_str());
 
         return (DWORD)gamePath.size();
@@ -240,7 +242,7 @@ namespace Framework::Launcher {
 
         Logging::GetInstance()->SetLogName(_config.name);
 
-        auto projectPath = Utils::StringUtils::WideToNormal(gProjectDllPath);
+        auto projectPath = Utils::StringUtils::WideToACP(gProjectDllPath);
         std::replace(projectPath.begin(), projectPath.end(), '/', '\\');
         Logging::GetInstance()->SetLogFolder(projectPath + "/logs");
 
@@ -248,7 +250,7 @@ namespace Framework::Launcher {
         _minidump     = std::make_unique<Utils::MiniDump>();
         _fileConfig   = std::make_unique<Utils::Config>();
 
-        _minidump->SetSymbolPath(Utils::StringUtils::WideToNormal(gProjectDllPath));
+        _minidump->SetSymbolPath(Utils::StringUtils::WideToACP(gProjectDllPath));
     }
 
     bool Project::Launch() {
@@ -364,7 +366,7 @@ namespace Framework::Launcher {
 
         std::error_code ec;
         if (!std::filesystem::is_regular_file(_gamePath, ec)) {
-            MessageBoxA(nullptr, ("The game executable could not be found:\n" + Utils::StringUtils::WideToNormal(_gamePath)).c_str(), _config.name.c_str(), MB_ICONERROR);
+            MessageBoxA(nullptr, ("The game executable could not be found:\n" + Utils::StringUtils::WideToACP(_gamePath)).c_str(), _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
@@ -379,7 +381,7 @@ namespace Framework::Launcher {
             }
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loading game {}", Utils::StringUtils::WideToNormal(_gamePath));
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loading game {}", Utils::StringUtils::WideToUTF8(_gamePath));
 
         // Run with type depending
         if (_config.launchType == ProjectLaunchType::PE_LOADING) {
@@ -485,12 +487,12 @@ namespace Framework::Launcher {
             return unavailable("Steam returned an empty install directory for the destination game");
         }
 
-        auto installPath = Utils::StringUtils::NormalToWide(installDir);
+        auto installPath = Utils::StringUtils::UTF8ToWide(installDir);
         std::replace(installPath.begin(), installPath.end(), '\\', '/');
 
         if (!GameExecutableExistsIn(installPath)) {
             _steamWrapper->Shutdown();
-            return unavailable(fmt::format("Steam points at {}, but the game executable is not there", Utils::StringUtils::WideToNormal(installPath)));
+            return unavailable(fmt::format("Steam points at {}, but the game executable is not there", Utils::StringUtils::WideToACP(installPath)));
         }
 
         _gamePath = installPath;
@@ -517,19 +519,19 @@ namespace Framework::Launcher {
 
         // Locate the game via the Epic launcher's plaintext manifests - no SDK or running client
         // needed, just Epic having installed it once. Matched by AppName, else by exe file name.
-        const auto exeName = Utils::StringUtils::WideToNormal(_config.executableName);
-        const auto appName = Utils::StringUtils::WideToNormal(_config.epicAppName);
+        const auto exeName = Utils::StringUtils::WideToUTF8(_config.executableName);
+        const auto appName = Utils::StringUtils::WideToUTF8(_config.epicAppName);
 
         const auto app = External::Epic::FindInstalledApp(exeName, appName);
         if (!app.IsValid()) {
             return unavailable("The destination game is not installed through the Epic Games Launcher");
         }
 
-        auto installPath = Utils::StringUtils::NormalToWide(app.installLocation);
+        auto installPath = Utils::StringUtils::UTF8ToWide(app.installLocation);
         std::ranges::replace(installPath, L'\\', L'/');
 
         if (!GameExecutableExistsIn(installPath)) {
-            return unavailable(fmt::format("Epic points at {}, but the game executable is not there", Utils::StringUtils::WideToNormal(installPath)));
+            return unavailable(fmt::format("Epic points at {}, but the game executable is not there", Utils::StringUtils::WideToACP(installPath)));
         }
 
         _gamePath = installPath;
@@ -561,7 +563,7 @@ namespace Framework::Launcher {
     }
 
     bool Project::ResolveGamePathFromPrompt() {
-        const auto startPath = Utils::StringUtils::WideToNormal(gProjectDllPath);
+        const auto startPath = Utils::StringUtils::WideToACP(gProjectDllPath);
 
         sfd_Options sfd = {};
         sfd.path        = startPath.c_str();
@@ -579,7 +581,7 @@ namespace Framework::Launcher {
             return false;
         }
 
-        const std::filesystem::path exePath(Utils::StringUtils::NormalToWide(picked));
+        const std::filesystem::path exePath(Utils::StringUtils::ACPToWide(picked));
 
         std::error_code ec;
         if (!std::filesystem::is_regular_file(exePath, ec)) {
@@ -587,9 +589,9 @@ namespace Framework::Launcher {
             return false;
         }
 
-        const auto expectedName = Utils::StringUtils::WideToNormal(_config.executableName);
+        const auto expectedName = Utils::StringUtils::WideToACP(_config.executableName);
         if (_wcsicmp(exePath.filename().c_str(), _config.executableName.c_str()) != 0) {
-            MessageBoxA(nullptr, ("Please select " + expectedName + ", not " + Utils::StringUtils::WideToNormal(exePath.filename().wstring()) + ".").c_str(), _config.name.c_str(), MB_ICONERROR);
+            MessageBoxA(nullptr, ("Please select " + expectedName + ", not " + Utils::StringUtils::WideToACP(exePath.filename().wstring()) + ".").c_str(), _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
@@ -627,7 +629,7 @@ namespace Framework::Launcher {
         }
 
         if (!GameExecutableExistsIn(gamePath)) {
-            MessageBoxA(nullptr, ("Cannot find " + expectedName + " inside the selected game directory:\n" + Utils::StringUtils::WideToNormal(gamePath)).c_str(), _config.name.c_str(), MB_ICONERROR);
+            MessageBoxA(nullptr, ("Cannot find " + expectedName + " inside the selected game directory:\n" + Utils::StringUtils::WideToACP(gamePath)).c_str(), _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
@@ -1114,7 +1116,7 @@ namespace Framework::Launcher {
             return false;
         }
 
-        auto gameExeHandle = std::ifstream(Utils::StringUtils::WideToNormal(_gamePath), std::ios::binary | std::ios::ate);
+        auto gameExeHandle = std::ifstream(std::filesystem::path(_gamePath), std::ios::binary | std::ios::ate);
         if (!gameExeHandle.good()) {
             MessageBoxA(nullptr, "Failed to find the game executable", _config.name.c_str(), MB_ICONERROR);
             return false;

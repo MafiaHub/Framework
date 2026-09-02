@@ -17,6 +17,7 @@ set(FRAMEWORK_SRC
     src/utils/hashing.cpp
     src/utils/path.cpp
     src/utils/safe_string.cpp
+    src/utils/string_utils.cpp
     src/utils/states/machine.cpp
 
     src/external/sentry/wrapper.cpp
@@ -168,6 +169,7 @@ if(WIN32)
     add_library(FrameworkLoader
         STATIC
         src/utils/hashing.cpp
+        src/utils/string_utils.cpp
         src/launcher/gpu_preference.cpp
         src/launcher/project.cpp
         src/launcher/rgl_bypass.cpp
