@@ -19,6 +19,7 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
+#include <mafianet/IncrementalReadInterface.h>
 #include <mafianet/types.h>
 #include <mafianet/peerinterface.h>
 #include <string>
@@ -38,6 +39,9 @@ namespace Framework::Networking {
         ClientGuidCallback _onClientAuthenticatedCallback;
         ConnectionReadyCallback _onConnectionReadyCallback;
         MafiaNet::FileListTransfer _fileListTransfer;
+
+        // Without this the streamer pushes whole files and the client only gets OnFile at completion.
+        MafiaNet::IncrementalReadInterface _assetReader;
 
         // Guids whose build challenge passed — the gate keeping unverified peers out of replication.
         std::unordered_set<uint64_t> _authenticatedClients;

@@ -21,6 +21,9 @@ namespace Framework::Networking {
         // How long Shutdown() blocks to flush the disconnection notification to connected peers, in
         // ms. Larger than the client's because the server broadcasts to every connection.
         constexpr unsigned int kShutdownBlockDurationMs = 1000;
+
+        // Chunk the streamer reads files in; also the granularity of the client's progress.
+        constexpr unsigned int kAssetChunkSize = 262144;
     } // namespace
 
     Utils::Result<void, Error> NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password) {
@@ -44,6 +47,7 @@ namespace Framework::Networking {
         _peer->SetMaximumIncomingConnections((uint16_t)maxPlayers);
 
         _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
+        _assetStreamer.SetDownloadRequestIncrementalReadInterface(&_assetReader, kAssetChunkSize);
         _peer->AttachPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_assetStreamer);
         RegisterBuildToken();
