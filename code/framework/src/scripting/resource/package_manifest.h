@@ -21,12 +21,43 @@ namespace Framework::Scripting {
         bool optional = false;
     };
 
+    // Scripts are declared by role and what ships is derived from it, so server scripts are
+    // excluded by construction rather than by a filter that could forget one. Paths are relative
+    // to the resource root; only |files| accepts globs, so execution order is exactly as written.
     struct MafiaHubConfig {
-        std::string server;                              // Server entry point
-        std::string client;                              // Client entry point
-        // Globs, relative to the resource root, for files shipped to clients alongside the entry
-        // point. Empty falls back to scanning the entry's directory.
-        std::vector<std::string> clientFiles;
+        std::vector<std::string> clientScripts; // executed on the client, shipped
+        std::vector<std::string> serverScripts; // executed on the server, never shipped
+        std::vector<std::string> sharedScripts; // executed on both, shipped
+        // Shipped to clients but not executed: web-view pages, styles, fonts. Globs allowed.
+        // Empty falls back to scanning the client scripts' directory.
+        std::vector<std::string> files;
+
+        // Superseded by the lists above; folded into them at parse time so existing manifests
+        // keep working.
+        std::string server;
+        std::string client;
+
+        std::vector<std::string> GetClientExecutionList() const {
+            std::vector<std::string> out(sharedScripts);
+            out.insert(out.end(), clientScripts.begin(), clientScripts.end());
+            return out;
+        }
+
+        std::vector<std::string> GetServerExecutionList() const {
+            std::vector<std::string> out(sharedScripts);
+            out.insert(out.end(), serverScripts.begin(), serverScripts.end());
+            return out;
+        }
+
+        // Scripts a client receives; |files| is separate because it needs glob expansion.
+        std::vector<std::string> GetShippedPaths() const {
+            std::vector<std::string> out(clientScripts);
+            out.insert(out.end(), sharedScripts.begin(), sharedScripts.end());
+            return out;
+        }
+
+        bool HasClientContent() const { return !clientScripts.empty() || !sharedScripts.empty(); }
+
         std::vector<ResourceDependency> resourceDependencies;
         std::vector<std::string> exports;
         int priority = 0;

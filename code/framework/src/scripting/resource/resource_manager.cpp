@@ -838,75 +838,70 @@ namespace Framework::Scripting {
             return false;
         }
 
-        const auto &mhConfig = resource.GetManifest().GetMafiaHubConfig();
-        const std::string &entryField = _config.isClient ? mhConfig.client : mhConfig.server;
-        if (entryField.empty()) {
+        const auto scripts = _config.isClient ? resource.GetClientScripts() : resource.GetServerScripts();
+        if (scripts.empty()) {
             return true;
         }
 
+        const std::string resourceName = resource.GetName();
+        const bool virtualRoot         = Utils::Vfs::IsVirtualPath(resource.GetPath());
+
         std::filesystem::path resourceRoot = std::filesystem::path(resource.GetPath());
         std::error_code ec;
-        std::string entryPoint;
-
-        if (Utils::Vfs::IsVirtualPath(resource.GetPath())) {
-            // Lexical: see Vfs::IsVirtualPath. PhysicsFS resolves nothing outside its mounts, so
-            // a prefix test is the whole containment check.
-            const std::string root = Utils::Vfs::NormalizeVirtual(resource.GetPath());
-            entryPoint             = Utils::Vfs::NormalizeVirtual(root + "/" + entryField);
-            if (root.empty() || entryPoint.empty() || !entryPoint.starts_with(root + "/")) {
-                outError = "Entry point escapes resource directory: " + entryField;
-                return false;
-            }
-            if (!Utils::Vfs::Get().Contains(entryPoint)) {
-                outError = "Entry point not found: " + entryPoint;
-                return false;
-            }
-        }
-        else {
+        if (!virtualRoot) {
             resourceRoot = std::filesystem::weakly_canonical(resourceRoot, ec);
             if (ec) {
                 outError = "Failed to resolve resource root path: " + resource.GetPath();
                 return false;
             }
-
-            std::filesystem::path entryPath(entryField);
-            if (entryPath.is_absolute()) {
-                outError = "Entry point must be a relative path: " + entryField;
-                return false;
-            }
-
-            std::filesystem::path resolvedEntry = std::filesystem::weakly_canonical(resourceRoot / entryPath, ec);
-            if (ec || !IsPathInsideRoot(resolvedEntry, resourceRoot)) {
-                outError = "Entry point escapes resource directory: " + entryField;
-                return false;
-            }
-
-            if (!std::filesystem::exists(resolvedEntry)) {
-                outError = "Entry point not found: " + resolvedEntry.string();
-                return false;
-            }
-            if (!std::filesystem::is_regular_file(resolvedEntry)) {
-                outError = "Entry point is not a regular file: " + resolvedEntry.string();
-                return false;
-            }
-            entryPoint = resolvedEntry.string();
         }
-        std::string resourceName = resource.GetName();
 
-        // Set resource context so Events.on() etc. know which resource is executing
-        SetCurrentResourceContext(resourceName);
+        for (const auto &script : scripts) {
+            std::string resolved;
 
-        // Use ExecuteFile which properly resolves the module from the file's
-        // parent directory (V8Engine uses LoadModule with correct base dir,
-        // NodeEngine uses Node.js require with absolute path).
-        bool result = _jsEngine->ExecuteFile(entryPoint);
+            if (virtualRoot) {
+                // Lexical: see Vfs::IsVirtualPath. PhysicsFS resolves nothing outside its mounts,
+                // so a prefix test is the whole containment check.
+                const std::string root = Utils::Vfs::NormalizeVirtual(resource.GetPath());
+                resolved               = Utils::Vfs::NormalizeVirtual(script);
+                if (root.empty() || resolved.empty() || !resolved.starts_with(root + "/")) {
+                    outError = "Script escapes resource directory: " + script;
+                    return false;
+                }
+                if (!Utils::Vfs::Get().Contains(resolved)) {
+                    outError = "Script not found: " + resolved;
+                    return false;
+                }
+            }
+            else {
+                const std::filesystem::path candidate = std::filesystem::weakly_canonical(std::filesystem::path(script), ec);
+                if (ec || !IsPathInsideRoot(candidate, resourceRoot)) {
+                    outError = "Script escapes resource directory: " + script;
+                    return false;
+                }
+                if (!std::filesystem::exists(candidate)) {
+                    outError = "Script not found: " + candidate.string();
+                    return false;
+                }
+                if (!std::filesystem::is_regular_file(candidate)) {
+                    outError = "Script is not a regular file: " + candidate.string();
+                    return false;
+                }
+                resolved = candidate.string();
+            }
 
-        SetCurrentResourceContext("");
+            // Set resource context so Events.on() etc. know which resource is executing.
+            SetCurrentResourceContext(resourceName);
+            const bool ok = _jsEngine->ExecuteFile(resolved);
+            SetCurrentResourceContext("");
 
-        if (!result) {
-            outError = _jsEngine->GetLastError();
+            if (!ok) {
+                outError = _jsEngine->GetLastError();
+                return false;
+            }
         }
-        return result;
+
+        return true;
     }
 
     bool ResourceManager::CallResourceStop(std::string_view resourceName) {

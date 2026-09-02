@@ -213,7 +213,7 @@ namespace Framework::Integrations::Server::Scripting {
 
             // Only running resources with a client entry point — a stopped
             // resource must not be handed to (re)connecting clients.
-            if (resource->IsRunning() && !resource->GetClientEntryPoint().empty()) {
+            if (resource->IsRunning() && resource->HasClientContent()) {
                 ClientResourceInfo info;
                 info.name    = resource->GetName();
                 info.version = resource->GetVersion();

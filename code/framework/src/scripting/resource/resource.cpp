@@ -121,26 +121,34 @@ namespace Framework::Scripting {
         return false;
     }
 
-    std::string Resource::GetServerEntryPoint() const {
-        const auto &server = _manifest.GetMafiaHubConfig().server;
-        if (server.empty()) {
+    std::string Resource::ResolvePath(const std::string &relative) const {
+        if (relative.empty()) {
             return "";
         }
         if (Utils::Vfs::IsVirtualPath(_path)) {
-            return _path + "/" + server;
+            return _path + "/" + relative;
         }
-        return (std::filesystem::path(_path) / server).string();
+        return (std::filesystem::path(_path) / relative).string();
     }
 
-    std::string Resource::GetClientEntryPoint() const {
-        const auto &client = _manifest.GetMafiaHubConfig().client;
-        if (client.empty()) {
-            return "";
+    std::vector<std::string> Resource::GetServerScripts() const {
+        std::vector<std::string> out;
+        for (const auto &script : _manifest.GetMafiaHubConfig().GetServerExecutionList()) {
+            out.push_back(ResolvePath(script));
         }
-        if (Utils::Vfs::IsVirtualPath(_path)) {
-            return _path + "/" + client;
+        return out;
+    }
+
+    std::vector<std::string> Resource::GetClientScripts() const {
+        std::vector<std::string> out;
+        for (const auto &script : _manifest.GetMafiaHubConfig().GetClientExecutionList()) {
+            out.push_back(ResolvePath(script));
         }
-        return (std::filesystem::path(_path) / client).string();
+        return out;
+    }
+
+    bool Resource::HasClientContent() const {
+        return _manifest.GetMafiaHubConfig().HasClientContent();
     }
 
     ResourceState Resource::GetState() const {

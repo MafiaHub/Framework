@@ -70,16 +70,33 @@ namespace Framework::Scripting {
 
             _mafiahubConfig.server = mh.value("server", "");
             _mafiahubConfig.client = mh.value("client", "");
-            _mafiahubConfig.priority = mh.value("priority", 0);
-            _mafiahubConfig.errorBehavior = mh.value("errorBehavior", "stop");
 
-            if (mh.contains("clientFiles") && mh["clientFiles"].is_array()) {
-                for (const auto &pattern : mh["clientFiles"]) {
-                    if (pattern.is_string() && !pattern.get<std::string>().empty()) {
-                        _mafiahubConfig.clientFiles.push_back(pattern.get<std::string>());
+            const auto readList = [&mh](const char *key, std::vector<std::string> &out) {
+                if (!mh.contains(key) || !mh[key].is_array()) {
+                    return;
+                }
+                for (const auto &entry : mh[key]) {
+                    if (entry.is_string() && !entry.get<std::string>().empty()) {
+                        out.push_back(entry.get<std::string>());
                     }
                 }
+            };
+
+            readList("clientScripts", _mafiahubConfig.clientScripts);
+            readList("serverScripts", _mafiahubConfig.serverScripts);
+            readList("sharedScripts", _mafiahubConfig.sharedScripts);
+            readList("files", _mafiahubConfig.files);
+
+            // Folded in so everything downstream sees only the role model.
+            if (!_mafiahubConfig.client.empty()) {
+                _mafiahubConfig.clientScripts.insert(_mafiahubConfig.clientScripts.begin(), _mafiahubConfig.client);
             }
+            if (!_mafiahubConfig.server.empty()) {
+                _mafiahubConfig.serverScripts.insert(_mafiahubConfig.serverScripts.begin(), _mafiahubConfig.server);
+            }
+            readList("clientFiles", _mafiahubConfig.files);
+            _mafiahubConfig.priority = mh.value("priority", 0);
+            _mafiahubConfig.errorBehavior = mh.value("errorBehavior", "stop");
 
             // Exports
             if (mh.contains("exports") && mh["exports"].is_array()) {

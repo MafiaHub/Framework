@@ -135,8 +135,8 @@ namespace Framework::Scripting {
 
     bool ResourcePackager::Package(const std::string &resourceName, const std::string &resourcePath, const PackageManifest &manifest, const Utils::Crypto::Key *key, PackagedResource &out, std::string &outError) {
         const auto &config = manifest.GetMafiaHubConfig();
-        if (config.client.empty()) {
-            outError = "resource has no client entry point";
+        if (!config.HasClientContent()) {
+            outError = "resource has no client scripts";
             return false;
         }
 
@@ -150,20 +150,20 @@ namespace Framework::Scripting {
         // Ordered, so the container stays byte-identical across rebuilds.
         std::set<std::string> selected;
 
-        const std::string clientEntry = std::filesystem::path(config.client).generic_string();
-        if (std::filesystem::exists(root / clientEntry, ec)) {
-            selected.insert(clientEntry);
-        }
-        else {
-            outError = "client entry point '" + clientEntry + "' does not exist";
-            return false;
-        }
-
         if (std::filesystem::exists(root / "package.json", ec)) {
             selected.insert("package.json");
         }
 
-        if (!config.clientFiles.empty()) {
+        for (const auto &script : config.GetShippedPaths()) {
+            const std::string relative = std::filesystem::path(script).generic_string();
+            if (!std::filesystem::exists(root / relative, ec)) {
+                outError = "script '" + relative + "' does not exist";
+                return false;
+            }
+            selected.insert(relative);
+        }
+
+        if (!config.files.empty()) {
             for (const auto &entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::skip_permission_denied, ec)) {
                 if (ec) {
                     break;
@@ -175,7 +175,7 @@ namespace Framework::Scripting {
                 if (relative.empty()) {
                     continue;
                 }
-                for (const auto &pattern : config.clientFiles) {
+                for (const auto &pattern : config.files) {
                     if (MatchGlob(pattern, relative)) {
                         selected.insert(relative);
                         break;
@@ -184,20 +184,28 @@ namespace Framework::Scripting {
             }
         }
         else {
-            // Cannot tell a server bundle from a client one, so drop the declared server entry.
-            const std::filesystem::path clientDir = (root / clientEntry).parent_path();
-
+            // Scanning cannot tell a server bundle from a client one, so drop what a server
+            // script names.
             std::set<std::string> excluded;
-            if (!config.server.empty()) {
-                const std::string serverEntry = std::filesystem::path(config.server).generic_string();
-                excluded.insert(serverEntry);
-                excluded.insert(serverEntry + ".map");
+            for (const auto &script : config.serverScripts) {
+                const std::string relative = std::filesystem::path(script).generic_string();
+                excluded.insert(relative);
+                excluded.insert(relative + ".map");
             }
 
-            if (clientDir != root && std::filesystem::exists(clientDir, ec)) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' does not declare mafiahub.clientFiles; falling back to scanning '{}'. Declare clientFiles to control exactly what reaches clients.", resourceName, clientDir.generic_string());
+            std::set<std::filesystem::path> scanned;
+            for (const auto &script : config.GetShippedPaths()) {
+                const auto dir = (root / std::filesystem::path(script)).parent_path();
+                if (dir == root || !std::filesystem::exists(dir, ec)) {
+                    continue;
+                }
+                if (!scanned.insert(dir).second) {
+                    continue;
+                }
 
-                for (const auto &entry : std::filesystem::recursive_directory_iterator(clientDir, std::filesystem::directory_options::skip_permission_denied, ec)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' declares no mafiahub.files; scanning '{}'. Declare files to control exactly what reaches clients.", resourceName, dir.generic_string());
+
+                for (const auto &entry : std::filesystem::recursive_directory_iterator(dir, std::filesystem::directory_options::skip_permission_denied, ec)) {
                     if (ec) {
                         break;
                     }
@@ -212,13 +220,6 @@ namespace Framework::Scripting {
                         continue;
                     }
                     selected.insert(relative);
-                }
-            }
-
-            for (const auto &skipped : excluded) {
-                // A resource whose client and server entry are the same file still ships it.
-                if (!selected.contains(skipped) && std::filesystem::exists(root / skipped, ec)) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}': withholding server-side file '{}' from clients", resourceName, skipped);
                 }
             }
         }

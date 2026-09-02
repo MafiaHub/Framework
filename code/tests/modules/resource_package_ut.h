@@ -220,30 +220,117 @@ MODULE(resource_package, {
         EQUALS(Framework::Scripting::ResourcePackager::MatchGlob("**/*.js", "dist/client.js"), true);
     });
 
-    IT("parses the clientFiles allowlist", {
+    IT("parses script roles and folds legacy entry points", {
         Framework::Scripting::PackageManifest manifest;
 
-        nlohmann::json withFiles = {
+        nlohmann::json roles = {
             {"name", "demo"},
-            {"mafiahub", {{"client", "c.js"}, {"clientFiles", nlohmann::json::array({"ui/**", "a.js"})}}},
+            {"mafiahub",
+             {{"clientScripts", nlohmann::json::array({"c1.js", "c2.js"})},
+              {"serverScripts", nlohmann::json::array({"s1.js"})},
+              {"sharedScripts", nlohmann::json::array({"sh.js"})},
+              {"files", nlohmann::json::array({"ui/**"})}}},
         };
-        EQUALS(manifest.ParseJson(withFiles), true);
-        UEQUALS(manifest.GetMafiaHubConfig().clientFiles.size(), 2u);
-        STREQUALS(manifest.GetMafiaHubConfig().clientFiles[0].c_str(), "ui/**");
+        EQUALS(manifest.ParseJson(roles), true);
+        const auto &cfg = manifest.GetMafiaHubConfig();
+        UEQUALS(cfg.clientScripts.size(), 2u);
+        UEQUALS(cfg.serverScripts.size(), 1u);
+        UEQUALS(cfg.sharedScripts.size(), 1u);
+        UEQUALS(cfg.files.size(), 1u);
 
-        // Absent means "fall back to the directory scan", not "ship nothing".
-        nlohmann::json without = {{"name", "demo"}, {"mafiahub", {{"client", "c.js"}}}};
-        EQUALS(manifest.ParseJson(without), true);
-        EQUALS(manifest.GetMafiaHubConfig().clientFiles.empty(), true);
+        // Shared scripts run first, then the role-specific ones, in declared order.
+        const auto clientOrder = cfg.GetClientExecutionList();
+        UEQUALS(clientOrder.size(), 3u);
+        STREQUALS(clientOrder[0].c_str(), "sh.js");
+        STREQUALS(clientOrder[1].c_str(), "c1.js");
+        STREQUALS(clientOrder[2].c_str(), "c2.js");
+
+        const auto serverOrder = cfg.GetServerExecutionList();
+        UEQUALS(serverOrder.size(), 2u);
+        STREQUALS(serverOrder[0].c_str(), "sh.js");
+        STREQUALS(serverOrder[1].c_str(), "s1.js");
+
+        // Derived from role: server scripts are absent.
+        const auto shipped = cfg.GetShippedPaths();
+        UEQUALS(shipped.size(), 3u);
+        EQUALS(std::find(shipped.begin(), shipped.end(), std::string("s1.js")) == shipped.end(), true);
+
+        // Legacy single entry points fold in ahead of any list, and clientFiles becomes files.
+        nlohmann::json legacy = {
+            {"name", "demo"},
+            {"mafiahub",
+             {{"client", "old-client.js"},
+              {"server", "old-server.js"},
+              {"clientFiles", nlohmann::json::array({"ui/**"})}}},
+        };
+        EQUALS(manifest.ParseJson(legacy), true);
+        const auto &old = manifest.GetMafiaHubConfig();
+        UEQUALS(old.clientScripts.size(), 1u);
+        STREQUALS(old.clientScripts[0].c_str(), "old-client.js");
+        UEQUALS(old.serverScripts.size(), 1u);
+        STREQUALS(old.serverScripts[0].c_str(), "old-server.js");
+        UEQUALS(old.files.size(), 1u);
+        EQUALS(old.HasClientContent(), true);
+
+        // A server-only resource has nothing to ship.
+        nlohmann::json serverOnly = {{"name", "demo"}, {"mafiahub", {{"server", "s.js"}}}};
+        EQUALS(manifest.ParseJson(serverOnly), true);
+        EQUALS(manifest.GetMafiaHubConfig().HasClientContent(), false);
 
         // Non-string and empty entries are dropped rather than packaged as garbage paths.
         nlohmann::json mixed = {
             {"name", "demo"},
-            {"mafiahub", {{"client", "c.js"}, {"clientFiles", nlohmann::json::array({"ok.js", 42, "", nlohmann::json::object()})}}},
+            {"mafiahub", {{"client", "c.js"}, {"files", nlohmann::json::array({"ok.js", 42, "", nlohmann::json::object()})}}},
         };
         EQUALS(manifest.ParseJson(mixed), true);
-        UEQUALS(manifest.GetMafiaHubConfig().clientFiles.size(), 1u);
-        STREQUALS(manifest.GetMafiaHubConfig().clientFiles[0].c_str(), "ok.js");
+        UEQUALS(manifest.GetMafiaHubConfig().files.size(), 1u);
+        STREQUALS(manifest.GetMafiaHubConfig().files[0].c_str(), "ok.js");
+    });
+
+    IT("ships shared scripts but never server scripts", {
+        const auto root = std::filesystem::temp_directory_path() / "fwpak_ut_roles";
+        std::filesystem::remove_all(root);
+        writeFile(root / "package.json", "{\"name\":\"roles\"}");
+        writeFile(root / "client.js", "client bytes");
+        writeFile(root / "shared.js", "shared bytes");
+        writeFile(root / "server.js", "SECRET server bytes");
+        writeFile(root / "ui" / "index.html", "<h1>ui</h1>");
+
+        nlohmann::json manifestJson = {
+            {"name", "roles"},
+            {"version", "1.0.0"},
+            {"mafiahub",
+             {{"clientScripts", nlohmann::json::array({"client.js"})},
+              {"serverScripts", nlohmann::json::array({"server.js"})},
+              {"sharedScripts", nlohmann::json::array({"shared.js"})},
+              {"files", nlohmann::json::array({"ui/**"})}}},
+        };
+        Framework::Scripting::PackageManifest manifest;
+        EQUALS(manifest.ParseJson(manifestJson), true);
+
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+
+        Framework::Scripting::PackagedResource packaged;
+        std::string error;
+        EQUALS(Framework::Scripting::ResourcePackager::Package("roles", root.string(), manifest, &key, packaged, error), true);
+        EQUALS(packaged.blob.find("SECRET") == std::string::npos, true);
+
+        std::string zip;
+        EQUALS(Framework::Utils::Package::Open(packaged.blob, &key, zip, error), true);
+        auto &vfs = Framework::Utils::Vfs::Get();
+        EQUALS(vfs.MountMemory(std::move(zip), "ut_roles.zip", "/resources/ut_roles", error), true);
+
+        EQUALS(vfs.Contains("/resources/ut_roles/client.js"), true);
+        EQUALS(vfs.Contains("/resources/ut_roles/shared.js"), true);
+        EQUALS(vfs.Contains("/resources/ut_roles/ui/index.html"), true);
+        EQUALS(vfs.Contains("/resources/ut_roles/package.json"), true);
+        // Excluded by role.
+        EQUALS(vfs.Contains("/resources/ut_roles/server.js"), false);
+
+        vfs.Unmount("ut_roles.zip");
+        std::filesystem::remove_all(root);
     });
 
     IT("keeps the server bundle out of the package", {
@@ -289,7 +376,7 @@ MODULE(resource_package, {
         std::filesystem::remove_all(root);
     });
 
-    IT("ships exactly what clientFiles declares", {
+    IT("ships exactly what a legacy clientFiles manifest declares", {
         const auto root = std::filesystem::temp_directory_path() / "fwpak_ut_declared";
         std::filesystem::remove_all(root);
         writeFile(root / "package.json", "{\"name\":\"demo\"}");
@@ -306,7 +393,7 @@ MODULE(resource_package, {
         };
         Framework::Scripting::PackageManifest manifest;
         EQUALS(manifest.ParseJson(manifestJson), true);
-        UEQUALS(manifest.GetMafiaHubConfig().clientFiles.size(), 2u);
+        UEQUALS(manifest.GetMafiaHubConfig().files.size(), 2u);
 
         bool ok = false;
         const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
@@ -570,8 +657,10 @@ MODULE(resource_package, {
         EQUALS(resource != nullptr, true);
         if (resource) {
             // The entry point must resolve inside the mount, with '/' joins.
-            STREQUALS(resource->GetClientEntryPoint().c_str(), "/resources/ut_discover/client.js");
-            EQUALS(vfs.Contains(resource->GetClientEntryPoint()), true);
+            const auto scripts = resource->GetClientScripts();
+            UEQUALS(scripts.size(), 1u);
+            STREQUALS(scripts[0].c_str(), "/resources/ut_discover/client.js");
+            EQUALS(vfs.Contains(scripts[0]), true);
         }
 
         vfs.Unmount("ut_discover.zip");
@@ -659,6 +748,51 @@ MODULE(resource_package, {
 
         vfs.Unmount("ut_attr.zip");
         engine.Shutdown();
+    });
+
+    IT("treats files as additive to the declared scripts", {
+        // Scripts and package.json ship regardless, so a manifest need not repeat them in files.
+        const auto root = std::filesystem::temp_directory_path() / "fwpak_ut_additive";
+        std::filesystem::remove_all(root);
+        writeFile(root / "package.json", "{\"name\":\"demo\"}");
+        writeFile(root / "client" / "main.js", "client bytes");
+        writeFile(root / "client" / "ui" / "index.html", "<h1>ui</h1>");
+        writeFile(root / "server" / "main.js", "SECRET server bytes");
+
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+
+        const auto packageWith = [&](const char *glob, Framework::Scripting::PackagedResource &out) {
+            nlohmann::json manifestJson = {
+                {"name", "demo"},
+                {"version", "1.0.0"},
+                {"mafiahub", {{"server", "server/main.js"}, {"client", "client/main.js"}, {"clientFiles", nlohmann::json::array({glob})}}},
+            };
+            Framework::Scripting::PackageManifest manifest;
+            if (!manifest.ParseJson(manifestJson)) {
+                return false;
+            }
+            std::string error;
+            return Framework::Scripting::ResourcePackager::Package("demo", root.string(), manifest, &key, out, error);
+        };
+
+        Framework::Scripting::PackagedResource lean;
+        EQUALS(packageWith("client/ui/**", lean), true);
+
+        // Also covering the script's own directory.
+        Framework::Scripting::PackagedResource redundant;
+        EQUALS(packageWith("client/**", redundant), true);
+
+        // Same three files, byte-identical: nothing was counted twice.
+        UEQUALS(lean.fileCount, 3u);
+        UEQUALS(redundant.fileCount, 3u);
+        STREQUALS(lean.sha256.c_str(), redundant.sha256.c_str());
+
+        // Neither ships the server bundle.
+        EQUALS(lean.blob.find("SECRET") == std::string::npos, true);
+
+        std::filesystem::remove_all(root);
     });
 
     IT("normalizes virtual paths and refuses escapes", {

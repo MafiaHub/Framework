@@ -213,8 +213,8 @@ MODULE(resource, {
 
         Resource resource(TestResourceHelper::GetTestResourcePath() + "/entry-test");
 
-        std::string serverEntry = resource.GetServerEntryPoint();
-        std::string clientEntry = resource.GetClientEntryPoint();
+        std::string serverEntry = resource.GetServerScripts().empty() ? std::string {} : resource.GetServerScripts().front();
+        std::string clientEntry = resource.GetClientScripts().empty() ? std::string {} : resource.GetClientScripts().front();
 
         // Should contain the path
         EQUALS(serverEntry.find("server/main.js") != std::string::npos, true);
@@ -231,8 +231,8 @@ MODULE(resource, {
 
         Resource resource(TestResourceHelper::GetTestResourcePath() + "/no-entry");
 
-        STREQUALS(resource.GetServerEntryPoint().c_str(), "");
-        STREQUALS(resource.GetClientEntryPoint().c_str(), "");
+        EQUALS(resource.GetServerScripts().empty(), true);
+        EQUALS(resource.GetClientScripts().empty(), true);
 
         TestResourceHelper::Cleanup();
     });

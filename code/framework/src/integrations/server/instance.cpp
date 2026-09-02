@@ -739,7 +739,7 @@ namespace Framework::Integrations::Server {
             if (!resource) {
                 continue;
             }
-            if (resource->GetManifest().GetMafiaHubConfig().client.empty()) {
+            if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
                 continue;
             }
 
@@ -796,7 +796,7 @@ namespace Framework::Integrations::Server {
             return;
         }
         // Only resources with a client entry point need a client-side refresh.
-        if (resource->GetManifest().GetMafiaHubConfig().client.empty()) {
+        if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
             return;
         }
 
@@ -842,7 +842,7 @@ namespace Framework::Integrations::Server {
             return;
         }
         // Only client resources need a client-side stop.
-        if (resource->GetManifest().GetMafiaHubConfig().client.empty()) {
+        if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
             return;
         }
 

@@ -99,15 +99,14 @@ namespace Framework::Scripting {
         bool HasExport(std::string_view exportName) const;
         bool DependsOn(std::string_view resourceName) const;
 
-        /**
-         * Get the server entry point script path.
-         */
-        std::string GetServerEntryPoint() const;
+        // Resolved against the resource root, in execution order: shared scripts first.
+        std::vector<std::string> GetServerScripts() const;
+        std::vector<std::string> GetClientScripts() const;
 
-        /**
-         * Get the client entry point script path.
-         */
-        std::string GetClientEntryPoint() const;
+        bool HasClientContent() const;
+
+        // '/'-joined for a packaged resource, native separators otherwise.
+        std::string ResolvePath(const std::string &relative) const;
 
         // State machine
         ResourceState GetState() const;
