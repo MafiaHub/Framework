@@ -25,7 +25,9 @@ namespace Framework::Networking {
         KICKED,
         KICKED_CUSTOM,
         KICKED_INVALID_PACKET,
-        UNKNOWN
+        UNKNOWN,
+        // Serialized by DisconnectPayload: append only.
+        BUILD_VERIFICATION_TIMEOUT
     };
 
     // Optional reason carried on a graceful disconnect (CloseConnection's reasonData).

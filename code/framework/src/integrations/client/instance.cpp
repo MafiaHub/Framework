@@ -769,6 +769,7 @@ namespace Framework::Integrations::Client {
             case Framework::Networking::DisconnectionReason::KICKED_CUSTOM: reason = "You have been kicked. Reason: " + customReason; break;
             case Framework::Networking::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
             case Framework::Networking::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
+            case Framework::Networking::DisconnectionReason::BUILD_VERIFICATION_TIMEOUT: reason = "Could not verify your build with the server in time. Check your connection and try again."; break;
             case Framework::Networking::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
             case Framework::Networking::DisconnectionReason::NO_FREE_SLOT: reason = "The server is full."; break;
             case Framework::Networking::DisconnectionReason::GRACEFUL_SHUTDOWN: reason = "The server closed the connection."; break;

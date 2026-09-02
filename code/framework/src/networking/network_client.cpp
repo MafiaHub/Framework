@@ -244,11 +244,18 @@ namespace Framework::Networking {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Build verified by server");
             return true;
         };
-        case ID_TWO_WAY_AUTHENTICATION_OUTGOING_CHALLENGE_FAILURE:
-        case ID_TWO_WAY_AUTHENTICATION_OUTGOING_CHALLENGE_TIMEOUT: {
+        case ID_TWO_WAY_AUTHENTICATION_OUTGOING_CHALLENGE_FAILURE: {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Build mismatch with server, disconnecting");
             if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, DisconnectionReason::WRONG_VERSION, "");
+            }
+            ResetConnectionState();
+            return true;
+        };
+        case ID_TWO_WAY_AUTHENTICATION_OUTGOING_CHALLENGE_TIMEOUT: {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Build verification timed out, disconnecting");
+            if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
+                _onPlayerDisconnectedCallback(_packet, DisconnectionReason::BUILD_VERIFICATION_TIMEOUT, "");
             }
             ResetConnectionState();
             return true;
