@@ -278,6 +278,11 @@ namespace Framework::Scripting {
             _resources[name] = std::move(resource);
         }
 
+        // Discovery keeps the graph current: mounted-package discovery and the client's hot-reload
+        // path both start a resource straight after adding it, and an empty graph silently costs
+        // them both dependency ordering.
+        BuildDependencyGraph();
+
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Discovered JS resource: {} v{}", name, version);
         return true;
     }
@@ -380,13 +385,24 @@ namespace Framework::Scripting {
         }
 
         std::vector<std::string> started;
+        std::vector<std::string> failed;
         for (const auto &name : loadOrder) {
             auto result = StartResource(name);
             if (result) {
                 started.push_back(name);
             } else {
+                failed.push_back(name);
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resource {}: {}", name, result.GetError());
             }
+        }
+
+        // A partial start is still a failure; the started list rides along on the error.
+        if (!failed.empty()) {
+            std::string names;
+            for (const auto &name : failed) {
+                names += names.empty() ? name : ", " + name;
+            }
+            return ResourceOperationResult(std::to_string(failed.size()) + " of " + std::to_string(loadOrder.size()) + " resources failed to start: " + names, std::move(started));
         }
 
         return ResourceOperationResult::Ok(started);

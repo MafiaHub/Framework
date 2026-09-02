@@ -115,7 +115,8 @@ namespace Framework::Scripting {
 
         /**
          * Start all discovered resources in dependency order.
-         * @return Result with list of started resources
+         * @return Ok with the list of started resources. If any resource failed, an error naming
+         *         them — the value still carries whatever did start.
          */
         ResourceOperationResult StartAll();
 

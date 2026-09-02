@@ -667,6 +667,97 @@ MODULE(resource_package, {
         engine.Shutdown();
     });
 
+    IT("builds the dependency graph for mounted resources", {
+        // An empty graph leaves every in-degree at zero, so the sort degrades to the _resources map
+        // order. The names are picked so that order — alphabetical — is the wrong one.
+        auto &vfs = Framework::Utils::Vfs::Get();
+
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+
+        std::string zip, error;
+
+        Framework::Utils::Package::Writer appWriter;
+        EQUALS(appWriter.Add("package.json", "{\"name\":\"ut_app\",\"version\":\"1.0.0\",\"mafiahub\":{\"clientScripts\":[\"client.js\"],\"resourceDependencies\":[\"ut_lib\"]}}"), true);
+        EQUALS(appWriter.Add("client.js", "globalThis.utApp = 1;"), true);
+        std::string appBlob;
+        EQUALS(appWriter.Build(&key, appBlob), true);
+        EQUALS(Framework::Utils::Package::Open(appBlob, &key, zip, error), true);
+        EQUALS(vfs.MountMemory(std::move(zip), "ut_app.zip", "/resources/ut_app", error), true);
+
+        Framework::Utils::Package::Writer libWriter;
+        EQUALS(libWriter.Add("package.json", "{\"name\":\"ut_lib\",\"version\":\"1.0.0\",\"mafiahub\":{\"clientScripts\":[\"client.js\"]}}"), true);
+        EQUALS(libWriter.Add("client.js", "globalThis.utLib = 1;"), true);
+        std::string libBlob;
+        EQUALS(libWriter.Build(&key, libBlob), true);
+        zip.clear();
+        EQUALS(Framework::Utils::Package::Open(libBlob, &key, zip, error), true);
+        EQUALS(vfs.MountMemory(std::move(zip), "ut_lib.zip", "/resources/ut_lib", error), true);
+
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+
+        Framework::Scripting::ResourceManagerConfig config;
+        config.resourcesPath = Framework::Utils::Vfs::kResourceMountRoot;
+        config.isClient      = true;
+
+        Framework::Scripting::ResourceManager manager(&engine, config);
+        UEQUALS(manager.DiscoverResources(), 2u);
+
+        const auto deps = manager.GetDependencies("ut_app");
+        UEQUALS(deps.size(), 1u);
+        EQUALS(deps.contains("ut_lib"), true);
+
+        // The dependency comes first even though "ut_app" sorts before "ut_lib".
+        const auto order = manager.GetLoadOrder();
+        UEQUALS(order.size(), 2u);
+        STREQUALS(order[0].c_str(), "ut_lib");
+        STREQUALS(order[1].c_str(), "ut_app");
+
+        vfs.Unmount("ut_app.zip");
+        vfs.Unmount("ut_lib.zip");
+        engine.Shutdown();
+    });
+
+    IT("reports a resource that failed to start", {
+        // The entry point named here is absent from the package, so the start fails before any
+        // lifecycle promise is awaited.
+        auto &vfs = Framework::Utils::Vfs::Get();
+
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+
+        Framework::Utils::Package::Writer writer;
+        EQUALS(writer.Add("package.json", "{\"name\":\"ut_broken\",\"version\":\"1.0.0\",\"mafiahub\":{\"clientScripts\":[\"missing.js\"]}}"), true);
+        std::string blob;
+        EQUALS(writer.Build(&key, blob), true);
+
+        std::string zip, error;
+        EQUALS(Framework::Utils::Package::Open(blob, &key, zip, error), true);
+        EQUALS(vfs.MountMemory(std::move(zip), "ut_broken.zip", "/resources/ut_broken", error), true);
+
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+
+        Framework::Scripting::ResourceManagerConfig config;
+        config.resourcesPath = Framework::Utils::Vfs::kResourceMountRoot;
+        config.isClient      = true;
+
+        Framework::Scripting::ResourceManager manager(&engine, config);
+        UEQUALS(manager.DiscoverResources(), 1u);
+
+        const auto result = manager.StartAll();
+        EQUALS(static_cast<bool>(result), false);
+        EQUALS(result.GetError().find("ut_broken") != std::string::npos, true);
+        UEQUALS(result.GetValue().size(), 0u);
+        EQUALS(manager.IsResourceRunning("ut_broken"), false);
+
+        vfs.Unmount("ut_broken.zip");
+        engine.Shutdown();
+    });
+
     IT("resolves modules inside a mounted package", {
         // V8Engine cannot be Init()ed here (libnode owns the V8 platform in this binary), but the
         // virtual branch of ResolveModulePath touches no isolate, so the resolution the client
