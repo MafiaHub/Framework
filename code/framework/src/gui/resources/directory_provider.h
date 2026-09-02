@@ -27,6 +27,8 @@ namespace Framework::GUI::Resources {
         // after construction.
         std::vector<std::string> _immutablePrefixes;
 
+        std::string _virtualPrefix;
+
         static std::filesystem::path Resolve(std::filesystem::path root);
 
       public:
@@ -34,6 +36,10 @@ namespace Framework::GUI::Resources {
 
         // e.g. MarkImmutable("assets/"). Call before registering the provider.
         void MarkImmutable(std::string pathPrefix);
+
+        // Look the request path up under this virtual prefix before the directory. Empty
+        // disables the lookup.
+        void SetVirtualPrefix(std::string prefix);
 
         // Responses already open keep reading the file they opened.
         void SetRoot(std::filesystem::path root);

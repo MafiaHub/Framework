@@ -8,6 +8,8 @@
 
 #include "resource.h"
 
+#include <utils/vfs.h>
+
 #include <core_modules.h>
 #include <networking/replication/replication_manager.h>
 
@@ -31,8 +33,8 @@ namespace Framework::Scripting {
         : _path(path)
         , _stateTimestamp(std::chrono::system_clock::now()) {
         // Try to load the manifest
-        std::filesystem::path manifestPath = std::filesystem::path(path) / "package.json";
-        _manifestValid = _manifest.Parse(manifestPath.string());
+        const std::string manifestPath = Utils::Vfs::IsVirtualPath(path) ? (path + "/package.json") : (std::filesystem::path(path) / "package.json").string();
+        _manifestValid = _manifest.Parse(manifestPath);
 
         if (!_manifestValid) {
             _errorMessage = _manifest.GetError();
@@ -124,6 +126,9 @@ namespace Framework::Scripting {
         if (server.empty()) {
             return "";
         }
+        if (Utils::Vfs::IsVirtualPath(_path)) {
+            return _path + "/" + server;
+        }
         return (std::filesystem::path(_path) / server).string();
     }
 
@@ -131,6 +136,9 @@ namespace Framework::Scripting {
         const auto &client = _manifest.GetMafiaHubConfig().client;
         if (client.empty()) {
             return "";
+        }
+        if (Utils::Vfs::IsVirtualPath(_path)) {
+            return _path + "/" + client;
         }
         return (std::filesystem::path(_path) / client).string();
     }

@@ -8,6 +8,13 @@
 
 #include "instance.h"
 
+#include <scripting/resource/resource_packager.h>
+#include <utils/crypto.h>
+#include <utils/package/package.h>
+
+#include <filesystem>
+#include <fstream>
+
 #include <filesystem>
 #include <set>
 #include <fstream>
@@ -436,9 +443,17 @@ namespace Framework::Integrations::Server {
             Framework::Networking::RPC::ServerResources resources;
             resources.readyEventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
             resources.tickRate     = _opts.worldConfig.tickInterval;
+            resources.packageKey   = _packageKeyHex;
             if (_scriptingModule) {
                 for (const auto &resource : _scriptingModule->GetClientResourceList()) {
-                    resources.resources.push_back({resource.name, resource.version});
+                    Framework::Networking::RPC::ResourceInfo info;
+                    info.name    = resource.name;
+                    info.version = resource.version;
+                    // Announced without a hash when packaging failed; the client refuses those.
+                    if (const auto hash = _packageHashes.find(resource.name); hash != _packageHashes.end()) {
+                        info.packageHash = hash->second;
+                    }
+                    resources.resources.push_back(std::move(info));
                 }
             }
             net->SendRPC(resources, guid);
@@ -647,67 +662,125 @@ namespace Framework::Integrations::Server {
         return v8pp::class_<Framework::Scripting::Builtins::Player>::create_object(isolate, networkId);
     }
 
+    std::string Instance::GetPackageStagingDir() const {
+        const auto scripting = GetScriptingModule();
+        const std::string assetsPath = Framework::Utils::GetAbsolutePathA(scripting ? scripting->GetResourcesPath() : _opts.resourcesPath);
+        return (std::filesystem::path(assetsPath).parent_path() / ".packages").string();
+    }
+
     void Instance::InitAssetStreamer() {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Setting up asset streamer...");
         const auto net      = GetNetworkingEngine()->GetNetworkServer();
         const auto streamer = net->GetAssetStreamer();
 
-        const auto scripting     = GetScriptingModule();
-        const auto resourcesPath = scripting->GetResourcesPath();
-        const std::string assetsPath = Framework::Utils::GetAbsolutePathA(resourcesPath);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Resources directory: {}", assetsPath);
-
-        streamer->SetApplicationDirectory(assetsPath.c_str());
-
-        // Add client files from each JS resource
-        const auto resourceManager = scripting->GetResourceManager();
-        if (resourceManager) {
-            for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
-                const auto resource = resourceManager->GetResource(resourceName);
-                if (!resource) continue;
-
-                // Only process resources with client entry points
-                const auto &clientEntryRelative = resource->GetManifest().GetMafiaHubConfig().client;
-                if (clientEntryRelative.empty()) continue;
-
-                const auto resourcePath = resource->GetPath();
-
-                // Add package.json for client to parse manifest info
-                std::filesystem::path packageJsonPath = std::filesystem::path(resourcePath) / "package.json";
-                if (std::filesystem::exists(packageJsonPath)) {
-                    std::filesystem::path packageJsonName = std::filesystem::path(resourceName) / "package.json";
-                    streamer->AddFile(packageJsonPath.string().c_str(), packageJsonName.string().c_str());
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->trace("Added client asset: {}", packageJsonName.string());
-                }
-
-                // Add the client entry point script
-                std::filesystem::path clientEntryPath = std::filesystem::path(resourcePath) / clientEntryRelative;
-                if (std::filesystem::exists(clientEntryPath)) {
-                    std::filesystem::path clientEntryName = std::filesystem::path(resourceName) / clientEntryRelative;
-                    streamer->AddFile(clientEntryPath.string().c_str(), clientEntryName.string().c_str());
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->trace("Added client asset: {}", clientEntryName.string());
-                }
-
-                // If the client entry is in a subdirectory, add all script and web-view asset files
-                // from that directory (pages served to views via fw://resources/<resource>/<file>)
-                static const std::set<std::string> kClientAssetExtensions = {".js", ".mjs", ".ts", ".json", ".html", ".htm", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".ttf", ".otf", ".woff", ".woff2", ".patch"};
-                std::filesystem::path clientDir = clientEntryPath.parent_path();
-                if (clientDir != resourcePath && std::filesystem::exists(clientDir)) {
-                    for (const auto &entry : std::filesystem::recursive_directory_iterator(clientDir)) {
-                        if (!entry.is_regular_file()) continue;
-
-                        const auto ext = entry.path().extension().string();
-                        if (kClientAssetExtensions.contains(ext)) {
-                            std::filesystem::path relativePath = std::filesystem::relative(entry.path(), std::filesystem::path(assetsPath));
-                            streamer->AddFile(entry.path().string().c_str(), relativePath.string().c_str());
-                            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->trace("Added client asset: {}", relativePath.string());
-                        }
-                    }
-                }
-            }
+        const auto scripting = GetScriptingModule();
+        if (!scripting) {
+            return;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset streamer ready with {} client files", streamer->GetNumberOfFilesForUpload());
+        // Containers are built once and shared by every client, so the key cannot be
+        // per-connection.
+        const std::string stagingDir = GetPackageStagingDir();
+        std::error_code ec;
+        std::filesystem::create_directories(stagingDir, ec);
+        if (ec) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not create the package staging directory '{}': {}", stagingDir, ec.message());
+            return;
+        }
+
+        // Persisted: the key feeds the container bytes, so a fresh one each restart would change
+        // every hash and re-download every resource. It guards the client cache, not these files.
+        if (!_packageKeyReady) {
+            const auto keyPath = (std::filesystem::path(stagingDir) / "package.key").string();
+
+            std::string storedHex;
+            if (std::ifstream keyFile(keyPath, std::ios::binary); keyFile.is_open()) {
+                std::getline(keyFile, storedHex);
+            }
+            while (!storedHex.empty() && (storedHex.back() == 0x0D || storedHex.back() == 0x0A)) {
+                storedHex.pop_back();
+            }
+
+            if (storedHex.size() == Framework::Utils::Crypto::kKeySize * 2 && Framework::Utils::Crypto::FromHex(storedHex, _packageKey.data(), _packageKey.size())) {
+                _packageKeyHex = storedHex;
+            }
+            else {
+                bool ok     = false;
+                _packageKey = Framework::Utils::Crypto::GenerateKey(&ok);
+                if (!ok) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not generate a resource package key; client resources will not be served");
+                    return;
+                }
+                _packageKeyHex = Framework::Utils::Crypto::ToHex(_packageKey.data(), _packageKey.size());
+
+                std::ofstream keyOut(keyPath, std::ios::binary | std::ios::trunc);
+                if (keyOut.is_open()) {
+                    keyOut << _packageKeyHex;
+                }
+                if (!keyOut.good()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Could not persist the resource package key to '{}'; clients will re-download resources after a restart", keyPath);
+                }
+            }
+            _packageKeyReady = true;
+        }
+
+        // Uploads are named relative to this, so clients receive a flat "<resource>.fwpak".
+        streamer->SetApplicationDirectory(stagingDir.c_str());
+        _packageHashes.clear();
+
+        const auto resourceManager = scripting->GetResourceManager();
+        if (!resourceManager) {
+            return;
+        }
+
+        size_t packagedFiles = 0;
+        for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
+            const auto resource = resourceManager->GetResource(resourceName);
+            if (!resource) {
+                continue;
+            }
+            if (resource->GetManifest().GetMafiaHubConfig().client.empty()) {
+                continue;
+            }
+
+            Framework::Scripting::PackagedResource packaged;
+            std::string error;
+            if (!Framework::Scripting::ResourcePackager::Package(resourceName, resource->GetPath(), resource->GetManifest(), &_packageKey, packaged, error)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not package client resource '{}': {}", resourceName, error);
+                continue;
+            }
+
+            const std::string packageName = resourceName + Framework::Utils::Package::kExtension;
+            const auto packagePath        = std::filesystem::path(stagingDir) / packageName;
+
+            // An unchanged resource keeps its mtime, so the delta transfer has nothing to send.
+            bool needsWrite = true;
+            if (std::filesystem::exists(packagePath, ec) && !ec) {
+                const auto existing = Framework::Utils::Crypto::Sha256FileHex(packagePath.string());
+                needsWrite          = !Framework::Utils::Crypto::ConstantTimeEquals(existing, packaged.sha256);
+            }
+
+            if (needsWrite) {
+                std::ofstream out(packagePath, std::ios::binary | std::ios::trunc);
+                if (!out.is_open()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not write package '{}'", packagePath.string());
+                    continue;
+                }
+                out.write(packaged.blob.data(), static_cast<std::streamsize>(packaged.blob.size()));
+                if (!out.good()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed while writing package '{}'", packagePath.string());
+                    continue;
+                }
+            }
+
+            streamer->AddFile(packagePath.string().c_str(), packageName.c_str());
+            _packageHashes[resourceName] = packaged.sha256;
+            packagedFiles += packaged.fileCount;
+
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Packaged client resource '{}': {} files, {} bytes, sha256 {}{}", resourceName, packaged.fileCount, packaged.blob.size(), packaged.sha256.substr(0, 16), needsWrite ? "" : " (unchanged)");
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset streamer ready with {} encrypted resource packages ({} files)", _packageHashes.size(), packagedFiles);
     }
 
     void Instance::BroadcastResourceRefresh(const std::string &name) {
@@ -739,8 +812,18 @@ namespace Framework::Integrations::Server {
         }
         InitAssetStreamer();
 
+        const auto hash = _packageHashes.find(resource->GetName());
+        if (hash == _packageHashes.end()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Not broadcasting refresh of '{}': packaging failed", name);
+            return;
+        }
+
         Framework::Networking::RPC::ResourceRefresh refresh;
-        refresh.resources.push_back({resource->GetName(), resource->GetVersion()});
+        Framework::Networking::RPC::ResourceInfo info;
+        info.name        = resource->GetName();
+        info.version     = resource->GetVersion();
+        info.packageHash = hash->second;
+        refresh.resources.push_back(std::move(info));
         net->BroadcastRPC(refresh);
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Broadcasting hot-reload of resource '{}' to clients", name);

@@ -13,6 +13,7 @@
 #include "builtins/messages.h"
 
 #include <logging/logger.h>
+#include <utils/vfs.h>
 
 #include <algorithm>
 #include <cctype>
@@ -112,9 +113,16 @@ namespace Framework::Scripting {
         v8::Isolate::Scope isolateScope(_isolate);
 
         namespace fs = std::filesystem;
-        std::error_code ec;
-        fs::path canonicalRoot = fs::weakly_canonical(fs::path(rootPath), ec);
-        std::string rootStr = (ec ? fs::path(rootPath) : canonicalRoot).string();
+        std::string rootStr;
+        if (Utils::Vfs::IsVirtualPath(rootPath)) {
+            // Cache keys are the virtual paths, so canonicalising would never match them.
+            rootStr = Utils::Vfs::NormalizeVirtual(rootPath);
+        }
+        else {
+            std::error_code ec;
+            fs::path canonicalRoot = fs::weakly_canonical(fs::path(rootPath), ec);
+            rootStr                = (ec ? fs::path(rootPath) : canonicalRoot).string();
+        }
         if (rootStr.empty()) {
             return;
         }
@@ -442,6 +450,42 @@ namespace Framework::Scripting {
                                              std::string_view fromDir) {
         namespace fs = std::filesystem;
 
+        // Lexical; PhysicsFS cannot address anything outside its mounts, so the module-root check
+        // is a prefix test.
+        if (Utils::Vfs::IsVirtualPath(std::string(fromDir)) || Utils::Vfs::IsVirtualPath(std::string(requested))) {
+            std::string joined;
+            if (requested.starts_with("/")) {
+                joined = std::string(requested);
+            }
+            else {
+                joined = std::string(fromDir) + "/" + std::string(requested);
+            }
+
+            const std::string candidate = Utils::Vfs::NormalizeVirtual(joined);
+            if (candidate.empty()) {
+                return "";
+            }
+
+            if (!_options.moduleRootPath.empty()) {
+                const std::string root = Utils::Vfs::NormalizeVirtual(_options.moduleRootPath);
+                if (!root.empty() && candidate != root && !candidate.starts_with(root + "/")) {
+                    return "";
+                }
+            }
+
+            const auto &vfs = Utils::Vfs::Get();
+            if (vfs.Contains(candidate)) {
+                return candidate;
+            }
+            if (vfs.Contains(candidate + ".js")) {
+                return candidate + ".js";
+            }
+            if (vfs.Contains(candidate + "/index.js")) {
+                return candidate + "/index.js";
+            }
+            return "";
+        }
+
         fs::path base(fromDir);
         fs::path resolved;
 
@@ -487,21 +531,30 @@ namespace Framework::Scripting {
             }
         }
 
+        const auto &vfs = Utils::Vfs::Get();
+        auto resolvesTo = [&vfs](const fs::path &candidate) {
+            if (vfs.Contains(candidate.string())) {
+                return true;
+            }
+            std::error_code ec;
+            return fs::exists(candidate, ec) && !ec && fs::is_regular_file(candidate, ec) && !ec;
+        };
+
         // Try exact path
-        if (fs::exists(resolved) && fs::is_regular_file(resolved)) {
+        if (resolvesTo(resolved)) {
             return resolved.string();
         }
 
         // Try with .js extension
         fs::path withJs = resolved;
         withJs += ".js";
-        if (fs::exists(withJs) && fs::is_regular_file(withJs)) {
+        if (resolvesTo(withJs)) {
             return withJs.string();
         }
 
         // Try as directory with index.js
         fs::path indexJs = resolved / "index.js";
-        if (fs::exists(indexJs) && fs::is_regular_file(indexJs)) {
+        if (resolvesTo(indexJs)) {
             return indexJs.string();
         }
 
@@ -659,10 +712,21 @@ namespace Framework::Scripting {
             return false;
         }
 
-        // Convert to absolute path
-        std::filesystem::path absPath = std::filesystem::absolute(filepath);
-        std::string absPathStr = absPath.string();
-        std::string dirStr = absPath.parent_path().string();
+        std::string absPathStr;
+        std::string dirStr;
+        std::string filenameStr;
+        if (Utils::Vfs::IsVirtualPath(std::string(filepath))) {
+            absPathStr             = Utils::Vfs::NormalizeVirtual(std::string(filepath));
+            const size_t lastSlash = absPathStr.find_last_of('/');
+            dirStr                 = lastSlash == std::string::npos ? std::string(Utils::Vfs::kResourceMountRoot) : absPathStr.substr(0, lastSlash);
+            filenameStr            = lastSlash == std::string::npos ? absPathStr : absPathStr.substr(lastSlash + 1);
+        }
+        else {
+            std::filesystem::path absPath = std::filesystem::absolute(filepath);
+            absPathStr                    = absPath.string();
+            dirStr                        = absPath.parent_path().string();
+            filenameStr                   = absPath.filename().string();
+        }
 
         // Load the module directly via C++ (bypasses JS require() which
         // only allows relative paths). This is the internal entry point
@@ -677,8 +741,7 @@ namespace Framework::Scripting {
 
         // Use LoadModule with a synthetic relative path "./<filename>"
         // resolved from the file's parent directory
-        std::string filename = absPath.filename().string();
-        v8::MaybeLocal<v8::Value> result = LoadModule("./" + filename, dirStr);
+        v8::MaybeLocal<v8::Value> result = LoadModule("./" + filenameStr, dirStr);
 
         if (result.IsEmpty()) {
             if (tryCatch.HasCaught()) {

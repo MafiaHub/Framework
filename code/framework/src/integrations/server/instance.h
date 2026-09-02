@@ -30,6 +30,7 @@
 #include "utils/command_listener.h"
 #include "utils/command_processor.h"
 
+#include <utils/crypto.h>
 #include <utils/lifecycle.h>
 
 #include <atomic>
@@ -38,6 +39,7 @@
 #include <sig.h>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -167,9 +169,17 @@ namespace Framework::Integrations::Server {
         std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
         std::unordered_set<uint64_t> _readyPlayerGuids;
 
+        // Loaded from (or written to) the staging directory; sent with the resource list.
+        Utils::Crypto::Key _packageKey {};
+        std::string _packageKeyHex;
+        bool _packageKeyReady = false;
+        std::unordered_map<std::string, std::string> _packageHashes;
+
         void InitEndpoints();
         void InitNetworkingMessages();
         void InitAssetStreamer();
+        // Directory the built .fwpak containers are staged in for the streamer to upload.
+        std::string GetPackageStagingDir() const;
         // Re-sync a hot-reloaded/started client resource to connected clients.
         void BroadcastResourceRefresh(const std::string &name);
         // Tell connected clients to stop a client resource.

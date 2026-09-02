@@ -169,6 +169,41 @@ add_subdirectory(libnode)
 # Build v8pp (header-only V8 binding library)
 add_subdirectory(v8pp)
 
+# PhysicsFS 3.2.0 and miniz 3.0.2 both declare cmake_minimum_required(VERSION 3.0), which CMake 4
+# refuses outright. Raise the policy floor for just these two rather than patching vendored files,
+# so updating them stays a plain directory replace.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+
+# Build PhysicsFS (zlib license) - the virtual file system backing client resource packages.
+# Only the ZIP archiver is kept: resource packages are ZIP payloads, and every other format is
+# dead weight (and extra parsers exposed to server-supplied bytes).
+set(PHYSFS_ARCHIVE_ZIP ON CACHE BOOL "" FORCE)
+set(PHYSFS_ARCHIVE_7Z OFF CACHE BOOL "" FORCE)
+set(PHYSFS_ARCHIVE_GRP OFF CACHE BOOL "" FORCE)
+set(PHYSFS_ARCHIVE_WAD OFF CACHE BOOL "" FORCE)
+set(PHYSFS_ARCHIVE_HOG OFF CACHE BOOL "" FORCE)
+set(PHYSFS_ARCHIVE_MVL OFF CACHE BOOL "" FORCE)
+set(PHYSFS_ARCHIVE_QPAK OFF CACHE BOOL "" FORCE)
+set(PHYSFS_ARCHIVE_SLB OFF CACHE BOOL "" FORCE)
+set(PHYSFS_ARCHIVE_ISO9660 OFF CACHE BOOL "" FORCE)
+set(PHYSFS_ARCHIVE_VDF OFF CACHE BOOL "" FORCE)
+set(PHYSFS_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(PHYSFS_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(PHYSFS_BUILD_TEST OFF CACHE BOOL "" FORCE)
+set(PHYSFS_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(PHYSFS_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+add_subdirectory(physfs)
+
+# Build miniz (MIT) - ZIP writing for the server-side resource packager. PhysicsFS bundles its
+# own miniz for reading only, and it is private to that library.
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_HEADER_ONLY OFF CACHE BOOL "" FORCE)
+set(INSTALL_PROJECT OFF CACHE BOOL "" FORCE)
+add_subdirectory(miniz)
+
+unset(CMAKE_POLICY_VERSION_MINIMUM)
+
 # Build OS specific libraries
 if (WIN32)
     # Build other win32 deps

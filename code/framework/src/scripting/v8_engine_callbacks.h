@@ -16,6 +16,7 @@
 #include "resource/resource_manager.h"
 
 #include <logging/logger.h>
+#include <utils/vfs.h>
 
 #include <fstream>
 #include <memory>
@@ -28,24 +29,13 @@ namespace Framework::Scripting::V8EngineCallbacks {
 
     // Reads an entire file into a string (with size limit)
     inline bool ReadFileContents(const std::string &filepath, std::string &outContent) {
-        std::ifstream file(filepath, std::ios::binary | std::ios::ate);
-        if (!file.is_open()) {
+        if (!Utils::Vfs::Get().Read(filepath, outContent)) {
             return false;
         }
-        auto size = file.tellg();
-        if (size < 0 || size > kMaxModuleFileSize) {
+        if (outContent.size() > static_cast<size_t>(kMaxModuleFileSize)) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
                 "Module file too large ({} bytes, max {}): {}",
-                static_cast<long long>(size), static_cast<long long>(kMaxModuleFileSize), filepath);
-            return false;
-        }
-        file.seekg(0, std::ios::beg);
-        outContent.resize(static_cast<size_t>(size));
-        file.read(outContent.data(), size);
-        if (file.fail() || file.gcount() != size) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
-                "Failed to read module file (read {} of {} bytes): {}",
-                static_cast<long long>(file.gcount()), static_cast<long long>(size), filepath);
+                outContent.size(), static_cast<long long>(kMaxModuleFileSize), filepath);
             outContent.clear();
             return false;
         }

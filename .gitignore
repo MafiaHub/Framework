@@ -66,3 +66,6 @@ vendors/directxtk/MakeSpriteFont/obj/Release/MakeSpriteFont.csproj.AssemblyRefer
 # MafiaHub Services build outputs
 code/framework/src/services/lib/Debug/
 code/framework/src/services/lib/Release/
+
+# Server-side staging for encrypted client resource packages
+.packages/

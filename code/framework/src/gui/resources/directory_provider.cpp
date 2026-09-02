@@ -8,6 +8,8 @@
 
 #include "directory_provider.h"
 
+#include <utils/vfs.h>
+
 #include <system_error>
 #include <utility>
 
@@ -22,6 +24,11 @@ namespace Framework::GUI::Resources {
 
     void DirectoryProvider::MarkImmutable(std::string pathPrefix) {
         _immutablePrefixes.push_back(std::move(pathPrefix));
+    }
+
+    void DirectoryProvider::SetVirtualPrefix(std::string prefix) {
+        std::scoped_lock lock(_mutex);
+        _virtualPrefix = std::move(prefix);
     }
 
     void DirectoryProvider::SetRoot(std::filesystem::path root) {
@@ -43,7 +50,8 @@ namespace Framework::GUI::Resources {
         }
 
         std::error_code error;
-        const std::filesystem::path file = std::filesystem::weakly_canonical(root / std::filesystem::path(path).lexically_normal(), error);
+        const std::filesystem::path joined = root / std::filesystem::path(path).lexically_normal();
+        const std::filesystem::path file   = std::filesystem::weakly_canonical(joined, error);
         if (error) {
             return nullptr;
         }
@@ -54,6 +62,30 @@ namespace Framework::GUI::Resources {
         const std::filesystem::path relative = std::filesystem::relative(file, root, error);
         if (error || relative.empty() || *relative.begin() == "..") {
             return nullptr;
+        }
+
+        // After the traversal guard, so a mounted path gets the same containment rules as a file.
+        // Contains() rather than Read(): Read() falls back to disk and would buffer a real file
+        // that FileStream should be streaming.
+        const auto &vfs = Utils::Vfs::Get();
+        std::string virtualPath;
+        {
+            std::scoped_lock lock(_mutex);
+            if (!_virtualPrefix.empty()) {
+                virtualPath = Utils::Vfs::NormalizeVirtual(_virtualPrefix + "/" + path);
+            }
+        }
+
+        std::string mounted;
+        if (!virtualPath.empty() && vfs.Contains(virtualPath) && vfs.Read(virtualPath, mounted)) {
+            stat.size = static_cast<std::uint64_t>(mounted.size());
+            for (const auto &prefix : _immutablePrefixes) {
+                if (path.rfind(prefix, 0) == 0) {
+                    stat.immutable = true;
+                    break;
+                }
+            }
+            return std::make_unique<MemoryStream>(std::move(mounted));
         }
 
         if (!std::filesystem::is_regular_file(file, error) || error) {

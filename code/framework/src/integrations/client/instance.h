@@ -13,6 +13,8 @@
 #include <utils/result.h>
 #include <external/discord/wrapper.h>
 #include <external/imgui/wrapper.h>
+#include "resource_packages.h"
+
 #include <external/sentry/wrapper.h>
 #include <function2.hpp>
 #include <graphics/renderer.h>
@@ -166,6 +168,8 @@ namespace Framework::Integrations::Client {
         // asset re-sync completes (dev mode). Empty on a normal connect.
         std::vector<Client::Scripting::ServerResourceInfo> _pendingRefreshResources;
 
+        ResourcePackageMounter _packageMounter;
+
         // The server's replicated server.json subset, decoded from the MafiaNet session payload the
         // moment the connection surfaces. Available before the asset phase and before any client
         // script runs, which is what lets a project pick what to load from it.
@@ -182,6 +186,12 @@ namespace Framework::Integrations::Client {
         // Human-readable reason for the last remote disconnection; empty when it was locally
         // initiated (user quit). Set before OnConnectionClosed() fires.
         std::string _lastDisconnectionReason;
+
+        // Removes pre-packaging extracted resource directories left in the asset cache.
+        static void PurgeLegacyPlaintextCache(const std::string &cacheDir);
+
+        // Returns the resources that failed to mount; the caller must not start those.
+        std::vector<std::string> MountResourcePackages(const std::vector<Client::Scripting::ServerResourceInfo> &resources);
 
         // One-shot: serve fw://resources/<resource>/<file> from the asset cache (scripted web views).
         bool _resourceSchemeRegistered {};

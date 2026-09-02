@@ -8,7 +8,10 @@ add_executable(FrameworkTests
         ../framework/src/gui/resources/mime.cpp
         ../framework/src/gui/resources/resource_stream.cpp
         ../framework/src/gui/resources/directory_provider.cpp
-        ../framework/src/gui/resources/memory_provider.cpp)
+        ../framework/src/gui/resources/memory_provider.cpp
+        # Free of CEF and of Integrations::Client::Instance, so the package mounter is testable
+        # without linking FrameworkClient.
+        ../framework/src/integrations/client/resource_packages.cpp)
 
 target_include_directories(FrameworkTests PRIVATE . ../framework/src)
 target_link_libraries(FrameworkTests Framework FrameworkServer libnode)

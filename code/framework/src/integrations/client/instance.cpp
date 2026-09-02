@@ -32,11 +32,13 @@
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 
+#include <algorithm>
 #include <filesystem>
 
 #include <logging/logger.h>
 
 #include "utils/path.h"
+#include "utils/vfs.h"
 #include "utils/profiler.h"
 #include "utils/version.h"
 #include "utils/time.h"
@@ -661,6 +663,18 @@ namespace Framework::Integrations::Client {
             _serverTickRate = payload.tickRate;
 
             _pendingServerResources = payload.resources;
+
+            // A server that predates encrypted resource packages writes a different layout, so the
+            // key lands on whatever followed it and the rest of the stream is garbage. Fail here
+            // rather than acting on thousands of nonsense entries.
+            if (!_packageMounter.SetKey(payload.packageKey) && !_pendingServerResources.empty()) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Server {}:{} did not send a usable resource package key; it is running an incompatible version. Disconnecting.", _currentState.host, _currentState.port);
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+                _pendingServerResources.clear();
+                (void)GetNetworkingEngine()->GetNetworkClient()->Disconnect();
+                return;
+            }
+
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", _pendingServerResources.size());
 
             SetConnectionPhase(ConnectionPhase::Downloading);
@@ -791,6 +805,8 @@ namespace Framework::Integrations::Client {
             // Reset the scripting engine (keeps engine alive, just stops resources)
             _scriptingModule->Reset();
 
+            _packageMounter.Reset();
+
             // Unregister from CoreModules so a subsequent reconnect can re-register
             // without tripping the "already registered" assertion
             CoreModules::SetScriptingModule(nullptr);
@@ -887,8 +903,16 @@ namespace Framework::Integrations::Client {
         const auto appDataPath = Framework::Utils::GetAppDataPathA();
         const auto cacheDir   = fmt::format("{}\\MafiaHubIntegration\\servers\\{}", appDataPath, _currentState.serverIDHash);
 
+        if (!Framework::Utils::Vfs::Get().Init(nullptr)) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not initialize the virtual file system; client resources will not load");
+        }
+
         // Let the system know where our scripts are stored
         SetAssetCachePath(cacheDir);
+
+        // Pre-packaging builds left plaintext resource directories here, which discovery would
+        // still pick up and run unverified. Only .fwpak containers belong in the cache.
+        PurgeLegacyPlaintextCache(cacheDir);
         streamer->SetApplicationDirectory(cacheDir.c_str());
         auto cacheDirHandle = cppfs::fs::open(cacheDir);
 
@@ -954,6 +978,88 @@ namespace Framework::Integrations::Client {
         StartAssetDownload();
     }
 
+    void Instance::PurgeLegacyPlaintextCache(const std::string &cacheDir) {
+        // Sweep every server's cache, not just the one being connected to: extracted plaintext
+        // left by an older build (including server bundles that predate the packaging fix) would
+        // otherwise sit on disk until the user happened to reconnect to that exact server.
+        std::error_code ec;
+        const auto serversRoot = std::filesystem::path(cacheDir).parent_path();
+
+        std::vector<std::filesystem::path> roots;
+        if (!serversRoot.empty() && std::filesystem::exists(serversRoot, ec) && !ec) {
+            for (const auto &server : std::filesystem::directory_iterator(serversRoot, ec)) {
+                if (ec) {
+                    break;
+                }
+                if (server.is_directory(ec) && !ec) {
+                    roots.push_back(server.path());
+                }
+            }
+        }
+        if (roots.empty()) {
+            roots.emplace_back(cacheDir);
+        }
+
+        size_t removed = 0;
+        for (const auto &root : roots) {
+            std::error_code rootError;
+            if (!std::filesystem::exists(root, rootError) || rootError) {
+                continue;
+            }
+            for (const auto &entry : std::filesystem::directory_iterator(root, rootError)) {
+                if (rootError) {
+                    break;
+                }
+                if (!entry.is_directory(rootError) || rootError) {
+                    continue;
+                }
+                std::error_code removeError;
+                const auto count = std::filesystem::remove_all(entry.path(), removeError);
+                if (removeError) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not remove legacy plaintext resource cache '{}': {}", entry.path().string(), removeError.message());
+                    continue;
+                }
+                removed += static_cast<size_t>(count);
+            }
+        }
+
+        if (removed > 0) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Removed {} file(s) of legacy plaintext resource cache", removed);
+        }
+    }
+
+    std::vector<std::string> Instance::MountResourcePackages(const std::vector<Client::Scripting::ServerResourceInfo> &resources) {
+        std::vector<std::string> failed;
+        const auto cacheDir = GetAssetCachePath();
+        if (cacheDir.empty()) {
+            for (const auto &resource : resources) {
+                failed.push_back(resource.name);
+            }
+            return failed;
+        }
+
+        // Bounded so a desynced resource list cannot turn one bad handshake into thousands of
+        // identical log lines.
+        constexpr size_t kMaxReportedFailures = 8;
+        size_t reported                       = 0;
+
+        for (const auto &resource : resources) {
+            std::string error;
+            if (!_packageMounter.Mount(cacheDir, resource.name, resource.packageHash, error)) {
+                if (reported < kMaxReportedFailures) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Refusing client resource '{}': {}", resource.name, error);
+                }
+                ++reported;
+                failed.push_back(resource.name);
+            }
+        }
+
+        if (reported > kMaxReportedFailures) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("{} further client resources were refused", reported - kMaxReportedFailures);
+        }
+        return failed;
+    }
+
     void Instance::OnAssetsDownloaded(bool success) {
         if (success && _deferredInitialAssetProcessingGeneration != 0 && !_resumingDeferredInitialAssetProcessing) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Ignoring duplicate initial asset completion while generation {} is deferred", _deferredInitialAssetProcessingGeneration);
@@ -972,10 +1078,14 @@ namespace Framework::Integrations::Client {
                 && scriptingModule->GetScriptingEngine()->IsInitialized()
                 && !_pendingRefreshResources.empty()) {
                 if (auto *rm = scriptingModule->GetResourceManager()) {
+                    const auto failed = MountResourcePackages(_pendingRefreshResources);
                     for (const auto &res : _pendingRefreshResources) {
+                        if (std::find(failed.begin(), failed.end(), res.name) != failed.end()) {
+                            continue;
+                        }
                         // Newly started server-side: discover from cache first.
                         if (!rm->HasResource(res.name)) {
-                            const std::string resPath = GetAssetCachePath() + "/" + res.name;
+                            const std::string resPath = Framework::Utils::Vfs::ResourcePath(res.name);
                             if (!rm->DiscoverResource(resPath)) {
                                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not discover new client resource '{}' at {}", res.name, resPath);
                                 continue;
@@ -1036,8 +1146,19 @@ namespace Framework::Integrations::Client {
 
                 PostScriptInit();
 
-                // Pass the pending resource list to the scripting module (without triggering download logic)
+                // Before anything is discovered or started. A package that fails verification is
+                // not a resource to skip: the server said it should run and its bytes are not what
+                // the server described, so the session is refused rather than left half-working.
                 if (!_pendingServerResources.empty()) {
+                    const auto failed = MountResourcePackages(_pendingServerResources);
+                    if (!failed.empty()) {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("{} of {} client resource(s) failed verification; refusing to join", failed.size(), _pendingServerResources.size());
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+                        _pendingServerResources.clear();
+                        _packageMounter.Reset();
+                        (void)net->Disconnect();
+                        return;
+                    }
                     scriptingModule->SetServerResourceList(_pendingServerResources);
                 }
 
@@ -1148,6 +1269,7 @@ namespace Framework::Integrations::Client {
         // pages. Reconnecting elsewhere moves that cache under the same origin.
         if (!_resourceProvider) {
             _resourceProvider = std::make_shared<Framework::GUI::Resources::DirectoryProvider>(GetAssetCachePath());
+            _resourceProvider->SetVirtualPrefix(Framework::Utils::Vfs::kResourceMountRoot);
         }
         else {
             _resourceProvider->SetRoot(GetAssetCachePath());

@@ -8,6 +8,8 @@
 
 #include "package_manifest.h"
 
+#include <utils/vfs.h>
+
 #include <fstream>
 
 namespace Framework::Scripting {
@@ -22,16 +24,14 @@ namespace Framework::Scripting {
         _author.clear();
         _mafiahubConfig = MafiaHubConfig {};
 
-        std::ifstream file(filepath);
-        if (!file.is_open()) {
+        std::string contents;
+        if (!Utils::Vfs::Get().Read(filepath, contents)) {
             _error = "Failed to open: " + filepath;
             return false;
         }
 
         try {
-            nlohmann::json json;
-            file >> json;
-            return ParseJson(json);
+            return ParseJson(nlohmann::json::parse(contents));
         } catch (const nlohmann::json::exception &e) {
             _error = "JSON parse error: " + std::string(e.what());
             return false;
@@ -72,6 +72,14 @@ namespace Framework::Scripting {
             _mafiahubConfig.client = mh.value("client", "");
             _mafiahubConfig.priority = mh.value("priority", 0);
             _mafiahubConfig.errorBehavior = mh.value("errorBehavior", "stop");
+
+            if (mh.contains("clientFiles") && mh["clientFiles"].is_array()) {
+                for (const auto &pattern : mh["clientFiles"]) {
+                    if (pattern.is_string() && !pattern.get<std::string>().empty()) {
+                        _mafiahubConfig.clientFiles.push_back(pattern.get<std::string>());
+                    }
+                }
+            }
 
             // Exports
             if (mh.contains("exports") && mh["exports"].is_array()) {

@@ -26,12 +26,18 @@
 #include "builtins/voice.h"
 #include "builtins/web.h"
 
+#include <utils/vfs.h>
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
 
 namespace Framework::Integrations::Client::Scripting {
     namespace {
+        bool IsResourceAvailableLocally(const std::string &resourcePath) {
+            return Framework::Utils::Vfs::Get().Contains(resourcePath + "/package.json");
+        }
+
         bool IsValidResourceName(const std::string &name) {
             if (name.empty()) {
                 return false;
@@ -72,8 +78,9 @@ namespace Framework::Integrations::Client::Scripting {
             _engine->SetSDKRegisterCallback(sdkCallback);
         }
 
-        // Sandbox require() paths to the resource cache directory
-        _engine->SetModuleRootPath(std::filesystem::absolute(_resourceCachePath).string());
+        // Resources are served from the mounted packages, not the cache directory the encrypted
+        // blobs sit in.
+        _engine->SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
 
         // Initialize the V8 engine - no-op if already initialized
         if (_engine->Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
@@ -83,7 +90,7 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Initialize ResourceManager with client-side config
         Framework::Scripting::ResourceManagerConfig config;
-        config.resourcesPath         = _resourceCachePath;
+        config.resourcesPath         = Framework::Utils::Vfs::kResourceMountRoot;
         config.isClient              = true;
         config.cascadeStopDependents = true;
 
@@ -230,14 +237,15 @@ namespace Framework::Integrations::Client::Scripting {
     }
 
     void ClientScriptingModule::SetResourceCachePath(const std::string &path) {
+        // A real directory holding the encrypted blobs; everything downstream addresses the
+        // decrypted contents through the virtual mount root instead.
         _resourceCachePath = path;
-        // Update V8 engine's module root path so require() sandbox matches
         if (_engine) {
-            _engine->SetModuleRootPath(std::filesystem::absolute(path).string());
+            _engine->SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
         }
         if (_resourceManager) {
             Framework::Scripting::ResourceManagerConfig config = _resourceManager->GetConfig();
-            config.resourcesPath                               = path;
+            config.resourcesPath                               = Framework::Utils::Vfs::kResourceMountRoot;
             _resourceManager->SetConfig(config);
         }
     }
@@ -267,8 +275,7 @@ namespace Framework::Integrations::Client::Scripting {
         for (const auto &resource : _serverResourceList) {
             std::string resourcePath = GetResourcePath(resource.name);
 
-            // Check if resource exists locally
-            if (!std::filesystem::exists(resourcePath)) {
+            if (!IsResourceAvailableLocally(resourcePath)) {
                 anyMissing = true;
                 if (_onResourceDownloadNeeded) {
                     _onResourceDownloadNeeded(resource.name, resource.version);
@@ -308,7 +315,7 @@ namespace Framework::Integrations::Client::Scripting {
         bool allDownloaded = true;
         for (const auto &resource : _serverResourceList) {
             std::string path = GetResourcePath(resource.name);
-            if (!std::filesystem::exists(path)) {
+            if (!IsResourceAvailableLocally(path)) {
                 allDownloaded = false;
                 break;
             }
@@ -353,7 +360,7 @@ namespace Framework::Integrations::Client::Scripting {
     }
 
     std::string ClientScriptingModule::GetResourcePath(const std::string &resourceName) const {
-        return (std::filesystem::path(_resourceCachePath) / resourceName).string();
+        return Framework::Utils::Vfs::ResourcePath(resourceName);
     }
 
 } // namespace Framework::Integrations::Client::Scripting

@@ -23,9 +23,14 @@ namespace Framework::Networking::RPC {
         std::string name;
         std::string version;
 
+        // Hex SHA-256 of the resource's .fwpak container; the client refuses a mismatch. Empty
+        // when the resource has no client entry point.
+        std::string packageHash;
+
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, name);
             bs->Serialize(write, version);
+            bs->Serialize(write, packageHash);
         }
     };
 
@@ -38,11 +43,17 @@ namespace Framework::Networking::RPC {
 
         int32_t readyEventId = 0;
         float tickRate = 0.0f;
+
+        // Hex AES-256 key for the resource packages. See
+        // docs/research/client_resource_protection.md for what this does and does not protect.
+        std::string packageKey;
+
         std::vector<ResourceInfo> resources;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, readyEventId);
             bs->Serialize(write, tickRate);
+            bs->Serialize(write, packageKey);
 
             if (write && resources.size() > std::numeric_limits<uint16_t>::max()) {
                 Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("ServerResources holds {} resources, exceeding the wire limit; truncating", resources.size());

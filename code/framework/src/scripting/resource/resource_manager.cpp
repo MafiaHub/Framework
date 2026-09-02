@@ -11,6 +11,8 @@
 #include "../builtins/events.h"
 #include "../builtins/messages.h"
 
+#include <utils/vfs.h>
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -141,6 +143,10 @@ namespace Framework::Scripting {
         // Newest file mtime under a resource directory, in impl-defined clock
         // ticks (monotonic for comparison). 0 if the directory can't be scanned.
         int64_t ComputeResourceMTime(const std::string &path) {
+            // Packaged resources have no files on disk to stat.
+            if (Utils::Vfs::IsVirtualPath(path)) {
+                return 0;
+            }
             std::error_code ec;
             int64_t newest = 0;
             std::filesystem::recursive_directory_iterator it(
@@ -203,10 +209,30 @@ namespace Framework::Scripting {
     size_t ResourceManager::DiscoverResources() {
         size_t count = 0;
 
+        // Deduplicated by DiscoverResource.
+        for (const auto &name : Utils::Vfs::Get().EnumerateDirectories(_config.resourcesPath)) {
+            const std::string mountedPath = _config.resourcesPath + "/" + name;
+            if (Utils::Vfs::Get().Contains(mountedPath + "/package.json")) {
+                if (DiscoverResource(mountedPath)) {
+                    ++count;
+                }
+            }
+        }
+
+        if (Utils::Vfs::IsVirtualPath(_config.resourcesPath)) {
+            if (count == 0) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No resources mounted under {}", _config.resourcesPath);
+            }
+            return count;
+        }
+
         std::filesystem::path resourcesDir(_config.resourcesPath);
-        if (!std::filesystem::exists(resourcesDir)) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resources directory not found: {}", _config.resourcesPath);
-            return 0;
+        std::error_code ec;
+        if (!std::filesystem::exists(resourcesDir, ec) || ec) {
+            if (count == 0) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resources directory not found: {}", _config.resourcesPath);
+            }
+            return count;
         }
 
         for (const auto &entry : std::filesystem::directory_iterator(resourcesDir)) {
@@ -820,36 +846,51 @@ namespace Framework::Scripting {
 
         std::filesystem::path resourceRoot = std::filesystem::path(resource.GetPath());
         std::error_code ec;
-        resourceRoot = std::filesystem::weakly_canonical(resourceRoot, ec);
-        if (ec) {
-            outError = "Failed to resolve resource root path: " + resource.GetPath();
-            return false;
-        }
+        std::string entryPoint;
 
-        std::filesystem::path entryPath(entryField);
-        if (entryPath.is_absolute()) {
-            outError = "Entry point must be a relative path: " + entryField;
-            return false;
+        if (Utils::Vfs::IsVirtualPath(resource.GetPath())) {
+            // Lexical: see Vfs::IsVirtualPath. PhysicsFS resolves nothing outside its mounts, so
+            // a prefix test is the whole containment check.
+            const std::string root = Utils::Vfs::NormalizeVirtual(resource.GetPath());
+            entryPoint             = Utils::Vfs::NormalizeVirtual(root + "/" + entryField);
+            if (root.empty() || entryPoint.empty() || !entryPoint.starts_with(root + "/")) {
+                outError = "Entry point escapes resource directory: " + entryField;
+                return false;
+            }
+            if (!Utils::Vfs::Get().Contains(entryPoint)) {
+                outError = "Entry point not found: " + entryPoint;
+                return false;
+            }
         }
+        else {
+            resourceRoot = std::filesystem::weakly_canonical(resourceRoot, ec);
+            if (ec) {
+                outError = "Failed to resolve resource root path: " + resource.GetPath();
+                return false;
+            }
 
-        std::filesystem::path resolvedEntry =
-            std::filesystem::weakly_canonical(resourceRoot / entryPath, ec);
-        if (ec || !IsPathInsideRoot(resolvedEntry, resourceRoot)) {
-            outError = "Entry point escapes resource directory: " + entryField;
-            return false;
+            std::filesystem::path entryPath(entryField);
+            if (entryPath.is_absolute()) {
+                outError = "Entry point must be a relative path: " + entryField;
+                return false;
+            }
+
+            std::filesystem::path resolvedEntry = std::filesystem::weakly_canonical(resourceRoot / entryPath, ec);
+            if (ec || !IsPathInsideRoot(resolvedEntry, resourceRoot)) {
+                outError = "Entry point escapes resource directory: " + entryField;
+                return false;
+            }
+
+            if (!std::filesystem::exists(resolvedEntry)) {
+                outError = "Entry point not found: " + resolvedEntry.string();
+                return false;
+            }
+            if (!std::filesystem::is_regular_file(resolvedEntry)) {
+                outError = "Entry point is not a regular file: " + resolvedEntry.string();
+                return false;
+            }
+            entryPoint = resolvedEntry.string();
         }
-
-        if (!std::filesystem::exists(resolvedEntry)) {
-            outError = "Entry point not found: " + resolvedEntry.string();
-            return false;
-        }
-
-        if (!std::filesystem::is_regular_file(resolvedEntry)) {
-            outError = "Entry point is not a regular file: " + resolvedEntry.string();
-            return false;
-        }
-
-        const std::string entryPoint = resolvedEntry.string();
         std::string resourceName = resource.GetName();
 
         // Set resource context so Events.on() etc. know which resource is executing
@@ -1016,6 +1057,21 @@ namespace Framework::Scripting {
                 }
 #endif
             }
+        }
+
+        if (Utils::Vfs::IsVirtualPath(_config.resourcesPath)) {
+            const std::string root = Utils::Vfs::NormalizeVirtual(_config.resourcesPath) + "/";
+            const std::string normalised = Utils::Vfs::NormalizeVirtual(path);
+            if (normalised.size() > root.size() && normalised.compare(0, root.size(), root) == 0) {
+                const size_t nameEnd = normalised.find('/', root.size());
+                if (nameEnd != std::string::npos) {
+                    const std::string resourceName = normalised.substr(root.size(), nameEnd - root.size());
+                    if (GetResource(resourceName) != nullptr) {
+                        return resourceName;
+                    }
+                }
+            }
+            return "";
         }
 
         // Get the configured resources root as a canonical path for matching

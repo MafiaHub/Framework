@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 24
+#define UNIT_MAX_MODULES 25
 #include "logging/logger.h"
 #include "unit.h"
 
@@ -24,6 +24,7 @@
 #include "modules/voice_mixer_ut.h"
 #include "modules/voice_ptt_gate_ut.h"
 #include "modules/gui_resources_ut.h"
+#include "modules/resource_package_ut.h"
 
 // Scripting tests
 #include "modules/engine_ut.h"
@@ -50,6 +51,7 @@ int main() {
     UNIT_MODULE(voice_mixer);
     UNIT_MODULE(voice_ptt_gate);
     UNIT_MODULE(gui_resources);
+    UNIT_MODULE(resource_package);
 
     // Scripting tests
     UNIT_MODULE(engine);

@@ -24,6 +24,9 @@ namespace Framework::Scripting {
     struct MafiaHubConfig {
         std::string server;                              // Server entry point
         std::string client;                              // Client entry point
+        // Globs, relative to the resource root, for files shipped to clients alongside the entry
+        // point. Empty falls back to scanning the entry's directory.
+        std::vector<std::string> clientFiles;
         std::vector<ResourceDependency> resourceDependencies;
         std::vector<std::string> exports;
         int priority = 0;

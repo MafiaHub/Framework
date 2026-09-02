@@ -15,6 +15,9 @@ set(FRAMEWORK_SRC
     src/utils/command_listener.cpp
     src/utils/command_processor.cpp
     src/utils/hashing.cpp
+    src/utils/crypto.cpp
+    src/utils/vfs.cpp
+    src/utils/package/package.cpp
     src/utils/path.cpp
     src/utils/safe_string.cpp
     src/utils/states/machine.cpp
@@ -52,6 +55,7 @@ set(FRAMEWORK_SRC
     src/scripting/resource/package_manifest.cpp
     src/scripting/resource/resource.cpp
     src/scripting/resource/resource_manager.cpp
+    src/scripting/resource/resource_packager.cpp
 
     src/jobs/job_system.cpp
     src/jobs/io_tasks.cpp
@@ -89,6 +93,7 @@ set(FRAMEWORK_CLIENT_SRC
     src/external/imgui/widgets/console.cpp
 
     src/integrations/client/instance.cpp
+    src/integrations/client/resource_packages.cpp
     src/integrations/client/networking/engine.cpp
     src/integrations/client/ui/chat_box.cpp
 
@@ -227,6 +232,8 @@ macro(link_shared_deps target_name)
     # Implementation-only vendor headers (PRIVATE - not part of public API)
     # Note: httplib include path is provided by the httplib target (uses split headers when HTTPLIB_COMPILE=ON)
     target_include_directories(${target_name} PRIVATE
+        ${CMAKE_SOURCE_DIR}/vendors/physfs/src
+        ${CMAKE_SOURCE_DIR}/vendors/miniz
         ${CMAKE_SOURCE_DIR}/vendors/cppfs/source/cppfs/include
         ${CMAKE_SOURCE_DIR}/vendors/semver
         ${CMAKE_SOURCE_DIR}/vendors/sentry/include
@@ -245,7 +252,7 @@ macro(link_shared_deps target_name)
     endif()
 
     # Global libraries (v8/v8pp excluded - linked explicitly to scripting targets only)
-    target_link_libraries(${target_name} MafiaNet::MafiaNetStatic glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl semver Hash ftl Tracy::TracyClient)
+    target_link_libraries(${target_name} MafiaNet::MafiaNetStatic glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl semver Hash ftl Tracy::TracyClient physfs-static miniz)
 
     # Required libraries for windows
     if(WIN32)
