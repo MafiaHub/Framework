@@ -147,6 +147,7 @@ if(WIN32)
         src/graphics/backend/d3d12.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
+        src/utils/hooking/pattern_table.cpp
         src/utils/hooking/hooking.cpp
         src/utils/game_module.cpp
         src/utils/memory.cpp
@@ -183,6 +184,7 @@ if(WIN32)
         src/external/epic/manifest.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
+        src/utils/hooking/pattern_table.cpp
         src/utils/hooking/hooking.cpp
         src/utils/memory.cpp)
     target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /FORCE:MULTIPLE /STACK:12000000,4096 /INCREMENTAL:NO /SUBSYSTEM:windows /LAST:.zdata /ENTRY:mainCRTStartup /MANIFEST:EMBED /MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/launcher.manifest)

@@ -69,3 +69,6 @@ code/framework/src/services/lib/Release/
 
 # Server-side staging for encrypted client resource packages
 .packages/
+
+# Python bytecode from the repo scripts
+__pycache__/
