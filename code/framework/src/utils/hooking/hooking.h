@@ -162,6 +162,11 @@ namespace hook {
         return reinterpret_cast<TRet(__thiscall *)(TArgs...)>(address)(args...);
     }
 
+    template <typename TRet = void, typename... TArgs>
+    constexpr inline TRet stdcall_call(uintptr_t address, TArgs... args) {
+        return reinterpret_cast<TRet(__stdcall *)(TArgs...)>(address)(args...);
+    }
+
     template <typename AddressType>
     inline void nop(AddressType address, size_t length) {
         adjust_base(address);
