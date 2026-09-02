@@ -16,6 +16,7 @@
 #include <logging/logger.h>
 
 #include <filesystem>
+#include <memory>
 
 namespace Framework::External::Sentry {
     namespace {
@@ -51,17 +52,18 @@ namespace Framework::External::Sentry {
     } // namespace
 
     Utils::Result<void, Framework::Error> Wrapper::Init(const InitOptions &options) {
-        // Build the options payload
-        sentry_options_t *opts = sentry_options_new();
-        sentry_options_set_dsn(opts, options.dsn.c_str());
+        // sentry_init takes ownership below; every path that bails out before that
+        // has to free the payload itself, so let a guard own it until then.
+        std::unique_ptr<sentry_options_t, decltype(&sentry_options_free)> opts(sentry_options_new(), sentry_options_free);
+        sentry_options_set_dsn(opts.get(), options.dsn.c_str());
 
         if (!options.release.empty()) {
-            sentry_options_set_release(opts, options.release.c_str());
+            sentry_options_set_release(opts.get(), options.release.c_str());
         }
         if (!options.environment.empty()) {
-            sentry_options_set_environment(opts, options.environment.c_str());
+            sentry_options_set_environment(opts.get(), options.environment.c_str());
         }
-        sentry_options_set_max_breadcrumbs(opts, static_cast<size_t>(options.maxBreadcrumbs));
+        sentry_options_set_max_breadcrumbs(opts.get(), static_cast<size_t>(options.maxBreadcrumbs));
 
         std::string handlerName = "crashpad_handler.exe";
 #if defined(__APPLE__) || defined(__linux__)
@@ -85,20 +87,20 @@ namespace Framework::External::Sentry {
             }
         }
 
-        sentry_options_set_handler_path(opts, breakpadFile.path().c_str());
-        sentry_options_set_database_path(opts, cacheDirectory.path().c_str());
+        sentry_options_set_handler_path(opts.get(), breakpadFile.path().c_str());
+        sentry_options_set_database_path(opts.get(), cacheDirectory.path().c_str());
 
         // Crashpad reads attachments lazily at crash time, so cef.log carries the CHECK/FATAL
         // line CEF writes before it fast-fails. Registered before init so the handler knows it.
         const std::string cefLog = std::filesystem::absolute(std::filesystem::path(options.handlerPath) / "logs" / "cef.log").string();
-        sentry_options_add_attachment(opts, cefLog.c_str());
+        sentry_options_add_attachment(opts.get(), cefLog.c_str());
 
         for (const auto &attachment : options.attachments) {
             const std::string absolute = std::filesystem::absolute(std::filesystem::path(attachment)).string();
-            sentry_options_add_attachment(opts, absolute.c_str());
+            sentry_options_add_attachment(opts.get(), absolute.c_str());
         }
 
-        if (sentry_init(opts) != 0) {
+        if (sentry_init(opts.release()) != 0) {
             return Framework::Error("Failed to initialize Sentry");
         }
         _initialized = true;
