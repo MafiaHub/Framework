@@ -51,6 +51,10 @@ namespace Framework::Voice {
     constexpr uint32_t kDefaultPushToTalkReleaseMs = 100;
     constexpr uint32_t kMaxPushToTalkReleaseMs     = 2000;
 
+    // A talker counts as stopped after this long without a frame. Shorter flickers mid-sentence:
+    // VAD punches holes between words and RakVoice flushes on a 50ms throttle.
+    constexpr uint32_t kTalkingTimeoutMs = 300;
+
     // A speaker's decoder is released after this long without a frame.
     constexpr uint32_t kSpeakerSilenceTimeoutMs = 2000;
 

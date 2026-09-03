@@ -370,6 +370,8 @@ namespace Framework::Voice {
         for (size_t i = 0; i < _admitted.size(); i++) {
             ReleaseAdmitted(static_cast<int>(i));
         }
+        _localTalking      = false;
+        _localTalkingUntil = 0;
 
         _voice.Deinit();
         _voice.SetRelayMode(false);
@@ -525,11 +527,13 @@ namespace Framework::Voice {
 
     void VoiceClient::PumpCapture() {
         if (!_capture.IsRunning()) {
-            _localLevel = 0.0f;
+            _localLevel   = 0.0f;
+            _localTalking = false;
             return;
         }
 
-        const bool transmit = _sessionOpen && !_inputSuppressed && !_transmitBlocked && _ptt.IsOpen(Utils::Time::GetTime());
+        const int64_t nowMs = Utils::Time::GetTime();
+        const bool transmit = _sessionOpen && !_inputSuppressed && !_transmitBlocked && _ptt.IsOpen(nowMs);
 
         // Drained whether or not we transmit: left alone the ring fills, and the next
         // push-to-talk press would send all of it before anything the player just said.
@@ -544,6 +548,13 @@ namespace Framework::Voice {
         }
 
         _transmitting = transmit && frames > 0;
+
+        // Debounced like the server's inbound frames, so a tick that drained nothing does not
+        // flicker the edge. Closing push-to-talk cuts it immediately.
+        if (_transmitting) {
+            _localTalkingUntil = nowMs + static_cast<int64_t>(kTalkingTimeoutMs);
+        }
+        _localTalking = transmit && nowMs < _localTalkingUntil;
 
         // From what we send, so a blocked transmit reads as silence. A tick with no frame holds.
         if (frames > 0) {
@@ -597,6 +608,7 @@ namespace Framework::Voice {
                 _admitted[slot].lastFrame  = nowMs;
                 _admitted[slot].audioUntil = nowMs + submitted * kFrameMs + kEnvelopeHoldSlackMs;
                 _admitted[slot].level      = FollowEnvelope(_admitted[slot].level, loudest, _envelopeStep);
+
             }
         }
 

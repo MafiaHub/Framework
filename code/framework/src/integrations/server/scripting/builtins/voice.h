@@ -30,6 +30,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         static void JS_SetLocalMute(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_IsLocallyMuted(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_IsPlayerVoiceEnabled(const v8::FunctionCallbackInfo<v8::Value> &info);
+        static void JS_IsPlayerTalking(const v8::FunctionCallbackInfo<v8::Value> &info);
     };
 
 } // namespace Framework::Integrations::Server::Scripting::Builtins

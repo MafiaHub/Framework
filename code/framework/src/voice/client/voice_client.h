@@ -212,6 +212,15 @@ namespace Framework::Voice {
             return _localLevel;
         }
 
+        // --- talking state ---
+
+        // Whether the local player is speaking, debounced so a tick that drained no capture
+        // frame does not read as a stop. Remote talkers are deliberately absent: what this
+        // client hears is a mixer detail, not a fact about the other player.
+        bool IsLocalTalking() const {
+            return _localTalking;
+        }
+
         // --- spatialisation ---
 
         // The one thing the framework cannot derive itself, since it depends on the game
@@ -330,6 +339,9 @@ namespace Framework::Voice {
         bool _transmitting    = false;
         bool _preferenceSent  = false;
         float _localLevel     = 0.0f;
+        bool _localTalking = false;
+        // Holds our own state across a tick that drained no capture frame.
+        int64_t _localTalkingUntil = 0;
         // One step per tick, shared by every envelope.
         int64_t _envelopeMs = 0;
         float _envelopeStep = 0.0f;

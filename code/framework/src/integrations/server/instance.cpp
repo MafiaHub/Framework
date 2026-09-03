@@ -1065,6 +1065,49 @@ namespace Framework::Integrations::Server {
         resourceManager->GetEvents().EmitReserved(isolate, context, "consoleCommand", eventArgs);
     }
 
+    void Instance::DispatchVoiceTalkingChanges() {
+        // Drained even without scripting, or the relay's queue grows for the life of the process.
+        _voiceServer.DrainTalkingChanges(_voiceTalkingChanges);
+        if (_voiceTalkingChanges.empty()) {
+            return;
+        }
+
+        auto *engine          = _scriptingModule ? _scriptingModule->GetEngine() : nullptr;
+        auto *resourceManager = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
+        const bool scripting  = engine != nullptr && resourceManager != nullptr && engine->IsInitialized();
+
+        auto *networking  = GetNetworkingEngine();
+        auto *server      = networking ? networking->GetNetworkServer() : nullptr;
+        auto *replication = server ? server->GetReplicationManager() : nullptr;
+
+        for (const Voice::TalkingChange &change : _voiceTalkingChanges) {
+            // A peer whose viewer is already gone is skipped rather than reported against a
+            // network id that no longer names anyone.
+            auto *viewer = replication ? replication->GetViewer(static_cast<MafiaNet::PeerGuid>(change.guid)) : nullptr;
+            if (!viewer) {
+                continue;
+            }
+
+            const uint64_t networkId = static_cast<uint64_t>(viewer->GetNetworkID());
+            OnPlayerVoiceStateChanged(networkId, change.talking);
+
+            if (!scripting) {
+                continue;
+            }
+
+            v8::Isolate *isolate = engine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            std::vector<v8::Local<v8::Value>> args;
+            args.push_back(WrapScriptPlayer(isolate, networkId));
+            resourceManager->GetEvents().EmitReserved(isolate, context, change.talking ? "playerVoiceStart" : "playerVoiceStop", args);
+        }
+    }
+
     void Instance::Shutdown() {
         if (_shuttingDown) {
             return;
@@ -1143,6 +1186,8 @@ namespace Framework::Integrations::Server {
                 });
                 _voiceServer.Update();
             }
+
+            DispatchVoiceTalkingChanges();
 
             if (_scriptingModule) {
                 FW_PROFILE_SCOPE_N("Server::Scripting");

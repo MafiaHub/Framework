@@ -21,6 +21,13 @@ namespace Framework::Networking {
 } // namespace Framework::Networking
 
 namespace Framework::Voice {
+    // One player starting or stopping talking. Queued rather than dispatched inline: the edges
+    // are found inside a packet handler, where a script handler could re-enter the relay.
+    struct TalkingChange {
+        uint64_t guid = 0;
+        bool talking  = false;
+    };
+
     // Server half of voice: owns the routing rule and forwards frames. Deliberately never
     // initialises a codec — RakVoice is attached purely so its relay path can forward
     // payloads, which is what keeps voice off the server's CPU budget.
@@ -65,6 +72,13 @@ namespace Framework::Voice {
         // Called by the network layer for every ID_RAKVOICE_RELAY_DATA packet.
         void OnVoiceFrame(MafiaNet::Packet *packet);
 
+        // Whether a player is emitting voice right now.
+        bool IsPlayerTalking(uint64_t guid) const;
+
+        // Moves the edges accumulated since the last call into `out`, which is cleared first.
+        // Update() must have run this tick for the stops to be current.
+        void DrainTalkingChanges(std::vector<TalkingChange> &out);
+
         // The client's own voice setting, from the VoicePreference RPC.
         void OnPlayerPreference(uint64_t guid, bool enabled);
 
@@ -80,6 +94,9 @@ namespace Framework::Voice {
 
         const std::vector<MafiaNet::RakNetGUID> &RecipientsFor(uint64_t talker);
 
+        // Queues a start edge on the first frame after silence.
+        void MarkTalking(uint64_t talker, int64_t nowMs);
+
         // A rule changed, so every cached set is suspect -- not just the talker's own, since
         // one player's change removes them from everyone else's.
         void InvalidateRecipients();
@@ -90,5 +107,8 @@ namespace Framework::Voice {
         VoiceRouter _router;
         std::unordered_map<uint64_t, CachedRecipients> _cache;
         std::vector<uint64_t> _scratch;
+        // Talker -> arrival time of their most recent frame. Presence is the talking flag.
+        std::unordered_map<uint64_t, int64_t> _talking;
+        std::vector<TalkingChange> _talkingChanges;
     };
 } // namespace Framework::Voice

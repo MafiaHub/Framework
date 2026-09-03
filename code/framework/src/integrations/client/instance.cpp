@@ -593,6 +593,35 @@ namespace Framework::Integrations::Client {
 
             _voiceClient.Update();
         }
+
+        DispatchVoiceTalkingChanges();
+    }
+
+    void Instance::DispatchVoiceTalkingChanges() {
+        const bool talking = _voiceClient.IsLocalTalking();
+        if (talking == _voiceLocalTalking) {
+            return;
+        }
+        _voiceLocalTalking = talking;
+
+        OnLocalVoiceStateChanged(talking);
+
+        auto *scriptingModule = static_cast<Client::Scripting::ClientScriptingModule *>(Framework::CoreModules::GetScriptingModule());
+        auto resourceManager  = scriptingModule ? scriptingModule->GetResourceManager() : nullptr;
+        auto *engine          = scriptingModule ? scriptingModule->GetEngine() : nullptr;
+        if (!resourceManager || !engine || !engine->IsInitialized()) {
+            return;
+        }
+
+        v8::Isolate *isolate = engine->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine->GetContext();
+        v8::Context::Scope contextScope(context);
+
+        std::vector<v8::Local<v8::Value>> args;
+        resourceManager->GetEvents().EmitReserved(isolate, context, talking ? "voiceStart" : "voiceStop", args);
     }
 
     void Instance::Render() {

@@ -60,16 +60,53 @@ namespace Framework::Voice {
         _attached = false;
         _server   = nullptr;
         _cache.clear();
+        _talking.clear();
+        _talkingChanges.clear();
     }
 
     void VoiceServer::Update() {
-        // Nothing periodic is required: cache entries expire lazily in RecipientsFor().
-        // Kept as an explicit hook so M2's channel bookkeeping has somewhere to live.
+        // Recipient cache entries expire lazily in RecipientsFor(); the only periodic work is
+        // retiring talkers who went quiet, since silence produces no packet to notice.
+        if (_talking.empty()) {
+            return;
+        }
+
+        const int64_t nowMs = Utils::Time::GetTime();
+        for (auto it = _talking.begin(); it != _talking.end();) {
+            if ((nowMs - it->second) <= static_cast<int64_t>(kTalkingTimeoutMs)) {
+                ++it;
+                continue;
+            }
+
+            const uint64_t guid = it->first;
+            it                  = _talking.erase(it);
+            _talkingChanges.push_back({guid, false});
+        }
+    }
+
+    void VoiceServer::MarkTalking(uint64_t talker, int64_t nowMs) {
+        const auto [it, inserted] = _talking.emplace(talker, nowMs);
+        it->second                = nowMs;
+        if (inserted) {
+            _talkingChanges.push_back({talker, true});
+        }
+    }
+
+    bool VoiceServer::IsPlayerTalking(uint64_t guid) const {
+        return _talking.find(guid) != _talking.end();
+    }
+
+    void VoiceServer::DrainTalkingChanges(std::vector<TalkingChange> &out) {
+        out.clear();
+        out.swap(_talkingChanges);
     }
 
     void VoiceServer::OnPlayerDisconnect(uint64_t guid) {
         _router.RemovePlayer(guid);
         _cache.erase(guid);
+        // No stop edge: the avatar is torn down in ReplicationManager::OnClosedConnection,
+        // which RakNet fires before this runs, so the event could not name the player.
+        _talking.erase(guid);
         InvalidateRecipients();
     }
 
@@ -196,7 +233,12 @@ namespace Framework::Voice {
             return;
         }
 
-        const auto &recipients = RecipientsFor(static_cast<uint64_t>(MafiaNet::ToPeerGuid(origin)));
+        const uint64_t talker = static_cast<uint64_t>(MafiaNet::ToPeerGuid(origin));
+
+        // Above the recipient check: a talker with nobody in earshot is still talking.
+        MarkTalking(talker, Utils::Time::GetTime());
+
+        const auto &recipients = RecipientsFor(talker);
         if (recipients.empty()) {
             return;
         }

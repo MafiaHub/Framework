@@ -196,6 +196,19 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         info.GetReturnValue().Set(voice != nullptr && !voice->GetRouter().IsPlayerVoiceDisabled(player));
     }
 
+    void Voice::JS_IsPlayerTalking(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate = info.GetIsolate();
+        v8::HandleScope hs(isolate);
+
+        uint64_t player = 0;
+        if (!ResolvePlayer(info, 0, "Voice.isPlayerTalking", player)) {
+            return;
+        }
+
+        auto *voice = Resolve();
+        info.GetReturnValue().Set(voice != nullptr && voice->IsPlayerTalking(player));
+    }
+
     void Voice::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
         if (!isolate || global.IsEmpty()) {
             return;
@@ -217,6 +230,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         attach("setLocalMute", &Voice::JS_SetLocalMute);
         attach("isLocallyMuted", &Voice::JS_IsLocallyMuted);
         attach("isPlayerVoiceEnabled", &Voice::JS_IsPlayerVoiceEnabled);
+        attach("isPlayerTalking", &Voice::JS_IsPlayerTalking);
         global->Set(ctx, v8pp::to_v8(isolate, "Voice"), voiceObj).Check();
 
         auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Voice", "Server-side proximity voice rules: how far voice carries, and who may talk to or hear whom.");
@@ -269,6 +283,10 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isPlayerVoiceEnabled",
             v8pp::metadata::docs("boolean", {v8pp::metadata::param("player", "Entity", false, "Player to query.")},
                 "Checks whether a player left voice chat enabled in their own client settings. A preference, not a permission: use setPlayerMuted or setPlayerDeaf to enforce anything.", "True unless the player turned voice chat off.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isPlayerTalking",
+            v8pp::metadata::docs("boolean", {v8pp::metadata::param("player", "Entity", false, "Player to query.")},
+                "Checks whether a player is speaking right now. Tracks speech rather than the push-to-talk key: silence is dropped before it reaches the server, and the state clears shortly after the last frame. The same signal raises the playerVoiceStart and playerVoiceStop events.",
+                "True while the player's voice is reaching the server.")));
     }
 
 } // namespace Framework::Integrations::Server::Scripting::Builtins

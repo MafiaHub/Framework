@@ -166,6 +166,8 @@ namespace Framework::Integrations::Server {
         // Proximity voice relay. Value member: it holds no resources until Init attaches it to
         // the peer, so a mod that never enables voice pays nothing beyond the empty maps.
         Voice::VoiceServer _voiceServer;
+        // Reused every tick so the drain never allocates.
+        std::vector<Voice::TalkingChange> _voiceTalkingChanges;
         std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
         std::unordered_set<uint64_t> _readyPlayerGuids;
 
@@ -196,6 +198,8 @@ namespace Framework::Integrations::Server {
         
         void HandleCommand(std::string_view command);
         void EmitConsoleCommand(const std::string &command, const std::vector<std::string> &args);
+        // Runs once per tick, after the relay's own update has retired the talkers who went quiet.
+        void DispatchVoiceTalkingChanges();
 
       public:
         Instance();
@@ -230,6 +234,14 @@ namespace Framework::Integrations::Server {
         virtual void OnChatCommand(uint64_t senderNetworkId, const std::string &text, const std::string &command, const std::vector<std::string> &args) {
             (void)senderNetworkId, (void)text, (void)command, (void)args;
         }
+        // A player started or stopped talking; also emitted as the "playerVoiceStart" /
+        // "playerVoiceStop" events. Derived from relayed frames, so it tracks speech rather than
+        // the push-to-talk key, and the stop trails the last frame by kTalkingTimeoutMs. A
+        // disconnect ends talking without a stop; clean up on OnPlayerDisconnect too.
+        virtual void OnPlayerVoiceStateChanged(uint64_t networkId, bool talking) {
+            (void)networkId, (void)talking;
+        }
+
         // A console line no built-in command claimed; also emitted as the "consoleCommand" event.
         virtual void OnConsoleCommand(const std::string &text, const std::string &command, const std::vector<std::string> &args) {
             (void)text, (void)command, (void)args;

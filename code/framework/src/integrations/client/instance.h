@@ -208,6 +208,10 @@ namespace Framework::Integrations::Client {
         // Unconditional: no InstanceOptions switch. A client with no microphone degrades to
         // listen-only rather than opting out.
         Voice::VoiceClient _voiceClient;
+        bool _voiceLocalTalking = false;
+
+        // Runs after the voice pump, never from inside it: a handler is free to call back into Voice.
+        void DispatchVoiceTalkingChanges();
 
         void InitNetworkingMessages();
         void InitAssetDownloader();
@@ -269,6 +273,13 @@ namespace Framework::Integrations::Client {
         }
         virtual void OnChatMessageReceived(const Framework::Networking::RPC::ChatMessage &msg) {
             (void)msg;
+        }
+
+        // The local player started or stopped talking; also emitted as the "voiceStart" /
+        // "voiceStop" events. Client-side voice is local only: who else is talking is the
+        // server's answer to give, not this client's mixer's.
+        virtual void OnLocalVoiceStateChanged(bool talking) {
+            (void)talking;
         }
 
         // Deep link (custom URL protocol) that launched the client. Fires once from Update() after
