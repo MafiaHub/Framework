@@ -500,15 +500,21 @@ namespace Framework::Scripting {
         // Start dependencies first
         auto deps = GetDependencies(name);
         for (const auto &depName : deps) {
-            // Uninstalled optional dependency: ValidateDependencies already let it through, so
-            // recursing here would fail the dependent with "Resource not found".
-            if (!HasResource(depName) && IsDependencyOptional(name, depName)) {
+            const bool optional = IsDependencyOptional(name, depName);
+
+            // ValidateDependencies already let this one through; recursing would undo that with "Resource not found".
+            if (!HasResource(depName) && (optional || _config.warnOnMissingDependency)) {
                 continue;
             }
 
             if (!IsResourceRunning(depName)) {
                 auto result = StartResource(depName);
                 if (!result) {
+                    // Installed-but-broken has to degrade like missing, or 'optional' means two things.
+                    if (optional) {
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' continues without optional dependency '{}': {}", name, depName, result.GetError());
+                        continue;
+                    }
                     return ResourceOperationResult("Failed to start dependency '" + depName + "': " + result.GetError());
                 }
             }

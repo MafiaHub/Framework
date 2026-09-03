@@ -615,6 +615,72 @@ MODULE(resource_manager, {
         TestManagerHelper::Cleanup();
     });
 
+    IT("an installed optional dependency that fails to start does not fail the dependent", {
+        TestManagerHelper::Cleanup();
+        // No server/main.js is written, so this one fails with "Script not found".
+        TestManagerHelper::CreateTestResource("opt-broken", R"({
+            "name": "opt-broken",
+            "version": "1.0.0",
+            "mafiahub": {
+                "serverScripts": ["server/main.js"]
+            }
+        })");
+        TestManagerHelper::CreateTestResource("opt-tolerant", R"({
+            "name": "opt-tolerant",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "opt-broken", "optional": true}]
+            }
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        manager.StartAll();
+        EQUALS(manager.IsResourceRunning("opt-broken"), false);
+        EQUALS(manager.IsResourceRunning("opt-tolerant"), true);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("warnOnMissingDependency starts a resource whose required dependency is absent", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("warn-user", R"({
+            "name": "warn-user",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "warn-absent"}]
+            }
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath            = TestManagerHelper::GetTestResourcePath();
+        config.warnOnMissingDependency  = true;
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        auto result = manager.StartAll();
+        EQUALS(static_cast<bool>(result), true);
+        // Validation only warns, so the start gate has to let the dependency through too.
+        EQUALS(manager.IsResourceRunning("warn-user"), true);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
     // ==================== Statistics ====================
 
     IT("GetRunningResourceCount returns zero when no resources running", {
