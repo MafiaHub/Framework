@@ -681,6 +681,36 @@ MODULE(resource_manager, {
         TestManagerHelper::Cleanup();
     });
 
+    IT("a mistyped optional flag keeps the resource and treats the dependency as required", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("badflag-user", R"({
+            "name": "badflag-user",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "badflag-absent", "optional": "true"}]
+            }
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        // The manifest still parses, so the resource is discovered rather than dropped.
+        EQUALS(manager.HasResource("badflag-user"), true);
+
+        auto result = manager.StartAll();
+        EQUALS(static_cast<bool>(result), false);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
     // ==================== Statistics ====================
 
     IT("GetRunningResourceCount returns zero when no resources running", {

@@ -8,6 +8,7 @@
 
 #include "package_manifest.h"
 
+#include <logging/logger.h>
 #include <utils/vfs.h>
 
 #include <fstream>
@@ -115,9 +116,15 @@ namespace Framework::Scripting {
                         rd.name = dep.get<std::string>();
                         rd.version = "*";
                     } else if (dep.is_object()) {
-                        rd.name = dep.value("name", "");
-                        rd.version = dep.value("version", "*");
-                        rd.optional = dep.value("optional", false);
+                        // value() throws type_error.302 on a mismatch, which would drop the whole resource over one mistyped field.
+                        const auto str = [&](const char *key, const char *fallback) { const auto it = dep.find(key); return (it != dep.end() && it->is_string()) ? it->get<std::string>() : fallback; };
+                        rd.name = str("name", "");
+                        rd.version = str("version", "*");
+                        const auto optionalIt = dep.find("optional");
+                        rd.optional = optionalIt != dep.end() && optionalIt->is_boolean() && optionalIt->get<bool>();
+                        if (optionalIt != dep.end() && !optionalIt->is_boolean()) {
+                            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Dependency '{}': 'optional' must be a boolean; treating it as required", rd.name);
+                        }
                     }
                     if (!rd.name.empty()) {
                         _mafiahubConfig.resourceDependencies.push_back(rd);
