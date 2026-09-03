@@ -89,10 +89,22 @@ namespace Framework::Networking {
         NetworkPeer();
         ~NetworkPeer();
 
+        // Major component of a MAJOR.MINOR.PATCH version, or the whole string when it carries no dot.
+        static std::string BuildTokenMajor(const std::string &version) {
+            const auto dot = version.find('.');
+            return dot == std::string::npos ? version : version.substr(0, dot);
+        }
+
         // Single source of truth for the gated build identity — must produce the same string on both
         // peers or the challenge fails.
+        //
+        // The Framework and mod versions are reduced to their major component: by the documented
+        // semantics only a major bump moves the wire format, so a patch or minor release on either
+        // must not lock out peers that have not rebuilt. The game version is kept whole — it tracks
+        // the game executable, not our release cadence, and a different game build shifts the
+        // pattern addresses the mod is compiled against.
         static std::string BuildToken(const std::string &gameName, const std::string &gameVersion, const std::string &fwVersion, const std::string &modVersion) {
-            return gameName + '|' + gameVersion + '|' + fwVersion + '|' + modVersion;
+            return gameName + '|' + gameVersion + '|' + BuildTokenMajor(fwVersion) + '|' + BuildTokenMajor(modVersion);
         }
 
         // Register the local build token (see BuildToken). Call before connecting/accepting.
