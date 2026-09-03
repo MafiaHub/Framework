@@ -14,6 +14,7 @@
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 
@@ -483,6 +484,132 @@ MODULE(resource_manager, {
 
         auto dependents = manager.GetDependents("parent-res");
         EQUALS(dependents.count("child-res"), 1u);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("StartAll skips a missing optional dependency", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("opt-user", R"({
+            "name": "opt-user",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "opt-absent", "optional": true}]
+            }
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        auto result = manager.StartAll();
+        EQUALS(static_cast<bool>(result), true);
+        // StartAll reports Ok even when a resource fails to start, so assert on the resource itself.
+        EQUALS(manager.IsResourceRunning("opt-user"), true);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("StartAll fails on a missing required dependency", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("req-user", R"({
+            "name": "req-user",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "req-absent"}]
+            }
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        auto result = manager.StartAll();
+        EQUALS(static_cast<bool>(result), false);
+        EQUALS(result.GetError(), std::string("Resource 'req-user' depends on missing resource 'req-absent'"));
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("optional dependency still orders the load when it is installed", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("opt-present", R"({
+            "name": "opt-present",
+            "version": "1.0.0"
+        })");
+        TestManagerHelper::CreateTestResource("opt-consumer", R"({
+            "name": "opt-consumer",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "opt-present", "optional": true}]
+            }
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        auto order      = manager.GetLoadOrder();
+        auto providerIt = std::find(order.begin(), order.end(), "opt-present");
+        auto consumerIt = std::find(order.begin(), order.end(), "opt-consumer");
+        EQUALS(providerIt != order.end(), true);
+        EQUALS(consumerIt != order.end(), true);
+        EQUALS(providerIt < consumerIt, true);
+
+        manager.StartAll();
+        EQUALS(manager.IsResourceRunning("opt-present"), true);
+        EQUALS(manager.IsResourceRunning("opt-consumer"), true);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("a dependency declared both optional and required stays required", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("dup-user", R"({
+            "name": "dup-user",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [
+                    {"name": "dup-absent", "optional": true},
+                    {"name": "dup-absent"}
+                ]
+            }
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        auto result = manager.StartAll();
+        EQUALS(static_cast<bool>(result), false);
 
         engine.Shutdown();
         TestManagerHelper::Cleanup();

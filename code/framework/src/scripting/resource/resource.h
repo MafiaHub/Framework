@@ -99,6 +99,9 @@ namespace Framework::Scripting {
         bool HasExport(std::string_view exportName) const;
         bool DependsOn(std::string_view resourceName) const;
 
+        // True only if every declaration of this dependency is marked optional.
+        bool IsOptionalDependency(std::string_view resourceName) const;
+
         // Resolved against the resource root, in execution order: shared scripts first.
         std::vector<std::string> GetServerScripts() const;
         std::vector<std::string> GetClientScripts() const;
