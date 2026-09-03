@@ -23,6 +23,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <utility>
 
 namespace Framework::GUI {
@@ -73,6 +74,90 @@ namespace Framework::GUI {
             }
             __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
                 return false;
+            }
+        }
+
+        const char *CefResultCodeName(int code) {
+            switch (code) {
+            case CEF_RESULT_CODE_NORMAL_EXIT: return "NORMAL_EXIT";
+            case CEF_RESULT_CODE_KILLED: return "KILLED";
+            case CEF_RESULT_CODE_HUNG: return "HUNG";
+            case CEF_RESULT_CODE_KILLED_BAD_MESSAGE: return "KILLED_BAD_MESSAGE";
+            case CEF_RESULT_CODE_GPU_DEAD_ON_ARRIVAL: return "GPU_DEAD_ON_ARRIVAL";
+            case CEF_RESULT_CODE_BAD_PROCESS_TYPE: return "BAD_PROCESS_TYPE";
+            case CEF_RESULT_CODE_MISSING_DATA: return "MISSING_DATA";
+            case CEF_RESULT_CODE_UNSUPPORTED_PARAM: return "UNSUPPORTED_PARAM";
+            case CEF_RESULT_CODE_PROFILE_IN_USE: return "PROFILE_IN_USE";
+            case CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED: return "NORMAL_EXIT_PROCESS_NOTIFIED";
+            case CEF_RESULT_CODE_INVALID_SANDBOX_STATE: return "INVALID_SANDBOX_STATE";
+            case CEF_RESULT_CODE_SYSTEM_RESOURCE_EXHAUSTED: return "SYSTEM_RESOURCE_EXHAUSTED";
+            default: return "unmapped";
+            }
+        }
+
+        const char *CefResultCodeHint(int code) {
+            switch (code) {
+            case CEF_RESULT_CODE_MISSING_DATA: return "a CEF runtime file is missing or unreadable";
+            case CEF_RESULT_CODE_PROFILE_IN_USE: return "another process still holds this cache profile; delete cache/profiles or end leftover cef_subprocess.exe";
+            case CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED: return "the profile was handed to an already-running browser process";
+            case CEF_RESULT_CODE_SYSTEM_RESOURCE_EXHAUSTED: return "the system is out of a resource CEF needs (handles, memory, desktop heap)";
+            default: return "";
+            }
+        }
+
+        std::string ResolveUiLocaleName() {
+            wchar_t name[LOCALE_NAME_MAX_LENGTH] = {};
+            if (LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT), name, LOCALE_NAME_MAX_LENGTH, 0) == 0) {
+                return {};
+            }
+            return std::filesystem::path(name).string();
+        }
+
+        void AuditCefRuntimeFiles(const std::filesystem::path &moduleDir) {
+            const auto logger = Framework::Logging::GetLogger("Web");
+
+            static constexpr const char *kRequiredFiles[] = {"libcef.dll", "cef_subprocess.exe", "chrome_elf.dll", "icudtl.dat", "resources.pak", "chrome_100_percent.pak", "chrome_200_percent.pak", "v8_context_snapshot.bin"};
+
+            std::error_code error;
+            bool complete = true;
+            for (const char *file : kRequiredFiles) {
+                const std::filesystem::path candidate = moduleDir / file;
+                if (!std::filesystem::is_regular_file(candidate, error)) {
+                    logger->error("CEF runtime file is missing: {}", candidate.string());
+                    complete = false;
+                }
+            }
+
+            const std::filesystem::path localesDir = moduleDir / "locales";
+            if (!std::filesystem::is_directory(localesDir, error)) {
+                logger->error("CEF locales directory is missing: {}", localesDir.string());
+                return;
+            }
+
+            std::size_t pakCount = 0;
+            for (const auto &entry : std::filesystem::directory_iterator(localesDir, error)) {
+                if (entry.path().extension() == ".pak") {
+                    ++pakCount;
+                }
+            }
+
+            const std::string uiLocale = ResolveUiLocaleName();
+            if (uiLocale.empty()) {
+                logger->error("CEF locales: {} pak(s) in '{}', OS UI locale could not be resolved", pakCount, localesDir.string());
+            }
+            else {
+                // Chromium falls back from the full name to the bare language.
+                const std::size_t separator          = uiLocale.find('-');
+                const std::filesystem::path exact    = localesDir / (uiLocale + ".pak");
+                const std::filesystem::path language = separator == std::string::npos ? exact : localesDir / (uiLocale.substr(0, separator) + ".pak");
+                const bool localeAvailable           = std::filesystem::is_regular_file(exact, error) || std::filesystem::is_regular_file(language, error);
+
+                logger->error("CEF locales: {} pak(s) in '{}', OS UI locale '{}', matching pak {}", pakCount, localesDir.string(), uiLocale, localeAvailable ? "present" : "MISSING");
+                complete = complete && localeAvailable;
+            }
+
+            if (complete) {
+                logger->error("CEF runtime files are all present; the failure is not a missing file");
             }
         }
 
@@ -186,7 +271,11 @@ namespace Framework::GUI {
         settings.no_sandbox                   = true;
         settings.log_severity                 = LOGSEVERITY_ERROR;
 
-        CefString(&settings.log_file) = rootDir + "/logs/cef.log";
+        std::error_code logDirError;
+        const std::filesystem::path logDir = std::filesystem::path(rootDir) / "logs";
+        std::filesystem::create_directories(logDir, logDirError);
+        const std::filesystem::path cefLogPath = logDir / "cef.log";
+        CefString(&settings.log_file)          = cefLogPath.wstring();
 
         // CEF requires an absolute path for the subprocess executable
         // Resolve next to THIS module (injected DLL), not the process exe.
@@ -198,7 +287,8 @@ namespace Framework::GUI {
         }
         wchar_t exePath[MAX_PATH] = {};
         GetModuleFileNameW(selfModule, exePath, MAX_PATH);
-        std::filesystem::path subprocessPath = std::filesystem::path(exePath).parent_path() / "cef_subprocess.exe";
+        const std::filesystem::path moduleDir        = std::filesystem::path(exePath).parent_path();
+        const std::filesystem::path subprocessPath   = moduleDir / "cef_subprocess.exe";
         CefString(&settings.browser_subprocess_path) = subprocessPath.wstring();
 
         // CEF holds a process-singleton lock on root_cache_path. Stable numbered
@@ -207,20 +297,39 @@ namespace Framework::GUI {
         // crash, so the lowest available profile is reusable on the next run.
         const auto cacheProfile = ClaimCefCacheProfile(rootDir);
         if (!cacheProfile) {
+            Framework::Logging::GetLogger("Web")->error("Failed to claim a CEF cache profile under '{}' ({} profiles tried, last error {}); is the directory writable?", (std::filesystem::path(rootDir) / "cache" / "profiles").string(), kMaxCefCacheProfiles, GetLastError());
             return Error("Failed to claim a persistent CEF cache profile");
         }
         const std::filesystem::path &cacheRoot = cacheProfile->first;
-        _cacheProfileLock                     = cacheProfile->second;
-        CefString(&settings.root_cache_path)  = cacheRoot.wstring();
-        CefString(&settings.cache_path)       = cacheRoot.wstring();
+        _cacheProfileLock                      = cacheProfile->second;
+        CefString(&settings.root_cache_path)   = cacheRoot.wstring();
+        CefString(&settings.cache_path)        = cacheRoot.wstring();
 
         // Create the CEF app
         _cefApp = new CEF::App();
         _cefApp->SetGPUAccelerated(gpuAccelerated);
 
+        Framework::Logging::GetLogger("Web")->debug("Initializing CEF: module '{}', cache profile '{}', log '{}'", moduleDir.string(), cacheRoot.string(), cefLogPath.string());
+
         // Initialize CEF
         CefMainArgs mainArgs(GetModuleHandle(nullptr));
         if (!CefInitialize(mainArgs, settings, _cefApp, nullptr)) {
+            // CefGetExitCode is the only CEF call allowed after a failed init.
+            const int exitCode = CefGetExitCode();
+            const auto logger  = Framework::Logging::GetLogger("Web");
+            logger->error("CefInitialize failed: exit code {} ({})", exitCode, CefResultCodeName(exitCode));
+            if (const char *hint = CefResultCodeHint(exitCode); *hint) {
+                logger->error("{}", hint);
+            }
+            logger->error("CefInitialize inputs: module '{}', cache profile '{}'", moduleDir.string(), cacheRoot.string());
+            AuditCefRuntimeFiles(moduleDir);
+            if (std::filesystem::exists(cefLogPath, logDirError)) {
+                logger->error("Chromium logged the underlying error to '{}'", cefLogPath.string());
+            }
+            else {
+                logger->error("No '{}' was written; CEF bailed before its own logging came up", cefLogPath.string());
+            }
+
             CloseHandle(_cacheProfileLock);
             _cacheProfileLock = INVALID_HANDLE_VALUE;
             return Error("Failed to initialize CEF");
