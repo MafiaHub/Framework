@@ -395,6 +395,10 @@ namespace Framework::Scripting {
         // Compute topological sort for load order
         std::vector<std::string> ComputeLoadOrder() const;
 
+        // Manifest lookup for optionality; the graph only carries names, not the flag.
+        bool IsDependencyOptional(std::string_view name, std::string_view depName) const;
+        bool IsDependencyOptionalUnlocked(std::string_view name, std::string_view depName) const;
+
         // True if the dependency graph has a cycle (can't fully topo-sort).
         bool HasDependencyCycle() const;
 

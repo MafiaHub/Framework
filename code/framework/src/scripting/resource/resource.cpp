@@ -121,6 +121,22 @@ namespace Framework::Scripting {
         return false;
     }
 
+    bool Resource::IsOptionalDependency(std::string_view resourceName) const {
+        const auto &deps = _manifest.GetMafiaHubConfig().resourceDependencies;
+        bool found       = false;
+        for (const auto &dep : deps) {
+            if (dep.name != resourceName) {
+                continue;
+            }
+            // A duplicate declaration that omits the flag makes the whole dependency required.
+            if (!dep.optional) {
+                return false;
+            }
+            found = true;
+        }
+        return found;
+    }
+
     std::string Resource::ResolvePath(const std::string &relative) const {
         if (relative.empty()) {
             return "";

@@ -303,19 +303,39 @@ namespace Framework::Scripting {
         }
     }
 
+    bool ResourceManager::IsDependencyOptionalUnlocked(std::string_view name, std::string_view depName) const {
+        auto it = _resources.find(name);
+        if (it == _resources.end() || !it->second) {
+            return false;
+        }
+        return it->second->IsOptionalDependency(depName);
+    }
+
+    bool ResourceManager::IsDependencyOptional(std::string_view name, std::string_view depName) const {
+        std::scoped_lock resourceLock(_resourcesMutex);
+        return IsDependencyOptionalUnlocked(name, depName);
+    }
+
     bool ResourceManager::ValidateDependencies(std::string &outError) const {
         std::scoped_lock graphLock(_graphMutex);
         std::scoped_lock resourceLock(_resourcesMutex);
 
         for (const auto &[name, deps] : _dependencies) {
             for (const auto &depName : deps) {
-                if (!_resources.contains(depName)) {
-                    if (_config.warnOnMissingDependency) {
-                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' depends on missing resource '{}'", name, depName);
-                    } else {
-                        outError = "Resource '" + name + "' depends on missing resource '" + depName + "'";
-                        return false;
-                    }
+                if (_resources.contains(depName)) {
+                    continue;
+                }
+
+                if (IsDependencyOptionalUnlocked(name, depName)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' skips missing optional dependency '{}'", name, depName);
+                    continue;
+                }
+
+                if (_config.warnOnMissingDependency) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' depends on missing resource '{}'", name, depName);
+                } else {
+                    outError = "Resource '" + name + "' depends on missing resource '" + depName + "'";
+                    return false;
                 }
             }
         }
@@ -480,9 +500,21 @@ namespace Framework::Scripting {
         // Start dependencies first
         auto deps = GetDependencies(name);
         for (const auto &depName : deps) {
+            const bool optional = IsDependencyOptional(name, depName);
+
+            // ValidateDependencies already let this one through; recursing would undo that with "Resource not found".
+            if (!HasResource(depName) && (optional || _config.warnOnMissingDependency)) {
+                continue;
+            }
+
             if (!IsResourceRunning(depName)) {
                 auto result = StartResource(depName);
                 if (!result) {
+                    // Installed-but-broken has to degrade like missing, or 'optional' means two things.
+                    if (optional) {
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' continues without optional dependency '{}': {}", name, depName, result.GetError());
+                        continue;
+                    }
                     return ResourceOperationResult("Failed to start dependency '" + depName + "': " + result.GetError());
                 }
             }
