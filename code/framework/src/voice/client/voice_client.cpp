@@ -25,6 +25,43 @@ namespace Framework::Voice {
         // How much nearer, in squared distance, a newcomer must be to take the farthest
         // talker's slot. Stops two speakers at similar range trading it every tick.
         constexpr float kEvictionHysteresis = 1.2f;
+
+        // Envelope follower time constants, in seconds.
+        constexpr float kEnvelopeAttack  = 0.02f;
+        constexpr float kEnvelopeRelease = 0.12f;
+
+        // Below this the envelope is noise.
+        constexpr float kEnvelopeFloor = 0.02f;
+
+        // A hitch must not slam every mouth shut.
+        constexpr float kMaxEnvelopeStep = 0.25f;
+
+        // Frames arrive in bursts: hold until the queued audio has played out, plus this.
+        constexpr int64_t kEnvelopeHoldSlackMs = 30;
+
+        constexpr int64_t kFrameMs = (kFrameSamples * 1000) / kSampleRate;
+
+        // Full-scale RMS, so levels compare across speakers rather than microphone gains.
+        float FrameLevel(const int16_t *mono, uint32_t samples) {
+            if (mono == nullptr || samples == 0) {
+                return 0.0f;
+            }
+
+            double sum = 0.0;
+            for (uint32_t i = 0; i < samples; i++) {
+                const double s = static_cast<double>(mono[i]) / 32768.0;
+                sum += s * s;
+            }
+
+            return std::min(1.0f, static_cast<float>(std::sqrt(sum / samples)));
+        }
+
+        // Time based, so the same speech drives the same mouth at 30 and at 200 frames a second.
+        float FollowEnvelope(float current, float target, float dt) {
+            const float tau  = target > current ? kEnvelopeAttack : kEnvelopeRelease;
+            const float next = current + (target - current) * (1.0f - std::exp(-dt / tau));
+            return next < kEnvelopeFloor ? 0.0f : next;
+        }
     } // namespace
 
     // ------------------------------------------------------------------------------------
@@ -476,6 +513,10 @@ namespace Framework::Voice {
             return;
         }
 
+        const int64_t nowMs = Utils::Time::GetTime();
+        _envelopeStep       = _envelopeMs != 0 ? std::min(static_cast<float>(nowMs - _envelopeMs) * 0.001f, kMaxEnvelopeStep) : 0.0f;
+        _envelopeMs         = nowMs;
+
         UpdateSession();
         PumpCapture();
         PumpSpeakers();
@@ -484,6 +525,7 @@ namespace Framework::Voice {
 
     void VoiceClient::PumpCapture() {
         if (!_capture.IsRunning()) {
+            _localLevel = 0.0f;
             return;
         }
 
@@ -492,14 +534,24 @@ namespace Framework::Voice {
         // Drained whether or not we transmit: left alone the ring fills, and the next
         // push-to-talk press would send all of it before anything the player just said.
         uint32_t frames = 0;
+        float loudest   = 0.0f;
         while (_capture.ReadFrame(_frame.data())) {
             if (transmit) {
                 _voice.SendFrame(_self, _frame.data());
+                loudest = std::max(loudest, FrameLevel(_frame.data(), static_cast<uint32_t>(_frame.size())));
             }
             frames++;
         }
 
         _transmitting = transmit && frames > 0;
+
+        // From what we send, so a blocked transmit reads as silence. A tick with no frame holds.
+        if (frames > 0) {
+            _localLevel = FollowEnvelope(_localLevel, transmit ? loudest : 0.0f, _envelopeStep);
+        }
+        else if (!transmit) {
+            _localLevel = FollowEnvelope(_localLevel, 0.0f, _envelopeStep);
+        }
     }
 
     void VoiceClient::PumpSpeakers() {
@@ -508,6 +560,13 @@ namespace Framework::Voice {
         }
 
         const int64_t nowMs = Utils::Time::GetTime();
+
+        // RakVoice drops a speaker from the active list the moment they stop, so decay here.
+        for (AdmittedSpeaker &admitted : _admitted) {
+            if (admitted.id != 0 && nowMs >= admitted.audioUntil) {
+                admitted.level = FollowEnvelope(admitted.level, 0.0f, _envelopeStep);
+            }
+        }
 
         _voice.GetActiveSpeakers(_activeSpeakers);
 
@@ -522,16 +581,22 @@ namespace Framework::Voice {
 
             // Drained admitted or not: the decode is already paid for, and leaving frames
             // queued only delays the audio handed back once a slot opens up.
-            bool received = false;
+            bool received     = false;
+            float loudest     = 0.0f;
+            int64_t submitted = 0;
             while (_voice.ReceiveFrameFrom(guid, _frame.data())) {
                 if (slot >= 0 && _sink != nullptr) {
                     _sink->Submit(speaker, _frame.data(), kFrameSamples);
+                    loudest = std::max(loudest, FrameLevel(_frame.data(), kFrameSamples));
+                    submitted++;
                 }
                 received = true;
             }
 
             if (received && slot >= 0) {
-                _admitted[slot].lastFrame = nowMs;
+                _admitted[slot].lastFrame  = nowMs;
+                _admitted[slot].audioUntil = nowMs + submitted * kFrameMs + kEnvelopeHoldSlackMs;
+                _admitted[slot].level      = FollowEnvelope(_admitted[slot].level, loudest, _envelopeStep);
             }
         }
 
@@ -596,8 +661,10 @@ namespace Framework::Voice {
     int VoiceClient::AdmitSpeaker(uint64_t speaker, int64_t nowMs) {
         for (size_t i = 0; i < _admitted.size(); i++) {
             if (_admitted[i].id == 0) {
-                _admitted[i].id        = speaker;
-                _admitted[i].lastFrame = nowMs;
+                _admitted[i].id         = speaker;
+                _admitted[i].lastFrame  = nowMs;
+                _admitted[i].level      = 0.0f;
+                _admitted[i].audioUntil = 0;
                 return static_cast<int>(i);
             }
         }
@@ -622,8 +689,10 @@ namespace Framework::Voice {
         }
 
         ReleaseAdmitted(farthest);
-        _admitted[farthest].id        = speaker;
-        _admitted[farthest].lastFrame = nowMs;
+        _admitted[farthest].id         = speaker;
+        _admitted[farthest].lastFrame  = nowMs;
+        _admitted[farthest].level      = 0.0f;
+        _admitted[farthest].audioUntil = 0;
         return farthest;
     }
 
@@ -636,8 +705,20 @@ namespace Framework::Voice {
             _sink->ReleaseSpeaker(_admitted[slot].id);
         }
 
-        _admitted[slot].id        = 0;
-        _admitted[slot].lastFrame = 0;
+        _admitted[slot].id         = 0;
+        _admitted[slot].lastFrame  = 0;
+        _admitted[slot].level      = 0.0f;
+        _admitted[slot].audioUntil = 0;
+    }
+
+    float VoiceClient::GetSpeakerLevel(uint64_t speaker) const {
+        // 0 marks a free slot, which FindAdmitted would match.
+        if (speaker == 0) {
+            return 0.0f;
+        }
+
+        const int slot = FindAdmitted(speaker);
+        return slot >= 0 ? _admitted[slot].level : 0.0f;
     }
 
     void VoiceClient::BeginSpeakerUpdate() {

@@ -202,6 +202,16 @@ namespace Framework::Voice {
             return _transmitting;
         }
 
+        // --- speech envelope ---
+
+        // Smoothed loudness in [0, 1] of the frames handed to the sink, for mouth animation.
+        float GetSpeakerLevel(uint64_t speaker) const;
+
+        // The same for our own microphone; non-zero only while transmitting.
+        float GetLocalLevel() const {
+            return _localLevel;
+        }
+
         // --- spatialisation ---
 
         // The one thing the framework cannot derive itself, since it depends on the game
@@ -269,6 +279,9 @@ namespace Framework::Voice {
         struct AdmittedSpeaker {
             uint64_t id       = 0;
             int64_t lastFrame = 0;
+            float level       = 0.0f;
+            // The level holds until the audio handed to the sink has played out.
+            int64_t audioUntil = 0;
         };
 
         // Tagged with the pass that last touched it, so EndSpeakerUpdate can retire the rest.
@@ -316,6 +329,10 @@ namespace Framework::Voice {
         bool _transmitBlocked = false;
         bool _transmitting    = false;
         bool _preferenceSent  = false;
+        float _localLevel     = 0.0f;
+        // One step per tick, shared by every envelope.
+        int64_t _envelopeMs = 0;
+        float _envelopeStep = 0.0f;
         int _pushToTalkKey    = kDefaultPushToTalkKey;
         PushToTalkGate _ptt {};
         MafiaNet::RakNetGUID _self {};
