@@ -21,6 +21,7 @@
 #include <function2.hpp>
 
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -107,10 +108,32 @@ namespace Framework::Networking::Replication {
         void SetInterestGroundPlaneXY(bool groundXY) {
             _interest.SetGroundPlaneXY(groundXY);
         }
+        // Streaming-boundary hysteresis. See InterestGrid::SetStreamOutMargin.
+        void SetInterestStreamOutMargin(float margin) {
+            _interest.SetStreamOutMargin(margin);
+        }
+        // Seconds of viewer velocity used as a second focus point. See
+        // InterestGrid::SetLookaheadSeconds.
+        void SetInterestLookaheadSeconds(float seconds) {
+            _interest.SetLookaheadSeconds(seconds);
+        }
+        // Per-type cap on in-range entities per viewer (0 = uncapped). See InterestGrid::SetBudget.
+        void SetInterestBudget(uint32_t typeId, uint32_t maxCount) {
+            _interest.SetBudget(typeId, maxCount);
+        }
+        // By registered type name, so games configure budgets without resolving ids themselves.
+        void SetInterestBudget(const std::string &typeName, uint32_t maxCount) {
+            _interest.SetBudget(EntityRegistry::Get().TypeId(typeName), maxCount);
+        }
+        // Minimum milliseconds between spatial-index rebuilds (0 = every tick, the default).
+        // Entity creation/destruction still forces an immediate rebuild.
+        void SetInterestRebuildInterval(uint32_t intervalMs) {
+            _interestRebuildInterval = intervalMs;
+        }
         // Rebuild the spatial index from current entity positions. Server only; call once per tick
-        // before ReplicaManager3 serializes (driven from NetworkPeer::Update).
+        // before ReplicaManager3 serializes (driven from NetworkPeer::Update). Honours the interval.
         void RebuildInterest();
-        void CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out);
+        void CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::unordered_set<NetworkEntity *> &previous, std::unordered_set<NetworkEntity *> &out);
         // Change counter for the interest index (see InterestGrid::Generation).
         uint32_t InterestGeneration() const {
             return _interest.Generation();
@@ -151,6 +174,10 @@ namespace Framework::Networking::Replication {
         NetworkPeer *_owner = nullptr;
         bool _clientRPCsRegistered = false;
         InterestGrid _interest;
+        uint32_t _interestRebuildInterval = 0;
+        int64_t _lastInterestRebuild      = 0;
+        // Entity set changed since the last rebuild; forces one regardless of the interval.
+        bool _interestDirty = true;
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
         fu2::function<void(MafiaNet::PeerGuid) const> _onClientDisconnect;
         fu2::function<void(uint64_t) const> _onEntityCreated;

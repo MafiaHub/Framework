@@ -249,6 +249,11 @@ namespace Framework::Networking::Replication {
         return position + velocity * Framework::Utils::Time::MsToSeconds(static_cast<float>(GetUpdateAge()));
     }
 
+    NetworkEntity *NetworkEntity::ResolveSibling(MafiaNet::NetworkID networkId) const {
+        const auto *manager = Manager();
+        return manager ? manager->GetEntityByNetworkID(networkId) : nullptr;
+    }
+
     MafiaNet::RM3ConstructionState NetworkEntity::QueryConstructionWithinWorld(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *) {
         return QueryConstruction_ServerConstruction(destinationConnection, IsServerPeer());
     }

@@ -48,8 +48,9 @@ namespace Framework::Networking::Replication {
         // than the grid changes.
         const uint32_t generation = _manager->InterestGeneration();
         if (!_relevantValid || _relevantGeneration != generation || _relevantViewer != viewer) {
+            _previousRelevant.swap(_relevant);
             _relevant.clear();
-            _manager->CollectInterest(viewer, viewerGUID, _relevant);
+            _manager->CollectInterest(viewer, viewerGUID, _previousRelevant, _relevant);
             _relevantGeneration = generation;
             _relevantViewer     = viewer;
             _relevantValid      = true;

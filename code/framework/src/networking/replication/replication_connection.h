@@ -42,6 +42,10 @@ namespace Framework::Networking::Replication {
         // the query is recomputed only when the generation or the viewer changed. A removal bumps the
         // generation, which is what keeps destroyed entities out of this cache.
         std::unordered_set<NetworkEntity *> _relevant;
+        // The previous _relevant, swapped aside on each recompute: the hysteresis state the grid
+        // needs for the stream-out margin and the sticky budget ranking. Membership only — entries
+        // are compared, never dereferenced.
+        std::unordered_set<NetworkEntity *> _previousRelevant;
         NetworkEntity *_relevantViewer = nullptr;
         uint32_t _relevantGeneration   = 0;
         bool _relevantValid            = false;

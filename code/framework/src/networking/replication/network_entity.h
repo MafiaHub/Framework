@@ -163,7 +163,18 @@ namespace Framework::Networking::Replication {
         };
         Streaming streaming;
 
+        // Type id (CRC32 of the registered name), stamped by EntityRegistry.
+        uint32_t GetTypeId() const {
+            return _typeId;
+        }
+
         // --- Game extension points ---
+        // Server interest: an entity this one makes no sense without (a seated ped needs its car).
+        // Survivors of a per-type budget pull it in with them, uncounted. Followed one level.
+        virtual NetworkEntity *GetInterestDependency() {
+            return nullptr;
+        }
+
         virtual void OnSerializeConstruction(FieldSerializer &fields) {
             (void)fields;
         }
@@ -212,6 +223,11 @@ namespace Framework::Networking::Replication {
 
         MafiaNet::Time GetUpdateAge() const;
         glm::vec3 GetExtrapolatedPosition() const;
+
+        // Resolve another entity in the same replicated world by NetworkID; the owning manager is
+        // otherwise private. The seam for overrides that need a sibling, chiefly
+        // GetInterestDependency.
+        NetworkEntity *ResolveSibling(MafiaNet::NetworkID networkId) const;
 
         void WriteAllocationID(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::BitStream *allocationIdBitstream) const final;
         void SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) final;

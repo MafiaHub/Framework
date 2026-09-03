@@ -16,6 +16,7 @@
 #include "modules/result_ut.h"
 #include "modules/network_packets_ut.h"
 #include "modules/replication_authority_ut.h"
+#include "modules/interest_grid_ut.h"
 #include "modules/state_machine_ut.h"
 #include "modules/persistent_config_ut.h"
 #include "modules/snapshot_buffer_ut.h"
@@ -43,6 +44,7 @@ int main() {
     UNIT_MODULE(result);
     UNIT_MODULE(network_packets);
     UNIT_MODULE(replication_authority);
+    UNIT_MODULE(interest_grid);
     UNIT_MODULE(state_machine);
     UNIT_MODULE(persistent_config);
     UNIT_MODULE(snapshot_buffer);

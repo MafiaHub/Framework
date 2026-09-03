@@ -12,6 +12,8 @@
 #include "entity_registry.h"
 #include "replication_connection.h"
 
+#include <utils/time.h>
+
 namespace Framework::Networking::Replication {
     namespace {
         // Raw RPC: the tail is the entity's polymorphic SerializeForcedState payload.
@@ -120,6 +122,7 @@ namespace Framework::Networking::Replication {
         // them as plain numbers. Clients adopt this id via the construction snapshot.
         entity->SetNetworkID(++_nextNetworkId);
         Reference(entity);
+        _interestDirty = true;
         if (_onEntityCreated) {
             _onEntityCreated(entity->GetNetworkID());
         }
@@ -143,6 +146,7 @@ namespace Framework::Networking::Replication {
         }
         // Scrub the interest indices so this delete can't dangle before the next rebuild.
         _interest.Remove(entity);
+        _interestDirty = true;
         if (_onEntityDestroyed) {
             _onEntityDestroyed(entity->GetNetworkID());
         }
@@ -201,14 +205,20 @@ namespace Framework::Networking::Replication {
         if (!_isServer) {
             return;
         }
+        const int64_t now = Utils::Time::GetTime();
+        if (!_interestDirty && _interestRebuildInterval > 0 && now - _lastInterestRebuild < static_cast<int64_t>(_interestRebuildInterval)) {
+            return;
+        }
+        _lastInterestRebuild = now;
+        _interestDirty       = false;
         _interest.BeginRebuild();
         ForEachEntity([this](NetworkEntity *entity) {
             _interest.Insert(entity);
         });
     }
 
-    void ReplicationManager::CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out) {
-        _interest.CollectVisible(viewer, viewerGUID, out);
+    void ReplicationManager::CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::unordered_set<NetworkEntity *> &previous, std::unordered_set<NetworkEntity *> &out) {
+        _interest.CollectVisible(viewer, viewerGUID, previous, out);
     }
 
     void ReplicationManager::OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) {
