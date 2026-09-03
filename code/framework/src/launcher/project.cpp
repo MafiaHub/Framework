@@ -156,43 +156,65 @@ LPSTR WINAPI GetCommandLineA_Stub() {
     return BuildGameCommandLineA();
 }
 
-DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr)) {
-        const auto gamePath = Framework::Utils::StringUtils::WideToNormal(gImagePath);
-        strcpy_s(lpFilename, nSize, gamePath.c_str());
+namespace {
+    // The real API truncates into the caller's buffer and says so in its return value;
+    // the CRT's _s copies abort the process instead, which is not a contract the game
+    // can be handed. Mirror Win32: fill what fits, terminate, report the truncation.
+    template <typename CharT>
+    DWORD CopyMappedImagePath(CharT *destination, DWORD size, const CharT *path, size_t length) {
+        if (!destination || size == 0) {
+            SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            return 0;
+        }
 
-        return (DWORD)gamePath.size();
+        if (length >= size) {
+            std::copy_n(path, size - 1, destination);
+            destination[size - 1] = CharT {};
+            SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            return size;
+        }
+
+        std::copy_n(path, length, destination);
+        destination[length] = CharT {};
+        return static_cast<DWORD>(length);
+    }
+
+    // Set only once Launch() has resolved the game, but these hooks are reachable before
+    // that; without the guard the conversions below read through a null pointer.
+    bool ShouldReportMappedImage(HMODULE module) {
+        return gImagePath && (!module || module == GetModuleHandle(nullptr));
+    }
+} // namespace
+
+DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
+    if (ShouldReportMappedImage(hModule)) {
+        const auto gamePath = Framework::Utils::StringUtils::WideToNormal(gImagePath);
+        return CopyMappedImagePath(lpFilename, nSize, gamePath.c_str(), gamePath.size());
     }
 
     return GetModuleFileNameA(hModule, lpFilename, nSize);
 }
 
 DWORD WINAPI GetModuleFileNameExA_Hook(HANDLE hProcess, HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr)) {
+    if (ShouldReportMappedImage(hModule)) {
         const auto gamePath = Framework::Utils::StringUtils::WideToNormal(gImagePath);
-        strcpy_s(lpFilename, nSize, gamePath.c_str());
-
-        return (DWORD)gamePath.size();
+        return CopyMappedImagePath(lpFilename, nSize, gamePath.c_str(), gamePath.size());
     }
 
     return GetModuleFileNameExA(hProcess, hModule, lpFilename, nSize);
 }
 
 DWORD WINAPI GetModuleFileNameW_Hook(HMODULE hModule, LPWSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr)) {
-        wcscpy_s(lpFilename, nSize, gImagePath);
-
-        return (DWORD)wcslen(gImagePath);
+    if (ShouldReportMappedImage(hModule)) {
+        return CopyMappedImagePath(lpFilename, nSize, gImagePath, wcslen(gImagePath));
     }
-    const auto len = GetModuleFileNameW(hModule, lpFilename, nSize);
-    return len;
+
+    return GetModuleFileNameW(hModule, lpFilename, nSize);
 }
 
 DWORD WINAPI GetModuleFileNameExW_Hook(HANDLE hProcess, HMODULE hModule, LPWSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr)) {
-        wcscpy_s(lpFilename, nSize, gImagePath);
-
-        return (DWORD)wcslen(gImagePath);
+    if (ShouldReportMappedImage(hModule)) {
+        return CopyMappedImagePath(lpFilename, nSize, gImagePath, wcslen(gImagePath));
     }
 
     return GetModuleFileNameExW(hProcess, hModule, lpFilename, nSize);
