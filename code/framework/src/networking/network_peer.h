@@ -23,6 +23,7 @@
 #include <mafianet/NetworkIDManager.h>
 #include <logging/logger.h>
 #include <utils/lifecycle.h>
+#include <utils/version.h>
 #include <memory>
 #include <string>
 #include <utility>
@@ -89,12 +90,6 @@ namespace Framework::Networking {
         NetworkPeer();
         ~NetworkPeer();
 
-        // Major component of a MAJOR.MINOR.PATCH version, or the whole string when it carries no dot.
-        static std::string BuildTokenMajor(const std::string &version) {
-            const auto dot = version.find('.');
-            return dot == std::string::npos ? version : version.substr(0, dot);
-        }
-
         // Single source of truth for the gated build identity — must produce the same string on both
         // peers or the challenge fails.
         //
@@ -104,7 +99,7 @@ namespace Framework::Networking {
         // the game executable, not our release cadence, and a different game build shifts the
         // pattern addresses the mod is compiled against.
         static std::string BuildToken(const std::string &gameName, const std::string &gameVersion, const std::string &fwVersion, const std::string &modVersion) {
-            return gameName + '|' + gameVersion + '|' + BuildTokenMajor(fwVersion) + '|' + BuildTokenMajor(modVersion);
+            return gameName + '|' + gameVersion + '|' + Utils::Version::Major(fwVersion) + '|' + Utils::Version::Major(modVersion);
         }
 
         // Register the local build token (see BuildToken). Call before connecting/accepting.

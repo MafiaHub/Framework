@@ -14,4 +14,10 @@ namespace Framework::Utils::Version {
     extern const char *gitLong;
     extern const char *git;
     extern const char *rel;
+
+    // Major component of a MAJOR.MINOR.PATCH version, or the whole string when it carries no dot.
+    inline std::string Major(const std::string &version) {
+        const auto dot = version.find('.');
+        return dot == std::string::npos ? version : version.substr(0, dot);
+    }
 } // namespace Framework::Utils::Version
