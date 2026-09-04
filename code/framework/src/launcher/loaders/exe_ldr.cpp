@@ -362,6 +362,10 @@ namespace Framework::Launcher::Loaders {
             throw std::runtime_error("Could not apply relocations to the target module");
         }
 
+        if (_sectionsMapped) {
+            _sectionsMapped(module);
+        }
+
         LoadImports(ntHeader);
         LoadDelayImports(ntHeader);
 

@@ -177,8 +177,10 @@ if(WIN32)
         src/utils/minidump.cpp
         src/launcher/loaders/exe_ldr.cpp
         src/launcher/loaders/process_identity.cpp
+        src/launcher/loaders/image_snapshot.cpp
         src/external/steam/wrapper.cpp
         src/external/epic/manifest.cpp
+        src/external/rockstar/library.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/pattern_table.cpp

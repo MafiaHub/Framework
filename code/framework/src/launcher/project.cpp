@@ -9,16 +9,19 @@
 #include "project.h"
 
 #include "external/epic/manifest.h"
+#include "external/rockstar/library.h"
 #include "gpu_preference.h"
 #include "loaders/exe_ldr.h"
 #include "loaders/process_identity.h"
 #include "logging/logger.h"
+#include "rgl_bypass.h"
 #include "sfd.h"
 #include "utils/hashing.h"
 #include "utils/string_utils.h"
 #include "utils/url_protocol.h"
 
 #include <Psapi.h>
+#include <TlHelp32.h>
 #include <ShellScalingApi.h>
 #include <Windows.h>
 #include <algorithm>
@@ -29,6 +32,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <ostream>
+#include <stdexcept>
 #include <utils/hooking/hooking.h>
 #include <utils/minidump.h>
 
@@ -429,7 +433,14 @@ namespace Framework::Launcher {
             return RunInnerClassicChecks();
         }
 
-        const auto status = (_config.platform == ProjectPlatform::STEAM) ? RunInnerSteamChecks(!canFallBack) : RunInnerEpicChecks(!canFallBack);
+        const auto status = [&]() -> PlatformCheckStatus {
+            switch (_config.platform) {
+            case ProjectPlatform::STEAM: return RunInnerSteamChecks(!canFallBack);
+            case ProjectPlatform::EPIC: return RunInnerEpicChecks(!canFallBack);
+            case ProjectPlatform::ROCKSTAR: return RunInnerRockstarChecks(!canFallBack);
+            default: return PlatformCheckStatus::UNAVAILABLE;
+            }
+        }();
         if (status == PlatformCheckStatus::OK) {
             _manualGamePath = false;
             return true;
@@ -563,6 +574,121 @@ namespace Framework::Launcher {
         // Unlike Steam there's no runtime DLL to inject or app-id file to drop; any Epic launch
         // args go through ProjectConfiguration::additionalLaunchArguments.
         return PlatformCheckStatus::OK;
+    }
+
+    PlatformCheckStatus Project::RunInnerRockstarChecks(bool reportErrors) {
+        const auto unavailable = [&](const std::string &reason) {
+            return ReportStoreUnavailable("Rockstar Games Launcher", reason, reportErrors);
+        };
+
+        // The launcher records every installed title in the registry, so nothing here needs the
+        // launcher itself to be running. Matched by its title key, else by the executable.
+        const auto exeName  = Utils::StringUtils::WideToNormal(_config.executableName);
+        const auto titleKey = Utils::StringUtils::WideToNormal(_config.rockstarTitleKey);
+
+        const auto title = External::Rockstar::FindInstalledTitle(exeName, titleKey);
+        if (!title.IsValid()) {
+            return unavailable("The destination game is not installed through the Rockstar Games Launcher");
+        }
+
+        auto installPath = Utils::StringUtils::NormalToWide(title.installFolder);
+        std::ranges::replace(installPath, L'\\', L'/');
+
+        if (!GameExecutableExistsIn(installPath)) {
+            return unavailable(fmt::format("The Rockstar Games Launcher points at {}, but the game executable is not there", title.installFolder));
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Rockstar Games Launcher title '{}' (build {}) resolved to {}", title.titleKey, title.version, title.installFolder);
+
+        _gamePath = installPath;
+
+        // Mirror the Steam and Epic paths: the launch code appends executableName to this root, and
+        // we stash it in classicGamePath purely so it lands in the persisted JSON config.
+        _config.classicGamePath = _gamePath;
+        return PlatformCheckStatus::OK;
+    }
+
+    namespace {
+        // How long the store gets to produce an authorised run of the game, in ms. It may have to
+        // start its own launcher first, so this is generous.
+        constexpr uint64_t kSnapshotCaptureTimeoutMs = 120000;
+
+        std::vector<DWORD> FindProcessesByName(const wchar_t *executableName) {
+            std::vector<DWORD> processes;
+
+            const auto snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (snapshot == INVALID_HANDLE_VALUE) {
+                return processes;
+            }
+
+            PROCESSENTRY32W entry {};
+            entry.dwSize = sizeof(entry);
+            if (Process32FirstW(snapshot, &entry)) {
+                do {
+                    if (_wcsicmp(entry.szExeFile, executableName) == 0) {
+                        processes.push_back(entry.th32ProcessID);
+                    }
+                } while (Process32NextW(snapshot, &entry));
+            }
+
+            CloseHandle(snapshot);
+            return processes;
+        }
+    } // namespace
+
+    bool Project::EnsureImageSnapshot(Loaders::ImageSnapshot &snapshot, const std::vector<uint8_t> &sourceImage) {
+        const auto logger = Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER);
+        if (snapshot.IsAvailable()) {
+            return true;
+        }
+
+        logger->info("No cached image snapshot for this build of the game, running it once so its decrypted code can be captured");
+
+        // Starting the game on its own is enough to get an authorised run: its wrapper refuses the
+        // launch and hands it to the Rockstar Games Launcher, which starts a copy it has authorised.
+        auto commandLine = L"\"" + _gamePath + L"\"";
+        const auto workDir = std::filesystem::path(_gamePath).parent_path().wstring();
+
+        STARTUPINFOW startupInfo {};
+        startupInfo.cb = sizeof(startupInfo);
+        PROCESS_INFORMATION processInfo {};
+
+        if (!CreateProcessW(_gamePath.c_str(), commandLine.data(), nullptr, nullptr, FALSE, 0, nullptr, workDir.c_str(), &startupInfo, &processInfo)) {
+            logger->error("Could not start the game to capture its decrypted code, error {}", GetLastError());
+            return false;
+        }
+
+        CloseHandle(processInfo.hThread);
+        CloseHandle(processInfo.hProcess);
+
+        const auto executableName = std::filesystem::path(_config.executableName).filename().wstring();
+        const auto deadline       = GetTickCount64() + kSnapshotCaptureTimeoutMs;
+
+        while (GetTickCount64() < deadline) {
+            // Any run of the game will do; the ones the wrapper has not decrypted are rejected by
+            // the capture itself, so every candidate is simply tried in turn.
+            for (const auto processId : FindProcessesByName(executableName.c_str())) {
+                const auto process = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION | PROCESS_TERMINATE, FALSE, processId);
+                if (!process) {
+                    continue;
+                }
+
+                const auto captured = snapshot.CaptureFrom(process, sourceImage);
+                if (captured) {
+                    // The capture only needed the game to have started; it does not need to keep running
+                    TerminateProcess(process, 0);
+                    CloseHandle(process);
+                    return true;
+                }
+
+                CloseHandle(process);
+            }
+
+            Sleep(500);
+        }
+
+        logger->error("No authorised run of the game appeared in time, its decrypted code could not be captured");
+        return false;
     }
 
     std::wstring Project::GetGameWorkDir(const std::wstring &gameRoot) const {
@@ -897,6 +1023,18 @@ namespace Framework::Launcher {
             return false;
         }
 
+        // Titles whose store wrapper encrypts their code cannot be mapped from the file alone; the
+        // decrypted code comes from a cached capture of a run the store authorised.
+        Loaders::ImageSnapshot snapshot(std::filesystem::path(gProjectDllPath) / "cache" / fmt::format("{}_image_snapshot.bin", _config.name), Utils::Hashing::CalculateCRC32(reinterpret_cast<const char *>(data), fileSize));
+
+        if (_config.useRockstarImageSnapshot && !EnsureImageSnapshot(snapshot, std::vector<uint8_t>(data, data + fileSize))) {
+            UnmapViewOfFile(data);
+            CloseHandle(hMapping);
+            CloseHandle(hFile);
+            MessageBoxA(nullptr, "The game's decrypted code could not be prepared.\n\nMake sure the Rockstar Games Launcher is installed and signed in, then try again.", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
         // Create the loader instance
         Loaders::ExecutableLoader loader(data, fileSize);
         loader.SetLoadLimit(_config.loadLimit);
@@ -969,6 +1107,12 @@ namespace Framework::Launcher {
             return static_cast<LPVOID>(GetProcAddress(hmod, exportFn));
         });
 
+        loader.SetSectionsMappedCallback([&](HMODULE module) {
+            if (_config.useRockstarImageSnapshot) {
+                snapshot.Apply(module);
+            }
+        });
+
         loader.SetTLSInitializer([&](void **base, uint32_t *index) {
             const auto tlsExport = (void (*)(void **, uint32_t *))GetProcAddress(tlsDll, "GetThreadLocalStorage");
             tlsExport(base, index);
@@ -989,6 +1133,20 @@ namespace Framework::Launcher {
 
             // Acquire the entry point reference
             entry_point = static_cast<void (*)()>(loader.GetEntryPoint());
+
+            // With the decrypted code in place the wrapper's entry stub has nothing left to do, and
+            // it would only spin waiting on a launcher handshake, so enter past it.
+            if (_config.useRockstarImageSnapshot) {
+                const auto stub = RGL::ResolveEntryStub(reinterpret_cast<uintptr_t>(base), reinterpret_cast<uintptr_t>(entry_point));
+                switch (stub.status) {
+                case RGL::EntryStubStatus::RESOLVED:
+                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Skipping the Rockstar Games Launcher entry stub at {:#x}, entering the game at {:#x}", reinterpret_cast<uintptr_t>(entry_point), stub.entryPoint);
+                    entry_point = reinterpret_cast<void (*)()>(stub.entryPoint);
+                    break;
+                case RGL::EntryStubStatus::NOT_PRESENT: Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("The game executable carries no Rockstar Games Launcher entry stub, entering it at {:#x}", reinterpret_cast<uintptr_t>(entry_point)); break;
+                case RGL::EntryStubStatus::UNSUPPORTED: throw std::runtime_error("The Rockstar Games Launcher entry stub could not be decoded, this game build is not supported yet");
+                }
+            }
 
             hook::set_base(reinterpret_cast<uintptr_t>(base));
 

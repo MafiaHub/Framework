@@ -46,6 +46,30 @@ namespace Framework::Launcher::RGL {
     };
 
     /**
+     * The Rockstar Games Launcher does not ship its titles starting at their own entry point: it
+     * prepends a small stub (its own PE section) that loads MTLX.dll, spins on that module's "X"
+     * export until the launcher answers the handshake, and only then jumps to the game's real
+     * entry point.
+     *
+     * A PE-loaded image has no launcher process to answer for it, and the stub retries forever
+     * rather than failing, so the mapped game has to be entered past the stub instead.
+     */
+    enum class EntryStubStatus {
+        NOT_PRESENT, // the image starts at its own entry point, nothing to skip
+        RESOLVED,    // the stub was decoded, `entryPoint` is the game's own
+        UNSUPPORTED  // the image carries a stub section this build cannot decode
+    };
+
+    struct EntryStub {
+        EntryStubStatus status = EntryStubStatus::NOT_PRESENT;
+        uintptr_t entryPoint   = 0; // the game's own entry point, absolute; only set when RESOLVED
+    };
+
+    // Decode the stub a mapped image entered at, reading the target out of the image itself rather
+    // than off a hardcoded offset.
+    EntryStub ResolveEntryStub(uintptr_t moduleBase, uintptr_t stubEntryPoint);
+
+    /**
      * RGL (Rockstar Games Launcher) Bypass
      *
      * Provides methods to bypass PE signature verification in RGL-protected games.

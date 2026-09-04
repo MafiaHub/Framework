@@ -38,6 +38,7 @@ namespace Framework::Launcher::Loaders {
         FunctionResolverProc _functionResolver;
 
         fu2::function<void(void **base, uint32_t *index)> _tlsInitializer;
+        fu2::function<void(HMODULE module) const> _sectionsMapped;
         std::vector<std::tuple<void *, DWORD, DWORD>> _targetProtections;
         bool _useDirectTlsSlot0 = false;
 
@@ -83,6 +84,12 @@ namespace Framework::Launcher::Loaders {
 
         inline void SetTLSInitializer(const fu2::function<void(void **base, uint32_t *index)> &callback) {
             _tlsInitializer = callback;
+        }
+
+        // Runs once the sections are mapped and relocated, before imports are resolved. This is the
+        // only point where an image can still be rewritten wholesale - see ImageSnapshot.
+        inline void SetSectionsMappedCallback(fu2::function<void(HMODULE module) const> callback) {
+            _sectionsMapped = std::move(callback);
         }
 
         inline void SetUseDirectTlsSlot0(bool useDirectSlot0) {

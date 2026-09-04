@@ -92,6 +92,7 @@ The launcher resolves the game directory from the configured `platform`:
 - `STEAM` - the Steam client is asked for the app's install directory (`steamAppId`).
 - `EPIC` - the Epic launcher's manifests are matched by `epicAppName`, else by `executableName`.
 - `CLASSIC` - the stored `classicGamePath` is used, or the player is prompted for the game executable when `promptForGameExe` is set.
+- `ROCKSTAR` - the Rockstar Games Launcher's registry entries are matched by `rockstarTitleKey`, else by the title holding `executableName`.
 
 Store lookups fail for players who own the game outside that store (or simply do not have the client running). Set `allowManualGamePathFallback` to keep the store as the primary path and drop to the manual prompt instead of aborting:
 
@@ -106,8 +107,49 @@ config.promptFilterName            = "game.exe";
 
 The picked file must be named `executableName`, and when `useAlternativeWorkDir` is set the work dir is stripped back off so the resulting path is the game root - the same thing Steam and Epic hand back. A manual pick is remembered in the launcher's JSON config (`game_path` plus `game_path_manual`) and takes priority over the store on later runs, so the prompt only appears once.
 
+## Rockstar Games Launcher Titles
+
+A title installed through the Rockstar Games Launcher is wrapped. Two things follow from that.
+
+**It does not start at its own entry point.** RGL prepends a stub in a section of its own
+(`.rkstr`) that resolves `LoadLibraryW` out of the PEB, loads `MTLX.dll` - Rockstar's wrapper, whose
+own PDB path calls it `RockstarWrapper` - spins on that module's `X` export until the launcher
+answers, and only then jumps to the game's real entry point. `RGL::ResolveEntryStub` decodes that
+final jump out of the mapped image, so the real entry point comes from the image rather than a
+hardcoded offset.
+
+**Its code sections are encrypted on disk, and only the wrapper decrypts them.** Mapping the image
+and entering past the stub therefore runs into ciphertext (measured on San Andreas: `.text` pages
+`0x401000`-`0x4FB000` are at 8.00 bits of entropy per byte, and executing them faults with
+`STATUS_PRIVILEGED_INSTRUCTION`). The wrapper will not do that decryption for a mapped image
+either: it only authorises a process the launcher itself started, and when it sees one it does not
+recognise it hands the launch back to the launcher, which starts its own copy of the game while the
+mapped one exits.
+
+So the decrypted code has to come from a run the launcher did authorise. `useRockstarImageSnapshot`
+does exactly that, following the executable snapshot FiveM uses for the same class of wrapper:
+
+```cpp
+config.platform                 = Framework::Launcher::ProjectPlatform::ROCKSTAR;
+config.rockstarTitleKey         = L"GTA: San Andreas";
+config.useRockstarImageSnapshot = true;
+```
+
+On the first run for a given build the launcher starts the game once - which the wrapper hands to
+the Rockstar Games Launcher - waits until every ciphertext page in the authorised process has been
+decrypted, reads the executable sections out of it, and caches them next to the launcher as
+`cache/<name>_image_snapshot.bin`, keyed by the executable's CRC32. Every later run maps the image
+from disk, lays the cached code back over it, and enters at the game's own entry point. A game
+update changes the checksum and the capture happens again.
+
+The completeness check matters: the wrapper decrypts progressively, and a capture taken while it is
+still working bakes half-decrypted code into the cache. `ImageSnapshot::CaptureFrom` only accepts a
+capture once every page that is ciphertext on disk has changed in memory.
+
 ## Files
 
 - `project.cpp` / `project.h` - Main launcher project class and configuration
 - `loaders/exe_ldr.cpp` / `exe_ldr.h` - PE executable loader implementation
 - `data/tls.cpp` - TLS buffer for allocated slot approach (in FrameworkLoaderData.dll)
+- `rgl_bypass.cpp` / `rgl_bypass.h` - Rockstar Games Launcher entry-stub decoding and signature-check bypasses
+- `loaders/image_snapshot.cpp` / `image_snapshot.h` - capture and replay of the code a store wrapper decrypts at runtime

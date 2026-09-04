@@ -18,7 +18,63 @@ namespace Framework::Launcher::RGL {
         // How long to wait for the injected LoadLibraryW thread to finish, in ms. Bounded so a hung
         // loader can't wedge injection forever; a timeout is treated as a failed injection.
         constexpr DWORD kInjectionWaitMs = 10000;
+
+        // Tail of the RGL entry stub: `add eax, <entry point RVA>` applied to the image base the
+        // stub read out of the PEB, then the hand-off itself - `mov esp, ebp`, the return slot
+        // patch, `pop ebp`, `popad`, `jmp eax`.
+        constexpr uint8_t kEntryStubTail[]  = {0x05, 0x00, 0x00, 0x00, 0x00, 0x8B, 0xE5, 0x89, 0x44, 0x24, 0x20, 0x5D, 0x61, 0xFF, 0xE0};
+        constexpr char kEntryStubTailMask[] = "x????xxxxxxxxxx";
+
+        // The section RGL puts its stub in. Only used to tell a stub whose shape has changed apart
+        // from an image that never had one - a decoded tail is what actually identifies the stub.
+        constexpr char kEntryStubSection[] = ".rkstr"; // compared with its terminator, so a longer section name cannot match
     } // namespace
+
+    EntryStub ResolveEntryStub(uintptr_t moduleBase, uintptr_t stubEntryPoint) {
+        auto *dosHeader = reinterpret_cast<IMAGE_DOS_HEADER *>(moduleBase);
+        if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
+            return {};
+        }
+
+        auto *ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS *>(moduleBase + dosHeader->e_lfanew);
+        if (ntHeaders->Signature != IMAGE_NT_SIGNATURE) {
+            return {};
+        }
+
+        // The stub lives in a section of its own, so the section the image entered in bounds the scan
+        const auto entryRva = static_cast<uint32_t>(stubEntryPoint - moduleBase);
+        auto *section       = IMAGE_FIRST_SECTION(ntHeaders);
+        auto *sectionsEnd   = section + ntHeaders->FileHeader.NumberOfSections;
+        for (; section != sectionsEnd; ++section) {
+            if (entryRva >= section->VirtualAddress && entryRva < section->VirtualAddress + section->Misc.VirtualSize) {
+                break;
+            }
+        }
+
+        if (section == sectionsEnd) {
+            return {};
+        }
+
+        const bool stubSection = memcmp(section->Name, kEntryStubSection, sizeof(kEntryStubSection)) == 0;
+        const auto scanEnd     = moduleBase + section->VirtualAddress + section->Misc.VirtualSize;
+        const auto notResolved = stubSection ? EntryStubStatus::UNSUPPORTED : EntryStubStatus::NOT_PRESENT;
+
+        if (scanEnd < stubEntryPoint + sizeof(kEntryStubTail)) {
+            return {notResolved};
+        }
+
+        const auto tail = Bypass::ScanPattern(stubEntryPoint, scanEnd - stubEntryPoint, kEntryStubTail, sizeof(kEntryStubTail), kEntryStubTailMask);
+        if (!tail) {
+            return {notResolved};
+        }
+
+        const auto entryPointRva = *reinterpret_cast<const uint32_t *>(tail + 1);
+        if (entryPointRva == 0 || entryPointRva >= ntHeaders->OptionalHeader.SizeOfImage) {
+            return {EntryStubStatus::UNSUPPORTED};
+        }
+
+        return {EntryStubStatus::RESOLVED, moduleBase + entryPointRva};
+    }
 
     // =========================================================================
     // Bypass Implementation
