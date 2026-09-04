@@ -200,9 +200,6 @@ namespace Framework::Integrations::Client {
         // servers.
         std::shared_ptr<Framework::GUI::Resources::DirectoryProvider> _resourceProvider;
 
-        // Cold-start deep-link URL; delivered to OnProtocolLaunch from Update().
-        std::string _pendingProtocolUrl;
-
         UI::ChatBox _chatBox;
 
         // Unconditional: no InstanceOptions switch. A client with no microphone degrades to
@@ -282,8 +279,8 @@ namespace Framework::Integrations::Client {
             (void)talking;
         }
 
-        // Deep link (custom URL protocol) that launched the client. Fires once from Update() after
-        // PostInit. url is the raw, un-decoded URI.
+        // Deep link (custom URL protocol) that launched the client. Fires once at the end of Init();
+        // url is the raw, un-decoded URI.
         virtual void OnProtocolLaunch(const std::string &url) {
             (void)url;
         }
