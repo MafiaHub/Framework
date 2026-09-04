@@ -20,6 +20,7 @@ set(FRAMEWORK_SRC
     src/utils/package/package.cpp
     src/utils/path.cpp
     src/utils/safe_string.cpp
+    src/utils/url_protocol.cpp
     src/utils/states/machine.cpp
 
     src/external/sentry/wrapper.cpp
@@ -154,10 +155,6 @@ if(WIN32)
         src/utils/minidump.cpp
     )
 
-    # URL scheme launch-argument extraction (used by the launcher).
-    list(APPEND FRAMEWORK_SRC
-        src/utils/url_protocol.cpp
-    )
 endif()
 
 # Additional libraries
