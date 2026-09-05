@@ -124,6 +124,10 @@ namespace Framework::GUI {
             _created = true;
         }
 
+        if (data.event == ViewEvent::InputFocusChange) {
+            _textInputFocused = data.focused;
+        }
+
         // window object exists from main-frame load start; bind before anything talks to the page
         if (data.event == ViewEvent::LoadingStart && data.isMainFrame && _sdk && _browser) {
             (void)_sdk->Init(_browser);
