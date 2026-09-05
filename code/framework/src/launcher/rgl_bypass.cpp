@@ -19,15 +19,12 @@ namespace Framework::Launcher::RGL {
         // loader can't wedge injection forever; a timeout is treated as a failed injection.
         constexpr DWORD kInjectionWaitMs = 10000;
 
-        // Tail of the RGL entry stub: `add eax, <entry point RVA>` applied to the image base the
-        // stub read out of the PEB, then the hand-off itself - `mov esp, ebp`, the return slot
-        // patch, `pop ebp`, `popad`, `jmp eax`.
+        // Stub tail: add eax, <entry RVA> applied to the PEB-read image base, then the hand-off
         constexpr uint8_t kEntryStubTail[]  = {0x05, 0x00, 0x00, 0x00, 0x00, 0x8B, 0xE5, 0x89, 0x44, 0x24, 0x20, 0x5D, 0x61, 0xFF, 0xE0};
         constexpr char kEntryStubTailMask[] = "x????xxxxxxxxxx";
 
-        // The section RGL puts its stub in. Only used to tell a stub whose shape has changed apart
-        // from an image that never had one - a decoded tail is what actually identifies the stub.
-        constexpr char kEntryStubSection[] = ".rkstr"; // compared with its terminator, so a longer section name cannot match
+        // Only tells a changed stub apart from an image that never had one; the tail identifies it
+        constexpr char kEntryStubSection[] = ".rkstr";
     } // namespace
 
     EntryStub ResolveEntryStub(uintptr_t moduleBase, uintptr_t stubEntryPoint) {
@@ -41,7 +38,7 @@ namespace Framework::Launcher::RGL {
             return {};
         }
 
-        // The stub lives in a section of its own, so the section the image entered in bounds the scan
+        // The stub has a section to itself, which bounds the scan
         const auto entryRva = static_cast<uint32_t>(stubEntryPoint - moduleBase);
         auto *section       = IMAGE_FIRST_SECTION(ntHeaders);
         auto *sectionsEnd   = section + ntHeaders->FileHeader.NumberOfSections;

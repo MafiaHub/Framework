@@ -19,8 +19,7 @@ namespace Framework::External::Rockstar {
         constexpr const wchar_t *kRegistryRoot = L"SOFTWARE\\Rockstar Games";
         constexpr const wchar_t *kLauncherKey  = L"Launcher";
 
-        // The launcher is a 32-bit installer, so its keys live under WOW6432Node on a 64-bit host.
-        // The native view is still tried second, for a host where no redirection applies.
+        // 32-bit installer, so WOW6432Node first; the native view covers a host with no redirection
         constexpr REGSAM kRegistryViews[] = {KEY_WOW64_32KEY, KEY_WOW64_64KEY};
 
         std::wstring ReadStringValue(HKEY key, const wchar_t *name) {
@@ -86,7 +85,7 @@ namespace Framework::External::Rockstar {
                     break;
                 }
 
-                // "Launcher", "Social Club" and friends sit next to the titles but hold no game
+                // "Launcher" and friends sit next to the titles but hold no game
                 InstalledTitle title;
                 title.titleKey      = Utils::StringUtils::WideToNormal(name);
                 title.installFolder = ReadTitleValue(root, name, L"InstallFolder", view);

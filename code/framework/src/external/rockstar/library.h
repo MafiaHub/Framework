@@ -12,26 +12,22 @@
 #include <vector>
 
 namespace Framework::External::Rockstar {
-    // One title the Rockstar Games Launcher has installed, as described by its registry key under
-    // HKLM\SOFTWARE\Rockstar Games (WOW6432Node on a 64-bit host).
+    // One title the Rockstar Games Launcher installed, from its key under HKLM\SOFTWARE\Rockstar Games.
     struct InstalledTitle {
         std::string titleKey;      // registry sub-key name, e.g. "GTA: San Andreas"
-        std::string installFolder; // install root ("InstallFolder")
-        std::string version;       // launcher build of the title ("Version"), may be empty
+        std::string installFolder;
+        std::string version;       // launcher build of the title, may be empty
 
         bool IsValid() const {
             return !installFolder.empty();
         }
     };
 
-    // Install root of the Rockstar Games Launcher itself, empty when it was never installed.
+    // Empty when the launcher was never installed.
     std::string GetLauncherPath();
 
-    // Every title the launcher knows about. Empty when the launcher is not installed.
     std::vector<InstalledTitle> EnumerateInstalledTitles();
 
-    // Find an installed title. When `titleKey` is non-empty it matches the registry sub-key name
-    // (case-insensitive); otherwise the first title holding `exeFileName` wins. Returns an invalid
-    // InstalledTitle when nothing matches.
+    // Matches `titleKey` when given, else the first title holding `exeFileName`.
     InstalledTitle FindInstalledTitle(const std::string &exeFileName, const std::string &titleKey = {});
 } // namespace Framework::External::Rockstar

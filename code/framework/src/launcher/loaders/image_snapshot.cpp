@@ -33,8 +33,7 @@ namespace Framework::Launcher::Loaders {
 
         constexpr size_t kPageSize = 0x1000;
 
-        // Bits per byte above which a page is ciphertext rather than compiled code. Encrypted pages
-        // sit at the very top of the scale (8.00 measured); real code stays well under 7.
+        // Ciphertext measures 8.00 bits per byte; compiled code stays well under 7
         constexpr double kEncryptedPageEntropy = 7.7;
 
         double PageEntropy(const uint8_t *page) {
@@ -90,7 +89,6 @@ namespace Framework::Launcher::Loaders {
             return false;
         }
 
-        // A game update changes the executable, and with it every offset the snapshot holds
         if (header.executableChecksum != _executableChecksum) {
             Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("The cached image snapshot belongs to a different build of the game, it will be captured again");
             return false;
@@ -123,7 +121,7 @@ namespace Framework::Launcher::Loaders {
         std::error_code ec;
         std::filesystem::create_directories(_cachePath.parent_path(), ec);
 
-        // Write beside the cache and rename, so an interrupted capture cannot leave a half file
+        // Rename in, so an interrupted capture cannot leave half a file behind
         auto temporaryPath = _cachePath;
         temporaryPath += ".tmp";
 
@@ -196,8 +194,7 @@ namespace Framework::Launcher::Loaders {
             return false;
         }
 
-        // The wrapped titles this exists for have their relocations stripped, so the authorised
-        // process maps at the same base the mapped image will use and section RVAs line up.
+        // These titles have their relocations stripped, so both images sit at the same base
         const auto base    = static_cast<uintptr_t>(ntHeaders->OptionalHeader.ImageBase);
         auto section       = IMAGE_FIRST_SECTION(ntHeaders);
         const auto endOfIt = section + ntHeaders->FileHeader.NumberOfSections;
@@ -207,7 +204,7 @@ namespace Framework::Launcher::Loaders {
         size_t pendingPages   = 0;
 
         for (; section != endOfIt; ++section) {
-            // The wrapper decrypts code; everything else the mapped image already has from disk
+            // The wrapper only decrypts code; the rest the mapped image already has from disk
             if (!(section->Characteristics & IMAGE_SCN_MEM_EXECUTE) || section->SizeOfRawData == 0) {
                 continue;
             }
@@ -226,10 +223,7 @@ namespace Framework::Launcher::Loaders {
                 return false;
             }
 
-            // The wrapper decrypts its pages progressively, so a capture taken too early bakes
-            // half-decrypted code into the cache and the game runs into ciphertext. Only the pages
-            // that are ciphertext on disk have to come from memory, and every one of them must
-            // have changed before the capture is worth keeping.
+            // Decryption is progressive: capture too early and half-decrypted code is cached
             for (size_t offset = 0; offset + kPageSize <= entry.data.size(); offset += kPageSize) {
                 const auto filePage = sourceImage.data() + section->PointerToRawData + offset;
                 if (PageEntropy(filePage) < kEncryptedPageEntropy) {

@@ -78,16 +78,12 @@ namespace Framework::Launcher {
         // empty the Epic manifest is matched by the launch executable's file name instead.
         std::wstring epicAppName;
 
-        // ROCKSTAR platform: registry sub-key the Rockstar Games Launcher installed the title
-        // under, e.g. L"GTA: San Andreas". Optional — when empty the title holding
-        // `executableName` is used instead.
+        // ROCKSTAR platform: the title's registry sub-key, e.g. L"GTA: San Andreas". Optional —
+        // when empty the title holding `executableName` is used instead.
         std::wstring rockstarTitleKey;
 
-        // ROCKSTAR platform, PE loading: the title's code sections are encrypted on disk and only
-        // its wrapper decrypts them, and that wrapper only authorises a process the Rockstar Games
-        // Launcher itself started. With this set the launcher captures the decrypted code once from
-        // a run the launcher authorised, caches it, and lays it back over the mapped image on every
-        // later run - which is also what makes entering past the wrapper's entry stub correct.
+        // ROCKSTAR platform, PE loading: capture the code the title's wrapper decrypts from a
+        // launcher-authorised run and replay it, so the mapped image can be entered past the stub.
         bool useRockstarImageSnapshot = false;
 
         // game exe integrity checks (uses CRC32 checksum)
@@ -195,7 +191,6 @@ namespace Framework::Launcher {
         PlatformCheckStatus RunInnerEpicChecks(bool reportErrors);
         PlatformCheckStatus RunInnerRockstarChecks(bool reportErrors);
 
-        // Captures the decrypted game code from a store-authorised run when no valid cache exists.
         bool EnsureImageSnapshot(Loaders::ImageSnapshot &snapshot, const std::vector<uint8_t> &sourceImage);
         bool RunInnerClassicChecks();
         bool ResolveGamePathFromPrompt();

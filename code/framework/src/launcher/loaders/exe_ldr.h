@@ -86,8 +86,7 @@ namespace Framework::Launcher::Loaders {
             _tlsInitializer = callback;
         }
 
-        // Runs once the sections are mapped and relocated, before imports are resolved. This is the
-        // only point where an image can still be rewritten wholesale - see ImageSnapshot.
+        // After sections are mapped and relocated, before imports resolve - see ImageSnapshot
         inline void SetSectionsMappedCallback(fu2::function<void(HMODULE module) const> callback) {
             _sectionsMapped = std::move(callback);
         }

@@ -37,8 +37,7 @@ else()
 	configure_file("@GIT_DIR@/HEAD" "@GIT_DATA@/head-ref" COPYONLY)
 endif()
 
-# A repository whose branch has no commits yet resolves neither a loose nor a packed ref, and
-# leaves the hash empty rather than failing the configure.
+# A branch with no commits yet resolves neither ref; leave the hash empty instead of failing
 if(NOT HEAD_HASH AND EXISTS "@GIT_DATA@/head-ref")
 	file(READ "@GIT_DATA@/head-ref" HEAD_HASH LIMIT 1024)
 	string(STRIP "${HEAD_HASH}" HEAD_HASH)

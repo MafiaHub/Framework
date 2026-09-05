@@ -581,8 +581,7 @@ namespace Framework::Launcher {
             return ReportStoreUnavailable("Rockstar Games Launcher", reason, reportErrors);
         };
 
-        // The launcher records every installed title in the registry, so nothing here needs the
-        // launcher itself to be running. Matched by its title key, else by the executable.
+        // Read from the registry, so the launcher itself does not need to be running
         const auto exeName  = Utils::StringUtils::WideToNormal(_config.executableName);
         const auto titleKey = Utils::StringUtils::WideToNormal(_config.rockstarTitleKey);
 
@@ -602,15 +601,13 @@ namespace Framework::Launcher {
 
         _gamePath = installPath;
 
-        // Mirror the Steam and Epic paths: the launch code appends executableName to this root, and
-        // we stash it in classicGamePath purely so it lands in the persisted JSON config.
+        // As with Steam and Epic, stashed here purely so it lands in the persisted JSON config
         _config.classicGamePath = _gamePath;
         return PlatformCheckStatus::OK;
     }
 
     namespace {
-        // How long the store gets to produce an authorised run of the game, in ms. It may have to
-        // start its own launcher first, so this is generous.
+        // Generous: the store may have to start its own launcher first
         constexpr uint64_t kSnapshotCaptureTimeoutMs = 120000;
 
         std::vector<DWORD> FindProcessesByName(const wchar_t *executableName) {
@@ -644,8 +641,7 @@ namespace Framework::Launcher {
 
         logger->info("No cached image snapshot for this build of the game, running it once so its decrypted code can be captured");
 
-        // Starting the game on its own is enough to get an authorised run: its wrapper refuses the
-        // launch and hands it to the Rockstar Games Launcher, which starts a copy it has authorised.
+        // Enough for an authorised run: the wrapper refuses us and hands the launch to the launcher
         auto commandLine = L"\"" + _gamePath + L"\"";
         const auto workDir = std::filesystem::path(_gamePath).parent_path().wstring();
 
@@ -665,8 +661,7 @@ namespace Framework::Launcher {
         const auto deadline       = GetTickCount64() + kSnapshotCaptureTimeoutMs;
 
         while (GetTickCount64() < deadline) {
-            // Any run of the game will do; the ones the wrapper has not decrypted are rejected by
-            // the capture itself, so every candidate is simply tried in turn.
+            // The capture rejects a run the wrapper has not decrypted, so just try each in turn
             for (const auto processId : FindProcessesByName(executableName.c_str())) {
                 const auto process = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION | PROCESS_TERMINATE, FALSE, processId);
                 if (!process) {
@@ -675,7 +670,6 @@ namespace Framework::Launcher {
 
                 const auto captured = snapshot.CaptureFrom(process, sourceImage);
                 if (captured) {
-                    // The capture only needed the game to have started; it does not need to keep running
                     TerminateProcess(process, 0);
                     CloseHandle(process);
                     return true;
@@ -1023,8 +1017,7 @@ namespace Framework::Launcher {
             return false;
         }
 
-        // Titles whose store wrapper encrypts their code cannot be mapped from the file alone; the
-        // decrypted code comes from a cached capture of a run the store authorised.
+        // A wrapped title cannot be mapped from the file alone; its code comes from the cache
         Loaders::ImageSnapshot snapshot(std::filesystem::path(gProjectDllPath) / "cache" / fmt::format("{}_image_snapshot.bin", _config.name), Utils::Hashing::CalculateCRC32(reinterpret_cast<const char *>(data), fileSize));
 
         if (_config.useRockstarImageSnapshot && !EnsureImageSnapshot(snapshot, std::vector<uint8_t>(data, data + fileSize))) {
@@ -1134,8 +1127,7 @@ namespace Framework::Launcher {
             // Acquire the entry point reference
             entry_point = static_cast<void (*)()>(loader.GetEntryPoint());
 
-            // With the decrypted code in place the wrapper's entry stub has nothing left to do, and
-            // it would only spin waiting on a launcher handshake, so enter past it.
+            // With the code in place the stub has nothing left to do but spin, so enter past it
             if (_config.useRockstarImageSnapshot) {
                 const auto stub = RGL::ResolveEntryStub(reinterpret_cast<uintptr_t>(base), reinterpret_cast<uintptr_t>(entry_point));
                 switch (stub.status) {
