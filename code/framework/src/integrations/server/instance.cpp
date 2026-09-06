@@ -62,6 +62,21 @@ namespace Framework::Integrations::Server {
     namespace {
         constexpr double kTickHitchWarnMs         = 100.0;
         constexpr double kTickHitchWarnIntervalMs = 1000.0;
+
+        // The default 15.6 ms Windows sleep quantum would hold the tick to ~32 Hz. Restored on every
+        // exit from Run(), unwinding included.
+        struct TimerResolutionScope {
+#ifdef _WIN32
+            TimerResolutionScope() {
+                timeBeginPeriod(1);
+            }
+            ~TimerResolutionScope() {
+                timeEndPeriod(1);
+            }
+#endif
+            TimerResolutionScope(const TimerResolutionScope &)            = delete;
+            TimerResolutionScope &operator=(const TimerResolutionScope &) = delete;
+        };
     } // namespace
 
     Instance::Instance(): _shuttingDown(false) {
@@ -1213,7 +1228,9 @@ namespace Framework::Integrations::Server {
                 });
             }
 
-            DispatchVoiceTalkingChanges();
+            phase("voiceEvents", [&] {
+                DispatchVoiceTalkingChanges();
+            });
 
             if (_scriptingModule) {
                 FW_PROFILE_SCOPE_N("Server::Scripting");
@@ -1269,17 +1286,11 @@ namespace Framework::Integrations::Server {
         }
     }
     void Instance::Run() {
-#ifdef _WIN32
-        // The default 15.6 ms sleep quantum would hold the tick to ~32 Hz.
-        timeBeginPeriod(1);
-#endif
+        const TimerResolutionScope timerResolution;
         while (_initialized) {
             Update();
             std::this_thread::yield();
         }
-#ifdef _WIN32
-        timeEndPeriod(1);
-#endif
     }
 
     void Instance::OnSignal(const sig_signal_t signal) {
