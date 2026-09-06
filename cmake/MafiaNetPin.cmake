@@ -24,4 +24,4 @@
 # tree, so bumping the pin here and rebuilding incrementally would silently keep
 # fetching the old revision. This file is the single source of truth, and there is
 # no reason to let -D override the wire format of the protocol.
-set(MAFIANET_PIN "b1af9501432a539969b5024bda88149e72a6ca30") # MafiaHub/MafiaNet#57 -- RakVoice::SetOrderingChannels (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
+set(MAFIANET_PIN "46fd83581e24037b0535a545b6204248e4a90c28") # v0.18.0 -- RakVoice::SetOrderingChannels (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
