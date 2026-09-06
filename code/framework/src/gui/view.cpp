@@ -128,6 +128,12 @@ namespace Framework::GUI {
             _textInputFocused = data.focused;
         }
 
+        // A new document starts with nothing focused; a cross-process navigation never reports
+        // the old caret going away.
+        if (data.event == ViewEvent::LoadingStart && data.isMainFrame) {
+            _textInputFocused = false;
+        }
+
         // window object exists from main-frame load start; bind before anything talks to the page
         if (data.event == ViewEvent::LoadingStart && data.isMainFrame && _sdk && _browser) {
             (void)_sdk->Init(_browser);
