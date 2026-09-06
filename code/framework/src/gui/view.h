@@ -61,8 +61,9 @@ namespace Framework::GUI {
         // CPU renderer fallback
         std::vector<uint8_t> _pixelData;
 
-        bool _gpuAccelerated  = false;
-        bool _hasFocus        = false;
+        bool _gpuAccelerated   = false;
+        bool _hasFocus         = false;
+        bool _textInputFocused = false;
         int _x;
         int _y;
         int _z;
@@ -107,6 +108,13 @@ namespace Framework::GUI {
             if (_browser) {
                 _browser->GetHost()->SetFocus(enable);
             }
+        }
+
+        // The DOM half of focus: an editable node holds the caret. Keys only reach a page while
+        // HasFocus() && ShouldDisplay(), so gate on all three. Not cleared by Focus(false): the DOM
+        // keeps its caret across it, and reports no transition when the view is refocused.
+        bool IsTextInputFocused() const {
+            return _textInputFocused;
         }
 
         bool HasFocus() const {

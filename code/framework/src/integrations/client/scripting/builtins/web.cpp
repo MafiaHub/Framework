@@ -369,7 +369,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             {{"cursor", "string", "CSS-style cursor name, or \"custom\" for shapes without one."}, {"cursorType", "number", "Raw CEF cursor type."}}, "Dispatched when an owned view's requested cursor shape changes.");
         describe(Framework::GUI::ViewEvent::Tooltip, "BrowserTooltipEvent", "A page wants to display a tooltip.", {{"text", "string", "Tooltip text; empty when the tooltip is dismissed."}},
             "Dispatched when an owned view requests a tooltip; windowless rendering draws none, so the script must.");
-        describe(Framework::GUI::ViewEvent::InputFocusChange, "BrowserInputFocusChangeEvent", "A form control inside a page gained or lost focus.", {{"focused", "boolean", "True while the page holds keyboard input."}},
+        describe(Framework::GUI::ViewEvent::InputFocusChange, "BrowserInputFocusChangeEvent", "An editable element inside a page gained or lost focus.", {{"focused", "boolean", "True while the page holds keyboard input."}},
             "Dispatched when focus enters or leaves an editable element of an owned view; use it to stop routing keys to the game.");
         describe(Framework::GUI::ViewEvent::ResourceBlocked, "BrowserResourceBlockedEvent", "A web view refused a request.",
             {{"url", "string", "URL that was refused."}, {"domain", "string", "Host component of that URL, empty when unparsable."}, {"reason", "\"cross-origin\" | \"invalid-url\" | \"host-filter\" | \"foreign-event\"", "Why the request was refused."}},

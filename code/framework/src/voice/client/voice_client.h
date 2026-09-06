@@ -247,7 +247,7 @@ namespace Framework::Voice {
         void RemoveSpeaker(uint64_t speaker);
 
         // Blocks transmission regardless of push-to-talk, cutting the release delay short. Set by
-        // the client Instance while its chat box has the caret or a web view holds focus.
+        // the client Instance while its chat box or a web view's editable node has the caret.
         void SetInputSuppressed(bool suppressed);
 
         // The mod-owned half of the same block: window focus, a game menu, locked controls. Ored
