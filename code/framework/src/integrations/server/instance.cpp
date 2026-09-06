@@ -73,6 +73,9 @@ namespace Framework::Integrations::Server {
             ~TimerResolutionScope() {
                 timeEndPeriod(1);
             }
+#else
+            TimerResolutionScope()  = default;
+            ~TimerResolutionScope() = default;
 #endif
             TimerResolutionScope(const TimerResolutionScope &)            = delete;
             TimerResolutionScope &operator=(const TimerResolutionScope &) = delete;
