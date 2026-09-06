@@ -8,19 +8,30 @@
 
 #include "network_entity.h"
 
+#include "../channels.h"
 #include "replication_manager.h"
 
 #include <mafianet/GetTime.h>
 #include <utils/time.h>
 
+#include <cstring>
+
 namespace Framework::Networking::Replication {
     namespace {
-        // Serialize channel split: the pose rides an unreliable-sequenced channel (a dropped frame is
-        // covered by the next one / receiver-side interpolation), game state rides a reliable-ordered
-        // channel (on-change deltas must never be lost). Both are flushed as independent RakNet
-        // messages because their PacketReliability differs (see Connection_RM3::SendSerialize).
+        // Serialize channel split: the pose rides an unreliable channel (a dropped frame is covered by
+        // the next one / receiver-side interpolation), game state rides a reliable-ordered channel
+        // (on-change deltas must never be lost). Both are flushed as independent RakNet messages
+        // because their PacketReliability differs (see Connection_RM3::SendSerialize).
         constexpr int kTransformChannel = 0;
         constexpr int kStateChannel     = 1;
+
+        bool SameBytes(const MafiaNet::BitStream *last, const MafiaNet::BitStream &current) {
+            if (!last || last->GetNumberOfBitsUsed() != current.GetNumberOfBitsUsed()) {
+                return false;
+            }
+            const MafiaNet::BitSize_t bytes = current.GetNumberOfBytesUsed();
+            return bytes == 0 || std::memcmp(last->GetData(), current.GetData(), bytes) == 0;
+        }
     } // namespace
 
     ReplicationManager *NetworkEntity::Manager() {
@@ -44,8 +55,9 @@ namespace Framework::Networking::Replication {
     void NetworkEntity::AdoptIncomingOwner(MafiaNet::PeerGuid incomingOwner) {
         // The server keeps its own authoritative owner assignment and must not let an owning client
         // dictate it back; clients adopt whatever the server sends.
-        if (!IsServerPeer()) {
+        if (!IsServerPeer() && ownerGUID != incomingOwner) {
             ownerGUID = incomingOwner;
+            _lastTransformTime = 0;
         }
     }
 
@@ -167,13 +179,34 @@ namespace Framework::Networking::Replication {
         // variable is omitted when unchanged, which would let a pre-override packet pass the staleness
         // check by absence), and the two channels are independent messages, so each carries its own.
 
-        // Channel 0 — transform: raw pose, unreliable-sequenced. Written every tick; ReplicaManager3
-        // memcmp-dedupes it against the last broadcast, so a motionless entity stops sending.
+        // Channel 0 — transform: raw pose, ordered per entity by the receiver's timestamp gate. Written
+        // every tick; ReplicaManager3 memcmp-dedupes it against the last broadcast.
         serializeParameters->outputBitstream[kTransformChannel].Write(stateEpoch);
         FieldSerializer transform(&serializeParameters->outputBitstream[kTransformChannel], true);
         SerializeTransform(transform);
-        serializeParameters->pro[kTransformChannel].reliability     = MafiaNet::Reliability::UnreliableSequenced;
-        serializeParameters->pro[kTransformChannel].orderingChannel = kTransformChannel;
+        serializeParameters->pro[kTransformChannel].reliability     = MafiaNet::Reliability::Unreliable;
+        serializeParameters->pro[kTransformChannel].orderingChannel = ToOrderingChannel(Channel::Transform);
+
+        // Idle refresh (see kTransformRefreshMs). An unchanged state channel is empty, so a forced send
+        // carries only the pose.
+        const MafiaNet::Time now                = serializeParameters->curTime;
+        const MafiaNet::BitStream *lastTransform = serializeParameters->lastSentBitstream[kTransformChannel];
+        bool refreshTransform                   = false;
+        if (!SameBytes(lastTransform, serializeParameters->outputBitstream[kTransformChannel])) {
+            if (lastTransform && lastTransform->GetNumberOfBitsUsed() > 0) {
+                _transformMoved      = true;
+                _lastTransformChange = now;
+            }
+            _lastTransformSend = now;
+        }
+        else if (_transformMoved && now >= _lastTransformSend) {
+            const bool inBurst          = now >= _lastTransformChange && now - _lastTransformChange < kTransformRefreshBurstMs;
+            const MafiaNet::Time period = inBurst ? kTransformRefreshMs : kTransformHeartbeatMs;
+            if (now - _lastTransformSend >= period) {
+                _lastTransformSend = now;
+                refreshTransform   = true;
+            }
+        }
 
         // Channel 1 — state: owner + game fields, VDS delta, reliable-ordered. whenLastSerialized == 0
         // means first send to a fresh system: write every variable in full; else only changed ones.
@@ -185,13 +218,13 @@ namespace Framework::Networking::Replication {
         SerializeFields(fields);
         _vds.EndSerialize(&ctx);
         serializeParameters->pro[kStateChannel].reliability    = MafiaNet::Reliability::ReliableOrdered;
-        serializeParameters->pro[kStateChannel].orderingChannel = kStateChannel;
+        serializeParameters->pro[kStateChannel].orderingChannel = ToOrderingChannel(Channel::State);
 
         // Both channels carry recipient-identical bytes, so broadcast-identically: ReplicaManager3
         // serializes once per tick, reuses the bytes for every connection, and suppresses each channel
         // whose bytes are unchanged. Per-connection filtering (owner exclusion) still happens upstream
         // in QuerySerializationWithinWorld.
-        return MafiaNet::RM3SR_BROADCAST_IDENTICALLY;
+        return refreshTransform ? MafiaNet::RM3SR_BROADCAST_IDENTICALLY_FORCE_SERIALIZATION : MafiaNet::RM3SR_BROADCAST_IDENTICALLY;
     }
 
     void NetworkEntity::Deserialize(MafiaNet::DeserializeParameters *deserializeParameters) {
@@ -203,15 +236,20 @@ namespace Framework::Networking::Replication {
 
         bool transformUpdated = false;
 
-        // Channel 0 — transform. The epoch fences a forced-state override against an owner's in-flight
-        // pose (which would otherwise revert it); the server drops a stale-epoch pose, clients adopt.
-        if (deserializeParameters->bitstreamWrittenTo[kTransformChannel]) {
+        // Channel 0 — transform. A pose older than the newest applied one is dropped. The epoch fences
+        // a forced-state override against an owner's in-flight pose (which would otherwise revert it);
+        // the server drops a stale-epoch pose, clients adopt.
+        const MafiaNet::Time sentAt = deserializeParameters->timeStamp;
+        if (deserializeParameters->bitstreamWrittenTo[kTransformChannel] && (sentAt == 0 || _lastTransformTime == 0 || sentAt >= _lastTransformTime)) {
             uint8_t incomingEpoch = stateEpoch;
             deserializeParameters->serializationBitstream[kTransformChannel].Read(incomingEpoch);
             if (ApplyIncomingEpoch(incomingEpoch)) {
                 FieldSerializer transform(&deserializeParameters->serializationBitstream[kTransformChannel], false);
                 SerializeTransform(transform);
                 transformUpdated = true;
+                if (sentAt != 0) {
+                    _lastTransformTime = sentAt;
+                }
             }
         }
 
@@ -230,7 +268,7 @@ namespace Framework::Networking::Replication {
         }
 
         // Already shifted to our local clock by RakPeer; do not subtract GetClockDifferential.
-        if (deserializeParameters->timeStamp != 0) {
+        if (deserializeParameters->timeStamp > lastUpdateTime) {
             lastUpdateTime = deserializeParameters->timeStamp;
         }
 

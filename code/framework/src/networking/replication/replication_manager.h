@@ -32,6 +32,16 @@ namespace Framework::Networking {
 } // namespace Framework::Networking
 
 namespace Framework::Networking::Replication {
+    // Server-side transform send interval by distance from the viewer: every tick inside nearDistance,
+    // midIntervalMs out to midDistance, farIntervalMs beyond. Only the transform channel is throttled;
+    // a zero interval means every tick.
+    struct SerializeRateBands {
+        float nearDistance     = 0.0f;
+        float midDistance      = 0.0f;
+        uint32_t midIntervalMs = 0;
+        uint32_t farIntervalMs = 0;
+    };
+
     // The replicated world: a ReplicaManager3 that owns the set of NetworkEntity objects. It
     // creates/destroys entities, resolves them by NetworkID, tracks each connection's "viewer"
     // entity, and drives an InterestGrid that ReplicationConnection::QueryReplicaList reads for
@@ -139,6 +149,29 @@ namespace Framework::Networking::Replication {
             return _interest.Generation();
         }
 
+        // Server: transform rate bands, default and per-type override.
+        void SetSerializeRateBands(const SerializeRateBands &bands) {
+            _rateBands = bands;
+        }
+        void SetSerializeRateBands(uint32_t typeId, const SerializeRateBands &bands) {
+            _rateBandsByType[typeId] = bands;
+        }
+        void SetSerializeRateBands(const std::string &typeName, const SerializeRateBands &bands) {
+            _rateBandsByType[EntityRegistry::Get().TypeId(typeName)] = bands;
+        }
+        const SerializeRateBands &GetSerializeRateBands(uint32_t typeId) const {
+            if (_rateBandsByType.empty()) {
+                return _rateBands;
+            }
+            const auto it = _rateBandsByType.find(typeId);
+            return it != _rateBandsByType.end() ? it->second : _rateBands;
+        }
+        bool HasSerializeRateBands() const {
+            return _rateBands.midIntervalMs != 0 || _rateBands.farIntervalMs != 0 || !_rateBandsByType.empty();
+        }
+        // Milliseconds between transform sends at squared distance distSq; 0 = every tick.
+        static uint32_t TransformSendIntervalMs(const SerializeRateBands &bands, float distSq);
+
         // Server: invoked from OnClosedConnection just before the dropped peer's avatar is destroyed,
         // while it is still resolvable. The integration layer wires its player-disconnect notification
         // here.
@@ -174,6 +207,8 @@ namespace Framework::Networking::Replication {
         NetworkPeer *_owner = nullptr;
         bool _clientRPCsRegistered = false;
         InterestGrid _interest;
+        SerializeRateBands _rateBands;
+        std::unordered_map<uint32_t, SerializeRateBands> _rateBandsByType;
         uint32_t _interestRebuildInterval = 0;
         int64_t _lastInterestRebuild      = 0;
         // Entity set changed since the last rebuild; forces one regardless of the interval.
