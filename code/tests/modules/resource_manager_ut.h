@@ -540,7 +540,7 @@ MODULE(resource_manager, {
 
         auto result = manager.StartAll();
         EQUALS(static_cast<bool>(result), false);
-        EQUALS(result.GetError(), std::string("Resource 'req-user' depends on missing resource 'req-absent'"));
+        STREQUALS(result.GetError().c_str(), "Resource 'req-user' depends on missing resource 'req-absent'");
 
         engine.Shutdown();
         TestManagerHelper::Cleanup();
