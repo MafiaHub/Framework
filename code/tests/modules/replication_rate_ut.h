@@ -93,6 +93,53 @@ MODULE(replication_rate, {
         EQUALS(static_cast<int>(manager.GetSerializeRateBands(7u).farIntervalMs), 50);
     });
 
+    IT("clamps inverted and negative bands so a far viewer never gets the near interval", {
+        ReplicationManager manager;
+        manager.SetSerializeRateBands(SerializeRateBands {100.0f, 50.0f, 33, 66});
+        const SerializeRateBands &clamped = manager.GetSerializeRateBands(1u);
+        EQUALS(static_cast<int>(clamped.nearDistance), 100);
+        EQUALS(static_cast<int>(clamped.midDistance), 100);
+        EQUALS(static_cast<int>(ReplicationManager::TransformSendIntervalMs(clamped, 75.0f * 75.0f)), 0);
+        EQUALS(static_cast<int>(ReplicationManager::TransformSendIntervalMs(clamped, 101.0f * 101.0f)), 66);
+
+        manager.SetSerializeRateBands(SerializeRateBands {-50.0f, -10.0f, 33, 66});
+        const SerializeRateBands &positive = manager.GetSerializeRateBands(1u);
+        EQUALS(static_cast<int>(positive.nearDistance), 0);
+        EQUALS(static_cast<int>(positive.midDistance), 0);
+        EQUALS(static_cast<int>(ReplicationManager::TransformSendIntervalMs(positive, 30.0f * 30.0f)), 66);
+    });
+
+    IT("sends the state channel only when a field changed, refresh ticks included", {
+        NetworkEntity entity;
+        MafiaNet::BitStream lastSent;
+        const auto stateBits = [&](MafiaNet::Time now, bool firstSend, MafiaNet::PeerGuid owner) {
+            entity.ownerGUID = owner;
+            MafiaNet::SerializeParameters sp;
+            for (int i = 0; i < MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS; ++i) {
+                sp.lastSentBitstream[i] = nullptr;
+            }
+            sp.lastSentBitstream[0] = &lastSent;
+            sp.whenLastSerialized   = firstSend ? 0 : 1;
+            sp.curTime              = now;
+            entity.OnUserReplicaPreSerializeTick();
+            entity.Serialize(&sp);
+            lastSent.Reset();
+            lastSent.Write(&sp.outputBitstream[0]);
+            return static_cast<int>(sp.outputBitstream[1].GetNumberOfBitsUsed());
+        };
+
+        // First send to a fresh system writes every field.
+        GREATER(stateBits(1000, true, MafiaNet::UNASSIGNED_PEER_GUID), 0);
+        // Nothing changed: no state message at all, not even the epoch prefix.
+        EQUALS(stateBits(1100, false, MafiaNet::UNASSIGNED_PEER_GUID), 0);
+        // A moved-then-idle entity on its refresh tick still sends no state.
+        entity.position = glm::vec3(4.0f, 0.0f, 0.0f);
+        EQUALS(stateBits(2000, false, MafiaNet::UNASSIGNED_PEER_GUID), 0);
+        EQUALS(stateBits(2000 + NetworkEntity::kTransformRefreshMs, false, MafiaNet::UNASSIGNED_PEER_GUID), 0);
+        // A field change is delivered.
+        GREATER(stateBits(3000, false, MafiaNet::PeerGuid(77)), 0);
+    });
+
     IT("never refreshes an entity that has not moved since construction", {
         SerializeHarness h;
         h.entity.position = glm::vec3(1.0f, 2.0f, 3.0f);

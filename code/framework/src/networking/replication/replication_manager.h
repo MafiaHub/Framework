@@ -40,6 +40,15 @@ namespace Framework::Networking::Replication {
         float midDistance      = 0.0f;
         uint32_t midIntervalMs = 0;
         uint32_t farIntervalMs = 0;
+
+        // Distances are clamped to 0 <= nearDistance <= midDistance, so an inverted or negative band
+        // cannot hand a far viewer the near interval.
+        SerializeRateBands Normalized() const {
+            SerializeRateBands out = *this;
+            out.nearDistance       = nearDistance > 0.0f ? nearDistance : 0.0f;
+            out.midDistance        = midDistance > out.nearDistance ? midDistance : out.nearDistance;
+            return out;
+        }
     };
 
     // The replicated world: a ReplicaManager3 that owns the set of NetworkEntity objects. It
@@ -151,13 +160,13 @@ namespace Framework::Networking::Replication {
 
         // Server: transform rate bands, default and per-type override.
         void SetSerializeRateBands(const SerializeRateBands &bands) {
-            _rateBands = bands;
+            _rateBands = bands.Normalized();
         }
         void SetSerializeRateBands(uint32_t typeId, const SerializeRateBands &bands) {
-            _rateBandsByType[typeId] = bands;
+            _rateBandsByType[typeId] = bands.Normalized();
         }
         void SetSerializeRateBands(const std::string &typeName, const SerializeRateBands &bands) {
-            _rateBandsByType[EntityRegistry::Get().TypeId(typeName)] = bands;
+            _rateBandsByType[EntityRegistry::Get().TypeId(typeName)] = bands.Normalized();
         }
         const SerializeRateBands &GetSerializeRateBands(uint32_t typeId) const {
             if (_rateBandsByType.empty()) {

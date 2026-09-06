@@ -217,6 +217,11 @@ namespace Framework::Networking::Replication {
         SerializeBaseFields(fields);
         SerializeFields(fields);
         _vds.EndSerialize(&ctx);
+        if (!ctx.anyVariablesWritten) {
+            // Nothing to deliver, so no message: the epoch prefix alone would be sent reliably on
+            // every forced refresh.
+            serializeParameters->outputBitstream[kStateChannel].Reset();
+        }
         serializeParameters->pro[kStateChannel].reliability    = MafiaNet::Reliability::ReliableOrdered;
         serializeParameters->pro[kStateChannel].orderingChannel = ToOrderingChannel(Channel::State);
 
