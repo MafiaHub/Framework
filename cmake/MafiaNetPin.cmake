@@ -24,4 +24,4 @@
 # tree, so bumping the pin here and rebuilding incrementally would silently keep
 # fetching the old revision. This file is the single source of truth, and there is
 # no reason to let -D override the wire format of the protocol.
-set(MAFIANET_PIN "9b0e240cce9d5cca77f50637fc59a8071606e633") # v0.17.0 -- in-session MTU black-hole detection (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
+set(MAFIANET_PIN "46fd83581e24037b0535a545b6204248e4a90c28") # v0.18.0 -- RakVoice::SetOrderingChannels (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)

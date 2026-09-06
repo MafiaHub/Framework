@@ -141,6 +141,13 @@ namespace Framework::Networking::Replication {
         // --- Authority (replicated) ---
         MafiaNet::PeerGuid ownerGUID = MafiaNet::UNASSIGNED_PEER_GUID;
 
+        // Idle refresh of an unchanged pose, so a lost final packet is repaired: every kTransformRefreshMs
+        // for kTransformRefreshBurstMs after the last change, then every kTransformHeartbeatMs. Entities
+        // that never moved since construction are not refreshed.
+        static constexpr MafiaNet::Time kTransformRefreshMs      = 500;
+        static constexpr MafiaNet::Time kTransformRefreshBurstMs = 2000;
+        static constexpr MafiaNet::Time kTransformHeartbeatMs    = 5000;
+
         // Fences server overrides against in-flight owner updates: bumped by the server on
         // ForceState, adopted by the owner from the ForceState/SetOwner RPCs and echoed back in its
         // updates; the server drops owner state carrying a stale value (sent before the owner saw the
@@ -224,6 +231,11 @@ namespace Framework::Networking::Replication {
         MafiaNet::Time GetUpdateAge() const;
         glm::vec3 GetExtrapolatedPosition() const;
 
+        // Accept the next pose whatever its timestamp; called on an ownership change.
+        void ResetTransformOrdering() {
+            _lastTransformTime = 0;
+        }
+
         // Resolve another entity in the same replicated world by NetworkID; the owning manager is
         // otherwise private. The seam for overrides that need a sibling, chiefly
         // GetInterestDependency.
@@ -280,5 +292,14 @@ namespace Framework::Networking::Replication {
         // Tracks the last value of each serialized variable per connection so updates carry only
         // what changed (the documented ReplicaManager3 delta path).
         MafiaNet::VariableDeltaSerializer _vds;
+
+        // Sender: refresh schedule state, in serialize-tick time.
+        bool _transformMoved                = false;
+        MafiaNet::Time _lastTransformChange = 0;
+        MafiaNet::Time _lastTransformSend   = 0;
+
+        // Receiver: send time of the newest applied pose. The transform channel is plain Unreliable
+        // (a sequenced stream is per channel, not per entity), so this is the per-entity ordering.
+        MafiaNet::Time _lastTransformTime = 0;
     };
 } // namespace Framework::Networking::Replication

@@ -54,7 +54,33 @@
 #include <cppfs/fs.h>
 #include <csignal>
 
+#ifdef _WIN32
+#include <timeapi.h>
+#endif
+
 namespace Framework::Integrations::Server {
+    namespace {
+        constexpr double kTickHitchWarnMs         = 100.0;
+        constexpr double kTickHitchWarnIntervalMs = 1000.0;
+
+        // The default 15.6 ms Windows sleep quantum would hold the tick to ~32 Hz. Restored on every
+        // exit from Run(), unwinding included.
+        struct TimerResolutionScope {
+#ifdef _WIN32
+            TimerResolutionScope() {
+                timeBeginPeriod(1);
+            }
+            ~TimerResolutionScope() {
+                timeEndPeriod(1);
+            }
+#else
+            TimerResolutionScope()  = default;
+            ~TimerResolutionScope() = default;
+#endif
+            TimerResolutionScope(const TimerResolutionScope &)            = delete;
+            TimerResolutionScope &operator=(const TimerResolutionScope &) = delete;
+        };
+    } // namespace
 
     Instance::Instance(): _shuttingDown(false) {
         _networkingEngine = std::make_unique<Networking::Engine>();
@@ -1217,13 +1243,25 @@ namespace Framework::Integrations::Server {
 
             FW_PROFILE_FRAME();
 
-            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
+            const auto end      = std::chrono::high_resolution_clock::now();
+            const double tickMs = std::chrono::duration<double, std::milli>(end - start).count();
+            if (tickMs >= kTickHitchWarnMs) {
+                ++_suppressedHitches;
+                if (std::chrono::duration<double, std::milli>(end - _lastHitchWarnAt).count() >= kTickHitchWarnIntervalMs) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server tick took {:.0f} ms against a {:.0f} ms budget ({} slow tick(s) since the last warning)", tickMs, Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval), _suppressedHitches);
+                    _lastHitchWarnAt   = end;
+                    _suppressedHitches = 0;
+                }
+            }
+
+            _nextTick = end + std::chrono::milliseconds(static_cast<int64_t>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
         }
         else {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
     void Instance::Run() {
+        const TimerResolutionScope timerResolution;
         while (_initialized) {
             Update();
             std::this_thread::yield();

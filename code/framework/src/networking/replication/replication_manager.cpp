@@ -8,6 +8,7 @@
 
 #include "replication_manager.h"
 
+#include "../channels.h"
 #include "../network_peer.h"
 #include "entity_registry.h"
 #include "replication_connection.h"
@@ -48,6 +49,7 @@ namespace Framework::Networking::Replication {
         _isServer = isServer;
         _myGUID   = MafiaNet::ToPeerGuid(owner->GetPeer()->GetMyGUID());
         SetNetworkIDManager(owner->GetNetworkIDManager());
+        SetDefaultOrderingChannel(ToOrderingChannel(Channel::Construction));
         owner->GetPeer()->AttachPlugin(this);
 
         // Client-only: these are server->owner pushes, so the server must never accept them inbound.
@@ -76,6 +78,16 @@ namespace Framework::Networking::Replication {
         }
     }
 
+    uint32_t ReplicationManager::TransformSendIntervalMs(const SerializeRateBands &bands, float distSq) {
+        if (distSq <= bands.nearDistance * bands.nearDistance) {
+            return 0;
+        }
+        if (distSq <= bands.midDistance * bands.midDistance) {
+            return bands.midIntervalMs;
+        }
+        return bands.farIntervalMs;
+    }
+
     void ReplicationManager::ForceState(NetworkEntity *entity) {
         // Server-only, like SetOwner: on a client this must be a no-op, not an RPC misaddressed to a
         // peer we aren't connected to (the shared scripting builtins call it on both sides).
@@ -101,6 +113,7 @@ namespace Framework::Networking::Replication {
             return;
         }
         entity->ownerGUID = guid;
+        entity->ResetTransformOrdering();
         // Serialize to an owner is withheld, so the grant can't ride normal replication: tell the new
         // owner directly. Other peers (and any prior owner) pick it up through serialize.
         if (_owner && _isServer && guid != MafiaNet::UNASSIGNED_PEER_GUID) {

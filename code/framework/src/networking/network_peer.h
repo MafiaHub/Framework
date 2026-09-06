@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "channels.h"
 #include "connection.h"
 #include "rpc/rpc.h"
 
@@ -122,7 +123,7 @@ namespace Framework::Networking {
         void BroadcastRPC(T &payload, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered, MafiaNet::RakNetGUID except = MafiaNet::UNASSIGNED_RAKNET_GUID) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
-            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, except, true, false);
+            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, ToOrderingChannel(Channel::Events), except, true, false);
         }
 
         // Send an RPC payload to a single system.
@@ -130,7 +131,7 @@ namespace Framework::Networking {
         void SendRPC(T &payload, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
-            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, guid, false, false);
+            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, ToOrderingChannel(Channel::Events), guid, false, false);
         }
 
         // Raw variant of RegisterRPC for handlers that decode the bitstream themselves (e.g. a
@@ -146,7 +147,7 @@ namespace Framework::Networking {
 
         // Send a pre-encoded bitstream under a raw identifier (pairs with RegisterRawRPC).
         void SendRawRPC(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
-            _rpc.Signal(identifier, &bs, priority, reliability, 0, guid, false, false);
+            _rpc.Signal(identifier, &bs, priority, reliability, ToOrderingChannel(Channel::Events), guid, false, false);
         }
 
         void Update() override;

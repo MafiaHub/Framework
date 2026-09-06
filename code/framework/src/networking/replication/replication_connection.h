@@ -11,6 +11,7 @@
 #include <mafianet/ReplicaManager3.h>
 
 #include <cstdint>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace Framework::Networking::Replication {
@@ -33,9 +34,19 @@ namespace Framework::Networking::Replication {
 
         void QueryReplicaList(DataStructures::List<MafiaNet::Replica3 *> &newReplicasToCreate, DataStructures::List<MafiaNet::Replica3 *> &existingReplicasToDestroy) override;
 
+        // Server: withholds the transform channel per viewer by distance band; the reliable state
+        // channel always passes.
+        MafiaNet::SendSerializeIfChangedResult SendSerialize(MafiaNet::Replica3 *replica, bool indicesToSend[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::BitStream serializationData[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::Time timestamp, MafiaNet::PRO sendParameters[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::RakPeerInterface *rakPeer, unsigned char worldId, MafiaNet::Time curTime) override;
+
+        uint32_t TransformSendIntervalMs(const NetworkEntity *entity) const;
+
       private:
         ReplicationManager *_manager = nullptr;
         bool _isServer               = false;
+        MafiaNet::PeerGuid _viewerGUID = MafiaNet::UNASSIGNED_PEER_GUID;
+
+        // Last transform send per replica; pruned against the interest set, keys never dereferenced.
+        std::unordered_map<const NetworkEntity *, MafiaNet::Time> _lastTransformSend;
 
         // Interest result cached against the grid generation: ReplicaManager3 calls QueryReplicaList
         // on every RakPeer::Receive(), but the grid only changes once per tick (plus removals), so

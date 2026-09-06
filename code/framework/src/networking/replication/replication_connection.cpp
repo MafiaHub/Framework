@@ -12,11 +12,16 @@
 #include "network_entity.h"
 #include "replication_manager.h"
 
+#include <cstring>
 #include <unordered_set>
 
 namespace Framework::Networking::Replication {
+    namespace {
+        constexpr int kTransformChannel = 0;
+    } // namespace
+
     ReplicationConnection::ReplicationConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID guid, ReplicationManager *manager, bool isServer)
-        : Connection_RM3(systemAddress, guid), _manager(manager), _isServer(isServer) {}
+        : Connection_RM3(systemAddress, guid), _manager(manager), _isServer(isServer), _viewerGUID(MafiaNet::ToPeerGuid(guid)) {}
 
     MafiaNet::Replica3 *ReplicationConnection::AllocReplica(MafiaNet::BitStream *allocationIdBitstream, MafiaNet::ReplicaManager3 *) {
         uint32_t typeId = 0;
@@ -54,6 +59,9 @@ namespace Framework::Networking::Replication {
             _relevantGeneration = generation;
             _relevantViewer     = viewer;
             _relevantValid      = true;
+            for (auto it = _lastTransformSend.begin(); it != _lastTransformSend.end();) {
+                it = _relevant.contains(const_cast<NetworkEntity *>(it->first)) ? std::next(it) : _lastTransformSend.erase(it);
+            }
         }
 
         for (NetworkEntity *entity : _relevant) {
@@ -70,5 +78,40 @@ namespace Framework::Networking::Replication {
                 existingReplicasToDestroy.Push(entity, _FILE_AND_LINE_);
             }
         }
+    }
+
+    uint32_t ReplicationConnection::TransformSendIntervalMs(const NetworkEntity *entity) const {
+        if (!_isServer || !_manager || !entity || !_relevantValid || !_relevantViewer || !_manager->HasSerializeRateBands()) {
+            return 0;
+        }
+        const NetworkEntity *viewer = _relevantViewer;
+        if (entity == viewer || entity->ownerGUID == _viewerGUID || entity->streaming.alwaysVisible || entity->streaming.targetGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+            return 0;
+        }
+        const SerializeRateBands &bands = _manager->GetSerializeRateBands(entity->GetTypeId());
+        if (bands.midIntervalMs == 0 && bands.farIntervalMs == 0) {
+            return 0;
+        }
+        const glm::vec3 delta = entity->position - viewer->position;
+        return ReplicationManager::TransformSendIntervalMs(bands, glm::dot(delta, delta));
+    }
+
+    MafiaNet::SendSerializeIfChangedResult ReplicationConnection::SendSerialize(MafiaNet::Replica3 *replica, bool indicesToSend[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::BitStream serializationData[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::Time timestamp, MafiaNet::PRO sendParameters[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::RakPeerInterface *rakPeer, unsigned char worldId, MafiaNet::Time curTime) {
+        if (indicesToSend[kTransformChannel]) {
+            const auto *entity      = static_cast<const NetworkEntity *>(replica);
+            const uint32_t interval = TransformSendIntervalMs(entity);
+            if (interval > 0) {
+                const auto it = _lastTransformSend.find(entity);
+                if (it != _lastTransformSend.end() && curTime >= it->second && curTime - it->second < interval) {
+                    // indicesToSend may be the replica's shared broadcast record.
+                    bool withheld[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS];
+                    std::memcpy(withheld, indicesToSend, sizeof(withheld));
+                    withheld[kTransformChannel] = false;
+                    return Connection_RM3::SendSerialize(replica, withheld, serializationData, timestamp, sendParameters, rakPeer, worldId, curTime);
+                }
+                _lastTransformSend[entity] = curTime;
+            }
+        }
+        return Connection_RM3::SendSerialize(replica, indicesToSend, serializationData, timestamp, sendParameters, rakPeer, worldId, curTime);
     }
 } // namespace Framework::Networking::Replication
