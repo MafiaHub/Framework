@@ -54,7 +54,15 @@
 #include <cppfs/fs.h>
 #include <csignal>
 
+#ifdef _WIN32
+#include <timeapi.h>
+#endif
+
 namespace Framework::Integrations::Server {
+    namespace {
+        constexpr double kTickHitchWarnMs         = 100.0;
+        constexpr double kTickHitchWarnIntervalMs = 1000.0;
+    } // namespace
 
     Instance::Instance(): _shuttingDown(false) {
         _networkingEngine = std::make_unique<Networking::Engine>();
@@ -1167,9 +1175,25 @@ namespace Framework::Integrations::Server {
         if (_nextTick <= start) {
             FW_PROFILE_SCOPE_N("Server::Tick");
 
+            // A stalled tick freezes replication for every client; anything past kTickHitchWarnMs is
+            // logged with the phase that took it.
+            const char *slowestPhase = "";
+            double slowestPhaseMs    = 0.0;
+            const auto phase         = [&](const char *name, auto &&body) {
+                const auto phaseStart = std::chrono::high_resolution_clock::now();
+                body();
+                const double ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - phaseStart).count();
+                if (ms > slowestPhaseMs) {
+                    slowestPhaseMs = ms;
+                    slowestPhase   = name;
+                }
+            };
+
             if (_networkingEngine) {
                 FW_PROFILE_SCOPE_N("Server::Networking");
-                _networkingEngine->Update();
+                phase("networking", [&] {
+                    _networkingEngine->Update();
+                });
             }
 
             // Refresh the voice router's world view from the replicated entities. Every entity
@@ -1178,56 +1202,84 @@ namespace Framework::Integrations::Server {
             // ForEach<NetworkEntity> would cost for no added selectivity.
             if (auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr) {
                 FW_PROFILE_SCOPE_N("Server::VoicePositions");
-                auto &router = _voiceServer.GetRouter();
-                replication->ForEachEntity([&router](Framework::Networking::Replication::NetworkEntity *entity) {
-                    if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
-                        router.SetPlayerPosition(static_cast<uint64_t>(entity->ownerGUID), entity->position);
-                    }
+                phase("voice", [&] {
+                    auto &router = _voiceServer.GetRouter();
+                    replication->ForEachEntity([&router](Framework::Networking::Replication::NetworkEntity *entity) {
+                        if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+                            router.SetPlayerPosition(static_cast<uint64_t>(entity->ownerGUID), entity->position);
+                        }
+                    });
+                    _voiceServer.Update();
                 });
-                _voiceServer.Update();
             }
 
             DispatchVoiceTalkingChanges();
 
             if (_scriptingModule) {
                 FW_PROFILE_SCOPE_N("Server::Scripting");
-                _scriptingModule->Update();
+                phase("scripting", [&] {
+                    _scriptingModule->Update();
+                });
             }
 
             if (_commandListener) {
                 FW_PROFILE_SCOPE_N("Server::Commands");
-                _commandListener->Update();
+                phase("commands", [&] {
+                    _commandListener->Update();
+                });
             }
 
             if (_masterlist->IsInitialized()) {
                 FW_PROFILE_SCOPE_N("Server::MasterlistPing");
-                Services::ServerInfo info {};
-                info.port           = _opts.bindPort;
-                info.gameMode       = _opts.modName;
-                info.version        = _opts.modVersion;
-                info.maxPlayers     = _opts.maxPlayers;
-                info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
-                _masterlist->Ping(info);
+                phase("masterlist", [&] {
+                    Services::ServerInfo info {};
+                    info.port           = _opts.bindPort;
+                    info.gameMode       = _opts.modName;
+                    info.version        = _opts.modVersion;
+                    info.maxPlayers     = _opts.maxPlayers;
+                    info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
+                    _masterlist->Ping(info);
+                });
             }
 
             {
                 FW_PROFILE_SCOPE_N("Server::PostUpdate");
-                PostUpdate();
+                phase("postUpdate", [&] {
+                    PostUpdate();
+                });
             }
 
             FW_PROFILE_FRAME();
 
-            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
+            const auto end      = std::chrono::high_resolution_clock::now();
+            const double tickMs = std::chrono::duration<double, std::milli>(end - start).count();
+            if (tickMs >= kTickHitchWarnMs) {
+                ++_suppressedHitches;
+                if (std::chrono::duration<double, std::milli>(end - _lastHitchWarnAt).count() >= kTickHitchWarnIntervalMs) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server tick took {:.0f} ms against a {:.0f} ms budget; slowest phase {} at {:.0f} ms ({} slow tick(s) since the last warning)", tickMs, Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval), slowestPhase, slowestPhaseMs, _suppressedHitches);
+                    _lastHitchWarnAt   = end;
+                    _suppressedHitches = 0;
+                }
+            }
+
+            _nextTick = end + std::chrono::milliseconds(static_cast<int64_t>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
         }
         else {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
     void Instance::Run() {
+#ifdef _WIN32
+        // The default 15.6 ms sleep quantum would hold the tick to ~32 Hz.
+        timeBeginPeriod(1);
+#endif
         while (_initialized) {
             Update();
             std::this_thread::yield();
         }
+#ifdef _WIN32
+        timeEndPeriod(1);
+#endif
     }
 
     void Instance::OnSignal(const sig_signal_t signal) {

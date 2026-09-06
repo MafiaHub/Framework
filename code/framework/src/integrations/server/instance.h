@@ -147,6 +147,8 @@ namespace Framework::Integrations::Server {
         // Set after the initial StartAll; gates runtime broadcasts to clients.
         bool _resourcesBooted = false;
         std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
+        std::chrono::time_point<std::chrono::high_resolution_clock> _lastHitchWarnAt {};
+        uint32_t _suppressedHitches = 0;
 
         InstanceOptions _opts;
 
