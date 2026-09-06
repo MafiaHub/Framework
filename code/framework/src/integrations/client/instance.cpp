@@ -385,7 +385,8 @@ namespace Framework::Integrations::Client {
         if (!_chatBox.IsSessionActive() || _chatBox.IsInputActive()) {
             return false;
         }
-        if (_webManager && _webManager->IsAnyViewFocused()) {
+        // Text entry, not view focus: a focused HUD or menu leaves keybinds and push-to-talk alone.
+        if (_webManager && _webManager->IsAnyTextInputFocused()) {
             return false;
         }
 #ifdef _WIN32
@@ -565,10 +566,9 @@ namespace Framework::Integrations::Client {
         {
             FW_PROFILE_SCOPE_N("Client::Voice");
 
-            // The chat box and web views belong to the framework, so it enforces this itself
-            // rather than trusting every mod to remember.
-            // Only actual text entry, not mere view focus: a focused HUD or menu must not mute the
-            // player. A page taking keystrokes reports it through ViewEvent::InputFocusChange.
+            // The chat box and web views belong to the framework, so it enforces this itself rather
+            // than trusting every mod to remember. Text entry only: a focused HUD or menu must not
+            // mute the player.
             _voiceClient.SetInputSuppressed(_chatBox.IsInputActive() || (_webManager && _webManager->IsAnyTextInputFocused()));
 
             // Speaker positions come from the replicated entity set, as the server's voice
