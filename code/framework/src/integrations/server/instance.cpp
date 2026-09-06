@@ -1190,25 +1190,9 @@ namespace Framework::Integrations::Server {
         if (_nextTick <= start) {
             FW_PROFILE_SCOPE_N("Server::Tick");
 
-            // A stalled tick freezes replication for every client; anything past kTickHitchWarnMs is
-            // logged with the phase that took it.
-            const char *slowestPhase = "";
-            double slowestPhaseMs    = 0.0;
-            const auto phase         = [&](const char *name, auto &&body) {
-                const auto phaseStart = std::chrono::high_resolution_clock::now();
-                body();
-                const double ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - phaseStart).count();
-                if (ms > slowestPhaseMs) {
-                    slowestPhaseMs = ms;
-                    slowestPhase   = name;
-                }
-            };
-
             if (_networkingEngine) {
                 FW_PROFILE_SCOPE_N("Server::Networking");
-                phase("networking", [&] {
-                    _networkingEngine->Update();
-                });
+                _networkingEngine->Update();
             }
 
             // Refresh the voice router's world view from the replicated entities. Every entity
@@ -1217,53 +1201,41 @@ namespace Framework::Integrations::Server {
             // ForEach<NetworkEntity> would cost for no added selectivity.
             if (auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr) {
                 FW_PROFILE_SCOPE_N("Server::VoicePositions");
-                phase("voice", [&] {
-                    auto &router = _voiceServer.GetRouter();
-                    replication->ForEachEntity([&router](Framework::Networking::Replication::NetworkEntity *entity) {
-                        if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
-                            router.SetPlayerPosition(static_cast<uint64_t>(entity->ownerGUID), entity->position);
-                        }
-                    });
-                    _voiceServer.Update();
+                auto &router = _voiceServer.GetRouter();
+                replication->ForEachEntity([&router](Framework::Networking::Replication::NetworkEntity *entity) {
+                    if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+                        router.SetPlayerPosition(static_cast<uint64_t>(entity->ownerGUID), entity->position);
+                    }
                 });
+                _voiceServer.Update();
             }
 
-            phase("voiceEvents", [&] {
-                DispatchVoiceTalkingChanges();
-            });
+            DispatchVoiceTalkingChanges();
 
             if (_scriptingModule) {
                 FW_PROFILE_SCOPE_N("Server::Scripting");
-                phase("scripting", [&] {
-                    _scriptingModule->Update();
-                });
+                _scriptingModule->Update();
             }
 
             if (_commandListener) {
                 FW_PROFILE_SCOPE_N("Server::Commands");
-                phase("commands", [&] {
-                    _commandListener->Update();
-                });
+                _commandListener->Update();
             }
 
             if (_masterlist->IsInitialized()) {
                 FW_PROFILE_SCOPE_N("Server::MasterlistPing");
-                phase("masterlist", [&] {
-                    Services::ServerInfo info {};
-                    info.port           = _opts.bindPort;
-                    info.gameMode       = _opts.modName;
-                    info.version        = _opts.modVersion;
-                    info.maxPlayers     = _opts.maxPlayers;
-                    info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
-                    _masterlist->Ping(info);
-                });
+                Services::ServerInfo info {};
+                info.port           = _opts.bindPort;
+                info.gameMode       = _opts.modName;
+                info.version        = _opts.modVersion;
+                info.maxPlayers     = _opts.maxPlayers;
+                info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
+                _masterlist->Ping(info);
             }
 
             {
                 FW_PROFILE_SCOPE_N("Server::PostUpdate");
-                phase("postUpdate", [&] {
-                    PostUpdate();
-                });
+                PostUpdate();
             }
 
             FW_PROFILE_FRAME();
@@ -1273,7 +1245,7 @@ namespace Framework::Integrations::Server {
             if (tickMs >= kTickHitchWarnMs) {
                 ++_suppressedHitches;
                 if (std::chrono::duration<double, std::milli>(end - _lastHitchWarnAt).count() >= kTickHitchWarnIntervalMs) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server tick took {:.0f} ms against a {:.0f} ms budget; slowest phase {} at {:.0f} ms ({} slow tick(s) since the last warning)", tickMs, Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval), slowestPhase, slowestPhaseMs, _suppressedHitches);
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server tick took {:.0f} ms against a {:.0f} ms budget ({} slow tick(s) since the last warning)", tickMs, Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval), _suppressedHitches);
                     _lastHitchWarnAt   = end;
                     _suppressedHitches = 0;
                 }
