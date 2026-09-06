@@ -23,6 +23,7 @@
 #include "scripting/resource/resource_manager.h"
 #include "scripting/builtins/events.h"
 
+#include "networking/channels.h"
 #include "networking/state.h"
 #include "networking/replication/replication_manager.h"
 #include "networking/replication/nametag_state.h"
@@ -52,10 +53,6 @@
 
 namespace Framework::Integrations::Client {
     namespace {
-        // Ordering channel for the asset-download file transfer. Wire-affecting: the server must
-        // use the same channel for these transfers to stay ordered relative to each other.
-        constexpr char kAssetDownloadOrderingChannel = 2;
-
         // Handler for server-emitted scripting events; reaches the scripting engine through the
         // CoreModules singleton.
         void OnEmitScriptEvent(const Shared::RPC::EmitScriptEvent &rpc, MafiaNet::Packet *packet) {
@@ -974,7 +971,7 @@ namespace Framework::Integrations::Client {
         }
 
         _downloadStatus.downloading = true;
-        _downloadStatus.setID = streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), &_assetDownloadProgress, MafiaNet::Priority::High, kAssetDownloadOrderingChannel, nullptr);
+        _downloadStatus.setID = streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), &_assetDownloadProgress, MafiaNet::Priority::High, Framework::Networking::ToOrderingChannel(Framework::Networking::Channel::Assets), nullptr);
     }
 
     void Instance::SyncResourceUpdatesFromServer() {

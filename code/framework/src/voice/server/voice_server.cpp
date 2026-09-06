@@ -12,6 +12,7 @@
 
 #include <logging/logger.h>
 #include <mafianet/MessageIdentifiers.h>
+#include <networking/channels.h>
 #include <networking/network_server.h>
 #include <networking/rpc/voice_settings.h>
 #include <utils/time.h>
@@ -34,6 +35,7 @@ namespace Framework::Voice {
         // entirely -- so setting it would only put the plugin in a contradictory state.
         // No Init() call either, so no codec is ever allocated here.
         _voice.SetRelayHost(true);
+        _voice.SetOrderingChannels(Framework::Networking::ToOrderingChannel(Framework::Networking::Channel::VoiceFrames), Framework::Networking::ToOrderingChannel(Framework::Networking::Channel::VoiceControl));
         server->GetPeer()->AttachPlugin(&_voice);
         _attached = true;
 

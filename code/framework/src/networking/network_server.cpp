@@ -8,6 +8,7 @@
 
 #include "network_server.h"
 
+#include "channels.h"
 #include "replication/replication_manager.h"
 
 #include <mafianet/BitStream.h>
@@ -48,6 +49,7 @@ namespace Framework::Networking {
 
         _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
         _assetStreamer.SetDownloadRequestIncrementalReadInterface(&_assetReader, kAssetChunkSize);
+        _assetStreamer.SetUploadSendParameters(MafiaNet::Priority::High, ToOrderingChannel(Channel::Assets));
         _peer->AttachPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_assetStreamer);
         RegisterBuildToken();
@@ -167,7 +169,7 @@ namespace Framework::Networking {
     void NetworkServer::SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, MafiaNet::Priority priority, MafiaNet::Reliability reliability) {
         // When broadcasting, the system identifier is the peer to exclude, so a single Signal reaches
         // everyone but the sender.
-        _rpc.Signal(identifier, &bs, priority, reliability, 0, excludeGUID, true, false);
+        _rpc.Signal(identifier, &bs, priority, reliability, ToOrderingChannel(Channel::Events), excludeGUID, true, false);
     }
 
     void NetworkServer::PushReplicationConnection(MafiaNet::RakNetGUID guid) {

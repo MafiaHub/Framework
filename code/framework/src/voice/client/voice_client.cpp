@@ -9,6 +9,7 @@
 #include "voice_client.h"
 
 #include <logging/logger.h>
+#include <networking/channels.h>
 #include <networking/network_client.h>
 #include <networking/rpc/voice_settings.h>
 #include <utils/time.h>
@@ -297,6 +298,7 @@ namespace Framework::Voice {
         _client = client;
 
         client->GetPeer()->AttachPlugin(&_voice);
+        _voice.SetOrderingChannels(Framework::Networking::ToOrderingChannel(Framework::Networking::Channel::VoiceFrames), Framework::Networking::ToOrderingChannel(Framework::Networking::Channel::VoiceControl));
         _attached = true;
 
         _sink = &_localSink;
