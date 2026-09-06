@@ -82,8 +82,9 @@ namespace Framework::GUI {
         void CleanupViews();
         bool IsAnyViewFocused() const;
 
-        // Whether a page is actually taking typed input, as opposed to merely holding focus.
-        // The predicate input gating wants: a focused HUD must not eat keybinds or mute voice.
+        // Whether a shown, focused view has the caret in an editable node, as opposed to merely
+        // holding focus. The predicate input gating wants: a focused HUD must not eat keybinds or
+        // mute voice.
         bool IsAnyTextInputFocused() const;
         bool IsAnyGCViewFocused() const;
 

@@ -581,7 +581,7 @@ namespace Framework::GUI {
     bool Manager::IsAnyTextInputFocused() const {
         std::scoped_lock lock(_renderMutex);
         for (const auto &view : _views) {
-            if (view->IsTextInputFocused()) {
+            if (view->HasFocus() && view->ShouldDisplay() && view->IsTextInputFocused()) {
                 return true;
             }
         }

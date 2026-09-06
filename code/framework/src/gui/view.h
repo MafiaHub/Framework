@@ -61,8 +61,8 @@ namespace Framework::GUI {
         // CPU renderer fallback
         std::vector<uint8_t> _pixelData;
 
-        bool _gpuAccelerated  = false;
-        bool _hasFocus        = false;
+        bool _gpuAccelerated   = false;
+        bool _hasFocus         = false;
         bool _textInputFocused = false;
         int _x;
         int _y;
@@ -110,9 +110,9 @@ namespace Framework::GUI {
             }
         }
 
-        // True while an editable element inside the page holds the caret. Distinct from HasFocus:
-        // a focused HUD captures no text, and this stays true for a view CEF types into without
-        // the framework's focus flag set (the chat box does exactly that).
+        // The DOM half of focus: an editable node holds the caret. Keys only reach a page while
+        // HasFocus() && ShouldDisplay(), so gate on all three. Not cleared by Focus(false): the DOM
+        // keeps its caret across it, and reports no transition when the view is refocused.
         bool IsTextInputFocused() const {
             return _textInputFocused;
         }
