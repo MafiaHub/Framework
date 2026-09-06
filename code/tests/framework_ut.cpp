@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 26
+#define UNIT_MAX_MODULES 27
 #include "logging/logger.h"
 #include "unit.h"
 
@@ -20,6 +20,7 @@
 #include "modules/interest_grid_ut.h"
 #include "modules/state_machine_ut.h"
 #include "modules/persistent_config_ut.h"
+#include "modules/server_config_ut.h"
 #include "modules/url_protocol_ut.h"
 #include "modules/snapshot_buffer_ut.h"
 #include "modules/voice_router_ut.h"
@@ -50,6 +51,7 @@ int main() {
     UNIT_MODULE(interest_grid);
     UNIT_MODULE(state_machine);
     UNIT_MODULE(persistent_config);
+    UNIT_MODULE(server_config);
     UNIT_MODULE(url_protocol);
     UNIT_MODULE(snapshot_buffer);
     UNIT_MODULE(voice_router);

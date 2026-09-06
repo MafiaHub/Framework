@@ -51,6 +51,11 @@ namespace v8 {
     class Local;
 } // namespace v8
 
+namespace cxxopts {
+    class Options;
+    class ParseResult;
+} // namespace cxxopts
+
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
 
@@ -128,6 +133,12 @@ namespace Framework::Integrations::Server {
         char **argv;
 
     };
+
+    // Settings resolve lowest to highest: InstanceOptions defaults, then the config document, then
+    // the command line. Each layer only touches the keys it actually carries.
+    void AddCommandLineOptions(cxxopts::Options &options, const InstanceOptions &opts);
+    void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts);
+    void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts);
 
     // Connection metadata handed to the player-connect callback so the game can create and fully
     // populate the player's avatar (nickname, slot index, identity ids) instead of leaving spawn-time

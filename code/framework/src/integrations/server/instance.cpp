@@ -146,11 +146,7 @@ namespace Framework::Integrations::Server {
 
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
-        options.allow_unrecognised_options();
-        options.add_options("MafiaHub Integrations server",
-            {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
-                {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)}, {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.webBindPort))},
-                {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(_opts.webBindHost)}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+        AddCommandLineOptions(options, _opts);
 
         // Try to parse and return if anything wrong happened
         const auto result = options.parse(_opts.argc, _opts.argv);
@@ -162,22 +158,28 @@ namespace Framework::Integrations::Server {
         }
 
         // Allow mod to specify custom JSON config file name
-        _opts.modConfigFile = result["config"].as<std::string>();
+        if (result.count("config")) {
+            _opts.modConfigFile = result["config"].as<std::string>();
+        }
 
         // Load JSON config if present
         if (!LoadConfigFromJSON()) {
             return Error("Failed to parse JSON config file '" + _opts.modConfigFile + "'");
         }
 
-        // Finally apply back to the structure that is used everywhere the settings from the parser
-        _opts.bindHost = result["host"].as<std::string>();
-        _opts.bindPort = result["port"].as<int32_t>();
+        ApplyCommandLine(result, _opts);
 
         if (_opts.bindHost.empty()) {
             return Error("bindHost is required");
         }
         if (_opts.bindPort <= 0 || _opts.bindPort > 65535) {
             return Error("bindPort must be in the range 1-65535 (got " + std::to_string(_opts.bindPort) + ")");
+        }
+        if (_opts.webServerEnabled && (_opts.webBindPort <= 0 || _opts.webBindPort > 65535)) {
+            return Error("webBindPort must be in the range 1-65535 (got " + std::to_string(_opts.webBindPort) + ")");
+        }
+        if (_opts.webServerEnabled && _opts.webBindHost.empty()) {
+            return Error("webBindHost is required");
         }
         if (_opts.maxPlayers <= 0) {
             return Error("maxPlayers must be greater than 0 (got " + std::to_string(_opts.maxPlayers) + ")");
@@ -340,6 +342,45 @@ namespace Framework::Integrations::Server {
     }
 
 
+    void AddCommandLineOptions(cxxopts::Options &options, const InstanceOptions &opts) {
+        options.allow_unrecognised_options();
+        options.add_options("MafiaHub Integrations server",
+            {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)},
+                {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)}, {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.webBindPort))},
+                {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(opts.webBindHost)}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+    }
+
+    void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts) {
+        const auto read = [&document](const char *key, auto &field) {
+            if (document.contains(key)) {
+                field = document.at(key).get<std::decay_t<decltype(field)>>();
+            }
+        };
+
+        read("host", opts.bindHost);
+        read("port", opts.bindPort);
+        read("apihost", opts.webBindHost);
+        read("apiport", opts.webBindPort);
+        read("map", opts.bindMapName);
+        read("maxplayers", opts.maxPlayers);
+        read("server-token", opts.bindSecretKey);
+    }
+
+    void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts) {
+        // count() is the number of command-line occurrences: a value that came from default_value
+        // leaves it at 0, so a flag the operator did not pass never overrides the config document.
+        const auto read = [&result](const char *key, auto &field) {
+            if (result.count(key)) {
+                field = result[key].as<std::decay_t<decltype(field)>>();
+            }
+        };
+
+        read("host", opts.bindHost);
+        read("port", opts.bindPort);
+        read("apihost", opts.webBindHost);
+        read("apiport", opts.webBindPort);
+    }
+
     bool Instance::LoadConfigFromJSON() {
         auto configHandle = cppfs::fs::open(_opts.modConfigFile);
 
@@ -378,18 +419,15 @@ namespace Framework::Integrations::Server {
                 return false;
             }
 
-            // Retrieve fields and overwrite InstanceOptions defaults
-            _opts.bindHost      = _fileConfig->Get<std::string>("host");
-            _opts.bindPort      = _fileConfig->Get<int>("port");
-            _opts.bindMapName   = _fileConfig->Get<std::string>("map");
-            _opts.maxPlayers    = _fileConfig->Get<int>("maxplayers");
-            _opts.bindSecretKey = _fileConfig->Get<std::string>("server-token");
+            auto *document = _fileConfig->GetDocument();
+            if (document) {
+                ApplyConfigDocument(*document, _opts);
+            }
 
             // Mod-declared keys live under "mod" so they cannot collide with framework keys added
             // later, and so the replicated subset is a filter over one object rather than a
             // subtraction over the whole document.
-            auto *document = _fileConfig->GetDocument();
-            _modConfig     = (document && document->contains("mod")) ? (*document)["mod"] : nlohmann::json::object();
+            _modConfig = (document && document->contains("mod")) ? (*document)["mod"] : nlohmann::json::object();
 
             std::string schemaError;
             if (!Framework::Utils::ValidateConfigAgainstSchema(_opts.modConfigSchema, _modConfig, schemaError)) {
@@ -413,7 +451,7 @@ namespace Framework::Integrations::Server {
             }
         }
         catch (const std::exception &ex) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("JSON config has missing fields: {}", ex.what());
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("JSON config could not be applied: {}", ex.what());
             return false;
         }
         return true;
@@ -423,6 +461,8 @@ namespace Framework::Integrations::Server {
         nlohmann::json frameworkKeys;
         frameworkKeys["host"]         = _opts.bindHost;
         frameworkKeys["port"]         = _opts.bindPort;
+        frameworkKeys["apihost"]      = _opts.webBindHost;
+        frameworkKeys["apiport"]      = _opts.webBindPort;
         frameworkKeys["map"]          = _opts.bindMapName;
         frameworkKeys["maxplayers"]   = _opts.maxPlayers;
         frameworkKeys["server-token"] = _opts.bindSecretKey;
