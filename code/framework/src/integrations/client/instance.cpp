@@ -1140,8 +1140,7 @@ namespace Framework::Integrations::Client {
             _pendingRefreshResources.clear();
 
             if (!_resumingDeferredInitialAssetProcessing) {
-                // Native content must be available to the project before it opens its world.
-                // Verify and mount the same packages scripting will consume, without starting scripts.
+                // Native content must be mounted before the project opens its world.
                 const auto failed = MountResourcePackages(_pendingServerResources);
                 if (!failed.empty()) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("{} of {} client resource(s) failed verification; refusing to join", failed.size(), _pendingServerResources.size());
@@ -1186,9 +1185,7 @@ namespace Framework::Integrations::Client {
 
                 PostScriptInit();
 
-                // Before anything is discovered or started. A package that fails verification is
-                // not a resource to skip: the server said it should run and its bytes are not what
-                // the server described, so the session is refused rather than left half-working.
+                // Restrict script discovery to the verified server resource list.
                 if (!_pendingServerResources.empty()) {
                     scriptingModule->SetServerResourceList(_pendingServerResources);
                 }
