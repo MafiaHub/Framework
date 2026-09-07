@@ -742,6 +742,12 @@ namespace Framework::Integrations::Client {
                 return;
             }
             for (const auto &res : payload.resources) {
+                if (!OnResourcePackageChanged(res.name, true)) {
+                    static_cast<void>(GetNetworkingEngine()->GetNetworkClient()->Disconnect());
+                    return;
+                }
+            }
+            for (const auto &res : payload.resources) {
                 // Drop any queued refresh so a pending sync can't resurrect it.
                 for (auto it = _pendingRefreshResources.begin(); it != _pendingRefreshResources.end();) {
                     it = (it->name == res.name) ? _pendingRefreshResources.erase(it) : it + 1;
@@ -1098,6 +1104,12 @@ namespace Framework::Integrations::Client {
                 if (auto *rm = scriptingModule->GetResourceManager()) {
                     const auto failed = MountResourcePackages(_pendingRefreshResources);
                     for (const auto &res : _pendingRefreshResources) {
+                        if (std::find(failed.begin(), failed.end(), res.name) == failed.end() && !OnResourcePackageChanged(res.name, false)) {
+                            static_cast<void>(net->Disconnect());
+                            return;
+                        }
+                    }
+                    for (const auto &res : _pendingRefreshResources) {
                         if (std::find(failed.begin(), failed.end(), res.name) != failed.end()) {
                             continue;
                         }
@@ -1128,6 +1140,16 @@ namespace Framework::Integrations::Client {
             _pendingRefreshResources.clear();
 
             if (!_resumingDeferredInitialAssetProcessing) {
+                // Native content must be available to the project before it opens its world.
+                // Verify and mount the same packages scripting will consume, without starting scripts.
+                const auto failed = MountResourcePackages(_pendingServerResources);
+                if (!failed.empty()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("{} of {} client resource(s) failed verification; refusing to join", failed.size(), _pendingServerResources.size());
+                    _pendingServerResources.clear();
+                    _packageMounter.Reset();
+                    (void)net->Disconnect();
+                    return;
+                }
                 const uint64_t generation = _assetProcessingGeneration;
                 if (OnInitialAssetDownloadReady(generation, _downloadStatus) == InitialAssetProcessingDecision::Defer) {
                     if (generation != _assetProcessingGeneration || net->GetConnectionState() != Framework::Networking::PeerState::CONNECTED) {
@@ -1168,15 +1190,6 @@ namespace Framework::Integrations::Client {
                 // not a resource to skip: the server said it should run and its bytes are not what
                 // the server described, so the session is refused rather than left half-working.
                 if (!_pendingServerResources.empty()) {
-                    const auto failed = MountResourcePackages(_pendingServerResources);
-                    if (!failed.empty()) {
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("{} of {} client resource(s) failed verification; refusing to join", failed.size(), _pendingServerResources.size());
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
-                        _pendingServerResources.clear();
-                        _packageMounter.Reset();
-                        (void)net->Disconnect();
-                        return;
-                    }
                     scriptingModule->SetServerResourceList(_pendingServerResources);
                 }
 
