@@ -1103,16 +1103,19 @@ namespace Framework::Integrations::Client {
                 && !_pendingRefreshResources.empty()) {
                 if (auto *rm = scriptingModule->GetResourceManager()) {
                     const auto failed = MountResourcePackages(_pendingRefreshResources);
+                    if (!failed.empty()) {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("{} refreshed client resource(s) failed verification; disconnecting", failed.size());
+                        _pendingRefreshResources.clear();
+                        static_cast<void>(net->Disconnect());
+                        return;
+                    }
                     for (const auto &res : _pendingRefreshResources) {
-                        if (std::find(failed.begin(), failed.end(), res.name) == failed.end() && !OnResourcePackageChanged(res.name, false)) {
+                        if (!OnResourcePackageChanged(res.name, false)) {
                             static_cast<void>(net->Disconnect());
                             return;
                         }
                     }
                     for (const auto &res : _pendingRefreshResources) {
-                        if (std::find(failed.begin(), failed.end(), res.name) != failed.end()) {
-                            continue;
-                        }
                         // Newly started server-side: discover from cache first.
                         if (!rm->HasResource(res.name)) {
                             const std::string resPath = Framework::Utils::Vfs::ResourcePath(res.name);
