@@ -208,8 +208,7 @@ namespace Framework::Voice {
             const uint64_t id = slot.id.load(std::memory_order_acquire);
             if (id == 0) {
                 // Draining here rather than on release keeps the ring single-consumer.
-                while (slot.pcm.Pop(scratch, kRenderChunkSamples)) {
-                }
+                while (slot.pcm.Pop(scratch, kRenderChunkSamples)) {}
                 slot.primed = false;
                 continue;
             }
@@ -301,7 +300,8 @@ namespace Framework::Voice {
         _voice.SetOrderingChannels(Framework::Networking::ToOrderingChannel(Framework::Networking::Channel::VoiceFrames), Framework::Networking::ToOrderingChannel(Framework::Networking::Channel::VoiceControl));
         _attached = true;
 
-        _sink = &_localSink;
+        _sink   = &_localSink;
+        _source = &_capture;
 
         // Devices are deliberately NOT opened here. A client Instance is initialized from inside
         // the host game's startup, which for an injected mod can be before the game has run any of
@@ -319,6 +319,12 @@ namespace Framework::Voice {
         _ptt.Cut();
         CloseSession();
 
+        // CloseSession stops the devices only when a session was open, and the installed source
+        // is not necessarily the built-in one. Null is the destructor on a client Init never ran.
+        if (_source != nullptr) {
+            _source->Stop();
+        }
+
         _capture.Stop();
         _localSink.Stop();
 
@@ -329,6 +335,7 @@ namespace Framework::Voice {
         _attached = false;
         _client   = nullptr;
         _sink     = nullptr;
+        _source   = nullptr;
         _placements.clear();
         _speakerRanges.clear();
         _published.clear();
@@ -401,13 +408,13 @@ namespace Framework::Voice {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: playback unavailable; remote players will be inaudible");
         }
 
-        if (!_capture.Start()) {
+        if (!_source->Start()) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: no microphone; push-to-talk will do nothing");
         }
     }
 
     void VoiceClient::StopDevices() {
-        _capture.Stop();
+        _source->Stop();
         _localSink.Stop();
     }
 
@@ -505,8 +512,8 @@ namespace Framework::Voice {
     }
 
     float VoiceClient::ResolveRange(uint64_t speaker) const {
-        const auto it   = _speakerRanges.find(speaker);
-        const float own = it != _speakerRanges.end() ? it->second : 0.0f;
+        const auto it     = _speakerRanges.find(speaker);
+        const float own   = it != _speakerRanges.end() ? it->second : 0.0f;
         const float range = own > 0.0f ? own : _defaultSpeakerRange;
 
         return _hearingRange > 0.0f ? std::min(range, _hearingRange) : range;
@@ -528,7 +535,7 @@ namespace Framework::Voice {
     }
 
     void VoiceClient::PumpCapture() {
-        if (!_capture.IsRunning()) {
+        if (!_source->IsRunning()) {
             _localLevel   = 0.0f;
             _localTalking = false;
             return;
@@ -541,7 +548,7 @@ namespace Framework::Voice {
         // push-to-talk press would send all of it before anything the player just said.
         uint32_t frames = 0;
         float loudest   = 0.0f;
-        while (_capture.ReadFrame(_frame.data())) {
+        while (_source->ReadFrame(_frame.data())) {
             if (transmit) {
                 _voice.SendFrame(_self, _frame.data());
                 loudest = std::max(loudest, FrameLevel(_frame.data(), static_cast<uint32_t>(_frame.size())));
@@ -610,7 +617,6 @@ namespace Framework::Voice {
                 _admitted[slot].lastFrame  = nowMs;
                 _admitted[slot].audioUntil = nowMs + submitted * kFrameMs + kEnvelopeHoldSlackMs;
                 _admitted[slot].level      = FollowEnvelope(_admitted[slot].level, loudest, _envelopeStep);
-
             }
         }
 
@@ -649,7 +655,9 @@ namespace Framework::Voice {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: no listener transform published; call VoiceClient::SetListenerTransform from the game camera");
         }
 
-        _localSink.PublishWorld(_listener, _published.data(), _published.size());
+        // To the installed sink: an engine sink positions its own voices, and this is the
+        // only thing that tells it where anyone is.
+        _sink->PublishWorld(_listener, _published.data(), _published.size());
     }
 
     int VoiceClient::FindAdmitted(uint64_t speaker) const {
@@ -818,6 +826,23 @@ namespace Framework::Voice {
         else {
             // Only one renderer at a time.
             _localSink.Stop();
+        }
+    }
+
+    void VoiceClient::SetSource(IVoiceSource *source) {
+        IVoiceSource *next = source != nullptr ? source : static_cast<IVoiceSource *>(&_capture);
+        if (next == _source) {
+            return;
+        }
+
+        // One holder at a time, outgoing one closed first: an exclusive-mode capture device
+        // would otherwise refuse to open for whoever takes over.
+        _source->Stop();
+        _source = next;
+
+        // Outside a session there is no microphone to open yet; OpenSession starts it.
+        if (_sessionOpen && !_source->Start()) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: no microphone; push-to-talk will do nothing");
         }
     }
 } // namespace Framework::Voice

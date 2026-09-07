@@ -10,6 +10,7 @@
 
 #include "audio_device.h"
 #include "i_voice_sink.h"
+#include "i_voice_source.h"
 #include "mixer.h"
 #include "push_to_talk_gate.h"
 #include "voice/voice_config.h"
@@ -29,12 +30,6 @@ namespace Framework::Networking {
 namespace Framework::Voice {
     // ~340ms of decoded audio per speaker.
     constexpr size_t kSpeakerRingSamples = 16384;
-
-    struct SpeakerPlacement {
-        uint64_t speaker = 0;
-        glm::vec3 position {0.0f};
-        float range = kDefaultProximityRange;
-    };
 
     // Built-in output path: mixes audible speakers into the default playback device with
     // distance attenuation and constant-power panning.
@@ -65,7 +60,7 @@ namespace Framework::Voice {
 
         // Listener and speakers replace the mixer's world as one atomic flip; published
         // separately, the mixer could pan a new orientation against a stale position.
-        void PublishWorld(const ListenerTransform &listener, const SpeakerPlacement *speakers, size_t count);
+        void PublishWorld(const ListenerTransform &listener, const SpeakerPlacement *speakers, size_t count) override;
 
         // Applied after mixing, before limiting. Clamped to [0, 4].
         void SetMasterVolume(float volume);
@@ -192,10 +187,10 @@ namespace Framework::Voice {
             return _pushToTalkKey;
         }
 
-        // False outside a session, and inside one when there is no capture device -- the client is
-        // listen-only.
+        // False outside a session, and inside one when the installed source found no
+        // microphone -- the client is listen-only.
         bool HasMicrophone() const {
-            return _capture.IsRunning();
+            return _source != nullptr && _source->IsRunning();
         }
 
         bool IsTransmitting() const {
@@ -264,7 +259,18 @@ namespace Framework::Voice {
             return _sink;
         }
 
-        // Built-in mixer only; a custom sink applies its own gain.
+        // --- input ---
+
+        // Takes the microphone from a game engine instead of the built-in capture device;
+        // nullptr restores the built-in one. The two never hold the microphone at once.
+        void SetSource(IVoiceSource *source);
+
+        IVoiceSource *GetSource() const {
+            return _source;
+        }
+
+        // Built-in mixer only; a custom sink applies its own gain, on whatever
+        // the host engine mixes voice into.
         void SetMasterVolume(float volume) {
             _localSink.SetMasterVolume(volume);
         }
@@ -276,6 +282,9 @@ namespace Framework::Voice {
         // Rolloff shape: the fraction of range within which a speaker is at full volume. Raising
         // it flattens the near field without moving the cutoff, which is the knob a player who
         // says "I can't hear anyone standing next to me" actually needs.
+        //
+        // Stored on the built-in mixer, but it describes the curve rather than the renderer, so
+        // an engine sink reads it back and shapes its own attenuation the same way.
         void SetFullVolumeFraction(float fraction) {
             _localSink.SetFullVolumeFraction(fraction);
         }
@@ -339,20 +348,21 @@ namespace Framework::Voice {
         bool _transmitting    = false;
         bool _preferenceSent  = false;
         float _localLevel     = 0.0f;
-        bool _localTalking = false;
+        bool _localTalking    = false;
         // Holds our own state across a tick that drained no capture frame.
         int64_t _localTalkingUntil = 0;
         // One step per tick, shared by every envelope.
         int64_t _envelopeMs = 0;
         float _envelopeStep = 0.0f;
-        int _pushToTalkKey    = kDefaultPushToTalkKey;
+        int _pushToTalkKey  = kDefaultPushToTalkKey;
         PushToTalkGate _ptt {};
         MafiaNet::RakNetGUID _self {};
         MafiaNet::RakNetGUID _server {};
 
         CaptureDevice _capture;
         LocalVoiceSink _localSink;
-        IVoiceSink *_sink = nullptr;
+        IVoiceSink *_sink     = nullptr;
+        IVoiceSource *_source = nullptr;
 
         ListenerTransform _listener {};
         bool _listenerSet    = false;

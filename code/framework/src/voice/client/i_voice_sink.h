@@ -8,6 +8,9 @@
 
 #pragma once
 
+#include "voice_world.h"
+
+#include <cstddef>
 #include <cstdint>
 
 namespace Framework::Voice {
@@ -24,5 +27,18 @@ namespace Framework::Voice {
         // Speaker fell silent, lost its slot, or disconnected. May name a speaker that was
         // never submitted, and may be called more than once for the same speaker.
         virtual void ReleaseSpeaker(uint64_t speaker) = 0;
+
+        // Once per tick, after that tick's Submits: where the listener is, and where each
+        // speaker still being heard stands. `speakers` covers only those the client admitted
+        // and has a position for, so a sink positions what it is given and leaves the rest
+        // where it last put them.
+        //
+        // Optional: a sink whose engine already knows the speaker's entity has no use for it.
+        // The built-in mixer does -- it is the only thing telling the audio thread where to pan.
+        virtual void PublishWorld(const ListenerTransform &listener, const SpeakerPlacement *speakers, size_t count) {
+            (void)listener;
+            (void)speakers;
+            (void)count;
+        }
     };
 } // namespace Framework::Voice

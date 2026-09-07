@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "i_voice_source.h"
 #include "spsc_ring.h"
 #include "voice/voice_config.h"
 
@@ -23,28 +24,29 @@ namespace Framework::Voice {
 
     using CaptureRing = SpscRing<int16_t, kCaptureRingSamples>;
 
-    // Microphone input. The device thread pushes s16 mono at kSampleRate into a ring; the
-    // main thread drains whole frames. Nothing allocates or locks once Start() returns.
-    class CaptureDevice final {
+    // Microphone input, and the built-in IVoiceSource. The device thread pushes s16 mono at
+    // kSampleRate into a ring; the main thread drains whole frames. Nothing allocates or
+    // locks once Start() returns.
+    class CaptureDevice final: public IVoiceSource {
       public:
         CaptureDevice() = default;
-        ~CaptureDevice();
+        ~CaptureDevice() override;
 
         // The ring's address is handed to the device thread.
         CaptureDevice(const CaptureDevice &)            = delete;
         CaptureDevice &operator=(const CaptureDevice &) = delete;
 
         // False when there is no usable microphone; callers treat that as listen-only.
-        bool Start();
+        bool Start() override;
         // Idempotent, and safe when Start() failed.
-        void Stop();
+        void Stop() override;
 
-        bool IsRunning() const {
+        bool IsRunning() const override {
             return _device != nullptr;
         }
 
         // Main thread. Pops exactly kFrameSamples, or writes nothing and returns false.
-        bool ReadFrame(int16_t *out);
+        bool ReadFrame(int16_t *out) override;
 
       private:
         static void OnCapture(ma_device *device, void *output, const void *input, uint32_t frameCount);
