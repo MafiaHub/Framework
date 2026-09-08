@@ -886,6 +886,30 @@ MODULE(resource_package, {
         std::filesystem::remove_all(root);
     });
 
+    IT("exposes binary map patches through verified resource mounts", {
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+        const std::string patch("\x0f\x0f\x01\x0d\x02\0\0\0\x0d\x01\xf0\xf0", 12);
+        const std::string manifest = R"({"patches":[{"sds":"/sds/city/sandisland.sds","patch":"SandIsland.sds.patch"}]})";
+        Framework::Utils::Package::Writer writer;
+        EQUALS(writer.Add("client/maps/map_patches.json", manifest), true);
+        EQUALS(writer.Add("client/maps/SandIsland.sds.patch", patch), true);
+        std::string blob, zip, error, contents;
+        EQUALS(writer.Build(&key, blob), true);
+        EQUALS(Framework::Utils::Package::Open(blob, &key, zip, error), true);
+        auto &vfs = Framework::Utils::Vfs::Get();
+        EQUALS(vfs.MountMemory(std::move(zip), "ut_map_patch.zip", "/resources/map-test", error), true);
+        EQUALS(vfs.Contains("/resources/map-test/client/maps/map_patches.json"), true);
+        EQUALS(vfs.Read("/resources/map-test/client/maps/map_patches.json", contents), true);
+        EQUALS(contents == manifest, true);
+        EQUALS(vfs.Read("/resources/map-test/client/maps/SandIsland.sds.patch", contents), true);
+        EQUALS(contents == patch, true);
+        EQUALS(vfs.EnumerateDirectories("/resources/map-test/client") == std::vector<std::string> {"maps"}, true);
+        EQUALS(vfs.Unmount("ut_map_patch.zip"), true);
+        EQUALS(vfs.Contains("/resources/map-test/client/maps/SandIsland.sds.patch"), false);
+    });
+
     IT("normalizes virtual paths and refuses escapes", {
         STREQUALS(Framework::Utils::Vfs::NormalizeVirtual("/resources/demo/./a.js").c_str(), "/resources/demo/a.js");
         STREQUALS(Framework::Utils::Vfs::NormalizeVirtual("/resources/demo/sub/../a.js").c_str(), "/resources/demo/a.js");

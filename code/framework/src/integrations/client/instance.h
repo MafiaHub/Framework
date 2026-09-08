@@ -257,6 +257,13 @@ namespace Framework::Integrations::Client {
         virtual void OnAssetsDownloadFinished(bool success) {
             (void)success;
         }
+        // Called after a refreshed package is mounted but before its scripts restart, or before
+        // stopping a resource. Native integrations may require a fresh session for changed assets.
+        virtual bool OnResourcePackageChanged(const std::string &resourceName, bool stopping) {
+            (void)resourceName;
+            (void)stopping;
+            return true;
+        }
         virtual InitialAssetProcessingDecision OnInitialAssetDownloadReady(uint64_t generation, const AssetDownloadStatus &status) {
             (void)generation;
             (void)status;
