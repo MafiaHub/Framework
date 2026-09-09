@@ -210,6 +210,17 @@ endif()
 # Custom defines
 target_compile_definitions(Framework PUBLIC MG_ENABLE_LOG=0)
 
+# Per-build key for RPC identifiers (see networking/rpc/rpc_identifier.h). A cache variable alone
+# never reaches the preprocessor, so release CI passing -DFW_RPC_IDENTIFIER_SALT=<uint64> would
+# silently keep the default; turn it into a define here. PUBLIC because every peer -- framework,
+# server, client and downstream projects -- must derive the same identifiers.
+set(FW_RPC_IDENTIFIER_SALT "" CACHE STRING "64-bit salt keying every RPC identifier; must match on client and server")
+if(NOT FW_RPC_IDENTIFIER_SALT STREQUAL "")
+    # Accept the value with or without an integer suffix; the header needs it unsigned 64-bit.
+    string(REGEX REPLACE "[uUlL]+$" "" FW_RPC_IDENTIFIER_SALT_VALUE "${FW_RPC_IDENTIFIER_SALT}")
+    target_compile_definitions(Framework PUBLIC FW_RPC_IDENTIFIER_SALT=${FW_RPC_IDENTIFIER_SALT_VALUE}ULL)
+endif()
+
 # External libraries & other stuff
 macro(link_shared_deps target_name)
     # Framework source directories (PUBLIC for dependent projects)

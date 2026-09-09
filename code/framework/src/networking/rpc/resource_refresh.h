@@ -20,7 +20,7 @@ namespace Framework::Networking::RPC {
     // Server -> client: these client resources were (re)started; the client
     // re-syncs their files (delta) and reloads/starts them.
     struct ResourceRefresh {
-        static constexpr const char *kIdentifier = "Framework::ResourceRefresh";
+        static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::ResourceRefresh");
         static constexpr uint16_t kMaxResources  = 1000; // bound untrusted input
 
         std::vector<ResourceInfo> resources;
@@ -51,7 +51,7 @@ namespace Framework::Networking::RPC {
     // Server -> client: stop these resources (no files). Sent when a client
     // resource stops at runtime.
     struct ResourceStop {
-        static constexpr const char *kIdentifier = "Framework::ResourceStop";
+        static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::ResourceStop");
         static constexpr uint16_t kMaxResources  = 1000;
 
         std::vector<ResourceInfo> resources;

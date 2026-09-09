@@ -16,7 +16,7 @@ namespace Framework::Networking::RPC {
     // Server->client: the radius the router culls on, so the client mixer fades a talker out
     // where the frames stop arriving rather than at its own compile-time default.
     struct VoiceSettings {
-        static constexpr const char *kIdentifier = "Framework::VoiceSettings";
+        static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::VoiceSettings");
 
         float proximityRange = 0.0f;
 
@@ -28,7 +28,7 @@ namespace Framework::Networking::RPC {
     // Server->client: one talker's override of the radius above, keyed by peer GUID. 0
     // restores the default.
     struct VoiceSpeakerRange {
-        static constexpr const char *kIdentifier = "Framework::VoiceSpeakerRange";
+        static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::VoiceSpeakerRange");
 
         uint64_t player = 0;
         float range     = 0.0f;
@@ -43,7 +43,7 @@ namespace Framework::Networking::RPC {
     // fan-out for a client that discards every frame. A preference, deliberately separate
     // from the router's mute and deaf flags, which are the server's to set.
     struct VoicePreference {
-        static constexpr const char *kIdentifier = "Framework::VoicePreference";
+        static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::VoicePreference");
 
         bool enabled = true;
 
