@@ -39,15 +39,16 @@ namespace Framework::Integrations::Client::UI::Nametags {
 
     // Lengths are fractions of the viewport, never pixels, so one scripting contract stays meaningful
     // whether a mod draws in pixels or in normalised space. Defaults match 1920x1080 pixel metrics.
+    // The name sits on a drop shadow, not a filled plate, as MTA:SA and GTA V both draw it.
     struct Appearance {
         float fontHeight       = 0.0148f;    // fraction of screen height (16 px)
-        float padding          = 0.0037f;    // fraction of screen height (4 px)
-        float rounding         = 0.0037f;    // fraction of screen height (4 px)
+        float shadowOffset     = 0.0014f;    // drop shadow, fraction of screen height (1.5 px)
         float healthBarWidth   = 0.026f;     // fraction of screen width (50 px)
-        float healthBarHeight  = 0.0046f;    // fraction of screen height (5 px)
-        float healthBarGap     = 0.0028f;    // fraction of screen height (3 px)
-        uint32_t plateColor    = 0x99000000; // 0xAARRGGBB
-        uint32_t barTrackColor = 0xAF000000;
+        float healthBarHeight  = 0.0037f;    // fraction of screen height (4 px)
+        float healthBarGap     = 0.0037f;    // fraction of screen height (4 px)
+        float healthBarBorder  = 0.0009f;    // dark border around the bar (1 px)
+        uint32_t shadowColor   = 0xD0000000; // 0xAARRGGBB
+        uint32_t barTrackColor = 0xC0000000;
     };
 
     // Offered per ped before the expensive work: ranking runs on these, so projection, bone lookups
