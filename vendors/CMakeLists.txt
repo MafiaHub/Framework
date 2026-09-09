@@ -51,79 +51,100 @@ set(HTTPLIB_REQUIRE_OPENSSL ON)
 set(HTTPLIB_COMPILE ON)
 add_subdirectory(httplib)
 
-# MafiaNet (networking) - fetched, not vendored.
+# MafiaNet (networking) - precompiled release archive, neither vendored nor
+# built from source.
 #
-# MafiaNet owns RakVoice, and therefore owns RakVoice's Opus and RNNoise
-# dependencies, which its own build fetches. Vendoring MafiaNet here would mean
-# hoisting those two a level up into this repository: ~85 MB of third-party
-# source, a collision with this repo's `vendors/**/*.cmake` ignore rule, and a
-# re-vendor split across three trees that have to stay in lockstep. Fetching the
-# release instead keeps the dependency boundary where it belongs.
+# MafiaNet's release pipeline publishes per-platform archives (linux-x86_64,
+# windows-x86/x64, macos-x86_64/arm64) containing the static library, the
+# bundled Opus/RNNoise static libs RakVoice needs, all public headers, and the
+# MafiaNet CMake package. Downloading one archive replaces compiling ~85 MB of
+# third-party source (plus MafiaNet's own Opus/RNNoise fetches) on every cold
+# configure, and keeps the dependency boundary where it belongs.
 #
-# This is the only FetchContent in the Framework build; everything else under
-# vendors/ is genuinely vendored in-tree. Building therefore needs network access
-# on a cold configure (the fetch is cached in the build tree afterwards).
-include(FetchContent)
-
-# Framework links the static library only; samples and MafiaNet's own test suite
-# are not our concern.
-set(MAFIANET_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-set(MAFIANET_BUILD_STATIC ON CACHE BOOL "" FORCE)
-set(MAFIANET_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
-set(MAFIANET_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-
-# Pinned to a release tag, never a branch: the message-id enum is positional, so
-# an unpinned bump would silently change the wire format. The pin lives in
-# cmake/MafiaNetPin.cmake so the release tooling can watch that one path.
+# This is the only download in the Framework build; everything else under
+# vendors/ is genuinely vendored in-tree. A cold configure therefore needs
+# network access (the archive is cached in the build tree afterwards).
+#
+# The pin (version + per-archive SHA-256) lives in cmake/MafiaNetPin.cmake so
+# the release tooling can watch that one path: the message-id enum is
+# positional, so a bump can move the wire format.
 include(MafiaNetPin)
 
-# No GIT_SHALLOW: it makes CMake clone the default branch at depth 1 and then check the
-# pin out of it, which only resolves while the pinned commit is still that branch's tip.
-# Any later MafiaNet commit leaves the pin unreachable and a cold configure dies with
-# "unable to read tree". A full clone is the cost of pinning by commit at all.
-FetchContent_Declare(
-    MafiaNet
-    GIT_REPOSITORY https://github.com/MafiaHub/MafiaNet.git
-    GIT_TAG        ${MAFIANET_PIN}
-)
-FetchContent_MakeAvailable(MafiaNet)
-
-# Reconcile the fetched dependencies with this build's CRT convention.
-#
-# Framework uses the RELEASE CRT even in Debug builds: FrameworkSetup forces
-# CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreadedDLL and replaces
-# CMAKE_CXX_FLAGS_DEBUG outright, so no /MDd and no _DEBUG reach its objects.
-#
-# MafiaNet follows the ordinary convention instead -- Source/CMakeLists.txt does
-# target_compile_definitions(... $<$<CONFIG:Debug>:_DEBUG>). Defining _DEBUG makes
-# MSVC select the debug CRT semantics in the object itself: _ITERATOR_DEBUG_LEVEL
-# becomes 2 and the object records MDd_DynamicDebug. Linking that against
-# Framework's MD_DynamicRelease objects fails with LNK2038, and no flag or
-# MSVC_RUNTIME_LIBRARY property can override it, because the definition is what
-# drives it. CI confirmed exactly that: the property was applied correctly and the
-# objects still came out MDd.
-#
-# So drop the definition on the fetched targets rather than fighting the symptom.
-# This is Framework adapting to its own unusual choice, not a defect upstream --
-# MafiaNet is right to define _DEBUG when it is built normally.
-#
-# Nothing analogous was needed while MafiaNet was vendored: that copy was a bare
-# add_library() with no target_compile_definitions of its own.
-if(MSVC)
-    foreach(_mafianet_target MafiaNetStatic MafiaNet opus rnnoise)
-        if(TARGET ${_mafianet_target})
-            set_property(TARGET ${_mafianet_target} PROPERTY
-                MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-
-            get_target_property(_fw_defs ${_mafianet_target} COMPILE_DEFINITIONS)
-            if(_fw_defs)
-                list(REMOVE_ITEM _fw_defs "$<$<CONFIG:Debug>:_DEBUG>" "_DEBUG")
-                set_property(TARGET ${_mafianet_target} PROPERTY
-                    COMPILE_DEFINITIONS ${_fw_defs})
-            endif()
-        endif()
-    endforeach()
+if(WIN32)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(_mafianet_platform "windows-x86")
+    else()
+        set(_mafianet_platform "windows-x64")
+    endif()
+    set(_mafianet_ext "zip")
+elseif(APPLE)
+    if(CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64"
+       OR (NOT CMAKE_OSX_ARCHITECTURES AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"))
+        set(_mafianet_platform "macos-x86_64")
+    elseif(CMAKE_OSX_ARCHITECTURES STREQUAL "arm64"
+       OR (NOT CMAKE_OSX_ARCHITECTURES AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64"))
+        set(_mafianet_platform "macos-arm64")
+    else()
+        message(FATAL_ERROR "No precompiled MafiaNet archive for macOS architectures '${CMAKE_OSX_ARCHITECTURES}' (universal builds are not supported)")
+    endif()
+    set(_mafianet_ext "tar.gz")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
+    set(_mafianet_platform "linux-x86_64")
+    set(_mafianet_ext "tar.gz")
+else()
+    message(FATAL_ERROR "No precompiled MafiaNet archive for ${CMAKE_SYSTEM_NAME}/${CMAKE_SYSTEM_PROCESSOR}")
 endif()
+
+set(_mafianet_name "MafiaNet-${MAFIANET_PIN_VERSION}-${_mafianet_platform}")
+set(_mafianet_root "${CMAKE_BINARY_DIR}/mafianet/${_mafianet_name}")
+
+if(NOT EXISTS "${_mafianet_root}/lib/cmake/MafiaNet/MafiaNetConfig.cmake")
+    set(_mafianet_archive "${CMAKE_BINARY_DIR}/mafianet/${_mafianet_name}.${_mafianet_ext}")
+    message(STATUS "Downloading precompiled MafiaNet ${MAFIANET_PIN_VERSION} (${_mafianet_platform})")
+    # EXPECTED_HASH makes any failure fatal: a failed download, a repointed tag,
+    # or a tampered archive all stop the configure here.
+    file(DOWNLOAD
+        "https://github.com/MafiaHub/MafiaNet/releases/download/v${MAFIANET_PIN_VERSION}/${_mafianet_name}.${_mafianet_ext}"
+        "${_mafianet_archive}"
+        EXPECTED_HASH SHA256=${MAFIANET_PIN_SHA256_${_mafianet_platform}}
+        SHOW_PROGRESS
+    )
+    file(ARCHIVE_EXTRACT INPUT "${_mafianet_archive}" DESTINATION "${CMAKE_BINARY_DIR}/mafianet")
+    file(REMOVE "${_mafianet_archive}")
+endif()
+
+# Resolves OpenSSL through find_dependency: on Windows that is the vendored
+# OpenSSL forced above, elsewhere the system one -- either way OpenSSL 3, which
+# is what the archives were compiled against.
+find_package(MafiaNet ${MAFIANET_PIN_VERSION} CONFIG REQUIRED
+    PATHS "${_mafianet_root}"
+    NO_DEFAULT_PATH
+)
+
+# Two per-target fixups, on the MafiaNet targets ONLY -- deliberately not via
+# the CMAKE_MAP_IMPORTED_CONFIG_* variables, which would also seed the
+# OpenSSL::SSL/Crypto targets that find_dependency creates inside the same
+# find_package call; those carry a single config-less IMPORTED_LOCATION, and a
+# mapping they cannot satisfy fails the configure ("IMPORTED_LOCATION not set
+# for ... configuration Debug").
+#
+#  - MAP_IMPORTED_CONFIG_*: the archives carry a single Release configuration,
+#    compiled with the /MD runtime on Windows -- exactly the CRT FrameworkSetup
+#    forces even in Debug builds -- so every consumer configuration maps onto
+#    it (and the old _DEBUG/CRT reconciliation the source build needed is gone).
+#  - IMPORTED_GLOBAL: find_package imports are scoped to this directory; the
+#    consumers live under code/ (a sibling), which could see the old
+#    add_subdirectory alias targets but not these.
+foreach(_mafianet_target MafiaNet::MafiaNetStatic MafiaNet::MafiaNet MafiaNet::opus MafiaNet::rnnoise)
+    if(TARGET ${_mafianet_target})
+        set_target_properties(${_mafianet_target} PROPERTIES
+            IMPORTED_GLOBAL TRUE
+            MAP_IMPORTED_CONFIG_DEBUG Release
+            MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
+            MAP_IMPORTED_CONFIG_MINSIZEREL Release
+        )
+    endif()
+endforeach()
 
 # Build sentry
 set(CURL_STATICLIB ON)
