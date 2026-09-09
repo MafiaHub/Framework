@@ -26,10 +26,13 @@ static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("M2O::PlayerReload"
 
 Nothing else about writing an RPC changes.
 
-> **Framework vs host mod.** Every framework RPC is already converted. Mod
-> identifiers (`M2O::*`, `HogwartsMP::*`, …) are **opt-in** — they still travel
-> in plaintext until a mod adopts the macro, which is what the rest of this
-> document is about.
+> **Opt-in for mods.** Every framework RPC is already converted. Mod identifiers
+> (`M2O::*`, `HogwartsMP::*`, …) are **not touched** — they keep travelling as
+> plaintext, and keep working, until a mod adopts the macro itself. A mod that
+> does nothing needs no changes and **cannot** end up with mismatched identifiers
+> or dropped RPCs. Section [2.6](#26-if-a-mod-does-nothing) spells out why that is
+> structural rather than a promise, and covers the two things that change whether
+> a mod opts in or not.
 
 ---
 
@@ -169,9 +172,54 @@ netServer->SignalExcept(Shared::RPC::PlayerReload::kIdentifier, bs, packet->guid
 
 Identifiers are independent of each other — each one only has to match itself on
 the other peer. A mod can convert one header at a time, as long as **client and
-server ship together**, which a netcode change already requires. There is no
-mixed-mode compatibility: a converted identifier and an unconverted one are
-simply two different slot names.
+server ship together**, which a netcode change already requires.
+
+The constraint is per identifier, not per mod: converting `M2O::PlayerShoot`
+while leaving `M2O::PlayerReload` alone is fine, and the untouched one keeps
+working. What does not work is converting a *single* identifier on one peer only
+— the two ends then key different slots and that one RPC stops dispatching. Since
+the macro sits in a shared header both peers compile, that only happens if client
+and server are built from different revisions.
+
+### 2.6 If a mod does nothing
+
+Adoption is optional and per-identifier. A mod that never touches the macro is
+unaffected — and that is structural, not a promise to be careful. **The hash is
+applied only at declaration sites.** Nothing in the send or register path
+transforms an identifier:
+
+```cpp
+RegisterRPC<T>(…)   →  RegisterRawRPC(T::kIdentifier, …)  →  _rpc.RegisterSlot(identifier, …)
+BroadcastRPC(T&)    →  _rpc.Signal(T::kIdentifier, …)
+SendRPC(T&, guid)   →  _rpc.Signal(T::kIdentifier, …)
+```
+
+`T::kIdentifier` reaches RPC4 verbatim. An unconverted `"M2O::PlayerReload"`
+therefore registers and signals under that exact string, on both peers, byte for
+byte as before. There is no path by which an identifier could be hashed on one
+side and not the other, so **unconverted RPCs cannot go missing or arrive
+unhandled**. Had the hashing lived inside `RegisterRawRPC`/`Signal` instead, it
+would have been mandatory for everyone; it deliberately does not.
+
+Two things change regardless of whether a mod opts in. Neither can fail silently:
+
+- **Framework RPCs are converted unconditionally** — `ChatMessage`,
+  `ClientIdentity`, `ServerResources`, `EmitScriptEvent`, `ForceState`,
+  `SetOwner` and the voice RPCs. This is safe because both peers take those
+  identifiers from the same framework build. It is also why the change is a
+  MAJOR bump: an old client against a new server was already broken, and the
+  build token rejects that pairing on the framework major version alone.
+- **`BuildToken` gained the salt fingerprint** (see
+  [§3](#salt-mismatch-is-caught-at-connect-time)). A matched pair computes the
+  same string and notices nothing. A mismatched pair is refused at the gate
+  rather than connecting and going quiet.
+
+> **The one way a mod can break.** Passing a framework identifier as a *string
+> literal* to a raw call — `RegisterRawRPC("Framework::ForceState", …)` — now
+> registers a slot nothing will ever signal. Go through the constant instead
+> (`Framework::Networking::RPC::ChatMessage::kIdentifier`), which is what every
+> raw call site in the tree already does. No project in this repository is
+> affected.
 
 ---
 
@@ -293,6 +341,14 @@ Mods get this for free — they already call `BuildToken`:
 net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(
     _opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
 ```
+
+> **The gate is off when `verifyBuildToken` is `false`.** That option makes both
+> peers register the fixed `kBuildVerificationDisabledToken` instead, so the
+> challenge passes without comparing anything — including the salt. Two builds
+> with different salts would then connect cleanly and silently dispatch nothing,
+> which is exactly the failure the fingerprint exists to prevent. If you turn
+> verification off, do not also rotate the salt: keep the default, or keep every
+> build in that deployment on one value.
 
 ---
 
