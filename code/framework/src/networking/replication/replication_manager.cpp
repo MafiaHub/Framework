@@ -10,6 +10,7 @@
 
 #include "../channels.h"
 #include "../network_peer.h"
+#include "../rpc/rpc_identifier.h"
 #include "entity_registry.h"
 #include "replication_connection.h"
 
@@ -18,10 +19,10 @@
 namespace Framework::Networking::Replication {
     namespace {
         // Raw RPC: the tail is the entity's polymorphic SerializeForcedState payload.
-        constexpr const char *kForceStateId = "Framework::ForceState";
+        constexpr const char *kForceStateId = FW_RPC_IDENTIFIER("Framework::ForceState");
 
         struct SetOwnerRPC {
-            static constexpr const char *kIdentifier = "Framework::SetOwner";
+            static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::SetOwner");
 
             MafiaNet::NetworkID networkId;
             MafiaNet::PeerGuid ownerGUID {};

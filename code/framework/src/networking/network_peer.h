@@ -99,8 +99,11 @@ namespace Framework::Networking {
         // must not lock out peers that have not rebuilt. The game version is kept whole — it tracks
         // the game executable, not our release cadence, and a different game build shifts the
         // pattern addresses the mod is compiled against.
+        //
+        // The RPC identifier salt rides along (see rpc/rpc_identifier.h): peers built with different
+        // salts derive different slot keys, and a mismatch has no other error path.
         static std::string BuildToken(const std::string &gameName, const std::string &gameVersion, const std::string &fwVersion, const std::string &modVersion) {
-            return gameName + '|' + gameVersion + '|' + Utils::Version::Major(fwVersion) + '|' + Utils::Version::Major(modVersion);
+            return gameName + '|' + gameVersion + '|' + Utils::Version::Major(fwVersion) + '|' + Utils::Version::Major(modVersion) + '|' + RPC::IdentifierSaltTag();
         }
 
         // Register the local build token (see BuildToken). Call before connecting/accepting.
