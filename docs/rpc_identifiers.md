@@ -206,6 +206,77 @@ but not required.
 > `CMakeLists.txt`, which would apply to the mod's targets but not to the
 > framework's.
 
+### Rotating it in CI
+
+Three properties make a rotation worth doing. They are what to reproduce on
+whatever CI you use; the GitHub Actions shape below is just one way to get them.
+
+**Rotate on release builds, not on every build.** Every distinct salt produces a
+mutually incompatible build. Regenerating it per commit or per PR would leave CI
+artifacts unable to talk to anything at all — not to each other, not to a
+developer's local build, not to a running test server. The default in the header
+exists precisely so that everything not deliberately rotated agrees. Gate the
+override on your release job.
+
+**One value per release, shared by every target.** Derive it once and feed the
+same value to every build in that release — client and server both. Deriving it
+independently in two jobs is how you ship a client that cannot talk to its own
+server.
+
+**Make it unpredictable.** Deriving the salt from the version tag alone is
+pointless: the tag is public, so anyone can recompute the mapping and the
+rotation buys nothing. Key the derivation with a CI secret. HMAC of the tag under
+that secret is the useful shape — unpredictable without the key, yet reproducible
+from the tag once you have it, so you can rebuild a shipped release months later
+to debug it without having stored anything.
+
+```yaml
+jobs:
+  salt:
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.derive.outputs.value }}
+    steps:
+      - id: derive
+        run: |
+          SALT=$(printf '%s' "${{ github.ref_name }}" \
+            | openssl dgst -sha256 -hmac "${{ secrets.RPC_SALT_KEY }}" -r \
+            | cut -c1-16)
+          echo "::add-mask::0x${SALT}"
+          echo "value=0x${SALT}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: salt
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target: [MyModClient, MyModServer]   # one salt, every target
+    steps:
+      - uses: actions/checkout@v5
+      # add-mask is per-job: without this the salt appears in this job's log.
+      - run: echo "::add-mask::${{ needs.salt.outputs.value }}"
+      - run: cmake -B build -DFW_RPC_IDENTIFIER_SALT=${{ needs.salt.outputs.value }}
+      - run: cmake --build build --target ${{ matrix.target }} --config Release
+```
+
+Two details that quietly undo the whole thing:
+
+- **Mask the salt in every job that touches it.** `::add-mask::` is scoped to the
+  job that sets it, and a derived value is not a registered secret, so it is *not*
+  redacted downstream. `cmake -B build -DFW_RPC_IDENTIFIER_SALT=…` is echoed into
+  the log like any other `run:` line, and a salt printed in a public build log is
+  a salt an attacker never had to work for.
+- **If you generate a random salt instead, record it** with the release artifacts,
+  somewhere private. A random value you did not keep means that release can never
+  be rebuilt — no debug symbols matching the shipped binary, no reproducing a
+  wire-level bug report against it.
+
+The framework's own release workflow (`.github/workflows/pr_tag_commit.yml`)
+does not rotate: it bumps `VERSION` and tags, and ships no binaries. Framework
+releases therefore carry the default salt, and rotation is entirely the mod
+pipeline's job — the mod is what actually ships a client and a server that have
+to agree.
+
 ### Salt mismatch is caught at connect time
 
 Both peers must derive identical tokens, and a mismatch has no error path of its
