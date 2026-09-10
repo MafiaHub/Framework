@@ -44,6 +44,18 @@ establishes. Guard genuine runtime conditions — a game-owned pointer that is
 legitimately null at that moment, a bounds check, an index the caller supplies.
 Never guard a fact.
 
+**What makes it a fact is that the scan aborts.** `hook::get_pattern` and
+friends `count(1)` internally, so a stale signature takes the DLL down at load
+and nothing downstream can observe a zero. A project whose resolver *does not*
+abort has no such guarantee, and there the zero is a genuine runtime condition:
+`HogwartsMP` resolves every address through `Core::AobFirst`, which deliberately
+logs a miss and returns null so one launch surfaces every stale AOB instead of
+the first one killing the load. Its `Game::gResolved` fields are therefore
+legitimately zero and MUST be checked — see the contract at the top of
+`code/projects/hogwarts/code/client/src/core/game_resolved.h`. The rule is about
+`gPatterns`; do not carry it across to a non-aborting resolver, and do not
+"fix" a project by removing the guards a non-aborting resolver requires.
+
 ### 2. Never touch files outside the repository
 
 Do not create, edit, or delete anything in the user's game install, home
@@ -54,7 +66,7 @@ make it. Configuration the mod needs belongs in the mod, applied in-process.
 
 ## Project Overview
 
-MafiaHub Framework is a C++ framework for building multiplayer game modifications. It provides networking, ECS (Entity Component System), scripting, GUI, and other essential components for synchronized multiplayer experiences.
+MafiaHub Framework is a C++ framework for building multiplayer game modifications. It provides networking, entity replication, scripting, GUI, and other essential components for synchronized multiplayer experiences.
 
 ## Build Commands
 
@@ -93,6 +105,8 @@ Or use Visual Studio 2022 with CMake tools installed and open the repository fol
   - `FrameworkClient` - Client-specific features (rendering, Discord presence, asset downloading)
   - `FrameworkServer` - Server-specific features (HTTP endpoints, command processing, masterlist)
 - `code/projects/` - Multiplayer projects (auto-discovered, create `IGNORE` file to exclude)
+  - Structure and coding rules for these are normative in `docs/project_architecture.md`
+  - Bringing up a new one: `docs/starting_a_new_project.md`
 - `code/tests/` - Framework tests
 - `vendors/` - Third-party dependencies
 
@@ -118,9 +132,10 @@ Both expose virtual methods (`PostInit`, `PostUpdate`, `PreShutdown`, `ModuleReg
 
 ### Key Patterns
 
-- **RPC System**: Use `FW_SEND_COMPONENT_RPC(rpc, ...)` and `FW_SEND_COMPONENT_RPC_TO(rpc, guid, ...)` for network communication
-- **Module Registration**: Access systems via `Framework::CoreModules::Get*()` static methods
-- **Entity Factories**: Use `PlayerFactory` and `StreamingFactory` for entity creation
+- **RPC System**: Typed, on the peer — `RegisterRPC<T>(handler)` to receive, `BroadcastRPC<T>(payload)` and `SendRPC<T>(payload, guid)` to send (`networking/network_peer.h`). Payload structs live in the project's `shared/`, one per header.
+- **Module Registration**: Access systems via `Framework::CoreModules::Get*()` static methods — `GetNetworkPeer()`, `GetReplication()`, `GetScriptingModule()`, `GetWebManager()`, `GetInput()`, `GetVoiceServer()` / `GetVoiceClient()`, `GetClientInstance()`
+- **Replicated Entities**: Subclass `Framework::Networking::Replication::NetworkEntity`, declare a `kTypeName`, and register it with `EntityRegistry::Get().Register<T>(T::kTypeName)`. Type ids are a CRC32 of the name, so registration order is irrelevant — but client and server MUST register the same set, so keep the list in shared code.
+- **Serialization**: Split three ways — `OnSerializeConstruction` (spawn metadata), `SerializeTransform` (high-frequency, unreliable), `SerializeFields` (low-frequency reliable deltas).
 
 ## Code Style
 
