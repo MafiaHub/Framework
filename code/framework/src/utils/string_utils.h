@@ -24,6 +24,64 @@ namespace Framework::Utils::StringUtils {
         return wstr;
     }
 
+    // Decodes UTF-8, unlike NormalToWide which widens byte by byte. Invalid sequences are dropped.
+    inline std::wstring Utf8ToWide(std::string_view str) {
+        std::wstring out;
+        out.reserve(str.size());
+        for (size_t i = 0; i < str.size();) {
+            const unsigned char lead = static_cast<unsigned char>(str[i]);
+            char32_t codepoint       = 0;
+            size_t continuations     = 0;
+            if (lead < 0x80) {
+                codepoint = lead;
+            }
+            else if ((lead & 0xE0) == 0xC0) {
+                codepoint     = lead & 0x1F;
+                continuations = 1;
+            }
+            else if ((lead & 0xF0) == 0xE0) {
+                codepoint     = lead & 0x0F;
+                continuations = 2;
+            }
+            else if ((lead & 0xF8) == 0xF0) {
+                codepoint     = lead & 0x07;
+                continuations = 3;
+            }
+            else {
+                ++i;
+                continue;
+            }
+            if (i + continuations >= str.size()) {
+                break;
+            }
+            bool valid = true;
+            for (size_t n = 1; n <= continuations; ++n) {
+                const unsigned char continuation = static_cast<unsigned char>(str[i + n]);
+                if ((continuation & 0xC0) != 0x80) {
+                    valid = false;
+                    break;
+                }
+                codepoint = (codepoint << 6) | (continuation & 0x3F);
+            }
+            i += continuations + 1;
+            if (!valid || codepoint > 0x10FFFF) {
+                continue;
+            }
+            if constexpr (sizeof(wchar_t) >= 4) {
+                out.push_back(static_cast<wchar_t>(codepoint));
+            }
+            else if (codepoint > 0xFFFF) {
+                codepoint -= 0x10000;
+                out.push_back(static_cast<wchar_t>(0xD800 + (codepoint >> 10)));
+                out.push_back(static_cast<wchar_t>(0xDC00 + (codepoint & 0x3FF)));
+            }
+            else {
+                out.push_back(static_cast<wchar_t>(codepoint));
+            }
+        }
+        return out;
+    }
+
     inline std::string WideToNormal(const std::wstring &wstr) {
         std::string str(wstr.length(), 0);
         std::transform(wstr.begin(), wstr.end(), str.begin(), [](wchar_t c) {
