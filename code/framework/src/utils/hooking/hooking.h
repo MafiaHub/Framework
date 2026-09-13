@@ -25,12 +25,31 @@ namespace hook {
     // for link /DYNAMICBASE executables
     extern ptrdiff_t baseAddressDifference;
 
+    // The x64 preferred-base window that adjust_base/get_adjusted treat as "an address
+    // inside the main module". The end used to be hardcoded at base + 96 MB, which silently
+    // stopped adjusting anything past it — a 444 MB image (Hogwarts Legacy) has four fifths
+    // of its RVA space beyond that line, so a resolved address up there would be handed back
+    // unrelocated under ASLR. set_base() now reads the real SizeOfImage and widens the window
+    // to match; the 96 MB default survives only as the fallback for a process that never
+    // called set_base().
+    //
+    // x86 is deliberately left alone: these constants are out of range for a 32-bit address
+    // space, so the checks below have always been dead there and m2o's committed table
+    // depends on that behaviour.
+    inline constexpr uintptr_t kPreferredImageBase = 0x140000000;
+    extern uintptr_t preferredImageEnd;
+
+    // Reads SizeOfImage off the module mapped at `base` and widens the window to match.
+    // Out-of-line so this header keeps working wherever <windows.h> is not in scope.
+    void set_preferred_image_end(uintptr_t base);
+
     // sets the base address difference based on an obtained pointer
     inline void set_base(uintptr_t address) {
 #ifdef _M_IX86
         uintptr_t addressDiff = (address - 0x400000);
 #elif defined(_M_AMD64)
-        uintptr_t addressDiff = (address - 0x140000000);
+        uintptr_t addressDiff = (address - kPreferredImageBase);
+        set_preferred_image_end(address);
 #endif
 
         // pointer-style cast to ensure unsigned overflow ends up copied directly into a signed value
@@ -42,10 +61,14 @@ namespace hook {
         set_base((uintptr_t)GetModuleHandle(NULL));
     }
 
+    inline bool is_preferred_base_address(uintptr_t address) {
+        return address >= kPreferredImageBase && address <= preferredImageEnd;
+    }
+
     // adjusts the address passed to the base as set above
     template <typename T>
     inline void adjust_base(T &address) {
-        if ((uintptr_t)address >= 0x140000000 && (uintptr_t)address <= 0x146000000) {
+        if (is_preferred_base_address((uintptr_t)address)) {
             *(uintptr_t *)&address += baseAddressDifference;
         }
     }
@@ -53,7 +76,7 @@ namespace hook {
     // returns the adjusted address to the stated base
     template <typename T>
     inline uintptr_t get_adjusted(T address) {
-        if ((uintptr_t)address >= 0x140000000 && (uintptr_t)address <= 0x146000000) {
+        if (is_preferred_base_address((uintptr_t)address)) {
             return (uintptr_t)address + baseAddressDifference;
         }
 
@@ -64,7 +87,7 @@ namespace hook {
     template <typename T>
     inline uintptr_t get_unadjusted(T address) {
 #ifdef _M_AMD64
-        if ((uintptr_t)address >= hook::get_adjusted(0x140000000) && (uintptr_t)address <= hook::get_adjusted(0x146000000)) {
+        if ((uintptr_t)address >= hook::get_adjusted(kPreferredImageBase) && (uintptr_t)address <= hook::get_adjusted(preferredImageEnd)) {
             return (uintptr_t)address - baseAddressDifference;
         }
 #endif

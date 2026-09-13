@@ -7,12 +7,16 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
+// First, and in place of a bare <windows.h>: this defines NOMINMAX for the include, without
+// which the `max` macro breaks the std::max() in EnsureMatches below. Relying on the target to
+// define it meant this file only compiled in targets that happened to.
+#include <utils/safe_win32.h>
+
 #include "hooking_patterns.h"
 
 #include <algorithm>
 #include <fstream>
 #include <string_view>
-#include <windows.h>
 
 #if PATTERNS_USE_HINTS
 #include <map>
