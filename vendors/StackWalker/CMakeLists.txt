@@ -61,7 +61,11 @@ if(CMAKE_COMPILER_IS_MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_CRT_SECURE_NO_DEPRECATE")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_CRT_NONSTDC_NO_DEPRECATE")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_SCL_SECURE_NO_DEPRECATE")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Zi")
+    # Upstream forces -Zi here. Debug info format is the consumer's call: we select it
+    # once through CMAKE_MSVC_DEBUG_INFORMATION_FORMAT, and Release CI builds pick
+    # Embedded (/Z7) so sccache can cache the objects. Leaving -Zi in place puts both
+    # flags on the command line - /Z7 wins and writes no PDB, but /Zi still makes CMake
+    # emit /Fd, so sccache fails trying to zip a PDB that was never created.
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4740")
 else()
     message(FATAL_ERROR "${CMAKE_CXX_COMPILER_ID} is not supported yet")
