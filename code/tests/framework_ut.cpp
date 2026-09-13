@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 28
+#define UNIT_MAX_MODULES 29
 #include "logging/logger.h"
 #include "unit.h"
 
@@ -31,6 +31,11 @@
 #include "modules/voice_ptt_gate_ut.h"
 #include "modules/gui_resources_ut.h"
 #include "modules/resource_package_ut.h"
+
+#ifdef _WIN32
+// The hooking layer, and so the pattern table, is Windows-only.
+#include "modules/pattern_table_ut.h"
+#endif
 
 // Scripting tests
 #include "modules/engine_ut.h"
@@ -64,6 +69,9 @@ int main() {
     UNIT_MODULE(voice_ptt_gate);
     UNIT_MODULE(gui_resources);
     UNIT_MODULE(resource_package);
+#ifdef _WIN32
+    UNIT_MODULE(pattern_table);
+#endif
 
     // Scripting tests
     UNIT_MODULE(engine);

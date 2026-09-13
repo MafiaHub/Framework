@@ -13,6 +13,16 @@ add_executable(FrameworkTests
         # without linking FrameworkClient.
         ../framework/src/integrations/client/resource_packages.cpp)
 
+# The pattern table and the base-relocation helpers live in FrameworkClient/FrameworkLoader,
+# neither of which the tests link. They depend on nothing but <windows.h>, so they compile
+# straight in — same reasoning as the GUI resource units above.
+if(WIN32)
+    target_sources(FrameworkTests PRIVATE
+        ../framework/src/utils/hooking/pattern_table.cpp
+        ../framework/src/utils/hooking/hooking_patterns.cpp
+        ../framework/src/utils/hooking/hooking.cpp)
+endif()
+
 target_include_directories(FrameworkTests PRIVATE . ../framework/src)
 target_link_libraries(FrameworkTests Framework FrameworkServer libnode)
 
