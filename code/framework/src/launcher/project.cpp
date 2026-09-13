@@ -394,12 +394,12 @@ namespace Framework::Launcher {
             return false;
         }
 
-        // Acquire the game version
-        const auto checksum = GetGameVersion();
-
-        // verify game integrity if enabled
+        // Verify game integrity if enabled. GetGameVersion() reads the whole executable into
+        // memory and CRC32s it — for Hogwarts Legacy that is 430 MB of I/O plus the hash, about
+        // a second and a half of boot, and the mapper below then reads the same file again. The
+        // checksum has no other consumer, so when verification is off there is nothing to compute.
         if (_config.verifyGameIntegrity) {
-            if (!EnsureGameExecutableIsCompatible(checksum)) {
+            if (!EnsureGameExecutableIsCompatible(GetGameVersion())) {
                 MessageBox(nullptr, "Unsupported game version", _config.name.c_str(), MB_ICONERROR);
                 return false;
             }
