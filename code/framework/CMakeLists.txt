@@ -94,6 +94,7 @@ set(FRAMEWORK_CLIENT_SRC
     src/external/imgui/widgets/console.cpp
 
     src/integrations/client/instance.cpp
+    src/integrations/client/masterlist_browser.cpp
     src/integrations/client/resource_packages.cpp
     src/integrations/client/networking/engine.cpp
     src/integrations/client/ui/chat_box.cpp
