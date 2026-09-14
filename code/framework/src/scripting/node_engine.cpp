@@ -127,15 +127,8 @@ namespace Framework::Scripting {
         }
 #endif
 
-        // Initialize Node.js with flags to control V8 platform ourselves
-        // Using initializer_list syntax as shown in Node.js docs
-        _initResult = node::InitializeOncePerProcess(
-            nodeArgs,
-            {
-                node::ProcessInitializationFlags::kNoInitializeV8,
-                node::ProcessInitializationFlags::kNoInitializeNodeV8Platform
-            }
-        );
+        // Preserve the host's shutdown/crash handlers and initialize V8 ourselves.
+        _initResult = node::InitializeOncePerProcess(nodeArgs, {node::ProcessInitializationFlags::kNoInitializeV8, node::ProcessInitializationFlags::kNoInitializeNodeV8Platform, node::ProcessInitializationFlags::kNoDefaultSignalHandling});
 
         for (const auto &err : _initResult->errors()) {
             _lastError += err + "\n";

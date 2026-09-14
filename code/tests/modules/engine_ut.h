@@ -10,6 +10,8 @@
 
 #include "scripting/node_engine.h"
 
+#include <csignal>
+
 MODULE(engine, {
     using namespace Framework::Scripting;
 
@@ -18,7 +20,11 @@ MODULE(engine, {
         options.processName = "test-server";
         NodeEngine *pEngine = new NodeEngine(options);
 
+        const auto shutdownHandler = +[](int) {};
+        const auto previousHandler = std::signal(SIGTERM, shutdownHandler);
         EQUALS(pEngine->Init(), ScriptingError::SCRIPTING_NONE);
+        const bool shutdownHandlerPreserved = std::signal(SIGTERM, previousHandler) == shutdownHandler;
+        EQUALS(shutdownHandlerPreserved, true);
         NEQUALS(pEngine->GetIsolate(), nullptr);
         EQUALS(pEngine->IsSandboxed(), false);
 
