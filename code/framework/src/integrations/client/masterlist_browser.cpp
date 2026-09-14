@@ -24,6 +24,19 @@ namespace Framework::Integrations::Client {
         auto Log() {
             return Logging::GetLogger(FRAMEWORK_INNER_CLIENT);
         }
+
+        // nlohmann's value() THROWS on a type mismatch rather than falling back to the default, and the
+        // whole parse sits under one try/catch — so one server row with a null or stringified field
+        // would empty the browser for every other server. Check the type, then read.
+        std::string ReadString(const nlohmann::json &obj, const char *key) {
+            const auto it = obj.find(key);
+            return (it != obj.end() && it->is_string()) ? it->get<std::string>() : std::string {};
+        }
+
+        int32_t ReadInt(const nlohmann::json &obj, const char *key, int32_t fallback) {
+            const auto it = obj.find(key);
+            return (it != obj.end() && it->is_number_integer()) ? it->get<int32_t>() : fallback;
+        }
     } // namespace
 
     MasterlistBrowser::~MasterlistBrowser() {
@@ -85,18 +98,18 @@ namespace Framework::Integrations::Client {
                             continue;
                         }
                         MasterlistServer entry;
-                        entry.gameMode = item.value("gamemode", std::string {});
+                        entry.gameMode = ReadString(item, "gamemode");
                         // One masterlist serves every MafiaHub game.
                         if (!_gameMode.empty() && entry.gameMode != _gameMode) {
                             continue;
                         }
-                        entry.name           = item.value("name", std::string {});
-                        entry.host           = item.value("ip", std::string {});
-                        entry.port           = static_cast<uint16_t>(item.value("port", static_cast<int>(kDefaultPort)));
-                        entry.localization   = item.value("localization", std::string {});
-                        entry.version        = item.value("version", std::string {});
-                        entry.currentPlayers = item.value("current_players", 0);
-                        entry.maxPlayers     = item.value("max_players", 0);
+                        entry.name           = ReadString(item, "name");
+                        entry.host           = ReadString(item, "ip");
+                        entry.port           = static_cast<uint16_t>(ReadInt(item, "port", kDefaultPort));
+                        entry.localization   = ReadString(item, "localization");
+                        entry.version        = ReadString(item, "version");
+                        entry.currentPlayers = ReadInt(item, "current_players", 0);
+                        entry.maxPlayers     = ReadInt(item, "max_players", 0);
                         if (entry.host.empty()) {
                             continue; // nothing to dial
                         }
