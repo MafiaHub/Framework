@@ -25,9 +25,8 @@ namespace Framework::Integrations::Client {
             return Logging::GetLogger(FRAMEWORK_INNER_CLIENT);
         }
 
-        // nlohmann's value() THROWS on a type mismatch rather than falling back to the default, and the
-        // whole parse sits under one try/catch — so one server row with a null or stringified field
-        // would empty the browser for every other server. Check the type, then read.
+        // nlohmann's value() throws on a type mismatch rather than returning the default, and the whole
+        // parse sits under one try/catch — so one row with a null field would empty the browser.
         std::string ReadString(const nlohmann::json &obj, const char *key) {
             const auto it = obj.find(key);
             return (it != obj.end() && it->is_string()) ? it->get<std::string>() : std::string {};
