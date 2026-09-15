@@ -181,17 +181,34 @@ namespace Framework::GUI {
                 // held for the whole read; OnPaint reallocates on resize
                 const auto pixelLock = renderHandler->LockPixels();
 
-                if (!renderHandler->GetPixelData().empty()) {
+                // Read once, so every size below describes the same frame.
+                const int width       = _width;
+                const int height      = _height;
+                const auto &pixelData = renderHandler->GetPixelData();
+                const size_t required = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+
+                // Resize() moves the view at once, CEF reallocates on its next OnPaint. Between the
+                // two the view describes more pixels than the buffer holds, so copying by its
+                // dimensions reads past the end.
+                if (required != 0 && pixelData.size() >= required) {
                     Graphics::Bitmap bmp;
                     bmp.format = Graphics::BitmapFormat::BGRA8;
-                    bmp.width  = _width;
-                    bmp.height = _height;
-                    bmp.pitch  = _width * 4;
-                    bmp.size   = static_cast<uint32_t>(renderHandler->GetPixelData().size());
-                    bmp.pixels = const_cast<uint8_t *>(renderHandler->GetPixelData().data());
+                    bmp.width  = width;
+                    bmp.height = height;
+                    bmp.pitch  = width * 4;
+                    bmp.size   = static_cast<uint32_t>(required);
+                    bmp.pixels = const_cast<uint8_t *>(pixelData.data());
+
+                    // Sized at creation, so a resized view needs a new one.
+                    if (_cpuTextureID != 0 && (_cpuTextureWidth != width || _cpuTextureHeight != height)) {
+                        backend->DestroyTexture(_cpuTextureID);
+                        _cpuTextureID = 0;
+                    }
 
                     if (_cpuTextureID == 0) {
-                        _cpuTextureID = backend->NextTextureId();
+                        _cpuTextureID     = backend->NextTextureId();
+                        _cpuTextureWidth  = width;
+                        _cpuTextureHeight = height;
                         backend->CreateTexture(_cpuTextureID, bmp);
                     }
                     else if (renderHandler->IsPixelDataDirty()) {

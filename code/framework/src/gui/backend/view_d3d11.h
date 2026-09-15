@@ -28,6 +28,10 @@ namespace Framework::GUI {
         // CPU path: texture created from pixel data
         uint32_t _cpuTextureID = 0;
 
+        // What _cpuTextureID was created at; a resize makes it stale.
+        int _cpuTextureWidth  = 0;
+        int _cpuTextureHeight = 0;
+
       public:
         ViewD3D11(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);
 
