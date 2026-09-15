@@ -16,9 +16,6 @@
 #include <scripting/engine.h>
 #include <scripting/module.h>
 #include <scripting/resource/resource_manager.h>
-#include <scripting/engine.h>
-#include <scripting/module.h>
-#include <scripting/resource/resource_manager.h>
 
 #include <fmt/format.h>
 #include <v8pp/convert.hpp>
@@ -155,6 +152,47 @@ namespace Framework::Scripting::Builtins {
         return v8::Null(isolate);
     }
 
+    void StateBag::Dispatch(v8::Isolate *isolate, uint32_t id, const Networking::Replication::StateChange &change) {
+        const auto perIsolate = _subscriptions.find(isolate);
+        if (perIsolate == _subscriptions.end()) {
+            return;
+        }
+        const auto entry = perIsolate->second.find(id);
+        if (entry == perIsolate->second.end()) {
+            return;
+        }
+
+        auto *module = CoreModules::GetScriptingModule();
+        auto *engine = module != nullptr ? module->GetScriptingEngine() : nullptr;
+        if (engine == nullptr) {
+            return;
+        }
+
+        // A change can originate off the script thread, so the isolate is entered rather than
+        // assumed. Locker nests safely when a script's own write is what got us here.
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine->GetContext();
+        if (context.IsEmpty()) {
+            return;
+        }
+        v8::Context::Scope contextScope(context);
+
+        // Undefined rather than null for a removal and for a key that held nothing, so a stored null
+        // stays distinguishable from an absent one.
+        v8::Local<v8::Value> args[3] = {
+            v8pp::to_v8(isolate, change.key),
+            change.removed ? v8::Local<v8::Value>(v8::Undefined(isolate)) : FromStateValue(isolate, context, change.value),
+            change.hadPrevious ? FromStateValue(isolate, context, change.previous) : v8::Local<v8::Value>(v8::Undefined(isolate)),
+        };
+
+        // A throwing listener is its own bug and must not take down the write that raised it.
+        v8::TryCatch tryCatch(isolate);
+        (void)entry->second.callback.Get(isolate)->Call(context, v8::Undefined(isolate), 3, args);
+        tryCatch.Reset();
+    }
+
     void StateBag::Unsubscribe(v8::Isolate *isolate, uint32_t id) {
         const auto perIsolate = _subscriptions.find(isolate);
         if (perIsolate == _subscriptions.end()) {
@@ -277,9 +315,8 @@ namespace Framework::Scripting::Builtins {
             [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 v8::Isolate *isolate = info.GetIsolate();
 
-                // The key comes first and is required, null meaning every key: an optional leading
-                // parameter cannot be expressed as one TypeScript signature, and a nullable one says
-                // the same thing without an overload.
+                // The key is required and nullable rather than optional: an optional leading parameter
+                // cannot be expressed as one TypeScript signature.
                 if (info.Length() < 2 || !(info[0]->IsString() || info[0]->IsNullOrUndefined())) {
                     isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "StateBag.onChange: expected (key, handler); pass null as the key to watch every key")));
                     return;
@@ -304,18 +341,12 @@ namespace Framework::Scripting::Builtins {
 
                 v8::Local<v8::Function> handler = handlerArg.As<v8::Function>();
 
-                // Attributed to the resource that registered it, so a stop drops it. Unowned, the
+                // Owned by the resource that registered it, so a stop drops it. Unowned, the
                 // subscription would outlive its resource and keep its objects alive.
                 std::string resourceName;
                 if (auto *module = CoreModules::GetScriptingModule()) {
                     if (auto *resources = module->GetResourceManager()) {
-                        resourceName = resources->GetResourceNameFromFunction(isolate, handler);
-                        if (resourceName.empty()) {
-                            resourceName = resources->GetCurrentResourceContext();
-                        }
-                        if (resourceName.empty()) {
-                            resourceName = resources->GetResourceContextFromStack(isolate);
-                        }
+                        resourceName = resources->ResolveResourceContext(isolate, handler);
                     }
                 }
 
@@ -328,51 +359,10 @@ namespace Framework::Scripting::Builtins {
                 filter.networkId = self->GetId();
                 filter.key       = key;
 
-                // The filter names this bag's entity, plus the key when one was given, so the callback
-                // below never runs for a change this listener did not ask for.
+                // Filtered on this bag's entity and, when one was named, its key -- so Dispatch never
+                // runs for a change this listener did not ask for.
                 subscription.handle = replication->AddStateChangeHandler(filter, [isolate, id](const Networking::Replication::StateChange &change) {
-                    const auto perIsolate = _subscriptions.find(isolate);
-                    if (perIsolate == _subscriptions.end()) {
-                        return;
-                    }
-                    const auto entry = perIsolate->second.find(id);
-                    if (entry == perIsolate->second.end()) {
-                        return;
-                    }
-
-                    auto *module = CoreModules::GetScriptingModule();
-                    auto *engine = module != nullptr ? module->GetScriptingEngine() : nullptr;
-                    if (engine == nullptr) {
-                        return;
-                    }
-
-                    // A change can originate off the script thread, so the isolate is entered here
-                    // rather than assumed. Locker nests safely when a script's own write got us here.
-                    v8::Locker locker(isolate);
-                    v8::Isolate::Scope isolateScope(isolate);
-                    v8::HandleScope handleScope(isolate);
-                    v8::Local<v8::Context> context = engine->GetContext();
-                    if (context.IsEmpty()) {
-                        return;
-                    }
-                    v8::Context::Scope contextScope(context);
-
-                    // Undefined rather than null for a removal and for a key that held nothing, so a
-                    // stored null stays distinguishable from an absent one.
-                    v8::Local<v8::Value> args[3] = {
-                        v8pp::to_v8(isolate, change.key),
-                        change.removed ? v8::Local<v8::Value>(v8::Undefined(isolate)) : FromStateValue(isolate, context, change.value),
-                        change.hadPrevious ? FromStateValue(isolate, context, change.previous) : v8::Local<v8::Value>(v8::Undefined(isolate)),
-                    };
-
-                    v8::TryCatch tryCatch(isolate);
-                    v8::Local<v8::Function> callback = entry->second.callback.Get(isolate);
-                    (void)callback->Call(context, v8::Undefined(isolate), 3, args);
-                    if (tryCatch.HasCaught()) {
-                        // A throwing listener is its own bug and must not take down the write that
-                        // raised it.
-                        tryCatch.Reset();
-                    }
+                    Dispatch(isolate, id, change);
                 });
 
                 if (subscription.handle == Networking::Replication::kInvalidStateChangeHandle) {
@@ -380,7 +370,7 @@ namespace Framework::Scripting::Builtins {
                 }
                 _subscriptions[isolate].emplace(id, std::move(subscription));
 
-                // An unsubscribe function, matching what Events.on hands back.
+                // Matching what Events.on hands back.
                 v8::Local<v8::Function> unsubscribe = v8::Function::New(
                     isolate->GetCurrentContext(),
                     [](const v8::FunctionCallbackInfo<v8::Value> &inner) {

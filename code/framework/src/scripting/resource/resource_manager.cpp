@@ -953,6 +953,20 @@ namespace Framework::Scripting {
         return true;
     }
 
+    std::string ResourceManager::ResolveResourceContext(v8::Isolate *isolate, v8::Local<v8::Function> handler) const {
+        if (!handler.IsEmpty()) {
+            std::string name = GetResourceNameFromFunction(isolate, handler);
+            if (!name.empty()) {
+                return name;
+            }
+        }
+        std::string name = GetCurrentResourceContext();
+        if (!name.empty()) {
+            return name;
+        }
+        return GetResourceContextFromStack(isolate);
+    }
+
     bool ResourceManager::CallResourceStop(std::string_view resourceName) {
         // Cleanup handlers before resource fully stops
         _events.CleanupResource(resourceName);

@@ -65,6 +65,9 @@ namespace Framework::Scripting::Builtins {
 
         static void Unsubscribe(v8::Isolate *isolate, uint32_t id);
 
+        // Calls one live subscription's handler with a change the filter already accepted.
+        static void Dispatch(v8::Isolate *isolate, uint32_t id, const Networking::Replication::StateChange &change);
+
         // The live bag behind a call's receiver, or nullptr when the handle is stale or not a
         // StateBag at all. Both cases are a silent no-op, so callers need not tell them apart —
         // argument checks still run first, because a bad argument throws even on a dead receiver.

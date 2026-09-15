@@ -310,6 +310,13 @@ namespace Framework::Scripting {
         std::string GetResourceNameFromFunction(v8::Isolate *isolate, v8::Local<v8::Function> fn) const;
 
         /**
+         * The resource a callback belongs to, by the three tiers in order: the handler's own script
+         * origin (async-safe), the context set during synchronous loading, then the call stack.
+         * Empty when none of them can name one.
+         */
+        std::string ResolveResourceContext(v8::Isolate *isolate, v8::Local<v8::Function> handler = {}) const;
+
+        /**
          * Get the currently executing resource.
          * @return Pointer to current resource, or nullptr if none
          */
