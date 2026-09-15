@@ -64,7 +64,7 @@ MODULE(state_bag, {
 
         EQUALS(entity.state.Set("job", text("blacksmith")) == StateBag::WriteResult::Applied, true);
         EQUALS(entity.state.Has("job"), true);
-        EQUALS(entity.state.Get("job")->text, std::string("blacksmith"));
+        STREQUALS(entity.state.Get("job")->text.c_str(), "blacksmith");
         EQUALS(entity.state.Size(), size_t(1));
     });
 
@@ -163,7 +163,7 @@ MODULE(state_bag, {
 
         entity.state.Set("secret", text("hidden"), StateScope::Server);
         // Readable locally but never dirty, so the flush has nothing to send.
-        EQUALS(entity.state.Get("secret")->text, std::string("hidden"));
+        STREQUALS(entity.state.Get("secret")->text.c_str(), "hidden");
         EQUALS(entity.state.HasDirty(), false);
     });
 
@@ -190,9 +190,9 @@ MODULE(state_bag, {
         const std::vector<std::string> keys = entity.state.Keys();
         EQUALS(keys.size(), size_t(3));
         // The backing store's order is arbitrary and unstable, and scripts enumerate this.
-        EQUALS(keys[0], std::string("alpha"));
-        EQUALS(keys[1], std::string("mike"));
-        EQUALS(keys[2], std::string("zulu"));
+        STREQUALS(keys[0].c_str(), "alpha");
+        STREQUALS(keys[1].c_str(), "mike");
+        STREQUALS(keys[2].c_str(), "zulu");
     });
 
     IT("raises a change with the previous value and whether there was one", {
@@ -212,12 +212,12 @@ MODULE(state_bag, {
         // Null is a value a script may store, so "was null" and "was never set" are told apart by
         // hadPrevious rather than by the value.
         EQUALS(seen[0].hadPrevious, false);
-        EQUALS(seen[0].value.text, std::string("farmer"));
+        STREQUALS(seen[0].value.text.c_str(), "farmer");
         EQUALS(seen[1].hadPrevious, true);
-        EQUALS(seen[1].previous.text, std::string("farmer"));
-        EQUALS(seen[1].value.text, std::string("blacksmith"));
+        STREQUALS(seen[1].previous.text.c_str(), "farmer");
+        STREQUALS(seen[1].value.text.c_str(), "blacksmith");
         EQUALS(seen[2].removed, true);
-        EQUALS(seen[2].previous.text, std::string("blacksmith"));
+        STREQUALS(seen[2].previous.text.c_str(), "blacksmith");
         EQUALS(seen[2].value.type == StateValue::Type::Null, true);
 
         serverManager->RemoveStateChangeHandler(handle);
@@ -256,8 +256,8 @@ MODULE(state_bag, {
 
         // The point of the filter: a listener watching one field is not woken by the others.
         EQUALS(seen.size(), size_t(2));
-        EQUALS(seen[0], std::string("job"));
-        EQUALS(seen[1], std::string("job"));
+        STREQUALS(seen[0].c_str(), "job");
+        STREQUALS(seen[1].c_str(), "job");
 
         serverManager->RemoveStateChangeHandler(handle);
     });
@@ -547,10 +547,10 @@ MODULE(state_bag, {
 
         EQUALS(destination.state.Size(), size_t(5));
         EQUALS(destination.state.Get("flag")->boolean, true);
-        EQUALS(destination.state.Get("count")->number, 42.5);
-        EQUALS(destination.state.Get("name")->text, std::string("Henry"));
+        EQUALS(destination.state.Get("count")->number == 42.5, true);
+        STREQUALS(destination.state.Get("name")->text.c_str(), "Henry");
         EQUALS(destination.state.Get("nothing")->type == StateValue::Type::Null, true);
-        EQUALS(destination.state.Get("document")->text, std::string(R"({"a":1})"));
+        STREQUALS(destination.state.Get("document")->text.c_str(), R"({"a":1})");
     });
 
     IT("replaces the whole bag when a seed arrives", {
@@ -590,7 +590,7 @@ MODULE(state_bag, {
         entity.replicaManager = serverManager;
 
         entity.state.Apply("job", text("blacksmith"), false);
-        EQUALS(entity.state.Get("job")->text, std::string("blacksmith"));
+        STREQUALS(entity.state.Get("job")->text.c_str(), "blacksmith");
 
         entity.state.Apply("job", StateValue {}, true);
         EQUALS(entity.state.Has("job"), false);
@@ -618,8 +618,8 @@ MODULE(state_bag, {
         // Exactly what a new owner has not been sent: it already has the broadcast keys from
         // construction and is never getting the server one.
         EQUALS(ownerKeys.size(), size_t(2));
-        EQUALS(ownerKeys[0], std::string("cuffed"));
-        EQUALS(ownerKeys[1], std::string("warrant"));
+        STREQUALS(ownerKeys[0].c_str(), "cuffed");
+        STREQUALS(ownerKeys[1].c_str(), "warrant");
     });
 
     IT("round-trips the sync payload", {
@@ -642,11 +642,11 @@ MODULE(state_bag, {
 
         EQUALS(in.changes.size(), size_t(2));
         EQUALS(in.changes[0].networkId == MafiaNet::NetworkID(7), true);
-        EQUALS(in.changes[0].key, std::string("job"));
-        EQUALS(in.changes[0].value.text, std::string("blacksmith"));
+        STREQUALS(in.changes[0].key.c_str(), "job");
+        STREQUALS(in.changes[0].value.text.c_str(), "blacksmith");
         EQUALS(in.changes[0].removed, false);
         EQUALS(in.changes[1].networkId == MafiaNet::NetworkID(9), true);
-        EQUALS(in.changes[1].key, std::string("cuffed"));
+        STREQUALS(in.changes[1].key.c_str(), "cuffed");
         EQUALS(in.changes[1].removed, true);
     });
 
