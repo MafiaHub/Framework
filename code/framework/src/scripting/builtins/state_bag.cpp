@@ -40,8 +40,13 @@ namespace Framework::Scripting::Builtins {
                 return false;
             }
 
+            // A getter or proxy that throws fails the read, and taking that for "no scope given" would
+            // broadcast the write with an exception already pending.
             v8::Local<v8::Value> scope;
-            if (!options.As<v8::Object>()->Get(context, v8pp::to_v8(isolate, "scope")).ToLocal(&scope) || scope->IsNullOrUndefined()) {
+            if (!options.As<v8::Object>()->Get(context, v8pp::to_v8(isolate, "scope")).ToLocal(&scope)) {
+                return false;
+            }
+            if (scope->IsNullOrUndefined()) {
                 return true;
             }
             if (!scope->IsString()) {
@@ -256,7 +261,10 @@ namespace Framework::Scripting::Builtins {
                 if (auto *bag = ResolveFrom(info)) {
                     for (const std::string &key : bag->Keys()) {
                         if (const auto *value = bag->Get(key)) {
-                            out->Set(context, v8pp::to_v8(isolate, key), FromStateValue(isolate, context, *value)).Check();
+                            // CreateDataProperty, not Set: "__proto__" is a storable key, and Set would
+                            // run the inherited setter and reassign this object's prototype instead of
+                            // giving it a property.
+                            out->CreateDataProperty(context, v8pp::to_v8(isolate, key).As<v8::Name>(), FromStateValue(isolate, context, *value)).Check();
                         }
                     }
                 }
@@ -433,7 +441,7 @@ namespace Framework::Scripting::Builtins {
             },
             v8pp::metadata::docs("boolean",
                 {
-                    v8pp::metadata::param("key", "string", false, "Key to write; at most 64 characters."),
+                    v8pp::metadata::param("key", "string", false, "Key to write; at most 64 UTF-8 bytes."),
                     v8pp::metadata::param("value", "any", false, "Value to store. Booleans, numbers and strings travel as themselves; anything else is serialized as JSON. At most 4096 bytes."),
                     v8pp::metadata::param("options", "{ scope?: 'broadcast' | 'owner' | 'server' }", true, "Who the key reaches: every client that can see the entity (the default), only its owning client, or nobody -- server-side storage that never goes on the wire."),
                 },
