@@ -74,6 +74,27 @@ namespace Framework::Networking::Replication {
         // can't ride normal replication.
         void SetOwner(NetworkEntity *entity, MafiaNet::PeerGuid guid);
 
+        // --- State bags ---
+        // Server: send this tick's accumulated bag changes. Driven from NetworkPeer::Update, next to
+        // RebuildInterest. Each change goes only to the connections that have the entity constructed,
+        // so bags inherit interest, virtual worlds and budgets rather than restating them — and no
+        // state reaches a client that cannot see the entity.
+        void FlushStateBags();
+
+        // Called by a bag when it first dirties in a tick, so the flush walks what changed.
+        void MarkStateBagDirty(NetworkEntity *entity);
+
+        // Raised for every bag change on this peer: the server on write, a client on apply. The
+        // framework carries the mechanism; a mod turns the callback into its own script event.
+        void SetOnStateChanged(fu2::function<void(const StateChange &) const> callback) {
+            _onStateChanged = std::move(callback);
+        }
+        void NotifyStateChanged(const StateChange &change) const {
+            if (_onStateChanged) {
+                _onStateChanged(change);
+            }
+        }
+
         bool IsServer() const {
             return _isServer;
         }
@@ -223,6 +244,9 @@ namespace Framework::Networking::Replication {
         // Entity set changed since the last rebuild; forces one regardless of the interval.
         bool _interestDirty = true;
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
+        // By NetworkID, not pointer: an entity can be destroyed between dirtying and the flush.
+        std::unordered_set<uint64_t> _dirtyStateBags;
+        fu2::function<void(const StateChange &) const> _onStateChanged;
         fu2::function<void(MafiaNet::PeerGuid) const> _onClientDisconnect;
         fu2::function<void(uint64_t) const> _onEntityCreated;
         fu2::function<void(uint64_t) const> _onEntityDestroyed;

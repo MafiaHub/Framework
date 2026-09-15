@@ -11,10 +11,14 @@
 #include "../channels.h"
 #include "../network_peer.h"
 #include "../rpc/rpc_identifier.h"
+#include "../rpc/state_bag_sync.h"
 #include "entity_registry.h"
 #include "replication_connection.h"
 
 #include <utils/time.h>
+
+#include <algorithm>
+#include <cstddef>
 
 namespace Framework::Networking::Replication {
     namespace {
@@ -75,6 +79,17 @@ namespace Framework::Networking::Replication {
                     entity->stateEpoch = payload.stateEpoch;
                 }
             });
+            owner->RegisterRPC<RPC::StateBagSync>([this](const RPC::StateBagSync &payload, MafiaNet::Packet *) {
+                for (const auto &change : payload.changes) {
+                    NetworkEntity *entity = GetEntityByNetworkID(change.networkId);
+                    if (entity == nullptr) {
+                        // Streamed out between the server's flush and this packet. A normal race;
+                        // logging it would bury the failures that matter.
+                        continue;
+                    }
+                    entity->state.Apply(change.key, change.value, change.removed);
+                }
+            });
             _clientRPCsRegistered = true;
         }
     }
@@ -123,6 +138,104 @@ namespace Framework::Networking::Replication {
             payload.ownerGUID  = guid;
             payload.stateEpoch = entity->stateEpoch;
             _owner->SendRPC(payload, MafiaNet::ToGuid(guid));
+
+            // Owner-scoped keys only ever went to the previous owner, and this owner's construction
+            // snapshot predates the grant. Nothing else would resend them.
+            const std::vector<std::string> ownerKeys = entity->state.OwnerKeys();
+            if (!ownerKeys.empty()) {
+                RPC::StateBagSync seed;
+                for (const std::string &key : ownerKeys) {
+                    const StateValue *value = entity->state.Get(key);
+                    if (value == nullptr) {
+                        continue;
+                    }
+                    RPC::StateBagSync::Change change;
+                    change.networkId = entity->GetNetworkID();
+                    change.key       = key;
+                    change.value     = *value;
+                    seed.changes.push_back(change);
+                }
+                if (!seed.changes.empty()) {
+                    _owner->SendRPC(seed, MafiaNet::ToGuid(guid));
+                }
+            }
+        }
+    }
+
+    void ReplicationManager::MarkStateBagDirty(NetworkEntity *entity) {
+        if (entity != nullptr) {
+            _dirtyStateBags.insert(entity->GetNetworkID());
+        }
+    }
+
+    void ReplicationManager::FlushStateBags() {
+        if (_dirtyStateBags.empty()) {
+            return;
+        }
+
+        // A client sends nothing outbound, and with no connections there is nowhere to send. Drop
+        // the marks rather than let them accumulate for a flush that never comes.
+        const unsigned connectionCount = (_isServer && _owner != nullptr) ? GetConnectionCount() : 0;
+        if (connectionCount == 0) {
+            for (const uint64_t networkId : _dirtyStateBags) {
+                if (auto *entity = GetEntityByNetworkID(networkId)) {
+                    entity->state.ClearDirty();
+                }
+            }
+            _dirtyStateBags.clear();
+            return;
+        }
+
+        // One buffer per connection, filled once and sent once. Placement asks the connection
+        // whether it has the entity constructed — the question interest, virtual worlds and budgets
+        // have already answered, so none of it is repeated here.
+        std::vector<std::vector<RPC::StateBagSync::Change>> buffers(connectionCount);
+        for (const uint64_t networkId : _dirtyStateBags) {
+            NetworkEntity *entity = GetEntityByNetworkID(networkId);
+            if (entity == nullptr) {
+                continue; // Destroyed since it dirtied.
+            }
+
+            for (const auto &[key, scope] : entity->state.Dirty()) {
+                const StateValue *current = entity->state.Get(key);
+                RPC::StateBagSync::Change change;
+                change.networkId = entity->GetNetworkID();
+                change.key       = key;
+                change.removed   = current == nullptr;
+                if (current != nullptr) {
+                    change.value = *current;
+                }
+
+                for (unsigned i = 0; i < connectionCount; ++i) {
+                    MafiaNet::Connection_RM3 *connection = GetConnectionAtIndex(i);
+                    if (connection == nullptr || !connection->HasReplicaConstructed(entity)) {
+                        continue;
+                    }
+                    if (scope == StateScope::Owner && MafiaNet::ToPeerGuid(connection->GetRakNetGUID()) != entity->ownerGUID) {
+                        continue;
+                    }
+                    buffers[i].push_back(change);
+                }
+            }
+            entity->state.ClearDirty();
+        }
+        _dirtyStateBags.clear();
+
+        for (unsigned i = 0; i < connectionCount; ++i) {
+            if (buffers[i].empty()) {
+                continue;
+            }
+            MafiaNet::Connection_RM3 *connection = GetConnectionAtIndex(i);
+            if (connection == nullptr) {
+                continue;
+            }
+            // Chunked to what the receiver accepts, so the reader never trusts a count off the wire.
+            for (size_t offset = 0; offset < buffers[i].size(); offset += RPC::StateBagSync::kMaxChanges) {
+                const size_t end = std::min(offset + RPC::StateBagSync::kMaxChanges, buffers[i].size());
+                RPC::StateBagSync payload;
+                payload.changes.assign(buffers[i].begin() + static_cast<ptrdiff_t>(offset), buffers[i].begin() + static_cast<ptrdiff_t>(end));
+                _owner->SendRPC(payload, connection->GetRakNetGUID());
+            }
         }
     }
 

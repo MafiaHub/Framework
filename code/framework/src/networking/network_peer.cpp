@@ -65,9 +65,12 @@ namespace Framework::Networking {
             return;
         }
 
-        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance.
+        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance, then
+        // send this tick's state-bag changes — the flush asks each connection what it has
+        // constructed, so it reads the relevance this rebuild just settled.
         if (_replicationManager) {
             _replicationManager->RebuildInterest();
+            _replicationManager->FlushStateBags();
         }
 
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {

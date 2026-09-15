@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "state_bag.h"
+
 #include <mafianet/ReplicaManager3.h>
 #include <mafianet/VariableDeltaSerializer.h>
 #include <mafianet/VirtualWorldReplica3.h>
@@ -130,8 +132,15 @@ namespace Framework::Networking::Replication {
     // client serializes upstream, and Deserialize accepts state only from the current owner.
     class NetworkEntity : public MafiaNet::VirtualWorldReplica3 {
       public:
-        NetworkEntity()           = default;
+        NetworkEntity() {
+            state.Bind(this);
+        }
         ~NetworkEntity() override = default;
+
+        // The bag points back at its entity, so a copy would raise the original's changes. Nothing
+        // legitimately copies an entity; this makes the mistake a compile error.
+        NetworkEntity(const NetworkEntity &)            = delete;
+        NetworkEntity &operator=(const NetworkEntity &) = delete;
 
         // --- Common replicated state ---
         glm::vec3 position = glm::vec3(0.0f);
@@ -140,6 +149,11 @@ namespace Framework::Networking::Replication {
 
         // --- Authority (replicated) ---
         MafiaNet::PeerGuid ownerGUID = MafiaNet::UNASSIGNED_PEER_GUID;
+
+        // Arbitrary key/value state a game or a script hangs off this entity, replicated on its own
+        // RPC (state_bag.h explains why not through SerializeFields). A bag nobody writes costs a
+        // zero count per construction and nothing else.
+        StateBag state;
 
         // Idle refresh of an unchanged pose, so a lost final packet is repaired: every kTransformRefreshMs
         // for kTransformRefreshBurstMs after the last change, then every kTransformHeartbeatMs. Entities
@@ -207,6 +221,10 @@ namespace Framework::Networking::Replication {
 
         // Called on the owning client after SerializeForcedState has applied the forced fields.
         virtual void OnStateForced() {}
+
+        // Raised for every key a construction seed delivered, after OnConstructed, so a listener
+        // finds the entity fully built.
+        void NotifySeededState(const std::vector<std::string> &keys);
 
         // This entity's nametag state, for entities that carry one (games embed and serialize it).
         virtual NametagState *GetNametag() {
@@ -284,6 +302,14 @@ namespace Framework::Networking::Replication {
         // returns false when the update is stale (sent before the last ForceState) and must not be
         // applied.
         bool ApplyIncomingEpoch(uint8_t incomingEpoch);
+
+        // --- State-bag plumbing, reached only by the bag itself ---
+        // Registers with the manager's dirty list, so a flush walks what changed rather than
+        // sweeping the world.
+        void MarkStateDirty();
+        // Raised on both peers: the server on write, a client on apply.
+        void NotifyStateChanged(const StateChange &change);
+        friend class StateBag;
 
         // CRC32 of the registered name; stamped by EntityRegistry, not game-settable.
         uint32_t _typeId = 0;

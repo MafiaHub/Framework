@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 29
+#define UNIT_MAX_MODULES 32
 #include "logging/logger.h"
 #include "unit.h"
 
@@ -19,6 +19,7 @@
 #include "modules/replication_authority_ut.h"
 #include "modules/replication_rate_ut.h"
 #include "modules/interest_grid_ut.h"
+#include "modules/state_bag_ut.h"
 #include "modules/rpc_identifier_ut.h"
 #include "modules/state_machine_ut.h"
 #include "modules/persistent_config_ut.h"
@@ -57,6 +58,7 @@ int main() {
     UNIT_MODULE(replication_authority);
     UNIT_MODULE(replication_rate);
     UNIT_MODULE(interest_grid);
+    UNIT_MODULE(state_bag);
     UNIT_MODULE(rpc_identifier);
     UNIT_MODULE(state_machine);
     UNIT_MODULE(persistent_config);

@@ -29,6 +29,7 @@ set(FRAMEWORK_SRC
     src/networking/errors.cpp
 
     src/networking/replication/network_entity.cpp
+    src/networking/replication/state_bag.cpp
     src/networking/replication/entity_registry.cpp
     src/networking/replication/interest_grid.cpp
     src/networking/replication/replication_manager.cpp
