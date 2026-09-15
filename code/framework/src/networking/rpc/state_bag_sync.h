@@ -30,7 +30,7 @@ namespace Framework::Networking::RPC {
     struct StateBagSync {
         static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::StateBagSync");
 
-        // The sender chunks to this, so the receiver can bound a length read off the wire.
+        // The sender chunks to this, and the receiver rejects anything above it.
         static constexpr uint16_t kMaxChanges = 256;
 
         struct Change {
@@ -46,6 +46,14 @@ namespace Framework::Networking::RPC {
             auto count = static_cast<uint16_t>(std::min<size_t>(changes.size(), kMaxChanges));
             bs->Serialize(write, count);
             if (!write) {
+                // The read consumes a full uint16 -- the value written above is not a bound on what
+                // comes back, so a corrupt or hostile sender can name 65535 here. The sender never
+                // writes more than kMaxChanges, so anything above it is malformed: drop the payload
+                // rather than allocate on a number off the wire.
+                if (count > kMaxChanges) {
+                    changes.clear();
+                    return;
+                }
                 changes.assign(count, Change {});
             }
             else if (changes.size() > count) {

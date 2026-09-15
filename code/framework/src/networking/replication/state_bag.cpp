@@ -88,18 +88,24 @@ namespace Framework::Networking::Replication {
 
         StateValue previous;
         const bool hadPrevious = it != _entries.end();
+        std::optional<StateScope> previousScope;
         if (hadPrevious) {
             if (it->second.value == value && it->second.scope == scope) {
                 return WriteResult::Unchanged;
             }
-            previous = it->second.value;
+            previous      = it->second.value;
+            previousScope = it->second.scope;
         }
 
         _entries[key] = Entry {value, scope};
 
-        // Server scope is storage, not replication, so it never dirties.
-        if (scope != StateScope::Server) {
-            MarkDirty(key, scope);
+        // Server scope is storage, not replication -- but a key that *was* replicated and is now
+        // Server still has to be taken back off the peers holding it, so the write dirties whenever
+        // either side of the transition reaches the wire.
+        const bool reachesWire  = scope != StateScope::Server;
+        const bool reachedWire  = previousScope.has_value() && *previousScope != StateScope::Server;
+        if (reachesWire || reachedWire) {
+            MarkDirty(key, scope, previousScope);
         }
         Notify(key, value, previous, hadPrevious, false);
         return WriteResult::Applied;
@@ -115,8 +121,10 @@ namespace Framework::Networking::Replication {
         const StateScope scope    = it->second.scope;
         _entries.erase(it);
 
+        // A removal reaches nobody and reached whoever the key was scoped to, which is exactly the
+        // shape the flush already handles: everyone leaving the audience is sent a removal.
         if (scope != StateScope::Server) {
-            MarkDirty(key, scope);
+            MarkDirty(key, StateScope::Server, scope);
         }
         Notify(key, StateValue {}, previous, true, true);
         return true;
@@ -193,8 +201,17 @@ namespace Framework::Networking::Replication {
         return keys;
     }
 
-    void StateBag::MarkDirty(const std::string &key, StateScope scope) {
-        _dirty[key] = scope;
+    void StateBag::MarkDirty(const std::string &key, StateScope scope, std::optional<StateScope> previous) {
+        const auto existing = _dirty.find(key);
+        if (existing != _dirty.end()) {
+            // Several writes in one tick collapse to one change, and the audience that matters is the
+            // one from before the first of them -- that is who is holding a stale value.
+            existing->second.scope = scope;
+        }
+        else {
+            _dirty.emplace(key, DirtyEntry {scope, previous});
+        }
+
         if (_owner != nullptr) {
             _owner->MarkStateDirty();
         }

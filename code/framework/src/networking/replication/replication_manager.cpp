@@ -128,6 +128,25 @@ namespace Framework::Networking::Replication {
         if (!entity) {
             return;
         }
+
+        // Captured before the grant: the peer losing authority is holding every owner-scoped value it
+        // was ever sent, and a client stores what it is sent regardless of the scope it was sent
+        // under, so withholding future updates would leave those values in place.
+        const MafiaNet::PeerGuid previousOwner = entity->ownerGUID;
+        if (_owner && _isServer && previousOwner != guid && previousOwner != MafiaNet::UNASSIGNED_PEER_GUID) {
+            RPC::StateBagSync revoke;
+            for (const std::string &key : entity->state.OwnerKeys()) {
+                RPC::StateBagSync::Change change;
+                change.networkId = entity->GetNetworkID();
+                change.key       = key;
+                change.removed   = true;
+                revoke.changes.push_back(change);
+            }
+            if (!revoke.changes.empty()) {
+                _owner->SendRPC(revoke, MafiaNet::ToGuid(previousOwner));
+            }
+        }
+
         entity->ownerGUID = guid;
         entity->ResetTransformOrdering();
         // Serialize to an owner is withheld, so the grant can't ride normal replication: tell the new
@@ -274,25 +293,47 @@ namespace Framework::Networking::Replication {
                 continue; // Destroyed since it dirtied.
             }
 
-            for (const auto &[key, scope] : entity->state.Dirty()) {
+            for (const auto &[key, dirty] : entity->state.Dirty()) {
                 const StateValue *current = entity->state.Get(key);
-                RPC::StateBagSync::Change change;
-                change.networkId = entity->GetNetworkID();
-                change.key       = key;
-                change.removed   = current == nullptr;
+
+                RPC::StateBagSync::Change update;
+                update.networkId = entity->GetNetworkID();
+                update.key       = key;
+                update.removed   = current == nullptr;
                 if (current != nullptr) {
-                    change.value = *current;
+                    update.value = *current;
                 }
+
+                // Sent to a connection that held the key and is no longer meant to. Nothing else takes
+                // a value back off a peer: a client stores what it is sent and filtering later updates
+                // would leave the old one sitting there.
+                RPC::StateBagSync::Change revoke;
+                revoke.networkId = entity->GetNetworkID();
+                revoke.key       = key;
+                revoke.removed   = true;
 
                 for (unsigned i = 0; i < connectionCount; ++i) {
                     MafiaNet::Connection_RM3 *connection = GetConnectionAtIndex(i);
                     if (connection == nullptr || !connection->HasReplicaConstructed(entity)) {
                         continue;
                     }
-                    if (scope == StateScope::Owner && MafiaNet::ToPeerGuid(connection->GetRakNetGUID()) != entity->ownerGUID) {
-                        continue;
+
+                    const MafiaNet::PeerGuid peer = MafiaNet::ToPeerGuid(connection->GetRakNetGUID());
+                    const auto inAudience         = [&](StateScope scope) {
+                        switch (scope) {
+                        case StateScope::Broadcast: return true;
+                        case StateScope::Owner: return peer == entity->ownerGUID;
+                        case StateScope::Server: return false;
+                        }
+                        return false;
+                    };
+
+                    if (inAudience(dirty.scope)) {
+                        buffers[i].push_back(update);
                     }
-                    buffers[i].push_back(change);
+                    else if (dirty.previous.has_value() && inAudience(*dirty.previous)) {
+                        buffers[i].push_back(revoke);
+                    }
                 }
             }
             entity->state.ClearDirty();

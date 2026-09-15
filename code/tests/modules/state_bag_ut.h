@@ -96,7 +96,10 @@ MODULE(state_bag, {
         entity.state.ClearDirty();
         // The value is identical but its audience is not, so this still has to go out.
         EQUALS(entity.state.Set("cuffed", text("yes"), StateScope::Owner) == StateBag::WriteResult::Applied, true);
-        EQUALS(entity.state.Dirty().at("cuffed") == StateScope::Owner, true);
+        EQUALS(entity.state.Dirty().at("cuffed").scope == StateScope::Owner, true);
+        // Broadcast delivered it to everyone, so the flush has to take it back off the ones the
+        // narrowed key no longer reaches.
+        EQUALS(entity.state.Dirty().at("cuffed").previous.value_or(StateScope::Server) == StateScope::Broadcast, true);
     });
 
     IT("refuses a key longer than the limit", {
@@ -173,7 +176,7 @@ MODULE(state_bag, {
         entity.state.Remove("cuffed");
         // The entry is gone, so the dirty record is the only thing that still knows the removal is
         // owner-only. Without it the flush would broadcast the removal of a key nobody else was sent.
-        EQUALS(entity.state.Dirty().at("cuffed") == StateScope::Owner, true);
+        EQUALS(entity.state.Dirty().at("cuffed").previous.value_or(StateScope::Server) == StateScope::Owner, true);
     });
 
     IT("lists keys in a stable order", {
@@ -385,6 +388,95 @@ MODULE(state_bag, {
 
         serverManager->RemoveStateChangeHandler(handle);
         serverManager->RemoveStateChangeHandler(lateHandle);
+    });
+
+    IT("does not send a value on the audience an earlier write in the same tick had", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        entity.state.Set("note", text("public"), StateScope::Broadcast);
+        entity.state.Set("note", text("secret"), StateScope::Server);
+
+        // Both writes land in one tick, so the flush sends one change and the scope it sends on has
+        // to be the one from the last write. Carrying the first write's Broadcast forward -- which is
+        // what a dirty record holding a bare scope does -- would put "secret" on every connection.
+        const auto &dirty = entity.state.Dirty().at("note");
+        EQUALS(dirty.scope == StateScope::Server, true);
+        // And nothing to revoke: the key did not exist before this tick, so no peer is holding an
+        // earlier value of it. A revocation is owed only to an audience a *previous* flush reached.
+        EQUALS(dirty.previous.has_value(), false);
+    });
+
+    IT("dirties a key that leaves the wire entirely", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        entity.state.Set("note", text("public"), StateScope::Broadcast);
+        entity.state.ClearDirty();
+        entity.state.Set("note", text("secret"), StateScope::Server);
+
+        // Server scope alone never dirties, but this key has already been delivered: without a dirty
+        // mark nothing would ever take it back.
+        EQUALS(entity.state.HasDirty(), true);
+    });
+
+    IT("leaves a key that was never on the wire alone", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        entity.state.Set("secret", text("hidden"), StateScope::Server);
+        entity.state.ClearDirty();
+        entity.state.Set("secret", text("also hidden"), StateScope::Server);
+
+        // Nothing has ever held this key, so there is nothing to revoke and nothing to send.
+        EQUALS(entity.state.HasDirty(), false);
+    });
+
+    IT("keeps the audience from before the first write of a tick", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        entity.state.Set("note", text("public"), StateScope::Broadcast);
+        entity.state.ClearDirty();
+
+        entity.state.Set("note", text("a"), StateScope::Owner);
+        entity.state.Set("note", text("b"), StateScope::Server);
+
+        // Two narrowing writes collapse into one change. The audience that matters is the one holding
+        // a stale value -- Broadcast, from before either of them -- not the intermediate Owner.
+        const auto &dirty = entity.state.Dirty().at("note");
+        EQUALS(dirty.scope == StateScope::Server, true);
+        EQUALS(dirty.previous.value_or(StateScope::Server) == StateScope::Broadcast, true);
+    });
+
+    IT("refuses a sync payload naming more changes than the sender can write", {
+        MafiaNet::BitStream bs;
+        // A count the sender would never produce: it chunks to kMaxChanges. The read consumes a full
+        // uint16 rather than clamping, so the reader has to refuse it instead of allocating on it.
+        bs.Write(static_cast<uint16_t>(65535));
+
+        StateBagSync in;
+        in.Serialize(&bs, false);
+        EQUALS(in.changes.size(), size_t(0));
+    });
+
+    IT("round-trips a payload of exactly the chunk size", {
+        StateBagSync out;
+        for (uint16_t i = 0; i < StateBagSync::kMaxChanges; ++i) {
+            StateBagSync::Change change;
+            change.networkId = i + 1;
+            change.key       = "k" + std::to_string(i);
+            change.value     = number(static_cast<double>(i));
+            out.changes.push_back(change);
+        }
+
+        MafiaNet::BitStream bs;
+        out.Serialize(&bs, true);
+
+        StateBagSync in;
+        in.Serialize(&bs, false);
+        // The bound is a rejection of what is above it, not of the largest payload the sender sends.
+        EQUALS(in.changes.size(), size_t(StateBagSync::kMaxChanges));
     });
 
     IT("seeds a non-owner with broadcast keys only", {

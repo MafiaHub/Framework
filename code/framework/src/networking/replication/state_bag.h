@@ -12,6 +12,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -126,10 +127,21 @@ namespace Framework::Networking::Replication {
 
         // --- Replication plumbing ---
 
-        // Dirty keys with the scope each carried when it changed. Recorded here rather than read back
-        // at flush time because a removed key has no entry left to read it from, and a removal still
-        // has to reach exactly the connections the key was going to.
-        const std::unordered_map<std::string, StateScope> &Dirty() const {
+        // What a dirty key has to tell the wire: who it reaches now, and who it reached before.
+        //
+        // Both, because a key's audience can shrink. A key that was Broadcast and is now Owner or
+        // Server has already been delivered to connections that must no longer hold it, and they only
+        // drop it if they are sent a removal. `previous` is what says who those are; it is empty when
+        // the key did not exist before this tick's first write.
+        //
+        // Recorded here rather than read back at flush time because a removed key has no entry left
+        // to read a scope from.
+        struct DirtyEntry {
+            StateScope scope = StateScope::Broadcast;
+            std::optional<StateScope> previous;
+        };
+
+        const std::unordered_map<std::string, DirtyEntry> &Dirty() const {
             return _dirty;
         }
         bool HasDirty() const {
@@ -155,11 +167,11 @@ namespace Framework::Networking::Replication {
         std::vector<std::string> OwnerKeys() const;
 
       private:
-        void MarkDirty(const std::string &key, StateScope scope);
+        void MarkDirty(const std::string &key, StateScope scope, std::optional<StateScope> previous);
         void Notify(const std::string &key, const StateValue &value, const StateValue &previous, bool hadPrevious, bool removed);
 
         std::unordered_map<std::string, Entry> _entries;
-        std::unordered_map<std::string, StateScope> _dirty;
+        std::unordered_map<std::string, DirtyEntry> _dirty;
         NetworkEntity *_owner = nullptr;
     };
 } // namespace Framework::Networking::Replication
