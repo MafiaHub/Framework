@@ -10,6 +10,7 @@
 
 #include "../builtins/events.h"
 #include "../builtins/messages.h"
+#include "../builtins/state_bag.h"
 
 #include <utils/vfs.h>
 
@@ -966,6 +967,7 @@ namespace Framework::Scripting {
             v8::Local<v8::Context> context = _jsEngine->GetContext();
             v8::Context::Scope contextScope(context);
             Builtins::Messages::CleanupResource(isolate, context, std::string(resourceName));
+            Builtins::StateBag::CleanupResource(isolate, std::string(resourceName));
         }
         return true;
     }

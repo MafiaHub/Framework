@@ -94,13 +94,20 @@ namespace Framework::Networking::Replication {
         fields.Field(rotation);
     }
 
-    void NetworkEntity::SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *) {
+    void NetworkEntity::SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) {
         constructionBitstream->Write(stateEpoch);
         FieldSerializer seed(constructionBitstream, true);
         SerializeBaseFields(seed);
         SerializeTransform(seed);
         OnSerializeConstruction(seed);
         SerializeFields(seed);
+        // Here and not in OnSerializeConstruction, which mods override: a missing base call there
+        // would silently drop every key, and this function is final.
+        //
+        // Construction is written per destination, so the owner's copy carries its Owner-scoped keys
+        // and nobody else's does — a fresh owner needs no separate seeding pass.
+        const bool toOwner = destinationConnection != nullptr && ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID && MafiaNet::ToPeerGuid(destinationConnection->GetRakNetGUID()) == ownerGUID;
+        state.SerializeSeed(constructionBitstream, toOwner);
     }
 
     bool NetworkEntity::DeserializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *) {
@@ -112,7 +119,9 @@ namespace Framework::Networking::Replication {
         SerializeTransform(seed);
         OnSerializeConstruction(seed);
         SerializeFields(seed);
+        const std::vector<std::string> seededKeys = state.DeserializeSeed(constructionBitstream);
         OnConstructed();
+        NotifySeededState(seededKeys);
         return true;
     }
 
@@ -139,6 +148,37 @@ namespace Framework::Networking::Replication {
     void NetworkEntity::SerializeForcedState(FieldSerializer &fields) {
         fields.Field(position);
         fields.Field(rotation);
+    }
+
+    void NetworkEntity::MarkStateDirty() {
+        // No manager before Reference(); a bag written that early is carried by the seed anyway.
+        if (auto *manager = Manager()) {
+            manager->MarkStateBagDirty(this);
+        }
+    }
+
+    void NetworkEntity::NotifyStateChanged(const StateChange &change) {
+        if (auto *manager = Manager()) {
+            manager->NotifyStateChanged(change);
+        }
+    }
+
+    void NetworkEntity::NotifySeededState(const std::vector<std::string> &keys) {
+        auto *manager = Manager();
+        if (manager == nullptr || keys.empty()) {
+            return;
+        }
+        for (const std::string &key : keys) {
+            const StateValue *value = state.Get(key);
+            if (value == nullptr) {
+                continue;
+            }
+            StateChange change;
+            change.entity = this;
+            change.key    = key;
+            change.value  = *value;
+            manager->NotifyStateChanged(change);
+        }
     }
 
     void NetworkEntity::ForceState() {

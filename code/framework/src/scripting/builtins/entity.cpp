@@ -8,6 +8,7 @@
 
 #include "entity.h"
 #include "../scripting_catalog.h"
+#include "state_bag.h"
 
 #include <core_modules.h>
 
@@ -128,6 +129,18 @@ namespace Framework::Scripting::Builtins {
             cls->accessor_property("rotation", rotationGetter, rotationSetter, v8pp::metadata::property_docs("Quaternion | Vector3", "Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees."));
         }
 
+        // Property: state. Read-only handle onto this entity's state bag — the bag itself is mutable,
+        // the binding between entity and bag is not, so there is no setter.
+        {
+            auto stateGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
+                if (self) {
+                    info.GetReturnValue().Set(StateBag::NewInstance(info.GetIsolate(), self->GetId()));
+                }
+            });
+            cls->accessor_property("state", stateGetter, v8::Local<v8::FunctionTemplate>(), v8pp::metadata::property_docs("StateBag", "Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag."));
+        }
+
         // Replication placement is the server's to decide; a client writes only its own replica.
         if (IsClientScripting(isolate)) {
             return *cls;
@@ -170,6 +183,11 @@ namespace Framework::Scripting::Builtins {
         v8pp::class_<Entity> &cls = GetClass(isolate);
         auto ctx                  = isolate->GetCurrentContext();
         global->Set(ctx, v8pp::to_v8(isolate, "Entity"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
+        // StateBag is reached only through `entity.state`, so its class would otherwise not exist
+        // until the first read -- long after the metadata export runs, leaving it out of the
+        // generated declarations. Build it here instead. It is deliberately not put on the global:
+        // there is no bag without an entity, so there is nothing for a script to construct.
+        StateBag::GetClass(isolate);
     }
 
     Networking::Replication::NetworkEntity *Entity::Resolve() const {

@@ -55,6 +55,10 @@ namespace Framework::Networking::Replication {
     // creates/destroys entities, resolves them by NetworkID, tracks each connection's "viewer"
     // entity, and drives an InterestGrid that ReplicationConnection::QueryReplicaList reads for
     // interest management.
+    // Identifies one state-change subscription. Zero is never handed out.
+    using StateChangeHandle = uint32_t;
+    inline constexpr StateChangeHandle kInvalidStateChangeHandle = 0;
+
     class ReplicationManager final : public MafiaNet::ReplicaManager3 {
       public:
         ReplicationManager();
@@ -73,6 +77,28 @@ namespace Framework::Networking::Replication {
         // NetworkEntity::SetOwner). Needed because serialize to an owner is withheld, so the grant
         // can't ride normal replication.
         void SetOwner(NetworkEntity *entity, MafiaNet::PeerGuid guid);
+
+        // --- State bags ---
+        // Server: send this tick's accumulated bag changes. Driven from NetworkPeer::Update, next to
+        // RebuildInterest. Each change goes only to the connections that have the entity constructed,
+        // so bags inherit interest, virtual worlds and budgets rather than restating them — and no
+        // state reaches a client that cannot see the entity.
+        void FlushStateBags();
+
+        // Called by a bag when it first dirties in a tick, so the flush walks what changed.
+        void MarkStateBagDirty(NetworkEntity *entity);
+
+        // Subscribe to bag changes on this peer: the server on write, a client on apply, including
+        // the keys a construction seed delivered. Returns a handle for RemoveStateChangeHandler, or
+        // kInvalidStateChangeHandle when the callback is empty.
+        //
+        // The filter is applied before the callback runs, which is the point of it: a busy server
+        // changes bags many times a tick, and a listener watching one key of one entity should not be
+        // paying to build arguments for every other change in the world. An empty filter still sees
+        // everything, for a mod that wants the firehose.
+        StateChangeHandle AddStateChangeHandler(const StateChangeFilter &filter, fu2::function<void(const StateChange &) const> callback);
+        void RemoveStateChangeHandler(StateChangeHandle handle);
+        void NotifyStateChanged(const StateChange &change);
 
         bool IsServer() const {
             return _isServer;
@@ -223,6 +249,21 @@ namespace Framework::Networking::Replication {
         // Entity set changed since the last rebuild; forces one regardless of the interval.
         bool _interestDirty = true;
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
+        // By NetworkID, not pointer: an entity can be destroyed between dirtying and the flush.
+        std::unordered_set<uint64_t> _dirtyStateBags;
+
+        struct StateChangeSubscription {
+            StateChangeFilter filter;
+            fu2::function<void(const StateChange &) const> callback;
+        };
+        // Handles rather than iterators or pointers, so a handler that unsubscribes during dispatch
+        // (itself or another) cannot invalidate what the dispatch is walking.
+        std::unordered_map<StateChangeHandle, StateChangeSubscription> _stateChangeHandlers;
+        // Keyed buckets, so a change consults only the subscriptions that named its key plus the ones
+        // that named no key at all.
+        std::unordered_map<std::string, std::vector<StateChangeHandle>> _stateChangeByKey;
+        std::vector<StateChangeHandle> _stateChangeAnyKey;
+        StateChangeHandle _nextStateChangeHandle = kInvalidStateChangeHandle;
         fu2::function<void(MafiaNet::PeerGuid) const> _onClientDisconnect;
         fu2::function<void(uint64_t) const> _onEntityCreated;
         fu2::function<void(uint64_t) const> _onEntityDestroyed;
