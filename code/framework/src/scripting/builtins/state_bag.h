@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <networking/replication/replication_manager.h>
 #include <networking/replication/state_bag.h>
 
 #include <v8.h>
@@ -38,6 +39,11 @@ namespace Framework::Scripting::Builtins {
         static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, uint64_t networkId);
         static void UnregisterIsolate(v8::Isolate *isolate);
 
+        // Drops the change subscriptions a stopping resource registered, mirroring
+        // Events::CleanupResource. Without it a stopped resource's handler keeps running, and its
+        // retained function keeps the resource's objects alive.
+        static void CleanupResource(v8::Isolate *isolate, const std::string &resourceName);
+
         // Scalars map directly; anything else is serialized to JSON. Returns false with an exception
         // pending when the value cannot be represented — a cycle, chiefly.
         static bool ToStateValue(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> input, Networking::Replication::StateValue &out);
@@ -49,6 +55,16 @@ namespace Framework::Scripting::Builtins {
       private:
         Networking::Replication::StateBag *Resolve() const;
 
+        // One live `onChange` registration: the script's function, the resource it belongs to so a
+        // stop can drop it, and the replication-side handle to cancel.
+        struct Subscription {
+            v8::Global<v8::Function> callback;
+            std::string resourceName;
+            Networking::Replication::StateChangeHandle handle = Networking::Replication::kInvalidStateChangeHandle;
+        };
+
+        static void Unsubscribe(v8::Isolate *isolate, uint32_t id);
+
         // The live bag behind a call's receiver, or nullptr when the handle is stale or not a
         // StateBag at all. Both cases are a silent no-op, so callers need not tell them apart —
         // argument checks still run first, because a bad argument throws even on a dead receiver.
@@ -56,5 +72,7 @@ namespace Framework::Scripting::Builtins {
 
         uint64_t _id = 0;
         inline static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<StateBag>>> _classes;
+        inline static std::unordered_map<v8::Isolate *, std::unordered_map<uint32_t, Subscription>> _subscriptions;
+        inline static uint32_t _nextSubscriptionId = 0;
     };
 } // namespace Framework::Scripting::Builtins

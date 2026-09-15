@@ -162,6 +162,84 @@ namespace Framework::Networking::Replication {
         }
     }
 
+    StateChangeHandle ReplicationManager::AddStateChangeHandler(const StateChangeFilter &filter, fu2::function<void(const StateChange &) const> callback) {
+        if (!callback) {
+            return kInvalidStateChangeHandle;
+        }
+
+        const StateChangeHandle handle = ++_nextStateChangeHandle;
+        _stateChangeHandlers.emplace(handle, StateChangeSubscription {filter, std::move(callback)});
+        if (filter.key.empty()) {
+            _stateChangeAnyKey.push_back(handle);
+        }
+        else {
+            _stateChangeByKey[filter.key].push_back(handle);
+        }
+        return handle;
+    }
+
+    void ReplicationManager::RemoveStateChangeHandler(StateChangeHandle handle) {
+        const auto it = _stateChangeHandlers.find(handle);
+        if (it == _stateChangeHandlers.end()) {
+            return;
+        }
+
+        const std::string key = it->second.filter.key;
+        _stateChangeHandlers.erase(it);
+
+        const auto drop = [handle](std::vector<StateChangeHandle> &bucket) {
+            bucket.erase(std::remove(bucket.begin(), bucket.end(), handle), bucket.end());
+        };
+        if (key.empty()) {
+            drop(_stateChangeAnyKey);
+            return;
+        }
+        const auto bucket = _stateChangeByKey.find(key);
+        if (bucket != _stateChangeByKey.end()) {
+            drop(bucket->second);
+            if (bucket->second.empty()) {
+                _stateChangeByKey.erase(bucket);
+            }
+        }
+    }
+
+    void ReplicationManager::NotifyStateChanged(const StateChange &change) {
+        if (_stateChangeHandlers.empty()) {
+            return;
+        }
+
+        const uint64_t networkId = change.entity != nullptr ? change.entity->GetNetworkID() : 0;
+        std::vector<StateChangeHandle> matched;
+
+        const auto collect = [&](const std::vector<StateChangeHandle> &bucket) {
+            for (const StateChangeHandle handle : bucket) {
+                const auto it = _stateChangeHandlers.find(handle);
+                if (it == _stateChangeHandlers.end()) {
+                    continue;
+                }
+                const uint64_t wanted = it->second.filter.networkId;
+                if (wanted == 0 || wanted == networkId) {
+                    matched.push_back(handle);
+                }
+            }
+        };
+
+        collect(_stateChangeAnyKey);
+        const auto keyed = _stateChangeByKey.find(change.key);
+        if (keyed != _stateChangeByKey.end()) {
+            collect(keyed->second);
+        }
+
+        // Each handle is looked up again at call time: a handler is free to unsubscribe itself or
+        // another during dispatch, and one added during dispatch is not called for this change.
+        for (const StateChangeHandle handle : matched) {
+            const auto it = _stateChangeHandlers.find(handle);
+            if (it != _stateChangeHandlers.end() && it->second.callback) {
+                it->second.callback(change);
+            }
+        }
+    }
+
     void ReplicationManager::MarkStateBagDirty(NetworkEntity *entity) {
         if (entity != nullptr) {
             _dirtyStateBags.insert(entity->GetNetworkID());

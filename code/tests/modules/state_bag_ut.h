@@ -32,6 +32,8 @@ MODULE(state_bag, {
     using Framework::Networking::Replication::NetworkEntity;
     using Framework::Networking::Replication::StateBag;
     using Framework::Networking::Replication::StateChange;
+    using Framework::Networking::Replication::StateChangeFilter;
+    using Framework::Networking::Replication::StateChangeHandle;
     using Framework::Networking::Replication::StateScope;
     using Framework::Networking::Replication::StateValue;
     using Framework::Networking::RPC::StateBagSync;
@@ -195,7 +197,7 @@ MODULE(state_bag, {
         entity.replicaManager = serverManager;
 
         std::vector<StateChange> seen;
-        serverManager->SetOnStateChanged([&seen](const StateChange &change) {
+        const StateChangeHandle handle = serverManager->AddStateChangeHandler({}, [&seen](const StateChange &change) {
             seen.push_back(change);
         });
 
@@ -215,7 +217,7 @@ MODULE(state_bag, {
         EQUALS(seen[2].previous.text, std::string("blacksmith"));
         EQUALS(seen[2].value.type == StateValue::Type::Null, true);
 
-        serverManager->SetOnStateChanged(nullptr);
+        serverManager->RemoveStateChangeHandler(handle);
     });
 
     IT("raises nothing for a write that changed nothing", {
@@ -225,13 +227,164 @@ MODULE(state_bag, {
         entity.state.Set("job", text("blacksmith"));
 
         size_t raised = 0;
-        serverManager->SetOnStateChanged([&raised](const StateChange &) {
+        const StateChangeHandle handle = serverManager->AddStateChangeHandler({}, [&raised](const StateChange &) {
             ++raised;
         });
         entity.state.Set("job", text("blacksmith"));
         EQUALS(raised, size_t(0));
 
-        serverManager->SetOnStateChanged(nullptr);
+        serverManager->RemoveStateChangeHandler(handle);
+    });
+
+    IT("delivers only the key a subscription filtered on", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        std::vector<std::string> seen;
+        StateChangeFilter filter;
+        filter.key                     = "job";
+        const StateChangeHandle handle = serverManager->AddStateChangeHandler(filter, [&seen](const StateChange &change) {
+            seen.push_back(change.key);
+        });
+
+        entity.state.Set("job", text("blacksmith"));
+        entity.state.Set("mood", text("cheerful"));
+        entity.state.Set("job", text("miller"));
+
+        // The point of the filter: a listener watching one field is not woken by the others.
+        EQUALS(seen.size(), size_t(2));
+        EQUALS(seen[0], std::string("job"));
+        EQUALS(seen[1], std::string("job"));
+
+        serverManager->RemoveStateChangeHandler(handle);
+    });
+
+    IT("delivers only the entity a subscription filtered on", {
+        NetworkEntity watched;
+        watched.replicaManager = serverManager;
+        watched.SetNetworkID(4001);
+        NetworkEntity other;
+        other.replicaManager = serverManager;
+        other.SetNetworkID(4002);
+
+        size_t seen = 0;
+        StateChangeFilter filter;
+        filter.networkId               = 4001;
+        const StateChangeHandle handle = serverManager->AddStateChangeHandler(filter, [&seen](const StateChange &) {
+            ++seen;
+        });
+
+        watched.state.Set("job", text("blacksmith"));
+        other.state.Set("job", text("miller"));
+
+        EQUALS(seen, size_t(1));
+        serverManager->RemoveStateChangeHandler(handle);
+    });
+
+    IT("applies both filters together", {
+        NetworkEntity watched;
+        watched.replicaManager = serverManager;
+        watched.SetNetworkID(4003);
+        NetworkEntity other;
+        other.replicaManager = serverManager;
+        other.SetNetworkID(4004);
+
+        size_t seen = 0;
+        StateChangeFilter filter;
+        filter.networkId               = 4003;
+        filter.key                     = "job";
+        const StateChangeHandle handle = serverManager->AddStateChangeHandler(filter, [&seen](const StateChange &) {
+            ++seen;
+        });
+
+        watched.state.Set("job", text("blacksmith")); // both match
+        watched.state.Set("mood", text("cheerful"));  // wrong key
+        other.state.Set("job", text("miller"));       // wrong entity
+
+        EQUALS(seen, size_t(1));
+        serverManager->RemoveStateChangeHandler(handle);
+    });
+
+    IT("sees every change through an empty filter", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        size_t seen                    = 0;
+        const StateChangeHandle handle = serverManager->AddStateChangeHandler({}, [&seen](const StateChange &) {
+            ++seen;
+        });
+
+        entity.state.Set("job", text("blacksmith"));
+        entity.state.Set("mood", text("cheerful"));
+        entity.state.Remove("job");
+
+        EQUALS(seen, size_t(3));
+        serverManager->RemoveStateChangeHandler(handle);
+    });
+
+    IT("stops delivering once a subscription is removed", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        size_t seen                    = 0;
+        const StateChangeHandle handle = serverManager->AddStateChangeHandler({}, [&seen](const StateChange &) {
+            ++seen;
+        });
+
+        entity.state.Set("job", text("blacksmith"));
+        serverManager->RemoveStateChangeHandler(handle);
+        entity.state.Set("job", text("miller"));
+
+        EQUALS(seen, size_t(1));
+        // Removing a handle twice is harmless; a script may cancel a subscription it already cancelled.
+        serverManager->RemoveStateChangeHandler(handle);
+    });
+
+    IT("refuses an empty callback rather than handing out a handle", {
+        EQUALS(serverManager->AddStateChangeHandler({}, nullptr) == Framework::Networking::Replication::kInvalidStateChangeHandle, true);
+    });
+
+    IT("honours a subscription that cancels itself while being dispatched", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        size_t seen = 0;
+        StateChangeHandle handle {};
+        handle = serverManager->AddStateChangeHandler({}, [&](const StateChange &) {
+            ++seen;
+            // Cancelling from inside dispatch is the natural way to write a once-handler, and must
+            // not corrupt the walk in progress.
+            serverManager->RemoveStateChangeHandler(handle);
+        });
+
+        entity.state.Set("job", text("blacksmith"));
+        entity.state.Set("job", text("miller"));
+
+        EQUALS(seen, size_t(1));
+    });
+
+    IT("does not call a subscription added while a change is being dispatched", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        size_t late                     = 0;
+        StateChangeHandle lateHandle    = Framework::Networking::Replication::kInvalidStateChangeHandle;
+        const StateChangeHandle handle  = serverManager->AddStateChangeHandler({}, [&](const StateChange &) {
+            if (lateHandle == Framework::Networking::Replication::kInvalidStateChangeHandle) {
+                lateHandle = serverManager->AddStateChangeHandler({}, [&late](const StateChange &) {
+                    ++late;
+                });
+            }
+        });
+
+        entity.state.Set("job", text("blacksmith"));
+        // The new subscription starts from the next change, not the one that created it.
+        EQUALS(late, size_t(0));
+        entity.state.Set("job", text("miller"));
+        EQUALS(late, size_t(1));
+
+        serverManager->RemoveStateChangeHandler(handle);
+        serverManager->RemoveStateChangeHandler(lateHandle);
     });
 
     IT("seeds a non-owner with broadcast keys only", {

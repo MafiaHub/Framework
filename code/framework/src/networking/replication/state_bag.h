@@ -53,6 +53,13 @@ namespace Framework::Networking::Replication {
         Server,        // never leaves the server; script-side storage at zero wire cost
     };
 
+    // Which changes a subscription wants. A zero networkId matches any entity, an empty key any key;
+    // both set is the narrow case a listener watching one field of one entity should be paying for.
+    struct StateChangeFilter {
+        uint64_t networkId = 0;
+        std::string key;
+    };
+
     struct StateChange {
         NetworkEntity *entity = nullptr;
         std::string key;

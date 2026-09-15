@@ -13,6 +13,12 @@
 #include <core_modules.h>
 #include <networking/replication/network_entity.h>
 #include <networking/replication/replication_manager.h>
+#include <scripting/engine.h>
+#include <scripting/module.h>
+#include <scripting/resource/resource_manager.h>
+#include <scripting/engine.h>
+#include <scripting/module.h>
+#include <scripting/resource/resource_manager.h>
 
 #include <fmt/format.h>
 #include <v8pp/convert.hpp>
@@ -144,6 +150,41 @@ namespace Framework::Scripting::Builtins {
         return v8::Null(isolate);
     }
 
+    void StateBag::Unsubscribe(v8::Isolate *isolate, uint32_t id) {
+        const auto perIsolate = _subscriptions.find(isolate);
+        if (perIsolate == _subscriptions.end()) {
+            return;
+        }
+        const auto it = perIsolate->second.find(id);
+        if (it == perIsolate->second.end()) {
+            return;
+        }
+
+        if (auto *replication = CoreModules::GetReplication()) {
+            replication->RemoveStateChangeHandler(it->second.handle);
+        }
+        perIsolate->second.erase(it);
+    }
+
+    void StateBag::CleanupResource(v8::Isolate *isolate, const std::string &resourceName) {
+        const auto perIsolate = _subscriptions.find(isolate);
+        if (perIsolate == _subscriptions.end()) {
+            return;
+        }
+
+        auto *replication = CoreModules::GetReplication();
+        for (auto it = perIsolate->second.begin(); it != perIsolate->second.end();) {
+            if (it->second.resourceName != resourceName) {
+                ++it;
+                continue;
+            }
+            if (replication != nullptr) {
+                replication->RemoveStateChangeHandler(it->second.handle);
+            }
+            it = perIsolate->second.erase(it);
+        }
+    }
+
     v8pp::class_<StateBag> &StateBag::GetClass(v8::Isolate *isolate) {
         auto it = _classes.find(isolate);
         if (it != _classes.end()) {
@@ -223,6 +264,132 @@ namespace Framework::Scripting::Builtins {
             },
             v8pp::metadata::docs("Record<string, any>", {}, "Copies this entity's whole state into a plain object.", "Every key and value currently set. The copy does not track later changes."));
 
+        cls->prototype_function(
+            "onChange",
+            [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                v8::Isolate *isolate = info.GetIsolate();
+
+                // The key comes first and is required, null meaning every key: an optional leading
+                // parameter cannot be expressed as one TypeScript signature, and a nullable one says
+                // the same thing without an overload.
+                if (info.Length() < 2 || !(info[0]->IsString() || info[0]->IsNullOrUndefined())) {
+                    isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "StateBag.onChange: expected (key, handler); pass null as the key to watch every key")));
+                    return;
+                }
+                const std::string key = info[0]->IsString() ? v8pp::from_v8<std::string>(isolate, info[0]) : std::string();
+
+                v8::Local<v8::Value> handlerArg = info[1];
+                if (!handlerArg->IsFunction()) {
+                    isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "StateBag.onChange: handler must be a function")));
+                    return;
+                }
+
+                auto *self = v8pp::class_<StateBag>::unwrap_object(isolate, info.This());
+                if (self == nullptr) {
+                    return;
+                }
+                auto *replication = CoreModules::GetReplication();
+                if (replication == nullptr) {
+                    isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "StateBag.onChange: replication is not available")));
+                    return;
+                }
+
+                v8::Local<v8::Function> handler = handlerArg.As<v8::Function>();
+
+                // Attributed to the resource that registered it, so a stop drops it. Unowned, the
+                // subscription would outlive its resource and keep its objects alive.
+                std::string resourceName;
+                if (auto *module = CoreModules::GetScriptingModule()) {
+                    if (auto *resources = module->GetResourceManager()) {
+                        resourceName = resources->GetResourceNameFromFunction(isolate, handler);
+                        if (resourceName.empty()) {
+                            resourceName = resources->GetCurrentResourceContext();
+                        }
+                        if (resourceName.empty()) {
+                            resourceName = resources->GetResourceContextFromStack(isolate);
+                        }
+                    }
+                }
+
+                const uint32_t id = ++_nextSubscriptionId;
+                Subscription subscription;
+                subscription.callback.Reset(isolate, handler);
+                subscription.resourceName = resourceName;
+
+                Networking::Replication::StateChangeFilter filter;
+                filter.networkId = self->GetId();
+                filter.key       = key;
+
+                // The filter names this bag's entity, plus the key when one was given, so the callback
+                // below never runs for a change this listener did not ask for.
+                subscription.handle = replication->AddStateChangeHandler(filter, [isolate, id](const Networking::Replication::StateChange &change) {
+                    const auto perIsolate = _subscriptions.find(isolate);
+                    if (perIsolate == _subscriptions.end()) {
+                        return;
+                    }
+                    const auto entry = perIsolate->second.find(id);
+                    if (entry == perIsolate->second.end()) {
+                        return;
+                    }
+
+                    auto *module = CoreModules::GetScriptingModule();
+                    auto *engine = module != nullptr ? module->GetScriptingEngine() : nullptr;
+                    if (engine == nullptr) {
+                        return;
+                    }
+
+                    // A change can originate off the script thread, so the isolate is entered here
+                    // rather than assumed. Locker nests safely when a script's own write got us here.
+                    v8::Locker locker(isolate);
+                    v8::Isolate::Scope isolateScope(isolate);
+                    v8::HandleScope handleScope(isolate);
+                    v8::Local<v8::Context> context = engine->GetContext();
+                    if (context.IsEmpty()) {
+                        return;
+                    }
+                    v8::Context::Scope contextScope(context);
+
+                    // Undefined rather than null for a removal and for a key that held nothing, so a
+                    // stored null stays distinguishable from an absent one.
+                    v8::Local<v8::Value> args[3] = {
+                        v8pp::to_v8(isolate, change.key),
+                        change.removed ? v8::Local<v8::Value>(v8::Undefined(isolate)) : FromStateValue(isolate, context, change.value),
+                        change.hadPrevious ? FromStateValue(isolate, context, change.previous) : v8::Local<v8::Value>(v8::Undefined(isolate)),
+                    };
+
+                    v8::TryCatch tryCatch(isolate);
+                    v8::Local<v8::Function> callback = entry->second.callback.Get(isolate);
+                    (void)callback->Call(context, v8::Undefined(isolate), 3, args);
+                    if (tryCatch.HasCaught()) {
+                        // A throwing listener is its own bug and must not take down the write that
+                        // raised it.
+                        tryCatch.Reset();
+                    }
+                });
+
+                if (subscription.handle == Networking::Replication::kInvalidStateChangeHandle) {
+                    return;
+                }
+                _subscriptions[isolate].emplace(id, std::move(subscription));
+
+                // An unsubscribe function, matching what Events.on hands back.
+                v8::Local<v8::Function> unsubscribe = v8::Function::New(
+                    isolate->GetCurrentContext(),
+                    [](const v8::FunctionCallbackInfo<v8::Value> &inner) {
+                        Unsubscribe(inner.GetIsolate(), v8pp::from_v8<uint32_t>(inner.GetIsolate(), inner.Data()));
+                    },
+                    v8pp::to_v8(isolate, id))
+                    .ToLocalChecked();
+                info.GetReturnValue().Set(unsubscribe);
+            },
+            v8pp::metadata::docs("Function",
+                {
+                    v8pp::metadata::param("key", "string | null", false, "Only report this key, or null to report every key of this entity."),
+                    v8pp::metadata::param("handler", "Function", false, "Called as (key: string, value: any, previous: any) with the changed key, its new value and the value before it. `value` is undefined when the key was removed and `previous` is undefined when it held nothing."),
+                },
+                "Watches this entity's state. The filter is applied before the handler runs, so a listener watching one key of one entity is not woken by unrelated changes. The subscription is dropped when the registering resource stops.",
+                "A zero-argument function that cancels this subscription."));
+
         // Writes are the server's — the same split Entity draws around setVirtualWorld.
         if (IsClientScripting(isolate)) {
             return *cls;
@@ -292,6 +459,15 @@ namespace Framework::Scripting::Builtins {
     }
 
     void StateBag::UnregisterIsolate(v8::Isolate *isolate) {
+        const auto perIsolate = _subscriptions.find(isolate);
+        if (perIsolate != _subscriptions.end()) {
+            if (auto *replication = CoreModules::GetReplication()) {
+                for (const auto &[id, subscription] : perIsolate->second) {
+                    replication->RemoveStateChangeHandler(subscription.handle);
+                }
+            }
+            _subscriptions.erase(perIsolate);
+        }
         _classes.erase(isolate);
     }
 } // namespace Framework::Scripting::Builtins
