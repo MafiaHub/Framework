@@ -45,6 +45,7 @@ set(FRAMEWORK_SRC
     src/scripting/builtins/quaternion.cpp
     src/scripting/builtins/color.cpp
     src/scripting/builtins/entity.cpp
+    src/scripting/builtins/state_bag.cpp
     src/scripting/builtins/player.cpp
     src/scripting/builtins/text_label.cpp
     src/scripting/builtins/chat.cpp
