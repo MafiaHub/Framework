@@ -65,9 +65,15 @@ namespace Framework::GUI {
         bool _gpuAccelerated = false;
         int _id              = 0;
 
+        std::atomic<bool> _compositingSuppressed = false;
+
         // Callers must hold _renderMutex
         std::vector<GUI::View *> GetViewsByZIndex() const;
         void RetireView(std::unique_ptr<View> view);
+
+        // A suppressed view is off screen, so it neither blits nor takes input.
+        bool IsViewComposited(const View *view) const;
+
 
       public:
         Manager();
@@ -94,6 +100,13 @@ namespace Framework::GUI {
 
         // Game-thread companion to Render(); must be called inside an ImGui frame.
         void SubmitImGuiDraws();
+
+        // Take every view off screen while the host's game draws something of its own - a loading
+        // screen, a full-screen movie - that UI must not cover. Views keep loading and painting, so
+        // lifting it shows the frame they had already reached; while it is up they take no input.
+        // Views marked View::SetAlwaysComposite are exempt.
+        void SetCompositingSuppressed(bool suppressed);
+        bool IsCompositingSuppressed() const;
 
         void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;
         void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;

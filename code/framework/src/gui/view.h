@@ -73,6 +73,8 @@ namespace Framework::GUI {
 
         bool _offscreen = false;
 
+        bool _alwaysComposite = false;
+
         // 0x0 views fill the viewport and track it across resizes
         bool _autoResize = false;
 
@@ -131,6 +133,16 @@ namespace Framework::GUI {
 
         bool IsOffscreen() const {
             return _offscreen;
+        }
+
+        // Exempt from Manager::SetCompositingSuppressed - for a view that stands in for something
+        // the game would otherwise be drawing itself, where hiding it shows nothing at all.
+        void SetAlwaysComposite(bool enable) {
+            _alwaysComposite = enable;
+        }
+
+        bool AlwaysComposites() const {
+            return _alwaysComposite;
         }
 
         // IDirect3DTexture9* on D3D9, ID3D11Texture2D* on D3D11. Null until the first paint.

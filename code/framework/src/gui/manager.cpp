@@ -407,6 +407,18 @@ namespace Framework::GUI {
         return views;
     }
 
+    void Manager::SetCompositingSuppressed(bool suppressed) {
+        _compositingSuppressed.store(suppressed, std::memory_order_release);
+    }
+
+    bool Manager::IsCompositingSuppressed() const {
+        return _compositingSuppressed.load(std::memory_order_acquire);
+    }
+
+    bool Manager::IsViewComposited(const View *view) const {
+        return !IsCompositingSuppressed() || view->AlwaysComposites();
+    }
+
     void Manager::SubmitImGuiDraws() {
         if (!_cefInitialized || _cefPumpFailed) {
             return;
@@ -416,6 +428,9 @@ namespace Framework::GUI {
 
         const View *cursorOwner = nullptr;
         for (auto *view : GetViewsByZIndex()) {
+            if (!IsViewComposited(view)) {
+                continue;
+            }
             view->SubmitImGuiDraw();
             if (view->HasFocus() && view->ShouldDisplay()) {
                 cursorOwner = view;
@@ -445,14 +460,18 @@ namespace Framework::GUI {
     void Manager::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
         std::scoped_lock lock(_renderMutex);
         for (auto &view : _views) {
-            view->ProcessMouseEvent(hWnd, msg, wParam, lParam);
+            if (IsViewComposited(view.get())) {
+                view->ProcessMouseEvent(hWnd, msg, wParam, lParam);
+            }
         }
     }
 
     void Manager::ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
         std::scoped_lock lock(_renderMutex);
         for (auto &view : _views) {
-            view->ProcessKeyboardEvent(hWnd, msg, wParam, lParam);
+            if (IsViewComposited(view.get())) {
+                view->ProcessKeyboardEvent(hWnd, msg, wParam, lParam);
+            }
         }
     }
 
@@ -581,7 +600,7 @@ namespace Framework::GUI {
     bool Manager::IsAnyViewFocused() const {
         std::scoped_lock lock(_renderMutex);
         for (const auto &view : _views) {
-            if (view->HasFocus()) {
+            if (view->HasFocus() && IsViewComposited(view.get())) {
                 return true;
             }
         }
