@@ -14,8 +14,11 @@
 #include <algorithm>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace Framework::Scripting {
     namespace detail {
@@ -82,10 +85,13 @@ namespace Framework::Scripting {
     // register into a catalog of their own, and a project's metadata file would otherwise
     // document only half its globals.
     //
-    // A class a project also defines is left alone: both sides define Player, and blending their
+    // A class a project also defines is not blended: both sides define Player, and merging their
     // members produces an interface extending two types that declare the same property
     // differently, which is not expressible in TypeScript. The project's definition is the
-    // specialised one, so it wins.
+    // specialised one, so it wins the name -- and the framework's is carried across as
+    // `Base<Name>`, because the project's class inherits it at runtime and says so in its bases.
+    // Extending it is exactly what the project's declaration wants; only merging the members into
+    // one symbol was ever the problem.
     //
     // A data type both sides define is blended property by property instead, because its members
     // are independent rather than a redefinition of each other. EventMap is the case that matters:
@@ -113,6 +119,11 @@ namespace Framework::Scripting {
             });
         };
 
+        // Classes carried across under a documentation name, as {registered name, documented name}.
+        // Applied after the whole merge rather than at the rename, so a source symbol imported later
+        // and naming the same base is repointed too.
+        std::vector<std::pair<std::string, std::string>> renames;
+
         for (const auto &symbol : source.symbols()) {
             if (std::find(skip.begin(), skip.end(), symbol.name) != skip.end()) {
                 continue;
@@ -121,6 +132,24 @@ namespace Framework::Scripting {
             if (const v8pp::metadata::symbol *collision = existing(symbol.name)) {
                 const bool blendable = symbol.kind == v8pp::metadata::symbol_kind::data_type && collision->kind == v8pp::metadata::symbol_kind::data_type;
                 if (!blendable) {
+                    // A class both sides define still has to reach the output, because the project's
+                    // class inherits it at runtime and records that inheritance as a base. Dropping it
+                    // leaves that base naming the project's own class -- a declaration extending
+                    // itself. Carry it across under a documentation name instead; the rename is
+                    // repointed into every base that named it once the merge is done.
+                    if (symbol.kind != v8pp::metadata::symbol_kind::constructor || collision->kind != v8pp::metadata::symbol_kind::constructor) {
+                        continue;
+                    }
+                    std::string documented = "Base" + symbol.name;
+                    while (existing(documented) != nullptr) {
+                        documented += "_";
+                    }
+                    v8pp::metadata::symbol &renamed = destination.constructor(documented, symbol.description);
+                    renamed.constructor            = symbol.constructor;
+                    renamed.functions              = symbol.functions;
+                    renamed.properties             = symbol.properties;
+                    renamed.bases                  = symbol.bases;
+                    renames.emplace_back(symbol.name, documented);
                     continue;
                 }
                 // Safe to add through the registry now that the kinds are known to agree; it
@@ -149,6 +178,30 @@ namespace Framework::Scripting {
             target->functions   = symbol.functions;
             target->properties  = symbol.properties;
             target->bases       = symbol.bases;
+        }
+
+        // Repoint the renames. Collected first and mutated after, because `symbols()` is read-only and
+        // the registry hands back a mutable symbol only by name and kind.
+        for (const auto &[registered, documented] : renames) {
+            std::vector<std::pair<std::string, v8pp::metadata::symbol_kind>> naming;
+            for (const auto &candidate : destination.symbols()) {
+                if (candidate.name != documented && std::find(candidate.bases.begin(), candidate.bases.end(), registered) != candidate.bases.end()) {
+                    naming.emplace_back(candidate.name, candidate.kind);
+                }
+            }
+
+            for (const auto &[name, kind] : naming) {
+                v8pp::metadata::symbol *target = nullptr;
+                switch (kind) {
+                case v8pp::metadata::symbol_kind::global_object: target = &destination.global_object(name); break;
+                case v8pp::metadata::symbol_kind::constructor: target = &destination.constructor(name); break;
+                case v8pp::metadata::symbol_kind::data_type: target = &destination.data_type(name); break;
+                }
+
+                if (target) {
+                    std::replace(target->bases.begin(), target->bases.end(), registered, documented);
+                }
+            }
         }
 
         const auto &existingVariables = destination.variables();
