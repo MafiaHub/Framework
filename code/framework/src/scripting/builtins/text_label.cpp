@@ -122,7 +122,6 @@ namespace Framework::Scripting::Builtins {
         auto &cls = _classes[isolate];
         cls       = std::make_unique<v8pp::class_<TextLabel>>(isolate, GetScriptingCatalog(isolate), "TextLabel", "Server-created replicated world-space text label.");
         cls->auto_wrap_objects(true);
-        cls->document_base("Entity");
         cls->inherit<Entity>()
             .ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Existing text-label network entity identifier.")}, "Creates a wrapper for an existing text label; use TextLabel.create to spawn one."))
             .function("toString", &TextLabel::ToString, v8pp::metadata::docs("string", {}, "Formats this label for logging and debugging.", "Text containing the label ID and current text."))

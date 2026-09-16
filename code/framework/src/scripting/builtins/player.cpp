@@ -186,7 +186,6 @@ namespace Framework::Scripting::Builtins {
         auto &cls = _classes[isolate];
         cls       = std::make_unique<v8pp::class_<Player>>(isolate, GetScriptingCatalog(isolate), "Player", "Framework-owned base handle for a connected player, extended by each game or mod.");
         cls->auto_wrap_objects(true);
-        cls->document_base("Entity");
         cls->inherit<Entity>()
             .ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a wrapper for an existing connected player with this ID; it does not connect or spawn a player."))
             .function("toString", &Player::ToString, v8pp::metadata::docs("string", {}, "Formats this player handle for logging and debugging.", "Text containing the player's network entity ID."))
