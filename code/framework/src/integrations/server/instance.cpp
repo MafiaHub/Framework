@@ -8,6 +8,8 @@
 
 #include "instance.h"
 
+#include "integrations/shared/scripting/state_bag_events.h"
+
 #include <scripting/resource/resource_packager.h>
 #include <utils/crypto.h>
 #include <utils/package/package.h>
@@ -277,6 +279,10 @@ namespace Framework::Integrations::Server {
                 resourceManager->OnEntityDestroyed(networkId);
             });
         }
+
+        _stateBagEvents = Integrations::Shared::Scripting::InstallStateBagEvents([this](v8::Isolate *isolate, uint64_t networkId) {
+            return WrapScriptEntity(isolate, networkId);
+        });
 
         PostScriptInit();
 
@@ -726,6 +732,10 @@ namespace Framework::Integrations::Server {
     v8::Local<v8::Value> Instance::WrapScriptPlayer(v8::Isolate *isolate, uint64_t networkId) {
         Framework::Scripting::Builtins::Player::GetClass(isolate);
         return v8pp::class_<Framework::Scripting::Builtins::Player>::create_object(isolate, networkId);
+    }
+
+    v8::Local<v8::Value> Instance::WrapScriptEntity(v8::Isolate *isolate, uint64_t networkId) {
+        return Integrations::Shared::Scripting::WrapEntityDefault(isolate, networkId);
     }
 
     std::string Instance::GetPackageStagingDir() const {
@@ -1182,6 +1192,8 @@ namespace Framework::Integrations::Server {
         _shuttingDown = true;
 
         PreShutdown();
+
+        Integrations::Shared::Scripting::ReleaseStateBagEvents(_stateBagEvents);
 
         if (_scriptingModule) {
             _scriptingModule->PreShutdown();

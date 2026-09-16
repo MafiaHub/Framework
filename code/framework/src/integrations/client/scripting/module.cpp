@@ -17,6 +17,7 @@
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/messages.h>
+#include <scripting/event_metadata.h>
 #include <scripting/scripting_catalog.h>
 
 #include "builtins/chat.h"
@@ -143,6 +144,9 @@ namespace Framework::Integrations::Client::Scripting {
 
         Framework::Scripting::SetScriptingCatalog(isolate, "framework-client");
         Framework::Scripting::SetScriptingEnvironment(isolate, /*isClient*/ true);
+
+        // The events the framework raises; a mod's catalog blends them into its own EventMap.
+        Framework::Scripting::RegisterEventMetadata(Framework::Scripting::GetScriptingCatalog(isolate));
 
         // Every builtin registers at the global root (new Vector3, not new Core.Vector3).
         Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);

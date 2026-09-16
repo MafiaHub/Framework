@@ -157,27 +157,10 @@ namespace Framework::Scripting::Builtins {
         }
     }
 
-    // Helper to get resource context with three-tier resolution:
-    // 1. Handler function's script origin (async-safe, root cause fix)
-    // 2. Explicit context (set during synchronous resource loading)
-    // 3. V8 call stack file paths (fallback for async ES modules)
+    // The three-tier resolution lives on ResourceManager, which owns all three tiers; this is the
+    // null-manager guard its callers here need.
     std::string GetResourceContextWithFallback(v8::Isolate *isolate, ResourceManager *manager, v8::Local<v8::Function> handlerFn = {}) {
-        // 1. Try handler function's script origin (async-safe, root cause fix)
-        if (!handlerFn.IsEmpty()) {
-            std::string name = manager->GetResourceNameFromFunction(isolate, handlerFn);
-            if (!name.empty()) {
-                return name;
-            }
-        }
-
-        // 2. Try explicit context (set during synchronous resource loading)
-        std::string resourceName = manager->GetCurrentResourceContext();
-        if (!resourceName.empty()) {
-            return resourceName;
-        }
-
-        // 3. Fallback: extract resource name from V8 call stack file paths
-        return manager->GetResourceContextFromStack(isolate);
+        return manager != nullptr ? manager->ResolveResourceContext(isolate, handlerFn) : std::string();
     }
 
     std::map<std::string, std::vector<EventHandler>, std::less<>> &Events::HandlerTable(HandlerScope scope) {

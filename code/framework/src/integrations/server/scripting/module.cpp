@@ -20,6 +20,7 @@
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/messages.h>
+#include <scripting/event_metadata.h>
 #include <scripting/scripting_catalog.h>
 
 namespace Framework::Integrations::Server::Scripting {
@@ -107,6 +108,9 @@ namespace Framework::Integrations::Server::Scripting {
         v8::Local<v8::Object> global = context->Global();
         Framework::Scripting::SetScriptingCatalog(isolate, "framework-server");
         Framework::Scripting::SetScriptingEnvironment(isolate, /*isClient*/ false);
+
+        // The events the framework raises; a mod's catalog blends them into its own EventMap.
+        Framework::Scripting::RegisterEventMetadata(Framework::Scripting::GetScriptingCatalog(isolate));
 
         // Every builtin registers at the global root (new Vector3, not new Core.Vector3).
         Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);

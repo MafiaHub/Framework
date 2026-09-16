@@ -10,6 +10,7 @@
 
 #include "../builtins/events.h"
 #include "../builtins/messages.h"
+#include "../builtins/state_bag.h"
 
 #include <utils/vfs.h>
 
@@ -952,6 +953,20 @@ namespace Framework::Scripting {
         return true;
     }
 
+    std::string ResourceManager::ResolveResourceContext(v8::Isolate *isolate, v8::Local<v8::Function> handler) const {
+        if (!handler.IsEmpty()) {
+            std::string name = GetResourceNameFromFunction(isolate, handler);
+            if (!name.empty()) {
+                return name;
+            }
+        }
+        std::string name = GetCurrentResourceContext();
+        if (!name.empty()) {
+            return name;
+        }
+        return GetResourceContextFromStack(isolate);
+    }
+
     bool ResourceManager::CallResourceStop(std::string_view resourceName) {
         // Cleanup handlers before resource fully stops
         _events.CleanupResource(resourceName);
@@ -966,6 +981,7 @@ namespace Framework::Scripting {
             v8::Local<v8::Context> context = _jsEngine->GetContext();
             v8::Context::Scope contextScope(context);
             Builtins::Messages::CleanupResource(isolate, context, std::string(resourceName));
+            Builtins::StateBag::CleanupResource(isolate, std::string(resourceName));
         }
         return true;
     }

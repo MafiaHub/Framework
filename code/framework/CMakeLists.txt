@@ -29,6 +29,7 @@ set(FRAMEWORK_SRC
     src/networking/errors.cpp
 
     src/networking/replication/network_entity.cpp
+    src/networking/replication/state_bag.cpp
     src/networking/replication/entity_registry.cpp
     src/networking/replication/interest_grid.cpp
     src/networking/replication/replication_manager.cpp
@@ -44,6 +45,7 @@ set(FRAMEWORK_SRC
     src/scripting/builtins/quaternion.cpp
     src/scripting/builtins/color.cpp
     src/scripting/builtins/entity.cpp
+    src/scripting/builtins/state_bag.cpp
     src/scripting/builtins/player.cpp
     src/scripting/builtins/text_label.cpp
     src/scripting/builtins/chat.cpp

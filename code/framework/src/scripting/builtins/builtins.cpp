@@ -10,6 +10,7 @@
 
 #include "entity.h"
 #include "player.h"
+#include "state_bag.h"
 #include "text_label.h"
 
 namespace Framework::Scripting::Builtins {
@@ -20,6 +21,7 @@ namespace Framework::Scripting::Builtins {
         Quaternion::UnregisterIsolate(isolate);
         Color::UnregisterIsolate(isolate);
         Entity::UnregisterIsolate(isolate);
+        StateBag::UnregisterIsolate(isolate);
         Player::UnregisterIsolate(isolate);
         TextLabel::UnregisterIsolate(isolate);
     }
