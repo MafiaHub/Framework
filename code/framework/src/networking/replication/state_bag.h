@@ -166,6 +166,12 @@ namespace Framework::Networking::Replication {
         // For the re-seed an ownership change needs: the incoming owner has never been sent these.
         std::vector<std::string> OwnerKeys() const;
 
+        // Keys the *current* owner may still be holding, which is not the same set. A key removed or
+        // narrowed to Server earlier in this tick is gone from OwnerKeys, but the peer was sent it
+        // and has not been told to drop it -- and by the time the flush runs, the owner it would
+        // compare against has already changed. Ownership changes revoke this set instead.
+        std::vector<std::string> OwnerRevokeKeys() const;
+
       private:
         void MarkDirty(const std::string &key, StateScope scope, std::optional<StateScope> previous);
         void Notify(const std::string &key, const StateValue &value, const StateValue &previous, bool hadPrevious, bool removed);

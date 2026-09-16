@@ -341,13 +341,19 @@ namespace Framework::Scripting::Builtins {
 
                 v8::Local<v8::Function> handler = handlerArg.As<v8::Function>();
 
-                // Owned by the resource that registered it, so a stop drops it. Unowned, the
-                // subscription would outlive its resource and keep its objects alive.
+                // Owned by the resource that registered it, so a stop drops it. An owner that
+                // cannot be named is refused rather than stored empty: CleanupResource matches on the
+                // name, so an empty one would survive every resource stop and keep calling a handler
+                // whose resource is gone. Events.on refuses the same case.
                 std::string resourceName;
                 if (auto *module = CoreModules::GetScriptingModule()) {
                     if (auto *resources = module->GetResourceManager()) {
                         resourceName = resources->ResolveResourceContext(isolate, handler);
                     }
+                }
+                if (resourceName.empty()) {
+                    isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "StateBag.onChange: must be called from within a resource")));
+                    return;
                 }
 
                 const uint32_t id = ++_nextSubscriptionId;

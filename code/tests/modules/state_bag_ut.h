@@ -622,6 +622,88 @@ MODULE(state_bag, {
         STREQUALS(ownerKeys[1].c_str(), "warrant");
     });
 
+    IT("revokes an owner key removed earlier in the same tick", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        entity.state.Set("cuffed", text("yes"), StateScope::Owner);
+        entity.state.ClearDirty();
+        entity.state.Remove("cuffed");
+
+        // Gone from the entries, so OwnerKeys no longer names it -- but the owner was sent it and has
+        // not been told to drop it. By flush time the entity has a new owner and the key's audience
+        // would be evaluated against that one, so the handover is the last chance to take it back.
+        EQUALS(entity.state.OwnerKeys().size(), size_t(0));
+        const std::vector<std::string> revoke = entity.state.OwnerRevokeKeys();
+        EQUALS(revoke.size(), size_t(1));
+        STREQUALS(revoke[0].c_str(), "cuffed");
+    });
+
+    IT("revokes an owner key narrowed to server scope in the same tick", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        entity.state.Set("cuffed", text("yes"), StateScope::Owner);
+        entity.state.ClearDirty();
+        entity.state.Set("cuffed", text("secret"), StateScope::Server);
+
+        const std::vector<std::string> revoke = entity.state.OwnerRevokeKeys();
+        EQUALS(revoke.size(), size_t(1));
+        STREQUALS(revoke[0].c_str(), "cuffed");
+    });
+
+    IT("does not revoke an owner key that widened to broadcast", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        entity.state.Set("cuffed", text("yes"), StateScope::Owner);
+        entity.state.ClearDirty();
+        entity.state.Set("cuffed", text("public"), StateScope::Broadcast);
+
+        // Still going out to everyone, the outgoing owner included, so there is nothing to take back.
+        EQUALS(entity.state.OwnerRevokeKeys().size(), size_t(0));
+    });
+
+    IT("combines live owner keys and tombstones without repeating one", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        entity.state.Set("cuffed", text("yes"), StateScope::Owner);
+        entity.state.Set("warrant", text("open"), StateScope::Owner);
+        entity.state.ClearDirty(); // Both have reached the owner.
+        entity.state.Remove("warrant");
+
+        // cuffed comes from the live entries and warrant from the dirty tombstones -- two sources,
+        // one list, each key once and in a stable order.
+        const std::vector<std::string> revoke = entity.state.OwnerRevokeKeys();
+        EQUALS(revoke.size(), size_t(2));
+        STREQUALS(revoke[0].c_str(), "cuffed");
+        STREQUALS(revoke[1].c_str(), "warrant");
+    });
+
+    IT("revokes nothing for an owner key created and dropped before any flush", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        entity.state.Set("warrant", text("open"), StateScope::Owner);
+        entity.state.Remove("warrant");
+
+        // Both writes land in one tick, so no peer was ever sent this key and none is holding it.
+        // The tombstone records no previous audience, which is what says so.
+        EQUALS(entity.state.OwnerRevokeKeys().size(), size_t(0));
+    });
+
+    IT("leaves a broadcast key out of the revoke set", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+
+        entity.state.Set("job", text("blacksmith"), StateScope::Broadcast);
+        entity.state.Remove("job");
+
+        // A removal the whole world is being told about is not the outgoing owner's business.
+        EQUALS(entity.state.OwnerRevokeKeys().size(), size_t(0));
+    });
+
     IT("round-trips the sync payload", {
         StateBagSync out;
         StateBagSync::Change first;

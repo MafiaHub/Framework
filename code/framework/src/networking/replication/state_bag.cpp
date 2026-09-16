@@ -73,6 +73,22 @@ namespace Framework::Networking::Replication {
         return keys;
     }
 
+    std::vector<std::string> StateBag::OwnerRevokeKeys() const {
+        std::vector<std::string> keys = OwnerKeys();
+        for (const auto &[key, dirty] : _dirty) {
+            // Only where the key has stopped reaching any client. One narrowed to Broadcast is still
+            // going out to everyone, the old owner included, so it needs no revocation.
+            if (!dirty.previous.has_value() || *dirty.previous != StateScope::Owner || dirty.scope != StateScope::Server) {
+                continue;
+            }
+            if (std::find(keys.begin(), keys.end(), key) == keys.end()) {
+                keys.push_back(key);
+            }
+        }
+        std::sort(keys.begin(), keys.end());
+        return keys;
+    }
+
     StateBag::WriteResult StateBag::Set(const std::string &key, const StateValue &value, StateScope scope) {
         if (key.empty() || key.size() > kMaxKeyLength) {
             return WriteResult::KeyTooLong;

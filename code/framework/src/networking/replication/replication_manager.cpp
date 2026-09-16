@@ -131,11 +131,13 @@ namespace Framework::Networking::Replication {
 
         // Captured before the grant: the peer losing authority is holding every owner-scoped value it
         // was ever sent, and a client stores what it is sent regardless of the scope it was sent
-        // under, so withholding future updates would leave those values in place.
+        // under, so withholding future updates would leave those values in place. This has to happen
+        // here rather than in the flush, which by then would compare the key's audience against the
+        // new owner.
         const MafiaNet::PeerGuid previousOwner = entity->ownerGUID;
         if (_owner && _isServer && previousOwner != guid && previousOwner != MafiaNet::UNASSIGNED_PEER_GUID) {
             RPC::StateBagSync revoke;
-            for (const std::string &key : entity->state.OwnerKeys()) {
+            for (const std::string &key : entity->state.OwnerRevokeKeys()) {
                 RPC::StateBagSync::Change change;
                 change.networkId = entity->GetNetworkID();
                 change.key       = key;
