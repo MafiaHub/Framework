@@ -735,8 +735,7 @@ namespace Framework::Integrations::Server {
     }
 
     v8::Local<v8::Value> Instance::WrapScriptEntity(v8::Isolate *isolate, uint64_t networkId) {
-        Framework::Scripting::Builtins::Entity::GetClass(isolate);
-        return v8pp::class_<Framework::Scripting::Builtins::Entity>::create_object(isolate, networkId);
+        return Integrations::Shared::Scripting::WrapEntityDefault(isolate, networkId);
     }
 
     std::string Instance::GetPackageStagingDir() const {
@@ -1194,15 +1193,7 @@ namespace Framework::Integrations::Server {
 
         PreShutdown();
 
-        // Leaving a dead handle registered would have the next session's changes dispatched through
-        // a subscription this instance no longer owns.
-        if (_stateBagEvents != Framework::Networking::Replication::kInvalidStateChangeHandle) {
-            if (auto *replication = CoreModules::GetReplication()) {
-                replication->RemoveStateChangeHandler(_stateBagEvents);
-            }
-            _stateBagEvents = Framework::Networking::Replication::kInvalidStateChangeHandle;
-        }
-
+        Integrations::Shared::Scripting::ReleaseStateBagEvents(_stateBagEvents);
 
         if (_scriptingModule) {
             _scriptingModule->PreShutdown();

@@ -20,6 +20,7 @@
 #include "modules/replication_rate_ut.h"
 #include "modules/interest_grid_ut.h"
 #include "modules/state_bag_ut.h"
+#include "modules/state_bag_scripting_ut.h"
 #include "modules/rpc_identifier_ut.h"
 #include "modules/state_machine_ut.h"
 #include "modules/persistent_config_ut.h"
@@ -59,6 +60,7 @@ int main() {
     UNIT_MODULE(replication_rate);
     UNIT_MODULE(interest_grid);
     UNIT_MODULE(state_bag);
+    UNIT_MODULE(state_bag_scripting);
     UNIT_MODULE(rpc_identifier);
     UNIT_MODULE(state_machine);
     UNIT_MODULE(persistent_config);
