@@ -82,27 +82,55 @@ namespace Framework::Scripting {
     // register into a catalog of their own, and a project's metadata file would otherwise
     // document only half its globals.
     //
-    // A name the project already defines is skipped whole rather than blended: both sides
-    // define Player, and merging their members produces an interface extending two types that
-    // declare the same property differently, which is not expressible in TypeScript. The
-    // project's definition is the specialised one, so it wins.
+    // A class a project also defines is left alone: both sides define Player, and blending their
+    // members produces an interface extending two types that declare the same property
+    // differently, which is not expressible in TypeScript. The project's definition is the
+    // specialised one, so it wins.
+    //
+    // A data type both sides define is blended property by property instead, because its members
+    // are independent rather than a redefinition of each other. EventMap is the case that matters:
+    // a project creates it for its own events, and the framework's belong in the same map. Without
+    // this the framework cannot document an event it raises itself, and every mod has to restate
+    // the whole set by hand. A property the project already declares still wins.
+    //
     // `skip` drops source symbols by name, for globals a project documents through some other
     // shape than the framework's own -- the event bus is emitted as Core.Events of type
     // EventBus, so carrying the framework's Events object across would declare it twice.
     inline void MergeScriptingCatalog(v8pp::metadata::registry &destination, const v8pp::metadata::registry &source, std::initializer_list<std::string_view> skip = {}) {
-        const auto defines = [&destination, &skip](const std::string &name) {
-            if (std::find(skip.begin(), skip.end(), name) != skip.end()) {
-                return true;
-            }
-
+        // The destination's symbol of this name, or nullptr. Read-only: adding through the registry
+        // is what hands back a mutable one.
+        const auto existing = [&destination](const std::string &name) -> const v8pp::metadata::symbol * {
             const auto &symbols = destination.symbols();
-            return std::any_of(symbols.begin(), symbols.end(), [&name](const v8pp::metadata::symbol &existing) {
-                return existing.name == name;
+            const auto it       = std::find_if(symbols.begin(), symbols.end(), [&name](const v8pp::metadata::symbol &candidate) {
+                return candidate.name == name;
+            });
+            return it != symbols.end() ? &*it : nullptr;
+        };
+
+        const auto declares = [](const v8pp::metadata::symbol &symbol, const std::string &name) {
+            return std::any_of(symbol.properties.begin(), symbol.properties.end(), [&name](const v8pp::metadata::property &property) {
+                return property.name == name;
             });
         };
 
         for (const auto &symbol : source.symbols()) {
-            if (defines(symbol.name)) {
+            if (std::find(skip.begin(), skip.end(), symbol.name) != skip.end()) {
+                continue;
+            }
+
+            if (const v8pp::metadata::symbol *collision = existing(symbol.name)) {
+                const bool blendable = symbol.kind == v8pp::metadata::symbol_kind::data_type && collision->kind == v8pp::metadata::symbol_kind::data_type;
+                if (!blendable) {
+                    continue;
+                }
+                // Safe to add through the registry now that the kinds are known to agree; it
+                // returns the symbol already there rather than a second one.
+                v8pp::metadata::symbol &target = destination.data_type(symbol.name);
+                for (const auto &property : symbol.properties) {
+                    if (!declares(target, property.name)) {
+                        target.record(property);
+                    }
+                }
                 continue;
             }
 
