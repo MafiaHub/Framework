@@ -285,6 +285,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         bind("hideView", HideViewCallback);
         bind("focusView", FocusViewCallback);
         bind("isViewVisible", IsViewVisibleCallback);
+        bind("setViewOffscreen", SetViewOffscreenCallback);
+        bind("isViewOffscreen", IsViewOffscreenCallback);
         bind("loadURL", LoadURLCallback);
         bind("resizeView", ResizeViewCallback);
         bind("setViewPosition", SetViewPositionCallback);
@@ -310,6 +312,12 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 "Changes input focus for an owned view.", "True when the view exists and focus was updated.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isViewVisible",
             v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier.")}, "Checks whether an owned view is currently visible.", "False for missing or unowned views.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setViewOffscreen",
+            v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("offscreen", "boolean", true, "Whether the page keeps painting without being drawn on screen; defaults to true.")},
+                "Keeps a hidden view painting so something else can sample it, such as a render target drawing the page onto world geometry. A view that is merely hidden stops painting and the sampled picture freezes.",
+                "True when the view exists and was updated.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isViewOffscreen",
+            v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier.")}, "Checks whether an owned view keeps painting while hidden.", "False for missing or unowned views.")));
         metadata.record(
             v8pp::metadata::function_of<v8::FunctionCallback>("loadURL", v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("url", "string", false, "New resource-relative or allowed absolute URL.")},
                                                                              "Navigates a view and replaces its allowed origin with the new URL's origin.", "True when navigation was requested.")));
@@ -548,6 +556,42 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         auto *view = GetOwnedView(id);
         args.GetReturnValue().Set(view != nullptr && view->ShouldDisplay());
+    }
+
+    void Web::SetViewOffscreenCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+
+        int id = -1;
+        if (!GetViewIdArg(args, "Web.setViewOffscreen", id)) {
+            return;
+        }
+
+        bool offscreen = true;
+        if (args.Length() >= 2 && args[1]->IsBoolean()) {
+            offscreen = args[1]->BooleanValue(isolate);
+        }
+
+        auto *view = GetOwnedView(id);
+        if (!view) {
+            args.GetReturnValue().Set(false);
+            return;
+        }
+        view->SetOffscreen(offscreen);
+        args.GetReturnValue().Set(true);
+    }
+
+    void Web::IsViewOffscreenCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+
+        int id = -1;
+        if (!GetViewIdArg(args, "Web.isViewOffscreen", id)) {
+            return;
+        }
+
+        auto *view = GetOwnedView(id);
+        args.GetReturnValue().Set(view != nullptr && view->IsOffscreen());
     }
 
     void Web::LoadURLCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {

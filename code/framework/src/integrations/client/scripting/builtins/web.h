@@ -82,6 +82,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static void HideViewCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void FocusViewCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void IsViewVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void SetViewOffscreenCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void IsViewOffscreenCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void LoadURLCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void ResizeViewCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void SetViewPositionCallback(const v8::FunctionCallbackInfo<v8::Value> &args);

@@ -146,7 +146,7 @@ namespace Framework::GUI {
     }
 
     void ViewD3D9::Render() {
-        if (!_browser || !_shouldDisplay) {
+        if (!_browser || (!_shouldDisplay && !_offscreen)) {
             return;
         }
 
@@ -163,13 +163,17 @@ namespace Framework::GUI {
 
         if (!UploadPixels(device) || !_texture) {
             return;
+        }
+
+        if (!_shouldDisplay) {
+            return; // offscreen: painted, not composited
         }
 
         DrawQuad(device);
     }
 
     void ViewD3D9::SubmitImGuiDraw() {
-        if (!_browser || !_shouldDisplay) {
+        if (!_browser || (!_shouldDisplay && !_offscreen)) {
             return;
         }
 
@@ -186,6 +190,10 @@ namespace Framework::GUI {
 
         if (!UploadPixels(device) || !_texture) {
             return;
+        }
+
+        if (!_shouldDisplay) {
+            return; // offscreen: painted, not composited
         }
 
         // Composite into the background draw list so world-space overlays queued earlier

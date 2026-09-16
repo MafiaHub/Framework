@@ -111,9 +111,9 @@ namespace Framework::GUI {
     }
 
     void View::RequestBeginFrame() {
-        // A hidden view that still animates composites and memcpys a full-viewport
-        // frame per tick, on the pump (main) thread. Display(false) means stop.
-        if (!_browser || !_shouldDisplay) {
+        // A hidden view that still animates costs a full-viewport memcpy per tick on the pump thread,
+        // so Display(false) means stop. Offscreen opts back in: no begin frame is no paint at all.
+        if (!_browser || (!_shouldDisplay && !_offscreen)) {
             return;
         }
         _browser->GetHost()->SendExternalBeginFrame();

@@ -32,6 +32,10 @@ namespace Framework::GUI {
         void Render() override;
         void SubmitImGuiDraw() override;
 
+        [[nodiscard]] void *GetNativeTexture() const override {
+            return _texture.Get();
+        }
+
       private:
         bool UploadPixels(IDirect3DDevice9 *device);
         void DrawQuad(IDirect3DDevice9 *device) const;

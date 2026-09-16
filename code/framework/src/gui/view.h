@@ -71,6 +71,8 @@ namespace Framework::GUI {
         bool _shouldDisplay   = false;
         bool _garbageCollected = false;
 
+        bool _offscreen = false;
+
         // 0x0 views fill the viewport and track it across resizes
         bool _autoResize = false;
 
@@ -119,6 +121,21 @@ namespace Framework::GUI {
 
         bool ShouldDisplay() const {
             return _shouldDisplay;
+        }
+
+        // Keeps painting without compositing, so a render target can sample the page; a merely hidden
+        // view never paints. D3D9 only - D3D11/D3D12 interleave upload with drawing and ignore it.
+        void SetOffscreen(bool enable) {
+            _offscreen = enable;
+        }
+
+        bool IsOffscreen() const {
+            return _offscreen;
+        }
+
+        // IDirect3DTexture9* on D3D9, ID3D11Texture2D* on D3D11. Null until the first paint.
+        [[nodiscard]] virtual void *GetNativeTexture() const {
+            return nullptr;
         }
 
         void SetPosition(int x, int y) {
