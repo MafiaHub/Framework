@@ -119,6 +119,30 @@ namespace Framework::Scripting {
             });
         };
 
+        // Whether a destination symbol is this merge's own earlier copy of `value`. A client
+        // re-initialises its scripting on every connect, so the merge runs again into a catalog that
+        // is process-global; without this it collides with what it wrote last time and carries the
+        // whole framework across again under fresh Base... names.
+        const auto carried = [](const v8pp::metadata::symbol &target, const v8pp::metadata::symbol &value) {
+            if (target.kind != value.kind || target.description != value.description) {
+                return false;
+            }
+            if (target.functions.size() != value.functions.size() || target.properties.size() != value.properties.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < target.functions.size(); ++i) {
+                if (target.functions[i].name != value.functions[i].name || target.functions[i].static_ != value.functions[i].static_) {
+                    return false;
+                }
+            }
+            for (size_t i = 0; i < target.properties.size(); ++i) {
+                if (target.properties[i].name != value.properties[i].name || target.properties[i].value_type.name != value.properties[i].value_type.name) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
         // Classes carried across under a documentation name, as {registered name, documented name}.
         // Applied after the whole merge rather than at the rename, so a source symbol imported later
         // and naming the same base is repointed too.
@@ -130,6 +154,9 @@ namespace Framework::Scripting {
             }
 
             if (const v8pp::metadata::symbol *collision = existing(symbol.name)) {
+                if (carried(*collision, symbol)) {
+                    continue;
+                }
                 const bool blendable = symbol.kind == v8pp::metadata::symbol_kind::data_type && collision->kind == v8pp::metadata::symbol_kind::data_type;
                 if (!blendable) {
                     // A class both sides define still has to reach the output, because the project's
@@ -141,7 +168,7 @@ namespace Framework::Scripting {
                         continue;
                     }
                     std::string documented = "Base" + symbol.name;
-                    while (existing(documented) != nullptr) {
+                    for (const v8pp::metadata::symbol *taken = existing(documented); taken != nullptr && !carried(*taken, symbol); taken = existing(documented)) {
                         documented += "_";
                     }
                     v8pp::metadata::symbol &renamed = destination.constructor(documented, symbol.description);

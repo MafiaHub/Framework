@@ -129,6 +129,53 @@ MODULE(scripting_catalog, {
         EQUALS(countSymbols(destination, "Events") == 0, true);
     });
 
+    IT("is idempotent: merging twice carries nothing across a second time", {
+        // A client re-initialises its scripting on every connect and the catalogs are process-global,
+        // so the merge runs again over its own output. Left unguarded it collided with what it wrote
+        // last time and minted a Base... twin of every framework class, plus BasePlayer_ for the one
+        // already carried across under that name.
+        const auto build = [](v8pp::metadata::registry &source, v8pp::metadata::registry &destination) {
+            source.constructor("Entity", "framework entity").add_property("id", "number", "");
+            source.constructor("Player", "framework player").add_property("id", "number", "");
+            source.data_type("EventMap").add_property("resourceStart", "[resourceName: string]", "");
+            destination.constructor("Player", "project player").add_property("nickname", "string", "");
+        };
+
+        v8pp::metadata::registry source;
+        v8pp::metadata::registry once;
+        build(source, once);
+        MergeScriptingCatalog(once, source);
+
+        v8pp::metadata::registry twice;
+        build(source, twice);
+        MergeScriptingCatalog(twice, source);
+        MergeScriptingCatalog(twice, source);
+
+        EQUALS(twice.symbols().size() == once.symbols().size(), true);
+        EQUALS(countSymbols(twice, "BasePlayer") == 1, true);
+        EQUALS(countSymbols(twice, "BasePlayer_") == 0, true);
+        EQUALS(countSymbols(twice, "BaseEntity") == 0, true);
+        EQUALS(countSymbols(twice, "Entity") == 1, true);
+        // The project still owns its own class, and the framework's is still reachable as the base.
+        EQUALS(hasProperty(twice, "Player", "nickname"), true);
+        EQUALS(hasProperty(twice, "BasePlayer", "id"), true);
+    });
+
+    IT("still sidesteps a class the project itself calls Base...", {
+        // The suffix is the fallback, not the bug: a project that defines its own BasePlayer must
+        // keep it, and the framework's Player still has to reach the output under some name.
+        v8pp::metadata::registry source;
+        source.constructor("Player", "framework player").add_property("id", "number", "");
+
+        v8pp::metadata::registry destination;
+        destination.constructor("Player", "project player").add_property("nickname", "string", "");
+        destination.constructor("BasePlayer", "project base player").add_property("projectOnly", "string", "");
+
+        MergeScriptingCatalog(destination, source);
+        EQUALS(hasProperty(destination, "BasePlayer", "projectOnly"), true);
+        EQUALS(hasProperty(destination, "BasePlayer_", "id"), true);
+    });
+
     IT("declares the events the framework raises", {
         v8pp::metadata::registry framework;
         Framework::Scripting::RegisterEventMetadata(framework);
