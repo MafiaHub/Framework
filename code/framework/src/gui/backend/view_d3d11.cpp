@@ -104,7 +104,7 @@ namespace Framework::GUI {
     }
 
     void ViewD3D11::Render() {
-        if (!_browser || !_shouldDisplay) {
+        if (!_browser || !IsOnScreen()) {
             return;
         }
 

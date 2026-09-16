@@ -376,9 +376,10 @@ namespace Framework::GUI {
             FW_PROFILE_SCOPE_N("Cef::BeginFrames");
             int visible = 0;
             for (auto &view : _views) {
+                ReconcileSuppression(view.get());
                 view->RequestBeginFrame();
                 view->Update();
-                visible += view->ShouldDisplay() ? 1 : 0;
+                visible += view->IsOnScreen() ? 1 : 0;
             }
             FW_PROFILE_PLOT("cef.views", static_cast<int64_t>(_views.size()));
             FW_PROFILE_PLOT("cef.views.visible", static_cast<int64_t>(visible));
@@ -419,6 +420,23 @@ namespace Framework::GUI {
         return !IsCompositingSuppressed() || view->AlwaysComposites();
     }
 
+    void Manager::ReconcileSuppression(View *view) {
+        // Per view per tick, not on the suppression edge: a view created or focused while
+        // suppression is up has to be caught too.
+        const bool composited = IsViewComposited(view);
+        view->SetAudioMuted(!composited);
+        if (!composited) {
+            if (view->HasFocus()) {
+                _focusSuspended.insert(view->GetId());
+                view->Focus(false); // a real blur, so the page gets its keyup instead of nothing
+            }
+            return;
+        }
+        if (_focusSuspended.erase(view->GetId()) > 0) {
+            view->Focus(true);
+        }
+    }
+
     void Manager::SubmitImGuiDraws() {
         if (!_cefInitialized || _cefPumpFailed) {
             return;
@@ -428,11 +446,8 @@ namespace Framework::GUI {
 
         const View *cursorOwner = nullptr;
         for (auto *view : GetViewsByZIndex()) {
-            if (!IsViewComposited(view)) {
-                continue;
-            }
             view->SubmitImGuiDraw();
-            if (view->HasFocus() && view->ShouldDisplay()) {
+            if (view->HasFocus() && view->IsOnScreen()) {
                 cursorOwner = view;
             }
         }
@@ -460,18 +475,14 @@ namespace Framework::GUI {
     void Manager::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
         std::scoped_lock lock(_renderMutex);
         for (auto &view : _views) {
-            if (IsViewComposited(view.get())) {
-                view->ProcessMouseEvent(hWnd, msg, wParam, lParam);
-            }
+            view->ProcessMouseEvent(hWnd, msg, wParam, lParam);
         }
     }
 
     void Manager::ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
         std::scoped_lock lock(_renderMutex);
         for (auto &view : _views) {
-            if (IsViewComposited(view.get())) {
-                view->ProcessKeyboardEvent(hWnd, msg, wParam, lParam);
-            }
+            view->ProcessKeyboardEvent(hWnd, msg, wParam, lParam);
         }
     }
 
@@ -556,6 +567,7 @@ namespace Framework::GUI {
 
     void Manager::RetireView(std::unique_ptr<View> view) {
         // Caller holds _renderMutex. Hide it, then let it age out in Update.
+        _focusSuspended.erase(view->GetId());
         view->Display(false);
         view->Focus(false);
         _dyingViews.emplace_back(std::move(view), 0);
@@ -600,7 +612,7 @@ namespace Framework::GUI {
     bool Manager::IsAnyViewFocused() const {
         std::scoped_lock lock(_renderMutex);
         for (const auto &view : _views) {
-            if (view->HasFocus() && IsViewComposited(view.get())) {
+            if (view->HasFocus()) {
                 return true;
             }
         }

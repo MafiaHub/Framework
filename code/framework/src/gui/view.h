@@ -74,6 +74,7 @@ namespace Framework::GUI {
         bool _offscreen = false;
 
         bool _alwaysComposite = false;
+        bool _audioMuted      = false;
 
         // 0x0 views fill the viewport and track it across resizes
         bool _autoResize = false;
@@ -123,6 +124,17 @@ namespace Framework::GUI {
 
         bool ShouldDisplay() const {
             return _shouldDisplay;
+        }
+
+        // Is this view actually going on screen? Every stage - begin frame, upload, blit - asks
+        // it, so one that is not costs nothing instead of painting for a blit that never happens.
+        bool IsOnScreen() const;
+
+        // Latched: CEF's own "is muted" getter does not work. Driven by the manager.
+        void SetAudioMuted(bool muted);
+
+        bool IsAudioMuted() const {
+            return _audioMuted;
         }
 
         // Keeps painting without compositing, so a render target can sample the page; a merely hidden

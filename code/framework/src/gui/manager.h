@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <vector>
 
 #include "include/cef_app.h"
@@ -67,13 +68,19 @@ namespace Framework::GUI {
 
         std::atomic<bool> _compositingSuppressed = false;
 
+        // Views blurred on their way off screen, to hand focus back to on the way in.
+        std::set<int> _focusSuspended;
+
         // Callers must hold _renderMutex
         std::vector<GUI::View *> GetViewsByZIndex() const;
         void RetireView(std::unique_ptr<View> view);
 
-        // A suppressed view is off screen, so it neither blits nor takes input.
+        // Does suppression apply to this view? Ignores ShouldDisplay: this is "is the manager
+        // holding it off screen", not "is it showing".
         bool IsViewComposited(const View *view) const;
 
+        // Off screen means off: no focus, no audio.
+        void ReconcileSuppression(View *view);
 
       public:
         Manager();
@@ -102,9 +109,9 @@ namespace Framework::GUI {
         void SubmitImGuiDraws();
 
         // Take every view off screen while the host's game draws something of its own - a loading
-        // screen, a full-screen movie - that UI must not cover. Views keep loading and painting, so
-        // lifting it shows the frame they had already reached; while it is up they take no input.
-        // Views marked View::SetAlwaysComposite are exempt.
+        // screen, a full-screen movie - that UI must not cover. A held view stops painting,
+        // uploading and compositing, gives up focus and is muted, but keeps running, so it returns
+        // on whatever frame its page has reached. View::SetAlwaysComposite exempts one.
         void SetCompositingSuppressed(bool suppressed);
         bool IsCompositingSuppressed() const;
 

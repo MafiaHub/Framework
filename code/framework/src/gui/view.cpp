@@ -7,6 +7,8 @@
  */
 
 #include "view.h"
+
+#include "manager.h"
 #include "logging/logger.h"
 
 #include <Windows.h>
@@ -111,12 +113,28 @@ namespace Framework::GUI {
     }
 
     void View::RequestBeginFrame() {
-        // A hidden view that still animates costs a full-viewport memcpy per tick on the pump thread,
-        // so Display(false) means stop. Offscreen opts back in: no begin frame is no paint at all.
-        if (!_browser || (!_shouldDisplay && !_offscreen)) {
+        // Animating off screen costs a full-viewport composite and memcpy per tick on the pump
+        // thread. Offscreen opts back in: with external begin frame, no begin frame is no paint.
+        if (!_browser || (!IsOnScreen() && !_offscreen)) {
             return;
         }
         _browser->GetHost()->SendExternalBeginFrame();
+    }
+
+    bool View::IsOnScreen() const {
+        if (!_shouldDisplay) {
+            return false;
+        }
+        return _alwaysComposite || !_manager || !_manager->IsCompositingSuppressed();
+    }
+
+    void View::SetAudioMuted(bool muted) {
+        // Latch only what was applied; the manager reconciles again once the browser exists.
+        if (!_browser || _audioMuted == muted) {
+            return;
+        }
+        _audioMuted = muted;
+        _browser->GetHost()->SetAudioMuted(muted);
     }
 
     void View::EmitViewEvent(const ViewEventData &data) {

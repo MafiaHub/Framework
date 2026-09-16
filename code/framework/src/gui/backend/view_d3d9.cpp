@@ -146,7 +146,7 @@ namespace Framework::GUI {
     }
 
     void ViewD3D9::Render() {
-        if (!_browser || (!_shouldDisplay && !_offscreen)) {
+        if (!_browser || (!IsOnScreen() && !_offscreen)) {
             return;
         }
 
@@ -165,7 +165,7 @@ namespace Framework::GUI {
             return;
         }
 
-        if (!_shouldDisplay) {
+        if (!IsOnScreen()) {
             return; // offscreen: painted, not composited
         }
 
@@ -173,7 +173,7 @@ namespace Framework::GUI {
     }
 
     void ViewD3D9::SubmitImGuiDraw() {
-        if (!_browser || (!_shouldDisplay && !_offscreen)) {
+        if (!_browser || (!IsOnScreen() && !_offscreen)) {
             return;
         }
 
@@ -192,7 +192,7 @@ namespace Framework::GUI {
             return;
         }
 
-        if (!_shouldDisplay) {
+        if (!IsOnScreen()) {
             return; // offscreen: painted, not composited
         }
 

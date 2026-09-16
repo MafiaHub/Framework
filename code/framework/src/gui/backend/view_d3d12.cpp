@@ -196,7 +196,7 @@ namespace Framework::GUI {
     }
 
     void ViewD3D12::Render() {
-        if (!_browser || !_shouldDisplay) {
+        if (!_browser || !IsOnScreen()) {
             return;
         }
 
@@ -239,7 +239,7 @@ namespace Framework::GUI {
     void ViewD3D12::SubmitImGuiDraw() {
         std::scoped_lock lock(_renderMutex);
 
-        if (!_shouldDisplay || !_textureReady || _srvSlot < 0) {
+        if (!IsOnScreen() || !_textureReady || _srvSlot < 0) {
             return;
         }
 
