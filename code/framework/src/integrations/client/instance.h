@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <networking/replication/replication_manager.h>
+
 #include <utils/error.h>
 #include <utils/lifecycle.h>
 #include <utils/result.h>
@@ -139,6 +141,8 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<Graphics::Renderer> _renderer;
         std::unique_ptr<Graphics::RenderIO> _renderIO;
         std::unique_ptr<Client::Scripting::ClientScriptingModule> _scriptingModule;
+        // Subscription raising entityStateChange; released on shutdown.
+        Framework::Networking::Replication::StateChangeHandle _stateBagEvents = Framework::Networking::Replication::kInvalidStateChangeHandle;
         std::unique_ptr<Framework::GUI::Manager> _webManager;
         // Not owned; the reporter is process-wide.
         External::Sentry::Wrapper *_crashReporter = nullptr;
@@ -408,6 +412,10 @@ namespace Framework::Integrations::Client {
         const std::string &GetAssetCachePath() const {
             return _assetCachePath;
         }
+
+        // The entity object passed to entityStateChange handlers. Default is the base Entity
+        // builtin; a game with handles of its own overrides this to hand scripts the specific one.
+        virtual v8::Local<v8::Value> WrapScriptEntity(v8::Isolate *isolate, uint64_t networkId);
 
         Scripting::ClientScriptingModule *GetScriptingModule() const {
             return _scriptingModule.get();

@@ -8,6 +8,8 @@
 
 #include "instance.h"
 
+#include "integrations/shared/scripting/state_bag_events.h"
+
 #include <scripting/resource/resource_packager.h>
 #include <utils/crypto.h>
 #include <utils/package/package.h>
@@ -277,6 +279,10 @@ namespace Framework::Integrations::Server {
                 resourceManager->OnEntityDestroyed(networkId);
             });
         }
+
+        _stateBagEvents = Integrations::Shared::Scripting::InstallStateBagEvents([this](v8::Isolate *isolate, uint64_t networkId) {
+            return WrapScriptEntity(isolate, networkId);
+        });
 
         PostScriptInit();
 
@@ -726,6 +732,11 @@ namespace Framework::Integrations::Server {
     v8::Local<v8::Value> Instance::WrapScriptPlayer(v8::Isolate *isolate, uint64_t networkId) {
         Framework::Scripting::Builtins::Player::GetClass(isolate);
         return v8pp::class_<Framework::Scripting::Builtins::Player>::create_object(isolate, networkId);
+    }
+
+    v8::Local<v8::Value> Instance::WrapScriptEntity(v8::Isolate *isolate, uint64_t networkId) {
+        Framework::Scripting::Builtins::Entity::GetClass(isolate);
+        return v8pp::class_<Framework::Scripting::Builtins::Entity>::create_object(isolate, networkId);
     }
 
     std::string Instance::GetPackageStagingDir() const {
@@ -1182,6 +1193,16 @@ namespace Framework::Integrations::Server {
         _shuttingDown = true;
 
         PreShutdown();
+
+        // Leaving a dead handle registered would have the next session's changes dispatched through
+        // a subscription this instance no longer owns.
+        if (_stateBagEvents != Framework::Networking::Replication::kInvalidStateChangeHandle) {
+            if (auto *replication = CoreModules::GetReplication()) {
+                replication->RemoveStateChangeHandler(_stateBagEvents);
+            }
+            _stateBagEvents = Framework::Networking::Replication::kInvalidStateChangeHandle;
+        }
+
 
         if (_scriptingModule) {
             _scriptingModule->PreShutdown();

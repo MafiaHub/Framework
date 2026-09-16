@@ -9,6 +9,8 @@
 #include "instance.h"
 
 #include "integrations/shared/rpc/emit_script_event.h"
+#include "integrations/shared/scripting/state_bag_events.h"
+#include "scripting/builtins/entity.h"
 
 #include "networking/rpc/rpc.h"
 #include "networking/rpc/chat_message.h"
@@ -459,6 +461,16 @@ namespace Framework::Integrations::Client {
     void Instance::Shutdown() {
         PreShutdown();
 
+        // Leaving a dead handle registered would have the next session's changes dispatched through
+        // a subscription this instance no longer owns.
+        if (_stateBagEvents != Framework::Networking::Replication::kInvalidStateChangeHandle) {
+            if (auto *replication = CoreModules::GetReplication()) {
+                replication->RemoveStateChangeHandler(_stateBagEvents);
+            }
+            _stateBagEvents = Framework::Networking::Replication::kInvalidStateChangeHandle;
+        }
+
+
         // Before the renderer: CefShutdown must drain the browsers while the device is
         // alive, else the guarded pump faults and orphans cef_subprocess.exe.
         if (_webManager && _webManager->IsInitialized()) {
@@ -508,6 +520,11 @@ namespace Framework::Integrations::Client {
         // Last: flush and tear down the async logging thread pool before static
         // destruction can race it.
         Logging::GetInstance()->Shutdown();
+    }
+
+    v8::Local<v8::Value> Instance::WrapScriptEntity(v8::Isolate *isolate, uint64_t networkId) {
+        Framework::Scripting::Builtins::Entity::GetClass(isolate);
+        return v8pp::class_<Framework::Scripting::Builtins::Entity>::create_object(isolate, networkId);
     }
 
     void Instance::Update() {
@@ -1161,6 +1178,10 @@ namespace Framework::Integrations::Client {
                 CoreModules::SetScriptingModule(scriptingModule);
 
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
+
+                _stateBagEvents = Integrations::Shared::Scripting::InstallStateBagEvents([this](v8::Isolate *isolate, uint64_t networkId) {
+                    return WrapScriptEntity(isolate, networkId);
+                });
 
                 PostScriptInit();
 

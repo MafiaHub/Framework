@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <networking/replication/replication_manager.h>
+
 #include <utils/safe_win32.h>
 
 #include <utils/error.h>
@@ -213,6 +215,8 @@ namespace Framework::Integrations::Server {
         void EmitConsoleCommand(const std::string &command, const std::vector<std::string> &args);
         // Runs once per tick, after the relay's own update has retired the talkers who went quiet.
         void DispatchVoiceTalkingChanges();
+        // Subscription raising entityStateChange; released on shutdown.
+        Framework::Networking::Replication::StateChangeHandle _stateBagEvents = Framework::Networking::Replication::kInvalidStateChangeHandle;
 
       public:
         Instance();
@@ -266,6 +270,11 @@ namespace Framework::Integrations::Server {
 
         // The player object passed to onClient handlers. Default is the base Player builtin.
         virtual v8::Local<v8::Value> WrapScriptPlayer(v8::Isolate *isolate, uint64_t networkId);
+
+        // The entity object passed to entityStateChange handlers, for any replicated entity rather
+        // than a player. Default is the base Entity builtin; a game with handles of its own overrides
+        // this to hand scripts the specific one.
+        virtual v8::Local<v8::Value> WrapScriptEntity(v8::Isolate *isolate, uint64_t networkId);
 
         void Update() override;
 
