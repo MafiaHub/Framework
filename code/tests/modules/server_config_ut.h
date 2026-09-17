@@ -119,6 +119,26 @@ MODULE(server_config, {
         STREQUALS(opts.bindHost.c_str(), "0.0.0.0");
     });
 
+    IT("lets the command line override the config document's server token", {
+        const auto longForm = resolve({{"server-token", "from-config"}}, {"--server-token", "from-cli"});
+        STREQUALS(longForm.bindSecretKey.c_str(), "from-cli");
+
+        const auto shortForm = resolve({{"server-token", "from-config"}}, {"-t", "from-cli"});
+        STREQUALS(shortForm.bindSecretKey.c_str(), "from-cli");
+    });
+
+    // An absent flag must not blank a token the document supplied -- without it the server silently
+    // stops announcing itself to the masterlist.
+    IT("keeps the document's server token when the flag is absent", {
+        const auto opts = resolve({{"server-token", "from-config"}}, {"-p", "20050"});
+        STREQUALS(opts.bindSecretKey.c_str(), "from-config");
+    });
+
+    IT("takes a server token with no document at all", {
+        const auto opts = resolve(nlohmann::json::object(), {"-t", "from-cli"});
+        STREQUALS(opts.bindSecretKey.c_str(), "from-cli");
+    });
+
     IT("resolves the config file path from the command line", {
         InstanceOptions opts = compiledDefaults();
 

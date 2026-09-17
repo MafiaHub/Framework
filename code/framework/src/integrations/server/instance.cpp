@@ -353,7 +353,8 @@ namespace Framework::Integrations::Server {
         options.add_options("MafiaHub Integrations server",
             {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)},
                 {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)}, {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.webBindPort))},
-                {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(opts.webBindHost)}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+                {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(opts.webBindHost)},
+                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts) {
@@ -385,6 +386,7 @@ namespace Framework::Integrations::Server {
         read("port", opts.bindPort);
         read("apihost", opts.webBindHost);
         read("apiport", opts.webBindPort);
+        read("server-token", opts.bindSecretKey);
     }
 
     bool Instance::LoadConfigFromJSON() {
