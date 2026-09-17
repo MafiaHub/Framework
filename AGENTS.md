@@ -50,9 +50,9 @@ and nothing downstream can observe a zero. A project whose resolver *does not*
 abort has no such guarantee, and there the zero is a genuine runtime condition:
 `HogwartsMP` resolves every address through `Core::AobFirst`, which deliberately
 logs a miss and returns null so one launch surfaces every stale AOB instead of
-the first one killing the load. Its `Game::gResolved` fields are therefore
+the first one killing the load. Its `SDK::gPatterns` fields are therefore
 legitimately zero and MUST be checked — see the contract at the top of
-`code/projects/hogwarts/code/client/src/core/game_resolved.h`. The rule is about
+`code/projects/hogwarts/code/client/src/sdk/patterns.h`. The rule is about
 `gPatterns`; do not carry it across to a non-aborting resolver, and do not
 "fix" a project by removing the guards a non-aborting resolver requires.
 

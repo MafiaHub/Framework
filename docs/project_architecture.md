@@ -142,21 +142,17 @@ Not every feature has every file. A feature with no replicated state has no enti
 
 ### 2.5 Known deviations to fix
 
-Every project currently groups by role. The migration is the same shape for all of them: for each feature, create `features/<feature>/` and move its hook file, its module, its bindings and its RPC headers into it.
+The remaining migrations follow the same shape: for each feature, create `features/<feature>/` and move its hook file, its module, its bindings and its RPC headers into it.
 
 | Project | Deviation | Target |
 |---|---|---|
-| all | features split across `core/hooks/`, `core/modules/`, `scripting/` or `core/builtins/`, `shared/rpc/` | one `features/<feature>/` folder per side |
-| all | hand-maintained source lists in `CMakeLists.txt` | glob `src/features/*/*.cpp` |
-| all | feature owners named `Module` / `Manager` / `Controller` / `Bridge` / `Mirror` / `Relay` / `Presenter` / `Worker` / `System` | `<Feature>Service`, see §7.1 |
+| remaining projects | features split across `core/hooks/`, `core/modules/`, `scripting/` or `core/builtins/`, `shared/rpc/` | one `features/<feature>/` folder per side |
+| remaining projects | hand-maintained source lists in `CMakeLists.txt` | glob `src/features/*/*.cpp` |
+| remaining projects | feature owners named `Module` / `Manager` / `Controller` / `Bridge` / `Mirror` / `Relay` / `Presenter` / `Worker` / `System` | `<Feature>Service`, see §7.1 |
 | `KCD2MP` (11), `m2o` (2), `cybermp` (2) | feature owners reached through `static X &Get()` singletons | members of `Application` / server `Instance`, see §7.5 |
-| `hogwarts` | scripting bindings named `*Manager` and parked in `core/builtins/` (`beast_manager.h` is a v8 `Register()` class) | `server/src/features/beast/beast_scripting.{h,cpp}` |
-| `hogwarts` | native-state adapters (`GearBridge`, `InventoryBridge`) in `core/` | their feature folders, or `game/` if two or more features use them |
 | `m2o` | feature owners loose at `core/` root (`season_manager.h`, `loading_screen_presenter.h`) | `features/season/`, `features/loading_screen/` |
-| `hogwarts` | no `shared/entities/`; replicated definitions live in `shared/modules/` | `shared/features/<feature>/<feature>_entity.h` |
 | `cybermp`, `m3o` | RPC payloads inlined at call sites | `shared/features/<feature>/<payload>.h` |
 | `vanta` | `core/nui/` parallel to `core/ui/`; `game/sync/` instead of `game/replicator/` | shell UI in `core/ui/`, capture in `game/replicator/` |
-| `hogwarts` | build output committed under the project | delete; builds live in `builds/build-64` |
 
 ---
 
