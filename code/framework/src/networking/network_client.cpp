@@ -51,6 +51,11 @@ namespace Framework::Networking {
         if (!_peer) {
             return;
         }
+
+        // DestroyInstance only deletes the peer. Without this the notification
+        // never goes out and the server waits out its connection-lost timeout.
+        _peer->Shutdown(kShutdownBlockDurationMs, 0, MafiaNet::Priority::Immediate);
+
         MafiaNet::RakPeerInterface::DestroyInstance(_peer);
         _peer = nullptr;
 
