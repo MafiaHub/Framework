@@ -440,6 +440,7 @@ If a feature has state that survives a call, it has a service. Free functions in
 ## 9. Hooks and patterns
 
 - Pattern addresses live in one `SDK::Patterns` struct resolved in `InitPatterns()`; a project ships a prebuilt table at `client/data/<project>.patterns` loaded via `hook::load_pattern_table`.
+- The table is committed and kept in step with the pattern source by a `PRE_BUILD` call to `scripts/check_pattern_table.py`. Give it `--regenerate` plus a way to find the game (`--exe`, `--exe-env <VAR>`, or `--steam-app <id> --steam-relative <path under the app>`) and a stale table is rebuilt during the build: a rebuild reuses every pattern the old table already resolved against the same executable, so adding one costs about a second. Without the game it still fails with the command to run on a machine that has it.
 - Per **AGENTS.md rule 1**, a resolved `gPatterns.*` entry MUST NOT be null-checked. Call `MH_CreateHook` / `hook::put` on it directly - no staging local, no "was not resolved" warning.
 - Hook installation uses `static InitFunction init([]{ ... }, "<Name>");` at the bottom of the feature's `<stem>_hooks.cpp`. The name string is mandatory and matches the feature.
 - Byte patches (`hook::put`) carry a comment giving the target symbol, the offset and the intended instruction - see M2O's `vehicle_lock_hooks.cpp`.
