@@ -469,6 +469,13 @@ namespace Framework::Integrations::Client {
             _webManager->Shutdown();
         }
 
+        // Also before the renderer: ImGui frees its font atlas through wrapper.cpp's
+        // SRV callbacks, which read the heap and device off D3D12Backend. Shutdown()
+        // nulls both, so freeing the atlas after it faults.
+        if (_imguiApp && _imguiApp->IsInitialized()) {
+            _imguiApp->Shutdown();
+        }
+
         if (_renderer && _renderer->IsInitialized()) {
             _renderer->Shutdown();
         }
@@ -486,10 +493,6 @@ namespace Framework::Integrations::Client {
 
         if (_scriptingModule) {
             _scriptingModule->Shutdown();
-        }
-
-        if (_imguiApp && _imguiApp->IsInitialized()) {
-            _imguiApp->Shutdown();
         }
 
         // Drain, never close: the reporter outlives this instance.
