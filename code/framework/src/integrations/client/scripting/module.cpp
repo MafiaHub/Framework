@@ -103,7 +103,7 @@ namespace Framework::Integrations::Client::Scripting {
         }
 
         // Web views and key binds created by a resource die with it (single callback slot).
-        _resourceManager->SetOnResourceStopped([](const std::string &resourceName) {
+        _resourceManager->AddOnResourceStopped([](const std::string &resourceName) {
             Builtins::Web::CleanupResource(resourceName);
             Builtins::Keybinds::CleanupResource(resourceName);
         });

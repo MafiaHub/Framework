@@ -983,7 +983,7 @@ MODULE(resource_manager_callbacks, {
         ResourceManager manager(&engine, config);
 
         std::string startedResource;
-        manager.SetOnResourceStarted([&startedResource](const std::string &name) {
+        manager.AddOnResourceStarted([&startedResource](const std::string &name) {
             startedResource = name;
         });
 
@@ -1017,7 +1017,7 @@ MODULE(resource_manager_callbacks, {
         ResourceManager manager(&engine, config);
 
         std::string stoppedResource;
-        manager.SetOnResourceStopped([&stoppedResource](const std::string &name) {
+        manager.AddOnResourceStopped([&stoppedResource](const std::string &name) {
             stoppedResource = name;
         });
 

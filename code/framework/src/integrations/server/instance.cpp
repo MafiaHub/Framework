@@ -294,12 +294,12 @@ namespace Framework::Integrations::Server {
 
         // Mirror runtime resource start/stop to clients. Gated on boot (the
         // StartAll below predates any connection) and shutdown.
-        _scriptingModule->GetResourceManager()->SetOnResourceStarted([this](const std::string &name) {
+        _scriptingModule->GetResourceManager()->AddOnResourceStarted([this](const std::string &name) {
             if (_resourcesBooted && !_shuttingDown) {
                 BroadcastResourceRefresh(name);
             }
         });
-        _scriptingModule->GetResourceManager()->SetOnResourceStopped([this](const std::string &name) {
+        _scriptingModule->GetResourceManager()->AddOnResourceStopped([this](const std::string &name) {
             if (_resourcesBooted && !_shuttingDown) {
                 BroadcastResourceStop(name);
             }

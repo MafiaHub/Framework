@@ -1065,26 +1065,28 @@ namespace Framework::Scripting {
         return {it->second.begin(), it->second.end()};
     }
 
-    void ResourceManager::SetOnResourceStarted(ResourceEventCallback callback) {
-        _onResourceStarted = std::move(callback);
-    }
-
-    void ResourceManager::SetOnResourceStopped(ResourceEventCallback callback) {
-        _onResourceStopped = std::move(callback);
+    void ResourceManager::AddOnResourceStarted(ResourceEventCallback callback) {
+        if (callback) {
+            _onResourceStarted.emplace_back(std::move(callback));
+        }
     }
 
     void ResourceManager::AddOnResourceStopped(ResourceEventCallback callback) {
         if (callback) {
-            _onResourceStoppedExtra.emplace_back(std::move(callback));
+            _onResourceStopped.emplace_back(std::move(callback));
         }
     }
 
-    void ResourceManager::SetOnResourceError(ResourceErrorCallback callback) {
-        _onResourceError = std::move(callback);
+    void ResourceManager::AddOnResourceError(ResourceErrorCallback callback) {
+        if (callback) {
+            _onResourceError.emplace_back(std::move(callback));
+        }
     }
 
-    void ResourceManager::SetOnResourceStateChanged(ResourceStateCallback callback) {
-        _onResourceStateChanged = std::move(callback);
+    void ResourceManager::AddOnResourceStateChanged(ResourceStateCallback callback) {
+        if (callback) {
+            _onResourceStateChanged.emplace_back(std::move(callback));
+        }
     }
 
     Engine *ResourceManager::GetJSEngine() const {
@@ -1398,31 +1400,26 @@ namespace Framework::Scripting {
     }
 
     void ResourceManager::FireOnResourceStarted(const std::string &name) {
-        if (_onResourceStarted) {
-            _onResourceStarted(name);
+        for (const auto &callback : _onResourceStarted) {
+            callback(name);
         }
     }
 
     void ResourceManager::FireOnResourceStopped(const std::string &name) {
-        if (_onResourceStopped) {
-            _onResourceStopped(name);
-        }
-        for (const auto &callback : _onResourceStoppedExtra) {
-            if (callback) {
-                callback(name);
-            }
+        for (const auto &callback : _onResourceStopped) {
+            callback(name);
         }
     }
 
     void ResourceManager::FireOnResourceError(const std::string &name, const std::string &error) {
-        if (_onResourceError) {
-            _onResourceError(name, error);
+        for (const auto &callback : _onResourceError) {
+            callback(name, error);
         }
     }
 
     void ResourceManager::FireOnResourceStateChanged(const std::string &name, ResourceState oldState, ResourceState newState) {
-        if (_onResourceStateChanged) {
-            _onResourceStateChanged(name, oldState, newState);
+        for (const auto &callback : _onResourceStateChanged) {
+            callback(name, oldState, newState);
         }
     }
 
