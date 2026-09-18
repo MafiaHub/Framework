@@ -63,6 +63,13 @@ namespace Framework::External::ImGUI {
 
         bool _processEventEnabled = true;
 
+        // Back buffer the overlay was last scaled to; only the log line reads it.
+        int _scaledBackBufferWidth  = 0;
+        int _scaledBackBufferHeight = 0;
+
+        // Matches the ImGui coordinate space to the back buffer we actually draw into.
+        void ScaleToBackBuffer();
+
       public:
         [[nodiscard]] Utils::Result<void, Framework::Error> Init(Config &config);
         void Shutdown() override;

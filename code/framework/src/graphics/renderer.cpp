@@ -90,6 +90,25 @@ namespace Framework::Graphics {
         });
     }
 
+    bool Renderer::GetBackBufferSize(int &width, int &height) const {
+        IDXGISwapChain *swapChain = nullptr;
+        if (_d3d12Backend) {
+            swapChain = _d3d12Backend->GetSwapChain();
+        }
+        else if (_d3d11Backend) {
+            swapChain = _d3d11Backend->GetSwapChain();
+        }
+
+        DXGI_SWAP_CHAIN_DESC desc {};
+        if (!swapChain || FAILED(swapChain->GetDesc(&desc)) || desc.BufferDesc.Width == 0 || desc.BufferDesc.Height == 0) {
+            return false;
+        }
+
+        width  = static_cast<int>(desc.BufferDesc.Width);
+        height = static_cast<int>(desc.BufferDesc.Height);
+        return true;
+    }
+
     void Renderer::Paint() {
         ForActiveBackend([](auto &backend) {
             backend.Paint();

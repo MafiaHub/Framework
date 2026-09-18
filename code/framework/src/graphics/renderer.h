@@ -122,5 +122,12 @@ namespace Framework::Graphics {
         RendererBackend GetBackendType() const {
             return _backend;
         }
+
+        // Size of the swap chain's back buffer: the target everything the framework draws over the
+        // game ends up in. It is not the window's client size whenever the game renders at another
+        // resolution than the window carries - driver downsampling (DSR/DLDSR), a DPI-virtualized
+        // window - so overlay geometry has to follow this rather than GetClientRect. False when the
+        // active backend has no swap chain to ask (D3D9).
+        bool GetBackBufferSize(int &width, int &height) const;
     };
 } // namespace Framework::Graphics

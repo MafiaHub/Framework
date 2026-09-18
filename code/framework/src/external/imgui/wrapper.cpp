@@ -177,6 +177,8 @@ namespace Framework::External::ImGUI {
         } break;
         }
 
+        ScaleToBackBuffer();
+
         ImGui::NewFrame();
 
         // process all widgets
@@ -187,6 +189,32 @@ namespace Framework::External::ImGUI {
         }
 
         ImGui::Render();
+    }
+
+    void Wrapper::ScaleToBackBuffer() {
+        // The platform backend measures the window and reports it as DisplaySize, but everything we
+        // draw lands in the game's back buffer. The two disagree whenever the game renders at a
+        // resolution the window does not carry - driver downsampling (DSR/DLDSR), a DPI-virtualized
+        // window - and the renderer backend then draws the whole overlay 1:1 into a corner of a
+        // larger target. FramebufferScale is what ImGui reserves for exactly that: it stretches the
+        // viewport, the scissor rects and the font rasterizer over the real target while layout
+        // stays in window coordinates, which is also the space mouse messages arrive in.
+        ImGuiIO &io                = ImGui::GetIO();
+        io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
+
+        int backBufferWidth  = 0;
+        int backBufferHeight = 0;
+        if (_config.renderer == nullptr || io.DisplaySize.x <= 0.0f || io.DisplaySize.y <= 0.0f || !_config.renderer->GetBackBufferSize(backBufferWidth, backBufferHeight)) {
+            return;
+        }
+
+        io.DisplayFramebufferScale = ImVec2(static_cast<float>(backBufferWidth) / io.DisplaySize.x, static_cast<float>(backBufferHeight) / io.DisplaySize.y);
+
+        if (backBufferWidth != _scaledBackBufferWidth || backBufferHeight != _scaledBackBufferHeight) {
+            _scaledBackBufferWidth  = backBufferWidth;
+            _scaledBackBufferHeight = backBufferHeight;
+            Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->debug("Overlay scaled for a {}x{} back buffer behind a {}x{} window", backBufferWidth, backBufferHeight, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y));
+        }
     }
 
     Utils::Result<void, Framework::Error> Wrapper::Render() {
