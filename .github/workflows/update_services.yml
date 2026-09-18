@@ -166,6 +166,12 @@ jobs:
             ${{ github.workspace }}/code/framework/src/services/bin
             ${{ github.workspace }}/code/framework/src/services/services
           if-no-files-found: error
+          # Consumed by the release job in this same run and then published as
+          # release assets, which do not count against Actions storage. Keeping
+          # them for the default 90 days stored four platform builds per run
+          # for no reader.
+          retention-days: 1
+          compression-level: 9
 
   release:
     name: Create or Update Release
