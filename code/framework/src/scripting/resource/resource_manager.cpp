@@ -1073,6 +1073,12 @@ namespace Framework::Scripting {
         _onResourceStopped = std::move(callback);
     }
 
+    void ResourceManager::AddOnResourceStopped(ResourceEventCallback callback) {
+        if (callback) {
+            _onResourceStoppedExtra.emplace_back(std::move(callback));
+        }
+    }
+
     void ResourceManager::SetOnResourceError(ResourceErrorCallback callback) {
         _onResourceError = std::move(callback);
     }
@@ -1400,6 +1406,11 @@ namespace Framework::Scripting {
     void ResourceManager::FireOnResourceStopped(const std::string &name) {
         if (_onResourceStopped) {
             _onResourceStopped(name);
+        }
+        for (const auto &callback : _onResourceStoppedExtra) {
+            if (callback) {
+                callback(name);
+            }
         }
     }
 

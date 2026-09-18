@@ -249,6 +249,13 @@ namespace Framework::Scripting {
         void SetOnResourceStopped(ResourceEventCallback callback);
 
         /**
+         * Add a further resource-stop listener, without displacing the one SetOnResourceStopped holds.
+         * The integration owns that one; a game project with its own per-resource state to drop registers
+         * here, and every listener runs in registration order after it.
+         */
+        void AddOnResourceStopped(ResourceEventCallback callback);
+
+        /**
          * Set callback for when a resource encounters an error.
          */
         void SetOnResourceError(ResourceErrorCallback callback);
@@ -428,6 +435,7 @@ namespace Framework::Scripting {
         // Event callbacks
         ResourceEventCallback _onResourceStarted;
         ResourceEventCallback _onResourceStopped;
+        std::vector<ResourceEventCallback> _onResourceStoppedExtra;
         ResourceErrorCallback _onResourceError;
         ResourceStateCallback _onResourceStateChanged;
 
