@@ -11,9 +11,78 @@
 #include <logging/logger.h>
 #include <utils/process_shutdown.h>
 
+#include <dxgi1_6.h>
 #include <wrl/client.h>
 
+#include <string>
+
 namespace Framework::Graphics {
+    namespace {
+        const char *VendorName(UINT vendorId) {
+            switch (vendorId) {
+            case 0x10DE: return "NVIDIA";
+            case 0x1002: return "AMD";
+            case 0x8086: return "Intel";
+            case 0x1414: return "Microsoft";
+            default: return "unknown";
+            }
+        }
+
+        const char *FormatName(DXGI_FORMAT format) {
+            switch (format) {
+            case DXGI_FORMAT_R8G8B8A8_UNORM: return "R8G8B8A8_UNORM";
+            case DXGI_FORMAT_B8G8R8A8_UNORM: return "B8G8R8A8_UNORM";
+            case DXGI_FORMAT_R10G10B10A2_UNORM: return "R10G10B10A2_UNORM";
+            case DXGI_FORMAT_R16G16B16A16_FLOAT: return "R16G16B16A16_FLOAT";
+            default: return "other";
+            }
+        }
+
+        const char *ColorSpaceName(DXGI_COLOR_SPACE_TYPE space) {
+            switch (space) {
+            case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709: return "sRGB";
+            case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709: return "scRGB";
+            case DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020: return "HDR10";
+            default: return "other";
+            }
+        }
+
+        // Adapter, driver, swapchain format and display colour space in one line, so a
+        // colour report from a machine we don't own arrives with the facts attached.
+        void LogSwapChainEnvironment(ID3D12Device *device, IDXGISwapChain3 *swapChain) {
+            std::string adapter = "adapter ?";
+            Microsoft::WRL::ComPtr<IDXGIFactory4> factory;
+            Microsoft::WRL::ComPtr<IDXGIAdapter1> dxgiAdapter;
+            DXGI_ADAPTER_DESC1 adapterDesc {};
+            if (SUCCEEDED(swapChain->GetParent(IID_PPV_ARGS(&factory))) && SUCCEEDED(factory->EnumAdapterByLuid(device->GetAdapterLuid(), IID_PPV_ARGS(&dxgiAdapter))) && SUCCEEDED(dxgiAdapter->GetDesc1(&adapterDesc))) {
+                char name[128] = {};
+                WideCharToMultiByte(CP_UTF8, 0, adapterDesc.Description, -1, name, sizeof(name), nullptr, nullptr);
+                std::string driver = "driver ?";
+                LARGE_INTEGER umd {};
+                if (SUCCEEDED(dxgiAdapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umd))) {
+                    driver = fmt::format("driver {}.{}.{}.{}", umd.HighPart >> 16, umd.HighPart & 0xFFFF, umd.LowPart >> 16, umd.LowPart & 0xFFFF);
+                }
+                adapter = fmt::format("{} (vendor 0x{:04X} {}, device 0x{:04X}, {})", name, adapterDesc.VendorId, VendorName(adapterDesc.VendorId), adapterDesc.DeviceId, driver);
+            }
+
+            std::string chain = "swapchain ?";
+            DXGI_SWAP_CHAIN_DESC scDesc {};
+            if (SUCCEEDED(swapChain->GetDesc(&scDesc))) {
+                chain = fmt::format("swapchain format {} ({}), {} buffers, swap effect {}", static_cast<int>(scDesc.BufferDesc.Format), FormatName(scDesc.BufferDesc.Format), scDesc.BufferCount, static_cast<int>(scDesc.SwapEffect));
+            }
+
+            std::string output = "output ?";
+            Microsoft::WRL::ComPtr<IDXGIOutput> dxgiOutput;
+            Microsoft::WRL::ComPtr<IDXGIOutput6> output6;
+            DXGI_OUTPUT_DESC1 outputDesc {};
+            if (SUCCEEDED(swapChain->GetContainingOutput(&dxgiOutput)) && SUCCEEDED(dxgiOutput.As(&output6)) && SUCCEEDED(output6->GetDesc1(&outputDesc))) {
+                output = fmt::format("output colour space {} ({}), {} bpc", static_cast<int>(outputDesc.ColorSpace), ColorSpaceName(outputDesc.ColorSpace), outputDesc.BitsPerColor);
+            }
+
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("D3D12 {}; {}; {}", adapter, chain, output);
+        }
+    } // namespace
+
     bool D3D12Backend::Init(const Framework::Graphics::RendererConfiguration &opts) {
         const auto swapChain = opts.d3d12.swapchain;
         const auto commandQueue = opts.d3d12.commandQueue;
@@ -97,6 +166,7 @@ namespace Framework::Graphics {
         _device = deviceGuard.Detach();
 
         Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("D3D12 device {}", fmt::ptr(_device));
+        LogSwapChainEnvironment(_device, _swapChain);
         return true;
     }
 
