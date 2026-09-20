@@ -18,6 +18,7 @@
 #include "graphics/types.h"
 
 #include <atomic>
+#include <dxgiformat.h>
 #include <function2.hpp>
 #include <mutex>
 #include <queue>
@@ -69,6 +70,12 @@ namespace Framework::External::ImGUI {
 
         // Matches the ImGui coordinate space to the back buffer we actually draw into.
         void ScaleToBackBuffer();
+
+        // Format the D3D12 pipeline was built for; the game can swap it under us.
+        DXGI_FORMAT _d3d12RtvFormat = DXGI_FORMAT_UNKNOWN;
+
+        void InitD3D12Backend(DXGI_FORMAT rtvFormat);
+        void MatchD3D12BackBufferFormat();
 
       public:
         [[nodiscard]] Utils::Result<void, Framework::Error> Init(Config &config);

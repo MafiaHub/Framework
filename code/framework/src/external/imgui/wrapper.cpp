@@ -102,18 +102,7 @@ namespace Framework::External::ImGUI {
             ImGui_ImplDX11_Init(renderBackend->GetDevice(), renderBackend->GetContext());
         } break;
         case Graphics::RendererBackend::BACKEND_D3D_12: {
-            const auto renderBackend = _config.renderer->GetD3D12Backend();
-
-            ImGui_ImplDX12_InitInfo initInfo {};
-            initInfo.Device               = renderBackend->GetDevice();
-            initInfo.CommandQueue         = renderBackend->GetCommandQueue();
-            initInfo.NumFramesInFlight    = renderBackend->NumFramesInFlight();
-            initInfo.RTVFormat            = DXGI_FORMAT_R8G8B8A8_UNORM;
-            initInfo.SrvDescriptorHeap    = renderBackend->GetSRVHeap();
-            initInfo.UserData             = renderBackend;
-            initInfo.SrvDescriptorAllocFn = ImGuiAllocSRV;
-            initInfo.SrvDescriptorFreeFn  = ImGuiFreeSRV;
-            ImGui_ImplDX12_Init(&initInfo);
+            InitD3D12Backend(_config.renderer->GetD3D12Backend()->GetBackBufferFormat());
         } break;
         }
 
@@ -167,6 +156,7 @@ namespace Framework::External::ImGUI {
             ImGui_ImplDX11_NewFrame();
         } break;
         case Graphics::RendererBackend::BACKEND_D3D_12: {
+            MatchD3D12BackBufferFormat();
             ImGui_ImplDX12_NewFrame();
         } break;
         }
@@ -269,6 +259,46 @@ namespace Framework::External::ImGUI {
         } break;
         default: break;
         }
+    }
+
+    void Wrapper::InitD3D12Backend(DXGI_FORMAT rtvFormat) {
+        const auto renderBackend = _config.renderer->GetD3D12Backend();
+        if (rtvFormat == DXGI_FORMAT_UNKNOWN) {
+            Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->warn("Back buffer format unknown, building the ImGui D3D12 pipeline for R8G8B8A8_UNORM");
+            rtvFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+        }
+
+        // The pipeline must declare the format the game's swapchain really carries: a
+        // mismatch is undefined in D3D12, and AMD drivers answer it by remapping colour lanes.
+        ImGui_ImplDX12_InitInfo initInfo {};
+        initInfo.Device               = renderBackend->GetDevice();
+        initInfo.CommandQueue         = renderBackend->GetCommandQueue();
+        initInfo.NumFramesInFlight    = renderBackend->NumFramesInFlight();
+        initInfo.RTVFormat            = rtvFormat;
+        initInfo.SrvDescriptorHeap    = renderBackend->GetSRVHeap();
+        initInfo.UserData             = renderBackend;
+        initInfo.SrvDescriptorAllocFn = ImGuiAllocSRV;
+        initInfo.SrvDescriptorFreeFn  = ImGuiFreeSRV;
+        ImGui_ImplDX12_Init(&initInfo);
+        _d3d12RtvFormat = rtvFormat;
+        Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGui D3D12 pipeline built for back buffer format {}", static_cast<int>(rtvFormat));
+    }
+
+    void Wrapper::MatchD3D12BackBufferFormat() {
+        const auto renderBackend = _config.renderer->GetD3D12Backend();
+        const auto format        = renderBackend->GetBackBufferFormat();
+        if (format == DXGI_FORMAT_UNKNOWN || format == _d3d12RtvFormat) {
+            return;
+        }
+
+        // HDR toggles and mode changes swap the format under us. The old pipeline may still
+        // be in flight, so keep it and retry next frame whenever the drain can't be confirmed.
+        if (!renderBackend->WaitForGpu()) {
+            return;
+        }
+        Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("Back buffer format changed {} -> {}, rebuilding the ImGui D3D12 pipeline", static_cast<int>(_d3d12RtvFormat), static_cast<int>(format));
+        ImGui_ImplDX12_Shutdown(); // ImGui re-creates the destroyed textures on its next frame
+        InitD3D12Backend(format);
     }
 
     InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {

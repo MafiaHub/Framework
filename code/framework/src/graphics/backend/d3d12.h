@@ -65,6 +65,10 @@ namespace Framework::Graphics {
             _swapChain = swapChain;
         }
 
+        // Live swapchain format (the game can change it: HDR toggles, mode changes);
+        // DXGI_FORMAT_UNKNOWN when there is no describable swapchain.
+        DXGI_FORMAT GetBackBufferFormat() const;
+
         // Bounded, shader-visible SRV slot pool shared with ImGui's heap (so handles
         // double as ImTextureID). AllocateSRVSlot returns -1 when exhausted; the
         // getters return a null handle for any out-of-range slot.
