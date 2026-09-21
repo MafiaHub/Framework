@@ -9,7 +9,7 @@
 #pragma once
 
 #include <fmt/format.h>
-#include <imgui/imgui.h>
+#include <imgui.h>
 
 #include <string>
 

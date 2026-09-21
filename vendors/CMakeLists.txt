@@ -1,55 +1,66 @@
 set(BUILD_SHARED_LIBS CACHE BOOL OFF)
 set(BUILD_SAMPLES CACHE BOOL OFF)
 
-# Recursively find all source files in the vendors directory
-file(GLOB_RECURSE VENDOR_FILES "*.cpp" "*.c" "*.h" "*.hpp")
-
-# Apply the no-warning compile flag to all files in the vendors directory
-foreach(vendor_file ${VENDOR_FILES})
-    set_source_files_properties(${vendor_file} PROPERTIES COMPILE_FLAGS "-w")
+# Silence warnings for the trees that are still vendored in-tree. vcpkg-provided packages arrive as
+# prebuilt archives and never reach the compiler here.
+file(GLOB VENDOR_DIRS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/*")
+foreach(vendor_dir ${VENDOR_DIRS})
+    # vcpkg's own checkout is a tool, not a compiled dependency, and recursing it costs seconds.
+    if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${vendor_dir}" AND NOT vendor_dir STREQUAL "vcpkg")
+        file(GLOB_RECURSE VENDOR_FILES "${CMAKE_CURRENT_SOURCE_DIR}/${vendor_dir}/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/${vendor_dir}/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/${vendor_dir}/*.h" "${CMAKE_CURRENT_SOURCE_DIR}/${vendor_dir}/*.hpp")
+        set_source_files_properties(${VENDOR_FILES} PROPERTIES COMPILE_FLAGS "-w")
+    endif()
 endforeach()
 
-# Add OpenSSL
-if (WIN32)
-    set(OPENSSL_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/openssl" CACHE PATH "Path to vendored OpenSSL")
-    set(OPENSSL_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/openssl/include" CACHE PATH "Path to vendored OpenSSL headers" FORCE)
-    if (CMAKE_SIZEOF_VOID_P EQUAL 4)
-        set(_OPENSSL_VENDOR_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/openssl/lib/x86")
-    else ()
-        set(_OPENSSL_VENDOR_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/openssl/lib")
-    endif ()
-    set(OPENSSL_SSL_LIBRARY "${_OPENSSL_VENDOR_LIB_DIR}/libssl.lib" CACHE FILEPATH "Path to vendored OpenSSL SSL library" FORCE)
-    set(OPENSSL_CRYPTO_LIBRARY "${_OPENSSL_VENDOR_LIB_DIR}/libcrypto.lib" CACHE FILEPATH "Path to vendored OpenSSL Crypto library" FORCE)
-    set(SSL_EAY_DEBUG "${_OPENSSL_VENDOR_LIB_DIR}/libssl.lib" CACHE FILEPATH "Path to vendored OpenSSL SSL debug library" FORCE)
-    set(SSL_EAY_RELEASE "${_OPENSSL_VENDOR_LIB_DIR}/libssl.lib" CACHE FILEPATH "Path to vendored OpenSSL SSL release library" FORCE)
-    set(LIB_EAY_DEBUG "${_OPENSSL_VENDOR_LIB_DIR}/libcrypto.lib" CACHE FILEPATH "Path to vendored OpenSSL Crypto debug library" FORCE)
-    set(LIB_EAY_RELEASE "${_OPENSSL_VENDOR_LIB_DIR}/libcrypto.lib" CACHE FILEPATH "Path to vendored OpenSSL Crypto release library" FORCE)
-    add_subdirectory(openssl)
-endif ()
+# ---------------------------------------------------------------------------
+# vcpkg-provided packages (see vcpkg.json). Versions are pinned by the manifest
+# baseline, not by a directory drop.
+# ---------------------------------------------------------------------------
 
-# Build semver
-add_subdirectory(semver)
+# find_package imports are scoped to this directory by default, and the consumers live under code/
+# (a sibling). This is the same problem the MafiaNet block below solves with IMPORTED_GLOBAL, but
+# that property cannot be set on the ALIAS targets several of these configs define.
+if(CMAKE_VERSION VERSION_LESS 3.24)
+    message(FATAL_ERROR "CMake 3.24 or newer is required (CMAKE_FIND_PACKAGE_TARGETS_GLOBAL)")
+endif()
+set(CMAKE_FIND_PACKAGE_TARGETS_GLOBAL ON)
 
-# Build SPDLOG
-set(SPDLOG_BUILD_SHARED OFF)
-add_subdirectory(spdlog)
+find_package(OpenSSL REQUIRED)
+find_package(CURL CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(cppfs CONFIG REQUIRED)
+find_package(miniz CONFIG REQUIRED)
+find_package(cxxopts CONFIG REQUIRED)
+find_package(function2 CONFIG REQUIRED)
+find_package(sentry CONFIG REQUIRED)
 
-# Build JSON and GLM
-add_subdirectory(json)
-add_subdirectory(glm)
+# The crashpad backend launches this helper out-of-process, so it has to sit next to the binaries.
+# The vendored drop staged it from a POST_BUILD; the port puts it under tools/.
+set(_sentry_crashpad "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/tools/sentry-native/crashpad_handler${CMAKE_EXECUTABLE_SUFFIX}")
+if(EXISTS "${_sentry_crashpad}")
+    file(COPY "${_sentry_crashpad}" DESTINATION "${CMAKE_BINARY_DIR}/bin")
+else()
+    message(WARNING "sentry-native crashpad_handler not found at ${_sentry_crashpad}; crash reports will not be captured")
+endif()
 
-# Build Hash
-add_subdirectory(hash)
+if(WIN32)
+    find_package(imgui CONFIG REQUIRED)
+    # The DX backends import from these system libs (the DX12 one calls CreateDXGIFactory1 /
+    # D3D12SerializeRootSignature since ImGui 1.92) and the port does not declare them. On the
+    # target's interface so consumers link them after imgui, which the MSVC linker requires.
+    target_link_libraries(imgui::imgui INTERFACE d3d9 d3d11 d3d12 dxgi)
 
-# Build CPPFS
-set(OPTION_BUILD_TESTS CACHE BOOL OFF)
-add_subdirectory(cppfs)
+    find_package(directxtk CONFIG REQUIRED)
+    find_package(minhook CONFIG REQUIRED)
+    find_package(stackwalker CONFIG REQUIRED)
+endif()
 
-# Build HTTPLib
-set(OPENSSL_USE_STATIC_LIBS ON)
-set(HTTPLIB_REQUIRE_OPENSSL ON)
-set(HTTPLIB_COMPILE ON)
-add_subdirectory(httplib)
+# ---------------------------------------------------------------------------
+# Still vendored in-tree
+# ---------------------------------------------------------------------------
 
 # MafiaNet (networking) - precompiled release archive, neither vendored nor
 # built from source.
@@ -57,13 +68,7 @@ add_subdirectory(httplib)
 # MafiaNet's release pipeline publishes per-platform archives (linux-x86_64,
 # windows-x86/x64, macos-x86_64/arm64) containing the static library, the
 # bundled Opus/RNNoise static libs RakVoice needs, all public headers, and the
-# MafiaNet CMake package. Downloading one archive replaces compiling ~85 MB of
-# third-party source (plus MafiaNet's own Opus/RNNoise fetches) on every cold
-# configure, and keeps the dependency boundary where it belongs.
-#
-# This is the only download in the Framework build; everything else under
-# vendors/ is genuinely vendored in-tree. A cold configure therefore needs
-# network access (the archive is cached in the build tree afterwards).
+# MafiaNet CMake package.
 #
 # The pin (version + per-archive SHA-256) lives in cmake/MafiaNetPin.cmake so
 # the release tooling can watch that one path: the message-id enum is
@@ -113,9 +118,8 @@ if(NOT EXISTS "${_mafianet_root}/lib/cmake/MafiaNet/MafiaNetConfig.cmake")
     file(REMOVE "${_mafianet_archive}")
 endif()
 
-# Resolves OpenSSL through find_dependency: on Windows that is the vendored
-# OpenSSL forced above, elsewhere the system one -- either way OpenSSL 3, which
-# is what the archives were compiled against.
+# Resolves OpenSSL through find_dependency, which now lands on the vcpkg OpenSSL 3 found above --
+# the same major the archives were compiled against.
 find_package(MafiaNet ${MAFIANET_PIN_VERSION} CONFIG REQUIRED
     PATHS "${_mafianet_root}"
     NO_DEFAULT_PATH
@@ -130,11 +134,9 @@ find_package(MafiaNet ${MAFIANET_PIN_VERSION} CONFIG REQUIRED
 #
 #  - MAP_IMPORTED_CONFIG_*: the archives carry a single Release configuration,
 #    compiled with the /MD runtime on Windows -- exactly the CRT FrameworkSetup
-#    forces even in Debug builds -- so every consumer configuration maps onto
-#    it (and the old _DEBUG/CRT reconciliation the source build needed is gone).
+#    forces even in Debug builds -- so every consumer configuration maps onto it.
 #  - IMPORTED_GLOBAL: find_package imports are scoped to this directory; the
-#    consumers live under code/ (a sibling), which could see the old
-#    add_subdirectory alias targets but not these.
+#    consumers live under code/ (a sibling).
 foreach(_mafianet_target MafiaNet::MafiaNetStatic MafiaNet::MafiaNet MafiaNet::opus MafiaNet::rnnoise)
     if(TARGET ${_mafianet_target})
         set_target_properties(${_mafianet_target} PROPERTIES
@@ -146,15 +148,21 @@ foreach(_mafianet_target MafiaNet::MafiaNetStatic MafiaNet::MafiaNet MafiaNet::o
     endif()
 endforeach()
 
-# Build sentry
-set(CURL_STATICLIB ON)
-add_subdirectory(sentry)
+# Build HTTPLib
+#
+# Not taken from vcpkg: that port hardcodes HTTPLIB_COMPILE=OFF, so it is header-only. The
+# prebuilt MafiaHubServices archive was compiled against compiled-mode httplib and carries
+# undefined references to its out-of-line symbols, which a header-only httplib cannot satisfy.
+set(OPENSSL_USE_STATIC_LIBS ON)
+set(HTTPLIB_REQUIRE_OPENSSL ON)
+set(HTTPLIB_COMPILE ON)
+add_subdirectory(httplib)
 
-# Build curl
-add_subdirectory(curl)
+# Build semver
+add_subdirectory(semver)
 
-# Build FMT
-add_subdirectory(fmt)
+# Build Hash
+add_subdirectory(hash)
 
 # Build libsig
 add_subdirectory(libsig)
@@ -163,19 +171,19 @@ add_subdirectory(libsig)
 add_subdirectory(sfd)
 
 # Build Tracy (profiler client)
-# TRACY_ENABLE follows FW_PROFILING; the TracyClient target is always available
-# so Framework can link it unconditionally - it compiles to no-ops when disabled.
+#
+# Not taken from vcpkg: the port exposes on-demand, fibers, verbose and crash-handler, but not
+# TRACY_DELAYED_INIT. Several modules link TracyClient statically on Windows (the loader exe and
+# the client inside the game DLL), and without delayed init every one of them starts a profiler
+# instance at static-init time instead of on first zone use.
 set(TRACY_ENABLE ${FW_PROFILING} CACHE BOOL "" FORCE)
 set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
 set(TRACY_STATIC ON CACHE BOOL "" FORCE)
 set(TRACY_FIBERS ON CACHE BOOL "" FORCE) # FTL job system runs on fibers
-# Multiple modules link TracyClient statically on Windows (loader exe + client
-# in the game DLL). Delayed init makes the profiler start on first zone use,
-# so only modules that actually record data spawn a Tracy instance.
 set(TRACY_DELAYED_INIT ON CACHE BOOL "" FORCE)
 add_subdirectory(tracy)
 
-# Build FTL (Fiber Tasking Library)
+# Build FTL (Fiber Tasking Library) - no vcpkg port exists.
 set(FTL_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(FTL_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(FTL_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -183,21 +191,21 @@ set(FTL_CPP_17 ON CACHE BOOL "" FORCE)
 add_subdirectory(ftl)
 
 # Build libnode (Node.js as library) - provides both libnode and v8 targets
-# libnode: Full Node.js shared library for server-side scripting
-# v8: V8 headers interface for client-side scripting (links to libnode)
 add_subdirectory(libnode)
 
-# Build v8pp (header-only V8 binding library)
+# Build v8pp - MafiaHub fork, fetched by commit
 add_subdirectory(v8pp)
 
-# PhysicsFS 3.2.0 and miniz 3.0.2 both declare cmake_minimum_required(VERSION 3.0), which CMake 4
-# refuses outright. Raise the policy floor for just these two rather than patching vendored files,
-# so updating them stays a plain directory replace.
+# PhysicsFS 3.2.0 declares cmake_minimum_required(VERSION 3.0), which CMake 4 refuses outright.
+# Raise the policy floor for just this one rather than patching vendored files, so updating it
+# stays a plain directory replace.
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 # Build PhysicsFS (zlib license) - the virtual file system backing client resource packages.
-# Only the ZIP archiver is kept: resource packages are ZIP payloads, and every other format is
-# dead weight (and extra parsers exposed to server-supplied bytes).
+#
+# Not taken from vcpkg: that port passes no PHYSFS_ARCHIVE_* options, so it builds every archiver.
+# Resource packages are ZIP payloads and the bytes arrive from the server, so every other format is
+# an extra parser on untrusted input.
 set(PHYSFS_ARCHIVE_ZIP ON CACHE BOOL "" FORCE)
 set(PHYSFS_ARCHIVE_7Z OFF CACHE BOOL "" FORCE)
 set(PHYSFS_ARCHIVE_GRP OFF CACHE BOOL "" FORCE)
@@ -216,38 +224,23 @@ set(PHYSFS_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
 add_subdirectory(physfs)
 # physfs FORCEs CMAKE_SKIP_RPATH ON into the cache under GCC/Clang. That leaks out of the
 # subdirectory and disables rpath for every target in the build, including M2OServer's
-# $ORIGIN - without which libnode.so shipped next to the binary no longer resolves. Clear it
-# here rather than editing the vendored tree. Not a snapshot/restore: on an already-configured
-# build the cached value is physfs's own ON, so restoring it would just preserve the bug.
+# $ORIGIN - without which libnode.so shipped next to the binary no longer resolves.
 set(CMAKE_SKIP_RPATH OFF CACHE BOOL "Skip RPATH" FORCE)
-
-# Build miniz (MIT) - ZIP writing for the server-side resource packager. PhysicsFS bundles its
-# own miniz for reading only, and it is private to that library.
-set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(BUILD_HEADER_ONLY OFF CACHE BOOL "" FORCE)
-set(INSTALL_PROJECT OFF CACHE BOOL "" FORCE)
-add_subdirectory(miniz)
 
 unset(CMAKE_POLICY_VERSION_MINIMUM)
 
 # Build OS specific libraries
 if (WIN32)
-    # Build other win32 deps
-    # miniaudio backs the voice capture/playback devices. Scoped to WIN32 because its only
-    # consumer is FrameworkClient, which is itself Windows-only; the library is portable and
-    # can move out of this block whenever a client is built for another platform.
+    # Not taken from vcpkg: that port installs miniaudio.h only, with no CMake package. The
+    # implementation TU and the PUBLIC feature-trimming defines below it would stay hand-written
+    # here either way, and splitting them from the header only invites version skew.
     add_subdirectory(miniaudio)
-    add_subdirectory(minhook)
     add_subdirectory(steamworks)
     add_subdirectory(udis86)
     add_subdirectory(ntdll)
-    add_subdirectory(imgui)
+    # Not taken from vcpkg: the port is ImGuizmo 1.10, which predates Dear ImGui's ImDrawFlags
+    # change to AddPolyline - the very break the vendored copy is patched for.
     add_subdirectory(imguizmo)
     add_subdirectory(discord)
-    add_subdirectory(directxtk)
     add_subdirectory(cef)
-
-    set(StackWalker_DISABLE_TESTS CACHE BOOL "" ON)
-    add_subdirectory(StackWalker)
 endif ()

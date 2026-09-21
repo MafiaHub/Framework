@@ -15,7 +15,7 @@
 #include <logging/logger.h>
 #include <utils/result.h>
 
-#include <function2.hpp>
+#include <function2/function2.hpp>
 
 #include <map>
 #include <memory>

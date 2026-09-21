@@ -3,4 +3,4 @@ add_library(ImGuizmo STATIC
 )
 
 target_include_directories(ImGuizmo PUBLIC ".")
-target_link_libraries(ImGuizmo DearImGUI)
+target_link_libraries(ImGuizmo imgui::imgui)

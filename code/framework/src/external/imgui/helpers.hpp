@@ -10,7 +10,7 @@
 
 #include "utils/function_traits.hpp"
 
-#include <function2.hpp>
+#include <function2/function2.hpp>
 
 namespace Framework::External::ImGUI {
     template <typename F>

@@ -13,7 +13,7 @@
 #include "include/cef_app.h"
 #include "include/cef_browser_process_handler.h"
 
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <mutex>
 #include <unordered_map>
 

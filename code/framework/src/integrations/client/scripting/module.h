@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <function2.hpp>
+#include <function2/function2.hpp>
 
 #include <memory>
 #include <string>

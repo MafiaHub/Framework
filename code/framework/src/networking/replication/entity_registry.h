@@ -10,7 +10,7 @@
 
 #include "network_entity.h"
 
-#include <function2.hpp>
+#include <function2/function2.hpp>
 
 #include <cstdint>
 #include <string>

@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <fu2/function2.hpp>
+#include <function2/function2.hpp>
 #include <string>
 
 namespace Framework::GUI {

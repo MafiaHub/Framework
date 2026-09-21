@@ -14,7 +14,7 @@
 
 #include <atomic>
 #include <cstdint>
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <memory>
 #include <mutex>
 #include <string>

@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <fu2/function2.hpp>
-#include <imgui/imgui.h>
+#include <function2/function2.hpp>
+#include <imgui.h>
 
 namespace Framework::External::ImGUI::Widgets {
     class UIBase {

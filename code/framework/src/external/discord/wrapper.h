@@ -15,7 +15,7 @@
 #include <utils/result.h>
 
 #include <discord.h>
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <string>
 
 namespace Framework::External::Discord {

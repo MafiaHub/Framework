@@ -233,26 +233,10 @@ macro(link_shared_deps target_name)
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     )
 
-    # Core vendor headers needed by all Framework targets (PUBLIC for API exposure)
-    target_include_directories(${target_name} PUBLIC
-        ${CMAKE_SOURCE_DIR}/vendors/glm
-        ${CMAKE_SOURCE_DIR}/vendors/json/include
-        ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
-        ${CMAKE_SOURCE_DIR}/vendors/fmt/include
-        ${CMAKE_SOURCE_DIR}/vendors/fu2                    # function2 (used in network_peer.h)
-        ${CMAKE_SOURCE_DIR}/vendors/cxxopts                # Command-line parsing (used in integrations)
-        ${CMAKE_SOURCE_DIR}/vendors                        # sentry, etc.
-    )
-
-    # Implementation-only vendor headers (PRIVATE - not part of public API)
-    # Note: httplib include path is provided by the httplib target (uses split headers when HTTPLIB_COMPILE=ON)
+    # Headers for the still-vendored trees. Everything from vcpkg arrives on its imported target.
     target_include_directories(${target_name} PRIVATE
         ${CMAKE_SOURCE_DIR}/vendors/physfs/src
-        ${CMAKE_SOURCE_DIR}/vendors/miniz
-        ${CMAKE_SOURCE_DIR}/vendors/cppfs/source/cppfs/include
         ${CMAKE_SOURCE_DIR}/vendors/semver
-        ${CMAKE_SOURCE_DIR}/vendors/sentry/include
-        ${CMAKE_SOURCE_DIR}/vendors/curl/include
         ${CMAKE_SOURCE_DIR}/vendors/ftl/include
     )
 
@@ -267,14 +251,11 @@ macro(link_shared_deps target_name)
     endif()
 
     # Global libraries (v8/v8pp excluded - linked explicitly to scripting targets only)
-    target_link_libraries(${target_name} MafiaNet::MafiaNetStatic glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl semver Hash ftl Tracy::TracyClient physfs-static miniz)
+    target_link_libraries(${target_name} MafiaNet::MafiaNetStatic glm::glm spdlog::spdlog fmt::fmt cppfs::cppfs nlohmann_json::nlohmann_json sentry::sentry httplib OpenSSL::SSL OpenSSL::Crypto CURL::libcurl cxxopts::cxxopts function2::function2 semver Hash ftl Tracy::TracyClient physfs-static miniz::miniz)
 
     # Required libraries for windows
     if(WIN32)
-        target_link_libraries(${target_name} StackWalker)
-        target_include_directories(${target_name} PRIVATE
-            ${CMAKE_SOURCE_DIR}/vendors/StackWalker/Main/StackWalker
-        )
+        target_link_libraries(${target_name} unofficial::stackwalker::StackWalker)
     endif()
 endmacro()
 
@@ -293,18 +274,9 @@ if(LIBNODE_AVAILABLE)
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/services>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     )
-    target_include_directories(FrameworkNodeEngine PUBLIC
-        ${CMAKE_SOURCE_DIR}/vendors/glm
-        ${CMAKE_SOURCE_DIR}/vendors/json/include
-        ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
-        ${CMAKE_SOURCE_DIR}/vendors/fmt/include
-        ${CMAKE_SOURCE_DIR}/vendors/fu2
-        ${CMAKE_SOURCE_DIR}/vendors
-    )
-
     # Link to libnode for headers (includes V8 and Node.js headers)
     # Also link spdlog for logging used by node_engine.cpp
-    target_link_libraries(FrameworkNodeEngine PUBLIC libnode v8pp spdlog)
+    target_link_libraries(FrameworkNodeEngine PUBLIC libnode v8pp spdlog::spdlog fmt::fmt glm::glm nlohmann_json::nlohmann_json function2::function2)
 
     # Node.js internal APIs require NODE_WANT_INTERNALS
     target_compile_definitions(FrameworkNodeEngine PRIVATE NODE_WANT_INTERNALS=1)
@@ -331,15 +303,7 @@ target_include_directories(FrameworkV8Engine PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/services>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
-target_include_directories(FrameworkV8Engine PUBLIC
-    ${CMAKE_SOURCE_DIR}/vendors/glm
-    ${CMAKE_SOURCE_DIR}/vendors/json/include
-    ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
-    ${CMAKE_SOURCE_DIR}/vendors/fmt/include
-    ${CMAKE_SOURCE_DIR}/vendors/fu2
-    ${CMAKE_SOURCE_DIR}/vendors
-)
-target_link_libraries(FrameworkV8Engine PUBLIC v8 v8pp spdlog)
+target_link_libraries(FrameworkV8Engine PUBLIC v8 v8pp spdlog::spdlog fmt::fmt glm::glm nlohmann_json::nlohmann_json function2::function2)
 target_compile_definitions(FrameworkV8Engine PRIVATE MG_ENABLE_LOG=0)
 if(WIN32)
     target_compile_definitions(FrameworkV8Engine PRIVATE _USE_MATH_DEFINES NOMINMAX)
@@ -400,10 +364,10 @@ endif()
 if(WIN32)
     target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv shlwapi)
 
-    target_link_libraries(FrameworkClient MafiaHubServices DiscordSDK DearImGUI ImGuizmo)
+    target_link_libraries(FrameworkClient MafiaHubServices DiscordSDK imgui::imgui ImGuizmo)
 
-    set(CLIENT_SHARED_LIBS minhook SteamSDK udis86)
-    target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} ${FREETYPE_LIBRARY})
+    set(CLIENT_SHARED_LIBS minhook::minhook SteamSDK udis86)
+    target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS})
 
     # Voice capture/playback. PUBLIC on the miniaudio side, so the feature-trimming defines
     # and the include directory reach anything that pulls in the voice client.
@@ -411,27 +375,20 @@ if(WIN32)
 
     # FrameworkClient-specific includes (Windows graphics, hooking, external services)
     target_include_directories(FrameworkClient PRIVATE
-        ${CMAKE_SOURCE_DIR}/vendors/minhook/include
-        ${CMAKE_SOURCE_DIR}/vendors/imgui
         ${CMAKE_SOURCE_DIR}/vendors/imguizmo
-        ${CMAKE_SOURCE_DIR}/vendors/sdl2/include
         ${CMAKE_SOURCE_DIR}/vendors/steamworks/include
-        ${CMAKE_SOURCE_DIR}/vendors/galaxy/Include
         ${CMAKE_SOURCE_DIR}/vendors/udis86
         ${CMAKE_SOURCE_DIR}/vendors/discord/src
-        ${CMAKE_SOURCE_DIR}/vendors/freetype/include
-        ${CMAKE_SOURCE_DIR}/vendors/optick/src
     )
 
     link_shared_deps(FrameworkLoader)
     target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} MafiaHubServices FrameworkLoaderData ntdll sfd)
-    target_link_libraries(FrameworkLoaderData udis86 minhook)
+    target_link_libraries(FrameworkLoaderData udis86 minhook::minhook)
     target_compile_definitions(FrameworkLoaderData PRIVATE _USE_MATH_DEFINES NOMINMAX)
     target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage /EXPORT:CoreSetExceptionOverride)
 
     # FrameworkLoader-specific includes
     target_include_directories(FrameworkLoader PRIVATE
-        ${CMAKE_SOURCE_DIR}/vendors/minhook/include
         ${CMAKE_SOURCE_DIR}/vendors/ntdll
         ${CMAKE_SOURCE_DIR}/vendors/sfd
         ${CMAKE_SOURCE_DIR}/vendors/steamworks/include
@@ -441,7 +398,6 @@ if(WIN32)
     # FrameworkLoaderData includes
     target_include_directories(FrameworkLoaderData PRIVATE
         ${CMAKE_SOURCE_DIR}/vendors/udis86
-        ${CMAKE_SOURCE_DIR}/vendors/minhook/include
     )
 
     if(NOT CMAKE_CL_64)
@@ -453,10 +409,7 @@ if(WIN32)
     endif()
 
     # CEF GUI integration (CEF target provides include dirs via INTERFACE)
-    target_link_libraries(FrameworkClient CEF)
-    target_include_directories(FrameworkClient PRIVATE
-        ${CMAKE_SOURCE_DIR}/vendors/directxtk
-    )
+    target_link_libraries(FrameworkClient CEF Microsoft::DirectXTK)
 
     # CEF subprocess executable
     # The renderer process must register the very same custom schemes as the

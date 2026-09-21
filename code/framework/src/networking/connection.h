@@ -10,7 +10,7 @@
 
 #include <mafianet/BitStream.h>
 #include <mafianet/types.h>
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <string>
 
 namespace Framework::Networking {

@@ -15,7 +15,7 @@
 #include <ftl/fibtex.h>
 #include <ftl/parallel_for.h>
 
-#include <function2.hpp>
+#include <function2/function2.hpp>
 
 #include <memory>
 #include <mutex>

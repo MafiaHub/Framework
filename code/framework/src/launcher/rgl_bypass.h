@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <string>
 
-#include <function2.hpp>
+#include <function2/function2.hpp>
 
 namespace Framework::Launcher::RGL {
 

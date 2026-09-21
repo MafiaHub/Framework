@@ -19,7 +19,7 @@
 
 #include "include/cef_scheme.h"
 
-#include <imgui/imgui.h>
+#include <imgui.h>
 
 #include <filesystem>
 #include <optional>

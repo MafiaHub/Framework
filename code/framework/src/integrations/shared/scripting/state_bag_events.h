@@ -18,7 +18,7 @@
 #include <scripting/module.h>
 #include <scripting/resource/resource_manager.h>
 
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <v8.h>
 #include <v8pp/class.hpp>
 #include <v8pp/convert.hpp>

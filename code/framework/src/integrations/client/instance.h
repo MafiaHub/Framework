@@ -18,7 +18,7 @@
 #include "resource_packages.h"
 
 #include <external/sentry/wrapper.h>
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <graphics/renderer.h>
 #include <graphics/renderio.h>
 

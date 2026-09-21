@@ -18,7 +18,7 @@
 #include <mafianet/peerinterface.h>
 
 #include <glm/glm.hpp>
-#include <function2.hpp>
+#include <function2/function2.hpp>
 
 #include <cstdint>
 #include <string>

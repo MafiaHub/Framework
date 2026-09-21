@@ -12,10 +12,10 @@
 
 #include <logging/logger.h>
 
-#include <backends/imgui_impl_dx11.h>
-#include <backends/imgui_impl_dx12.h>
-#include <backends/imgui_impl_dx9.h>
-#include <backends/imgui_impl_win32.h>
+#include <imgui_impl_dx11.h>
+#include <imgui_impl_dx12.h>
+#include <imgui_impl_dx9.h>
+#include <imgui_impl_win32.h>
 
 #include "graphics/backend/d3d11.h"
 #include "graphics/backend/d3d12.h"

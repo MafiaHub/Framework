@@ -10,7 +10,7 @@
 
 #include "safe_win32.h"
 
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <string>
 
 namespace Framework::Utils {

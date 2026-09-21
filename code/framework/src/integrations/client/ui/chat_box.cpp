@@ -8,7 +8,7 @@
 
 #include "chat_box.h"
 
-#include <imgui/imgui.h>
+#include <imgui.h>
 
 #include <cstdio>
 #include <ctime>

@@ -15,7 +15,7 @@
 
 #include <Windows.h>
 
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <string>
 #include <utility>
 #include <vector>

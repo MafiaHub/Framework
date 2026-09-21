@@ -18,7 +18,7 @@
 #include "graphics/types.h"
 
 #include <atomic>
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <mutex>
 #include <queue>
 #include <string>

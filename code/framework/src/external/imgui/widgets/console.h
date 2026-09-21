@@ -12,7 +12,7 @@
 
 #include <utils/command_processor.h>
 
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <memory>
 #include <spdlog/sinks/ringbuffer_sink.h>
 #include <spdlog/spdlog.h>

@@ -14,7 +14,7 @@
 #include <string>
 #include <unordered_map>
 
-#include <fu2/function2.hpp>
+#include <function2/function2.hpp>
 
 #include "include/cef_browser.h"
 

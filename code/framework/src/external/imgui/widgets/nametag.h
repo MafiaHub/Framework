@@ -10,7 +10,7 @@
 
 #include "world_text.h"
 
-#include <imgui/imgui.h>
+#include <imgui.h>
 
 #include <algorithm>
 #include <cstdint>

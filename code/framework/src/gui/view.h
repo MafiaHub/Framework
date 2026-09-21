@@ -11,7 +11,7 @@
 #include <utils/safe_win32.h>
 
 #include <d3d11.h>
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <map>
 #include <memory>
 #include <mutex>

@@ -16,7 +16,7 @@
 
 #include <Windows.h>
 #include <cstdint>
-#include <function2.hpp>
+#include <function2/function2.hpp>
 #include <vector>
 #include <winnt.h>
 
