@@ -48,10 +48,21 @@ if(NOT DEFINED VCPKG_TARGET_TRIPLET)
         else()
             set(VCPKG_TARGET_TRIPLET "x64-windows-mh" CACHE STRING "")
         endif()
+    elseif(APPLE)
+        if(CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64"
+           OR (NOT CMAKE_OSX_ARCHITECTURES AND CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "x86_64"))
+            set(VCPKG_TARGET_TRIPLET "x64-osx-mh" CACHE STRING "")
+        else()
+            set(VCPKG_TARGET_TRIPLET "arm64-osx-mh" CACHE STRING "")
+        endif()
     else()
         set(VCPKG_TARGET_TRIPLET "x64-linux-mh" CACHE STRING "")
     endif()
 endif()
+
+# A shared binary cache is what keeps the manifest from costing a source build of openssl, curl and
+# sentry-native on every cold runner. Left to the caller: VCPKG_BINARY_SOURCES in the environment
+# picks the store, and CI sets it. The default (a per-user files cache) already covers local work.
 
 set(VCPKG_OVERLAY_TRIPLETS "${CMAKE_CURRENT_LIST_DIR}/vcpkg-triplets" CACHE STRING "")
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/vcpkg-ports")
