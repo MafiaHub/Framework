@@ -13,7 +13,9 @@
 #include <logging/logger.h>
 
 #include <imgui_impl_dx11.h>
-#include <imgui_impl_dx12.h>
+#ifdef FW_IMGUI_DX12
+    #include <imgui_impl_dx12.h>
+#endif
 #include <imgui_impl_dx9.h>
 #include <imgui_impl_win32.h>
 
@@ -25,6 +27,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 namespace Framework::External::ImGUI {
     namespace {
+#ifdef FW_IMGUI_DX12
         // Give ImGui 1.92's dynamic font atlas (RendererHasTextures) the backend's SRV slot
         // pool; the legacy single-descriptor init clears the flag and asserts on atlas rebuild.
         void ImGuiAllocSRV(ImGui_ImplDX12_InitInfo *info, D3D12_CPU_DESCRIPTOR_HANDLE *outCpu, D3D12_GPU_DESCRIPTOR_HANDLE *outGpu) {
@@ -46,6 +49,7 @@ namespace Framework::External::ImGUI {
             const UINT descSize = backend->GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
             backend->FreeSRVSlot(static_cast<int>((cpu.ptr - base.ptr) / descSize)); // slot = handle offset from heap start
         }
+#endif
     } // namespace
 
     Utils::Result<void, Framework::Error> Wrapper::Init(Config &config) {
@@ -101,6 +105,7 @@ namespace Framework::External::ImGUI {
             const auto renderBackend = _config.renderer->GetD3D11Backend();
             ImGui_ImplDX11_Init(renderBackend->GetDevice(), renderBackend->GetContext());
         } break;
+#ifdef FW_IMGUI_DX12
         case Graphics::RendererBackend::BACKEND_D3D_12: {
             const auto renderBackend = _config.renderer->GetD3D12Backend();
 
@@ -115,6 +120,7 @@ namespace Framework::External::ImGUI {
             initInfo.SrvDescriptorFreeFn  = ImGuiFreeSRV;
             ImGui_ImplDX12_Init(&initInfo);
         } break;
+#endif
         }
 
         switch (_config.windowBackend) {
@@ -139,9 +145,11 @@ namespace Framework::External::ImGUI {
         case Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_Shutdown();
         } break;
+#ifdef FW_IMGUI_DX12
         case Graphics::RendererBackend::BACKEND_D3D_12: {
             ImGui_ImplDX12_Shutdown();
         } break;
+#endif
         }
 
         switch (_config.windowBackend) {
@@ -166,9 +174,11 @@ namespace Framework::External::ImGUI {
         case Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_NewFrame();
         } break;
+#ifdef FW_IMGUI_DX12
         case Graphics::RendererBackend::BACKEND_D3D_12: {
             ImGui_ImplDX12_NewFrame();
         } break;
+#endif
         }
 
         switch (_config.windowBackend) {
@@ -235,11 +245,13 @@ namespace Framework::External::ImGUI {
         case Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_RenderDrawData(drawData);
         } break;
+#ifdef FW_IMGUI_DX12
         case Graphics::RendererBackend::BACKEND_D3D_12: {
             // TODO(DavoSK): pass second argument here
             const auto renderBackend = _config.renderer->GetD3D12Backend();
             ImGui_ImplDX12_RenderDrawData(drawData, renderBackend->GetGraphicsCommandList());
         } break;
+#endif
         }
 
         return {};

@@ -366,6 +366,12 @@ if(WIN32)
 
     target_link_libraries(FrameworkClient MafiaHubServices DiscordSDK imgui::imgui ImGuizmo)
 
+    # imgui's D3D12 backend is x64-only upstream (the vcpkg port marks dx12-binding !x86), and no
+    # 32-bit title reaches a D3D12 renderer. The Framework's own D3D12 backend stays on both.
+    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+        target_compile_definitions(FrameworkClient PRIVATE FW_IMGUI_DX12)
+    endif()
+
     set(CLIENT_SHARED_LIBS minhook::minhook SteamSDK udis86)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS})
 

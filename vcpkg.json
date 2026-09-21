@@ -43,10 +43,18 @@
       "features": [
         "dx9-binding",
         "dx11-binding",
-        "dx12-binding",
         "win32-binding"
       ],
       "platform": "windows"
+    },
+    {
+      "$comment": "The port marks dx12-binding !x86; no 32-bit project can reach a D3D12 renderer.",
+      "name": "imgui",
+      "default-features": false,
+      "features": [
+        "dx12-binding"
+      ],
+      "platform": "windows & !x86"
     },
     {
       "name": "minhook",
