@@ -17,6 +17,25 @@ cmake_minimum_required(VERSION 3.20)
 
 include(FetchContent)
 
+# The release CDN drops a transfer often enough that a single failure must not end a
+# build; without this a hiccup during configure takes a whole release down.
+function(download_with_retry what url destination)
+    foreach(attempt RANGE 1 3)
+        file(DOWNLOAD "${url}" "${destination}" SHOW_PROGRESS INACTIVITY_TIMEOUT 60 STATUS status)
+        list(GET status 0 code)
+        if(code EQUAL 0)
+            return()
+        endif()
+        list(GET status 1 reason)
+        file(REMOVE "${destination}")
+        message(STATUS "${what}: download attempt ${attempt} failed: ${reason}")
+        if(attempt LESS 3)
+            execute_process(COMMAND ${CMAKE_COMMAND} -E sleep 3)
+        endif()
+    endforeach()
+    message(FATAL_ERROR "${what}: Failed to download after 3 attempts: ${reason}")
+endfunction()
+
 set(LIBNODE_VERSION "25.6.1" CACHE STRING "libnode version")
 set(LIBNODE_GITHUB_REPO "MafiaHub/MafiaNode")
 set(LIBNODE_DOWNLOAD_DIR "${CMAKE_CURRENT_BINARY_DIR}/libnode-${LIBNODE_VERSION}")
@@ -71,18 +90,7 @@ if(LIBNODE_V8_ONLY)
 
         set(V8_ARCHIVE_PATH "${LIBNODE_DOWNLOAD_DIR}/${V8_ARCHIVE_NAME}")
 
-        file(DOWNLOAD
-            "${V8_URL}"
-            "${V8_ARCHIVE_PATH}"
-            SHOW_PROGRESS
-            STATUS V8_DOWNLOAD_STATUS
-        )
-
-        list(GET V8_DOWNLOAD_STATUS 0 V8_DOWNLOAD_ERROR)
-        if(V8_DOWNLOAD_ERROR)
-            list(GET V8_DOWNLOAD_STATUS 1 V8_DOWNLOAD_ERROR_MSG)
-            message(FATAL_ERROR "v8: Failed to download: ${V8_DOWNLOAD_ERROR_MSG}")
-        endif()
+        download_with_retry(v8 "${V8_URL}" "${V8_ARCHIVE_PATH}")
 
         message(STATUS "v8: Extracting...")
         file(ARCHIVE_EXTRACT
@@ -152,18 +160,7 @@ else()
 
         set(LIBNODE_ARCHIVE_PATH "${LIBNODE_DOWNLOAD_DIR}/${LIBNODE_ARCHIVE_NAME}")
 
-        file(DOWNLOAD
-            "${LIBNODE_URL}"
-            "${LIBNODE_ARCHIVE_PATH}"
-            SHOW_PROGRESS
-            STATUS LIBNODE_DOWNLOAD_STATUS
-        )
-
-        list(GET LIBNODE_DOWNLOAD_STATUS 0 LIBNODE_DOWNLOAD_ERROR)
-        if(LIBNODE_DOWNLOAD_ERROR)
-            list(GET LIBNODE_DOWNLOAD_STATUS 1 LIBNODE_DOWNLOAD_ERROR_MSG)
-            message(FATAL_ERROR "libnode: Failed to download: ${LIBNODE_DOWNLOAD_ERROR_MSG}")
-        endif()
+        download_with_retry(libnode "${LIBNODE_URL}" "${LIBNODE_ARCHIVE_PATH}")
 
         message(STATUS "libnode: Extracting...")
         file(ARCHIVE_EXTRACT
