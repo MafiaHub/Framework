@@ -72,3 +72,7 @@ code/framework/src/services/lib/Release/
 
 # Python bytecode from the repo scripts
 __pycache__/
+
+# vcpkg checkout and per-build installed tree
+vendors/vcpkg/
+vcpkg_installed/

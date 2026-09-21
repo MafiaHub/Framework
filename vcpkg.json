@@ -1,0 +1,60 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "mafiahub-framework",
+  "version-string": "24.1.2",
+  "description": "Third-party dependencies for the MafiaHub Framework.",
+  "builtin-baseline": "5f96cd15fd745122cf27e0524606d6c1efc5fd07",
+  "dependencies": [
+    "cxxopts",
+    "function2",
+    "glm",
+    "miniz",
+    "nlohmann-json",
+    "sentry-native",
+    {
+      "name": "cppfs",
+      "default-features": false
+    },
+    {
+      "name": "curl",
+      "default-features": false,
+      "features": [
+        "non-http",
+        "ssl"
+      ]
+    },
+    {
+      "name": "fmt"
+    },
+    {
+      "$comment": "Default features are deliberate: the port maps them inverted, so dropping them would build spdlog against std::format and define SPDLOG_NO_TZ_OFFSET.",
+      "name": "spdlog"
+    },
+    {
+      "name": "openssl"
+    },
+    {
+      "name": "directxtk",
+      "platform": "windows"
+    },
+    {
+      "name": "imgui",
+      "default-features": false,
+      "features": [
+        "dx9-binding",
+        "dx11-binding",
+        "dx12-binding",
+        "win32-binding"
+      ],
+      "platform": "windows"
+    },
+    {
+      "name": "minhook",
+      "platform": "windows"
+    },
+    {
+      "name": "stackwalker",
+      "platform": "windows"
+    }
+  ]
+}
