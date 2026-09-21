@@ -14,6 +14,7 @@
 
 #include "exe_ldr.h"
 
+#include <cstring>
 #include <delayimp.h>
 #include <stdexcept>
 

@@ -16,6 +16,7 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 
+#include <cstring>
 #include <fstream>
 #include <memory>
 #include <vector>

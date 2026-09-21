@@ -11,6 +11,8 @@
 #include "graphics/types.h"
 #include "graphics/renderer.h"
 
+#include <cstring>
+
 namespace Framework::Graphics {
     template <typename TDevice, typename TContext, typename TSwapChain, typename TCommandQueue>
     class Backend {
