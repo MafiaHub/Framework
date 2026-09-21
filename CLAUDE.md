@@ -49,7 +49,15 @@ Or use Visual Studio 2022 with CMake tools installed and open the repository fol
   - `FrameworkServer` - Server-specific features (HTTP endpoints, command processing, masterlist)
 - `code/projects/` - Multiplayer projects (auto-discovered, create `IGNORE` file to exclude)
 - `code/tests/` - Framework tests
-- `vendors/` - Third-party dependencies
+- `vendors/` - Third-party dependencies that are not on vcpkg: MafiaNet, CEF, libnode, v8pp,
+  FTL, steamworks, discord, and a handful of small hand-rolled libs. Four are kept here on
+  purpose despite having ports - physfs (the port builds every archiver), tracy (no
+  `TRACY_DELAYED_INIT`), imguizmo (port predates the ImGui 1.92 `AddPolyline` change) and
+  miniaudio (port ships only the header). Each carries the reason in `vendors/CMakeLists.txt`.
+- `vcpkg.json` - everything else, pinned by `builtin-baseline`. vcpkg is fetched and
+  bootstrapped at configure time by `cmake/VcpkgBootstrap.cmake`; override with
+  `-DFW_VCPKG_ROOT=<path>` (not the `VCPKG_ROOT` env var, which `vcvars64.bat` hijacks).
+  Triplets in `cmake/vcpkg-triplets/` pin the `/MD` runtime with static libs, release-only.
 
 ## Architecture
 
