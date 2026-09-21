@@ -217,16 +217,21 @@ extern "C" void __declspec(dllexport) CoreRT_SetupSEHHandler(void *moduleBase, v
             }
         }
 
-        // patch it
-        DisableToolHelpScope scope;
-        MH_CreateHook(internalAddress, patchFunction, patchOriginal);
+        // MinHook 1.3.4 aborts MH_EnableHook when CreateToolhelp32Snapshot fails, so the freeze
+        // runs outside the scope; only the trampoline allocation needs ToolHelp disabled.
+        {
+            DisableToolHelpScope scope;
+            MH_CreateHook(internalAddress, patchFunction, patchOriginal);
+        }
         MH_EnableHook(MH_ALL_HOOKS);
     }
     else {
         // trace("Not running on Windows - no RtlLookupFunctionTable. Is this some fake OS?\n");
 
-        DisableToolHelpScope scope;
-        MH_CreateHookApi(L"ntdll.dll", "RtlImageDirectoryEntryToData", RtlImageDirectoryEntryToDataStub, (void **)&g_origRtlImageDirectoryEntryToData);
+        {
+            DisableToolHelpScope scope;
+            MH_CreateHookApi(L"ntdll.dll", "RtlImageDirectoryEntryToData", RtlImageDirectoryEntryToDataStub, (void **)&g_origRtlImageDirectoryEntryToData);
+        }
         MH_EnableHook(MH_ALL_HOOKS);
     }
 }
@@ -280,8 +285,8 @@ extern "C" void __declspec(dllexport) CoreSetExceptionOverride(LONG (*handler)(E
         {
             DisableToolHelpScope scope;
             MH_CreateHook(internalAddress, RtlDispatchExceptionStub, (void **)&g_origRtlDispatchException);
-            MH_EnableHook(MH_ALL_HOOKS);
         }
+        MH_EnableHook(MH_ALL_HOOKS);
     }
 }
 #else
