@@ -14,7 +14,20 @@
 #ifndef IS_FXSERVER
 #define ASSERT(x) __noop
 
-#if !defined(GTA_FIVE) && !defined(JITASM_H)
+// This header calls VirtualProtect, VirtualAlloc, GetModuleHandle and friends and never declared
+// them: <windows.h> only ever arrived through jitasm.h, which is now x86-only. Include it plainly,
+// exactly as jitasm did - NOT utils/safe_win32.h, which opens with WinSock2.h. Most consumers
+// reach this header after MinHook.h has already pulled a plain <windows.h>, and winsock.h is in
+// scope by then; WinSock2.h on top of that is a redefinition error.
+#include <windows.h>
+
+// jitasm is x86-only here: every type built on it - FunctionAssembly, inject_hook,
+// inject_hook_frontend, CallStub, inject_call - lives inside the `#ifndef _M_AMD64` block below,
+// whose `#else` branch hands x64 AllocateFunctionStub instead. Including the assembler on x64 cost
+// every translation unit ~98k preprocessed lines for declarations it cannot reach, and this is the
+// most included Framework header in the mods. Anything on x64 that genuinely wants jitasm includes
+// it directly, which re-enables the blocks below.
+#if !defined(GTA_FIVE) && !defined(JITASM_H) && !defined(_M_AMD64)
 #include "jitasm.h"
 #endif
 
