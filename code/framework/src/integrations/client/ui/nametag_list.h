@@ -42,6 +42,8 @@ namespace Framework::Integrations::Client::UI::Nametags {
     // The name sits on a drop shadow, not a filled plate, as MTA:SA and GTA V both draw it.
     struct Appearance {
         float fontHeight       = 0.0148f;    // fraction of screen height (16 px)
+        float noteFontHeight   = 0.0130f;    // the transient note line, a touch smaller (14 px)
+        float noteGap          = 0.0028f;    // between the note block and the name (3 px)
         float shadowOffset     = 0.0014f;    // drop shadow, fraction of screen height (1.5 px)
         float healthBarWidth   = 0.026f;     // fraction of screen width (50 px)
         float healthBarHeight  = 0.0037f;    // fraction of screen height (4 px)
@@ -61,6 +63,8 @@ namespace Framework::Integrations::Client::UI::Nametags {
         uint32_t color      = 0xFFFFFFFF; // 0xAARRGGBB
         float healthPercent = -1.0f;      // <0 draws no bar
         const char *label   = nullptr;    // borrowed for the frame
+        const char *note    = nullptr;    // transient local line (NoteStore), borrowed for the frame
+        uint32_t noteColor  = 0;          // 0xAARRGGBB; 0 draws the note in `color`
     };
 
     // One tag that survived selection, ordered far to near so a nearer tag paints over a farther one.
@@ -75,6 +79,8 @@ namespace Framework::Integrations::Client::UI::Nametags {
         uint32_t color      = 0xFFFFFFFF;
         float healthPercent = -1.0f;
         const char *label   = nullptr;
+        const char *note    = nullptr;
+        uint32_t noteColor  = 0;
     };
 
     // Returning false drops a tag before it costs anything: per-viewer rules live here.
@@ -139,7 +145,10 @@ namespace Framework::Integrations::Client::UI::Nametags {
 
         // False when the candidate cannot draw at all; the caller then skips its expensive work.
         bool Add(const Candidate &candidate) {
-            if (!candidate.label || !candidate.label[0] || !HasComponent(candidate.components, Component::Name)) {
+            const bool hasName = candidate.label && candidate.label[0] && HasComponent(candidate.components, Component::Name);
+            const bool hasNote = candidate.note && candidate.note[0];
+            // A note draws over a player whose name is hidden: it is the viewer's own line, not theirs.
+            if (!hasName && !hasNote) {
                 return false;
             }
             const Config &config = GetConfig();
@@ -161,7 +170,9 @@ namespace Framework::Integrations::Client::UI::Nametags {
             resolved.components    = candidate.components;
             resolved.color         = candidate.color;
             resolved.healthPercent = config.showHealth && HasComponent(candidate.components, Component::Health) ? candidate.healthPercent : -1.0f;
-            resolved.label         = candidate.label;
+            resolved.label         = hasName ? candidate.label : nullptr;
+            resolved.note          = hasNote ? candidate.note : nullptr;
+            resolved.noteColor     = candidate.noteColor;
             _entries.push_back(resolved);
             return true;
         }
@@ -183,11 +194,13 @@ namespace Framework::Integrations::Client::UI::Nametags {
                 return lhs.distance > rhs.distance;
             });
 
+            // Sorted: EffectiveDistance searches it once per comparison.
             _previous.clear();
             _previous.reserve(_entries.size());
             for (const Resolved &entry : _entries) {
                 _previous.push_back(entry.id);
             }
+            std::sort(_previous.begin(), _previous.end());
             return _entries;
         }
 
@@ -201,7 +214,7 @@ namespace Framework::Integrations::Client::UI::Nametags {
         static constexpr float kStickyBonus = 0.9f; // how strongly a visible tag defends its slot
 
         float EffectiveDistance(const Resolved &entry) const {
-            return std::find(_previous.begin(), _previous.end(), entry.id) != _previous.end() ? entry.distance * kStickyBonus : entry.distance;
+            return std::binary_search(_previous.begin(), _previous.end(), entry.id) ? entry.distance * kStickyBonus : entry.distance;
         }
 
         const Config *_config = nullptr;
