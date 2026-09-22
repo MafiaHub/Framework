@@ -199,6 +199,12 @@ namespace Framework::Graphics {
         return _frameBufferCount;
     }
 
+    DXGI_FORMAT D3D12Backend::GetBackBufferFormat() const {
+        DXGI_SWAP_CHAIN_DESC1 desc {};
+        _swapChain->GetDesc1(&desc);
+        return desc.Format;
+    }
+
     int D3D12Backend::AllocateSRVSlot() {
         std::lock_guard<std::mutex> lock(_srvMutex);
         if (!_srvHeap) {

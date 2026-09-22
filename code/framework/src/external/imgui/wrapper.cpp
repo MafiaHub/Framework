@@ -107,18 +107,7 @@ namespace Framework::External::ImGUI {
         } break;
 #ifdef FW_IMGUI_DX12
         case Graphics::RendererBackend::BACKEND_D3D_12: {
-            const auto renderBackend = _config.renderer->GetD3D12Backend();
-
-            ImGui_ImplDX12_InitInfo initInfo {};
-            initInfo.Device               = renderBackend->GetDevice();
-            initInfo.CommandQueue         = renderBackend->GetCommandQueue();
-            initInfo.NumFramesInFlight    = renderBackend->NumFramesInFlight();
-            initInfo.RTVFormat            = DXGI_FORMAT_R8G8B8A8_UNORM;
-            initInfo.SrvDescriptorHeap    = renderBackend->GetSRVHeap();
-            initInfo.UserData             = renderBackend;
-            initInfo.SrvDescriptorAllocFn = ImGuiAllocSRV;
-            initInfo.SrvDescriptorFreeFn  = ImGuiFreeSRV;
-            ImGui_ImplDX12_Init(&initInfo);
+            InitDX12Backend();
         } break;
 #endif
         }
@@ -176,6 +165,7 @@ namespace Framework::External::ImGUI {
         } break;
 #ifdef FW_IMGUI_DX12
         case Graphics::RendererBackend::BACKEND_D3D_12: {
+            SyncDX12RtvFormat();
             ImGui_ImplDX12_NewFrame();
         } break;
 #endif
@@ -200,6 +190,39 @@ namespace Framework::External::ImGUI {
 
         ImGui::Render();
     }
+
+#ifdef FW_IMGUI_DX12
+    void Wrapper::InitDX12Backend() {
+        const auto renderBackend = _config.renderer->GetD3D12Backend();
+        const auto rtvFormat     = renderBackend->GetBackBufferFormat();
+        _dx12RtvFormat           = static_cast<int>(rtvFormat);
+        Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGui DX12 pipeline built for back buffer format {}", _dx12RtvFormat);
+
+        ImGui_ImplDX12_InitInfo initInfo {};
+        initInfo.Device               = renderBackend->GetDevice();
+        initInfo.CommandQueue         = renderBackend->GetCommandQueue();
+        initInfo.NumFramesInFlight    = renderBackend->NumFramesInFlight();
+        initInfo.RTVFormat            = rtvFormat;
+        initInfo.SrvDescriptorHeap    = renderBackend->GetSRVHeap();
+        initInfo.UserData             = renderBackend;
+        initInfo.SrvDescriptorAllocFn = ImGuiAllocSRV;
+        initInfo.SrvDescriptorFreeFn  = ImGuiFreeSRV;
+        ImGui_ImplDX12_Init(&initInfo);
+    }
+
+    void Wrapper::SyncDX12RtvFormat() {
+        const auto renderBackend = _config.renderer->GetD3D12Backend();
+        if (static_cast<int>(renderBackend->GetBackBufferFormat()) == _dx12RtvFormat) {
+            return;
+        }
+
+        if (!renderBackend->WaitForGpu()) {
+            return;
+        }
+        ImGui_ImplDX12_Shutdown();
+        InitDX12Backend();
+    }
+#endif
 
     void Wrapper::ScaleToBackBuffer() {
         // The platform backend measures the window and reports it as DisplaySize, but everything we

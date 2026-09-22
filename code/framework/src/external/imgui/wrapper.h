@@ -70,6 +70,10 @@ namespace Framework::External::ImGUI {
         // Matches the ImGui coordinate space to the back buffer we actually draw into.
         void ScaleToBackBuffer();
 
+        int _dx12RtvFormat = 0;
+        void InitDX12Backend();
+        void SyncDX12RtvFormat();
+
       public:
         [[nodiscard]] Utils::Result<void, Framework::Error> Init(Config &config);
         void Shutdown() override;
