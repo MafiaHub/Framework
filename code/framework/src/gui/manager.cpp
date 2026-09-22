@@ -9,6 +9,7 @@
 #include "manager.h"
 
 #include <logging/logger.h>
+#include <utils/path.h>
 #include <utils/process_shutdown.h>
 #include <utils/profiler.h>
 
@@ -279,15 +280,12 @@ namespace Framework::GUI {
 
         // CEF requires an absolute path for the subprocess executable
         // Resolve next to THIS module (injected DLL), not the process exe.
-        static const int s_moduleAnchor = 0;
-        HMODULE selfModule              = nullptr;
-        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(&s_moduleAnchor), &selfModule) || !selfModule) {
+        const std::wstring moduleDirName = Framework::Utils::GetModuleDirW();
+        if (moduleDirName.empty()) {
             Framework::Logging::GetLogger("Web")->error("Failed to resolve owning module for the CEF subprocess path");
             return Error("Failed to resolve owning module for the CEF subprocess path");
         }
-        wchar_t exePath[MAX_PATH] = {};
-        GetModuleFileNameW(selfModule, exePath, MAX_PATH);
-        const std::filesystem::path moduleDir        = std::filesystem::path(exePath).parent_path();
+        const std::filesystem::path moduleDir        = moduleDirName;
         const std::filesystem::path subprocessPath   = moduleDir / "cef_subprocess.exe";
         CefString(&settings.browser_subprocess_path) = subprocessPath.wstring();
 

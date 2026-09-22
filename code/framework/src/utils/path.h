@@ -16,6 +16,11 @@ namespace Framework::Utils {
     std::string GetAbsolutePathA(std::string_view relative);
     std::wstring GetAppDataPathW();
     std::string GetAppDataPathA();
+    // Directory of the module this code is linked into, for the files shipped beside it. Unlike
+    // GetAbsolutePath*, which resolves against the PROCESS EXECUTABLE - the game's exe for an
+    // injected client. Empty on failure and on non-Windows.
+    std::wstring GetModuleDirW();
+    std::string GetModuleDirA();
     std::wstring GetFileExtensionW(const std::wstring &path);
     std::string GetFileExtensionA(std::string_view path);
 } // namespace Framework::Utils

@@ -155,6 +155,52 @@ namespace Framework::Utils {
 #endif
     }
 
+#ifdef WIN32
+    namespace {
+        // Framework is a STATIC library, so this address lies inside the consuming module. A null
+        // handle must not reach GetModuleFileName, which reads it as the process executable.
+        const int g_moduleAnchor = 0;
+
+        HMODULE OwningModule() {
+            HMODULE self = nullptr;
+            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(&g_moduleAnchor), &self);
+            return self;
+        }
+    } // namespace
+#endif
+
+    std::wstring GetModuleDirW() {
+#ifdef WIN32
+        const HMODULE self     = OwningModule();
+        wchar_t path[MAX_PATH] = {};
+        const DWORD length     = self ? GetModuleFileNameW(self, path, MAX_PATH) : 0;
+        if (length == 0 || length >= MAX_PATH) {
+            return {};
+        }
+        const std::wstring full(path, length);
+        const auto separator = full.find_last_of(L"/\\");
+        return separator == std::wstring::npos ? std::wstring {} : full.substr(0, separator);
+#else
+        return {};
+#endif
+    }
+
+    std::string GetModuleDirA() {
+#ifdef WIN32
+        const HMODULE self  = OwningModule();
+        char path[MAX_PATH] = {};
+        const DWORD length  = self ? GetModuleFileNameA(self, path, MAX_PATH) : 0;
+        if (length == 0 || length >= MAX_PATH) {
+            return {};
+        }
+        const std::string full(path, length);
+        const auto separator = full.find_last_of("/\\");
+        return separator == std::string::npos ? std::string {} : full.substr(0, separator);
+#else
+        return {};
+#endif
+    }
+
     std::wstring GetFileExtensionW(const std::wstring &path) {
         if (path.empty()) {
             return std::wstring();
