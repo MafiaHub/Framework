@@ -238,6 +238,70 @@ MODULE(interest_grid, {
         EQUALS(swapped.contains(incumbent), false);
     });
 
+    // The defect this guards: CollectVisible skips an entity owned by the viewer from ranking and
+    // re-adds it from the owned index instead. Ownership is granted by delegation *after*
+    // RebuildInterest has already built that index, and the rebuild is rate-limited -- so without
+    // Reown the entity is in neither set for a whole interval and the peer that was just told to
+    // simulate it has its replica destroyed and rebuilt. Seen live as an NPC despawning and
+    // respawning every few seconds on the simulating client only.
+    IT("keeps an entity relevant to the viewer it is granted to after the rebuild", {
+        InterestGrid grid;
+        freshGrid(grid);
+
+        NetworkEntity *viewer   = make(typeA, 0.0f, 0.0f);
+        viewer->streaming.range = 250.0f;
+        // Far outside any streaming range, so only ownership can keep it relevant -- which is the
+        // case a delegated entity is in the moment it is handed over near the edge of the world.
+        NetworkEntity *granted  = make(typeA, 5000.0f, 0.0f);
+
+        grid.BeginRebuild();
+        grid.Insert(viewer);
+        grid.Insert(granted);
+
+        std::unordered_set<NetworkEntity *> before;
+        grid.CollectVisible(viewer, viewerGuid, nothingBefore, before);
+        EQUALS(before.contains(granted), false);
+
+        const uint32_t generationBefore = grid.Generation();
+
+        // The grant, as delegation makes it: ownerGUID written, then the grid told -- with no
+        // rebuild in between.
+        granted->ownerGUID = viewerGuid;
+        grid.Reown(granted, MafiaNet::UNASSIGNED_PEER_GUID);
+
+        std::unordered_set<NetworkEntity *> after;
+        grid.CollectVisible(viewer, viewerGuid, before, after);
+        EQUALS(after.contains(granted), true);
+        // Viewers cache their relevant set against the generation, so it has to move or nobody
+        // recomputes and the grant is invisible until the next rebuild.
+        EQUALS(grid.Generation() != generationBefore, true);
+    });
+
+    IT("stops treating an entity as owned once it is handed back", {
+        InterestGrid grid;
+        freshGrid(grid);
+
+        NetworkEntity *viewer   = make(typeA, 0.0f, 0.0f);
+        viewer->streaming.range = 250.0f;
+        NetworkEntity *released = make(typeA, 5000.0f, 0.0f);
+        released->ownerGUID     = viewerGuid;
+
+        grid.BeginRebuild();
+        grid.Insert(viewer);
+        grid.Insert(released);
+
+        std::unordered_set<NetworkEntity *> owned;
+        grid.CollectVisible(viewer, viewerGuid, nothingBefore, owned);
+        EQUALS(owned.contains(released), true);
+
+        released->ownerGUID = MafiaNet::UNASSIGNED_PEER_GUID;
+        grid.Reown(released, viewerGuid);
+
+        std::unordered_set<NetworkEntity *> handedBack;
+        grid.CollectVisible(viewer, viewerGuid, owned, handedBack);
+        EQUALS(handedBack.contains(released), false);
+    });
+
     IT("never counts owned or always-visible entities against a budget", {
         InterestGrid grid;
         freshGrid(grid);

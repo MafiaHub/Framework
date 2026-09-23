@@ -134,6 +134,30 @@ namespace Framework::Networking::Replication {
         return best;
     }
 
+    void InterestGrid::Reown(NetworkEntity *entity, MafiaNet::PeerGuid previousOwner) {
+        if (!entity) {
+            return;
+        }
+
+        const auto bucket = _ownedByGuid.find(previousOwner);
+        if (bucket != _ownedByGuid.end()) {
+            bucket->second.erase(entity);
+            if (bucket->second.empty()) {
+                _ownedByGuid.erase(bucket);
+            }
+        }
+
+        // Only entities the current rebuild admitted are queryable, which is the same condition
+        // Insert files them under; one that is not in the index must not be filed by a later grant.
+        if (_live.contains(entity) && entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+            _ownedByGuid[entity->ownerGUID].insert(entity);
+        }
+
+        // The relevant set of both peers involved changed: the new owner now bypasses range and
+        // budget, and the old one stops doing so. Viewers cache their set against this counter.
+        ++_generation;
+    }
+
     const std::unordered_set<NetworkEntity *> *InterestGrid::OwnedBy(MafiaNet::PeerGuid guid) const {
         const auto it = _ownedByGuid.find(guid);
         return it != _ownedByGuid.end() ? &it->second : nullptr;

@@ -68,6 +68,17 @@ namespace Framework::Networking::Replication {
         // Drop an entity from the indices so an intra-tick delete can't dangle before the next rebuild.
         void Remove(NetworkEntity *entity);
 
+        // Re-file an entity whose ownerGUID just changed, and bump the generation so viewers recompute.
+        //
+        // Not optional bookkeeping. CollectVisible skips an entity owned by the viewer from range and
+        // budget ranking and re-adds it from the owned index instead, so the two have to agree: an
+        // entity whose ownerGUID names the viewer but which is missing from that viewer's bucket is in
+        // neither set and drops out of the relevant set entirely -- ReplicaManager3 then destroys the
+        // replica on the one peer that was just told to simulate it, and recreates it at the next
+        // rebuild. Because RebuildInterest is rate-limited, that window is a whole interval wide, not
+        // a tick.
+        void Reown(NetworkEntity *entity, MafiaNet::PeerGuid previousOwner);
+
         // Monotonic counter bumped whenever the index contents change (rebuild or removal).
         // Consumers cache query results against it: ReplicaManager3 re-runs QueryReplicaList on every
         // RakPeer::Receive() call, but the index only changes once per tick, so an unchanged
