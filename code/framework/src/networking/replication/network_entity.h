@@ -23,6 +23,7 @@ namespace Framework::Networking::Replication {
     class ReplicationManager;
     class EntityRegistry;
     struct NametagState;
+    struct DelegationPolicy;
 
     class FieldSerializer final {
       public:
@@ -229,6 +230,38 @@ namespace Framework::Networking::Replication {
         // This entity's nametag state, for entities that carry one (games embed and serialize it).
         virtual NametagState *GetNametag() {
             return nullptr;
+        }
+
+        // --- Delegated simulation (server-side; see delegation.h) ---
+        // An entity the server owns but cannot simulate returns a policy here, and DelegationManager
+        // elects a client to run it: that client becomes the owner, so the whole authority model
+        // above applies to it unchanged. Null (the default) means the entity is never delegated.
+        //
+        // The pointer must outlive the entity and is read on every election pass, so the usual
+        // implementation returns the address of a static or member policy.
+        virtual const DelegationPolicy *GetDelegationPolicy() const {
+            return nullptr;
+        }
+
+        // Asked on the server when an election wants to move this entity, and only then. False
+        // defers the handover -- a body mid-attack or mid-climb has state on its simulator that no
+        // other peer can continue -- until the entity agrees or the policy's grace runs out.
+        virtual bool CanReleaseSimulation() const {
+            return true;
+        }
+
+        // Raised on the server after a delegated entity's simulator changed and its forced state has
+        // been pushed. UNASSIGNED on either side means "the server", i.e. nobody was or is
+        // simulating it. The game's own bookkeeping (revisions, script events) hangs off this.
+        virtual void OnSimulatorChanged(MafiaNet::PeerGuid previous, MafiaNet::PeerGuid current) {
+            (void)previous;
+            (void)current;
+        }
+
+        // True on the client that has been elected to simulate this entity. Identical to IsOwner()
+        // for a delegated entity; it exists so game code reads as what it means at the call site.
+        bool IsSimulating() const {
+            return GetDelegationPolicy() != nullptr && IsOwner();
         }
 
         // Server: push this entity's forced state to its owner. No-op for unowned (server-owned)

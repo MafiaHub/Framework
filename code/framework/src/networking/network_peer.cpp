@@ -70,6 +70,11 @@ namespace Framework::Networking {
         // constructed, so it reads the relevance this rebuild just settled.
         if (_replicationManager) {
             _replicationManager->RebuildInterest();
+            // After the rebuild and before the flush: the election reads the positions this tick
+            // settled, and a handover it decides is an ownership change the flush then sees, so an
+            // owner-scoped bag key travels to the peer that has just been given the entity rather
+            // than to the one that had it a moment ago.
+            _replicationManager->Delegation().Update();
             _replicationManager->FlushStateBags();
         }
 

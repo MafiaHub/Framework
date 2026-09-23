@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "delegation.h"
 #include "entity_registry.h"
 #include "interest_grid.h"
 #include "network_entity.h"
@@ -143,6 +144,19 @@ namespace Framework::Networking::Replication {
         void SetViewer(MafiaNet::PeerGuid guid, NetworkEntity *entity);
         NetworkEntity *GetViewer(MafiaNet::PeerGuid guid) const;
         void ClearViewer(MafiaNet::PeerGuid guid);
+        // Every connection that has one, for code that needs "where is each player" rather than one
+        // named player: interest is computed per viewer, and so is delegation.
+        void ForEachViewer(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const;
+
+        // --- Delegated simulation ---
+        // Election of which client simulates which server-owned entity. Server-side; on a client the
+        // manager exists but does nothing. See delegation.h.
+        DelegationManager &Delegation() {
+            return _delegation;
+        }
+        const DelegationManager &Delegation() const {
+            return _delegation;
+        }
 
         // --- Interest management ---
         // Configure the spatial index extent (see InterestGrid::Configure). Call before the first
@@ -152,6 +166,9 @@ namespace Framework::Networking::Replication {
         // InterestGrid::SetGroundPlaneXY.
         void SetInterestGroundPlaneXY(bool groundXY) {
             _interest.SetGroundPlaneXY(groundXY);
+            // Delegation measures the same distances for the same reason, so a game that has told
+            // the framework which way is up has told it once.
+            _delegation.SetGroundPlaneXY(groundXY);
         }
         // Streaming-boundary hysteresis. See InterestGrid::SetStreamOutMargin.
         void SetInterestStreamOutMargin(float margin) {
@@ -242,6 +259,7 @@ namespace Framework::Networking::Replication {
         NetworkPeer *_owner = nullptr;
         bool _clientRPCsRegistered = false;
         InterestGrid _interest;
+        DelegationManager _delegation;
         SerializeRateBands _rateBands;
         std::unordered_map<uint32_t, SerializeRateBands> _rateBandsByType;
         uint32_t _interestRebuildInterval = 0;

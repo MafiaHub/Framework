@@ -56,6 +56,7 @@ namespace Framework::Networking::Replication {
         SetNetworkIDManager(owner->GetNetworkIDManager());
         SetDefaultOrderingChannel(ToOrderingChannel(Channel::Construction));
         owner->GetPeer()->AttachPlugin(this);
+        _delegation.Init(this, isServer);
 
         // Client-only: these are server->owner pushes, so the server must never accept them inbound.
         if (!_isServer && !_clientRPCsRegistered) {
@@ -151,6 +152,9 @@ namespace Framework::Networking::Replication {
 
         entity->ownerGUID = guid;
         entity->ResetTransformOrdering();
+        // Before anything can query relevance again: see InterestGrid::Reown for what a stale owned
+        // index costs the peer that just gained authority.
+        _interest.Reown(entity, previousOwner);
         // Serialize to an owner is withheld, so the grant can't ride normal replication: tell the new
         // owner directly. Other peers (and any prior owner) pick it up through serialize.
         if (_owner && _isServer && guid != MafiaNet::UNASSIGNED_PEER_GUID) {
@@ -395,6 +399,10 @@ namespace Framework::Networking::Replication {
         // Scrub the interest indices so this delete can't dangle before the next rebuild.
         _interest.Remove(entity);
         _interestDirty = true;
+        // And the delegation bookkeeping, which is keyed by NetworkID: ids are monotonic, but an
+        // entry left behind would still be found by a later entity that reused the id after a
+        // reconnect, and would carry a stale pin into it.
+        _delegation.OnEntityDestroyed(entity->GetNetworkID());
         if (_onEntityDestroyed) {
             _onEntityDestroyed(entity->GetNetworkID());
         }
@@ -436,6 +444,14 @@ namespace Framework::Networking::Replication {
     NetworkEntity *ReplicationManager::GetViewer(MafiaNet::PeerGuid guid) const {
         const auto it = _viewers.find(guid);
         return it != _viewers.end() ? it->second : nullptr;
+    }
+
+    void ReplicationManager::ForEachViewer(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const {
+        for (const auto &[guid, viewer] : _viewers) {
+            if (viewer != nullptr) {
+                fn(guid, viewer);
+            }
+        }
     }
 
     void ReplicationManager::ClearViewer(MafiaNet::PeerGuid guid) {
@@ -485,6 +501,9 @@ namespace Framework::Networking::Replication {
             if (_onClientDisconnect && GetConnectionByGUID(rakNetGUID) != nullptr) {
                 _onClientDisconnect(guid);
             }
+            // Before the blanket hand-back below, so entities this peer was *simulating* go through
+            // delegation and raise its change notification, rather than silently losing an owner.
+            _delegation.OnClientDisconnected(guid);
             NetworkEntity *viewer = GetViewer(guid);
             // Return any other entity the dropped peer owned (e.g. a vehicle it was driving) to the
             // server, or its authority gate would freeze it against an owner that no longer exists.
@@ -496,6 +515,10 @@ namespace Framework::Networking::Replication {
             if (viewer) {
                 DestroyEntity(viewer);
             }
+            // Now that the departed peer can no longer be elected, re-run the election so whatever
+            // it was simulating is picked up by whoever else is near it this instant rather than at
+            // the next scheduled pass.
+            _delegation.UpdateNow();
         }
         ReplicaManager3::OnClosedConnection(systemAddress, rakNetGUID, lostConnectionReason);
     }

@@ -32,6 +32,7 @@ set(FRAMEWORK_SRC
     src/networking/replication/state_bag.cpp
     src/networking/replication/entity_registry.cpp
     src/networking/replication/interest_grid.cpp
+    src/networking/replication/delegation.cpp
     src/networking/replication/replication_manager.cpp
     src/networking/replication/replication_connection.cpp
 
