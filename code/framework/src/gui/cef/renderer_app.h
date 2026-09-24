@@ -30,7 +30,7 @@ namespace Framework::GUI::CEF {
 
     class RendererApp final: public CefApp, public CefRenderProcessHandler {
       private:
-        // browser id -> form control focused; a renderer process can host several browsers
+        // browser id -> editable node focused; a renderer process can host several browsers
         std::unordered_map<int, bool> _inputFocus;
 
       public:
