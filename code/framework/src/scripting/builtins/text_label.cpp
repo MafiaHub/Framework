@@ -139,7 +139,7 @@ namespace Framework::Scripting::Builtins {
             .property("fadeDistance", &TextLabel::GetFadeDistance, v8pp::metadata::property_docs("number", "Current fade range in world units."))
             .property("style", &TextLabel::GetStyle, v8pp::metadata::property_docs("number", "Current framework text-label style enum value."));
 
-        // setColor accepts either a Core.Color or byte components (r, g, b, a from 0-255), so scripts
+        // setColor accepts either a Color or byte components (r, g, b, a from 0-255), so scripts
         // don't have to hand-pack this API's ARGB layout. Registered as a raw prototype function
         // because v8pp's typed binding can't express the Color|number overload.
         cls->prototype_function(
@@ -166,7 +166,7 @@ namespace Framework::Scripting::Builtins {
                 {v8pp::metadata::param("colorOrR", "Color | number", false, "A Core.Color, or the red byte (0-255) when passing components."),
                     v8pp::metadata::param("g", "number", true, "Green byte (0-255) when passing components."), v8pp::metadata::param("b", "number", true, "Blue byte (0-255) when passing components."),
                     v8pp::metadata::param("a", "number", true, "Alpha byte (0-255) when passing components; defaults to 255.")},
-                "Changes the label's packed ARGB color from a Core.Color or byte components."));
+                "Changes the label's packed ARGB color from a Color or byte components."));
 
         return *cls;
     }

@@ -44,7 +44,7 @@ namespace Framework::Scripting::Builtins {
                     color = c->Uint32Value(ctx).FromMaybe(0u);
                 }
                 else if (auto *col = v8pp::class_<Color>::unwrap_object(isolate, c)) {
-                    // Pack a Core.Color into Chat's 0xRRGGBBAA layout.
+                    // Pack a Color into Chat's 0xRRGGBBAA layout.
                     color = col->toRGBA();
                 }
             }
@@ -88,14 +88,14 @@ namespace Framework::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("sendToAll", v8pp::metadata::docs("void",
                                                                                            {
                                                                                                v8pp::metadata::param("text", "string", false, "Message body broadcast to every connected client."),
-                                                                                               v8pp::metadata::param("options", "{ author?: string; color?: number | Color }", true, "Optional author label and color: a Core.Color or a packed 0xRRGGBBAA integer."),
+                                                                                               v8pp::metadata::param("options", "{ author?: string; color?: number | Color }", true, "Optional author label and color: a Color or a packed 0xRRGGBBAA integer."),
                                                                                            },
                                                                                            "Broadcasts a structured chat message to all clients.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("sendToPlayer", v8pp::metadata::docs("void",
                                                                                               {
                                                                                                   v8pp::metadata::param("player", "Entity", false, "Player-owned entity identifying the destination connection."),
                                                                                                   v8pp::metadata::param("text", "string", false, "Message body sent to the player."),
-                                                                                                  v8pp::metadata::param("options", "{ author?: string; color?: number | Color }", true, "Optional author label and color: a Core.Color or a packed 0xRRGGBBAA integer."),
+                                                                                                  v8pp::metadata::param("options", "{ author?: string; color?: number | Color }", true, "Optional author label and color: a Color or a packed 0xRRGGBBAA integer."),
                                                                                               },
                                                                                               "Sends a structured chat message to one player's owning connection.")));
     }

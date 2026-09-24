@@ -35,7 +35,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Vector4>>(isolate, GetScriptingCatalog(isolate), "Vector4", "Mutable four-dimensional vector exposed as Core.Vector4.");
+        cls       = std::make_unique<v8pp::class_<Vector4>>(isolate, GetScriptingCatalog(isolate), "Vector4", "Mutable four-dimensional vector.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
         cls->ctor<float, float, float, float>(v8pp::metadata::docs("void",
                                                   {

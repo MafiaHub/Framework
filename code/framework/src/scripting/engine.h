@@ -104,11 +104,6 @@ namespace Framework::Scripting {
         virtual v8::Local<v8::Context> GetContext() const = 0;
 
         /**
-         * Get the Core global object for builtin types and events.
-         */
-        v8::Local<v8::Object> GetCoreObject() const;
-
-        /**
          * Set the owning ResourceManager for resource context tracking.
          * Called by ResourceManager during construction.
          */

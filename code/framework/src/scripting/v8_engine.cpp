@@ -277,12 +277,6 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = _context.Get(_isolate);
         v8::Local<v8::Object> global = context->Global();
 
-        // Create globalThis.Core = {}
-        v8::Local<v8::Object> coreObj = v8::Object::New(_isolate);
-        global->Set(context,
-            v8::String::NewFromUtf8Literal(_isolate, "Core"),
-            coreObj).Check();
-
         InstallTimerFunctions();
         InstallRequireFunction();
 

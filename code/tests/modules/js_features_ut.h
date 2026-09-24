@@ -191,7 +191,7 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            // Create Core object on global (normally done by engine bootstrap)
+            // A scratch namespace to register into; the runtime registers at the global root instead
             v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
             context->Global()->Set(context,
                 v8::String::NewFromUtf8Literal(isolate, "Core"),

@@ -116,7 +116,7 @@ namespace Framework::Scripting::Builtins {
         // Register as "Events" on target object
         target->Set(context, v8pp::to_v8(isolate, "Events"), eventsObj).Check();
 
-        auto &metadata         = GetScriptingCatalog(isolate).global_object("Events", "Asynchronous resource event bus exposed as Core.Events.");
+        auto &metadata         = GetScriptingCatalog(isolate).global_object("Events", "Asynchronous resource event bus.");
         const auto handlerDocs = [](const char *returnType, const char *description, const char *returnDescription = "") {
             return v8pp::metadata::docs(returnType,
                 {

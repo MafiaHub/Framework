@@ -35,7 +35,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Vector3>>(isolate, GetScriptingCatalog(isolate), "Vector3", "Mutable three-dimensional vector exposed as Core.Vector3 for positions, directions, and Euler angles.");
+        cls       = std::make_unique<v8pp::class_<Vector3>>(isolate, GetScriptingCatalog(isolate), "Vector3", "Mutable three-dimensional vector for positions, directions, and Euler angles.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
         cls->ctor<float, float, float>(v8pp::metadata::docs("void",
                                            {
