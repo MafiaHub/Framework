@@ -190,4 +190,74 @@ MODULE(scripting_catalog, {
         EQUALS(hasProperty(project, "EventMap", "resourceStop"), true);
         EQUALS(hasProperty(project, "EventMap", "entityStateChange"), true);
     });
+
+    const auto functionOf = [](const v8pp::metadata::registry &registry, const std::string &symbolName, const std::string &functionName) -> const v8pp::metadata::function * {
+        for (const auto &symbol : registry.symbols()) {
+            if (symbol.name != symbolName) {
+                continue;
+            }
+            for (const auto &function : symbol.functions) {
+                if (function.name == functionName) {
+                    return &function;
+                }
+            }
+        }
+        return nullptr;
+    };
+
+    const auto kindOf = [](const v8pp::metadata::registry &registry, const std::string &name) {
+        for (const auto &symbol : registry.symbols()) {
+            if (symbol.name == name) {
+                return symbol.kind;
+            }
+        }
+        throw std::invalid_argument("no such symbol");
+    };
+
+    IT("blends a global object the project extends in place", {
+        // M2O attaches setDefaultRelay onto the framework's Chat object, so sendToPlayer is still live
+        // on it. Taking the project's symbol whole dropped the framework's functions from the docs.
+        v8pp::metadata::registry source;
+        source.global_object("Chat", "framework chat").record(v8pp::metadata::function_of<v8::FunctionCallback>("sendToPlayer", {}));
+        source.global_object("Chat").record(v8pp::metadata::function_of<v8::FunctionCallback>("setDefaultRelay", v8pp::metadata::docs("void", {}, "framework version")));
+
+        v8pp::metadata::registry destination;
+        destination.global_object("Chat", "project chat").record(v8pp::metadata::function_of<v8::FunctionCallback>("setDefaultRelay", v8pp::metadata::docs("void", {}, "project version")));
+
+        MergeScriptingCatalog(destination, source);
+        EQUALS(functionOf(destination, "Chat", "sendToPlayer") != nullptr, true);
+        // The project's own member of the same name wins.
+        STREQUALS(functionOf(destination, "Chat", "setDefaultRelay")->description.c_str(), "project version");
+
+        MergeScriptingCatalog(destination, source);
+        EQUALS(countSymbols(destination, "Chat") == 1, true);
+        EQUALS(std::count_if(destination.symbols().front().functions.begin(), destination.symbols().front().functions.end(), [](const v8pp::metadata::function &function) {
+            return function.name == "sendToPlayer";
+        }) == 1, true);
+    });
+
+    IT("exports a class that is not on the global as an interface", {
+        v8pp::metadata::registry catalog;
+        auto &player = catalog.constructor("Player", "published");
+        player.constructor = v8pp::metadata::function_of<v8::FunctionCallback>("constructor", {});
+        auto &bag = catalog.constructor("StateBag", "reached as entity.state");
+        bag.constructor = v8pp::metadata::function_of<v8::FunctionCallback>("constructor", {});
+        bag.record(v8pp::metadata::function_of<v8::FunctionCallback>("get", {}, false));
+        bag.record(v8pp::metadata::function_of<v8::FunctionCallback>("create", {}, true));
+        catalog.constructor("BasePlayer").bases.push_back("Entity");
+
+        const auto exported = Framework::Scripting::ExportableScriptingCatalog(catalog, [](const std::string &name) {
+            return name == "Player";
+        });
+
+        EQUALS(kindOf(exported, "Player") == v8pp::metadata::symbol_kind::constructor, true);
+        EQUALS(kindOf(exported, "StateBag") == v8pp::metadata::symbol_kind::data_type, true);
+        EQUALS(kindOf(exported, "BasePlayer") == v8pp::metadata::symbol_kind::data_type, true);
+        EQUALS(functionOf(exported, "StateBag", "get") != nullptr, true);
+        // A static would hang off a constructor no script can reach.
+        EQUALS(functionOf(exported, "StateBag", "create") == nullptr, true);
+        EQUALS(exported.symbols().back().bases.size() == 1, true);
+        // The live catalog keeps its kinds, so the next registration of StateBag does not collide.
+        EQUALS(kindOf(catalog, "StateBag") == v8pp::metadata::symbol_kind::constructor, true);
+    });
 })

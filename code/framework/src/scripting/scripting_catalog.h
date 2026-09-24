@@ -12,6 +12,8 @@
 #include <v8pp/metadata.hpp>
 
 #include <algorithm>
+#include <functional>
+#include <iterator>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -157,7 +159,10 @@ namespace Framework::Scripting {
                 if (carried(*collision, symbol)) {
                     continue;
                 }
-                const bool blendable = symbol.kind == v8pp::metadata::symbol_kind::data_type && collision->kind == v8pp::metadata::symbol_kind::data_type;
+                // A project extends a framework global in place (M2O's Chat adds its relay switches to
+                // the framework's Chat object), so both halves are live on the one object.
+                const bool blendable = symbol.kind == collision->kind
+                                    && (symbol.kind == v8pp::metadata::symbol_kind::data_type || symbol.kind == v8pp::metadata::symbol_kind::global_object);
                 if (!blendable) {
                     // A class both sides define still has to reach the output, because the project's
                     // class inherits it at runtime and records that inheritance as a base. Dropping it
@@ -180,11 +185,20 @@ namespace Framework::Scripting {
                     continue;
                 }
                 // Safe to add through the registry now that the kinds are known to agree; it
-                // returns the symbol already there rather than a second one.
-                v8pp::metadata::symbol &target = destination.data_type(symbol.name);
+                // returns the symbol already there rather than a second one. The project's own
+                // members win over a framework member of the same name.
+                v8pp::metadata::symbol &target = symbol.kind == v8pp::metadata::symbol_kind::global_object ? destination.global_object(symbol.name) : destination.data_type(symbol.name);
                 for (const auto &property : symbol.properties) {
                     if (!declares(target, property.name)) {
                         target.record(property);
+                    }
+                }
+                for (const auto &function : symbol.functions) {
+                    const bool defined = std::any_of(target.functions.begin(), target.functions.end(), [&function](const v8pp::metadata::function &candidate) {
+                        return candidate.name == function.name && candidate.static_ == function.static_;
+                    });
+                    if (!defined) {
+                        target.record(function);
                     }
                 }
                 continue;
@@ -240,6 +254,50 @@ namespace Framework::Scripting {
                 destination.variable_(variable.name, variable.value_type, variable.description, variable.readonly);
             }
         }
+    }
+
+    // The catalog as scripts can reach it, for export. A class the runtime never puts on the global --
+    // StateBag, reached only as entity.state, or a framework class carried across under a Base... name
+    // -- is documented as an interface: a class declaration promises a global constructor that a
+    // script would find missing. Returns a copy, because the live catalog is process-global and a
+    // later registration of the same class would collide with a symbol whose kind had changed.
+    inline v8pp::metadata::registry ExportableScriptingCatalog(const v8pp::metadata::registry &catalog, const std::function<bool(const std::string &)> &isGlobal) {
+        v8pp::metadata::registry exported;
+        for (const auto &symbol : catalog.symbols()) {
+            const bool unpublished = symbol.kind == v8pp::metadata::symbol_kind::constructor && !isGlobal(symbol.name);
+            v8pp::metadata::symbol *target = nullptr;
+            switch (unpublished ? v8pp::metadata::symbol_kind::data_type : symbol.kind) {
+            case v8pp::metadata::symbol_kind::global_object: target = &exported.global_object(symbol.name, symbol.description); break;
+            case v8pp::metadata::symbol_kind::constructor: target = &exported.constructor(symbol.name, symbol.description); break;
+            case v8pp::metadata::symbol_kind::data_type: target = &exported.data_type(symbol.name, symbol.description); break;
+            }
+            target->bases = symbol.bases;
+            if (!unpublished) {
+                target->constructor = symbol.constructor;
+                target->functions   = symbol.functions;
+                target->properties  = symbol.properties;
+                continue;
+            }
+            // Statics hang off the constructor, which a script cannot reach either.
+            std::copy_if(symbol.functions.begin(), symbol.functions.end(), std::back_inserter(target->functions), [](const v8pp::metadata::function &function) {
+                return !function.static_;
+            });
+            std::copy_if(symbol.properties.begin(), symbol.properties.end(), std::back_inserter(target->properties), [](const v8pp::metadata::property &property) {
+                return !property.static_;
+            });
+        }
+        for (const auto &variable : catalog.variables()) {
+            exported.variable_(variable.name, variable.value_type, variable.description, variable.readonly);
+        }
+        return exported;
+    }
+
+    inline v8pp::metadata::registry ExportableScriptingCatalog(const v8pp::metadata::registry &catalog, v8::Isolate *isolate, v8::Local<v8::Context> context) {
+        const v8::Local<v8::Object> global = context->Global();
+        return ExportableScriptingCatalog(catalog, [&](const std::string &name) {
+            v8::Local<v8::String> key;
+            return v8::String::NewFromUtf8(isolate, name.c_str()).ToLocal(&key) && global->Has(context, key).FromMaybe(false);
+        });
     }
 
     inline void ClearScriptingCatalog(v8::Isolate *isolate) {
