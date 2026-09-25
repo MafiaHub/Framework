@@ -448,6 +448,7 @@ namespace Framework::Integrations::Client {
                 imguiConfig.windowHandle  = _renderer->GetWindow();
                 imguiConfig.fontPath      = _opts.imguiFontPath;
                 imguiConfig.fontSize      = _opts.imguiFontSize;
+                imguiConfig.fonts         = _opts.imguiFonts;
                 if (auto imguiResult = _imguiApp->Init(imguiConfig); !imguiResult) {
                     Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGUI has failed to init: {}", imguiResult.GetError().message);
                 }

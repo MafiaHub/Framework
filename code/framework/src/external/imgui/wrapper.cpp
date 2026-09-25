@@ -95,6 +95,22 @@ namespace Framework::External::ImGUI {
             }
         }
 
+        // The first font in the atlas is the default one, so a mod font must never take that
+        // slot when no UI font was configured.
+        if (!_config.fonts.empty() && io.Fonts->Fonts.empty()) {
+            io.Fonts->AddFontDefault();
+        }
+        for (const FontSource &source : _config.fonts) {
+            ImFontConfig fontCfg;
+            fontCfg.Flags |= ImFontFlags_NoLoadError;
+            if (ImFont *font = io.Fonts->AddFontFromFileTTF(source.path.c_str(), 0.0f, &fontCfg)) {
+                _fonts[source.name] = font;
+            }
+            else {
+                Logging::GetLogger("ImGui")->warn("Failed to load font '{}' from '{}', its users draw with the default font", source.name, source.path);
+            }
+        }
+
         ImGui::StyleColorsDark();
 
         switch (_config.renderBackend) {
@@ -148,6 +164,7 @@ namespace Framework::External::ImGUI {
         }
 
         ImGui::DestroyContext();
+        _fonts.clear(); // the atlas that owned them is gone
 
         isContextInitialized = false;
         Lifecycle::Shutdown();

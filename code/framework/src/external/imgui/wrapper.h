@@ -22,6 +22,10 @@
 #include <mutex>
 #include <queue>
 #include <string>
+#include <unordered_map>
+#include <vector>
+
+struct ImFont;
 
 namespace Framework::Graphics {
     class Renderer;
@@ -34,6 +38,13 @@ namespace Framework::External::ImGUI {
         ERROR_MISMATCH
     };
 
+    // A TTF a mod draws with by name, loaded into the atlas beside the UI font. ImGui 1.92
+    // rasterizes at whatever size a draw call asks for, so a font carries no size.
+    struct FontSource {
+        std::string name;
+        std::string path;
+    };
+
     struct Config {
         Graphics::PlatformBackend windowBackend = Graphics::PlatformBackend::PLATFORM_WIN32;
         Graphics::RendererBackend renderBackend = Graphics::RendererBackend::BACKEND_D3D_11;
@@ -44,6 +55,9 @@ namespace Framework::External::ImGUI {
         // (e.g. Latin + Cyrillic + CJK) "just works" without explicit glyph ranges.
         std::string fontPath;
         float fontSize = 16.0f;
+
+        // Named fonts for mod widgets (nametags, HUD text); never the default font.
+        std::vector<FontSource> fonts;
 
         // NOTE: Set up during init
         Graphics::Renderer *renderer = nullptr;
@@ -58,6 +72,8 @@ namespace Framework::External::ImGUI {
         Config _config;
         std::queue<RenderProc> _renderQueue;
         std::recursive_mutex _renderMtx;
+
+        std::unordered_map<std::string, ImFont *> _fonts;
 
         static inline std::atomic_bool isContextInitialized = false;
 
@@ -88,6 +104,13 @@ namespace Framework::External::ImGUI {
         // (e.g. D3D9 lost device on alt-tab). Must bracket the host's device Reset.
         void OnDeviceLost();
         void OnDeviceReset();
+
+        // Null when the font was never declared or its file failed to load; the caller then
+        // draws with the current font.
+        ImFont *GetFont(const std::string &name) const {
+            const auto it = _fonts.find(name);
+            return it != _fonts.end() ? it->second : nullptr;
+        }
 
         void PushWidget(const RenderProc &proc) {
             _renderQueue.push(proc);

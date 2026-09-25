@@ -92,6 +92,8 @@ namespace Framework::Integrations::Client {
         // A Unicode-covering font enables non-Latin scripts (e.g. Cyrillic).
         std::string imguiFontPath;
         float imguiFontSize = 16.0f;
+        // Named fonts the mod draws with, looked up through GetImGUI()->GetFont(name).
+        std::vector<External::ImGUI::FontSource> imguiFonts;
 
         Graphics::RendererConfiguration rendererOptions = {};
     };
