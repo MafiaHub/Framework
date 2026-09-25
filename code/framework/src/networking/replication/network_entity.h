@@ -173,13 +173,16 @@ namespace Framework::Networking::Replication {
         // Local-clock send time of the last applied update (MafiaNet shifts it on receipt). Not replicated.
         MafiaNet::Time lastUpdateTime = 0;
 
-        // --- Server-only streaming metadata (never replicated; unused on the client) ---
+        // --- Server-side streaming metadata (not replicated, isViewer aside; unused on the client) ---
         // Grouped under `streaming` so the server-only nature is explicit and these don't read as
         // per-entity wire state. Dimension lives in the VirtualWorldReplica3 base (Get/SetVirtualWorld).
+        // isViewer is the exception: ReplicationManager::SetViewer sets it and the base fields carry
+        // it, because a client has no other way to tell a player's avatar from an entity the player
+        // merely owns (see ReplicationManager::ForEachAvatar).
         struct Streaming {
             bool alwaysVisible = false;  // bypass range culling; dimension still applies
             bool visible       = true;   // master visibility switch
-            bool isViewer      = false;  // drives a connection's interest set (the player's avatar)
+            bool isViewer      = false;  // drives a connection's interest set (the player's avatar); replicated
             float range        = 100.0f; // interest radius (world units) when acting as a viewer
             MafiaNet::PeerGuid targetGUID = MafiaNet::UNASSIGNED_PEER_GUID; // if set, streams only to this connection
         };
@@ -325,7 +328,7 @@ namespace Framework::Networking::Replication {
         // clients adopt it. Single source of truth for the rule shared by construction and deltas.
         void AdoptIncomingOwner(MafiaNet::PeerGuid incomingOwner);
 
-        // The base reliable field set (owner authority) in its single wire order, shared by
+        // The base reliable field set (owner authority, avatar flag) in its single wire order, shared by
         // construction, Serialize, and Deserialize so the three paths cannot drift apart. The
         // transform travels on its own unreliable channel (SerializeTransform); the state epoch
         // travels as a raw prefix on each channel — see the comments in Serialize().

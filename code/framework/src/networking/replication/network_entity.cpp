@@ -78,13 +78,19 @@ namespace Framework::Networking::Replication {
     void NetworkEntity::SerializeBaseFields(FieldSerializer &fields) {
         if (fields.Writing()) {
             fields.Field(ownerGUID);
+            fields.Field(streaming.isViewer);
         }
         else {
-            // Read into a temporary so the server can ignore a client-supplied owner (see
-            // AdoptIncomingOwner); clients adopt the owner the server sends.
+            // Read into temporaries so the server can ignore a client-supplied owner (see
+            // AdoptIncomingOwner) or avatar claim; clients adopt what the server sends.
             MafiaNet::PeerGuid incomingOwner = ownerGUID;
+            bool incomingViewer              = streaming.isViewer;
             fields.Field(incomingOwner);
+            fields.Field(incomingViewer);
             AdoptIncomingOwner(incomingOwner);
+            if (!IsServerPeer()) {
+                streaming.isViewer = incomingViewer;
+            }
         }
     }
 

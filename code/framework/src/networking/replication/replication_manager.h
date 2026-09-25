@@ -147,6 +147,9 @@ namespace Framework::Networking::Replication {
         // Every connection that has one, for code that needs "where is each player" rather than one
         // named player: interest is computed per viewer, and so is delegation.
         void ForEachViewer(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const;
+        // Every player's avatar with the guid of the player it stands for, on either peer. What
+        // proximity voice keys a speaker's position on.
+        void ForEachAvatar(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const;
 
         // --- Delegated simulation ---
         // Election of which client simulates which server-owned entity. Server-side; on a client the

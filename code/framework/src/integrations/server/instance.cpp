@@ -1252,17 +1252,14 @@ namespace Framework::Integrations::Server {
                 _networkingEngine->Update();
             }
 
-            // Refresh the voice router's world view from the replicated entities. Every entity
-            // carrying an owner GUID is a player-controlled one, which is exactly the set the
-            // proximity rule keys on; ForEachEntity avoids the per-entity dynamic_cast that
-            // ForEach<NetworkEntity> would cost for no added selectivity.
+            // Refresh the voice router's world view from each player's avatar. Not from every owned
+            // entity: a player also owns what the server delegated to them, and any of those would
+            // move their voice to wherever it stands.
             if (auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr) {
                 FW_PROFILE_SCOPE_N("Server::VoicePositions");
                 auto &router = _voiceServer.GetRouter();
-                replication->ForEachEntity([&router](Framework::Networking::Replication::NetworkEntity *entity) {
-                    if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
-                        router.SetPlayerPosition(static_cast<uint64_t>(entity->ownerGUID), entity->position);
-                    }
+                replication->ForEachAvatar([&router](MafiaNet::PeerGuid guid, Framework::Networking::Replication::NetworkEntity *avatar) {
+                    router.SetPlayerPosition(static_cast<uint64_t>(guid), avatar->position);
                 });
                 _voiceServer.Update();
             }

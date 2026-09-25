@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 32
+#define UNIT_MAX_MODULES 64
 #include "logging/logger.h"
 #include "unit.h"
 
@@ -30,6 +30,7 @@
 #include "modules/url_protocol_ut.h"
 #include "modules/snapshot_buffer_ut.h"
 #include "modules/voice_router_ut.h"
+#include "modules/voice_positions_ut.h"
 #include "modules/spsc_ring_ut.h"
 #include "modules/voice_mixer_ut.h"
 #include "modules/voice_ptt_gate_ut.h"
@@ -72,6 +73,7 @@ int main() {
     UNIT_MODULE(url_protocol);
     UNIT_MODULE(snapshot_buffer);
     UNIT_MODULE(voice_router);
+    UNIT_MODULE(voice_positions);
     UNIT_MODULE(spsc_ring);
     UNIT_MODULE(voice_mixer);
     UNIT_MODULE(voice_ptt_gate);

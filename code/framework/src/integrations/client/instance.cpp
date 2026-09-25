@@ -577,15 +577,12 @@ namespace Framework::Integrations::Client {
             // rather than trusting every mod to remember.
             _voiceClient.SetInputSuppressed(_chatBox.IsInputActive() || (_webManager && _webManager->IsAnyViewFocused()));
 
-            // Speaker positions come from the replicated entity set, as the server's voice
-            // router gets them: an owner GUID means a player-controlled entity. Done here so
-            // a mod only has to supply the listener transform.
+            // Speaker positions come from each player's avatar, as the server's voice router gets
+            // them. Done here so a mod only has to supply the listener transform.
             if (auto *replication = _networkingEngine->GetNetworkClient()->GetReplicationManager()) {
                 _voiceClient.BeginSpeakerUpdate();
-                replication->ForEachEntity([this](Framework::Networking::Replication::NetworkEntity *entity) {
-                    if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
-                        _voiceClient.SetSpeakerPosition(static_cast<uint64_t>(entity->ownerGUID), entity->position);
-                    }
+                replication->ForEachAvatar([this](MafiaNet::PeerGuid guid, Framework::Networking::Replication::NetworkEntity *avatar) {
+                    _voiceClient.SetSpeakerPosition(static_cast<uint64_t>(guid), avatar->position);
                 });
                 _voiceClient.EndSpeakerUpdate();
             }

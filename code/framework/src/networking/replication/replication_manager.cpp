@@ -454,6 +454,22 @@ namespace Framework::Networking::Replication {
         }
     }
 
+    void ReplicationManager::ForEachAvatar(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const {
+        // Owning an entity does not make it the player: a delegated NPC, a ridden horse or a dropped
+        // item all carry the player's guid, and taking the last of them as the avatar is what moved
+        // voice away from the speaker. The server has the viewer map; a client has the flag the
+        // server replicates off it.
+        if (_isServer) {
+            ForEachViewer(fn);
+            return;
+        }
+        ForEachEntity([&fn](NetworkEntity *entity) {
+            if (entity->streaming.isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+                fn(entity->ownerGUID, entity);
+            }
+        });
+    }
+
     void ReplicationManager::ClearViewer(MafiaNet::PeerGuid guid) {
         const auto it = _viewers.find(guid);
         if (it == _viewers.end()) {
