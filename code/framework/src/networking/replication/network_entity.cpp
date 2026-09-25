@@ -232,7 +232,7 @@ namespace Framework::Networking::Replication {
         // Channel 0 — transform: raw pose, ordered per entity by the receiver's timestamp gate. Written
         // every tick; ReplicaManager3 memcmp-dedupes it against the last broadcast.
         serializeParameters->outputBitstream[kTransformChannel].Write(stateEpoch);
-        FieldSerializer transform(&serializeParameters->outputBitstream[kTransformChannel], true);
+        FieldSerializer transform(&serializeParameters->outputBitstream[kTransformChannel], true, IsServerPeer());
         SerializeTransform(transform);
         serializeParameters->pro[kTransformChannel].reliability     = MafiaNet::Reliability::Unreliable;
         serializeParameters->pro[kTransformChannel].orderingChannel = ToOrderingChannel(Channel::Transform);
@@ -263,7 +263,7 @@ namespace Framework::Networking::Replication {
         serializeParameters->outputBitstream[kStateChannel].Write(stateEpoch);
         MafiaNet::VariableDeltaSerializer::SerializationContext ctx;
         _vds.BeginIdenticalSerialize(&ctx, serializeParameters->whenLastSerialized == 0, &serializeParameters->outputBitstream[kStateChannel]);
-        FieldSerializer fields(&_vds, &ctx);
+        FieldSerializer fields(&_vds, &ctx, IsServerPeer());
         SerializeBaseFields(fields);
         SerializeFields(fields);
         _vds.EndSerialize(&ctx);
@@ -299,7 +299,7 @@ namespace Framework::Networking::Replication {
             uint8_t incomingEpoch = stateEpoch;
             deserializeParameters->serializationBitstream[kTransformChannel].Read(incomingEpoch);
             if (ApplyIncomingEpoch(incomingEpoch)) {
-                FieldSerializer transform(&deserializeParameters->serializationBitstream[kTransformChannel], false);
+                FieldSerializer transform(&deserializeParameters->serializationBitstream[kTransformChannel], false, !IsServerPeer());
                 SerializeTransform(transform);
                 transformUpdated = true;
                 if (IsServerPeer()) {
@@ -320,7 +320,7 @@ namespace Framework::Networking::Replication {
             if (ApplyIncomingEpoch(incomingEpoch)) {
                 MafiaNet::VariableDeltaSerializer::DeserializationContext ctx;
                 _vds.BeginDeserialize(&ctx, &deserializeParameters->serializationBitstream[kStateChannel]);
-                FieldSerializer fields(&_vds, &ctx);
+                FieldSerializer fields(&_vds, &ctx, !IsServerPeer());
                 SerializeBaseFields(fields);
                 SerializeFields(fields);
                 _vds.EndDeserialize(&ctx);

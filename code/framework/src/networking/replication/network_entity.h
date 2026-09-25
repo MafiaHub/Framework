@@ -25,14 +25,23 @@ namespace Framework::Networking::Replication {
     struct NametagState;
     struct DelegationPolicy;
 
+    // `serverAuthored` says whose bytes these are: true when the server writes the stream (the per-tick
+    // channels it relays, construction, forced state), false when an owning client writes it upstream.
+    // Both ends of one stream agree on it, which is what lets ServerField leave a field out of the
+    // upstream wire entirely.
     class FieldSerializer final {
       public:
-        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::SerializationContext *ctx) : _vds(vds), _serialize(ctx) {}
-        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx) : _vds(vds), _deserialize(ctx) {}
-        FieldSerializer(MafiaNet::BitStream *bs, bool write) : _plain(bs), _writePlain(write) {}
+        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::SerializationContext *ctx, bool serverAuthored) : _vds(vds), _serialize(ctx), _serverAuthored(serverAuthored) {}
+        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx, bool serverAuthored) : _vds(vds), _deserialize(ctx), _serverAuthored(serverAuthored) {}
+        FieldSerializer(MafiaNet::BitStream *bs, bool write, bool serverAuthored = true) : _plain(bs), _writePlain(write), _serverAuthored(serverAuthored) {}
 
         bool Writing() const {
             return _serialize != nullptr || (_plain != nullptr && _writePlain);
+        }
+
+        // Whether the server wrote (or is writing) this stream; see the class comment.
+        bool ServerAuthored() const {
+            return _serverAuthored;
         }
 
         bool Good() const {
@@ -57,6 +66,18 @@ namespace Framework::Networking::Replication {
                 if (_good && changed) {
                     _good = _deserialize->bitStream->Read(value);
                 }
+            }
+        }
+
+        // A field only the server decides -- a verdict, a seat, a name -- on an entity a client owns.
+        // Carried wherever the server writes, and absent from the owner's upstream stream on both
+        // ends: the owner cannot echo back a value the server has since changed, and a forced state
+        // pushed for something else cannot be undone by the owner's in-flight copy of it. The owner
+        // learns it from SerializeForcedState, which the server writes.
+        template <typename T>
+        void ServerField(T &value) {
+            if (_serverAuthored) {
+                Field(value);
             }
         }
 
@@ -123,6 +144,7 @@ namespace Framework::Networking::Replication {
         MafiaNet::VariableDeltaSerializer::DeserializationContext *_deserialize = nullptr;
         MafiaNet::BitStream *_plain                                             = nullptr;
         bool _writePlain                                                        = false;
+        bool _serverAuthored                                                    = true;
         bool _good                                                              = true;
     };
 

@@ -164,6 +164,71 @@ MODULE(replication_authority, {
         EQUALS(entity.IsPoseServerAuthored(), true);
     });
 
+    // A verdict only the server decides, on an entity a client simulates. The owner's upstream
+    // stream leaves it out on both ends, so neither an echo of a stale value nor an update the
+    // owner sent before a forced state landed can overwrite the server's.
+    struct VerdictEntity final : NetworkEntity {
+        int measured = 0;
+        int verdict  = 0;
+        void SerializeFields(Framework::Networking::Replication::FieldSerializer &fields) override {
+            fields.Field(measured);
+            fields.ServerField(verdict);
+        }
+    };
+
+    // One entity's state channel, serialized the way its peer writes it and delivered to another.
+    const auto deliverState = [](VerdictEntity &from, VerdictEntity &to, MafiaNet::Connection_RM3 *sourceConnection) {
+        MafiaNet::SerializeParameters sp;
+        for (int i = 0; i < MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS; ++i) {
+            sp.lastSentBitstream[i] = nullptr;
+        }
+        sp.whenLastSerialized = 0;
+        sp.curTime            = 1;
+        from.OnUserReplicaPreSerializeTick();
+        from.Serialize(&sp);
+
+        MafiaNet::DeserializeParameters dp;
+        for (int i = 0; i < MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS; ++i) {
+            dp.bitstreamWrittenTo[i] = false;
+        }
+        dp.bitstreamWrittenTo[1] = true;
+        dp.timeStamp             = 0;
+        dp.sourceConnection      = sourceConnection;
+        dp.serializationBitstream[1].Write(&sp.outputBitstream[1]);
+        to.Deserialize(&dp);
+    };
+
+    IT("keeps a server field out of the owner's upstream state", {
+        VerdictEntity simulator;
+        simulator.replicaManager = clientManager;
+        simulator.measured       = 7;
+        simulator.verdict        = 1;
+
+        VerdictEntity server;
+        server.replicaManager = serverManager;
+        server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+        server.verdict        = 2;
+
+        deliverState(simulator, server, ownerConn);
+        EQUALS(server.measured, 7);
+        EQUALS(server.verdict, 2);
+    });
+
+    IT("carries a server field to the clients the server relays to", {
+        VerdictEntity server;
+        server.replicaManager = serverManager;
+        server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+        server.measured       = 7;
+        server.verdict        = 2;
+
+        VerdictEntity observer;
+        observer.replicaManager = clientManager;
+
+        deliverState(server, observer, nullptr);
+        EQUALS(observer.measured, 7);
+        EQUALS(observer.verdict, 2);
+    });
+
     serverManager->DeallocConnection(ownerConn);
     serverManager->DeallocConnection(attackerConn);
 });

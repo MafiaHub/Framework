@@ -276,6 +276,8 @@ namespace NewMP::Shared::Features {
 
 The three-way split is the single most important decision in the file. Spawn metadata goes in construction, the transform on the unreliable channel, everything else as reliable deltas. A rarely-changing string in `SerializeTransform` costs bandwidth on every idle player, every tick, forever.
 
+**Server fields.** On an entity a client owns, the owner's `SerializeFields` stream goes upstream and the server takes it as the truth. That is right for what the owner measures and wrong for what the server decides: who sits in a seat, whether a delegated animal is alive, a name a script set. Write those with `f.ServerField(value)`. It travels only where the server writes, which is its relay, construction and forced state, and it is absent from the owner's upstream stream on both ends. The owner hears a server field only through `SerializeForcedState`, so append it there as well. Without this, a forced state pushed for some other reason carries whatever the server held at that instant, and the owner echoes it back over a verdict that landed a moment later.
+
 **Registration.** Type ids are CRC32 of `kTypeName`, so order does not matter - but both sides must register the *same set*, which is why the list lives in shared code:
 
 ```cpp
