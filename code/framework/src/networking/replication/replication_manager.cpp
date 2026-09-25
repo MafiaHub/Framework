@@ -65,10 +65,13 @@ namespace Framework::Networking::Replication {
                 bs->ReadCompressed(networkId);
                 uint8_t epoch = 0;
                 bs->Read(epoch);
+                bool poseForced = true;
+                bs->Read(poseForced);
                 if (auto *entity = GetEntityByNetworkID(networkId)) {
                     // Adopting the epoch is what acknowledges the override: updates we send from here
                     // on carry it, so the server stops dropping them.
-                    entity->stateEpoch = epoch;
+                    entity->stateEpoch  = epoch;
+                    entity->_poseForced = poseForced;
                     FieldSerializer fields(bs, false);
                     entity->SerializeForcedState(fields);
                     entity->OnStateForced();
@@ -120,6 +123,8 @@ namespace Framework::Networking::Replication {
         // NetworkIDs are small and monotonic, so WriteCompressed strips the leading zero bytes.
         bs.WriteCompressed(networkId);
         bs.Write(entity->stateEpoch);
+        // Whether the pose below is a move or an echo, so the owner warps only for the first.
+        bs.Write(entity->IsPoseServerAuthored());
         FieldSerializer fields(&bs, true);
         entity->SerializeForcedState(fields);
         _owner->SendRawRPC(kForceStateId, bs, MafiaNet::ToGuid(entity->ownerGUID));

@@ -226,6 +226,20 @@ namespace Framework::Networking::Replication {
         // Called on the owning client after SerializeForcedState has applied the forced fields.
         virtual void OnStateForced() {}
 
+        // Server: whether the pose this entity holds was put there by the server -- a script or game
+        // code moved it -- rather than being the pose its owner last reported. True for an entity
+        // no owner has reported a pose for yet, whose only pose is the server's. ForceState carries
+        // the answer, which the owner reads as WasPoseForced().
+        bool IsPoseServerAuthored() const;
+
+        // Owning client, from OnStateForced on: whether the last forced state's pose is one the
+        // server authored (a teleport the owner has to take) rather than its own report echoed back.
+        // A push made for some other field still carries the pose, a round trip old, and an owner
+        // that warps onto every one of those jerks backwards each time.
+        bool WasPoseForced() const {
+            return _poseForced;
+        }
+
         // Raised for every key a construction seed delivered, after OnConstructed, so a listener
         // finds the entity fully built.
         void NotifySeededState(const std::vector<std::string> &keys);
@@ -363,5 +377,16 @@ namespace Framework::Networking::Replication {
         // Receiver: send time of the newest applied pose. The transform channel is plain Unreliable
         // (a sequenced stream is per channel, not per entity), so this is the per-entity ordering.
         MafiaNet::Time _lastTransformTime = 0;
+
+        // Server: the pose the owner last reported, so a forced state can tell a move the server
+        // made from the owner's own pose echoed back. Compared exactly: both sides hold the value the
+        // transform channel decoded, and anything that writes a different one is a move.
+        glm::vec3 _ownerPosition = glm::vec3(0.0f);
+        glm::quat _ownerRotation = glm::identity<glm::quat>();
+        bool _ownerPoseKnown     = false;
+
+        // Owning client: the flag the last forced-state RPC carried. Written by the manager.
+        bool _poseForced = false;
+        friend class ReplicationManager;
     };
 } // namespace Framework::Networking::Replication

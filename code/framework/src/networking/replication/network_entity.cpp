@@ -94,6 +94,10 @@ namespace Framework::Networking::Replication {
         }
     }
 
+    bool NetworkEntity::IsPoseServerAuthored() const {
+        return !_ownerPoseKnown || position != _ownerPosition || rotation != _ownerRotation;
+    }
+
     void NetworkEntity::SerializeTransform(FieldSerializer &fields) {
         fields.Field(position);
         fields.Field(velocity);
@@ -298,6 +302,11 @@ namespace Framework::Networking::Replication {
                 FieldSerializer transform(&deserializeParameters->serializationBitstream[kTransformChannel], false);
                 SerializeTransform(transform);
                 transformUpdated = true;
+                if (IsServerPeer()) {
+                    _ownerPosition  = position;
+                    _ownerRotation  = rotation;
+                    _ownerPoseKnown = true;
+                }
                 if (sentAt != 0) {
                     _lastTransformTime = sentAt;
                 }

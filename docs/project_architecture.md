@@ -434,6 +434,7 @@ If a feature has state that survives a call, it has a service. Free functions in
 - Server-only bookkeeping fields live on the same class, are not serialized, and are marked `// server-only, not serialized`.
 - The **client half** is `features/<stem>/<stem>.{h,cpp}`, a `final` subclass of the shared entity that owns the native game object. It implements the Replica3 hooks (`OnConstructed`, `OnDeserialized`, `OnStateForced`, `DeallocReplica`) and a `Frame()`.
 - The owner/remote asymmetry is stated in the class comment: the owner captures native state upstream; remotes inject received state and apply only authoritative outcomes.
+- A forced state always carries the pose, whatever it was pushed for. `OnStateForced` moves the native object onto it only when `WasPoseForced()` says the server authored that pose; otherwise it is the owner's own report a round trip old, and taking it jerks the object backwards.
 
 ---
 

@@ -102,6 +102,68 @@ MODULE(replication_authority, {
         EQUALS(entity.DeserializeDestruction(&bs, attackerConn), true);
     });
 
+    // A forced state always carries the pose, so the owner has to be told whether that pose is a
+    // move the server made or its own report echoed back. The server answers from the last pose the
+    // owner's transform channel delivered.
+    const auto deliverOwnerPose = [&](NetworkEntity &entity, const glm::vec3 &position) {
+        MafiaNet::DeserializeParameters params {};
+        params.sourceConnection = ownerConn;
+        params.timeStamp        = 0;
+        params.bitstreamWrittenTo[0] = true;
+        params.serializationBitstream[0].Write(entity.stateEpoch);
+        glm::vec3 wirePosition = position;
+        glm::vec3 wireVelocity(0.0f);
+        glm::quat wireRotation = glm::identity<glm::quat>();
+        Framework::Networking::Replication::FieldSerializer transform(&params.serializationBitstream[0], true);
+        transform.Field(wirePosition);
+        transform.Field(wireVelocity);
+        transform.Field(wireRotation);
+        entity.Deserialize(&params);
+    };
+
+    IT("treats a pose no owner has reported as the server's own", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+        entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+        entity.position       = glm::vec3(1.0f, 2.0f, 3.0f);
+
+        EQUALS(entity.IsPoseServerAuthored(), true);
+    });
+
+    IT("reads the owner's own reported pose as an echo, not a move", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+        entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+
+        deliverOwnerPose(entity, glm::vec3(10.0f, 20.0f, 30.0f));
+        EQUALS(entity.position.x, 10.0f);
+        EQUALS(entity.IsPoseServerAuthored(), false);
+    });
+
+    IT("reads a server write after the owner's report as a move", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+        entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+
+        deliverOwnerPose(entity, glm::vec3(10.0f, 20.0f, 30.0f));
+        entity.position = glm::vec3(500.0f, 20.0f, 30.0f);
+        EQUALS(entity.IsPoseServerAuthored(), true);
+
+        // The owner taking the teleport and reporting from there settles it again.
+        deliverOwnerPose(entity, glm::vec3(500.0f, 20.0f, 30.0f));
+        EQUALS(entity.IsPoseServerAuthored(), false);
+    });
+
+    IT("ignores a pose delivered by a connection that does not own the entity", {
+        NetworkEntity entity;
+        entity.replicaManager = serverManager;
+        entity.ownerGUID      = MafiaNet::ToPeerGuid(attackerGuid);
+        entity.position       = glm::vec3(1.0f, 2.0f, 3.0f);
+
+        deliverOwnerPose(entity, glm::vec3(1.0f, 2.0f, 3.0f));
+        EQUALS(entity.IsPoseServerAuthored(), true);
+    });
+
     serverManager->DeallocConnection(ownerConn);
     serverManager->DeallocConnection(attackerConn);
 });
