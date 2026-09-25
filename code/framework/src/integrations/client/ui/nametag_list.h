@@ -65,6 +65,7 @@ namespace Framework::Integrations::Client::UI::Nametags {
         const char *label   = nullptr;    // borrowed for the frame
         const char *note    = nullptr;    // transient local line (NoteStore), borrowed for the frame
         uint32_t noteColor  = 0;          // 0xAARRGGBB; 0 draws the note in `color`
+        float voiceLevel    = -1.0f;      // <0 not talking; [0,1] VoiceClient::GetSpeakerLevel while they are
     };
 
     // One tag that survived selection, ordered far to near so a nearer tag paints over a farther one.
@@ -81,6 +82,7 @@ namespace Framework::Integrations::Client::UI::Nametags {
         const char *label   = nullptr;
         const char *note    = nullptr;
         uint32_t noteColor  = 0;
+        float voiceLevel    = -1.0f;
     };
 
     // Returning false drops a tag before it costs anything: per-viewer rules live here.
@@ -173,6 +175,7 @@ namespace Framework::Integrations::Client::UI::Nametags {
             resolved.label         = hasName ? candidate.label : nullptr;
             resolved.note          = hasNote ? candidate.note : nullptr;
             resolved.noteColor     = candidate.noteColor;
+            resolved.voiceLevel    = candidate.voiceLevel;
             _entries.push_back(resolved);
             return true;
         }

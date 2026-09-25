@@ -10,6 +10,7 @@
 
 #include "nametag_list.h"
 
+#include <external/imgui/widgets/nametag.h>
 #include <imgui.h>
 
 #include <algorithm>
@@ -101,6 +102,14 @@ namespace Framework::Integrations::Client::UI::Nametags {
 
         if (drawName) {
             Detail::DrawShadowedLine(drawList, font, namePx, screen.x, top, tag.label, nullptr, NametagColor(tag.color, alpha), shadow, shadowPx);
+
+            // Off the left of the centred name, so talking never moves the name itself.
+            if (tag.voiceLevel >= 0.0f) {
+                const float nameWidth = font->CalcTextSizeA(namePx, FLT_MAX, 0.0f, tag.label).x;
+                const ImVec2 center(screen.x - nameWidth * 0.5f - namePx * 0.7f, top + namePx * 0.5f);
+                External::ImGUI::Widgets::DrawVoiceIcon(drawList, ImVec2(center.x + shadowPx, center.y + shadowPx), namePx, tag.voiceLevel, shadow);
+                External::ImGUI::Widgets::DrawVoiceIcon(drawList, center, namePx, tag.voiceLevel, NametagColor(tag.color, alpha));
+            }
             top += namePx;
         }
 

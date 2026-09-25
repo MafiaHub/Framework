@@ -13,6 +13,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 namespace Framework::External::ImGUI::Widgets {
@@ -73,7 +74,58 @@ namespace Framework::External::ImGUI::Widgets {
         float healthBarWidth  = 50.0f; // used when a healthPercent is supplied
         float healthBarHeight = 5.0f;
         NameTagAnchor anchor  = NameTagAnchor::TextCenter;
+
+        // The talking indicator, drawn inside the plate to the left of the name. < 0 draws none;
+        // [0, 1] is how loud the speaker is right now (VoiceClient::GetSpeakerLevel), which
+        // swells the waves -- a player who is talking but between syllables still shows the
+        // speaker and its first wave.
+        float voiceLevel = -1.0f;
+        ImU32 voiceColor = IM_COL32(255, 255, 255, 255);
     };
+
+    // A loudspeaker with up to three sound waves, sized to `height` and centred on `center`.
+    // The waves light up with `level` in [0, 1]; the first is always on, so a quiet moment
+    // mid-sentence does not look like the speaker stopped. Returns the width it took.
+    inline float DrawVoiceIcon(ImDrawList *drawList, ImVec2 center, float height, float level, ImU32 color) {
+        if (!drawList || height <= 0.0f) {
+            return 0.0f;
+        }
+
+        const float h         = height * 0.8f;
+        const float left      = center.x - h * 0.5f;
+        const float bodyW     = h * 0.22f;
+        const float bodyH     = h * 0.36f;
+        const float coneW     = h * 0.24f;
+        const float coneH     = h * 0.8f;
+        const float thickness = std::max(1.0f, h * 0.09f);
+
+        // Body and cone as one convex outline, so the join does not show a seam.
+        const ImVec2 points[] = {
+            ImVec2(left, center.y - bodyH * 0.5f),
+            ImVec2(left + bodyW, center.y - bodyH * 0.5f),
+            ImVec2(left + bodyW + coneW, center.y - coneH * 0.5f),
+            ImVec2(left + bodyW + coneW, center.y + coneH * 0.5f),
+            ImVec2(left + bodyW, center.y + bodyH * 0.5f),
+            ImVec2(left, center.y + bodyH * 0.5f),
+        };
+        drawList->AddConvexPolyFilled(points, 6, color);
+
+        const ImVec2 origin(left + bodyW + coneW * 0.35f, center.y);
+        const float baseAlpha = static_cast<float>((color >> IM_COL32_A_SHIFT) & 0xFF) / 255.0f;
+        const float clamped   = std::clamp(level, 0.0f, 1.0f);
+        constexpr float kSpan = 0.8f; // radians either side of horizontal
+        for (int wave = 0; wave < 3; wave++) {
+            // The first wave is always lit; the other two need a louder voice to fill in.
+            const float lit       = wave == 0 ? 1.0f : std::clamp((clamped - 0.08f * static_cast<float>(wave)) * 6.0f, 0.0f, 1.0f);
+            const float radius    = coneW * 0.9f + static_cast<float>(wave) * h * 0.2f;
+            const ImU32 waveAlpha = static_cast<ImU32>(255.0f * baseAlpha * (0.25f + 0.75f * lit));
+            const ImU32 waveColor = (color & ~IM_COL32_A_MASK) | (waveAlpha << IM_COL32_A_SHIFT);
+            drawList->PathArcTo(origin, radius, -kSpan, kSpan, 8);
+            drawList->PathStroke(waveColor, 0, thickness);
+        }
+
+        return h * 1.1f;
+    }
 
     // BottomCenter anchors the full widget, including the health bar.
     inline void DrawNameTag(ImDrawList *drawList, ImVec2 screenPos, const char *name, const NameTagStyle &style = {}, float alpha = 1.0f, float healthPercent = -1.0f) {
@@ -85,11 +137,19 @@ namespace Framework::External::ImGUI::Widgets {
         float fontSize = style.fontSize > 0.0f ? style.fontSize : ImGui::GetFontSize();
 
         const bool drawHealth    = healthPercent >= 0.0f && style.healthBarWidth > 0.0f && style.healthBarHeight > 0.0f;
+        const bool drawVoice     = style.voiceLevel >= 0.0f;
         const ImVec2 textSize    = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, name);
         const float bottomOffset = style.anchor == NameTagAnchor::BottomCenter ? textSize.y * 0.5f + style.padding + (drawHealth ? 3.0f + style.healthBarHeight : 0.0f) : 0.0f;
         const ImVec2 textPos(screenPos.x - textSize.x * 0.5f, screenPos.y - textSize.y * 0.5f - bottomOffset);
 
-        drawList->AddRectFilled(ImVec2(textPos.x - style.padding, textPos.y - style.padding), ImVec2(textPos.x + textSize.x + style.padding, textPos.y + textSize.y + style.padding), WorldTextModulateAlpha(style.bgColor, alpha), style.rounding);
+        // The icon hangs off the left of the name rather than recentring it, so a player who
+        // starts talking does not make their name jump sideways.
+        const float iconWidth = drawVoice ? textSize.y + style.padding : 0.0f;
+
+        drawList->AddRectFilled(ImVec2(textPos.x - style.padding - iconWidth, textPos.y - style.padding), ImVec2(textPos.x + textSize.x + style.padding, textPos.y + textSize.y + style.padding), WorldTextModulateAlpha(style.bgColor, alpha), style.rounding);
+        if (drawVoice) {
+            DrawVoiceIcon(drawList, ImVec2(textPos.x - iconWidth + textSize.y * 0.5f, textPos.y + textSize.y * 0.5f), textSize.y, style.voiceLevel, WorldTextModulateAlpha(style.voiceColor, alpha));
+        }
         drawList->AddText(font, fontSize, textPos, WorldTextModulateAlpha(style.textColor, alpha), name);
 
         if (!drawHealth) {
