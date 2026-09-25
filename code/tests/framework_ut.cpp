@@ -34,6 +34,7 @@
 #include "modules/spsc_ring_ut.h"
 #include "modules/voice_mixer_ut.h"
 #include "modules/voice_ptt_gate_ut.h"
+#include "modules/voice_activity_ut.h"
 #include "modules/gui_resources_ut.h"
 #include "modules/resource_package_ut.h"
 
@@ -77,6 +78,7 @@ int main() {
     UNIT_MODULE(spsc_ring);
     UNIT_MODULE(voice_mixer);
     UNIT_MODULE(voice_ptt_gate);
+    UNIT_MODULE(voice_activity);
     UNIT_MODULE(gui_resources);
     UNIT_MODULE(resource_package);
 #ifdef _WIN32

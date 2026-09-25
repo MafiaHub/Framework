@@ -58,11 +58,15 @@ namespace Framework::Voice {
         }
 
         // Time based, so the same speech drives the same mouth at 30 and at 200 frames a second.
-        float FollowEnvelope(float current, float target, float dt) {
+        // A meter keeps what a mouth floors: the quiet end is exactly where a threshold is set.
+        float FollowEnvelope(float current, float target, float dt, float floor = kEnvelopeFloor) {
             const float tau  = target > current ? kEnvelopeAttack : kEnvelopeRelease;
             const float next = current + (target - current) * (1.0f - std::exp(-dt / tau));
-            return next < kEnvelopeFloor ? 0.0f : next;
+            return next < floor ? 0.0f : next;
         }
+
+        // Below this the input meter reads silence; far under any sensible threshold.
+        constexpr float kInputMeterFloor = 0.0005f;
     } // namespace
 
     // ------------------------------------------------------------------------------------
@@ -83,7 +87,7 @@ namespace Framework::Voice {
 
         for (Slot &slot : _slots) {
             slot.id.store(0, std::memory_order_relaxed);
-            slot.pcm.Clear();
+            slot.audio.Clear();
         }
     }
 
@@ -106,10 +110,12 @@ namespace Framework::Voice {
 
             // Wait for the audio thread to drain what the previous occupant left. Clearing
             // from this thread would race the consumer.
-            if (slot.pcm.Available() != 0) {
+            if (slot.audio.Available() != 0) {
                 continue;
             }
 
+            // Before the id is published: the producer side is this thread's alone until then.
+            slot.audio.ResetEstimate();
             slot.id.store(speaker, std::memory_order_release);
             return static_cast<int>(i);
         }
@@ -132,7 +138,7 @@ namespace Framework::Voice {
         }
 
         // A full ring means the device is not consuming; dropping beats playing stale audio.
-        _slots[slot].pcm.Push(mono, samples);
+        _slots[slot].audio.Push(mono, samples, Utils::Time::GetTime());
     }
 
     void LocalVoiceSink::ReleaseSpeaker(uint64_t speaker) {
@@ -208,38 +214,8 @@ namespace Framework::Voice {
             const uint64_t id = slot.id.load(std::memory_order_acquire);
             if (id == 0) {
                 // Draining here rather than on release keeps the ring single-consumer.
-                while (slot.pcm.Pop(scratch, kRenderChunkSamples)) {}
-                slot.primed = false;
+                slot.audio.Discard(scratch, kRenderChunkSamples);
                 continue;
-            }
-
-            // Frames arrive in bursts every 50ms while this runs every 20ms, so playing on
-            // the first frame leaves the buffer at zero and every hiccup punches a hole.
-            if (!slot.primed) {
-                if (slot.pcm.Available() < kJitterBufferFrames * kFrameSamples) {
-                    continue;
-                }
-
-                slot.primed = true;
-            }
-
-            // Ran dry. Hold the remainder and re-prime: splicing silence mid-waveform is what
-            // makes an underrun sound like distortion rather than a pause.
-            if (slot.pcm.Available() < frameCount) {
-                slot.primed = false;
-                continue;
-            }
-
-            // Drifted deep. Skip the oldest audio back to the prime level so latency cannot
-            // creep upwards. Requires a whole chunk of headroom, so it can never trim below
-            // the target and starve the consume below.
-            if (slot.pcm.Available() > kJitterBufferMaxFrames * kFrameSamples) {
-                const size_t target = std::max<size_t>(kJitterBufferFrames * kFrameSamples, frameCount);
-                while (slot.pcm.Available() >= target + kRenderChunkSamples) {
-                    if (!slot.pcm.Pop(scratch, kRenderChunkSamples)) {
-                        break;
-                    }
-                }
             }
 
             // A slot that changed hands since the last publish has no trustworthy position,
@@ -258,9 +234,10 @@ namespace Framework::Voice {
             uint32_t remaining = frameCount;
             uint32_t offset    = 0;
 
+            // The playout buffer decides priming, underrun and drift; a false is silence.
             while (remaining > 0) {
                 const uint32_t chunk = std::min(remaining, kRenderChunkSamples);
-                if (!slot.pcm.Pop(scratch, chunk)) {
+                if (!slot.audio.Pull(scratch, chunk)) {
                     break;
                 }
 
@@ -316,7 +293,7 @@ namespace Framework::Voice {
     }
 
     void VoiceClient::Shutdown() {
-        _ptt.Cut();
+        CutGates();
         CloseSession();
 
         // CloseSession stops the devices only when a session was open, and the installed source
@@ -363,7 +340,8 @@ namespace Framework::Voice {
         // of our code sees them, so the mixer's slot array bounds mixing rather than CPU.
         _voice.SetMaxDecodedSpeakers(kMaxDecodedTalkers);
 
-        // No SetNoiseFilter: RNNoise needs 480-sample frames and voice runs at 960.
+        // No SetNoiseFilter: RakVoice only runs RNNoise on 480-sample frames and voice runs at
+        // 960. NoiseSuppressor runs it on each half instead, in PumpCapture.
         _voice.SetRelayTarget(_server);
 
         _sessionOpen = true;
@@ -381,6 +359,9 @@ namespace Framework::Voice {
         }
         _localTalking      = false;
         _localTalkingUntil = 0;
+        _inputLevel        = 0.0f;
+        CutGates();
+        _denoiser.Reset();
 
         _voice.Deinit();
         _voice.SetRelayMode(false);
@@ -393,7 +374,6 @@ namespace Framework::Voice {
         _self         = MafiaNet::UNASSIGNED_RAKNET_GUID;
         _sessionOpen  = false;
         _transmitting = false;
-        _ptt.Cut();
 
         // Nothing to capture or play between servers, and holding the microphone open there would
         // leave the OS recording indicator lit in the main menu.
@@ -480,9 +460,60 @@ namespace Framework::Voice {
 
         // Re-enabling reopens from UpdateSession, once the connection is confirmed.
         if (!enabled) {
-            _ptt.Cut();
+            CutGates();
             CloseSession();
         }
+    }
+
+    void VoiceClient::SetTransmitMode(TransmitMode mode) {
+        if (mode == _transmitMode) {
+            return;
+        }
+
+        CutGates();
+        _transmitMode = mode;
+    }
+
+    void VoiceClient::SetNoiseSuppression(bool enabled) {
+        _noiseSuppression = enabled;
+        if (!enabled) {
+            _denoiser.Reset();
+        }
+    }
+
+    std::vector<std::string> VoiceClient::ListCaptureDevices() const {
+        return _source != nullptr ? _source->ListDevices() : std::vector<std::string> {};
+    }
+
+    std::string VoiceClient::GetCaptureDevice() const {
+        return _source != nullptr ? _source->GetSelectedDevice() : std::string {};
+    }
+
+    void VoiceClient::SetCaptureDevice(const std::string &name) {
+        if (_source == nullptr || _source->GetSelectedDevice() == name) {
+            return;
+        }
+
+        _source->SelectDevice(name);
+
+        // What the old microphone taught the denoiser about the room is wrong for this one.
+        _denoiser.Reset();
+        CutGates();
+
+        if (_source->IsRunning()) {
+            _source->Stop();
+            if (!_source->Start()) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: the chosen microphone would not open; continuing listen-only");
+            }
+        }
+    }
+
+    void VoiceClient::CutGates() {
+        _ptt.Cut();
+        _vad.Cut();
+        _gateWasOpen  = false;
+        _preRollCount = 0;
+        _preRollNext  = 0;
     }
 
     void VoiceClient::SetPushToTalk(bool held) {
@@ -492,14 +523,14 @@ namespace Framework::Voice {
     void VoiceClient::SetInputSuppressed(bool suppressed) {
         _inputSuppressed = suppressed;
         if (suppressed) {
-            _ptt.Cut();
+            CutGates();
         }
     }
 
     void VoiceClient::SetTransmitBlocked(bool blocked) {
         _transmitBlocked = blocked;
         if (blocked) {
-            _ptt.Cut();
+            CutGates();
         }
     }
 
@@ -537,41 +568,92 @@ namespace Framework::Voice {
     void VoiceClient::PumpCapture() {
         if (!_source->IsRunning()) {
             _localLevel   = 0.0f;
+            _inputLevel   = 0.0f;
             _localTalking = false;
             return;
         }
 
         const int64_t nowMs = Utils::Time::GetTime();
-        const bool transmit = _sessionOpen && !_inputSuppressed && !_transmitBlocked && _ptt.IsOpen(nowMs);
+        const bool allowed  = _sessionOpen && !_inputSuppressed && !_transmitBlocked;
+        const bool activity = _transmitMode == TransmitMode::VoiceActivity;
 
         // Drained whether or not we transmit: left alone the ring fills, and the next
         // push-to-talk press would send all of it before anything the player just said.
         uint32_t frames = 0;
         float loudest   = 0.0f;
+        float heard     = 0.0f;
+        bool sent       = false;
         while (_source->ReadFrame(_frame.data())) {
-            if (transmit) {
-                _voice.SendFrame(_self, _frame.data());
-                loudest = std::max(loudest, FrameLevel(_frame.data(), static_cast<uint32_t>(_frame.size())));
-            }
             frames++;
+
+            if (_noiseSuppression) {
+                _denoiser.Process(_frame.data());
+            }
+
+            const float level = FrameLevel(_frame.data(), static_cast<uint32_t>(_frame.size()));
+            heard             = std::max(heard, level);
+
+            // The level gate is fed while blocked too, so it does not reopen on a stale hold the
+            // moment the block lifts.
+            const bool gate = activity ? _vad.Update(level, nowMs) : _ptt.IsOpen(nowMs);
+            const bool open = allowed && gate;
+
+            if (!open) {
+                _gateWasOpen = false;
+                if (activity) {
+                    KeepPreRoll(_frame.data());
+                }
+                continue;
+            }
+
+            // Push-to-talk never sends what came before the key: that is audio the player did
+            // not choose to send. Voice activation does, because the frame that crossed the
+            // threshold is already part of the word.
+            if (!_gateWasOpen && activity) {
+                SendPreRoll();
+            }
+            _gateWasOpen = true;
+
+            _voice.SendFrame(_self, _frame.data());
+            loudest = std::max(loudest, level);
+            sent    = true;
         }
 
-        _transmitting = transmit && frames > 0;
+        _transmitting = sent;
+
+        const bool gateOpen = allowed && (activity ? _vad.IsOpen() : _ptt.IsOpen(nowMs));
 
         // Debounced like the server's inbound frames, so a tick that drained nothing does not
-        // flicker the edge. Closing push-to-talk cuts it immediately.
+        // flicker the edge. Closing the gate cuts it immediately.
         if (_transmitting) {
             _localTalkingUntil = nowMs + static_cast<int64_t>(kTalkingTimeoutMs);
         }
-        _localTalking = transmit && nowMs < _localTalkingUntil;
+        _localTalking = gateOpen && nowMs < _localTalkingUntil;
 
         // From what we send, so a blocked transmit reads as silence. A tick with no frame holds.
         if (frames > 0) {
-            _localLevel = FollowEnvelope(_localLevel, transmit ? loudest : 0.0f, _envelopeStep);
+            _localLevel = FollowEnvelope(_localLevel, sent ? loudest : 0.0f, _envelopeStep);
+            _inputLevel = FollowEnvelope(_inputLevel, heard, _envelopeStep, kInputMeterFloor);
         }
-        else if (!transmit) {
+        else if (!gateOpen) {
             _localLevel = FollowEnvelope(_localLevel, 0.0f, _envelopeStep);
         }
+    }
+
+    void VoiceClient::KeepPreRoll(const int16_t *frame) {
+        std::copy(frame, frame + kFrameSamples, _preRoll[_preRollNext].begin());
+        _preRollNext  = (_preRollNext + 1) % kVoiceActivationPreRollFrames;
+        _preRollCount = std::min(_preRollCount + 1, kVoiceActivationPreRollFrames);
+    }
+
+    void VoiceClient::SendPreRoll() {
+        // Oldest first: once the ring is full, the next write position is the oldest entry.
+        const uint32_t first = (_preRollNext + kVoiceActivationPreRollFrames - _preRollCount) % kVoiceActivationPreRollFrames;
+        for (uint32_t i = 0; i < _preRollCount; i++) {
+            _voice.SendFrame(_self, _preRoll[(first + i) % kVoiceActivationPreRollFrames].data());
+        }
+        _preRollCount = 0;
+        _preRollNext  = 0;
     }
 
     void VoiceClient::PumpSpeakers() {
@@ -594,10 +676,12 @@ namespace Framework::Voice {
             const MafiaNet::RakNetGUID guid = _activeSpeakers[i];
             const uint64_t speaker          = static_cast<uint64_t>(MafiaNet::ToPeerGuid(guid));
 
-            int slot = FindAdmitted(speaker);
-            if (slot < 0) {
-                slot = AdmitSpeaker(speaker, nowMs);
-            }
+            // Admitted on their first frame, not on being listed: RakVoice lists every channel it
+            // still holds a decoder for, audio or not, so admitting on the listing would re-admit
+            // a silent talker the tick after the silence timeout released them -- and read them
+            // as talking.
+            int slot            = FindAdmitted(speaker);
+            bool admissionTried = slot >= 0;
 
             // Drained admitted or not: the decode is already paid for, and leaving frames
             // queued only delays the audio handed back once a slot opens up.
@@ -605,6 +689,11 @@ namespace Framework::Voice {
             float loudest     = 0.0f;
             int64_t submitted = 0;
             while (_voice.ReceiveFrameFrom(guid, _frame.data())) {
+                if (!admissionTried) {
+                    admissionTried = true;
+                    slot           = AdmitSpeaker(speaker, nowMs);
+                }
+
                 if (slot >= 0 && _sink != nullptr) {
                     _sink->Submit(speaker, _frame.data(), kFrameSamples);
                     loudest = std::max(loudest, FrameLevel(_frame.data(), kFrameSamples));
@@ -731,6 +820,22 @@ namespace Framework::Voice {
         _admitted[slot].lastFrame  = 0;
         _admitted[slot].level      = 0.0f;
         _admitted[slot].audioUntil = 0;
+    }
+
+    bool VoiceClient::IsSpeakerTalking(uint64_t speaker) const {
+        if (speaker == 0) {
+            return false;
+        }
+
+        const int slot = FindAdmitted(speaker);
+        if (slot < 0 || _admitted[slot].lastFrame == 0) {
+            return false;
+        }
+
+        // The later of the last arrival plus the hold, and the end of what is still queued to
+        // play: a burst can hand over more audio than the hold covers.
+        const int64_t until = std::max(_admitted[slot].lastFrame + static_cast<int64_t>(kSpeakerTalkingHoldMs), _admitted[slot].audioUntil + static_cast<int64_t>(kTalkingTimeoutMs));
+        return Utils::Time::GetTime() < until;
     }
 
     float VoiceClient::GetSpeakerLevel(uint64_t speaker) const {

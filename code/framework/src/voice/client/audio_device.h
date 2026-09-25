@@ -14,9 +14,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 // miniaudio.h expands to roughly four megabytes, so it stays out of this header.
 struct ma_device;
+struct ma_context;
 
 namespace Framework::Voice {
     // ~340ms of mono capture.
@@ -48,10 +51,23 @@ namespace Framework::Voice {
         // Main thread. Pops exactly kFrameSamples, or writes nothing and returns false.
         bool ReadFrame(int16_t *out) override;
 
+        std::vector<std::string> ListDevices() const override;
+        void SelectDevice(const std::string &name) override;
+
+        std::string GetSelectedDevice() const override {
+            return _deviceName;
+        }
+
       private:
         static void OnCapture(ma_device *device, void *output, const void *input, uint32_t frameCount);
 
+        bool OpenContext();
+        void CloseContext();
+
         ma_device *_device = nullptr;
+        // Only while a chosen device is open; the default device needs none of its own.
+        ma_context *_context = nullptr;
+        std::string _deviceName;
         CaptureRing _ring;
     };
 

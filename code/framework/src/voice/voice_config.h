@@ -55,6 +55,14 @@ namespace Framework::Voice {
     // VAD punches holes between words and RakVoice flushes on a 50ms throttle.
     constexpr uint32_t kTalkingTimeoutMs = 300;
 
+    // How long a remote speaker still reads as talking (VoiceClient::IsSpeakerTalking) after
+    // their audio stops arriving. Longer than kTalkingTimeoutMs on purpose: VAD sends nothing
+    // at all during silence -- RakVoice drops Opus's DTX frames -- so every pause between words
+    // is a gap on the receiving side, and an indicator that followed the arrivals alone would
+    // blink through a sentence. Long enough to bridge a pause, short enough that the icon still
+    // goes when the sentence does.
+    constexpr uint32_t kSpeakerTalkingHoldMs = 700;
+
     // A speaker's decoder is released after this long without a frame.
     constexpr uint32_t kSpeakerSilenceTimeoutMs = 2000;
 
@@ -69,4 +77,30 @@ namespace Framework::Voice {
     // steadily further behind. Past this, the oldest audio is skipped back to
     // kJitterBufferFrames: one audible skip in exchange for bounded latency.
     constexpr uint32_t kJitterBufferMaxFrames = 12;
+
+    // Bounds on the adaptive start depth, in 20ms frames. kJitterBufferFrames is where a
+    // speaker starts before anything has been measured; from there the depth follows the
+    // gaps between their arrivals. Two frames is the floor RakVoice's 50ms flush allows,
+    // ten (200ms) is where a conversation starts to feel like a phone call.
+    constexpr uint32_t kJitterBufferMinFrames       = 2;
+    constexpr uint32_t kJitterBufferMaxTargetFrames = 10;
+
+    // Arrival gaps longer than this are the talker pausing, not the network: VAD sends
+    // nothing between words, so a gap of this size carries no information about jitter.
+    constexpr uint32_t kJitterTalkspurtGapMs = 250;
+
+    // How many recent arrival gaps the adaptive depth is taken from. At RakVoice's 50ms
+    // flush this is the last ~2.5 seconds of speech.
+    constexpr uint32_t kJitterWindowSamples = 48;
+
+    // Transmit without a key: the microphone opens once its level crosses a threshold and
+    // stays open for a hold after it falls back, so the gaps between words do not chop.
+    // Levels are full-scale RMS in [0, 1], the same scale GetSpeakerLevel reports.
+    constexpr float kDefaultVoiceActivationThreshold = 0.03f; // about -30 dBFS
+    constexpr uint32_t kDefaultVoiceActivationHoldMs = 300;
+    constexpr uint32_t kMaxVoiceActivationHoldMs     = 2000;
+
+    // Frames kept from before the gate opens and sent with the first open frame, so the
+    // onset of the word that tripped the threshold is not the part that gets lost.
+    constexpr uint32_t kVoiceActivationPreRollFrames = 2;
 } // namespace Framework::Voice

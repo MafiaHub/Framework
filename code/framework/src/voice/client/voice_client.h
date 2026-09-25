@@ -12,14 +12,18 @@
 #include "i_voice_sink.h"
 #include "i_voice_source.h"
 #include "mixer.h"
+#include "noise_suppressor.h"
+#include "playout_buffer.h"
 #include "push_to_talk_gate.h"
 #include "voice/voice_config.h"
+#include "voice_activity_gate.h"
 
 #include <mafianet/RakVoice.h>
 
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -30,6 +34,14 @@ namespace Framework::Networking {
 namespace Framework::Voice {
     // ~340ms of decoded audio per speaker.
     constexpr size_t kSpeakerRingSamples = 16384;
+
+    // What opens the microphone.
+    enum class TransmitMode : uint8_t {
+        // A held key, plus the release delay.
+        PushToTalk,
+        // The microphone's own level crossing a threshold, plus a hold. No key at all.
+        VoiceActivity,
+    };
 
     // Built-in output path: mixes audible speakers into the default playback device with
     // distance attenuation and constant-power panning.
@@ -81,9 +93,7 @@ namespace Framework::Voice {
         struct Slot {
             // 0 = free. Published last on acquire, cleared first on release.
             std::atomic<uint64_t> id {0};
-            SpscRing<int16_t, kSpeakerRingSamples> pcm;
-            // Jitter buffer filled enough to play. Audio thread only, so not atomic.
-            bool primed = false;
+            PlayoutBuffer<kSpeakerRingSamples> audio;
         };
 
         struct World {
@@ -160,8 +170,48 @@ namespace Framework::Voice {
 
         // --- microphone ---
 
+        // Push-to-talk by default. Switching cuts whatever the old mode had open.
+        void SetTransmitMode(TransmitMode mode);
+
+        TransmitMode GetTransmitMode() const {
+            return _transmitMode;
+        }
+
+        // Voice activation's trigger level, as full-scale RMS in [0, 1] -- the scale
+        // GetInputLevel reports, so a settings UI can draw one against the other.
+        void SetVoiceActivationThreshold(float threshold) {
+            _vad.SetThreshold(threshold);
+        }
+
+        float GetVoiceActivationThreshold() const {
+            return _vad.GetThreshold();
+        }
+
+        // How long voice activation stays open after the level drops, in milliseconds.
+        void SetVoiceActivationHold(uint32_t ms) {
+            _vad.SetHold(ms);
+        }
+
+        uint32_t GetVoiceActivationHold() const {
+            return _vad.GetHold();
+        }
+
+        // RNNoise over the microphone, ahead of the level, the gate and the encoder. Off by
+        // default: it costs a little CPU and colours some voices.
+        void SetNoiseSuppression(bool enabled);
+
+        bool IsNoiseSuppressionEnabled() const {
+            return _noiseSuppression;
+        }
+
+        // The recording devices the installed source can open, and the one it opens. An engine
+        // source that cannot choose lists none. Changing it restarts a running microphone.
+        std::vector<std::string> ListCaptureDevices() const;
+        void SetCaptureDevice(const std::string &name);
+        std::string GetCaptureDevice() const;
+
         // The raw key state. Gating conditions belong in SetTransmitBlocked: folded in here they
-        // would extend the release delay rather than cut it.
+        // would extend the release delay rather than cut it. Ignored under voice activation.
         void SetPushToTalk(bool held);
 
         bool IsPushToTalkHeld() const {
@@ -207,14 +257,26 @@ namespace Framework::Voice {
             return _localLevel;
         }
 
+        // How loud the microphone is, sent or not: after noise suppression, before the gate.
+        // What a sensitivity setting is tuned against. 0 while no microphone is open.
+        float GetInputLevel() const {
+            return _inputLevel;
+        }
+
         // --- talking state ---
 
-        // Whether the local player is speaking, debounced so a tick that drained no capture
-        // frame does not read as a stop. Remote talkers are deliberately absent: what this
-        // client hears is a mixer detail, not a fact about the other player.
+        // Whether the local player is speaking -- push-to-talk held or voice activation open,
+        // and audio going out -- debounced so a tick that drained no capture frame does not
+        // read as a stop. A remote talker's counterpart is IsSpeakerTalking, which answers
+        // for this client's playback rather than for the other player.
         bool IsLocalTalking() const {
             return _localTalking;
         }
+
+        // Whether this client is hearing `speaker` right now, held across the gaps between
+        // words for kSpeakerTalkingHoldMs. A fact about this client's playback, not the other player: someone out of
+        // range, muted for us or outside the audible set reads as silent.
+        bool IsSpeakerTalking(uint64_t speaker) const;
 
         // --- spatialisation ---
 
@@ -269,8 +331,9 @@ namespace Framework::Voice {
             return _source;
         }
 
-        // Built-in mixer only; a custom sink applies its own gain, on whatever
-        // the host engine mixes voice into.
+        // The player's voice volume, in [0, 4]. Stored on the built-in mixer, which applies it;
+        // an engine sink reads it back and applies it on whatever its engine mixes voice into,
+        // the same way it reads the rolloff below.
         void SetMasterVolume(float volume) {
             _localSink.SetMasterVolume(volume);
         }
@@ -327,6 +390,10 @@ namespace Framework::Voice {
         void StopDevices();
 
         void PumpCapture();
+        // Whichever gate the mode uses, closed at once.
+        void CutGates();
+        void KeepPreRoll(const int16_t *frame);
+        void SendPreRoll();
         void PumpSpeakers();
         void PublishWorld();
 
@@ -348,6 +415,7 @@ namespace Framework::Voice {
         bool _transmitting    = false;
         bool _preferenceSent  = false;
         float _localLevel     = 0.0f;
+        float _inputLevel     = 0.0f;
         bool _localTalking    = false;
         // Holds our own state across a tick that drained no capture frame.
         int64_t _localTalkingUntil = 0;
@@ -355,7 +423,17 @@ namespace Framework::Voice {
         int64_t _envelopeMs = 0;
         float _envelopeStep = 0.0f;
         int _pushToTalkKey  = kDefaultPushToTalkKey;
+        TransmitMode _transmitMode = TransmitMode::PushToTalk;
         PushToTalkGate _ptt {};
+        VoiceActivityGate _vad {};
+        // Whether the last captured frame went out, so the first one to open voice activation
+        // knows to send the pre-roll ahead of itself.
+        bool _gateWasOpen = false;
+        std::array<std::array<int16_t, kFrameSamples>, kVoiceActivationPreRollFrames> _preRoll {};
+        uint32_t _preRollCount = 0;
+        uint32_t _preRollNext  = 0;
+        bool _noiseSuppression = false;
+        NoiseSuppressor _denoiser;
         MafiaNet::RakNetGUID _self {};
         MafiaNet::RakNetGUID _server {};
 

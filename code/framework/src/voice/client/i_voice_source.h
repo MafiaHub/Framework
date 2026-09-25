@@ -11,6 +11,8 @@
 #include "voice/voice_config.h"
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace Framework::Voice {
     // Where captured voice comes from. The mirror of IVoiceSink: implement this to take the
@@ -36,5 +38,26 @@ namespace Framework::Voice {
         // nothing and returns false. Drained in a loop until it returns false, so a source
         // that has buffered several frames hands them all over in one tick.
         virtual bool ReadFrame(int16_t *out) = 0;
+
+        // --- device choice, optional ---
+        //
+        // A source that cannot choose its device keeps the defaults: no devices listed, and a
+        // selection that is remembered by nobody.
+
+        // The recording devices this source could open, by the name a player picks from.
+        virtual std::vector<std::string> ListDevices() const {
+            return {};
+        }
+
+        // By a name ListDevices gave; empty for the system default. A name that is no longer
+        // present at Start falls back to the default rather than leaving the player mute.
+        // Takes effect on the next Start -- VoiceClient restarts a running source itself.
+        virtual void SelectDevice(const std::string &name) {
+            (void)name;
+        }
+
+        virtual std::string GetSelectedDevice() const {
+            return {};
+        }
     };
 } // namespace Framework::Voice

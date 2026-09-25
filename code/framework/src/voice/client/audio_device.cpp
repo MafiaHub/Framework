@@ -24,6 +24,22 @@ namespace Framework::Voice {
             config.performanceProfile        = ma_performance_profile_low_latency;
             config.noPreSilencedOutputBuffer = MA_TRUE;
         }
+
+        bool FindCaptureDevice(ma_context *context, const std::string &name, ma_device_id &out) {
+            ma_device_info *captures = nullptr;
+            ma_uint32 count          = 0;
+            if (ma_context_get_devices(context, nullptr, nullptr, &captures, &count) != MA_SUCCESS) {
+                return false;
+            }
+
+            for (ma_uint32 i = 0; i < count; i++) {
+                if (name == captures[i].name) {
+                    out = captures[i].id;
+                    return true;
+                }
+            }
+            return false;
+        }
     } // namespace
 
     void CaptureDevice::OnCapture(ma_device *device, void *output, const void *input, uint32_t frameCount) {
@@ -51,13 +67,25 @@ namespace Framework::Voice {
         config.pUserData        = this;
         ApplyCommonConfig(config);
 
+        // A chosen device is found by name in a context of our own, which then has to outlive
+        // the device: a device id is only meaningful to the context that enumerated it.
+        ma_device_id chosen {};
+        if (!_deviceName.empty() && OpenContext() && FindCaptureDevice(_context, _deviceName, chosen)) {
+            config.capture.pDeviceID = &chosen;
+        }
+        else if (!_deviceName.empty()) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: microphone '{}' is not connected; using the system default", _deviceName);
+        }
+
         auto *device = new (std::nothrow) ma_device {};
         if (device == nullptr) {
+            CloseContext();
             return false;
         }
 
-        if (ma_device_init(nullptr, &config, device) != MA_SUCCESS) {
+        if (ma_device_init(config.capture.pDeviceID != nullptr ? _context : nullptr, &config, device) != MA_SUCCESS) {
             delete device;
+            CloseContext();
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: no usable capture device; continuing listen-only");
             return false;
         }
@@ -65,6 +93,7 @@ namespace Framework::Voice {
         if (ma_device_start(device) != MA_SUCCESS) {
             ma_device_uninit(device);
             delete device;
+            CloseContext();
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Voice: capture device failed to start; continuing listen-only");
             return false;
         }
@@ -72,6 +101,59 @@ namespace Framework::Voice {
         _device = device;
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Voice: capture device '{}' running at {}Hz", _device->capture.name, _device->sampleRate);
         return true;
+    }
+
+    std::vector<std::string> CaptureDevice::ListDevices() const {
+        std::vector<std::string> names;
+
+        // Its own short-lived context, so listing never disturbs a running device. Only ever
+        // asked for from a settings screen, long after the host has chosen its COM apartment;
+        // see VoiceClient::Init for why that matters to miniaudio's WASAPI backend.
+        ma_context context;
+        if (ma_context_init(nullptr, 0, nullptr, &context) != MA_SUCCESS) {
+            return names;
+        }
+
+        ma_device_info *captures = nullptr;
+        ma_uint32 count          = 0;
+        if (ma_context_get_devices(&context, nullptr, nullptr, &captures, &count) == MA_SUCCESS) {
+            names.reserve(count);
+            for (ma_uint32 i = 0; i < count; i++) {
+                names.emplace_back(captures[i].name);
+            }
+        }
+
+        ma_context_uninit(&context);
+        return names;
+    }
+
+    void CaptureDevice::SelectDevice(const std::string &name) {
+        _deviceName = name;
+    }
+
+    bool CaptureDevice::OpenContext() {
+        if (_context != nullptr) {
+            return true;
+        }
+
+        auto *context = new (std::nothrow) ma_context {};
+        if (context == nullptr || ma_context_init(nullptr, 0, nullptr, context) != MA_SUCCESS) {
+            delete context;
+            return false;
+        }
+
+        _context = context;
+        return true;
+    }
+
+    void CaptureDevice::CloseContext() {
+        if (_context == nullptr) {
+            return;
+        }
+
+        ma_context_uninit(_context);
+        delete _context;
+        _context = nullptr;
     }
 
     void CaptureDevice::Stop() {
@@ -84,6 +166,9 @@ namespace Framework::Voice {
         delete _device;
         _device = nullptr;
         _ring.Clear();
+
+        // After the device: it was opened against this context.
+        CloseContext();
     }
 
     CaptureDevice::~CaptureDevice() {
