@@ -197,7 +197,9 @@ namespace Framework::Voice {
         }
 
         // RNNoise over the microphone, ahead of the level, the gate and the encoder. Off by
-        // default: it costs a little CPU and colours some voices.
+        // default: it colours some voices, and it costs about 0.3ms of the calling thread per
+        // 20ms frame -- paid on every frame under voice activation, which has to hear
+        // everything to gate it, and only while the key is down under push-to-talk.
         void SetNoiseSuppression(bool enabled);
 
         bool IsNoiseSuppressionEnabled() const {
@@ -257,8 +259,9 @@ namespace Framework::Voice {
             return _localLevel;
         }
 
-        // How loud the microphone is, sent or not: after noise suppression, before the gate.
-        // What a sensitivity setting is tuned against. 0 while no microphone is open.
+        // How loud the microphone is, sent or not, before the gate -- and after noise
+        // suppression wherever it runs, which under voice activation is everywhere. What a
+        // sensitivity setting is tuned against. 0 while no microphone is open.
         float GetInputLevel() const {
             return _inputLevel;
         }
@@ -434,6 +437,8 @@ namespace Framework::Voice {
         uint32_t _preRollNext  = 0;
         bool _noiseSuppression = false;
         NoiseSuppressor _denoiser;
+        // Whether the denoiser saw the previous captured frame; a frame after a gap restarts it.
+        bool _denoiserFed = false;
         MafiaNet::RakNetGUID _self {};
         MafiaNet::RakNetGUID _server {};
 

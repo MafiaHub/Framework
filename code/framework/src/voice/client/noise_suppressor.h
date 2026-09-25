@@ -44,6 +44,11 @@ namespace Framework::Voice {
         // or a new microphone, where the noise the model learned is not the noise to come.
         void Reset();
 
+        // Clears the model's history in place, without freeing it. For audio that resumes
+        // after a gap the model did not see: its overlap buffers still hold the samples
+        // before the gap, which would be spliced onto the first frame after it.
+        void Restart();
+
       private:
         static constexpr uint32_t kHalfSamples = kFrameSamples / 2;
 

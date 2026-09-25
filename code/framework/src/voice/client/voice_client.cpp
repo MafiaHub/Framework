@@ -509,6 +509,7 @@ namespace Framework::Voice {
     }
 
     void VoiceClient::CutGates() {
+        _denoiserFed = false;
         _ptt.Cut();
         _vad.Cut();
         _gateWasOpen  = false;
@@ -583,12 +584,21 @@ namespace Framework::Voice {
         float loudest   = 0.0f;
         float heard     = 0.0f;
         bool sent       = false;
+        // Push-to-talk's gate does not depend on the level, so with the key up there is nothing
+        // to denoise for: the frame is thrown away. Voice activation gates on the denoised
+        // level, so it has to process every frame.
+        const bool denoise = _noiseSuppression && (activity || (allowed && _ptt.IsOpen(nowMs)));
+
         while (_source->ReadFrame(_frame.data())) {
             frames++;
 
-            if (_noiseSuppression) {
+            if (denoise) {
+                if (!_denoiserFed) {
+                    _denoiser.Restart();
+                }
                 _denoiser.Process(_frame.data());
             }
+            _denoiserFed = denoise;
 
             const float level = FrameLevel(_frame.data(), static_cast<uint32_t>(_frame.size()));
             heard             = std::max(heard, level);

@@ -13,12 +13,13 @@
 #include <algorithm>
 #include <cmath>
 
-// The MafiaNet archive links RNNoise into RakVoice but ships no header for it, so the four
-// entry points used here are declared from RNNoise's own rnnoise.h. They are plain C and have
-// not changed shape since RNNoise's first release.
+// The MafiaNet archive links RNNoise into RakVoice but ships no header for it, so the entry
+// points used here are declared from RNNoise's own rnnoise.h. They are plain C and have not
+// changed shape since RNNoise's first release.
 extern "C" {
 struct RNNModel;
 DenoiseState *rnnoise_create(RNNModel *model);
+int rnnoise_init(DenoiseState *st, RNNModel *model);
 void rnnoise_destroy(DenoiseState *st);
 float rnnoise_process_frame(DenoiseState *st, float *out, const float *in);
 int rnnoise_get_frame_size(void);
@@ -35,6 +36,13 @@ namespace Framework::Voice {
         if (_state != nullptr) {
             rnnoise_destroy(_state);
             _state = nullptr;
+        }
+    }
+
+    void NoiseSuppressor::Restart() {
+        // What rnnoise_create does after its allocation; the built-in model is only pointed at.
+        if (_state != nullptr) {
+            rnnoise_init(_state, nullptr);
         }
     }
 
