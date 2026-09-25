@@ -47,7 +47,7 @@ namespace Framework::Scripting::Builtins {
             }
             Predicate filter;
             repl->ForEachEntity([&](Networking::Replication::NetworkEntity *e) {
-                auto *typed = dynamic_cast<NativeType *>(e);
+                auto *typed = Networking::Replication::CheckedEntityCast<NativeType>(e);
                 if (!typed) {
                     return;
                 }

@@ -33,6 +33,20 @@ namespace Framework::Networking {
 } // namespace Framework::Networking
 
 namespace Framework::Networking::Replication {
+    // Downcast a base NetworkEntity* to a concrete subclass. Uses RTTI where it
+    // is available; when a target is built with /GR- (RTTI disabled) it falls
+    // back to comparing the registered type id, which requires the concrete
+    // type to declare a kTypeName. Both paths are identical for the exact
+    // registered leaf type -- the id check just cannot see a base class.
+    template <typename T>
+    inline T *CheckedEntityCast(NetworkEntity *entity) {
+#if defined(_CPPRTTI)
+        return dynamic_cast<T *>(entity);
+#else
+        return (entity != nullptr && entity->GetTypeId() == EntityRegistry::Get().TypeId(T::kTypeName)) ? static_cast<T *>(entity) : nullptr;
+#endif
+    }
+
     // Server-side transform send interval by distance from the viewer: every tick inside nearDistance,
     // midIntervalMs out to midDistance, farIntervalMs beyond. Only the transform channel is throttled;
     // a zero interval means every tick.
@@ -121,20 +135,20 @@ namespace Framework::Networking::Replication {
         // the type id from T::kTypeName.
         template <typename T>
         T *CreateEntity() {
-            return dynamic_cast<T *>(CreateEntity(EntityRegistry::Get().TypeId(T::kTypeName)));
+            return CheckedEntityCast<T>(CreateEntity(EntityRegistry::Get().TypeId(T::kTypeName)));
         }
         template <typename T>
         T *GetEntity(MafiaNet::NetworkID networkId) const {
-            return dynamic_cast<T *>(GetEntityByNetworkID(networkId));
+            return CheckedEntityCast<T>(GetEntityByNetworkID(networkId));
         }
         template <typename T>
         T *GetViewerAs(MafiaNet::PeerGuid guid) const {
-            return dynamic_cast<T *>(GetViewer(guid));
+            return CheckedEntityCast<T>(GetViewer(guid));
         }
         template <typename T>
         void ForEach(const fu2::function<void(T *) const> &fn) const {
             ForEachEntity([&fn](NetworkEntity *entity) {
-                if (auto *typed = dynamic_cast<T *>(entity)) {
+                if (T *typed = CheckedEntityCast<T>(entity)) {
                     fn(typed);
                 }
             });
