@@ -57,13 +57,14 @@ namespace Framework::Integrations::Client::UI::Nametags {
 
     // `screen` is the anchor in pixels, `viewport` the display size the Appearance fractions resolve
     // against, and `alpha` the mod's own multiplier (occlusion fade) on top of tag.distanceAlpha.
-    inline void DrawResolvedNametag(ImDrawList *drawList, const Resolved &tag, ImVec2 screen, float alpha, const Appearance &appearance, ImVec2 viewport) {
+    // `font` null draws with the current font; a mod's own comes from Wrapper::GetFont.
+    inline void DrawResolvedNametag(ImDrawList *drawList, const Resolved &tag, ImVec2 screen, float alpha, const Appearance &appearance, ImVec2 viewport, ImFont *font = nullptr) {
         alpha *= tag.distanceAlpha;
         if (!drawList || alpha <= 0.0f || viewport.x <= 0.0f || viewport.y <= 0.0f) {
             return;
         }
 
-        ImFont *font          = ImGui::GetFont();
+        font                  = font ? font : ImGui::GetFont();
         const float namePx    = appearance.fontHeight * viewport.y * tag.scale;
         const float notePx    = appearance.noteFontHeight * viewport.y * tag.scale;
         const float noteGap   = appearance.noteGap * viewport.y * tag.scale;

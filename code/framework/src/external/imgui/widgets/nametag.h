@@ -64,6 +64,7 @@ namespace Framework::External::ImGUI::Widgets {
     };
 
     struct NameTagStyle {
+        ImFont *font          = nullptr; // null = current font; a mod's own is Wrapper::GetFont
         ImU32 textColor       = IM_COL32(255, 255, 255, 255);
         ImU32 bgColor         = IM_COL32(0, 0, 0, 153);
         float fontSize        = 0.0f; // 0 = current font size
@@ -80,7 +81,7 @@ namespace Framework::External::ImGUI::Widgets {
             return;
         }
 
-        ImFont *font   = ImGui::GetFont();
+        ImFont *font   = style.font ? style.font : ImGui::GetFont();
         float fontSize = style.fontSize > 0.0f ? style.fontSize : ImGui::GetFontSize();
 
         const bool drawHealth    = healthPercent >= 0.0f && style.healthBarWidth > 0.0f && style.healthBarHeight > 0.0f;
