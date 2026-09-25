@@ -37,6 +37,16 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static void GetPushToTalkReleaseDelayCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void IsTalkingCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void HasMicrophoneCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void SetTransmitModeCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void GetTransmitModeCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void SetActivationThresholdCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void GetActivationThresholdCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void GetInputLevelCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void SetNoiseSuppressionCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void IsNoiseSuppressionEnabledCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void GetInputDevicesCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void SetInputDeviceCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void GetInputDeviceCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
     };
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins

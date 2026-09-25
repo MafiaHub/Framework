@@ -17,6 +17,7 @@
 #include <v8pp/convert.hpp>
 
 #include <string>
+#include <vector>
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
     namespace {
@@ -28,6 +29,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         Framework::Voice::VoiceClient *Resolve() {
             return CoreModules::GetVoiceClient();
         }
+
+        // The spellings scripts use for TransmitMode.
+        constexpr const char *kPushToTalk    = "pushToTalk";
+        constexpr const char *kVoiceActivity = "voiceActivity";
     } // namespace
 
     void Voice::SetEnabledCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -144,6 +149,105 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         args.GetReturnValue().Set(voice != nullptr && voice->HasMicrophone());
     }
 
+    void Voice::SetTransmitModeCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+        if (args.Length() < 1 || !args[0]->IsString()) {
+            ThrowError(isolate, "Voice.setTransmitMode: expected (mode)");
+            return;
+        }
+
+        const std::string mode = v8pp::from_v8<std::string>(isolate, args[0]);
+        if (mode != kPushToTalk && mode != kVoiceActivity) {
+            ThrowError(isolate, "Voice.setTransmitMode: unknown mode '" + mode + "'; expected 'pushToTalk' or 'voiceActivity'");
+            return;
+        }
+
+        if (auto *voice = Resolve()) {
+            voice->SetTransmitMode(mode == kVoiceActivity ? Framework::Voice::TransmitMode::VoiceActivity : Framework::Voice::TransmitMode::PushToTalk);
+        }
+    }
+
+    void Voice::GetTransmitModeCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+
+        auto *voice         = Resolve();
+        const bool activity = voice != nullptr && voice->GetTransmitMode() == Framework::Voice::TransmitMode::VoiceActivity;
+        args.GetReturnValue().Set(v8pp::to_v8(isolate, activity ? kVoiceActivity : kPushToTalk));
+    }
+
+    void Voice::SetActivationThresholdCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+        if (args.Length() < 1 || !args[0]->IsNumber()) {
+            ThrowError(isolate, "Voice.setActivationThreshold: expected (level)");
+            return;
+        }
+
+        if (auto *voice = Resolve()) {
+            voice->SetVoiceActivationThreshold(static_cast<float>(args[0]->NumberValue(isolate->GetCurrentContext()).FromMaybe(Framework::Voice::kDefaultVoiceActivationThreshold)));
+        }
+    }
+
+    void Voice::GetActivationThresholdCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        auto *voice = Resolve();
+        args.GetReturnValue().Set(voice != nullptr ? voice->GetVoiceActivationThreshold() : Framework::Voice::kDefaultVoiceActivationThreshold);
+    }
+
+    void Voice::GetInputLevelCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        auto *voice = Resolve();
+        args.GetReturnValue().Set(voice != nullptr ? voice->GetInputLevel() : 0.0f);
+    }
+
+    void Voice::SetNoiseSuppressionCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+        if (args.Length() < 1) {
+            ThrowError(isolate, "Voice.setNoiseSuppression: expected (enabled)");
+            return;
+        }
+
+        if (auto *voice = Resolve()) {
+            voice->SetNoiseSuppression(args[0]->BooleanValue(isolate));
+        }
+    }
+
+    void Voice::IsNoiseSuppressionEnabledCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        auto *voice = Resolve();
+        args.GetReturnValue().Set(voice != nullptr && voice->IsNoiseSuppressionEnabled());
+    }
+
+    void Voice::GetInputDevicesCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+
+        auto *voice                          = Resolve();
+        const std::vector<std::string> names = voice != nullptr ? voice->ListCaptureDevices() : std::vector<std::string> {};
+        args.GetReturnValue().Set(v8pp::to_v8(isolate, names));
+    }
+
+    void Voice::SetInputDeviceCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+        if (args.Length() < 1 || !args[0]->IsString()) {
+            ThrowError(isolate, "Voice.setInputDevice: expected (name)");
+            return;
+        }
+
+        if (auto *voice = Resolve()) {
+            voice->SetCaptureDevice(v8pp::from_v8<std::string>(isolate, args[0]));
+        }
+    }
+
+    void Voice::GetInputDeviceCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+
+        auto *voice = Resolve();
+        args.GetReturnValue().Set(v8pp::to_v8(isolate, voice != nullptr ? voice->GetCaptureDevice() : std::string {}));
+    }
+
     void Voice::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
         (void)resourceManager;
         if (!isolate || context.IsEmpty() || target.IsEmpty()) {
@@ -169,6 +273,16 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         attach(voiceObj, "getPushToTalkReleaseDelay", &Voice::GetPushToTalkReleaseDelayCallback);
         attach(voiceObj, "isTalking", &Voice::IsTalkingCallback);
         attach(voiceObj, "hasMicrophone", &Voice::HasMicrophoneCallback);
+        attach(voiceObj, "setTransmitMode", &Voice::SetTransmitModeCallback);
+        attach(voiceObj, "getTransmitMode", &Voice::GetTransmitModeCallback);
+        attach(voiceObj, "setActivationThreshold", &Voice::SetActivationThresholdCallback);
+        attach(voiceObj, "getActivationThreshold", &Voice::GetActivationThresholdCallback);
+        attach(voiceObj, "getInputLevel", &Voice::GetInputLevelCallback);
+        attach(voiceObj, "setNoiseSuppression", &Voice::SetNoiseSuppressionCallback);
+        attach(voiceObj, "isNoiseSuppressionEnabled", &Voice::IsNoiseSuppressionEnabledCallback);
+        attach(voiceObj, "getInputDevices", &Voice::GetInputDevicesCallback);
+        attach(voiceObj, "setInputDevice", &Voice::SetInputDeviceCallback);
+        attach(voiceObj, "getInputDevice", &Voice::GetInputDeviceCallback);
         target->Set(context, v8pp::to_v8(isolate, "Voice"), voiceObj).Check();
 
         auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Voice", "Local player's proximity voice chat settings: on/off, playback volume, hearing range and the push-to-talk binding.");
@@ -176,9 +290,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             v8pp::metadata::docs("void", {v8pp::metadata::param("enabled", "boolean", false, "Whether voice chat runs at all for this player.")},
                 "Turns voice chat on or off. Off closes the microphone and playback devices and tells the server to stop relaying voice to this client.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isEnabled", v8pp::metadata::docs("boolean", {}, "Checks whether voice chat is enabled for this player.", "True unless the player turned voice chat off.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setVolume",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("volume", "number", false, "Playback gain, where 1 is unattenuated. Clamped to 0..4.")},
-                "Sets the playback volume of incoming voice. Applies to the built-in mixer only.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setVolume", v8pp::metadata::docs("void", {v8pp::metadata::param("volume", "number", false, "Playback gain, where 1 is unattenuated. Clamped to 0..4.")},
+                                                                                           "Sets the playback volume of incoming voice. A game that plays voice through its own audio engine applies the same gain there.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getVolume", v8pp::metadata::docs("number", {}, "Reads the voice playback volume.", "Current gain, where 1 is unattenuated.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setHearingRange",
             v8pp::metadata::docs("void", {v8pp::metadata::param("range", "number", false, "Audibility radius in world units; 0 removes the local limit.")},
@@ -198,6 +311,23 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             v8pp::metadata::docs("boolean", {}, "Checks whether the local player is speaking right now. The same state raises the voiceStart and voiceStop events.",
                 "True while push-to-talk is open -- held, or still inside the release delay -- and the microphone is producing audio.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("hasMicrophone", v8pp::metadata::docs("boolean", {}, "Checks whether a capture device opened for this session.", "False when the player has no working microphone, i.e. they are listen-only.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setTransmitMode",
+            v8pp::metadata::docs("void", {v8pp::metadata::param("mode", "'pushToTalk' | 'voiceActivity'", false, "pushToTalk sends while the key is held; voiceActivity sends whenever the microphone is louder than the activation threshold.")},
+                "Chooses what opens the microphone. Switching closes whatever the previous mode had open. Unknown modes throw.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getTransmitMode", v8pp::metadata::docs("'pushToTalk' | 'voiceActivity'", {}, "Reads what opens the microphone.", "The current transmit mode.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setActivationThreshold", v8pp::metadata::docs("void", {v8pp::metadata::param("level", "number", false, "Microphone level, 0 to 1 on the scale getInputLevel reports, above which voice activation sends.")},
+                                                                                                        "Sets the voice-activation sensitivity: lower sends quieter speech, higher ignores more background noise. Clamped to 0..1.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getActivationThreshold", v8pp::metadata::docs("number", {}, "Reads the voice-activation threshold.", "Level from 0 to 1.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getInputLevel",
+            v8pp::metadata::docs("number", {}, "Reads how loud the microphone is right now, whether or not anything is being sent -- the value to draw a level meter from and to tune the activation threshold against.",
+                "Smoothed level from 0 to 1; 0 while no microphone is open.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setNoiseSuppression", v8pp::metadata::docs("void", {v8pp::metadata::param("enabled", "boolean", false, "Whether to filter background noise out of the microphone.")},
+                                                                                                     "Turns noise suppression on or off. It runs before the level is measured, so it also keeps steady noise from tripping voice activation.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isNoiseSuppressionEnabled", v8pp::metadata::docs("boolean", {}, "Checks whether noise suppression is on.", "True while background noise is being filtered.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getInputDevices", v8pp::metadata::docs("string[]", {}, "Lists the microphones voice can record from.", "Device names as the player would recognise them; empty when the game chooses the device itself.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setInputDevice", v8pp::metadata::docs("void", {v8pp::metadata::param("name", "string", false, "A name from getInputDevices, or an empty string for the system default.")},
+                                                                                                "Chooses the microphone. A running microphone is reopened on the new device; a device that is no longer connected falls back to the default.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getInputDevice", v8pp::metadata::docs("string", {}, "Reads the chosen microphone.", "Its name, or an empty string for the system default.")));
     }
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins
