@@ -33,6 +33,7 @@
 
 #include <function2/function2.hpp>
 #include <memory>
+#include <type_traits>
 
 namespace hook {
     // for link /DYNAMICBASE executables
@@ -192,6 +193,17 @@ namespace hook {
     constexpr inline TRet call(AddressType address, TArgs... args) {
         return reinterpret_cast<TRet (*)(TArgs...)>(address)(args...);
     }
+
+    // The patching call(address, func) binds only to a function with every template argument deduced, so
+    // call<X>(...) always invokes. Unconstrained, call<X>(addr, x) with x an X wrote a call over the native.
+    template <typename T>
+    concept patch_target = std::is_member_function_pointer_v<T> || (std::is_pointer_v<T> && std::is_function_v<std::remove_pointer_t<T>>);
+
+    // A deduced call(address, x) that cannot patch to x must not compile rather than silently invoke:
+    // pass the function itself to patch (not hook::bind<uintptr_t>), or call<void>(address, x) to invoke.
+    template <typename... Explicit, typename T, typename AT>
+        requires(sizeof...(Explicit) == 0 && !patch_target<T>)
+    void call(AT address, T value) = delete;
 
     template <typename TRet = void, typename... TArgs>
     constexpr inline TRet this_call(uintptr_t address, TArgs... args) {
@@ -568,12 +580,6 @@ namespace hook {
         put<int>((uintptr_t)address + 1, (intptr_t)func - (intptr_t)get_adjusted(address) - 5);
     }
 
-    template <typename T, typename AT>
-    inline void call(AT address, T func) {
-        put<uint8_t>(address, 0xE8);
-        put<int>((uintptr_t)address + 1, (intptr_t)func - (intptr_t)get_adjusted(address) - 5);
-    }
-
     template <typename T>
     inline T get_call(T address) {
         intptr_t target = *(uintptr_t *)(get_adjusted(address) + 1);
@@ -615,6 +621,21 @@ namespace hook {
         cast.function = function;
 
         return (uintptr_t)cast.ptr;
+    }
+
+    // Explicit soaks up any explicit template argument, which rules this overload out (see patch_target).
+    template <typename... Explicit, patch_target T, typename AT>
+        requires(sizeof...(Explicit) == 0)
+    inline void call(AT address, T func) {
+        uintptr_t target;
+        if constexpr (std::is_member_function_pointer_v<T>) {
+            target = get_member(func);
+        } else {
+            target = (uintptr_t)func;
+        }
+
+        put<uint8_t>(address, 0xE8);
+        put<int>((uintptr_t)address + 1, (intptr_t)target - (intptr_t)get_adjusted(address) - 5);
     }
 
     namespace vp {
@@ -765,7 +786,9 @@ namespace hook {
         put<int>((uintptr_t)address + 1, (intptr_t)funcStub - (intptr_t)get_adjusted(address) - 5);
     }
 
-    template <typename T, typename AT>
+    // Explicit soaks up any explicit template argument, which rules this overload out (see patch_target).
+    template <typename... Explicit, patch_target T, typename AT>
+        requires(sizeof...(Explicit) == 0)
     inline void call(AT address, T func) {
         call_reg<0>(address, func);
     }
