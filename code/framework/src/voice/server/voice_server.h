@@ -63,7 +63,7 @@ namespace Framework::Voice {
         void Update();
 
         // Feeds the router each player's avatar position and virtual world. Call once per tick,
-        // before Update().
+        // before that tick's packets, so its voice frames route on current worlds.
         void SyncAvatars(const Networking::Replication::ReplicationManager &replication);
 
         VoiceRouter &GetRouter() {

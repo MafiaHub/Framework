@@ -1358,14 +1358,20 @@ namespace Framework::Integrations::Server {
         if (_nextTick <= start) {
             FW_PROFILE_SCOPE_N("Server::Tick");
 
+            // Before the packet pump: voice frames are routed inline there, and must see the worlds
+            // scripts and PostUpdate set last tick, not the ones from before them.
+            auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr;
+            if (replication) {
+                FW_PROFILE_SCOPE_N("Server::VoicePositions");
+                _voiceServer.SyncAvatars(*replication);
+            }
+
             if (_networkingEngine) {
                 FW_PROFILE_SCOPE_N("Server::Networking");
                 _networkingEngine->Update();
             }
 
-            if (auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr) {
-                FW_PROFILE_SCOPE_N("Server::VoicePositions");
-                _voiceServer.SyncAvatars(*replication);
+            if (replication) {
                 _voiceServer.Update();
             }
 
