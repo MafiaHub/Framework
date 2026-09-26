@@ -60,5 +60,8 @@ namespace Framework::Networking::Replication {
         NetworkEntity *_relevantViewer = nullptr;
         uint32_t _relevantGeneration   = 0;
         bool _relevantValid            = false;
+        // The last diff against the cached set came back empty. Only a new generation or viewer
+        // (or a non-empty diff being applied) can change the answer, so repeat queries return early.
+        bool _diffSettled = false;
     };
 } // namespace Framework::Networking::Replication

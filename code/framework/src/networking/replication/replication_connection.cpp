@@ -62,6 +62,10 @@ namespace Framework::Networking::Replication {
             for (auto it = _lastTransformSend.begin(); it != _lastTransformSend.end();) {
                 it = _relevant.contains(const_cast<NetworkEntity *>(it->first)) ? std::next(it) : _lastTransformSend.erase(it);
             }
+            _diffSettled = false;
+        }
+        else if (_diffSettled) {
+            return;
         }
 
         for (NetworkEntity *entity : _relevant) {
@@ -78,6 +82,7 @@ namespace Framework::Networking::Replication {
                 existingReplicasToDestroy.Push(entity, _FILE_AND_LINE_);
             }
         }
+        _diffSettled = newReplicasToCreate.Size() == 0 && existingReplicasToDestroy.Size() == 0;
     }
 
     uint32_t ReplicationConnection::TransformSendIntervalMs(const NetworkEntity *entity) const {
