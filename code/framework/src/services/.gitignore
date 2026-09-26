@@ -1,4 +1,5 @@
 lib/*.*
+bin/
 services/*.*
 cache/
 src/

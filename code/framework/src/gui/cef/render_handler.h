@@ -36,6 +36,10 @@ namespace Framework::GUI::CEF {
         int _pixelHeight     = 0;
         bool _pixelDataDirty = false;
 
+        // Union of the rects refreshed since the last ClearPixelDataDirty, for backends that
+        // upload a sub-rectangle (D3D8). Empty when nothing is pending.
+        CefRect _dirtyBounds;
+
         ID3D11Device *_device = nullptr;
 
       public:
@@ -78,6 +82,12 @@ namespace Framework::GUI::CEF {
 
         void ClearPixelDataDirty() {
             _pixelDataDirty = false;
+            _dirtyBounds    = {};
+        }
+
+        // Caller holds LockPixels(). Clamped to the current pixel surface.
+        const CefRect &GetDirtyBounds() const {
+            return _dirtyBounds;
         }
 
         IMPLEMENT_REFCOUNTING(RenderHandler);

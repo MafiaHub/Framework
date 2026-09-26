@@ -35,6 +35,11 @@
 #define ID3D12DeviceContext void
 
 namespace Framework::Graphics {
+    namespace D3D8 {
+        class Device;
+    } // namespace D3D8
+
+    class D3D8Backend;
     class D3D9Backend;
     class D3D11Backend;
     class D3D12Backend;
@@ -46,6 +51,9 @@ namespace Framework::Graphics {
         PlatformBackend platform {};
         HWND windowHandle {};
 
+        struct {
+            D3D8::Device *device {};
+        } d3d8;
         struct {
             IDirect3DDevice9 *device {};
         } d3d9;
@@ -72,6 +80,7 @@ namespace Framework::Graphics {
 
         HWND _window {};
 
+        std::unique_ptr<D3D8Backend> _d3d8Backend;
         std::unique_ptr<D3D9Backend> _d3d9Backend;
         std::unique_ptr<D3D11Backend> _d3d11Backend;
         std::unique_ptr<D3D12Backend> _d3d12Backend;
@@ -99,6 +108,10 @@ namespace Framework::Graphics {
 
         // Escape hatches: the concrete D3D backends, for direct device/swapchain access the Renderer
         // doesn't wrap. Only one is non-null, matching the configured backend.
+        D3D8Backend *GetD3D8Backend() const {
+            return _d3d8Backend.get();
+        }
+
         D3D9Backend *GetD3D9Backend() const {
             return _d3d9Backend.get();
         }
@@ -127,7 +140,7 @@ namespace Framework::Graphics {
         // game ends up in. It is not the window's client size whenever the game renders at another
         // resolution than the window carries - driver downsampling (DSR/DLDSR), a DPI-virtualized
         // window - so overlay geometry has to follow this rather than GetClientRect. False when the
-        // active backend has no swap chain to ask (D3D9).
+        // active backend has nothing to ask (D3D9).
         bool GetBackBufferSize(int &width, int &height) const;
     };
 } // namespace Framework::Graphics

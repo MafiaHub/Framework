@@ -34,6 +34,9 @@ Bin/
 [Bb]uild/
 [Bb]uild*/
 [Bb]uilds/
+!/builds/
+/builds/*
+!/builds/build.bat
 
 CMakeLists.txt.user
 CMakeCache.txt
@@ -48,7 +51,8 @@ CTestTestfile.cmake
 _deps
 cmake-build*
 
-code/projects
+code/projects/*
+/logs/
 
 vendors/cef/src
 

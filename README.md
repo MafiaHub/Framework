@@ -78,6 +78,10 @@ cmake --build build --target RunFrameworkTests
 
 ### Build on Windows
 
+Windows x64 binaries can also be built from Linux using MSVC under Wine in
+Docker. See [Windows builds from Linux](scripts/windows/README.md) for the
+canonical build command, dependencies and output paths.
+
 #### Visual Studio 2022 support
 
 Please ensure you have the cmake tools installed in your copy of Visual Studio first.

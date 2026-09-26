@@ -15,6 +15,7 @@
 
 #include "gui/backend/view_d3d11.h"
 #include "gui/backend/view_d3d12.h"
+#include "gui/backend/view_d3d8.h"
 #include "gui/backend/view_d3d9.h"
 #include "gui/resources/scheme.h"
 
@@ -22,6 +23,7 @@
 
 #include <imgui.h>
 
+#include <cstdlib>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -169,7 +171,13 @@ namespace Framework::GUI {
                 return std::nullopt;
             }
 
-            for (std::size_t index = 0; index < kMaxCefCacheProfiles; ++index) {
+            // Separate Wine prefixes run separate wineservers, which do not
+            // enforce the profile lock against each other.
+            std::size_t first = 0;
+            if (const char *base = std::getenv("FW_CEF_PROFILE_BASE")) {
+                first = static_cast<std::size_t>(std::strtoul(base, nullptr, 10));
+            }
+            for (std::size_t index = first; index < first + kMaxCefCacheProfiles; ++index) {
                 const std::filesystem::path profileRoot = profilesRoot / std::to_string(index);
                 std::filesystem::create_directories(profileRoot, error);
                 if (error) {
@@ -513,6 +521,9 @@ namespace Framework::GUI {
             break;
         case Graphics::RendererBackend::BACKEND_D3D_12:
             view = std::make_unique<ViewD3D12>(++_id, _graphicsRenderer, this);
+            break;
+        case Graphics::RendererBackend::BACKEND_D3D_8:
+            view = std::make_unique<ViewD3D8>(++_id, _graphicsRenderer, this);
             break;
         default:
             Framework::Logging::GetLogger("Web")->error("Failed to create view: Unsupported renderer backend");

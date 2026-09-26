@@ -125,6 +125,7 @@ list(APPEND FRAMEWORK_CLIENT_SRC
     src/gui/clipboard.cpp
     src/gui/view.cpp
     src/gui/sdk.cpp
+    src/gui/backend/view_d3d8.cpp
     src/gui/backend/view_d3d9.cpp
     src/gui/backend/view_d3d11.cpp
     src/gui/backend/view_d3d12.cpp
@@ -148,6 +149,7 @@ list(APPEND FRAMEWORK_CLIENT_SRC
 # Append the platform-dependent files to the related lists
 if(WIN32)
     list(APPEND FRAMEWORK_CLIENT_SRC
+        src/graphics/backend/d3d8.cpp
         src/graphics/backend/d3d9.cpp
         src/graphics/backend/d3d11.cpp
         src/graphics/backend/d3d12.cpp

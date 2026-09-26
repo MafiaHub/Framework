@@ -11,6 +11,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <string>
 
 namespace Framework::Utils::Crypto {
@@ -42,6 +43,7 @@ namespace Framework::Utils::Crypto {
 
     // Empty on failure.
     std::string Sha256FileHex(const std::string &path);
+    std::string Sha256FileHex(const std::filesystem::path &path);
 
     bool ConstantTimeEquals(const std::string &a, const std::string &b);
 

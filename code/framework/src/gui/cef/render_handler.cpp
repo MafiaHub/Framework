@@ -122,6 +122,27 @@ namespace Framework::GUI::CEF {
         // No damage means no upload: the views re-push the whole surface on dirty.
         if (copied > 0) {
             _pixelDataDirty = true;
+            if (reshaped) {
+                _dirtyBounds = CefRect(0, 0, width, height);
+            }
+            else {
+                for (const auto &rect : dirtyRects) {
+                    int x0 = (std::max)(0, rect.x);
+                    int y0 = (std::max)(0, rect.y);
+                    int x1 = (std::min)(width, rect.x + rect.width);
+                    int y1 = (std::min)(height, rect.y + rect.height);
+                    if (x1 <= x0 || y1 <= y0) {
+                        continue;
+                    }
+                    if (!_dirtyBounds.IsEmpty()) {
+                        x0 = (std::min)(x0, _dirtyBounds.x);
+                        y0 = (std::min)(y0, _dirtyBounds.y);
+                        x1 = (std::max)(x1, _dirtyBounds.x + _dirtyBounds.width);
+                        y1 = (std::max)(y1, _dirtyBounds.y + _dirtyBounds.height);
+                    }
+                    _dirtyBounds = CefRect(x0, y0, x1 - x0, y1 - y0);
+                }
+            }
         }
 
         FW_PROFILE_PLOT("cef.paint.bytes", static_cast<int64_t>(copied));

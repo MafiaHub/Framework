@@ -52,7 +52,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Quaternion>>(isolate, GetScriptingCatalog(isolate), "Quaternion", "Mutable quaternion for three-dimensional rotations. Components are scalar-first (w, x, y, z), matching GLM — not the x, y, z, w order some libraries use.");
+        cls       = std::make_unique<v8pp::class_<Quaternion>>(isolate, GetScriptingCatalog(isolate), "Quaternion", "Mutable quaternion exposed as the global Quaternion for three-dimensional rotations. Components are scalar-first (w, x, y, z), matching GLM — not the x, y, z, w order some libraries use.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
         cls->ctor<float, float, float, float>(v8pp::metadata::docs("void",
                                                   {

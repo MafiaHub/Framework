@@ -19,7 +19,8 @@ namespace Framework::Graphics {
     enum class RendererBackend {
         BACKEND_D3D_9,
         BACKEND_D3D_11,
-        BACKEND_D3D_12
+        BACKEND_D3D_12,
+        BACKEND_D3D_8
     };
 
     enum class RendererAPI {

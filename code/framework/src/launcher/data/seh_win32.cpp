@@ -160,6 +160,12 @@ static PVOID RtlImageDirectoryEntryToDataStub(HMODULE hModule, BOOL a2, WORD dir
 }
 
 extern "C" void __declspec(dllexport) CoreRT_SetupSEHHandler(void *moduleBase, void *moduleEnd, PRUNTIME_FUNCTION runtimeFunctions, DWORD entryCount) {
+    // Wine's WoW64 and exception dispatch code must keep its own ntdll entry
+    // points intact. A mapped game's x64 exception table cannot be installed
+    // through the Windows-only ntdll patch below.
+    if (GetProcAddress(GetModuleHandleA("ntdll.dll"), "wine_get_version")) {
+        return;
+    }
     // store passed data
     g_overrideStart = (DWORD64)moduleBase;
     g_overrideEnd   = (DWORD64)moduleEnd;
@@ -275,6 +281,9 @@ static BOOLEAN RtlDispatchExceptionStub(EXCEPTION_RECORD *record, CONTEXT *conte
 }
 
 extern "C" void __declspec(dllexport) CoreSetExceptionOverride(LONG (*handler)(EXCEPTION_POINTERS *)) {
+    if (GetProcAddress(GetModuleHandleA("ntdll.dll"), "wine_get_version")) {
+        return;
+    }
     g_exceptionHandler = handler;
 
     void *baseAddress = GetProcAddress(GetModuleHandle("ntdll.dll"), "KiUserExceptionDispatcher");

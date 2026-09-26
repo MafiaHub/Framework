@@ -12,6 +12,9 @@
 #include "include/cef_app.h"
 #include "renderer_app.h"
 
+#include <cwchar>
+#include <string>
+
 namespace {
     DWORD GetParentProcessId() {
         using NtQueryInformationProcess_t = NTSTATUS(NTAPI *)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
@@ -26,21 +29,33 @@ namespace {
         return static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(pbi.Reserved3)); // InheritedFromUniqueProcessId
     }
 
-    // Self-exit when the parent (game) process dies, so an abrupt quit or crash
-    // that skips CEF teardown doesn't leave this helper orphaned.
+    DWORD GetBrowserProcessId() {
+        auto commandLine = CefCommandLine::CreateCommandLine();
+        commandLine->InitFromString(GetCommandLineW());
+        const std::wstring value = commandLine->GetSwitchValue("framework-browser-pid").ToWString();
+        if (value.empty()) {
+            return GetParentProcessId();
+        }
+        wchar_t *end = nullptr;
+        const unsigned long pid = std::wcstoul(value.c_str(), &end, 10);
+        return end != value.c_str() && *end == L'\0' ? static_cast<DWORD>(pid) : 0;
+    }
+
+    // Self-exit when the browser (game) process dies, including an abrupt
+    // termination that skips the normal CefShutdown path.
     DWORD WINAPI MonitorParentProcess(LPVOID) {
-        const DWORD parentPid = GetParentProcessId();
-        if (!parentPid) {
+        const DWORD browserPid = GetBrowserProcessId();
+        if (!browserPid || browserPid == GetCurrentProcessId()) {
             return 0;
         }
-        HANDLE parent = OpenProcess(SYNCHRONIZE, FALSE, parentPid);
-        if (!parent) {
-            return 0;
-        }
-        if (WaitForSingleObject(parent, INFINITE) == WAIT_OBJECT_0) {
+        HANDLE browser = OpenProcess(SYNCHRONIZE, FALSE, browserPid);
+        if (!browser) {
             ExitProcess(0);
         }
-        CloseHandle(parent);
+        if (WaitForSingleObject(browser, INFINITE) == WAIT_OBJECT_0) {
+            ExitProcess(0);
+        }
+        CloseHandle(browser);
         return 0;
     }
 } // namespace

@@ -26,7 +26,7 @@ else()
     endif()
 endif()
 
-if(WIN32)
+if(CMAKE_HOST_WIN32)
     set(_fw_vcpkg_bootstrap "${_fw_vcpkg_root}/bootstrap-vcpkg.bat")
     set(_fw_vcpkg_exe "${_fw_vcpkg_root}/vcpkg.exe")
 else()

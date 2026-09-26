@@ -41,6 +41,8 @@ namespace Framework::Utils {
         // Optional whitelist, string fields only. Empty means any value of the declared type.
         std::vector<std::string> allowed;
         std::string description;
+        // String fields can reject an explicit empty value as well as absence.
+        bool nonEmpty = false;
     };
 
     using ConfigSchema = std::vector<ConfigField>;

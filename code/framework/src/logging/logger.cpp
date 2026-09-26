@@ -55,7 +55,7 @@ namespace Framework::Logging {
     Logger::Logger() {
         _sessionStart = std::chrono::system_clock::now();
 
-        spdlog::flush_on(spdlog::level::err);
+        spdlog::flush_on(spdlog::level::warn);
         spdlog::flush_every(std::chrono::seconds(2));
 
         // Support for async logging. A single worker keeps messages in order; more
@@ -125,6 +125,9 @@ namespace Framework::Logging {
         }
 
         spdLogger->set_level(spdlog::level::trace);
+        // register_logger() does not apply the registry's flush_on setting to
+        // loggers constructed directly here.
+        spdLogger->flush_on(spdlog::level::warn);
 
         try {
             spdlog::register_logger(spdLogger);

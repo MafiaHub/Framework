@@ -96,6 +96,11 @@ namespace Framework::Utils {
                 return false;
             }
 
+            if (field.nonEmpty && field.type == ConfigFieldType::String && it->get_ref<const std::string &>().empty()) {
+                error = "'mod." + field.key + "' must not be empty";
+                return false;
+            }
+
             if (!field.allowed.empty() && field.type == ConfigFieldType::String) {
                 const auto value = it->get<std::string>();
                 bool permitted = false;

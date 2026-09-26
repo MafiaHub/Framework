@@ -9,6 +9,7 @@
 #include "renderer.h"
 
 #include "backend/d3d11.h"
+#include "backend/d3d8.h"
 #include "backend/d3d12.h"
 #include "backend/d3d9.h"
 
@@ -45,6 +46,13 @@ namespace Framework::Graphics {
                 return Error("Failed to initialize the D3D12 graphics backend");
             }
         }
+        else if (_config.backend == RendererBackend::BACKEND_D3D_8) {
+            _d3d8Backend = std::make_unique<D3D8Backend>();
+            if (!_d3d8Backend->Init(_config)) {
+                _d3d8Backend.reset();
+                return Error("Failed to initialize the D3D8 graphics backend");
+            }
+        }
         else {
             return Error("Renderer backend is not implemented");
         }
@@ -63,6 +71,9 @@ namespace Framework::Graphics {
         }
         else if (_d3d12Backend) {
             fn(*_d3d12Backend);
+        }
+        else if (_d3d8Backend) {
+            fn(*_d3d8Backend);
         }
     }
 
@@ -91,6 +102,10 @@ namespace Framework::Graphics {
     }
 
     bool Renderer::GetBackBufferSize(int &width, int &height) const {
+        if (_d3d8Backend) {
+            return _d3d8Backend->GetBackBufferSize(width, height);
+        }
+
         IDXGISwapChain *swapChain = nullptr;
         if (_d3d12Backend) {
             swapChain = _d3d12Backend->GetSwapChain();

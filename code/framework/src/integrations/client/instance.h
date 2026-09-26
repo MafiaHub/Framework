@@ -72,6 +72,10 @@ namespace Framework::Integrations::Client {
         std::string modSlug;
         std::string modVersion;
 
+        // Empty keeps the framework's historical AppData cache. A mod can
+        // instead keep downloaded resources under its own installation root.
+        std::string assetCacheRoot;
+
         bool verifyBuildToken = true; // false bypasses the build/version mismatch challenge
 
         bool initRendererManually = false;

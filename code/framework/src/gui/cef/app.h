@@ -60,6 +60,7 @@ namespace Framework::GUI::CEF {
         }
 
         void OnBeforeCommandLineProcessing(const CefString &processType, CefRefPtr<CefCommandLine> commandLine) override;
+        void OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> commandLine) override;
         void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override;
         void OnContextInitialized() override;
 
