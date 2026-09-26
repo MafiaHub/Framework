@@ -228,6 +228,8 @@ namespace Framework::Integrations::Server {
         // Override what you need; this is the whole extension surface (no Set*Callback setters).
         // Order: Init -> PostInit -> PostScriptInit; tick: Update -> PostUpdate; Shutdown -> PreShutdown.
         virtual void PostInit() {}
+        // Re-add project-owned downloads after each resource upload-list rebuild.
+        virtual void OnAssetStreamerReady() {}
         virtual void PostScriptInit() {}
         virtual void PostUpdate() {}
         virtual void PreShutdown() {}

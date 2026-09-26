@@ -853,13 +853,17 @@ namespace Framework::Integrations::Server {
                 }
             }
 
-            streamer->AddFile(packagePath.string().c_str(), packageName.c_str());
+            if (!streamer->AddFile(packagePath.string().c_str(), packageName.c_str())) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not register package '{}' for download", packageName);
+                continue;
+            }
             _packageHashes[resourceName] = packaged.sha256;
             packagedFiles += packaged.fileCount;
 
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Packaged client resource '{}': {} files, {} bytes, sha256 {}{}", resourceName, packaged.fileCount, packaged.blob.size(), packaged.sha256.substr(0, 16), needsWrite ? "" : " (unchanged)");
         }
 
+        OnAssetStreamerReady();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset streamer ready with {} encrypted resource packages ({} files)", _packageHashes.size(), packagedFiles);
     }
 

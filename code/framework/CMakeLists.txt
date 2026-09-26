@@ -26,6 +26,7 @@ set(FRAMEWORK_SRC
     src/external/sentry/wrapper.cpp
 
     src/networking/network_peer.cpp
+    src/networking/asset_streamer.cpp
     src/networking/errors.cpp
 
     src/networking/replication/network_entity.cpp
