@@ -16,7 +16,7 @@
 #include <mafianet/packet_priority.h>
 #include <mafianet/peer_interface.h>
 #include <mafianet/file_list_transfer.h>
-#include <mafianet/directory_delta_transfer.h>
+#include "asset_streamer.h"
 #include <mafianet/rpc4_plugin.h>
 #include <mafianet/ready_event.h>
 #include <mafianet/statistics_history.h>
@@ -48,7 +48,7 @@ namespace Framework::Networking {
         MafiaNet::Packet *_packet         = nullptr;
         int _packetDataOffset          = 0; // Offset to skip timestamp prefix if present
         fu2::function<bool(MafiaNet::Packet *) const> _onUnknownPacketCallback;
-        mutable MafiaNet::DirectoryDeltaTransfer _assetStreamer;
+        mutable AssetStreamer _assetStreamer;
 
         // RPC4 dispatches remote-procedure calls by identifier to C handlers. NetworkIDManager hands
         // out the cross-network object handles used by replicas. StatisticsHistoryPlugin tracks
@@ -242,7 +242,7 @@ namespace Framework::Networking {
         static const char *GetStartupResultString(uint8_t id);
         static const char *GetConnectionAttemptString(uint8_t id);
 
-        MafiaNet::DirectoryDeltaTransfer* GetAssetStreamer() const noexcept {
+        AssetStreamer* GetAssetStreamer() const noexcept {
             return &_assetStreamer;
         }
 
