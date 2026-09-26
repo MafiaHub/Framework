@@ -22,6 +22,15 @@ namespace Framework::Voice {
         _players[guid].position = pos;
     }
 
+    void VoiceRouter::SetPlayerVirtualWorld(uint64_t guid, MafiaNet::VirtualWorldId world) {
+        _players[guid].virtualWorld = world;
+    }
+
+    MafiaNet::VirtualWorldId VoiceRouter::GetPlayerVirtualWorld(uint64_t guid) const {
+        const PlayerState *state = Find(guid);
+        return state ? state->virtualWorld : MafiaNet::VIRTUAL_WORLD_DEFAULT;
+    }
+
     void VoiceRouter::RemovePlayer(uint64_t guid) {
         _players.erase(guid);
 
@@ -120,6 +129,10 @@ namespace Framework::Voice {
                 continue;
             }
             if (state.locallyMuted.count(talker) != 0) {
+                continue;
+            }
+            // Separate maps keep their own origins, so a player in another world can be "close".
+            if (!MafiaNet::VirtualWorldsCanSee(talkerState.virtualWorld, state.virtualWorld)) {
                 continue;
             }
 

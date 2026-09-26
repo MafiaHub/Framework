@@ -14,6 +14,8 @@
 #include <mafianet/MessageIdentifiers.h>
 #include <networking/channels.h>
 #include <networking/network_server.h>
+#include <networking/replication/network_entity.h>
+#include <networking/replication/replication_manager.h>
 #include <networking/rpc/voice_settings.h>
 #include <utils/time.h>
 
@@ -83,6 +85,26 @@ namespace Framework::Voice {
             const uint64_t guid = it->first;
             it                  = _talking.erase(it);
             _talkingChanges.push_back({guid, false});
+        }
+    }
+
+    void VoiceServer::SyncAvatars(const Networking::Replication::ReplicationManager &replication) {
+        // Avatars, not every owned entity: a delegated NPC or ridden horse carries the player's
+        // guid too, and taking it would move their voice to wherever that entity stands.
+        bool worldChanged = false;
+        replication.ForEachAvatar([this, &worldChanged](MafiaNet::PeerGuid peer, Networking::Replication::NetworkEntity *avatar) {
+            const auto guid = static_cast<uint64_t>(peer);
+            _router.SetPlayerPosition(guid, avatar->position);
+            const MafiaNet::VirtualWorldId world = avatar->GetVirtualWorld();
+            if (_router.GetPlayerVirtualWorld(guid) != world) {
+                _router.SetPlayerVirtualWorld(guid, world);
+                worldChanged = true;
+            }
+        });
+
+        // Moves ride the refresh interval; a world change cuts audio now, in both directions.
+        if (worldChanged) {
+            InvalidateRecipients();
         }
     }
 

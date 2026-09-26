@@ -212,4 +212,78 @@ MODULE(voice_router, {
         EQUALS(router.IsPlayerMuted(1), true);
         EQUALS(router.IsPlayerVoiceDisabled(1), false);
     });
+
+    IT("skips a listener in another virtual world, however close, in both directions", {
+        // Separate maps have their own origins, so a dungeon player can stand on the
+        // coordinates of an overland one. Player 3 shares the talker's world and is what
+        // makes the test able to fail on "nobody hears anything".
+        VoiceRouter router;
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(1, 0, 0));
+        router.SetPlayerPosition(3, glm::vec3(1, 0, 0));
+        router.SetPlayerVirtualWorld(1, 7);
+        router.SetPlayerVirtualWorld(2, 8);
+        router.SetPlayerVirtualWorld(3, 7);
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+        EQUALS(out.size(), static_cast<size_t>(1));
+        EQUALS(RouterContains(out, 3), true);
+
+        router.ComputeRecipients(2, out);
+        EQUALS(out.size(), static_cast<size_t>(0));
+    });
+
+    IT("puts a player with no world set in the default world", {
+        VoiceRouter router;
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(5, 0, 0));
+        router.SetPlayerVirtualWorld(2, MafiaNet::VIRTUAL_WORLD_DEFAULT);
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+        EQUALS(out.size(), static_cast<size_t>(1));
+        EQUALS(router.GetPlayerVirtualWorld(1), MafiaNet::VIRTUAL_WORLD_DEFAULT);
+        EQUALS(router.GetPlayerVirtualWorld(99), MafiaNet::VIRTUAL_WORLD_DEFAULT);
+    });
+
+    IT("lets a player in the global world hear and be heard in every world", {
+        VoiceRouter router;
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(5, 0, 0));
+        router.SetPlayerVirtualWorld(1, 7);
+        router.SetPlayerVirtualWorld(2, MafiaNet::VIRTUAL_WORLD_GLOBAL);
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+        EQUALS(RouterContains(out, 2), true);
+
+        router.ComputeRecipients(2, out);
+        EQUALS(RouterContains(out, 1), true);
+    });
+
+    IT("still applies range inside a shared virtual world", {
+        VoiceRouter router;
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(500, 0, 0));
+        router.SetPlayerVirtualWorld(1, 7);
+        router.SetPlayerVirtualWorld(2, 7);
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+        EQUALS(out.size(), static_cast<size_t>(0));
+    });
+
+    IT("does not let a reused GUID inherit a removed player's world", {
+        VoiceRouter router;
+        router.SetPlayerVirtualWorld(2, 8);
+        router.RemovePlayer(2);
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(5, 0, 0));
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+        EQUALS(out.size(), static_cast<size_t>(1));
+        EQUALS(router.GetPlayerVirtualWorld(2), MafiaNet::VIRTUAL_WORLD_DEFAULT);
+    });
 });

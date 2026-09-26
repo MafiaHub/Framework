@@ -11,6 +11,7 @@
 #include "voice/voice_config.h"
 
 #include <glm/glm.hpp>
+#include <mafianet/VirtualWorld.h>
 
 #include <cstdint>
 #include <unordered_map>
@@ -19,8 +20,8 @@
 
 namespace Framework::Voice {
     // Decides who hears a given talker. Deliberately free of networking and audio: it is a
-    // pure function of positions, ranges and mute state, so the routing rule can be tested
-    // without standing up a server. VoiceServer owns one of these and feeds it positions.
+    // pure function of positions, virtual worlds, ranges and mute state, so the routing rule
+    // can be tested without standing up a server. VoiceServer owns one of these and feeds it.
     //
     // Proximity is evaluated with a linear scan rather than through the replication interest
     // grid: InterestGrid::QueryRadius is private and keyed on NetworkEntity rather than
@@ -38,6 +39,12 @@ namespace Framework::Voice {
 
         // Upserts a player's world position. Also registers a previously unknown player.
         void SetPlayerPosition(uint64_t guid, const glm::vec3 &pos);
+
+        // Upserts the virtual world a player stands in. Two players hear each other only when
+        // MafiaNet::VirtualWorldsCanSee their worlds, the same gate replication streams behind.
+        void SetPlayerVirtualWorld(uint64_t guid, MafiaNet::VirtualWorldId world);
+
+        MafiaNet::VirtualWorldId GetPlayerVirtualWorld(uint64_t guid) const;
 
         // Drops all state for a player: position, range, mute flags, and every local-mute
         // entry naming them, so a reused GUID cannot inherit a stale mute.
@@ -80,17 +87,18 @@ namespace Framework::Voice {
         bool IsPlayerVoiceDisabled(uint64_t guid) const;
 
         // Fills `out` with the GUIDs that should receive `talker`'s frames. Clears `out`
-        // first. Every eligible listener in range is returned -- there is no server-side
-        // cap on fan-out, and the order is unspecified.
+        // first. Every eligible listener in range and in a visible virtual world is returned --
+        // there is no server-side cap on fan-out, and the order is unspecified.
         void ComputeRecipients(uint64_t talker, std::vector<uint64_t> &out) const;
 
       private:
         struct PlayerState {
             glm::vec3 position {0.0f};
-            float range        = 0.0f; // <= 0 means the router's default range
-            bool serverMuted   = false;
-            bool deaf          = false;
-            bool voiceDisabled = false;
+            MafiaNet::VirtualWorldId virtualWorld = MafiaNet::VIRTUAL_WORLD_DEFAULT;
+            float range                           = 0.0f; // <= 0 means the router's default range
+            bool serverMuted                      = false;
+            bool deaf                             = false;
+            bool voiceDisabled                    = false;
             std::unordered_set<uint64_t> locallyMuted; // talkers this player does not hear
         };
 

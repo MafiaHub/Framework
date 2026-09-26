@@ -1252,15 +1252,9 @@ namespace Framework::Integrations::Server {
                 _networkingEngine->Update();
             }
 
-            // Refresh the voice router's world view from each player's avatar. Not from every owned
-            // entity: a player also owns what the server delegated to them, and any of those would
-            // move their voice to wherever it stands.
             if (auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr) {
                 FW_PROFILE_SCOPE_N("Server::VoicePositions");
-                auto &router = _voiceServer.GetRouter();
-                replication->ForEachAvatar([&router](MafiaNet::PeerGuid guid, Framework::Networking::Replication::NetworkEntity *avatar) {
-                    router.SetPlayerPosition(static_cast<uint64_t>(guid), avatar->position);
-                });
+                _voiceServer.SyncAvatars(*replication);
                 _voiceServer.Update();
             }
 
