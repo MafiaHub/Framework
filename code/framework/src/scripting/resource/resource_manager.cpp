@@ -19,7 +19,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
-#include <queue>
+#include <set>
 #include <stack>
 #include <thread>
 
@@ -349,7 +349,9 @@ namespace Framework::Scripting {
 
         std::vector<std::string> result;
         std::map<std::string, int> inDegree;
-        std::queue<std::string> queue;
+        // Dependencies bound the order; among ready resources the lower manifest priority starts first, name breaks ties.
+        std::set<std::pair<int, std::string>> ready;
+        const auto priorityOf = [this](const std::string &name) { return _resources.at(name)->GetManifest().GetMafiaHubConfig().priority; };
 
         // Initialize in-degrees (only count dependencies that exist in _resources)
         for (const auto &[name, _] : _resources) {
@@ -364,14 +366,14 @@ namespace Framework::Scripting {
             }
             inDegree[name] = degree;
             if (inDegree[name] == 0) {
-                queue.push(name);
+                ready.emplace(priorityOf(name), name);
             }
         }
 
         // Topological sort
-        while (!queue.empty()) {
-            std::string current = queue.front();
-            queue.pop();
+        while (!ready.empty()) {
+            std::string current = std::move(ready.begin()->second);
+            ready.erase(ready.begin());
             result.push_back(current);
 
             auto depIt = _dependents.find(current);
@@ -379,7 +381,7 @@ namespace Framework::Scripting {
                 for (const auto &dependent : depIt->second) {
                     --inDegree[dependent];
                     if (inDegree[dependent] == 0) {
-                        queue.push(dependent);
+                        ready.emplace(priorityOf(dependent), dependent);
                     }
                 }
             }

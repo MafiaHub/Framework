@@ -585,6 +585,50 @@ MODULE(resource_manager, {
         TestManagerHelper::Cleanup();
     });
 
+    IT("orders by priority within a dependency tier", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("prio-a", R"({
+            "name": "prio-a",
+            "version": "1.0.0",
+            "mafiahub": { "priority": 20 }
+        })");
+        TestManagerHelper::CreateTestResource("prio-b", R"({
+            "name": "prio-b",
+            "version": "1.0.0",
+            "mafiahub": { "priority": -5 }
+        })");
+        TestManagerHelper::CreateTestResource("prio-c", R"({
+            "name": "prio-c",
+            "version": "1.0.0"
+        })");
+        TestManagerHelper::CreateTestResource("prio-d", R"({
+            "name": "prio-d",
+            "version": "1.0.0",
+            "mafiahub": { "priority": -100, "resourceDependencies": ["prio-a"] }
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        // prio-d has the lowest priority but still waits for prio-a, its dependency.
+        auto order = manager.GetLoadOrder();
+        UEQUALS(order.size(), 4u);
+        STREQUALS(order[0].c_str(), "prio-b");
+        STREQUALS(order[1].c_str(), "prio-c");
+        STREQUALS(order[2].c_str(), "prio-a");
+        STREQUALS(order[3].c_str(), "prio-d");
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
     IT("a dependency declared both optional and required stays required", {
         TestManagerHelper::Cleanup();
         TestManagerHelper::CreateTestResource("dup-user", R"({
