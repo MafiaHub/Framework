@@ -142,6 +142,9 @@ namespace Framework::External::ImGUI {
         if (!isContextInitialized) {
             return;
         }
+        // Cleared before teardown, not after: the backends and the context go away
+        // below, so anything gated on this flag must already see "not initialized".
+        isContextInitialized = false;
 
         switch (_config.renderBackend) {
         case Graphics::RendererBackend::BACKEND_D3D_9: {
@@ -166,7 +169,6 @@ namespace Framework::External::ImGUI {
         ImGui::DestroyContext();
         _fonts.clear(); // the atlas that owned them is gone
 
-        isContextInitialized = false;
         Lifecycle::Shutdown();
     }
 
@@ -335,6 +337,10 @@ namespace Framework::External::ImGUI {
     }
 
     void Wrapper::ShowCursor(bool show) {
+        // Reachable from teardown paths after Shutdown() or a failed Init().
+        if (!isContextInitialized) {
+            return;
+        }
         ImGuiIO &io        = ImGui::GetIO();
         io.MouseDrawCursor = show;
     }
