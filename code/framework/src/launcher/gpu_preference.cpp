@@ -141,6 +141,14 @@ namespace Framework::Launcher {
         }
         installed = true;
 
+        // Wine has no Windows hybrid-GPU export policy to override. In particular,
+        // do not patch its ntdll LdrGetProcedureAddress transition path: new WoW64
+        // uses that same module for 32-to-64-bit syscall dispatch.
+        if (const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll"); ntdll && GetProcAddress(ntdll, "wine_get_version")) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Wine detected; skipping Windows GPU preference hooks (including ntdll)");
+            return;
+        }
+
         // FrameworkLoaderData links its own copy, so this module needs its own init.
         MH_Initialize();
 

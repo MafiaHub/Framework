@@ -142,6 +142,7 @@ namespace Framework::Launcher {
         using FunctionResolverProc = fu2::function<LPVOID(HMODULE, const char *) const>;
         using LibraryLoaderProc    = fu2::function<HMODULE(const char *) const>;
         using PreLaunchProc        = fu2::function<void() const>;
+        using GameExecutableValidatorProc = fu2::function<bool(const std::wstring &) const>;
 
       private:
         ProjectConfiguration _config;
@@ -156,6 +157,7 @@ namespace Framework::Launcher {
         LibraryLoaderProc _libraryLoader;
         FunctionResolverProc _functionResolver;
         PreLaunchProc _preLaunchFunctor;
+        GameExecutableValidatorProc _gameExecutableValidator;
 
       public:
         explicit Project(ProjectConfiguration &);
@@ -173,6 +175,11 @@ namespace Framework::Launcher {
 
         inline void SetPreLaunchFunctor(PreLaunchProc preLaunchFunctor) {
             _preLaunchFunctor = std::move(preLaunchFunctor);
+        }
+
+        // Runs on the resolved executable path before the PE loader opens the image.
+        inline void SetGameExecutableValidator(GameExecutableValidatorProc validator) {
+            _gameExecutableValidator = std::move(validator);
         }
 
         ProjectConfiguration &GetConfig() {

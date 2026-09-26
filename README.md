@@ -127,6 +127,10 @@ cmake --build build --target RunFrameworkTests
 
 The launcher (`Framework::Loader`) is Windows-only.
 
+Windows x64 binaries can also be built from Linux using MSVC under Wine in
+Docker. See [Windows builds from Linux](scripts/windows/README.md) for the
+canonical build command, dependencies and output paths.
+
 ## Releases and versioning
 
 Versions are set by hand. Raise `VERSION` in a commit, then push the matching tag:

@@ -35,7 +35,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Vector2>>(isolate, GetScriptingCatalog(isolate), "Vector2", "Mutable two-dimensional vector.");
+        cls       = std::make_unique<v8pp::class_<Vector2>>(isolate, GetScriptingCatalog(isolate), "Vector2", "Mutable two-dimensional vector exposed as the global Vector2.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
         cls->ctor<float, float>(v8pp::metadata::docs("void",
                                     {

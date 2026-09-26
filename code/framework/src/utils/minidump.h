@@ -10,24 +10,30 @@
 
 #include <Windows.h>
 
+#include <atomic>
 #include <string>
 
 namespace Framework::Utils {
     class MiniDump final {
       private:
         static inline std::string _symbolPath;
-        static inline bool _isCaptureEnabled = true;
+        static inline std::wstring _dumpDirectory;
+        static inline std::atomic_bool _isCaptureEnabled {true};
         void InitExceptionOverride();
 
       public:
         MiniDump();
 
         inline void SetCaptureEnabled(bool enabled) {
-            _isCaptureEnabled = enabled;
+            _isCaptureEnabled.store(enabled);
         }
 
         inline void SetSymbolPath(const std::string &path) {
             _symbolPath = path;
+        }
+
+        inline void SetDumpDirectory(const std::wstring &path) {
+            _dumpDirectory = path;
         }
 
         static LONG WINAPI ExceptionFilter(EXCEPTION_POINTERS *exceptionInfo);

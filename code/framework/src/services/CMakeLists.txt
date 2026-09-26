@@ -11,13 +11,18 @@ if(MAFIAHUB_SERVICES_BUILD_FROM_SOURCE)
     add_subdirectory(src)
 else()
     message(STATUS "Using the precompiled MafiaHub Services distribution")
+    # Each canonical build tree has its own architecture. Sharing the extracted
+    # archive in the source tree lets a 32-bit configure replace the 64-bit
+    # library while another build is linking it.
+    set(MAFIA_HUB_ROOT "${CMAKE_BINARY_DIR}/mafiahub-services")
+    set(MAFIA_HUB_CACHE "${MAFIA_HUB_ROOT}/cache")
     
     # Define release URLs
     set(MAFIA_HUB_RELEASE_URL "https://github.com/MafiaHub/Framework/releases/tag/MafiaHub-Services")
     set(MAFIA_HUB_DOWNLOAD_URL "https://github.com/MafiaHub/Framework/releases/download/MafiaHub-Services")
     
     # Create cache directory if it doesn't exist
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/cache")
+    file(MAKE_DIRECTORY "${MAFIA_HUB_CACHE}")
 
     # Determine platform-specific zip file
     if(WIN32)
@@ -28,23 +33,23 @@ else()
         else()
             message(FATAL_ERROR "Unsupported Windows pointer size for MafiaHub Services: ${CMAKE_SIZEOF_VOID_P}")
         endif()
-        set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/MafiaHubServices.lib")
-        set(MAFIA_HUB_UPDATER "${CMAKE_CURRENT_SOURCE_DIR}/bin/MafiaHubUpdater.exe")
+        set(MAFIA_HUB_LIB "${MAFIA_HUB_ROOT}/lib/MafiaHubServices.lib")
+        set(MAFIA_HUB_UPDATER "${MAFIA_HUB_ROOT}/bin/MafiaHubUpdater.exe")
     elseif(APPLE)
         set(PLATFORM_ZIP "mafiahub-services-macos-latest.zip")
-        set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/libMafiaHubServices_macos.a")
+        set(MAFIA_HUB_LIB "${MAFIA_HUB_ROOT}/lib/libMafiaHubServices_macos.a")
     elseif(UNIX)
         set(PLATFORM_ZIP "mafiahub-services-ubuntu-latest.zip")
-        set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/libMafiaHubServices.a")
+        set(MAFIA_HUB_LIB "${MAFIA_HUB_ROOT}/lib/libMafiaHubServices.a")
     endif()
     
     # Define local build.txt path
-    set(LOCAL_BUILD_TXT "${CMAKE_CURRENT_SOURCE_DIR}/cache/${PLATFORM_ZIP}.build.txt")
+    set(LOCAL_BUILD_TXT "${MAFIA_HUB_CACHE}/${PLATFORM_ZIP}.build.txt")
     
     # Try to download remote build.txt
     file(DOWNLOAD
         "${MAFIA_HUB_DOWNLOAD_URL}/build.txt"
-        "${CMAKE_CURRENT_SOURCE_DIR}/cache/remote_build.txt"
+        "${MAFIA_HUB_CACHE}/remote_build.txt"
         STATUS DOWNLOAD_STATUS
         SHOW_PROGRESS
         TLS_VERIFY ON
@@ -55,7 +60,7 @@ else()
     # Check if download was successful
     if(${STATUS_CODE} EQUAL 0)
         # Read the remote build timestamp
-        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/cache/remote_build.txt" REMOTE_BUILD_TIMESTAMP)
+        file(READ "${MAFIA_HUB_CACHE}/remote_build.txt" REMOTE_BUILD_TIMESTAMP)
         string(STRIP "${REMOTE_BUILD_TIMESTAMP}" REMOTE_BUILD_TIMESTAMP)
         
         set(NEED_UPDATE TRUE)
@@ -84,7 +89,7 @@ else()
             # Download platform-specific zip
             file(DOWNLOAD
                 "${MAFIA_HUB_DOWNLOAD_URL}/${PLATFORM_ZIP}"
-                "${CMAKE_CURRENT_SOURCE_DIR}/cache/${PLATFORM_ZIP}"
+                "${MAFIA_HUB_CACHE}/${PLATFORM_ZIP}"
                 STATUS ZIP_DOWNLOAD_STATUS
                 SHOW_PROGRESS
                 TLS_VERIFY ON
@@ -94,23 +99,23 @@ else()
             
             if(${ZIP_STATUS_CODE} EQUAL 0)
                 # Clear existing files if they exist (except cache)
-                if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lib")
-                    file(REMOVE_RECURSE "${CMAKE_CURRENT_SOURCE_DIR}/lib")
+                if(EXISTS "${MAFIA_HUB_ROOT}/lib")
+                    file(REMOVE_RECURSE "${MAFIA_HUB_ROOT}/lib")
                 endif()
-                if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/services")
-                    file(REMOVE_RECURSE "${CMAKE_CURRENT_SOURCE_DIR}/services")
+                if(EXISTS "${MAFIA_HUB_ROOT}/services")
+                    file(REMOVE_RECURSE "${MAFIA_HUB_ROOT}/services")
                 endif()
-                if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bin")
-                    file(REMOVE_RECURSE "${CMAKE_CURRENT_SOURCE_DIR}/bin")
+                if(EXISTS "${MAFIA_HUB_ROOT}/bin")
+                    file(REMOVE_RECURSE "${MAFIA_HUB_ROOT}/bin")
                 endif()
                 
                 # Extract the zip file
-                message(STATUS "Extracting MafiaHub Services to ${CMAKE_CURRENT_SOURCE_DIR}")
+                message(STATUS "Extracting MafiaHub Services to ${MAFIA_HUB_ROOT}")
                 
                 # Use CMake's built-in extraction capability
                 execute_process(
-                    COMMAND ${CMAKE_COMMAND} -E tar xzf "${CMAKE_CURRENT_SOURCE_DIR}/cache/${PLATFORM_ZIP}"
-                    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                    COMMAND ${CMAKE_COMMAND} -E tar xzf "${MAFIA_HUB_CACHE}/${PLATFORM_ZIP}"
+                    WORKING_DIRECTORY "${MAFIA_HUB_ROOT}"
                     RESULT_VARIABLE EXTRACT_RESULT
                 )
                 
@@ -119,8 +124,7 @@ else()
                 endif()
                 
                 # Update local build.txt
-                file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/cache/remote_build.txt" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/cache")
-                file(RENAME "${CMAKE_CURRENT_SOURCE_DIR}/cache/remote_build.txt" "${LOCAL_BUILD_TXT}")
+                file(RENAME "${MAFIA_HUB_CACHE}/remote_build.txt" "${LOCAL_BUILD_TXT}")
                 
                 message(STATUS "MafiaHub Services successfully updated to build ${REMOTE_BUILD_TIMESTAMP}")
             else()
@@ -141,7 +145,7 @@ else()
     add_library(MafiaHubServices STATIC IMPORTED GLOBAL)
     set_target_properties(MafiaHubServices PROPERTIES
         IMPORTED_LOCATION "${MAFIA_HUB_LIB}"
-        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/services")
+        INTERFACE_INCLUDE_DIRECTORIES "${MAFIA_HUB_ROOT}/services")
     if(WIN32)
         set_property(TARGET MafiaHubServices APPEND PROPERTY
             INTERFACE_LINK_LIBRARIES User32 Gdi32 Comctl32)

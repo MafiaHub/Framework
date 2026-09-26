@@ -7,9 +7,11 @@
  */
 
 #include "minidump.h"
+#include <DbgHelp.h>
 #include <winnt.h>
 
 #include "logging/logger.h"
+#include "utils/string_utils.h"
 
 #include <StackWalker.h>
 
@@ -47,14 +49,44 @@ namespace Framework::Utils {
     };
 
     LONG WINAPI MiniDump::ExceptionFilter(EXCEPTION_POINTERS *exceptionInfo) {
-        if (!_isCaptureEnabled) {
-            return EXCEPTION_EXECUTE_HANDLER;
-        }
         if (exceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_BREAKPOINT) {
             return EXCEPTION_CONTINUE_EXECUTION;
         }
+        if (_isCaptureEnabled.exchange(false) == false) {
+            return EXCEPTION_CONTINUE_SEARCH;
+        }
 
-        _isCaptureEnabled = false;
+        std::wstring dumpPath;
+        DWORD dumpError = ERROR_SUCCESS;
+        if (!_dumpDirectory.empty()) {
+            SYSTEMTIME now {};
+            GetSystemTime(&now);
+            wchar_t filename[128];
+            swprintf_s(filename, L"Crash-%04u%02u%02u-%02u%02u%02u-%lu-%lu.dmp", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond, GetCurrentProcessId(), GetCurrentThreadId());
+            dumpPath = _dumpDirectory + L"\\" + filename;
+
+            if (!CreateDirectoryW(_dumpDirectory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
+                dumpError = GetLastError();
+            }
+            else {
+                const HANDLE file = CreateFileW(dumpPath.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                if (file == INVALID_HANDLE_VALUE) {
+                    dumpError = GetLastError();
+                }
+                else {
+                    MINIDUMP_EXCEPTION_INFORMATION exception {GetCurrentThreadId(), exceptionInfo, FALSE};
+                    constexpr auto dumpType = static_cast<MINIDUMP_TYPE>(MiniDumpNormal | MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithFullMemoryInfo);
+                    if (!MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), file, dumpType, &exception, nullptr, nullptr)) {
+                        dumpError = GetLastError();
+                    }
+                    CloseHandle(file);
+                    if (dumpError != ERROR_SUCCESS) {
+                        DeleteFileW(dumpPath.c_str());
+                    }
+                }
+            }
+        }
+
         StackWalkerSentry sw;
         sw.SetSymPath(_symbolPath.c_str());
         sw.ShowCallstack(GetCurrentThread(), exceptionInfo->ContextRecord);
@@ -76,17 +108,23 @@ namespace Framework::Utils {
                                             "EAX: {:<12x} ECX: {:<12x} \n"
                                             "EDX: {:<12x} EBX: {:<12x} \n"
                                             "ESP: {:<12x} EBP: {:<12x} \n"
-                                            "ESI: {:<12x} EDI: {:<12x} \n",
+                                            "ESI: {:<12x} EDI: {:<12x} \n"
+                                            "CS : {:<12x} SS : {:<12x} \n",
             (DWORD)exceptionInfo->ExceptionRecord->ExceptionAddress, exceptionInfo->ExceptionRecord->ExceptionCode, exceptionInfo->ContextRecord->Eax, exceptionInfo->ContextRecord->Ecx, exceptionInfo->ContextRecord->Edx, exceptionInfo->ContextRecord->Ebx,
-            exceptionInfo->ContextRecord->Esp, exceptionInfo->ContextRecord->Ebp, exceptionInfo->ContextRecord->Esi, exceptionInfo->ContextRecord->Edi);
+            exceptionInfo->ContextRecord->Esp, exceptionInfo->ContextRecord->Ebp, exceptionInfo->ContextRecord->Esi, exceptionInfo->ContextRecord->Edi, exceptionInfo->ContextRecord->SegCs, exceptionInfo->ContextRecord->SegSs);
 #endif
 
-        Framework::Logging::GetLogger("MiniDump")->error(fmt::format("Unhandled exception at address: {}\nStack trace:\n\n{}", crashInfo, sw.GetOutputDump()));
-        Framework::Logging::GetLogger("MiniDump")->flush();
-        _isCaptureEnabled = true;
-
-        // Give async logger some time to flush the log
-        Sleep(2000);
+        const auto logger = Framework::Logging::GetLogger("MiniDump", false);
+        if (!dumpPath.empty()) {
+            if (dumpError == ERROR_SUCCESS) {
+                logger->error("Crash dump written to {}", StringUtils::WideToNormal(dumpPath));
+            }
+            else {
+                logger->error("Could not write crash dump to {} (Win32 error {})", StringUtils::WideToNormal(dumpPath), dumpError);
+            }
+        }
+        logger->error("Unhandled exception at address: {}\nStack trace:\n\n{}", crashInfo, sw.GetOutputDump());
+        logger->flush();
 
         // uncomment to break here
         //__debugbreak();

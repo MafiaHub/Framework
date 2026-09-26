@@ -190,8 +190,10 @@ namespace Framework::Launcher::Platforms {
     }
 
     void Steam::PrepareAppIdentity(const PlatformHost &host) const {
-        cppfs::FileHandle appIdFile = cppfs::fs::open("steam_appid.txt");
-        appIdFile.writeFile(std::to_string(_options.appId) + "\n");
+        if (_options.writeAppIdFile) {
+            cppfs::FileHandle appIdFile = cppfs::fs::open("steam_appid.txt");
+            appIdFile.writeFile(std::to_string(_options.appId) + "\n");
+        }
         host.SetProcessVariable(L"SteamAppId", std::to_wstring(_options.appId));
     }
 

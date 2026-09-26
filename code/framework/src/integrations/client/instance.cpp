@@ -38,6 +38,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <iterator>
+#include <imgui.h>
 
 #include <logging/logger.h>
 
@@ -183,7 +184,7 @@ namespace Framework::Integrations::Client {
 
     void Instance::DispatchReceivedChat(const Framework::Networking::RPC::ChatMessage &msg) {
         EmitChatMessageEvent(msg);
-        if (_chatBox.IsVisible()) {
+        if (_chatBox.IsVisible() && ImGui::GetCurrentContext()) {
             _chatBox.AddMessage(msg.author, msg.text, msg.color);
         }
         OnChatMessageReceived(msg);

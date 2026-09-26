@@ -84,6 +84,10 @@ namespace Framework::GUI::CEF {
         // Accelerated path: the popup arrives as its own shared texture.
         SharedCopy _sharedPopup;
 
+        // Union of the rects refreshed since the last ClearPixelDataDirty, for backends that
+        // upload a sub-rectangle (D3D8). Empty when nothing is pending.
+        CefRect _dirtyBounds;
+
         ID3D11Device *_device = nullptr;
         Microsoft::WRL::ComPtr<ID3D11Device1> _copyDevice;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> _copyContext;
@@ -164,6 +168,12 @@ namespace Framework::GUI::CEF {
         void ClearPixelDataDirty() {
             _pixelDataDirty = false;
             _pixelDirtyRect = CefRect();
+            _dirtyBounds    = {};
+        }
+
+        // Caller holds LockPixels(). Clamped to the current pixel surface.
+        const CefRect &GetDirtyBounds() const {
+            return _dirtyBounds;
         }
 
       private:

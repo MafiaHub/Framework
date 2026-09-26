@@ -402,6 +402,7 @@ namespace Framework::Integrations::Server {
         read("apiport", opts.webBindPort);
         read("map", opts.bindMapName);
         read("maxplayers", opts.maxPlayers);
+        read("password", opts.bindPassword);
         read("server-token", opts.bindSecretKey);
         read("password", opts.bindPassword);
     }
@@ -507,6 +508,7 @@ namespace Framework::Integrations::Server {
         frameworkKeys["apiport"]      = _opts.webBindPort;
         frameworkKeys["map"]          = _opts.bindMapName;
         frameworkKeys["maxplayers"]   = _opts.maxPlayers;
+        frameworkKeys["password"]     = _opts.bindPassword;
         frameworkKeys["server-token"] = _opts.bindSecretKey;
         frameworkKeys["password"]     = _opts.bindPassword;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);

@@ -203,7 +203,7 @@ namespace Framework::Utils::Crypto {
         return Sha256Hex(data.data(), data.size());
     }
 
-    std::string Sha256FileHex(const std::string &path) {
+    std::string Sha256FileHex(const std::filesystem::path &path) {
         std::ifstream file(path, std::ios::binary);
         if (!file.is_open()) {
             return {};
@@ -242,6 +242,10 @@ namespace Framework::Utils::Crypto {
         }
         EVP_MD_CTX_free(ctx);
         return ToHex(digest, digestLen);
+    }
+
+    std::string Sha256FileHex(const std::string &path) {
+        return Sha256FileHex(std::filesystem::path(path));
     }
 
     bool ConstantTimeEquals(const std::string &a, const std::string &b) {

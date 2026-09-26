@@ -82,12 +82,10 @@ void __cdecl RegisterThreadLocalExeAtexitCallback_Stub(ThreadLocalCallback) {
 }
 
 static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
-    const auto result = Framework::Utils::MiniDump::ExceptionFilter(exceptionInfo);
-    if (result == EXCEPTION_CONTINUE_EXECUTION)
-        return result;
-    else if (result != EXCEPTION_EXECUTE_HANDLER)
-        return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
-    return result;
+    if (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) {
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+    return Framework::Utils::MiniDump::ExceptionFilter(exceptionInfo);
 }
 
 void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
@@ -391,11 +389,15 @@ namespace Framework::Launcher {
         auto projectPath = Utils::StringUtils::WideToNormal(gProjectDllPath);
         std::replace(projectPath.begin(), projectPath.end(), '/', '\\');
         Logging::GetInstance()->SetLogFolder(projectPath + "/logs");
+        // Keep early launcher messages when the game faults before an async
+        // logging worker could drain its queue.
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER, false);
 
         _minidump     = std::make_unique<Utils::MiniDump>();
         _fileConfig   = std::make_unique<Utils::Config>();
 
         _minidump->SetSymbolPath(Utils::StringUtils::WideToNormal(gProjectDllPath));
+        _minidump->SetDumpDirectory(std::wstring(gProjectDllPath) + L"\\logs");
     }
 
     bool Project::Launch() {
@@ -505,6 +507,10 @@ namespace Framework::Launcher {
         std::error_code ec;
         if (!std::filesystem::is_regular_file(_gamePath, ec)) {
             MessageBoxA(nullptr, ("The game executable could not be found:\n" + Utils::StringUtils::WideToNormal(_gamePath)).c_str(), _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
+        if (_gameExecutableValidator && !_gameExecutableValidator(_gamePath)) {
             return false;
         }
 
@@ -1035,6 +1041,7 @@ namespace Framework::Launcher {
         }
 
         // The game runs here; a C++ exception surfacing means it crashed while running.
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->flush();
         try {
             InvokeEntryPoint(entry_point);
             return true;

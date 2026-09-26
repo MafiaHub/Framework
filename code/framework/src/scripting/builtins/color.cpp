@@ -97,7 +97,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Color>>(isolate, GetScriptingCatalog(isolate), "Color", "Mutable RGBA color, with components stored from 0 to 1.");
+        cls       = std::make_unique<v8pp::class_<Color>>(isolate, GetScriptingCatalog(isolate), "Color", "Mutable RGBA color exposed as the global Color, with components stored from 0 to 1.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
         // Custom constructor callback rather than the default ctor<...> factory: v8pp's factory
         // forwards args as std::optional<float>&&, which its is_optional trait doesn't recognize, so

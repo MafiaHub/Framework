@@ -29,6 +29,10 @@ namespace Framework::Launcher::Platforms {
 
             // a game folder the player picked that holds steam_api is started as the Steam copy
             bool adoptManualCopies = false;
+
+            // SteamAppId is always set in the environment; some games also need steam_appid.txt
+            // in the working directory
+            bool writeAppIdFile = true;
         };
 
         explicit Steam(Options options): _options(options) {}

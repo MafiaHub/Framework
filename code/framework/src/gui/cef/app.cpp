@@ -6,6 +6,8 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
+#include <utils/safe_win32.h>
+
 #include "app.h"
 
 #include "gui/resources/scheme.h"
@@ -17,6 +19,13 @@
 #include <string>
 
 namespace Framework::GUI::CEF {
+    namespace {
+        bool RunningUnderWine() {
+            const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+            return ntdll && GetProcAddress(ntdll, "wine_get_version");
+        }
+
+    } // namespace
 
     namespace {
         // --enable-features and --disable-features each take one comma-separated
@@ -56,11 +65,24 @@ namespace Framework::GUI::CEF {
     }
 
     void App::OnBeforeCommandLineProcessing(const CefString &processType, CefRefPtr<CefCommandLine> commandLine) {
+        const bool wineSoftwareRendering = !_gpuAccelerated && RunningUnderWine();
         if (!_gpuAccelerated) {
             // CPU OSR path never touches the driver; a crashing GPU process otherwise
             // takes the whole browser down ("GPU process isn't usable")
             commandLine->AppendSwitch("disable-gpu");
             commandLine->AppendSwitch("disable-gpu-compositing");
+            if (wineSoftwareRendering) {
+                // Wine's D3D11/ANGLE and SwiftShader paths can both fail during
+                // Viz initialization. This UI only needs CPU OnPaint buffers.
+                commandLine->AppendSwitch("disable-gpu-rasterization");
+                commandLine->AppendSwitch("disable-software-rasterizer");
+                commandLine->AppendSwitch("disable-3d-apis");
+                commandLine->AppendSwitch("disable-webgl");
+                commandLine->AppendSwitch("disable-gpu-process-prelaunch");
+                // Chromium may still start a GPU service for software
+                // compositing. Keep it in the browser under Wine.
+                commandLine->AppendSwitch("in-process-gpu");
+            }
         }
         else {
             // The GPU process is its own process, so the launcher's forcing does not
@@ -88,17 +110,27 @@ namespace Framework::GUI::CEF {
         // No internal begin-frame scheduler: rendering uses external begin frames.
     }
 
+    void App::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> commandLine) {
+        // Handed over on the command line so the child never asks the kernel who launched it
+        commandLine->AppendSwitchWithValue(kParentProcessSwitch, std::to_string(GetCurrentProcessId()));
+        if (!_gpuAccelerated && RunningUnderWine()) {
+            // The browser process receives these in OnBeforeCommandLineProcessing,
+            // but CEF does not carry them over to every child command line.
+            commandLine->AppendSwitch("disable-gpu");
+            commandLine->AppendSwitch("disable-gpu-compositing");
+            commandLine->AppendSwitch("disable-gpu-rasterization");
+            commandLine->AppendSwitch("disable-software-rasterizer");
+            commandLine->AppendSwitch("disable-3d-apis");
+            commandLine->AppendSwitch("disable-webgl");
+        }
+    }
+
     void App::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) {
         Resources::RegisterCustomSchemes(registrar);
     }
 
     void App::OnContextInitialized() {
         _contextInitialized = true;
-    }
-
-    void App::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> commandLine) {
-        // Handed over on the command line so the child never asks the kernel who launched it
-        commandLine->AppendSwitchWithValue(kParentProcessSwitch, std::to_string(GetCurrentProcessId()));
     }
 
     void App::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) {
