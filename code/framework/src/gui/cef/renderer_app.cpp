@@ -54,6 +54,12 @@ namespace Framework::GUI::CEF {
         CefRefPtr<CefV8Handler> handler = new CallEventHandler(browser);
         CefRefPtr<CefV8Value> func    = CefV8Value::CreateFunction("callEvent", handler);
         global->SetValue("callEvent", func, V8_PROPERTY_ATTRIBUTE_NONE);
+
+        // Each document starts with nothing focused; without this the dedupe in
+        // OnFocusedNodeChanged would swallow the first focus after a same-process navigation.
+        if (frame && frame->IsMain()) {
+            _inputFocus[browser->GetIdentifier()] = false;
+        }
     }
 
     // The DOM is only reachable here, so the browser process cannot decide this for itself.
@@ -62,7 +68,9 @@ namespace Framework::GUI::CEF {
             return;
         }
 
-        const bool typing = node && node->GetType() == CefDOMNode::Type::DOM_NODE_TYPE_ELEMENT && node->GetFormControlElementType() != CefDOMNode::FormControlType::DOM_FORM_CONTROL_TYPE_UNSUPPORTED;
+        // IsEditable: text inputs, textareas and contenteditable. A form-control test would count
+        // buttons, checkboxes and selects as typing, and miss rich-text editors.
+        const bool typing = node && node->IsEditable();
 
         bool &previous = _inputFocus[browser->GetIdentifier()];
         if (previous == typing) {
