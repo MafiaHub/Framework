@@ -204,6 +204,14 @@ namespace Framework::Networking::Replication {
         void SetInterestBudget(const std::string &typeName, uint32_t maxCount) {
             _interest.SetBudget(EntityRegistry::Get().TypeId(typeName), maxCount);
         }
+        // Holds a type to each entity's own streaming range instead of letting the viewer's widen
+        // it. See InterestGrid::SetUsesEntityRange.
+        void SetInterestUsesEntityRange(uint32_t typeId, bool usesEntityRange) {
+            _interest.SetUsesEntityRange(typeId, usesEntityRange);
+        }
+        void SetInterestUsesEntityRange(const std::string &typeName, bool usesEntityRange) {
+            _interest.SetUsesEntityRange(EntityRegistry::Get().TypeId(typeName), usesEntityRange);
+        }
         // Minimum milliseconds between spatial-index rebuilds (0 = every tick, the default).
         // Entity creation/destruction still forces an immediate rebuild.
         void SetInterestRebuildInterval(uint32_t intervalMs) {

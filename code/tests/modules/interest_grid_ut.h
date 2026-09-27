@@ -106,6 +106,56 @@ MODULE(interest_grid, {
         EQUALS(out.contains(farPed), false);
     });
 
+    IT("holds a type that uses its entity range to that range, even under a longer viewer range", {
+        InterestGrid grid;
+        freshGrid(grid);
+        grid.SetStreamOutMargin(10.0f);
+        grid.SetUsesEntityRange(typeB, true);
+
+        NetworkEntity *viewer    = make(typeA, 0.0f, 0.0f);
+        viewer->streaming.range  = 250.0f;
+        NetworkEntity *nearChest = make(typeB, 40.0f, 0.0f);
+        nearChest->streaming.range = 50.0f;
+        NetworkEntity *farChest  = make(typeB, 100.0f, 0.0f);
+        farChest->streaming.range = 50.0f;
+        // Its own range reaches further than the viewer's, and still counts in full.
+        NetworkEntity *wideChest = make(typeB, 300.0f, 0.0f);
+        wideChest->streaming.range = 320.0f;
+        // Another type at the same distance keeps the viewer's range.
+        NetworkEntity *otherType = make(typeA, 100.0f, 10.0f);
+        otherType->streaming.range = 50.0f;
+        // Already streamed and just past its range: the margin keeps it.
+        NetworkEntity *leaving = make(typeB, 55.0f, 10.0f);
+        leaving->streaming.range = 50.0f;
+
+        grid.BeginRebuild();
+        grid.Insert(viewer);
+        grid.Insert(nearChest);
+        grid.Insert(farChest);
+        grid.Insert(wideChest);
+        grid.Insert(otherType);
+        grid.Insert(leaving);
+
+        const std::unordered_set<NetworkEntity *> before {leaving};
+        std::unordered_set<NetworkEntity *> out;
+        grid.CollectVisible(viewer, viewerGuid, before, out);
+
+        EQUALS(out.contains(nearChest), true);
+        EQUALS(out.contains(farChest), false);
+        EQUALS(out.contains(wideChest), true);
+        EQUALS(out.contains(otherType), true);
+        EQUALS(out.contains(leaving), true);
+
+        // Turned back off, the viewer's range widens it again from the next rebuild.
+        grid.SetUsesEntityRange(typeB, false);
+        grid.BeginRebuild();
+        grid.Insert(viewer);
+        grid.Insert(farChest);
+        out.clear();
+        grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
+        EQUALS(out.contains(farChest), true);
+    });
+
     IT("keeps an already-streamed entity out to range + margin, but will not admit a new one there", {
         InterestGrid grid;
         freshGrid(grid);

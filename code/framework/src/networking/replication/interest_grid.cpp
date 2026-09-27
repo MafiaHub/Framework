@@ -29,6 +29,9 @@ namespace Framework::Networking::Replication {
         _min      = worldMin;
         _max      = worldMax;
         _ready    = false; // re-initialised on next BeginRebuild()
+        // The own-range grid follows on its next insert, with the new bounds.
+        _ownRangeReady   = false;
+        _ownRangeEntries = 0;
     }
 
     void InterestGrid::SetBudget(uint32_t typeId, uint32_t maxCount) {
@@ -44,12 +47,35 @@ namespace Framework::Networking::Replication {
         return it != _budgets.end() ? it->second : 0;
     }
 
+    void InterestGrid::SetUsesEntityRange(uint32_t typeId, bool usesEntityRange) {
+        if (usesEntityRange) {
+            _entityRangeTypes.insert(typeId);
+        }
+        else {
+            _entityRangeTypes.erase(typeId);
+        }
+    }
+
+    float InterestGrid::RangeFor(const NetworkEntity *entity, float viewerRange) const {
+        // The entity's own range wins when longer; that is what makes per-type distances work.
+        // A type that opted in is held to its own range even when the viewer's is longer.
+        if (_entityRangeTypes.contains(entity->GetTypeId())) {
+            return entity->streaming.range;
+        }
+        return std::max(viewerRange, entity->streaming.range);
+    }
+
     void InterestGrid::BeginRebuild() {
         if (!_ready) {
             _grid.Init(_cellSize, _cellSize, _min, _min, _max, _max);
             _ready = true;
         }
         _grid.Clear();
+        if (_ownRangeEntries != 0) {
+            _ownRangeGrid.Clear();
+            _ownRangeEntries = 0;
+        }
+        _maxOwnRange = 0.0f;
         _ownedByGuid.clear();
         _alwaysVisible.clear();
         _live.clear();
@@ -64,9 +90,20 @@ namespace Framework::Networking::Replication {
         // GridSectorizer asserts on a zero-area entry, so insert a tiny box around the ground-plane
         // position (X and the configured second axis).
         const float v = GroundV(entity->position);
-        _grid.AddEntry(entity, entity->position.x - kPointEpsilon, v - kPointEpsilon, entity->position.x + kPointEpsilon, v + kPointEpsilon);
+        if (_entityRangeTypes.contains(entity->GetTypeId())) {
+            if (!_ownRangeReady) {
+                _ownRangeGrid.Init(_cellSize, _cellSize, _min, _min, _max, _max);
+                _ownRangeReady = true;
+            }
+            _ownRangeGrid.AddEntry(entity, entity->position.x - kPointEpsilon, v - kPointEpsilon, entity->position.x + kPointEpsilon, v + kPointEpsilon);
+            _maxOwnRange = std::max(_maxOwnRange, entity->streaming.range);
+            ++_ownRangeEntries;
+        }
+        else {
+            _grid.AddEntry(entity, entity->position.x - kPointEpsilon, v - kPointEpsilon, entity->position.x + kPointEpsilon, v + kPointEpsilon);
+            _maxEntityRange = std::max(_maxEntityRange, entity->streaming.range);
+        }
         _live.insert(entity);
-        _maxEntityRange = std::max(_maxEntityRange, entity->streaming.range);
         if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
             _ownedByGuid[entity->ownerGUID].insert(entity);
         }
@@ -102,13 +139,13 @@ namespace Framework::Networking::Replication {
         _alwaysVisible.erase(entity);
     }
 
-    void InterestGrid::GatherCandidates(const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out) {
+    void InterestGrid::GatherCandidates(GridSectorizer &grid, const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out) {
         if (!_ready) {
             return;
         }
         const float centerV = GroundV(center);
         _queryHits.Clear(true, _FILE_AND_LINE_);
-        _grid.GetEntries(_queryHits, center.x - radius, centerV - radius, center.x + radius, centerV + radius);
+        grid.GetEntries(_queryHits, center.x - radius, centerV - radius, center.x + radius, centerV + radius);
 
         for (unsigned i = 0; i < _queryHits.Size(); ++i) {
             auto *entity = static_cast<NetworkEntity *>(_queryHits[i]);
@@ -204,7 +241,13 @@ namespace Framework::Networking::Replication {
         const float queryRadius = std::max(viewerRange, _maxEntityRange) + _streamOutMargin;
         _candidates.clear();
         for (const glm::vec3 &focus : _focus) {
-            GatherCandidates(focus, queryRadius, _candidates);
+            GatherCandidates(_grid, focus, queryRadius, _candidates);
+        }
+        if (_ownRangeEntries != 0) {
+            const float ownRangeRadius = _maxOwnRange + _streamOutMargin;
+            for (const glm::vec3 &focus : _focus) {
+                GatherCandidates(_ownRangeGrid, focus, ownRangeRadius, _candidates);
+            }
         }
 
         // Owned and always-visible entities are skipped here and added unconditionally below: they
@@ -222,8 +265,7 @@ namespace Framework::Networking::Replication {
             }
 
             const bool wasRelevant = previous.contains(entity);
-            // The entity's own range wins when longer; that is what makes per-type distances work.
-            float range = std::max(viewerRange, entity->streaming.range);
+            float range            = RangeFor(entity, viewerRange);
             if (wasRelevant) {
                 range += _streamOutMargin;
             }

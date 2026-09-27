@@ -205,7 +205,7 @@ namespace Framework::Networking::Replication {
             bool alwaysVisible = false;  // bypass range culling; dimension still applies
             bool visible       = true;   // master visibility switch
             bool isViewer      = false;  // drives a connection's interest set (the player's avatar); replicated
-            float range        = 100.0f; // interest radius (world units) when acting as a viewer
+            float range        = 100.0f; // interest radius (world units): a viewer's reach, and an entity's own (see InterestGrid::SetUsesEntityRange)
             MafiaNet::PeerGuid targetGUID = MafiaNet::UNASSIGNED_PEER_GUID; // if set, streams only to this connection
         };
         Streaming streaming;

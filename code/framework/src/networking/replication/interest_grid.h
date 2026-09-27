@@ -61,6 +61,16 @@ namespace Framework::Networking::Replication {
         // Owned, always-visible, dependency and viewer entities are additive and uncounted.
         void SetBudget(uint32_t typeId, uint32_t maxCount);
 
+        // By default an entity streams at the larger of its own range and the viewer's, so its
+        // range can only widen interest. For a type set here the entity's own streaming.range is
+        // the whole radius and the viewer's is ignored, which lets dense scenery stream nearer
+        // than the viewer sees everything else. The stream-out margin still applies.
+        //
+        // Such entities are filed in a grid of their own, queried only as far as the longest of
+        // their ranges, so however many there are they never enter a viewer's wide query. Where an
+        // entity is filed is decided when it is inserted: a change takes effect at the next rebuild.
+        void SetUsesEntityRange(uint32_t typeId, bool usesEntityRange);
+
         // Start a fresh rebuild: (re)initialise the grid if needed, then clear it and the indices.
         void BeginRebuild();
         // Add one live entity to the grid and the owned/always-visible indices.
@@ -104,7 +114,7 @@ namespace Framework::Networking::Replication {
 
         // Live entities whose cell overlaps the query box. No exact distance test: CollectVisible
         // applies each candidate's own range.
-        void GatherCandidates(const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out);
+        void GatherCandidates(GridSectorizer &grid, const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out);
 
         // Second ground-plane axis (the first is always X): Y when _groundXY, else Z.
         float GroundV(const glm::vec3 &p) const {
@@ -115,6 +125,9 @@ namespace Framework::Networking::Replication {
         float NearestFocusDistSq(const glm::vec3 &p) const;
 
         uint32_t BudgetFor(uint32_t typeId) const;
+
+        // Streaming radius of one candidate for this viewer, before the stream-out margin.
+        float RangeFor(const NetworkEntity *entity, float viewerRange) const;
 
         const std::unordered_set<NetworkEntity *> *OwnedBy(MafiaNet::PeerGuid guid) const;
         const std::unordered_set<NetworkEntity *> &AlwaysVisible() const {
@@ -138,7 +151,14 @@ namespace Framework::Networking::Replication {
         float _maxEntityRange = 0.0f;
         uint32_t _generation = 0;
         GridSectorizer _grid;
+        // Entities of the types that use their own range, and the widest of those ranges; see
+        // SetUsesEntityRange. Initialised and cleared only once a project files anything here.
+        GridSectorizer _ownRangeGrid;
+        bool _ownRangeReady          = false;
+        size_t _ownRangeEntries      = 0;
+        float _maxOwnRange           = 0.0f;
         std::unordered_map<uint32_t, uint32_t> _budgets;
+        std::unordered_set<uint32_t> _entityRangeTypes;
         std::unordered_map<MafiaNet::PeerGuid, std::unordered_set<NetworkEntity *>> _ownedByGuid;
         std::unordered_set<NetworkEntity *> _alwaysVisible;
         // Entities currently in the index; grid hits are filtered through it (see class comment).
