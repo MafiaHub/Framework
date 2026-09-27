@@ -746,7 +746,7 @@ namespace Framework::Scripting::Builtins {
         return EmitInternal(isolate, context, eventName, args, "", HandlerScope::Global);
     }
 
-    bool Events::EmitReservedSync(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args) {
+    bool Events::EmitReservedSync(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, SynchronousFailurePolicy failurePolicy) {
         v8::HandleScope handleScope(isolate);
 
         auto handlersToCall = CollectHandlers(isolate, eventName, "", HandlerScope::Global);
@@ -761,13 +761,23 @@ namespace Framework::Scripting::Builtins {
             if (tryCatch.HasCaught()) {
                 std::string errorStr = FormatV8Exception(isolate, tryCatch, "Unknown error in event handler");
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Event '{}' handler error: {}", logContext, eventName, errorStr);
+                if (failurePolicy == SynchronousFailurePolicy::Veto)
+                    proceed = false;
                 tryCatch.Reset();
                 continue;
             }
 
             // Literal false only, so a handler that forgets to return can't silently veto.
             v8::Local<v8::Value> result;
-            if (maybeResult.ToLocal(&result) && result->IsBoolean() && !result->IsTrue()) {
+            if (!maybeResult.ToLocal(&result)) {
+                if (failurePolicy == SynchronousFailurePolicy::Veto)
+                    proceed = false;
+            }
+            else if (result->IsBoolean() && !result->IsTrue()) {
+                proceed = false;
+            }
+            else if (failurePolicy == SynchronousFailurePolicy::Veto && result->IsPromise()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Event '{}' requires a synchronous handler; returned Promise vetoed the operation", logContext, eventName);
                 proceed = false;
             }
         }

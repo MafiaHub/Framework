@@ -59,6 +59,8 @@ namespace Framework::Scripting::Builtins {
      */
     class Events final {
       public:
+        enum class SynchronousFailurePolicy { Continue, Veto };
+
         Events() = default;
         ~Events();
 
@@ -86,14 +88,13 @@ namespace Framework::Scripting::Builtins {
                                             const std::vector<v8::Local<v8::Value>> &args);
 
         /**
-         * Synchronous EmitReserved. Every handler runs; returning literal false vetoes, and this
-         * returns false when any did. A returned Promise is ignored — the caller needs its answer
-         * before it returns, so async handlers cannot veto.
+         * Synchronous EmitReserved. Every handler runs; literal false vetoes.
+         * Continue logs exceptions and ignores returned Promises, preserving
+         * the existing behavior. Veto also refuses exceptions, missing call
+         * results and Promises: an approval must finish synchronously.
+         * No handlers, undefined and other non-false values are not refusals.
          */
-        bool EmitReservedSync(v8::Isolate *isolate,
-                              v8::Local<v8::Context> context,
-                              const std::string &eventName,
-                              const std::vector<v8::Local<v8::Value>> &args);
+        bool EmitReservedSync(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, SynchronousFailurePolicy failurePolicy = SynchronousFailurePolicy::Continue);
 
         /**
          * Emit a native event to the global handlers of one resource only, for events the
