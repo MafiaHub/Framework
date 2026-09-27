@@ -28,3 +28,39 @@ Verify that an owner destruction request leaves it alive, a server removal
 removes it from both clients, and a late joiner receives its current world.
 Exercise the script placement overrides with valid and refused writes;
 refusal must leave the durable placement unchanged and throw to the caller.
+
+## API example
+
+An existing registered entity type can keep its usual physics delegation
+while refusing owner-authored deletion:
+
+```cpp
+bool CanOwnerDestroy() const override {
+    return false;
+}
+```
+
+`CanOwnerDestroy()` defaults to true. The server calls this policy only after
+validating the sender's ownership. Returning true never authorizes another
+client to delete the entity. Normal server destruction remains available
+through `ReplicationManager::DestroyEntity(entity)`.
+
+Server code changes the entity's world through the normal typed setter:
+
+```cpp
+entity->SetVirtualWorld(7);
+```
+
+This sends the current owner a forced snapshot when the value changes;
+other observers receive ordinary state updates or streaming changes. The
+world is also included in construction for late joiners. The framework's
+`SerializeForcedSnapshot` places the world before the game's
+`SerializeForcedState` extension, even if that override omits a base call.
+Game implementations should keep overriding `SerializeForcedState` for
+their own forced fields.
+
+Durable script handles can override `Entity::SetPosition`,
+`SetRotationFromEuler`, `SetRotationFromQuaternion` and `SetVirtualWorld`.
+Validate and commit the durable placement before updating the replica.
+Throwing `std::runtime_error` from a rejected setter reaches JavaScript as
+a catchable error; do not change the replica before rejecting the write.
