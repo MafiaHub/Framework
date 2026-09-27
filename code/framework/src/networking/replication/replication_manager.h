@@ -33,14 +33,12 @@ namespace Framework::Networking {
 } // namespace Framework::Networking
 
 namespace Framework::Networking::Replication {
-    // Downcast a base NetworkEntity* to a concrete subclass. Uses RTTI where it
-    // is available; when a target is built with /GR- (RTTI disabled) it falls
-    // back to comparing the registered type id, which requires the concrete
-    // type to declare a kTypeName. Both paths are identical for the exact
-    // registered leaf type -- the id check just cannot see a base class.
+    // dynamic_cast when RTTI is on (_CPPRTTI is MSVC-only, GCC/Clang use __GXX_RTTI);
+    // under /GR- or -fno-rtti, a registered-type-id check that needs T::kTypeName and
+    // matches only the exact leaf type.
     template <typename T>
     inline T *CheckedEntityCast(NetworkEntity *entity) {
-#if defined(_CPPRTTI)
+#if defined(_CPPRTTI) || defined(__GXX_RTTI)
         return dynamic_cast<T *>(entity);
 #else
         return (entity != nullptr && entity->GetTypeId() == EntityRegistry::Get().TypeId(T::kTypeName)) ? static_cast<T *>(entity) : nullptr;
