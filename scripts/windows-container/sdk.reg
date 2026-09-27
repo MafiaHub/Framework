@@ -1,0 +1,17 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v10.0]
+"InstallationFolder"="C:\\msvc\\Windows Kits\\10\\"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows Kits\Installed Roots]
+"KitsRoot10"="C:\\msvc\\Windows Kits\\10\\"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Microsoft SDKs\Windows\v10.0]
+"InstallationFolder"="C:\\msvc\\Windows Kits\\10\\"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots]
+"KitsRoot10"="C:\\msvc\\Windows Kits\\10\\"
+
+; A headless build must fail on a crashing tool, not wait for a GUI debugger.
+[HKEY_CURRENT_USER\Software\Wine\WineDbg]
+"ShowCrashDialog"=dword:00000000
