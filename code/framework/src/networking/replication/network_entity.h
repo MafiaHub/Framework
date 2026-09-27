@@ -251,6 +251,14 @@ namespace Framework::Networking::Replication {
         // carries the transform; override to add state, e.g. a vehicle's engine/config.
         virtual void SerializeForcedState(FieldSerializer &fields);
 
+        // Mandatory owner snapshot fields precede the game's extension, even
+        // when an override does not call SerializeForcedState on the base.
+        void SerializeForcedSnapshot(FieldSerializer &fields);
+
+        // A current owner is excluded from normal state relays, so a world
+        // change also pushes a forced snapshot directly to that connection.
+        void SetVirtualWorld(uint32_t world);
+
         // Called on the owning client after SerializeForcedState has applied the forced fields.
         virtual void OnStateForced() {}
 

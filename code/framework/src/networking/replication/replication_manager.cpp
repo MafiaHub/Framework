@@ -73,7 +73,7 @@ namespace Framework::Networking::Replication {
                     entity->stateEpoch  = epoch;
                     entity->_poseForced = poseForced;
                     FieldSerializer fields(bs, false);
-                    entity->SerializeForcedState(fields);
+                    entity->SerializeForcedSnapshot(fields);
                     entity->OnStateForced();
                 }
             });
@@ -126,7 +126,7 @@ namespace Framework::Networking::Replication {
         // Whether the pose below is a move or an echo, so the owner warps only for the first.
         bs.Write(entity->IsPoseServerAuthored());
         FieldSerializer fields(&bs, true);
-        entity->SerializeForcedState(fields);
+        entity->SerializeForcedSnapshot(fields);
         _owner->SendRawRPC(kForceStateId, bs, MafiaNet::ToGuid(entity->ownerGUID));
     }
 

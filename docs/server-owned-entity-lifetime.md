@@ -7,8 +7,10 @@ still applies; this policy adds a restriction rather than granting access.
 Clients continue accepting the server's destruction messages.
 
 The base construction and state snapshots now include the server's virtual
-world. Owner updates cannot change that value on the server. This changes
-the shared wire format and requires matching version 29 clients and servers.
+world. Changes also push it directly to the current owner, which is excluded
+from ordinary relays. It precedes game-specific forced fields, so an override
+cannot accidentally omit it. Owner updates cannot change it on the server.
+This changes the shared wire format and requires matching version 29 clients and servers.
 
 Script handles can override the Entity position, rotation and virtual-world
 setters. A durable object can therefore commit its placement before exposing
@@ -19,7 +21,7 @@ a catchable JavaScript error, matching the other bound setter paths.
 
 Run `builds\build.bat RunFrameworkTests 64`. The replication authority tests
 cover owner/non-owner destruction, server destruction on clients, world
-seeding on construction, subsequent world updates and forged owner worlds.
+seeding on construction, subsequent world updates, forced owner updates and forged owner worlds.
 
 For an integrating mod, create a durable entity with a client physics owner.
 Verify that an owner destruction request leaves it alive, a server removal

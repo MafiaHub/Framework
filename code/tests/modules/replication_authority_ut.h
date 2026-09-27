@@ -285,6 +285,55 @@ MODULE(replication_authority, {
         EQUALS(server.GetVirtualWorld(), 456u);
     });
 
+    IT("pushes a world change to an owner that remains visible but receives no relays", {
+        NetworkEntity server;
+        server.replicaManager = serverManager;
+        server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+        ownerConn->SetVirtualWorld(MafiaNet::VIRTUAL_WORLD_GLOBAL);
+        EQUALS(server.QuerySerialization(ownerConn), MafiaNet::RM3QSR_DO_NOT_CALL_SERIALIZE);
+        const auto oldEpoch = server.stateEpoch;
+        server.SetVirtualWorld(123);
+        EQUALS(server.stateEpoch, static_cast<uint8_t>(oldEpoch + 1));
+        EQUALS(server.QuerySerialization(ownerConn), MafiaNet::RM3QSR_DO_NOT_CALL_SERIALIZE);
+        server.SetVirtualWorld(123);
+        EQUALS(server.stateEpoch, static_cast<uint8_t>(oldEpoch + 1));
+
+        NetworkEntity owner;
+        owner.replicaManager = clientManager;
+        MafiaNet::BitStream payload;
+        Framework::Networking::Replication::FieldSerializer output(&payload, true);
+        server.SerializeForcedSnapshot(output);
+        Framework::Networking::Replication::FieldSerializer input(&payload, false);
+        owner.SerializeForcedSnapshot(input);
+        EQUALS(input.Good(), true);
+        EQUALS(owner.GetVirtualWorld(), 123u);
+        EQUALS(owner.stateEpoch, 0u);
+        ownerConn->SetVirtualWorld(MafiaNet::VIRTUAL_WORLD_DEFAULT);
+    });
+
+    IT("carries the forced world even when a game replaces the base forced fields", {
+        struct CustomForcedEntity final: NetworkEntity {
+            int custom = 0;
+            void SerializeForcedState(Framework::Networking::Replication::FieldSerializer &fields) override {
+                fields.Field(custom);
+            }
+        };
+        CustomForcedEntity server;
+        server.replicaManager = serverManager;
+        server.SetVirtualWorld(456);
+        server.custom = 42;
+        CustomForcedEntity owner;
+        owner.replicaManager = clientManager;
+        MafiaNet::BitStream payload;
+        Framework::Networking::Replication::FieldSerializer output(&payload, true);
+        server.SerializeForcedSnapshot(output);
+        Framework::Networking::Replication::FieldSerializer input(&payload, false);
+        owner.SerializeForcedSnapshot(input);
+        EQUALS(input.Good(), true);
+        EQUALS(owner.GetVirtualWorld(), 456u);
+        EQUALS(owner.custom, 42);
+    });
+
     serverManager->DeallocConnection(ownerConn);
     serverManager->DeallocConnection(attackerConn);
 });

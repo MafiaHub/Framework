@@ -167,6 +167,25 @@ namespace Framework::Networking::Replication {
         fields.Field(rotation);
     }
 
+    void NetworkEntity::SerializeForcedSnapshot(FieldSerializer &fields) {
+        uint32_t world = GetVirtualWorld();
+        fields.ServerField(world);
+        if (!fields.Writing() && fields.Good() && !IsServerPeer()) {
+            SetVirtualWorld(world);
+        }
+        SerializeForcedState(fields);
+    }
+
+    void NetworkEntity::SetVirtualWorld(uint32_t world) {
+        if (GetVirtualWorld() == world) {
+            return;
+        }
+        MafiaNet::VirtualWorldReplica3::SetVirtualWorld(world);
+        if (IsServerPeer()) {
+            ForceState();
+        }
+    }
+
     void NetworkEntity::MarkStateDirty() {
         // No manager before Reference(); a bag written that early is carried by the seed anyway.
         if (auto *manager = Manager()) {
