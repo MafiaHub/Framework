@@ -1,0 +1,7 @@
+/builds/build.bat text eol=crlf
+/scripts/windows-container/*.cmd text eol=crlf
+/scripts/windows-container/*.reg text eol=crlf
+/scripts/windows-container/*.sh text eol=lf
+/scripts/build_windows_container.sh text eol=lf
+/scripts/run_windows_server.sh text eol=lf
+/scripts/run_windows_client.sh text eol=lf

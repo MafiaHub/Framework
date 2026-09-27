@@ -64,6 +64,7 @@ vendors/directxtk/MakeSpriteFont/obj/Release/MakeSpriteFont.csproj.AssemblyRefer
 /vendors/directxtk/MakeSpriteFont/obj
 
 # MafiaHub Services build outputs
+code/framework/src/services/bin/
 code/framework/src/services/lib/Debug/
 code/framework/src/services/lib/Release/
 
@@ -76,3 +77,8 @@ __pycache__/
 # vcpkg checkout and per-build installed tree
 vendors/vcpkg/
 vcpkg_installed/
+
+# Keep the canonical Windows CLI entry point; build outputs stay ignored.
+!/builds/
+/builds/*
+!/builds/build.bat

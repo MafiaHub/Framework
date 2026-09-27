@@ -78,6 +78,9 @@ cmake --build build --target RunFrameworkTests
 
 ### Build on Windows
 
+To build Windows targets from Linux with the actual MSVC toolchain, see the
+optional [MSVC/Wine container workflow](docs/windows-container.md).
+
 #### Visual Studio 2022 support
 
 Please ensure you have the cmake tools installed in your copy of Visual Studio first.
