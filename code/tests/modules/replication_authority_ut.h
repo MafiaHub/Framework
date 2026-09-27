@@ -52,6 +52,33 @@ MODULE(replication_authority, {
     MafiaNet::Connection_RM3 *ownerConn    = serverManager->AllocConnection(noAddress, ownerGuid);
     MafiaNet::Connection_RM3 *attackerConn = serverManager->AllocConnection(noAddress, attackerGuid);
 
+    struct ServerLifetimeEntity final: Framework::Networking::Replication::NetworkEntity {
+        bool CanOwnerDestroy() const override {
+            return false;
+        }
+    };
+
+    IT("keeps server-owned lifetime even when a client owns the pose", {
+        ServerLifetimeEntity entity;
+        entity.replicaManager = serverManager;
+        entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+
+        MafiaNet::BitStream bs;
+        EQUALS(entity.DeserializeDestruction(&bs, ownerConn), false);
+        EQUALS(entity.DeserializeDestruction(&bs, attackerConn), false);
+        EQUALS(entity.DeserializeDestruction(&bs, nullptr), false);
+    });
+
+    IT("accepts server destruction on a client even when owners cannot destroy", {
+        ServerLifetimeEntity entity;
+        entity.replicaManager = clientManager;
+        entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+
+        MafiaNet::BitStream bs;
+        EQUALS(entity.DeserializeDestruction(&bs, ownerConn), true);
+        EQUALS(entity.DeserializeDestruction(&bs, nullptr), true);
+    });
+
     IT("lets the server delete an entity when the request comes from its owner", {
         NetworkEntity entity;
         entity.replicaManager = serverManager;
@@ -227,6 +254,35 @@ MODULE(replication_authority, {
         deliverState(server, observer, nullptr);
         EQUALS(observer.measured, 7);
         EQUALS(observer.verdict, 2);
+    });
+
+    IT("seeds the virtual world when a client constructs an entity", {
+        NetworkEntity server;
+        server.replicaManager = serverManager;
+        server.SetVirtualWorld(123);
+        NetworkEntity observer;
+        observer.replicaManager = clientManager;
+        MafiaNet::BitStream construction;
+        server.SerializeConstruction(&construction, nullptr);
+        EQUALS(observer.DeserializeConstruction(&construction, nullptr), true);
+        EQUALS(observer.GetVirtualWorld(), 123u);
+    });
+
+    IT("replicates world changes and refuses the owning client's world assignment", {
+        VerdictEntity server;
+        server.replicaManager = serverManager;
+        server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+        server.SetVirtualWorld(123);
+        VerdictEntity observer;
+        observer.replicaManager = clientManager;
+        deliverState(server, observer, nullptr);
+        EQUALS(observer.GetVirtualWorld(), 123u);
+        server.SetVirtualWorld(456);
+        deliverState(server, observer, nullptr);
+        EQUALS(observer.GetVirtualWorld(), 456u);
+        observer.SetVirtualWorld(999);
+        deliverState(observer, server, ownerConn);
+        EQUALS(server.GetVirtualWorld(), 456u);
     });
 
     serverManager->DeallocConnection(ownerConn);

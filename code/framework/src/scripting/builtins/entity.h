@@ -45,14 +45,14 @@ namespace Framework::Scripting::Builtins {
         }
 
         Vector3 GetPosition() const;
-        void SetPosition(const Vector3 &pos);
+        virtual void SetPosition(const Vector3 &pos);
 
         Quaternion GetRotation() const;
-        void SetRotationFromEuler(const Vector3 &rot);
-        void SetRotationFromQuaternion(const Quaternion &quat);
+        virtual void SetRotationFromEuler(const Vector3 &rot);
+        virtual void SetRotationFromQuaternion(const Quaternion &quat);
 
         uint32_t GetVirtualWorld() const;
-        void SetVirtualWorld(uint32_t world);
+        virtual void SetVirtualWorld(uint32_t world);
 
         // Restrict streaming to a single player's connection (null clears). Range/visibility still apply.
         void SetVisibleTo(Networking::Replication::NetworkEntity *targetEntity);

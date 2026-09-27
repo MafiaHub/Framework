@@ -114,14 +114,20 @@ namespace Framework::Scripting::Builtins {
                 if (!self || info.Length() < 1)
                     return;
 
-                auto *vec = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info[0]);
-                if (vec) {
-                    self->SetRotationFromEuler(*vec);
-                    return;
+                try {
+                    auto *vec = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info[0]);
+                    if (vec) {
+                        self->SetRotationFromEuler(*vec);
+                        return;
+                    }
+                    auto *quat = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info[0]);
+                    if (quat) {
+                        self->SetRotationFromQuaternion(*quat);
+                        return;
+                    }
                 }
-                auto *quat = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info[0]);
-                if (quat) {
-                    self->SetRotationFromQuaternion(*quat);
+                catch (const std::exception &error) {
+                    info.GetIsolate()->ThrowException(v8::Exception::Error(v8pp::to_v8(info.GetIsolate(), error.what())));
                     return;
                 }
                 info.GetIsolate()->ThrowException(v8::Exception::TypeError(v8pp::to_v8(info.GetIsolate(), "rotation must be a Vector3 (euler degrees) or Quaternion")));
