@@ -91,6 +91,17 @@ MODULE(voice_activity, {
         EQUALS(estimator.GetTargetFrames(), 8u);
     });
 
+    IT("covers an occasional late arrival, not only the usual ones", {
+        JitterEstimator estimator;
+        int64_t t = 1000;
+        for (int i = 0; i < 48; i++) {
+            t += (i % 15 == 0) ? 130 : 50;
+            estimator.OnArrival(t);
+        }
+        // One gap in fifteen runs 130ms. Sized to the usual 50ms, each of them is a cut.
+        EQUALS(estimator.GetTargetFrames(), 7u);
+    });
+
     IT("treats a long gap as the talker pausing, not as jitter", {
         JitterEstimator estimator;
         int64_t t = 1000;

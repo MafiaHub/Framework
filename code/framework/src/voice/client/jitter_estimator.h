@@ -25,9 +25,11 @@ namespace Framework::Voice {
     // carry no sender timestamp this side of RakVoice, so the gap between arrivals is the
     // measurement. Frames handed over in the same millisecond are one arrival.
     //
-    // A high percentile of the recent gaps rather than the largest, so one hitch does not keep
-    // the latency up for the rest of the conversation, and gaps long enough to be the talker
-    // pausing are left out entirely -- VAD sends nothing between words.
+    // Near the top of the recent gaps rather than their largest, so one hitch does not keep the
+    // latency up for the rest of the conversation, and gaps long enough to be the talker pausing
+    // are left out entirely -- VAD sends nothing between words. Near the top, not merely high:
+    // every gap longer than the depth runs the buffer dry, so a depth sized to the 90th
+    // percentile is one cut in every ten arrivals -- two a second on a jittery link.
     //
     // Pure and single threaded: the producer side of a playout buffer owns it.
     class JitterEstimator final {
@@ -70,8 +72,8 @@ namespace Framework::Voice {
         // Below this many gaps the default is a better guess than the percentile.
         static constexpr uint32_t kMinSamples = 8;
 
-        // The percentile, in tenths.
-        static constexpr uint32_t kPercentileTenths = 9;
+        // The percentile, in hundredths: over the 48-gap window, the second longest.
+        static constexpr uint32_t kPercentileHundredths = 98;
 
         static constexpr uint32_t kFrameMs = (kFrameSamples * 1000) / kSampleRate;
 
@@ -81,7 +83,7 @@ namespace Framework::Voice {
             }
 
             std::array<uint16_t, kJitterWindowSamples> sorted = _gaps;
-            const uint32_t rank                               = ((_count - 1) * kPercentileTenths) / 10;
+            const uint32_t rank                               = ((_count - 1) * kPercentileHundredths) / 100;
             std::nth_element(sorted.begin(), sorted.begin() + rank, sorted.begin() + _count);
 
             const uint32_t gapMs  = sorted[rank];
