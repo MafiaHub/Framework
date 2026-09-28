@@ -33,7 +33,8 @@ namespace Framework::Utils {
     // and clears history so the sampler latches the new pose instead of sweeping across the map.
     //
     // Feed it from NetworkEntity::OnDeserialized(transformUpdated) and sample every frame at
-    // MafiaNet::GetTime() - EffectiveDelayMs().
+    // RenderTime(MafiaNet::GetTime()). The presentation clock slews toward the
+    // adaptive delay instead of jumping whenever a packet changes that delay.
     //
     // TPolicy defines how snapshots blend:
     //   static glm::vec3 Position(const TSnapshot &);
@@ -142,8 +143,11 @@ namespace Framework::Utils {
         }
 
         void Clear() {
-            _head  = 0;
-            _count = 0;
+            _head               = 0;
+            _count              = 0;
+            _avgIntervalMs      = 0.0f;
+            _jitterMs           = 0.0f;
+            _renderClockStarted = false;
         }
 
         bool Empty() const {
@@ -156,6 +160,31 @@ namespace Framework::Utils {
             }
             const float delay = _avgIntervalMs + 3.0f * _jitterMs;
             return glm::clamp(delay, Config().minDelayMs, Config().maxDelayMs);
+        }
+
+        // Move the presentation clock at 90..110% of wall time while its
+        // delay adapts. Directly subtracting a new delay can reverse motion
+        // on a late packet, or jump forward as jitter decays. Keep fractional
+        // milliseconds so high frame rates do not round away the correction.
+        MafiaNet::Time RenderTime(MafiaNet::Time now) {
+            const double target = glm::max(0.0, static_cast<double>(now) - EffectiveDelayMs());
+            if (!_renderClockStarted) {
+                // Not while the target is clamped to zero: the clock would then advance from zero with
+                // wall time and run ahead of a target still held back by the delay.
+                if (target <= 0.0) {
+                    return 0;
+                }
+                _renderClockStarted = true;
+                _renderTimeMs       = target;
+                _lastRenderNow      = now;
+            }
+            else if (now > _lastRenderNow) {
+                const double elapsed = static_cast<double>(now - _lastRenderNow);
+                _lastRenderNow       = now;
+                _renderTimeMs += elapsed;
+                _renderTimeMs += glm::clamp(target - _renderTimeMs, -elapsed * 0.1, elapsed * 0.1);
+            }
+            return static_cast<MafiaNet::Time>(_renderTimeMs);
         }
 
       private:
@@ -189,6 +218,10 @@ namespace Framework::Utils {
 
         float _avgIntervalMs = 0.0f;
         float _jitterMs      = 0.0f;
+
+        bool _renderClockStarted      = false;
+        MafiaNet::Time _lastRenderNow = 0;
+        double _renderTimeMs          = 0.0;
     };
 
     // Default instantiation for the replication transform channel: the fields NetworkEntity's

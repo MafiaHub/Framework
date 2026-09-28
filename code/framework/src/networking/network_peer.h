@@ -88,6 +88,12 @@ namespace Framework::Networking {
         // Fixed token both peers register when verifyBuildToken is off; challenge still passes.
         static constexpr const char *kBuildVerificationDisabledToken = "Framework::BuildVerificationDisabled";
 
+        // How long the build challenge and the nonce it answers stay valid (TwoWayAuthentication::SetTimeout).
+        static constexpr MafiaNet::Time kBuildVerificationTimeoutMs = 30000;
+
+        // Minimum time between two statistics-history samples.
+        static constexpr MafiaNet::Time kStatisticsSampleIntervalMs = 100;
+
         NetworkPeer();
         ~NetworkPeer();
 

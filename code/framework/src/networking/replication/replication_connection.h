@@ -8,6 +8,9 @@
 
 #pragma once
 
+#include "interest_refresh.h"
+#include "transform_batch.h"
+
 #include <mafianet/ReplicaManager3.h>
 
 #include <cstdint>
@@ -22,7 +25,7 @@ namespace Framework::Networking::Replication {
     // server it decides which replicas should exist on this connection (QueryReplicaList). It runs in
     // QUERY_CONNECTION_FOR_REPLICA_LIST mode, so the streaming relevance rules live in
     // QueryReplicaList rather than in Replica3::QueryConstruction/QueryDestruction.
-    class ReplicationConnection final : public MafiaNet::Connection_RM3 {
+    class ReplicationConnection final: public MafiaNet::Connection_RM3 {
       public:
         ReplicationConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID guid, ReplicationManager *manager, bool isServer);
 
@@ -34,24 +37,40 @@ namespace Framework::Networking::Replication {
 
         void QueryReplicaList(DataStructures::List<MafiaNet::Replica3 *> &newReplicasToCreate, DataStructures::List<MafiaNet::Replica3 *> &existingReplicasToDestroy) override;
 
-        // Server: withholds the transform channel per viewer by distance band; the reliable state
-        // channel always passes.
-        MafiaNet::SendSerializeIfChangedResult SendSerialize(MafiaNet::Replica3 *replica, bool indicesToSend[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::BitStream serializationData[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::Time timestamp, MafiaNet::PRO sendParameters[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::RakPeerInterface *rakPeer, unsigned char worldId, MafiaNet::Time curTime) override;
+        // Withholds the transform channel per viewer by distance band (server) and, with batching
+        // enabled, queues it into this connection's batch; the reliable state channel always passes.
+        MafiaNet::SendSerializeIfChangedResult SendSerialize(MafiaNet::Replica3 *replica, bool indicesToSend[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::BitStream serializationData[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::Time timestamp,
+            MafiaNet::PRO sendParameters[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::RakPeerInterface *rakPeer, unsigned char worldId, MafiaNet::Time curTime) override;
 
         uint32_t TransformSendIntervalMs(const NetworkEntity *entity) const;
 
+        // Sends what the pass queued. Called once per replication pass, after every entity.
+        void FlushTransforms(MafiaNet::RakPeerInterface *rakPeer);
+
+        // Recompute this viewer's interest on its next query instead of at its phase: for a change
+        // that concerns this connection alone, such as gaining or losing ownership of an entity.
+        void InvalidateInterest() {
+            _interestStale = true;
+        }
+
       private:
+        void SendPacket(MafiaNet::RakPeerInterface *rakPeer, MafiaNet::BitStream &packet, const MafiaNet::PRO &parameters) const;
+
         ReplicationManager *_manager = nullptr;
         bool _isServer               = false;
+        TransformBatch _transformBatch;
+        // GetMTUSize scans every peer slot, so the budget is read once per pass; 0 = not read yet.
+        std::size_t _packetBudget      = 0;
         MafiaNet::PeerGuid _viewerGUID = MafiaNet::UNASSIGNED_PEER_GUID;
 
         // Last transform send per replica; pruned against the interest set, keys never dereferenced.
         std::unordered_map<const NetworkEntity *, MafiaNet::Time> _lastTransformSend;
 
-        // Interest result cached against the grid generation: ReplicaManager3 calls QueryReplicaList
-        // on every RakPeer::Receive(), but the grid only changes once per tick (plus removals), so
-        // the query is recomputed only when the generation or the viewer changed. A removal bumps the
-        // generation, which is what keeps destroyed entities out of this cache.
+        // Routine queries run at a per-viewer phase. Lifecycle invalidation is immediate so a cached
+        // set never exposes deleted entity pointers.
+        InterestRefresh _interestRefresh;
+        uint32_t _relevantUrgentGeneration = 0;
+        bool _interestStale                = false;
         std::unordered_set<NetworkEntity *> _relevant;
         // The previous _relevant, swapped aside on each recompute: the hysteresis state the grid
         // needs for the stream-out margin and the sticky budget ranking. Membership only — entries
