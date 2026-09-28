@@ -216,9 +216,10 @@ MODULE(transform_batch, {
             packet.data   = bytes.data();
             packet.length = static_cast<unsigned int>(bytes.size()) - (truncate ? 1 : 0);
             packet.guid   = sender;
-            EQUALS(manager->OnReceive(&packet), MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE);
+            // The unit macros break out of the test on failure, so the check stays out of this lambda.
+            return manager->OnReceive(&packet);
         };
-        deliver(stranger, 100, 3, 9.0f);
+        EQUALS(deliver(stranger, 100, 3, 9.0f), MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE);
         EQUALS(entity.position.x, 0.0f);
         deliver(owner, 100, 2, 9.0f);
         EQUALS(entity.position.x, 0.0f);
