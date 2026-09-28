@@ -320,7 +320,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getRange", v8pp::metadata::docs("number", {}, "Reads the server's proximity range for talkers with no override of their own.", "Radius in world units.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setTier",
             v8pp::metadata::docs("void", {v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout.")},
-                "Switches how far this player's voice carries, as the voice tier key does. A request: the server paces it, decides the radius, and may move the player itself.")));
+                "Switches how far this player's voice carries. A request: the server paces it, decides the radius, and may move the player itself.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getTier", v8pp::metadata::docs("number", {}, "Reads the voice tier this player is on.", "0 whisper, 1 normal, 2 shout.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPushToTalkKey",
             v8pp::metadata::docs("void", {v8pp::metadata::param("key", "string", false, "Case-insensitive key name, using the same names as Key.bind.")},

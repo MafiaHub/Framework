@@ -323,7 +323,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
                     v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout."),
                     v8pp::metadata::param("range", "number", false, "Audibility radius in world units; values <= 0 make the tier carry the server-wide range."),
                 },
-                "Sets how far a voice tier carries. Players switch tier with a key; whisper starts at 8, shout at 60, and normal carries the server-wide range. Give a tier the server-wide range to take it away. Connected clients are told.")));
+                "Sets how far a voice tier carries. Players switch tier themselves; whisper starts at 8, shout at 60, and normal carries the server-wide range. Set a tier to 0 to make it carry the server-wide range, which takes it away. Connected clients are told.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getTierRange",
             v8pp::metadata::docs("number", {v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout.")}, "Reads how far a voice tier carries, with the server-wide range already resolved.", "Radius in world units.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPlayerTier",
