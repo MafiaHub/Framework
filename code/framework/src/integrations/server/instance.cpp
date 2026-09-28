@@ -1314,6 +1314,7 @@ namespace Framework::Integrations::Server {
                 info.version        = _opts.modVersion;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
+                info.passworded     = !_opts.bindPassword.empty();
                 _masterlist->Ping(info);
             }
 
