@@ -107,8 +107,8 @@ namespace Framework::Integrations::Client::UI::Nametags {
             if (tag.voiceLevel >= 0.0f) {
                 const float nameWidth = font->CalcTextSizeA(namePx, FLT_MAX, 0.0f, tag.label).x;
                 const ImVec2 center(screen.x - nameWidth * 0.5f - namePx * 0.7f, top + namePx * 0.5f);
-                External::ImGUI::Widgets::DrawVoiceIcon(drawList, ImVec2(center.x + shadowPx, center.y + shadowPx), namePx, tag.voiceLevel, shadow);
-                External::ImGUI::Widgets::DrawVoiceIcon(drawList, center, namePx, tag.voiceLevel, NametagColor(tag.color, alpha));
+                External::ImGUI::Widgets::DrawVoiceIcon(drawList, ImVec2(center.x + shadowPx, center.y + shadowPx), namePx, tag.voiceLevel, shadow, tag.voiceWaves);
+                External::ImGUI::Widgets::DrawVoiceIcon(drawList, center, namePx, tag.voiceLevel, NametagColor(tag.color, alpha), tag.voiceWaves);
             }
             top += namePx;
         }
