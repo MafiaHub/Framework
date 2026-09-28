@@ -8,28 +8,27 @@
 
 #pragma once
 
-#include "build_authentication.h"
 #include "channels.h"
 #include "connection.h"
 #include "rpc/rpc.h"
 
-#include "sampled_statistics_history.h"
-#include <logging/logger.h>
-#include <mafianet/DirectoryDeltaTransfer.h>
-#include <mafianet/FileListTransfer.h>
 #include <mafianet/MessageIdentifiers.h>
-#include <mafianet/NetworkIDManager.h>
 #include <mafianet/PacketPriority.h>
+#include <mafianet/peerinterface.h>
+#include <mafianet/FileListTransfer.h>
+#include <mafianet/DirectoryDeltaTransfer.h>
 #include <mafianet/RPC4Plugin.h>
 #include <mafianet/ReadyEvent.h>
+#include <mafianet/StatisticsHistory.h>
 #include <mafianet/TwoWayAuthentication.h>
-#include <mafianet/peerinterface.h>
+#include <mafianet/NetworkIDManager.h>
+#include <logging/logger.h>
+#include <utils/lifecycle.h>
+#include <utils/version.h>
 #include <memory>
 #include <string>
 #include <utility>
 #include <utils/hashing.h>
-#include <utils/lifecycle.h>
-#include <utils/version.h>
 #include <vector>
 
 namespace Framework::Networking::Replication {
@@ -41,11 +40,11 @@ namespace Framework::Networking::RPC {
 } // namespace Framework::Networking::RPC
 
 namespace Framework::Networking {
-    class NetworkPeer: public Lifecycle {
+    class NetworkPeer : public Lifecycle {
       protected:
         MafiaNet::RakPeerInterface *_peer = nullptr;
         MafiaNet::Packet *_packet         = nullptr;
-        int _packetDataOffset             = 0; // Offset to skip timestamp prefix if present
+        int _packetDataOffset          = 0; // Offset to skip timestamp prefix if present
         PacketCallback _onUnknownPacketCallback;
         mutable MafiaNet::DirectoryDeltaTransfer _assetStreamer;
 
@@ -54,11 +53,11 @@ namespace Framework::Networking {
         // per-connection bandwidth/RTT/loss.
         MafiaNet::RPC4 _rpc;
         MafiaNet::NetworkIDManager _networkIDManager;
-        SampledStatisticsHistory _statisticsHistory;
+        MafiaNet::StatisticsHistoryPlugin _statisticsHistory;
 
         // Connection gate: TwoWayAuthentication proves an identical build token without sending it;
         // ReadyEvent is the per-connection spawn barrier. Flow in network_{server,client}.cpp.
-        BuildAuthentication _twoWayAuth;
+        MafiaNet::TwoWayAuthentication _twoWayAuth;
         MafiaNet::ReadyEvent _readyEvent;
         std::string _buildToken;
         // Token currently registered with TwoWayAuthentication, so an unchanged re-registration can
@@ -88,6 +87,12 @@ namespace Framework::Networking {
 
         // Fixed token both peers register when verifyBuildToken is off; challenge still passes.
         static constexpr const char *kBuildVerificationDisabledToken = "Framework::BuildVerificationDisabled";
+
+        // How long the build challenge and the nonce it answers stay valid (TwoWayAuthentication::SetTimeout).
+        static constexpr MafiaNet::Time kBuildVerificationTimeoutMs = 30000;
+
+        // Minimum time between two statistics-history samples.
+        static constexpr MafiaNet::Time kStatisticsSampleIntervalMs = 100;
 
         NetworkPeer();
         ~NetworkPeer();
@@ -209,7 +214,7 @@ namespace Framework::Networking {
         static const char *GetStartupResultString(uint8_t id);
         static const char *GetConnectionAttemptString(uint8_t id);
 
-        MafiaNet::DirectoryDeltaTransfer *GetAssetStreamer() const noexcept {
+        MafiaNet::DirectoryDeltaTransfer* GetAssetStreamer() const noexcept {
             return &_assetStreamer;
         }
 

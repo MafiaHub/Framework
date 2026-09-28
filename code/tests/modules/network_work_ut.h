@@ -12,37 +12,10 @@
 #include "networking/replication/interest_refresh.h"
 #include "networking/replication/replication_connection.h"
 #include "networking/replication/replication_manager.h"
-#include "networking/sampled_statistics_history.h"
 
 #include <array>
 
 MODULE(network_work, {
-    IT("samples history at most ten times per second during a packet flood", {
-        Framework::Networking::NetworkServer peer;
-        Framework::Networking::SampledStatisticsHistory history;
-        history.SetRakPeerInterface(peer.GetPeer());
-        history.SetTrackConnections(true, 0, true);
-        MafiaNet::PluginInterface2 &plugin = history;
-        plugin.OnNewConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, MafiaNet::RakNetGUID(77), true);
-        NEQUALS(history.statistics.GetObjectIndex(77), static_cast<unsigned int>(-1));
-        int samples = 0;
-        for (unsigned int now = 0; now < 1000; ++now) {
-            for (int packet = 0; packet < 50; ++packet) {
-                samples += history.UpdateAt(now) ? 1 : 0;
-            }
-        }
-        EQUALS(samples, 10);
-        EQUALS(history.UpdateAt(1000), true);
-        // A stall samples once, without replaying missed history samples.
-        EQUALS(history.UpdateAt(5000), true);
-        EQUALS(history.UpdateAt(5000), false);
-        plugin.OnClosedConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, MafiaNet::RakNetGUID(77), MafiaNet::LCR_CONNECTION_LOST);
-        EQUALS(history.statistics.GetObjectIndex(77), static_cast<unsigned int>(-1));
-        history.OnRakPeerShutdown();
-        EQUALS(history.UpdateAt(5001), true);
-        EQUALS(history.UpdateAt(0), true);
-    });
-
     IT("distributes viewer work and does not catch up missed periods after a stall", {
         using Framework::Networking::Replication::InterestRefresh;
         std::array<InterestRefresh, 512> viewers;

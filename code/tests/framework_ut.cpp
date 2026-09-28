@@ -12,7 +12,6 @@
 
 /* TEST CATEGORIES */
 #include "modules/bitops_ut.h"
-#include "modules/build_authentication_ut.h"
 #include "modules/delegation_ut.h"
 #include "modules/gui_resources_ut.h"
 #include "modules/interest_grid_ut.h"
@@ -64,7 +63,6 @@ int main() {
     UNIT_MODULE(result);
     UNIT_MODULE(network_packets);
     UNIT_MODULE(network_work);
-    UNIT_MODULE(build_authentication);
     UNIT_MODULE(replication_authority);
     UNIT_MODULE(replication_rate);
     UNIT_MODULE(transform_batch);
