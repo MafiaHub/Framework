@@ -182,6 +182,14 @@ namespace Framework::Voice {
             return _tier;
         }
 
+        // Steps whisper, normal, shout and round again, `steps` times: what a tier key does.
+        void CycleTier(uint32_t steps = 1);
+
+        // How visible the local player's own voice indicator should be, in [0, 1]: full while
+        // talking, and fading out for kTierShownMs after the tier changed, the server's doing
+        // included. 0 means draw nothing.
+        float GetIndicatorAlpha() const;
+
         // --- microphone ---
 
         // Push-to-talk by default. Switching cuts whatever the old mode had open.
@@ -489,10 +497,11 @@ namespace Framework::Voice {
         VoiceTierRanges _tierRanges   = kDefaultTierRanges;
         std::array<AdmittedSpeaker, kMaxAudibleTalkers> _admitted {};
 
-        VoiceTier _tier       = VoiceTier::Normal;
-        VoiceTier _sentTier   = VoiceTier::Normal;
-        bool _tierSent        = false;
-        int64_t _tierSentAtMs = 0;
+        VoiceTier _tier        = VoiceTier::Normal;
+        VoiceTier _sentTier    = VoiceTier::Normal;
+        bool _tierSent         = false;
+        int64_t _tierSentAtMs  = 0;
+        int64_t _tierShownAtMs = 0;
 
         // Reused every tick so the per-frame path never allocates.
         std::array<int16_t, kFrameSamples> _frame {};

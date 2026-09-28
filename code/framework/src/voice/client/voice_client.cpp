@@ -919,8 +919,9 @@ namespace Framework::Voice {
             // a newer press still waiting its turn. A tier we never asked for is the server's
             // decision, and wins.
             if (_tierSent && tier != _sentTier) {
-                _tier     = tier;
-                _sentTier = tier;
+                _tier          = tier;
+                _sentTier      = tier;
+                _tierShownAtMs = Utils::Time::GetTime();
             }
             return;
         }
@@ -959,8 +960,30 @@ namespace Framework::Voice {
             return;
         }
 
+        if (tier == _tier) {
+            return;
+        }
+
         // Sent from Update, which paces it: a key pressed three times in a frame is one request.
-        _tier = tier;
+        _tier          = tier;
+        _tierShownAtMs = Utils::Time::GetTime();
+    }
+
+    void VoiceClient::CycleTier(uint32_t steps) {
+        constexpr uint32_t kTiers = static_cast<uint32_t>(VoiceTier::Count);
+        SetTier(static_cast<VoiceTier>((static_cast<uint32_t>(_tier) + steps) % kTiers));
+    }
+
+    float VoiceClient::GetIndicatorAlpha() const {
+        if (_localTalking) {
+            return 1.0f;
+        }
+        if (_tierShownAtMs == 0) {
+            return 0.0f;
+        }
+
+        const int64_t left = static_cast<int64_t>(kTierShownMs) - (Utils::Time::GetTime() - _tierShownAtMs);
+        return std::clamp(static_cast<float>(left) / static_cast<float>(kTierFadeMs), 0.0f, 1.0f);
     }
 
     void VoiceClient::PublishTier(int64_t nowMs) {

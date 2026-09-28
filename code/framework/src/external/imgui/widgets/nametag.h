@@ -132,6 +132,19 @@ namespace Framework::External::ImGUI::Widgets {
         return h * 1.1f;
     }
 
+    // The local player's own voice on a HUD: the speaker icon over a drop shadow, faded by
+    // `alpha` (VoiceClient::GetIndicatorAlpha). Where it sits is the mod's call.
+    inline void DrawVoiceIndicator(ImDrawList *drawList, ImVec2 center, float height, float level, int waves, float alpha) {
+        if (!drawList || alpha <= 0.0f) {
+            return;
+        }
+
+        const float opacity = std::clamp(alpha, 0.0f, 1.0f);
+        const float shadow  = std::max(1.0f, height * 0.06f);
+        DrawVoiceIcon(drawList, ImVec2(center.x + shadow, center.y + shadow), height, level, IM_COL32(0, 0, 0, static_cast<int>(160.0f * opacity)), waves);
+        DrawVoiceIcon(drawList, center, height, level, IM_COL32(255, 255, 255, static_cast<int>(230.0f * opacity)), waves);
+    }
+
     // BottomCenter anchors the full widget, including the health bar.
     inline void DrawNameTag(ImDrawList *drawList, ImVec2 screenPos, const char *name, const NameTagStyle &style = {}, float alpha = 1.0f, float healthPercent = -1.0f) {
         if (!drawList || !name || !name[0] || alpha <= 0.0f) {

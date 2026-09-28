@@ -71,6 +71,11 @@ namespace Framework::Voice {
     constexpr uint32_t kTierRequestIntervalMs = 250;
     constexpr uint32_t kTierChangeFloorMs     = 200;
 
+    // How long the local player's indicator stays up after their tier changes, and the tail of
+    // that over which it fades, so a switch is seen without having to speak.
+    constexpr uint32_t kTierShownMs = 1500;
+    constexpr uint32_t kTierFadeMs  = 400;
+
     // Default push-to-talk binding, as a Win32 virtual-key code ('V').
     constexpr int kDefaultPushToTalkKey = 0x56;
 
