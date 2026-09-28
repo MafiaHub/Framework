@@ -617,16 +617,16 @@ MODULE(js_features, {
 
         EQUALS(RunJS(engine, R"(
             globalThis.__syncCalls = 0;
-            Core.Events.on('allow', () => true);
-            Core.Events.on('allow', () => {});
-            Core.Events.on('deny', () => false);
-            Core.Events.on('deny', () => { globalThis.__syncCalls++; return true; });
-            Core.Events.on('throws', () => { throw new Error('expected synchronous veto test'); });
-            Core.Events.on('throws', () => { globalThis.__syncCalls++; return true; });
-            Core.Events.on('async', async () => false);
-            Core.Events.on('async', () => { globalThis.__syncCalls++; return true; });
-            Core.Events.once('onceDeny', () => false);
-            Core.Events.onClient('allow', () => false);
+            Events.on('allow', () => true);
+            Events.on('allow', () => {});
+            Events.on('deny', () => false);
+            Events.on('deny', () => { globalThis.__syncCalls++; return true; });
+            Events.on('throws', () => { throw new Error('expected synchronous veto test'); });
+            Events.on('throws', () => { globalThis.__syncCalls++; return true; });
+            Events.on('async', async () => false);
+            Events.on('async', () => { globalThis.__syncCalls++; return true; });
+            Events.once('onceDeny', () => false);
+            Events.onClient('allow', () => false);
             0
         )"), 0);
 
