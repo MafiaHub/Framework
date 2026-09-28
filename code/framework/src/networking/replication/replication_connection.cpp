@@ -12,6 +12,9 @@
 #include "network_entity.h"
 #include "replication_manager.h"
 
+#include <mafianet/GetTime.h>
+
+#include <algorithm>
 #include <cstring>
 #include <unordered_set>
 
@@ -21,7 +24,10 @@ namespace Framework::Networking::Replication {
     } // namespace
 
     ReplicationConnection::ReplicationConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID guid, ReplicationManager *manager, bool isServer)
-        : Connection_RM3(systemAddress, guid), _manager(manager), _isServer(isServer), _viewerGUID(MafiaNet::ToPeerGuid(guid)) {}
+        : Connection_RM3(systemAddress, guid)
+        , _manager(manager)
+        , _isServer(isServer)
+        , _viewerGUID(MafiaNet::ToPeerGuid(guid)) {}
 
     MafiaNet::Replica3 *ReplicationConnection::AllocReplica(MafiaNet::BitStream *allocationIdBitstream, MafiaNet::ReplicaManager3 *) {
         uint32_t typeId = 0;
@@ -45,20 +51,20 @@ namespace Framework::Networking::Replication {
             return;
         }
 
-        // Keep the observer's dimension in sync with its avatar.
+        // Dimension changes and lifecycle invalidation bypass the phase delay.
+        const bool worldChanged = GetVirtualWorld() != viewer->GetVirtualWorld();
         SetVirtualWorld(viewer->GetVirtualWorld());
-
-        // Recompute the interest set only when the grid contents or the viewer changed (see the
-        // member comment); otherwise reuse the cached set — ReplicaManager3 re-queries far more often
-        // than the grid changes.
-        const uint32_t generation = _manager->InterestGeneration();
-        if (!_relevantValid || _relevantGeneration != generation || _relevantViewer != viewer) {
+        const uint32_t generation       = _manager->InterestGeneration();
+        const uint32_t urgentGeneration = _manager->InterestUrgentGeneration();
+        const bool urgent               = !_relevantValid || _relevantViewer != viewer || worldChanged || _relevantUrgentGeneration != urgentGeneration;
+        if (_interestRefresh.Due(MafiaNet::GetTime(), _manager->InterestRefreshInterval(), GetRakNetGUID().g, urgent, _relevantGeneration != generation)) {
             _previousRelevant.swap(_relevant);
             _relevant.clear();
             _manager->CollectInterest(viewer, viewerGUID, _previousRelevant, _relevant);
-            _relevantGeneration = generation;
-            _relevantViewer     = viewer;
-            _relevantValid      = true;
+            _relevantGeneration       = generation;
+            _relevantUrgentGeneration = urgentGeneration;
+            _relevantViewer           = viewer;
+            _relevantValid            = true;
             for (auto it = _lastTransformSend.begin(); it != _lastTransformSend.end();) {
                 it = _relevant.contains(const_cast<NetworkEntity *>(it->first)) ? std::next(it) : _lastTransformSend.erase(it);
             }
@@ -96,22 +102,44 @@ namespace Framework::Networking::Replication {
         return ReplicationManager::TransformSendIntervalMs(bands, glm::dot(delta, delta));
     }
 
-    MafiaNet::SendSerializeIfChangedResult ReplicationConnection::SendSerialize(MafiaNet::Replica3 *replica, bool indicesToSend[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::BitStream serializationData[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::Time timestamp, MafiaNet::PRO sendParameters[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::RakPeerInterface *rakPeer, unsigned char worldId, MafiaNet::Time curTime) {
-        if (indicesToSend[kTransformChannel]) {
+    MafiaNet::SendSerializeIfChangedResult ReplicationConnection::SendSerialize(MafiaNet::Replica3 *replica, bool indicesToSend[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::BitStream serializationData[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS],
+        MafiaNet::Time timestamp, MafiaNet::PRO sendParameters[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::RakPeerInterface *rakPeer, unsigned char worldId, MafiaNet::Time curTime) {
+        bool selected[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS];
+        std::memcpy(selected, indicesToSend, sizeof(selected));
+        if (selected[kTransformChannel] && serializationData[kTransformChannel].GetNumberOfBitsUsed() != 0) {
             const auto *entity      = static_cast<const NetworkEntity *>(replica);
             const uint32_t interval = TransformSendIntervalMs(entity);
             if (interval > 0) {
                 const auto it = _lastTransformSend.find(entity);
                 if (it != _lastTransformSend.end() && curTime >= it->second && curTime - it->second < interval) {
-                    // indicesToSend may be the replica's shared broadcast record.
-                    bool withheld[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS];
-                    std::memcpy(withheld, indicesToSend, sizeof(withheld));
-                    withheld[kTransformChannel] = false;
-                    return Connection_RM3::SendSerialize(replica, withheld, serializationData, timestamp, sendParameters, rakPeer, worldId, curTime);
+                    selected[kTransformChannel] = false;
                 }
-                _lastTransformSend[entity] = curTime;
+                else {
+                    _lastTransformSend[entity] = curTime;
+                }
             }
         }
-        return Connection_RM3::SendSerialize(replica, indicesToSend, serializationData, timestamp, sendParameters, rakPeer, worldId, curTime);
+        // Leave headroom for UDP/IP and MafiaNet's message/datagram headers so
+        // an unreliable batch never needs fragmentation at the negotiated MTU.
+        // GetMTUSize scans peer slots in MafiaNet. Share one lookup across this
+        // connection's poses, then refresh next pass for negotiated MTU changes.
+        if (!_packetBudgetValid) {
+            _packetBudget      = static_cast<std::size_t>(std::max(0, rakPeer->GetMTUSize(GetSystemAddress()) - 128));
+            _packetBudgetValid = true;
+        }
+        // RM3 reuses SerializeParameters for cached broadcasts. Use its pass
+        // time for every entity, rather than the last entity's wall-clock stamp.
+        const MafiaNet::Time sentAt = timestamp != 0 ? curTime : 0;
+        const bool sent             = _writer.Write(replica->GetNetworkID(), selected, serializationData, sentAt, sendParameters, worldId, _manager->TransformBatchingEnabled(), _packetBudget, [this, rakPeer](MafiaNet::BitStream &packet, const MafiaNet::PRO &parameters) {
+            rakPeer->Send(&packet, parameters.priority, parameters.reliability, parameters.orderingChannel, GetSystemAddress(), false, parameters.sendReceipt);
+        });
+        return sent ? MafiaNet::SSICR_SENT_DATA : MafiaNet::SSICR_DID_NOT_SEND_DATA;
+    }
+
+    void ReplicationConnection::FlushTransforms(MafiaNet::RakPeerInterface *rakPeer) {
+        _writer.Flush([this, rakPeer](MafiaNet::BitStream &packet, const MafiaNet::PRO &parameters) {
+            rakPeer->Send(&packet, parameters.priority, parameters.reliability, parameters.orderingChannel, GetSystemAddress(), false, parameters.sendReceipt);
+        });
+        _packetBudgetValid = false;
     }
 } // namespace Framework::Networking::Replication

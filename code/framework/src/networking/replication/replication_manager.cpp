@@ -42,8 +42,60 @@ namespace Framework::Networking::Replication {
         };
     } // namespace
 
-    ReplicationManager::ReplicationManager() = default;
+    ReplicationManager::ReplicationManager()  = default;
     ReplicationManager::~ReplicationManager() = default;
+
+    void ReplicationManager::Update() {
+        if (_networkUpdateActive && std::exchange(_updatedThisNetworkUpdate, true)) {
+            return;
+        }
+        MafiaNet::ReplicaManager3::Update();
+        // Flush in the same pump that collected the poses, never on the next
+        // tick. Each connection owns its batch and its interest/rate filtering.
+        for (unsigned int world = 0; world < worldsList.Size(); ++world) {
+            const auto worldId = worldsList[world]->worldId;
+            for (unsigned int i = 0; i < GetConnectionCount(worldId); ++i) {
+                static_cast<ReplicationConnection *>(GetConnectionAtIndex(i, worldId))->FlushTransforms(GetRakPeerInterface());
+            }
+        }
+    }
+
+    MafiaNet::PluginReceiveResult ReplicationManager::OnReceive(MafiaNet::Packet *packet) {
+        const int offset = NetworkPeer::ResolvePacketDataOffset(packet->data, packet->length);
+        if (offset < 0 || packet->data[offset] != ReplicationWriter::kTransformBatchId) {
+            return MafiaNet::ReplicaManager3::OnReceive(packet);
+        }
+        MafiaNet::BitStream input(packet->data, packet->length, false);
+        MafiaNet::Time timestamp;
+        MafiaNet::WorldId worldId;
+        ReplicationWriter::TransformEntries entries;
+        if (!ReplicationWriter::ReadBatch(input, timestamp, worldId, entries) || worldId >= 255 || worldsArray[worldId] == nullptr) {
+            return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
+        }
+        auto *connection = GetConnectionByGUID(packet->guid, worldId);
+        if (connection == nullptr) {
+            return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
+        }
+        // Reuse channel storage for the whole packet, including any capacity
+        // grown by a large pose. Packet-local storage also permits reentry.
+        MafiaNet::DeserializeParameters parameters {};
+        parameters.timeStamp             = timestamp; // RakPeer already shifted ID_TIMESTAMP to local time.
+        parameters.sourceConnection      = connection;
+        parameters.bitstreamWrittenTo[0] = true;
+        for (const auto &entry : entries) {
+            auto *entity = GetNetworkIDManager(worldId)->GET_OBJECT_FROM_ID<NetworkEntity *>(entry.networkId);
+            if (entity == nullptr) {
+                // Construction may still be in flight, or destruction may have
+                // overtaken this unreliable batch. Other entries remain valid.
+                continue;
+            }
+            parameters.serializationBitstream[0].Reset();
+            parameters.serializationBitstream[0].WriteBits(input.GetData() + entry.offset / 8, entry.bits, false);
+            // Reuse the normal owner, epoch and per-entity timestamp gates.
+            entity->Deserialize(&parameters);
+        }
+        return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
+    }
 
     void ReplicationManager::ConfigureGrid(float cellSize, float worldMin, float worldMax) {
         _interest.Configure(cellSize, worldMin, worldMax);
@@ -160,6 +212,9 @@ namespace Framework::Networking::Replication {
         // Before anything can query relevance again: see InterestGrid::Reown for what a stale owned
         // index costs the peer that just gained authority.
         _interest.Reown(entity, previousOwner);
+        if (previousOwner != guid) {
+            ++_interestUrgentGeneration;
+        }
         // Serialize to an owner is withheld, so the grant can't ride normal replication: tell the new
         // owner directly. Other peers (and any prior owner) pick it up through serialize.
         if (_owner && _isServer && guid != MafiaNet::UNASSIGNED_PEER_GUID) {
@@ -403,6 +458,7 @@ namespace Framework::Networking::Replication {
         }
         // Scrub the interest indices so this delete can't dangle before the next rebuild.
         _interest.Remove(entity);
+        ++_interestUrgentGeneration;
         _interestDirty = true;
         // And the delegation bookkeeping, which is keyed by NetworkID: ids are monotonic, but an
         // entry left behind would still be found by a later entity that reused the id after a
@@ -493,6 +549,9 @@ namespace Framework::Networking::Replication {
         const int64_t now = Utils::Time::GetTime();
         if (!_interestDirty && _interestRebuildInterval > 0 && now - _lastInterestRebuild < static_cast<int64_t>(_interestRebuildInterval)) {
             return;
+        }
+        if (_interestDirty) {
+            ++_interestUrgentGeneration;
         }
         _lastInterestRebuild = now;
         _interestDirty       = false;

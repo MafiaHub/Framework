@@ -18,8 +18,8 @@
 #include <mafianet/ReplicaManager3.h>
 #include <mafianet/peerinterface.h>
 
-#include <glm/glm.hpp>
 #include <function2/function2.hpp>
+#include <glm/glm.hpp>
 
 #include <cstdint>
 #include <string>
@@ -71,15 +71,35 @@ namespace Framework::Networking::Replication {
     // entity, and drives an InterestGrid that ReplicationConnection::QueryReplicaList reads for
     // interest management.
     // Identifies one state-change subscription. Zero is never handed out.
-    using StateChangeHandle = uint32_t;
+    using StateChangeHandle                                      = uint32_t;
     inline constexpr StateChangeHandle kInvalidStateChangeHandle = 0;
 
-    class ReplicationManager final : public MafiaNet::ReplicaManager3 {
+    class ReplicationManager final: public MafiaNet::ReplicaManager3 {
       public:
         ReplicationManager();
         ~ReplicationManager();
 
         void Init(NetworkPeer *owner, bool isServer);
+
+        // Enable before connecting. All receivers understand batches; senders
+        // opt in per game. Requires the Framework 29 wire protocol on both ends.
+        void SetTransformBatchingEnabled(bool enabled) {
+            _batchTransforms = enabled;
+        }
+        bool TransformBatchingEnabled() const {
+            return _batchTransforms;
+        }
+        void Update() override;
+        // RakPeer invokes plugin Update() on every Receive(), including each
+        // packet drained by one application update. Run RM3's world pass once.
+        void BeginNetworkUpdate() {
+            _networkUpdateActive      = true;
+            _updatedThisNetworkUpdate = false;
+        }
+        void EndNetworkUpdate() {
+            _networkUpdateActive = false;
+        }
+        MafiaNet::PluginReceiveResult OnReceive(MafiaNet::Packet *packet) override;
 
         // Server: push the entity's forced state to its owner — the server's authoritative override
         // of an owned entity (see NetworkEntity::ForceState / OnStateForced). Bumps the entity's
@@ -213,7 +233,8 @@ namespace Framework::Networking::Replication {
             _interest.SetUsesEntityRange(EntityRegistry::Get().TypeId(typeName), usesEntityRange);
         }
         // Minimum milliseconds between spatial-index rebuilds (0 = every tick, the default).
-        // Entity creation/destruction still forces an immediate rebuild.
+        // Viewer queries are staggered across the same interval. Entity lifecycle
+        // changes still force an immediate rebuild and viewer refresh.
         void SetInterestRebuildInterval(uint32_t intervalMs) {
             _interestRebuildInterval = intervalMs;
         }
@@ -224,6 +245,13 @@ namespace Framework::Networking::Replication {
         // Change counter for the interest index (see InterestGrid::Generation).
         uint32_t InterestGeneration() const {
             return _interest.Generation();
+        }
+
+        uint32_t InterestUrgentGeneration() const {
+            return _interestUrgentGeneration;
+        }
+        uint32_t InterestRefreshInterval() const {
+            return _interestRebuildInterval;
         }
 
         // Server: transform rate bands, default and per-type override.
@@ -275,20 +303,24 @@ namespace Framework::Networking::Replication {
         void DeallocConnection(MafiaNet::Connection_RM3 *connection) const override;
 
       private:
-        bool _isServer    = false;
-        MafiaNet::PeerGuid _myGUID  = MafiaNet::UNASSIGNED_PEER_GUID;
+        bool _isServer                 = false;
+        bool _batchTransforms          = false;
+        bool _networkUpdateActive      = false;
+        bool _updatedThisNetworkUpdate = false;
+        MafiaNet::PeerGuid _myGUID     = MafiaNet::UNASSIGNED_PEER_GUID;
         // Server-side monotonic NetworkID allocator. Starts at 1 (0 reads as "none" in game code) and
         // stays well within JavaScript's safe-integer range so scripting can hold ids as plain numbers.
         // Bumped only from CreateEntity on the sim thread, so it needs no synchronization.
-        uint64_t _nextNetworkId = 0;
-        NetworkPeer *_owner = nullptr;
+        uint64_t _nextNetworkId    = 0;
+        NetworkPeer *_owner        = nullptr;
         bool _clientRPCsRegistered = false;
         InterestGrid _interest;
         DelegationManager _delegation;
         SerializeRateBands _rateBands;
         std::unordered_map<uint32_t, SerializeRateBands> _rateBandsByType;
-        uint32_t _interestRebuildInterval = 0;
-        int64_t _lastInterestRebuild      = 0;
+        uint32_t _interestUrgentGeneration = 0;
+        uint32_t _interestRebuildInterval  = 0;
+        int64_t _lastInterestRebuild       = 0;
         // Entity set changed since the last rebuild; forces one regardless of the interval.
         bool _interestDirty = true;
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;

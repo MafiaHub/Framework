@@ -78,6 +78,7 @@ namespace Framework::Networking {
             _replicationManager->FlushStateBags();
         }
 
+        _replicationManager->BeginNetworkUpdate();
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
             if (_packet->length == 0) {
                 continue;
@@ -87,7 +88,7 @@ namespace Framework::Networking {
                 continue;
             }
             _packetDataOffset = offset;
-            uint8_t packetID = _packet->data[_packetDataOffset];
+            uint8_t packetID  = _packet->data[_packetDataOffset];
 
             if (!HandlePacket(packetID, _packet)) {
                 if (IsReplicationPacket(packetID)) {
@@ -99,6 +100,7 @@ namespace Framework::Networking {
                 }
             }
         }
+        _replicationManager->EndNetworkUpdate();
     }
 
     int NetworkPeer::ResolvePacketDataOffset(const uint8_t *data, uint32_t length) {
@@ -122,10 +124,8 @@ namespace Framework::Networking {
         case ID_REPLICA_MANAGER_SCOPE_CHANGE:
         case ID_REPLICA_MANAGER_SERIALIZE:
         case ID_REPLICA_MANAGER_DOWNLOAD_STARTED:
-        case ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE:
-            return true;
-        default:
-            return false;
+        case ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE: return true;
+        default: return false;
         }
     }
 
