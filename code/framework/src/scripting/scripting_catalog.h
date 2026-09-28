@@ -103,9 +103,8 @@ namespace Framework::Scripting {
     //
     // `skip` drops source symbols by name, for globals a project documents through some other
     // shape than the framework's own. The event bus used to be one: the generator declared a fixed
-    // Core.Events that could not tell which side owns emitServer, emitAllClients or onClient. It
-    // now declares the recorded Events object, so a project should carry it across rather than
-    // skip it.
+    // bus that could not tell which side owns emitServer, emitAllClients or onClient. It now
+    // declares the recorded Events object, so a project should carry it across rather than skip it.
     inline void MergeScriptingCatalog(v8pp::metadata::registry &destination, const v8pp::metadata::registry &source, std::initializer_list<std::string_view> skip = {}) {
         // The destination's symbol of this name, or nullptr. Read-only: adding through the registry
         // is what hands back a mutable one.

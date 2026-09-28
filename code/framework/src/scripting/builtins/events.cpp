@@ -354,7 +354,7 @@ namespace Framework::Scripting::Builtins {
         BroadcastScriptEvent(args, "emitServer");
     }
 
-    // Server -> every client, arriving as Core.Events.on(name, data).
+    // Server -> every client, arriving as Events.on(name, data).
     void Events::EmitAllClientsCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
         BroadcastScriptEvent(args, "emitAllClients");
     }
