@@ -402,11 +402,13 @@ namespace Framework::Voice {
 
         int FindAdmitted(uint64_t speaker) const;
         bool IsSelf(uint64_t speaker) const;
-        // Evicts the most distant talker if needed; -1 when every slot holds someone nearer.
+        // Evicts the talker farthest out into their own range if needed; -1 when every slot
+        // holds someone heard better.
         int AdmitSpeaker(uint64_t speaker, int64_t nowMs);
         void ReleaseAdmitted(int slot);
-        // Infinity when the position is unknown.
-        float DistanceSqTo(uint64_t speaker) const;
+        // Squared distance as a fraction of the talker's range, so a shout carries past a
+        // whisper at the same distance. Infinity when the position is unknown.
+        float ReachSqTo(uint64_t speaker) const;
 
         Networking::NetworkClient *_client = nullptr;
         MafiaNet::RakVoice _voice;

@@ -769,14 +769,16 @@ namespace Framework::Voice {
         return -1;
     }
 
-    float VoiceClient::DistanceSqTo(uint64_t speaker) const {
+    float VoiceClient::ReachSqTo(uint64_t speaker) const {
         const auto it = _placements.find(speaker);
         if (it == _placements.end()) {
             return std::numeric_limits<float>::infinity();
         }
 
+        // ResolveRange is never 0: the default range and the hearing range are both positive.
         const glm::vec3 delta = it->second.placement.position - _listener.position;
-        return glm::dot(delta, delta);
+        const float range     = ResolveRange(speaker);
+        return glm::dot(delta, delta) / (range * range);
     }
 
     int VoiceClient::AdmitSpeaker(uint64_t speaker, int64_t nowMs) {
@@ -790,22 +792,24 @@ namespace Framework::Voice {
             }
         }
 
+        // Measured against each talker's own range rather than in metres: a shout at 30m is
+        // heard better than a whisper at 6m, and a crowd of whisperers must not drown it out.
         // Unplaceable speakers sort as infinitely far, so they are evicted first and never
         // displace one the player can actually see.
-        const float candidateDistSq = DistanceSqTo(speaker);
+        const float candidateReachSq = ReachSqTo(speaker);
 
-        int farthest         = -1;
-        float farthestDistSq = 0.0f;
+        int farthest          = -1;
+        float farthestReachSq = 0.0f;
 
         for (size_t i = 0; i < _admitted.size(); i++) {
-            const float distSq = DistanceSqTo(_admitted[i].id);
-            if (farthest < 0 || distSq > farthestDistSq) {
-                farthest       = static_cast<int>(i);
-                farthestDistSq = distSq;
+            const float reachSq = ReachSqTo(_admitted[i].id);
+            if (farthest < 0 || reachSq > farthestReachSq) {
+                farthest        = static_cast<int>(i);
+                farthestReachSq = reachSq;
             }
         }
 
-        if (farthest < 0 || !(candidateDistSq * kEvictionHysteresis < farthestDistSq)) {
+        if (farthest < 0 || !(candidateReachSq * kEvictionHysteresis < farthestReachSq)) {
             return -1;
         }
 
