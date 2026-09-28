@@ -163,7 +163,7 @@ namespace Framework::Scripting::Builtins {
                 self->SetColor(num(0, 0), num(1, 0), num(2, 0), num(3, 255));
             },
             v8pp::metadata::docs("void",
-                {v8pp::metadata::param("colorOrR", "Color | number", false, "A Core.Color, or the red byte (0-255) when passing components."),
+                {v8pp::metadata::param("colorOrR", "Color | number", false, "A Color, or the red byte (0-255) when passing components."),
                     v8pp::metadata::param("g", "number", true, "Green byte (0-255) when passing components."), v8pp::metadata::param("b", "number", true, "Blue byte (0-255) when passing components."),
                     v8pp::metadata::param("a", "number", true, "Alpha byte (0-255) when passing components; defaults to 255.")},
                 "Changes the label's packed ARGB color from a Color or byte components."));

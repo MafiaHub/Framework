@@ -123,11 +123,11 @@ MODULE(scripting_catalog, {
 
     IT("drops a skipped symbol even when the project has no symbol of that name", {
         v8pp::metadata::registry source;
-        source.global_object("Events").add_property("on", "Function", "");
+        source.constructor("Entity").add_property("id", "number", "");
 
         v8pp::metadata::registry destination;
-        MergeScriptingCatalog(destination, source, {"Events"});
-        EQUALS(countSymbols(destination, "Events") == 0, true);
+        MergeScriptingCatalog(destination, source, {"Entity"});
+        EQUALS(countSymbols(destination, "Entity") == 0, true);
     });
 
     IT("is idempotent: merging twice carries nothing across a second time", {
