@@ -9,7 +9,7 @@
 #pragma once
 
 #include "interest_refresh.h"
-#include "replication_writer.h"
+#include "transform_batch.h"
 
 #include <mafianet/ReplicaManager3.h>
 
@@ -37,27 +37,31 @@ namespace Framework::Networking::Replication {
 
         void QueryReplicaList(DataStructures::List<MafiaNet::Replica3 *> &newReplicasToCreate, DataStructures::List<MafiaNet::Replica3 *> &existingReplicasToDestroy) override;
 
-        // Server: withholds the transform channel per viewer by distance band; the reliable state
-        // channel always passes.
+        // Withholds the transform channel per viewer by distance band (server) and, with batching
+        // enabled, queues it into this connection's batch; the reliable state channel always passes.
         MafiaNet::SendSerializeIfChangedResult SendSerialize(MafiaNet::Replica3 *replica, bool indicesToSend[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::BitStream serializationData[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::Time timestamp,
             MafiaNet::PRO sendParameters[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::RakPeerInterface *rakPeer, unsigned char worldId, MafiaNet::Time curTime) override;
 
         uint32_t TransformSendIntervalMs(const NetworkEntity *entity) const;
+
+        // Sends what the pass queued. Called once per replication pass, after every entity.
         void FlushTransforms(MafiaNet::RakPeerInterface *rakPeer);
 
       private:
+        void SendPacket(MafiaNet::RakPeerInterface *rakPeer, MafiaNet::BitStream &packet, const MafiaNet::PRO &parameters) const;
+
         ReplicationManager *_manager = nullptr;
         bool _isServer               = false;
-        ReplicationWriter _writer;
-        bool _packetBudgetValid        = false;
+        TransformBatch _transformBatch;
+        // GetMTUSize scans every peer slot, so the budget is read once per pass; 0 = not read yet.
         std::size_t _packetBudget      = 0;
         MafiaNet::PeerGuid _viewerGUID = MafiaNet::UNASSIGNED_PEER_GUID;
 
         // Last transform send per replica; pruned against the interest set, keys never dereferenced.
         std::unordered_map<const NetworkEntity *, MafiaNet::Time> _lastTransformSend;
 
-        // Routine queries run at a per-viewer phase. Lifecycle invalidation is
-        // immediate so a cached set never exposes deleted entity pointers.
+        // Routine queries run at a per-viewer phase. Lifecycle invalidation is immediate so a cached
+        // set never exposes deleted entity pointers.
         InterestRefresh _interestRefresh;
         uint32_t _relevantUrgentGeneration = 0;
         std::unordered_set<NetworkEntity *> _relevant;

@@ -10,124 +10,50 @@
 
 #include "networking/network_server.h"
 #include "networking/replication/replication_manager.h"
-#include "networking/replication/replication_writer.h"
+#include "networking/replication/transform_batch.h"
 
-#include <array>
 #include <vector>
 
-MODULE(replication_writer, {
-    using Framework::Networking::Replication::ReplicationWriter;
+MODULE(transform_batch, {
     struct Packet {
         std::vector<unsigned char> data;
-        MafiaNet::BitSize_t bits;
         MafiaNet::PRO pro;
     };
+
+    // One connection's batch, with the packets it would have handed to RakPeer.
     struct Harness {
-        ReplicationWriter writer;
-        MafiaNet::BitStream channels[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS];
-        MafiaNet::PRO parameters[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS];
-        bool selected[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS] {};
+        Framework::Networking::Replication::TransformBatch batch;
+        MafiaNet::BitStream pose;
+        MafiaNet::PRO parameters {};
         std::vector<Packet> packets;
-        ReplicationWriter::SendPacket send = [this](MafiaNet::BitStream &bs, const MafiaNet::PRO &pro) {
-            packets.push_back({std::vector<unsigned char>(bs.GetData(), bs.GetData() + bs.GetNumberOfBytesUsed()), bs.GetNumberOfBitsUsed(), pro});
+        Framework::Networking::Replication::TransformBatch::SendPacket send = [this](MafiaNet::BitStream &bs, const MafiaNet::PRO &pro) {
+            packets.push_back({std::vector<unsigned char>(bs.GetData(), bs.GetData() + bs.GetNumberOfBytesUsed()), pro});
         };
 
         Harness() {
-            for (auto &pro : parameters) {
-                pro.priority        = MafiaNet::Priority::High;
-                pro.reliability     = MafiaNet::Reliability::ReliableOrdered;
-                pro.orderingChannel = 3;
-                pro.sendReceipt     = 0;
-            }
-            parameters[0].reliability     = MafiaNet::Reliability::Unreliable;
-            parameters[0].orderingChannel = 0;
-            parameters[1].orderingChannel = 1;
-            // A non-byte-aligned pose, and stale cached state: exactly the
-            // shape that previously generated empty reliable messages.
-            channels[0].Write(static_cast<std::uint32_t>(123));
-            channels[0].Write(true);
-            channels[1].Write(static_cast<std::uint32_t>(456));
+            parameters.priority    = MafiaNet::Priority::High;
+            parameters.reliability = MafiaNet::Reliability::Unreliable;
+            // A pose that does not end on a byte boundary.
+            pose.Write(static_cast<std::uint32_t>(123));
+            pose.Write(true);
         }
-        bool Write(MafiaNet::NetworkID id, bool batched = false, MafiaNet::Time time = 100, std::size_t budget = 1100, MafiaNet::WorldId world = 0) {
-            return writer.Write(id, selected, channels, time, parameters, world, batched, budget, send);
+        bool Queue(MafiaNet::NetworkID id, MafiaNet::Time time = 100, std::size_t budget = 1100, MafiaNet::WorldId world = 0) {
+            return batch.Queue(id, pose, time, parameters, world, budget, send);
         }
         void Flush() {
-            writer.Flush(send);
+            batch.Flush(send);
         }
     };
 
-    IT("omits stale cached state and never emits empty channel groups", {
-        Harness h;
-        h.selected[0] = true;
-        EQUALS(h.Write(1), true);
-        EQUALS(h.packets.size(), 1u);
-        EQUALS(h.packets[0].pro.reliability, MafiaNet::Reliability::Unreliable);
-        h.packets.clear();
-        h.selected[0] = false;
-        h.selected[1] = true;
-        EQUALS(h.Write(1), true);
-        EQUALS(h.packets.size(), 1u);
-        EQUALS(h.packets[0].pro.reliability, MafiaNet::Reliability::ReliableOrdered);
-        h.packets.clear();
-        h.selected[1] = false;
-        EQUALS(h.Write(1), false);
-        h.Flush();
-        EQUALS(h.packets.size(), 0u);
-    });
-
-    IT("preserves RM3 framing and selected bits without consuming cached streams", {
-        Harness h;
-        h.selected[0] = h.selected[1] = true;
-        h.channels[0].IgnoreBits(7);
-        h.Write(91);
-        EQUALS(h.packets.size(), 2u);
-        EQUALS(h.channels[0].GetReadOffset(), 7u);
-        for (std::size_t message = 0; message < h.packets.size(); ++message) {
-            auto &packet = h.packets[message];
-            MafiaNet::BitStream bs(packet.data.data(), static_cast<unsigned int>(packet.data.size()), false);
-            MafiaNet::MessageID id;
-            MafiaNet::Time timestamp;
-            MafiaNet::WorldId world;
-            MafiaNet::NetworkID entity;
-            bs.Read(id);
-            EQUALS(id, ID_TIMESTAMP);
-            bs.Read(timestamp);
-            EQUALS(timestamp, 100u);
-            bs.Read(id);
-            EQUALS(id, ID_REPLICA_MANAGER_SERIALIZE);
-            bs.Read(world);
-            EQUALS(world, 0u);
-            bs.Read(entity);
-            EQUALS(entity, 91u);
-            for (int channel = 0; channel < MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS; ++channel) {
-                bool present = false;
-                EQUALS(bs.Read(present), true);
-                EQUALS(present, (channel == static_cast<int>(message)));
-                if (present) {
-                    MafiaNet::BitSize_t bits;
-                    bs.ReadCompressed(bits);
-                    EQUALS(bits, h.channels[channel].GetNumberOfBitsUsed());
-                    bs.AlignReadToByteBoundary();
-                    MafiaNet::BitStream value;
-                    EQUALS(bs.Read(value, bits), true);
-                    std::uint32_t number;
-                    value.Read(number);
-                    EQUALS(number, (channel == 0 ? 123u : 456u));
-                    if (channel == 0) {
-                        bool flag = false;
-                        value.Read(flag);
-                        EQUALS(flag, true);
-                    }
-                }
-            }
-        }
-    });
+    auto read = [](Packet &packet, MafiaNet::Time &timestamp, MafiaNet::WorldId &world, Framework::Networking::Replication::TransformBatch::Entries &entries, std::size_t size) {
+        MafiaNet::BitStream bs(packet.data.data(), static_cast<unsigned int>(size), false);
+        return Framework::Networking::Replication::TransformBatch::Read(bs, timestamp, world, entries);
+    };
 
     IT("batches exact pose bits and flushes within the payload budget", {
         Harness h;
-        h.selected[0] = true;
         for (MafiaNet::NetworkID id = 1; id <= 100; ++id) {
-            h.Write(id, true, 100, 100);
+            EQUALS(h.Queue(id, 100, 100), true);
         }
         h.Flush();
         LESSER(h.packets.size(), 100u);
@@ -135,22 +61,22 @@ MODULE(replication_writer, {
         for (auto &packet : h.packets) {
             EQUALS((packet.data.size() <= 100), true);
             EQUALS(packet.pro.reliability, MafiaNet::Reliability::Unreliable);
-            MafiaNet::BitStream bs(packet.data.data(), static_cast<unsigned int>(packet.data.size()), false);
             MafiaNet::Time timestamp;
             MafiaNet::WorldId world;
-            ReplicationWriter::TransformEntries entries;
-            EQUALS(ReplicationWriter::ReadBatch(bs, timestamp, world, entries), true);
+            Framework::Networking::Replication::TransformBatch::Entries entries;
+            MafiaNet::BitStream bs(packet.data.data(), static_cast<unsigned int>(packet.data.size()), false);
+            EQUALS(Framework::Networking::Replication::TransformBatch::Read(bs, timestamp, world, entries), true);
             EQUALS(timestamp, 100u);
             EQUALS(world, 0u);
             for (const auto &entry : entries) {
                 ++total;
                 EQUALS(entry.networkId, total);
                 EQUALS(entry.bits, 33u);
-                MafiaNet::BitStream pose(bs.GetData() + entry.offset / 8, 5, false);
+                MafiaNet::BitStream value(packet.data.data() + entry.offset / 8, 5, false);
                 std::uint32_t number;
                 bool flag = false;
-                pose.Read(number);
-                pose.Read(flag);
+                value.Read(number);
+                value.Read(flag);
                 EQUALS(number, 123u);
                 EQUALS(flag, true);
             }
@@ -158,85 +84,104 @@ MODULE(replication_writer, {
         EQUALS(total, 100u);
     });
 
-    IT("keeps state immediate and isolates batch timestamps worlds and recipients", {
+    IT("starts a new batch per timestamp and world, and keeps each connection's batch its own", {
         Harness a, b;
-        a.selected[0] = a.selected[1] = b.selected[0] = true;
-        a.Write(1, true);
+        a.Queue(1);
+        a.Queue(2, 101);
         EQUALS(a.packets.size(), 1u);
-        EQUALS(a.packets[0].pro.reliability, MafiaNet::Reliability::ReliableOrdered);
-        a.selected[1] = false;
-        a.Write(2, true, 101);
+        a.Queue(3, 101, 1100, 1);
         EQUALS(a.packets.size(), 2u);
-        a.Write(3, true, 101, 1100, 1);
-        EQUALS(a.packets.size(), 3u);
-        b.Write(4, true);
+        b.Queue(4);
         EQUALS(b.packets.size(), 0u);
         a.Flush();
         b.Flush();
-        EQUALS(a.packets.size(), 4u);
+        EQUALS(a.packets.size(), 3u);
+        EQUALS(b.packets.size(), 1u);
+        b.Flush();
         EQUALS(b.packets.size(), 1u);
     });
 
-    IT("falls back to RM3 for transforms exceeding the batch budget", {
+    IT("refuses poses the format cannot carry, queueing nothing", {
         Harness h;
-        h.selected[0] = true;
-        h.Write(1, true, 100, 20);
+        EQUALS(h.Queue(1, 100, 20), false);
+        EQUALS(h.Queue(1, 0), false);
+        h.parameters.reliability = MafiaNet::Reliability::ReliableOrdered;
+        EQUALS(h.Queue(1), false);
+        h.parameters.reliability = MafiaNet::Reliability::Unreliable;
+        h.pose.Reset();
+        EQUALS(h.Queue(1), false);
         h.Flush();
-        EQUALS(h.packets.size(), 1u);
-        EQUALS(h.packets[0].data[1 + sizeof(MafiaNet::Time)], ID_REPLICA_MANAGER_SERIALIZE);
+        EQUALS(h.packets.size(), 0u);
     });
 
     IT("encodes small IDs compactly and preserves full-width IDs", {
         Harness h;
-        h.selected[0] = true;
         const MafiaNet::NetworkID ids[] {1, 127, 128, 16384, 0x123456789ABCDEF0ULL};
         for (auto id : ids) {
-            h.Write(id, true);
+            h.Queue(id);
         }
         h.Flush();
         EQUALS(h.packets.size(), 1u);
         auto &data = h.packets[0].data;
-        // Shared header is 13 bytes, then ID=1 in one byte and a uint16 length.
+        // The shared header is 13 bytes, then ID 1 in one byte and a uint16 length.
         EQUALS(data[13], 1u);
-        MafiaNet::BitStream bs(data.data(), static_cast<unsigned int>(data.size()), false);
         MafiaNet::Time timestamp;
         MafiaNet::WorldId world;
-        ReplicationWriter::TransformEntries entries;
-        EQUALS(ReplicationWriter::ReadBatch(bs, timestamp, world, entries), true);
+        Framework::Networking::Replication::TransformBatch::Entries entries;
+        EQUALS(read(h.packets[0], timestamp, world, entries, data.size()), true);
         EQUALS(entries.size(), 5u);
         for (std::size_t i = 0; i < entries.size(); ++i) {
             EQUALS(entries[i].networkId, ids[i]);
         }
         EQUALS(entries[0].offset, 16u * 8);
-        // Unterminated/overflowing 10-byte varint at the first entry.
+        // An unterminated, overflowing ten-byte varint at the first entry.
         std::fill(data.begin() + 13, data.begin() + 23, 0xFF);
-        MafiaNet::BitStream malformed(data.data(), static_cast<unsigned int>(data.size()), false);
-        EQUALS(ReplicationWriter::ReadBatch(malformed, timestamp, world, entries), false);
+        EQUALS(read(h.packets[0], timestamp, world, entries, data.size()), false);
         EQUALS(entries.size(), 0u);
     });
 
-    IT("rejects truncated batches and extra bytes before applying any entries", {
+    IT("rejects truncated batches and extra bytes before returning any entry", {
         Harness h;
-        h.selected[0] = true;
-        h.Write(1, true);
-        h.Write(2, true);
+        h.Queue(1);
+        h.Queue(2);
         h.Flush();
         auto &data = h.packets[0].data;
         MafiaNet::Time timestamp;
         MafiaNet::WorldId world;
-        ReplicationWriter::TransformEntries entries;
-        for (unsigned int size = 0; size < data.size(); ++size) {
-            MafiaNet::BitStream bs(data.data(), size, false);
-            EQUALS(ReplicationWriter::ReadBatch(bs, timestamp, world, entries), false);
+        Framework::Networking::Replication::TransformBatch::Entries entries;
+        for (std::size_t size = 0; size < data.size(); ++size) {
+            EQUALS(read(h.packets[0], timestamp, world, entries, size), false);
         }
         data.push_back(0);
-        MafiaNet::BitStream bs(data.data(), static_cast<unsigned int>(data.size()), false);
-        EQUALS(ReplicationWriter::ReadBatch(bs, timestamp, world, entries), false);
+        EQUALS(read(h.packets[0], timestamp, world, entries, data.size()), false);
+    });
+
+    IT("recognises only timestamped batches as batches", {
+        Harness h;
+        h.Queue(1);
+        h.Flush();
+        const auto &data = h.packets[0].data;
+        EQUALS(Framework::Networking::Replication::TransformBatch::IsBatch(data.data(), static_cast<unsigned int>(data.size())), true);
+        // A game's own raw message that takes the reserved identifier without a timestamp.
+        const unsigned char game[] {Framework::Networking::Replication::TransformBatch::kId, 1, 2, 3};
+        EQUALS(Framework::Networking::Replication::TransformBatch::IsBatch(game, sizeof(game)), false);
+        EQUALS(Framework::Networking::Replication::TransformBatch::IsBatch(data.data(), 9), false);
+    });
+
+    IT("passes packets that are not batches on to their own handler", {
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        unsigned char game[] {Framework::Networking::Replication::TransformBatch::kId, 1, 2, 3};
+        MafiaNet::Packet packet {};
+        packet.data   = game;
+        packet.length = sizeof(game);
+        packet.guid   = MafiaNet::RakNetGUID(1001);
+        EQUALS(manager->OnReceive(&packet), MafiaNet::RR_CONTINUE_PROCESSING);
     });
 
     IT("applies batches through ownership epoch and per-entity timestamp gates", {
-        // Unstarted peer: dispatch real packets through the manager without
-        // binding sockets or connecting any stress clients.
+        // An unstarted peer: real packets go through the manager without binding a socket.
         Framework::Networking::NetworkServer peer;
         auto *manager = peer.GetReplicationManager();
         manager->Init(&peer, true);
@@ -257,22 +202,21 @@ MODULE(replication_writer, {
 
         auto deliver = [&](MafiaNet::RakNetGUID sender, MafiaNet::Time time, std::uint8_t epoch, float x, bool truncate = false) {
             Harness h;
-            h.channels[0].Reset();
-            h.channels[0].Write(epoch);
+            h.pose.Reset();
+            h.pose.Write(epoch);
             Framework::Networking::Replication::NetworkEntity source;
             source.position.x = x;
-            Framework::Networking::Replication::FieldSerializer fields(&h.channels[0], true);
+            Framework::Networking::Replication::FieldSerializer fields(&h.pose, true);
             source.SerializeTransform(fields);
-            h.selected[0] = true;
-            h.Write(9999, true, time); // Unknown entity must not block the following one.
-            h.Write(7, true, time);
+            h.Queue(9999, time); // An unknown entity must not block the one after it.
+            h.Queue(7, time);
             h.Flush();
             auto &bytes = h.packets[0].data;
             MafiaNet::Packet packet {};
             packet.data   = bytes.data();
             packet.length = static_cast<unsigned int>(bytes.size()) - (truncate ? 1 : 0);
             packet.guid   = sender;
-            manager->OnReceive(&packet);
+            EQUALS(manager->OnReceive(&packet), MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE);
         };
         deliver(stranger, 100, 3, 9.0f);
         EQUALS(entity.position.x, 0.0f);
@@ -289,7 +233,7 @@ MODULE(replication_writer, {
         // The stack replica detaches before the peer tears down its connections.
     });
 
-    IT("resets reusable pose storage between entities and packets", {
+    IT("resets the reused pose stream between entities and packets", {
         Framework::Networking::NetworkServer peer;
         auto *manager = peer.GetReplicationManager();
         manager->Init(&peer, true);
@@ -310,15 +254,14 @@ MODULE(replication_writer, {
         }
         for (unsigned int pass = 1; pass <= 3; ++pass) {
             Harness h;
-            h.selected[0] = true;
             for (unsigned int i = 0; i < 2; ++i) {
-                h.channels[0].Reset();
-                h.channels[0].Write(static_cast<uint8_t>(i + 1));
+                h.pose.Reset();
+                h.pose.Write(static_cast<uint8_t>(i + 1));
                 Framework::Networking::Replication::NetworkEntity source;
                 source.position.x = static_cast<float>(10 * pass + i);
-                Framework::Networking::Replication::FieldSerializer fields(&h.channels[0], true);
+                Framework::Networking::Replication::FieldSerializer fields(&h.pose, true);
                 source.SerializeTransform(fields);
-                h.Write(i + 1, true, 100 + pass);
+                h.Queue(i + 1, 100 + pass);
             }
             h.Flush();
             EQUALS(h.packets.size(), 1u);
@@ -380,7 +323,7 @@ MODULE(replication_writer, {
         manager->Update();
         manager->EndNetworkUpdate();
         EQUALS(entity.passes, 2);
-        manager->Update(); // Explicit standalone calls remain supported.
+        manager->Update(); // Outside a drain every call runs a pass, as in ReplicaManager3.
         EQUALS(entity.passes, 3);
     });
 });

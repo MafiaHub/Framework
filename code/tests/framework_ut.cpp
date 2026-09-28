@@ -22,7 +22,6 @@
 #include "modules/persistent_config_ut.h"
 #include "modules/replication_authority_ut.h"
 #include "modules/replication_rate_ut.h"
-#include "modules/replication_writer_ut.h"
 #include "modules/resource_package_ut.h"
 #include "modules/result_ut.h"
 #include "modules/rpc_identifier_ut.h"
@@ -34,6 +33,7 @@
 #include "modules/state_bag_ut.h"
 #include "modules/state_machine_ut.h"
 #include "modules/string_utils_ut.h"
+#include "modules/transform_batch_ut.h"
 #include "modules/url_protocol_ut.h"
 #include "modules/voice_activity_ut.h"
 #include "modules/voice_mixer_ut.h"
@@ -67,7 +67,7 @@ int main() {
     UNIT_MODULE(build_authentication);
     UNIT_MODULE(replication_authority);
     UNIT_MODULE(replication_rate);
-    UNIT_MODULE(replication_writer);
+    UNIT_MODULE(transform_batch);
     UNIT_MODULE(interest_grid);
     UNIT_MODULE(delegation);
     UNIT_MODULE(state_bag);

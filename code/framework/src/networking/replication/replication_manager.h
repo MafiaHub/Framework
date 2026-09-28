@@ -81,17 +81,18 @@ namespace Framework::Networking::Replication {
 
         void Init(NetworkPeer *owner, bool isServer);
 
-        // Enable before connecting. All receivers understand batches; senders
-        // opt in per game. Requires the Framework 29 wire protocol on both ends.
+        // Sends unreliable transforms as per-connection batches (see TransformBatch). Every receiver
+        // reads batches; each game opts its senders in, before connecting. Framework 29 wire protocol.
         void SetTransformBatchingEnabled(bool enabled) {
             _batchTransforms = enabled;
         }
         bool TransformBatchingEnabled() const {
             return _batchTransforms;
         }
-        void Update() override;
-        // RakPeer invokes plugin Update() on every Receive(), including each
-        // packet drained by one application update. Run RM3's world pass once.
+
+        // RakPeer updates every plugin on each Receive(), so draining N packets would run N world
+        // passes. Between these two calls only the first Update() runs one; outside them every call
+        // does, as in ReplicaManager3.
         void BeginNetworkUpdate() {
             _networkUpdateActive      = true;
             _updatedThisNetworkUpdate = false;
@@ -99,6 +100,8 @@ namespace Framework::Networking::Replication {
         void EndNetworkUpdate() {
             _networkUpdateActive = false;
         }
+        void Update() override;
+        // Decodes transform batches and hands everything else to ReplicaManager3.
         MafiaNet::PluginReceiveResult OnReceive(MafiaNet::Packet *packet) override;
 
         // Server: push the entity's forced state to its owner — the server's authoritative override
@@ -232,9 +235,9 @@ namespace Framework::Networking::Replication {
         void SetInterestUsesEntityRange(const std::string &typeName, bool usesEntityRange) {
             _interest.SetUsesEntityRange(EntityRegistry::Get().TypeId(typeName), usesEntityRange);
         }
-        // Minimum milliseconds between spatial-index rebuilds (0 = every tick, the default).
-        // Viewer queries are staggered across the same interval. Entity lifecycle
-        // changes still force an immediate rebuild and viewer refresh.
+        // Minimum milliseconds between spatial-index rebuilds (0 = every tick, the default). Viewer
+        // queries are staggered across the same interval. Entity lifecycle changes still force an
+        // immediate rebuild and viewer refresh.
         void SetInterestRebuildInterval(uint32_t intervalMs) {
             _interestRebuildInterval = intervalMs;
         }

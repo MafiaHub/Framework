@@ -50,10 +50,9 @@ namespace Framework::Networking::Replication {
             return;
         }
         MafiaNet::ReplicaManager3::Update();
-        // Flush in the same pump that collected the poses, never on the next
-        // tick. Each connection owns its batch and its interest/rate filtering.
+        // Flush in the same pass that queued the poses, never on the next tick.
         for (unsigned int world = 0; world < worldsList.Size(); ++world) {
-            const auto worldId = worldsList[world]->worldId;
+            const MafiaNet::WorldId worldId = worldsList[world]->worldId;
             for (unsigned int i = 0; i < GetConnectionCount(worldId); ++i) {
                 static_cast<ReplicationConnection *>(GetConnectionAtIndex(i, worldId))->FlushTransforms(GetRakPeerInterface());
             }
@@ -61,38 +60,37 @@ namespace Framework::Networking::Replication {
     }
 
     MafiaNet::PluginReceiveResult ReplicationManager::OnReceive(MafiaNet::Packet *packet) {
-        const int offset = NetworkPeer::ResolvePacketDataOffset(packet->data, packet->length);
-        if (offset < 0 || packet->data[offset] != ReplicationWriter::kTransformBatchId) {
+        if (!TransformBatch::IsBatch(packet->data, packet->length)) {
             return MafiaNet::ReplicaManager3::OnReceive(packet);
         }
         MafiaNet::BitStream input(packet->data, packet->length, false);
         MafiaNet::Time timestamp;
         MafiaNet::WorldId worldId;
-        ReplicationWriter::TransformEntries entries;
-        if (!ReplicationWriter::ReadBatch(input, timestamp, worldId, entries) || worldId >= 255 || worldsArray[worldId] == nullptr) {
+        TransformBatch::Entries entries;
+        if (!TransformBatch::Read(input, timestamp, worldId, entries) || worldsArray[worldId] == nullptr) {
             return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
         }
-        auto *connection = GetConnectionByGUID(packet->guid, worldId);
+        MafiaNet::Connection_RM3 *connection = GetConnectionByGUID(packet->guid, worldId);
         if (connection == nullptr) {
             return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
         }
-        // Reuse channel storage for the whole packet, including any capacity
-        // grown by a large pose. Packet-local storage also permits reentry.
+        // One set of parameters for the whole packet: its pose stream keeps whatever capacity a large
+        // pose grew it to.
         MafiaNet::DeserializeParameters parameters {};
         parameters.timeStamp             = timestamp; // RakPeer already shifted ID_TIMESTAMP to local time.
         parameters.sourceConnection      = connection;
         parameters.bitstreamWrittenTo[0] = true;
-        for (const auto &entry : entries) {
-            auto *entity = GetNetworkIDManager(worldId)->GET_OBJECT_FROM_ID<NetworkEntity *>(entry.networkId);
-            if (entity == nullptr) {
-                // Construction may still be in flight, or destruction may have
-                // overtaken this unreliable batch. Other entries remain valid.
+        for (const TransformBatch::Entry &entry : entries) {
+            auto *replica = GetNetworkIDManager(worldId)->GET_OBJECT_FROM_ID<MafiaNet::Replica3 *>(entry.networkId);
+            if (replica == nullptr) {
+                // Construction still in flight, or a destruction overtook this unreliable batch; the
+                // other entries are unaffected.
                 continue;
             }
             parameters.serializationBitstream[0].Reset();
-            parameters.serializationBitstream[0].WriteBits(input.GetData() + entry.offset / 8, entry.bits, false);
-            // Reuse the normal owner, epoch and per-entity timestamp gates.
-            entity->Deserialize(&parameters);
+            parameters.serializationBitstream[0].WriteBits(input.GetData() + BITS_TO_BYTES(entry.offset), entry.bits, false);
+            // The same owner, epoch and per-entity timestamp gates as an RM3 serialize message.
+            replica->Deserialize(&parameters);
         }
         return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
     }

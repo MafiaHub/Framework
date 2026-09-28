@@ -35,7 +35,7 @@ set(FRAMEWORK_SRC
     src/networking/replication/delegation.cpp
     src/networking/replication/replication_manager.cpp
     src/networking/replication/replication_connection.cpp
-    src/networking/replication/replication_writer.cpp
+    src/networking/replication/transform_batch.cpp
 
     # JavaScript scripting engine base and builtins (used by both client and server)
     # Note: node_engine.cpp and v8_engine.cpp are in OBJECT libraries due to special compile flags

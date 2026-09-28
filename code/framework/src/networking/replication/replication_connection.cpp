@@ -104,9 +104,11 @@ namespace Framework::Networking::Replication {
 
     MafiaNet::SendSerializeIfChangedResult ReplicationConnection::SendSerialize(MafiaNet::Replica3 *replica, bool indicesToSend[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::BitStream serializationData[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS],
         MafiaNet::Time timestamp, MafiaNet::PRO sendParameters[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::RakPeerInterface *rakPeer, unsigned char worldId, MafiaNet::Time curTime) {
+        // indicesToSend may be the replica's shared broadcast record, so the selection is edited on a copy.
         bool selected[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS];
         std::memcpy(selected, indicesToSend, sizeof(selected));
-        if (selected[kTransformChannel] && serializationData[kTransformChannel].GetNumberOfBitsUsed() != 0) {
+        MafiaNet::BitStream &transform = serializationData[kTransformChannel];
+        if (selected[kTransformChannel] && transform.GetNumberOfBitsUsed() != 0) {
             const auto *entity      = static_cast<const NetworkEntity *>(replica);
             const uint32_t interval = TransformSendIntervalMs(entity);
             if (interval > 0) {
@@ -119,27 +121,35 @@ namespace Framework::Networking::Replication {
                 }
             }
         }
-        // Leave headroom for UDP/IP and MafiaNet's message/datagram headers so
-        // an unreliable batch never needs fragmentation at the negotiated MTU.
-        // GetMTUSize scans peer slots in MafiaNet. Share one lookup across this
-        // connection's poses, then refresh next pass for negotiated MTU changes.
-        if (!_packetBudgetValid) {
-            _packetBudget      = static_cast<std::size_t>(std::max(0, rakPeer->GetMTUSize(GetSystemAddress()) - 128));
-            _packetBudgetValid = true;
-        }
-        // RM3 reuses SerializeParameters for cached broadcasts. Use its pass
-        // time for every entity, rather than the last entity's wall-clock stamp.
+        // RM3 reuses one SerializeParameters for the whole pass, so a cached broadcast carries the stamp
+        // of whichever entity serialized last. The pass time is the same for every entity, which is
+        // also what lets their poses share a batch.
         const MafiaNet::Time sentAt = timestamp != 0 ? curTime : 0;
-        const bool sent             = _writer.Write(replica->GetNetworkID(), selected, serializationData, sentAt, sendParameters, worldId, _manager->TransformBatchingEnabled(), _packetBudget, [this, rakPeer](MafiaNet::BitStream &packet, const MafiaNet::PRO &parameters) {
-            rakPeer->Send(&packet, parameters.priority, parameters.reliability, parameters.orderingChannel, GetSystemAddress(), false, parameters.sendReceipt);
-        });
-        return sent ? MafiaNet::SSICR_SENT_DATA : MafiaNet::SSICR_DID_NOT_SEND_DATA;
+
+        bool batched = false;
+        if (selected[kTransformChannel] && _manager->TransformBatchingEnabled()) {
+            if (_packetBudget == 0) {
+                // Headroom for UDP/IP and MafiaNet's datagram and message headers: a batch is never fragmented.
+                _packetBudget = static_cast<std::size_t>(std::max(0, rakPeer->GetMTUSize(GetSystemAddress()) - 128));
+            }
+            batched                     = _transformBatch.Queue(replica->GetNetworkID(), transform, sentAt, sendParameters[kTransformChannel], worldId, _packetBudget, [this, rakPeer](MafiaNet::BitStream &packet, const MafiaNet::PRO &parameters) {
+                SendPacket(rakPeer, packet, parameters);
+            });
+            selected[kTransformChannel] = !batched;
+        }
+
+        const MafiaNet::SendSerializeIfChangedResult result = Connection_RM3::SendSerialize(replica, selected, serializationData, sentAt, sendParameters, rakPeer, worldId, curTime);
+        return batched ? MafiaNet::SSICR_SENT_DATA : result;
     }
 
     void ReplicationConnection::FlushTransforms(MafiaNet::RakPeerInterface *rakPeer) {
-        _writer.Flush([this, rakPeer](MafiaNet::BitStream &packet, const MafiaNet::PRO &parameters) {
-            rakPeer->Send(&packet, parameters.priority, parameters.reliability, parameters.orderingChannel, GetSystemAddress(), false, parameters.sendReceipt);
+        _transformBatch.Flush([this, rakPeer](MafiaNet::BitStream &packet, const MafiaNet::PRO &parameters) {
+            SendPacket(rakPeer, packet, parameters);
         });
-        _packetBudgetValid = false;
+        _packetBudget = 0;
+    }
+
+    void ReplicationConnection::SendPacket(MafiaNet::RakPeerInterface *rakPeer, MafiaNet::BitStream &packet, const MafiaNet::PRO &parameters) const {
+        rakPeer->Send(&packet, parameters.priority, parameters.reliability, parameters.orderingChannel, GetSystemAddress(), false, parameters.sendReceipt);
     }
 } // namespace Framework::Networking::Replication
