@@ -236,8 +236,8 @@ namespace Framework::Networking::Replication {
             _interest.SetUsesEntityRange(EntityRegistry::Get().TypeId(typeName), usesEntityRange);
         }
         // Minimum milliseconds between spatial-index rebuilds (0 = every tick, the default). Viewer
-        // queries are staggered across the same interval. Entity lifecycle changes still force an
-        // immediate rebuild and viewer refresh.
+        // queries are staggered across the same interval. Entity creation and destruction still force
+        // an immediate rebuild and refresh every viewer; an ownership change refreshes its two owners.
         void SetInterestRebuildInterval(uint32_t intervalMs) {
             _interestRebuildInterval = intervalMs;
         }
@@ -250,6 +250,8 @@ namespace Framework::Networking::Replication {
             return _interest.Generation();
         }
 
+        // Bumped by a change every viewer must see before its next phase: a destroyed entity (a cached
+        // set must never hand it out) or a rebuild caused by creation or destruction.
         uint32_t InterestUrgentGeneration() const {
             return _interestUrgentGeneration;
         }
@@ -306,6 +308,9 @@ namespace Framework::Networking::Replication {
         void DeallocConnection(MafiaNet::Connection_RM3 *connection) const override;
 
       private:
+        // Makes the connection of this peer, if any, refresh its interest on its next query.
+        void InvalidateInterestOf(MafiaNet::PeerGuid guid);
+
         bool _isServer                 = false;
         bool _batchTransforms          = false;
         bool _networkUpdateActive      = false;

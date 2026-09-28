@@ -83,60 +83,85 @@ MODULE(network_work, {
         EQUALS(refresh.Due(0, 100, 7, false, false), true);
     });
 
-    IT("invalidates phased connection caches on deletion ownership and viewer world changes", {
+    IT("refreshes a viewer at once for deletions, world changes and its own ownership changes only", {
         using namespace Framework::Networking::Replication;
         Framework::Networking::NetworkServer peer;
         auto *manager = peer.GetReplicationManager();
         manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
         manager->ConfigureGrid(100, -4096, 4096);
-        // Keep routine work distant in the future: changes below must bypass its deadline.
-        manager->SetInterestRebuildInterval(1000000);
-        const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::InterestRefresh");
-        auto *viewer            = manager->CreateEntity(type);
-        auto *nearby            = manager->CreateEntity(type);
-        auto *distant               = manager->CreateEntity(type);
-        viewer->streaming.range = 100;
-        distant->position.x         = 1000;
-        const MafiaNet::RakNetGUID guid(77);
-        manager->SetViewer(MafiaNet::ToPeerGuid(guid), viewer);
+        // Routine refreshes are far in the future: every change below has to bypass them.
+        constexpr uint32_t kFarInterval = 1000000;
+        manager->SetInterestRebuildInterval(kFarInterval);
+        const auto type            = EntityRegistry::Get().Register<NetworkEntity>("Test::InterestRefresh");
+        auto *viewer               = manager->CreateEntity(type);
+        auto *bystander            = manager->CreateEntity(type);
+        auto *nearby               = manager->CreateEntity(type);
+        auto *distant              = manager->CreateEntity(type);
+        viewer->streaming.range    = 100;
+        bystander->streaming.range = 100;
+        distant->position.x        = 1000;
+        const MafiaNet::RakNetGUID viewerGuid(77), bystanderGuid(78);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->SetViewer(MafiaNet::ToPeerGuid(bystanderGuid), bystander);
         manager->RebuildInterest();
-        ReplicationConnection connection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid, manager, true);
-        DataStructures::List<MafiaNet::Replica3 *> create, destroy;
-        auto contains = [&](NetworkEntity *entity) {
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, bystanderGuid));
+        auto *viewerConnection    = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+        auto *bystanderConnection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(bystanderGuid));
+
+        // Whether the connection's current interest set holds the entity.
+        auto sees = [](ReplicationConnection *connection, NetworkEntity *entity) {
+            DataStructures::List<MafiaNet::Replica3 *> create, destroy;
+            connection->QueryReplicaList(create, destroy);
             for (unsigned int i = 0; i < create.Size(); ++i) {
-                if (create[i] == entity)
+                if (create[i] == entity) {
                     return true;
+                }
             }
             return false;
         };
-        auto query = [&] {
-            create.Clear(true, _FILE_AND_LINE_);
-            destroy.Clear(true, _FILE_AND_LINE_);
-            connection.QueryReplicaList(create, destroy);
+        // Moves the grid on without any refresh-forcing change: cached sets keep the old picture.
+        auto rebuildQuietly = [&] {
+            manager->SetInterestRebuildInterval(0);
+            manager->RebuildInterest();
+            manager->SetInterestRebuildInterval(kFarInterval);
         };
-        query();
-        EQUALS(contains(nearby), true);
-        EQUALS(contains(distant), false);
-        manager->SetOwner(distant, MafiaNet::ToPeerGuid(guid));
-        query();
-        EQUALS(contains(distant), true);
+
+        EQUALS(sees(viewerConnection, nearby), true);
+        EQUALS(sees(viewerConnection, distant), false);
+        EQUALS(sees(bystanderConnection, nearby), true);
+
+        nearby->position.x = 2000;
+        rebuildQuietly();
+        EQUALS(sees(viewerConnection, nearby), true);
+        EQUALS(sees(bystanderConnection, nearby), true);
+
+        // The new owner refreshes at once; a viewer the handover does not concern keeps its phase.
+        manager->SetOwner(distant, MafiaNet::ToPeerGuid(viewerGuid));
+        EQUALS(sees(viewerConnection, distant), true);
+        EQUALS(sees(viewerConnection, nearby), false);
+        EQUALS(sees(bystanderConnection, nearby), true);
+
+        // A destruction reaches every viewer before its phase.
         manager->DestroyEntity(nearby);
-        query();
-        EQUALS(contains(nearby), false);
-        // Owned entities intentionally bypass world culling. Relinquish it
-        // before testing a normal in-range entity's dimension change.
+        EQUALS(sees(bystanderConnection, nearby), false);
+
+        // Owned entities bypass world culling, so hand it back before testing a dimension change.
         distant->position.x = 10;
         manager->SetOwner(distant, MafiaNet::UNASSIGNED_PEER_GUID);
-        manager->SetInterestRebuildInterval(0);
-        manager->RebuildInterest();
-        manager->SetInterestRebuildInterval(1000000);
-        query();
-        EQUALS(contains(distant), true);
+        rebuildQuietly();
+        EQUALS(sees(viewerConnection, distant), true);
         viewer->SetVirtualWorld(5);
-        query();
-        EQUALS(connection.GetVirtualWorld(), 5);
-        EQUALS(contains(distant), false);
+        EQUALS(sees(viewerConnection, distant), false);
+        EQUALS(viewerConnection->GetVirtualWorld(), 5);
         manager->DestroyEntity(distant);
+        manager->DestroyEntity(bystander);
         manager->DestroyEntity(viewer);
     });
 });

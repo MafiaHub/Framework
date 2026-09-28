@@ -180,6 +180,15 @@ namespace Framework::Networking::Replication {
         _owner->SendRawRPC(kForceStateId, bs, MafiaNet::ToGuid(entity->ownerGUID));
     }
 
+    void ReplicationManager::InvalidateInterestOf(MafiaNet::PeerGuid guid) {
+        if (guid == MafiaNet::UNASSIGNED_PEER_GUID) {
+            return;
+        }
+        if (auto *connection = static_cast<ReplicationConnection *>(GetConnectionByGUID(MafiaNet::ToGuid(guid)))) {
+            connection->InvalidateInterest();
+        }
+    }
+
     void ReplicationManager::SetOwner(NetworkEntity *entity, MafiaNet::PeerGuid guid) {
         if (!entity) {
             return;
@@ -210,8 +219,11 @@ namespace Framework::Networking::Replication {
         // Before anything can query relevance again: see InterestGrid::Reown for what a stale owned
         // index costs the peer that just gained authority.
         _interest.Reown(entity, previousOwner);
+        // Owned entities bypass range and budget, so the two owners' sets changed and nobody else's
+        // did: only they skip their refresh phase.
         if (previousOwner != guid) {
-            ++_interestUrgentGeneration;
+            InvalidateInterestOf(previousOwner);
+            InvalidateInterestOf(guid);
         }
         // Serialize to an owner is withheld, so the grant can't ride normal replication: tell the new
         // owner directly. Other peers (and any prior owner) pick it up through serialize.

@@ -51,12 +51,12 @@ namespace Framework::Networking::Replication {
             return;
         }
 
-        // Dimension changes and lifecycle invalidation bypass the phase delay.
+        // Dimension changes, ownership changes and lifecycle invalidation bypass the phase delay.
         const bool worldChanged = GetVirtualWorld() != viewer->GetVirtualWorld();
         SetVirtualWorld(viewer->GetVirtualWorld());
         const uint32_t generation       = _manager->InterestGeneration();
         const uint32_t urgentGeneration = _manager->InterestUrgentGeneration();
-        const bool urgent               = !_relevantValid || _relevantViewer != viewer || worldChanged || _relevantUrgentGeneration != urgentGeneration;
+        const bool urgent               = !_relevantValid || _interestStale || _relevantViewer != viewer || worldChanged || _relevantUrgentGeneration != urgentGeneration;
         if (_interestRefresh.Due(MafiaNet::GetTime(), _manager->InterestRefreshInterval(), GetRakNetGUID().g, urgent, _relevantGeneration != generation)) {
             _previousRelevant.swap(_relevant);
             _relevant.clear();
@@ -65,6 +65,7 @@ namespace Framework::Networking::Replication {
             _relevantUrgentGeneration = urgentGeneration;
             _relevantViewer           = viewer;
             _relevantValid            = true;
+            _interestStale            = false;
             for (auto it = _lastTransformSend.begin(); it != _lastTransformSend.end();) {
                 it = _relevant.contains(const_cast<NetworkEntity *>(it->first)) ? std::next(it) : _lastTransformSend.erase(it);
             }

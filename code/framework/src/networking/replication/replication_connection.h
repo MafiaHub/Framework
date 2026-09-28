@@ -47,6 +47,12 @@ namespace Framework::Networking::Replication {
         // Sends what the pass queued. Called once per replication pass, after every entity.
         void FlushTransforms(MafiaNet::RakPeerInterface *rakPeer);
 
+        // Recompute this viewer's interest on its next query instead of at its phase: for a change
+        // that concerns this connection alone, such as gaining or losing ownership of an entity.
+        void InvalidateInterest() {
+            _interestStale = true;
+        }
+
       private:
         void SendPacket(MafiaNet::RakPeerInterface *rakPeer, MafiaNet::BitStream &packet, const MafiaNet::PRO &parameters) const;
 
@@ -64,6 +70,7 @@ namespace Framework::Networking::Replication {
         // set never exposes deleted entity pointers.
         InterestRefresh _interestRefresh;
         uint32_t _relevantUrgentGeneration = 0;
+        bool _interestStale                = false;
         std::unordered_set<NetworkEntity *> _relevant;
         // The previous _relevant, swapped aside on each recompute: the hysteresis state the grid
         // needs for the stream-out margin and the sticky budget ranking. Membership only — entries
