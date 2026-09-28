@@ -92,17 +92,6 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::FunctionTemplate> countTmpl = v8::FunctionTemplate::New(isolate, ListenerCountCallback, contextData);
         eventsObj->Set(context, v8pp::to_v8(isolate, "listenerCount"), countTmpl->GetFunction(context).ToLocalChecked()).Check();
 
-        // onClient/onceClient/offClient — client-originated events (dispatched via EmitClient).
-        // Backed by a table separate from on()/emit(), so a client can never target a native handler.
-        v8::Local<v8::FunctionTemplate> onClientTmpl = v8::FunctionTemplate::New(isolate, OnClientCallback, contextData);
-        eventsObj->Set(context, v8pp::to_v8(isolate, "onClient"), onClientTmpl->GetFunction(context).ToLocalChecked()).Check();
-
-        v8::Local<v8::FunctionTemplate> onceClientTmpl = v8::FunctionTemplate::New(isolate, OnceClientCallback, contextData);
-        eventsObj->Set(context, v8pp::to_v8(isolate, "onceClient"), onceClientTmpl->GetFunction(context).ToLocalChecked()).Check();
-
-        v8::Local<v8::FunctionTemplate> offClientTmpl = v8::FunctionTemplate::New(isolate, OffClientCallback, contextData);
-        eventsObj->Set(context, v8pp::to_v8(isolate, "offClient"), offClientTmpl->GetFunction(context).ToLocalChecked()).Check();
-
         // Bridge, split by side: emitServer up (client), emitAllClients down (server).
         if (isClient) {
             v8::Local<v8::FunctionTemplate> emitServerTmpl = v8::FunctionTemplate::New(isolate, EmitServerCallback, contextData);
@@ -111,6 +100,19 @@ namespace Framework::Scripting::Builtins {
         else {
             v8::Local<v8::FunctionTemplate> emitAllTmpl = v8::FunctionTemplate::New(isolate, EmitAllClientsCallback, contextData);
             eventsObj->Set(context, v8pp::to_v8(isolate, "emitAllClients"), emitAllTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+            // onClient/onceClient/offClient -- client-originated events (dispatched via EmitClient).
+            // Backed by a table separate from on()/emit(), so a client can never target a native
+            // handler. Server-only: only the server's instance ever dispatches into that table, so on
+            // a client they would register handlers nothing can reach.
+            v8::Local<v8::FunctionTemplate> onClientTmpl = v8::FunctionTemplate::New(isolate, OnClientCallback, contextData);
+            eventsObj->Set(context, v8pp::to_v8(isolate, "onClient"), onClientTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+            v8::Local<v8::FunctionTemplate> onceClientTmpl = v8::FunctionTemplate::New(isolate, OnceClientCallback, contextData);
+            eventsObj->Set(context, v8pp::to_v8(isolate, "onceClient"), onceClientTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+            v8::Local<v8::FunctionTemplate> offClientTmpl = v8::FunctionTemplate::New(isolate, OffClientCallback, contextData);
+            eventsObj->Set(context, v8pp::to_v8(isolate, "offClient"), offClientTmpl->GetFunction(context).ToLocalChecked()).Check();
         }
 
         // Register as "Events" on target object
@@ -141,10 +143,6 @@ namespace Framework::Scripting::Builtins {
                 "Emits an event only within the calling resource.", "Promise rejected when one or more local handlers fail.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("listenerCount",
             v8pp::metadata::docs("number", {v8pp::metadata::param("eventName", "string", false, "Shared event name to inspect.")}, "Counts persistent and one-shot shared handlers across resources.", "Number of matching handlers.")));
-        metadata.record(
-            v8pp::metadata::function_of<v8::FunctionCallback>("onClient", handlerDocs("Unsubscribe", "Registers a persistent server handler for events originating from clients; this namespace is isolated from native events.", "Function that removes this exact subscription.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("onceClient", handlerDocs("void", "Registers a one-shot server handler for a client-originated event.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("offClient", handlerDocs("void", "Removes a matching client-originated event handler owned by the calling resource.")));
         if (isClient) {
             metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("emitServer",
                 v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Server-side client-event name."), v8pp::metadata::param("payload", "unknown", true, "Optional string payload sent verbatim; other values are JSON-serialized.")},
@@ -154,6 +152,9 @@ namespace Framework::Scripting::Builtins {
             metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("emitAllClients",
                 v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Client shared-event name."), v8pp::metadata::param("payload", "unknown", true, "Optional string payload sent verbatim; other values are JSON-serialized.")},
                     "Broadcasts a named event to every connected client's shared Events handlers.")));
+            metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("onClient", handlerDocs("Unsubscribe", "Registers a persistent server handler for events originating from clients; this namespace is isolated from native events.", "Function that removes this exact subscription.")));
+            metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("onceClient", handlerDocs("void", "Registers a one-shot server handler for a client-originated event.")));
+            metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("offClient", handlerDocs("void", "Removes a matching client-originated event handler owned by the calling resource.")));
         }
     }
 
