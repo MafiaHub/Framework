@@ -187,6 +187,11 @@ namespace Framework::Integrations::Server {
         if (_opts.maxPlayers <= 0) {
             return Error("maxPlayers must be greater than 0 (got " + std::to_string(_opts.maxPlayers) + ")");
         }
+        // MafiaNet keeps 255 bytes and silently drops the rest, so a longer one would be a different
+        // password from the one the operator wrote, and nobody could type the one it enforces.
+        if (_opts.bindPassword.size() > 255) {
+            return Error("password must be at most 255 bytes (got " + std::to_string(_opts.bindPassword.size()) + ")");
+        }
         if (_opts.maxPlayersHardCap > 0 && _opts.maxPlayers > _opts.maxPlayersHardCap) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("maxplayers {} exceeds this build's hard cap; running with {}", _opts.maxPlayers, _opts.maxPlayersHardCap);
             _opts.maxPlayers = _opts.maxPlayersHardCap;
@@ -321,6 +326,7 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Http Port:\t{}", _opts.webBindPort);
         }
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Password:\t{}", _opts.bindPassword.empty() ? "none" : "required");
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
@@ -355,7 +361,7 @@ namespace Framework::Integrations::Server {
             {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)},
                 {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)}, {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.webBindPort))},
                 {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(opts.webBindHost)},
-                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts) {
@@ -372,6 +378,7 @@ namespace Framework::Integrations::Server {
         read("map", opts.bindMapName);
         read("maxplayers", opts.maxPlayers);
         read("server-token", opts.bindSecretKey);
+        read("password", opts.bindPassword);
     }
 
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts) {
@@ -388,6 +395,7 @@ namespace Framework::Integrations::Server {
         read("apihost", opts.webBindHost);
         read("apiport", opts.webBindPort);
         read("server-token", opts.bindSecretKey);
+        read("password", opts.bindPassword);
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -475,6 +483,7 @@ namespace Framework::Integrations::Server {
         frameworkKeys["map"]          = _opts.bindMapName;
         frameworkKeys["maxplayers"]   = _opts.maxPlayers;
         frameworkKeys["server-token"] = _opts.bindSecretKey;
+        frameworkKeys["password"]     = _opts.bindPassword;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
 
