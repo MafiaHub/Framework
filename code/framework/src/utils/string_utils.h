@@ -109,6 +109,25 @@ namespace Framework::Utils::StringUtils {
         return s;
     }
 
+    // ASCII case-insensitive character comparison, the one fold the helpers below share.
+    inline bool EqualsFolded(char lhs, char rhs) {
+        return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
+    }
+
+    // ASCII case-insensitive equality, without allocating a lowered copy of either side.
+    inline bool EqualsIgnoreCase(std::string_view lhs, std::string_view rhs) {
+        return lhs.size() == rhs.size() && std::equal(lhs.begin(), lhs.end(), rhs.begin(), EqualsFolded);
+    }
+
+    inline bool StartsWithIgnoreCase(std::string_view value, std::string_view prefix) {
+        return value.size() >= prefix.size() && EqualsIgnoreCase(value.substr(0, prefix.size()), prefix);
+    }
+
+    // ASCII case-insensitive substring test; an empty needle matches everything (std::search misses it in an empty haystack).
+    inline bool ContainsIgnoreCase(std::string_view haystack, std::string_view needle) {
+        return needle.empty() || std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(), EqualsFolded) != haystack.end();
+    }
+
     // File name (portion after the last / or \) of a possibly-relative path.
     inline std::string FileName(std::string_view path) {
         const auto pos = path.find_last_of("/\\");

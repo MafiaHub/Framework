@@ -854,10 +854,11 @@ namespace Framework::Integrations::Client {
         // The server's voice ranges, so the mixer fades a talker out where the frames stop.
         net->RegisterRPC<Framework::Networking::RPC::VoiceSettings>([this](const Framework::Networking::RPC::VoiceSettings &payload, MafiaNet::Packet *) {
             _voiceClient.SetDefaultSpeakerRange(payload.proximityRange);
+            _voiceClient.SetTierRanges(payload.tierRanges);
         });
 
         net->RegisterRPC<Framework::Networking::RPC::VoiceSpeakerRange>([this](const Framework::Networking::RPC::VoiceSpeakerRange &payload, MafiaNet::Packet *) {
-            _voiceClient.SetSpeakerRange(payload.player, payload.range);
+            _voiceClient.SetSpeakerRange(payload.player, payload.range, static_cast<Framework::Voice::VoiceTier>(payload.tier));
         });
 
         // Scripted nametag state for our own avatar; our next upstream update carries it to the others.

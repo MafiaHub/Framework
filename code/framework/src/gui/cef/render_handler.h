@@ -36,6 +36,26 @@ namespace Framework::GUI::CEF {
         int _pixelHeight     = 0;
         bool _pixelDataDirty = false;
 
+        // A popup widget (a <select> list, a date picker) is painted apart from the
+        // page. _popupRect is where it sits, in view coordinates. Written on the CEF
+        // UI thread, read by the render thread.
+        std::mutex _popupMutex;
+        bool _popupVisible = false;
+        CefRect _popupRect;
+
+        // Software path, CEF UI thread only: the popup's own pixels, and the page
+        // pixels it covers in _pixelData so they can be put back when it moves or
+        // closes. _stampedRect is empty while nothing is drawn over the page.
+        std::vector<uint8_t> _popupPixels;
+        int _popupPixelWidth  = 0;
+        int _popupPixelHeight = 0;
+        std::vector<uint8_t> _popupUnderlay;
+        CefRect _stampedRect;
+
+        // Accelerated path: the popup arrives as its own shared texture.
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> _popupSharedTexture;
+        HANDLE _popupSharedHandle = nullptr;
+
         ID3D11Device *_device = nullptr;
 
       public:
@@ -51,6 +71,11 @@ namespace Framework::GUI::CEF {
         void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect &rect) override;
         void OnAcceleratedPaint(CefRefPtr<CefBrowser> browser, PaintElementType type, const RectList &dirtyRects, const CefAcceleratedPaintInfo &info) override;
         void OnPaint(CefRefPtr<CefBrowser> browser, PaintElementType type, const RectList &dirtyRects, const void *buffer, int width, int height) override;
+        void OnPopupShow(CefRefPtr<CefBrowser> browser, bool show) override;
+        void OnPopupSize(CefRefPtr<CefBrowser> browser, const CefRect &rect) override;
+
+        // Where the popup is drawn, in view coordinates; false while none is open.
+        bool GetPopupRect(CefRect &rect);
 
         [[nodiscard]] std::lock_guard<std::mutex> LockTexture() {
             return std::lock_guard<std::mutex>(_textureMutex);
@@ -68,6 +93,10 @@ namespace Framework::GUI::CEF {
             return _sharedHandle;
         }
 
+        ID3D11Texture2D *GetPopupSharedTexture() const {
+            return _popupSharedTexture.Get();
+        }
+
         const std::vector<uint8_t> &GetPixelData() const {
             return _pixelData;
         }
@@ -79,6 +108,11 @@ namespace Framework::GUI::CEF {
         void ClearPixelDataDirty() {
             _pixelDataDirty = false;
         }
+
+      private:
+        void OpenSharedTexture(HANDLE handle, Microsoft::WRL::ComPtr<ID3D11Texture2D> &texture, HANDLE &openedHandle);
+        void StampPopup();
+        void UnstampPopup();
 
         IMPLEMENT_REFCOUNTING(RenderHandler);
     };

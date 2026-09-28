@@ -23,6 +23,10 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         static void JS_GetRange(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_SetPlayerRange(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_GetPlayerRange(const v8::FunctionCallbackInfo<v8::Value> &info);
+        static void JS_SetTierRange(const v8::FunctionCallbackInfo<v8::Value> &info);
+        static void JS_GetTierRange(const v8::FunctionCallbackInfo<v8::Value> &info);
+        static void JS_SetPlayerTier(const v8::FunctionCallbackInfo<v8::Value> &info);
+        static void JS_GetPlayerTier(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_SetPlayerMuted(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_IsPlayerMuted(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_SetPlayerDeaf(const v8::FunctionCallbackInfo<v8::Value> &info);

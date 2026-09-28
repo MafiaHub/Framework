@@ -10,6 +10,8 @@
 
 #include "rpc.h"
 
+#include <voice/voice_config.h>
+
 #include <cstdint>
 
 namespace Framework::Networking::RPC {
@@ -19,23 +21,43 @@ namespace Framework::Networking::RPC {
         static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::VoiceSettings");
 
         float proximityRange = 0.0f;
+        // Each voice tier's radius, 0 where it carries proximityRange.
+        Framework::Voice::VoiceTierRanges tierRanges = Framework::Voice::kDefaultTierRanges;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, proximityRange);
+            for (float &range : tierRanges) {
+                bs->Serialize(write, range);
+            }
         }
     };
 
-    // Server->client: one talker's override of the radius above, keyed by peer GUID. 0
-    // restores the default.
+    // Server->client: one talker's override of the radii above (0 for none) and the
+    // Voice::VoiceTier they are on, keyed by peer GUID. The talker is told too, which is how
+    // a tier set by the server reaches the player's own indicator.
     struct VoiceSpeakerRange {
         static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::VoiceSpeakerRange");
 
         uint64_t player = 0;
         float range     = 0.0f;
+        uint8_t tier    = static_cast<uint8_t>(Framework::Voice::VoiceTier::Normal);
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, player);
             bs->Serialize(write, range);
+            bs->Serialize(write, tier);
+        }
+    };
+
+    // Client->server: the Voice::VoiceTier the player switched to. A request: the server paces
+    // it and answers a change with a VoiceSpeakerRange to everyone, the sender included.
+    struct VoiceTierRequest {
+        static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::VoiceTierRequest");
+
+        uint8_t tier = static_cast<uint8_t>(Framework::Voice::VoiceTier::Normal);
+
+        void Serialize(MafiaNet::BitStream *bs, bool write) {
+            bs->Serialize(write, tier);
         }
     };
 

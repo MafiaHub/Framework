@@ -22,6 +22,7 @@
 #include <scripting/builtins/messages.h>
 #include <scripting/event_metadata.h>
 #include <scripting/scripting_catalog.h>
+#include <scripting/timer_metadata.h>
 
 namespace Framework::Integrations::Server::Scripting {
 
@@ -111,6 +112,9 @@ namespace Framework::Integrations::Server::Scripting {
 
         // The events the framework raises; a mod's catalog blends them into its own EventMap.
         Framework::Scripting::RegisterEventMetadata(Framework::Scripting::GetScriptingCatalog(isolate));
+
+        // The engine installs the timers without a binding; declare them for it.
+        Framework::Scripting::RegisterTimerMetadata(Framework::Scripting::GetScriptingCatalog(isolate), /*isClient*/ false);
 
         // Every builtin registers at the global root (new Vector3, not new Core.Vector3).
         Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);

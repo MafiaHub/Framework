@@ -19,7 +19,31 @@ namespace Framework::GUI {
         return View::Init(url, width, height, offsetX, offsetY, gpuAccelerated);
     }
 
-    void ViewD3D11::CreateOrUpdateGeometry() {
+    namespace {
+        // Points a backend texture at a CEF shared texture, rebuilding its SRV when the texture changes.
+        void BindSharedTexture(Graphics::D3D11Backend *backend, uint32_t textureID, ID3D11Texture2D *sharedTex) {
+            auto &texEntry = backend->GetTexture(textureID);
+
+            // CEF hands us a new shared texture when the surface changes (e.g. resize).
+            // Drop the SRV bound to the previous texture so it is recreated against the
+            // new one; otherwise the view keeps sampling the stale surface.
+            if (texEntry.texture.Get() != sharedTex) {
+                texEntry.texture = sharedTex;
+                texEntry.texture_srv.Reset();
+            }
+
+            if (!texEntry.texture_srv) {
+                D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc {};
+                srvDesc.Format                    = DXGI_FORMAT_B8G8R8A8_UNORM;
+                srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
+                srvDesc.Texture2D.MipLevels       = 1;
+                srvDesc.Texture2D.MostDetailedMip = 0;
+                backend->GetDevice()->CreateShaderResourceView(sharedTex, &srvDesc, &texEntry.texture_srv);
+            }
+        }
+    } // namespace
+
+    void ViewD3D11::CreateOrUpdateGeometry(uint32_t &geometryID, bool &created, int x, int y, int width, int height) {
         auto *backend = _graphicsRenderer->GetD3D11Backend();
         if (!backend) {
             return;
@@ -41,10 +65,10 @@ namespace Framework::GUI {
             float data6[4];
         };
 
-        float left   = static_cast<float>(_x);
-        float top    = static_cast<float>(_y);
-        float right  = static_cast<float>(_x + _width);
-        float bottom = static_cast<float>(_y + _height);
+        float left   = static_cast<float>(x);
+        float top    = static_cast<float>(y);
+        float right  = static_cast<float>(x + width);
+        float bottom = static_cast<float>(y + height);
 
         Vertex vertices[4] = {};
 
@@ -93,14 +117,37 @@ namespace Framework::GUI {
         ib.size = sizeof(indices);
         ib.data = reinterpret_cast<uint8_t *>(indices);
 
-        if (!_geometryCreated) {
-            _geometryID = backend->NextGeometryId();
-            backend->CreateGeometry(_geometryID, vb, ib);
-            _geometryCreated = true;
+        if (!created) {
+            geometryID = backend->NextGeometryId();
+            backend->CreateGeometry(geometryID, vb, ib);
+            created = true;
         }
         else {
-            backend->UpdateGeometry(_geometryID, vb, ib);
+            backend->UpdateGeometry(geometryID, vb, ib);
         }
+    }
+
+    void ViewD3D11::DrawPopup(Graphics::D3D11Backend *backend, Graphics::GPUState gpuState) {
+        auto *renderHandler = GetRenderHandler();
+
+        // Held for the whole read, as for the page texture
+        const auto texLock = renderHandler->LockTexture();
+
+        auto *popupTex = renderHandler->GetPopupSharedTexture();
+        CefRect popupRect;
+        if (!popupTex || !renderHandler->GetPopupRect(popupRect)) {
+            return;
+        }
+
+        if (_popupTextureID == 0) {
+            _popupTextureID = backend->NextTextureId();
+        }
+        BindSharedTexture(backend, _popupTextureID, popupTex);
+
+        CreateOrUpdateGeometry(_popupGeometryID, _popupGeometryCreated, _x + popupRect.x, _y + popupRect.y, popupRect.width, popupRect.height);
+
+        gpuState.texture_1_id = _popupTextureID;
+        backend->DrawGeometry(_popupGeometryID, 6, 0, gpuState);
     }
 
     void ViewD3D11::Render() {
@@ -116,7 +163,7 @@ namespace Framework::GUI {
         }
 
         // Create/update geometry
-        CreateOrUpdateGeometry();
+        CreateOrUpdateGeometry(_geometryID, _geometryCreated, _x, _y, _width, _height);
 
         // Set up GPU state for rendering the quad
         Graphics::GPUState gpuState {};
@@ -149,26 +196,7 @@ namespace Framework::GUI {
                     }
 
                     // Create a SRV from the shared texture and register with backend
-                    auto &texEntry = backend->GetTexture(_textureID);
-                    Microsoft::WRL::ComPtr<ID3D11Texture2D> tex;
-                    sharedTex->QueryInterface(IID_PPV_ARGS(&tex));
-
-                    // CEF hands us a new shared texture when the surface changes (e.g. resize).
-                    // Drop the SRV bound to the previous texture so it is recreated against the
-                    // new one; otherwise the view keeps sampling the stale surface.
-                    if (texEntry.texture.Get() != tex.Get()) {
-                        texEntry.texture = tex;
-                        texEntry.texture_srv.Reset();
-                    }
-
-                    if (!texEntry.texture_srv) {
-                        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc {};
-                        srvDesc.Format                    = DXGI_FORMAT_B8G8R8A8_UNORM;
-                        srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
-                        srvDesc.Texture2D.MipLevels       = 1;
-                        srvDesc.Texture2D.MostDetailedMip = 0;
-                        backend->GetDevice()->CreateShaderResourceView(sharedTex, &srvDesc, &texEntry.texture_srv);
-                    }
+                    BindSharedTexture(backend, _textureID, sharedTex);
 
                     gpuState.texture_1_id = _textureID;
                 }
@@ -224,6 +252,11 @@ namespace Framework::GUI {
         // Draw the geometry
         if (gpuState.texture_1_id != 0) {
             backend->DrawGeometry(_geometryID, 6, 0, gpuState);
+
+            // The software path already has the popup in its pixels
+            if (_gpuAccelerated) {
+                DrawPopup(backend, gpuState);
+            }
         }
     }
 } // namespace Framework::GUI

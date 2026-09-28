@@ -25,6 +25,11 @@ namespace Framework::GUI {
         uint32_t _geometryID = 0;
         bool _geometryCreated = false;
 
+        // GPU path: a popup widget (a <select> list) comes as its own texture, drawn over the page
+        uint32_t _popupTextureID   = 0;
+        uint32_t _popupGeometryID  = 0;
+        bool _popupGeometryCreated = false;
+
         // CPU path: texture created from pixel data
         uint32_t _cpuTextureID = 0;
 
@@ -40,6 +45,7 @@ namespace Framework::GUI {
         void Render() override;
 
       private:
-        void CreateOrUpdateGeometry();
+        void CreateOrUpdateGeometry(uint32_t &geometryID, bool &created, int x, int y, int width, int height);
+        void DrawPopup(Graphics::D3D11Backend *backend, Graphics::GPUState gpuState);
     };
 } // namespace Framework::GUI

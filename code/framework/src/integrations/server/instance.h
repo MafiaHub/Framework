@@ -183,6 +183,7 @@ namespace Framework::Integrations::Server {
         Voice::VoiceServer _voiceServer;
         // Reused every tick so the drain never allocates.
         std::vector<Voice::TalkingChange> _voiceTalkingChanges;
+        std::vector<Voice::TierChange> _voiceTierChanges;
         std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
         std::unordered_set<uint64_t> _readyPlayerGuids;
 
@@ -213,8 +214,9 @@ namespace Framework::Integrations::Server {
         
         void HandleCommand(std::string_view command);
         void EmitConsoleCommand(const std::string &command, const std::vector<std::string> &args);
-        // Runs once per tick, after the relay's own update has retired the talkers who went quiet.
-        void DispatchVoiceTalkingChanges();
+        // Runs once per tick, after the relay's own update has retired the talkers who went
+        // quiet: talking edges, and the tier switches players asked for.
+        void DispatchVoiceChanges();
         // Subscription raising entityStateChange; released on shutdown.
         Framework::Networking::Replication::StateChangeHandle _stateBagEvents = Framework::Networking::Replication::kInvalidStateChangeHandle;
 

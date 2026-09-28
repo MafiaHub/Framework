@@ -315,6 +315,7 @@ namespace Framework::Voice {
         _source   = nullptr;
         _placements.clear();
         _speakerRanges.clear();
+        _speakerTiers.clear();
         _published.clear();
     }
 
@@ -370,6 +371,7 @@ namespace Framework::Voice {
         // The same peer GUID may be a different player on the next server.
         _placements.clear();
         _speakerRanges.clear();
+        _speakerTiers.clear();
 
         _self         = MafiaNet::UNASSIGNED_RAKNET_GUID;
         _sessionOpen  = false;
@@ -409,7 +411,10 @@ namespace Framework::Voice {
             // The next server inherits nothing from this one.
             _server              = MafiaNet::UNASSIGNED_RAKNET_GUID;
             _preferenceSent      = false;
+            _tierSent            = false;
+            _tierSentAtMs        = 0;
             _defaultSpeakerRange = kDefaultProximityRange;
+            _tierRanges          = kDefaultTierRanges;
             return;
         }
 
@@ -427,6 +432,10 @@ namespace Framework::Voice {
         if (!_preferenceSent) {
             PublishPreference();
         }
+
+        // Whether or not a session follows, like the preference: the tier is how far our voice
+        // would carry, and the others draw it.
+        PublishTier(Utils::Time::GetTime());
 
         if (_enabled && !_sessionOpen) {
             OpenSession();
@@ -546,7 +555,8 @@ namespace Framework::Voice {
     float VoiceClient::ResolveRange(uint64_t speaker) const {
         const auto it     = _speakerRanges.find(speaker);
         const float own   = it != _speakerRanges.end() ? it->second : 0.0f;
-        const float range = own > 0.0f ? own : _defaultSpeakerRange;
+        const float tier  = _tierRanges[static_cast<size_t>(GetSpeakerTier(speaker))];
+        const float range = own > 0.0f ? own : (tier > 0.0f ? tier : _defaultSpeakerRange);
 
         return _hearingRange > 0.0f ? std::min(range, _hearingRange) : range;
     }
@@ -769,14 +779,16 @@ namespace Framework::Voice {
         return -1;
     }
 
-    float VoiceClient::DistanceSqTo(uint64_t speaker) const {
+    float VoiceClient::ReachSqTo(uint64_t speaker) const {
         const auto it = _placements.find(speaker);
         if (it == _placements.end()) {
             return std::numeric_limits<float>::infinity();
         }
 
+        // ResolveRange is never 0: the default range and the hearing range are both positive.
         const glm::vec3 delta = it->second.placement.position - _listener.position;
-        return glm::dot(delta, delta);
+        const float range     = ResolveRange(speaker);
+        return glm::dot(delta, delta) / (range * range);
     }
 
     int VoiceClient::AdmitSpeaker(uint64_t speaker, int64_t nowMs) {
@@ -790,22 +802,24 @@ namespace Framework::Voice {
             }
         }
 
+        // Measured against each talker's own range rather than in metres: a shout at 30m is
+        // heard better than a whisper at 6m, and a crowd of whisperers must not drown it out.
         // Unplaceable speakers sort as infinitely far, so they are evicted first and never
         // displace one the player can actually see.
-        const float candidateDistSq = DistanceSqTo(speaker);
+        const float candidateReachSq = ReachSqTo(speaker);
 
-        int farthest         = -1;
-        float farthestDistSq = 0.0f;
+        int farthest          = -1;
+        float farthestReachSq = 0.0f;
 
         for (size_t i = 0; i < _admitted.size(); i++) {
-            const float distSq = DistanceSqTo(_admitted[i].id);
-            if (farthest < 0 || distSq > farthestDistSq) {
-                farthest       = static_cast<int>(i);
-                farthestDistSq = distSq;
+            const float reachSq = ReachSqTo(_admitted[i].id);
+            if (farthest < 0 || reachSq > farthestReachSq) {
+                farthest        = static_cast<int>(i);
+                farthestReachSq = reachSq;
             }
         }
 
-        if (farthest < 0 || !(candidateDistSq * kEvictionHysteresis < farthestDistSq)) {
+        if (farthest < 0 || !(candidateReachSq * kEvictionHysteresis < farthestReachSq)) {
             return -1;
         }
 
@@ -895,8 +909,20 @@ namespace Framework::Voice {
         entry.generation         = _placementGeneration;
     }
 
-    void VoiceClient::SetSpeakerRange(uint64_t speaker, float range) {
-        if (speaker == 0 || IsSelf(speaker)) {
+    void VoiceClient::SetSpeakerRange(uint64_t speaker, float range, VoiceTier tier) {
+        if (speaker == 0 || tier >= VoiceTier::Count) {
+            return;
+        }
+
+        if (IsOwnGuid(speaker)) {
+            // The server's answer to a request we sent is not news, and adopting it would undo
+            // a newer press still waiting its turn. A tier we never asked for is the server's
+            // decision, and wins.
+            if (_tierSent && tier != _sentTier) {
+                _tier          = tier;
+                _sentTier      = tier;
+                _tierShownAtMs = Utils::Time::GetTime();
+            }
             return;
         }
 
@@ -906,11 +932,83 @@ namespace Framework::Voice {
         else {
             _speakerRanges.erase(speaker);
         }
+
+        if (tier != VoiceTier::Normal) {
+            _speakerTiers[speaker] = tier;
+        }
+        else {
+            _speakerTiers.erase(speaker);
+        }
+    }
+
+    VoiceTier VoiceClient::GetSpeakerTier(uint64_t speaker) const {
+        const auto it = _speakerTiers.find(speaker);
+        return it != _speakerTiers.end() ? it->second : VoiceTier::Normal;
+    }
+
+    bool VoiceClient::IsOwnGuid(uint64_t speaker) const {
+        if (_client == nullptr || _client->GetPeer() == nullptr) {
+            return false;
+        }
+
+        const MafiaNet::RakNetGUID self = _client->GetPeer()->GetMyGUID();
+        return self != MafiaNet::UNASSIGNED_RAKNET_GUID && speaker == static_cast<uint64_t>(MafiaNet::ToPeerGuid(self));
+    }
+
+    void VoiceClient::SetTier(VoiceTier tier) {
+        if (tier >= VoiceTier::Count) {
+            return;
+        }
+
+        if (tier == _tier) {
+            return;
+        }
+
+        // Sent from Update, which paces it: a key pressed three times in a frame is one request.
+        _tier          = tier;
+        _tierShownAtMs = Utils::Time::GetTime();
+    }
+
+    void VoiceClient::CycleTier(uint32_t steps) {
+        constexpr uint32_t kTiers = static_cast<uint32_t>(VoiceTier::Count);
+        SetTier(static_cast<VoiceTier>((static_cast<uint32_t>(_tier) + steps) % kTiers));
+    }
+
+    float VoiceClient::GetIndicatorAlpha() const {
+        if (_localTalking) {
+            return 1.0f;
+        }
+        if (_tierShownAtMs == 0) {
+            return 0.0f;
+        }
+
+        const int64_t left = static_cast<int64_t>(kTierShownMs) - (Utils::Time::GetTime() - _tierShownAtMs);
+        return std::clamp(static_cast<float>(left) / static_cast<float>(kTierFadeMs), 0.0f, 1.0f);
+    }
+
+    void VoiceClient::PublishTier(int64_t nowMs) {
+        if (_client == nullptr || _server == MafiaNet::UNASSIGNED_RAKNET_GUID) {
+            return;
+        }
+        if (_tierSent && _sentTier == _tier) {
+            return;
+        }
+        if (_tierSentAtMs != 0 && (nowMs - _tierSentAtMs) < static_cast<int64_t>(kTierRequestIntervalMs)) {
+            return;
+        }
+
+        Networking::RPC::VoiceTierRequest payload;
+        payload.tier = static_cast<uint8_t>(_tier);
+        _client->SendRPC(payload, _server);
+        _sentTier     = _tier;
+        _tierSent     = true;
+        _tierSentAtMs = nowMs;
     }
 
     void VoiceClient::RemoveSpeaker(uint64_t speaker) {
         _placements.erase(speaker);
         _speakerRanges.erase(speaker);
+        _speakerTiers.erase(speaker);
 
         const int slot = FindAdmitted(speaker);
         if (slot >= 0) {
