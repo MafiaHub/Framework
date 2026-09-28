@@ -50,11 +50,8 @@ namespace Framework::Voice {
     }
 
     float VoiceRouter::GetTierRange(VoiceTier tier) const {
-        return HasOwnTierRange(tier) ? _tierRanges[static_cast<size_t>(tier)] : _defaultRange;
-    }
-
-    bool VoiceRouter::HasOwnTierRange(VoiceTier tier) const {
-        return tier < VoiceTier::Count && _tierRanges[static_cast<size_t>(tier)] > 0.0f;
+        const float range = tier < VoiceTier::Count ? _tierRanges[static_cast<size_t>(tier)] : 0.0f;
+        return range > 0.0f ? range : _defaultRange;
     }
 
     void VoiceRouter::SetPlayerTier(uint64_t guid, VoiceTier tier) {
@@ -77,19 +74,6 @@ namespace Framework::Voice {
     float VoiceRouter::GetEffectivePlayerRange(uint64_t guid) const {
         const PlayerState *state = Find(guid);
         return state ? ResolveRange(*state) : _defaultRange;
-    }
-
-    float VoiceRouter::GetAdvertisedPlayerRange(uint64_t guid) const {
-        const PlayerState *state = Find(guid);
-        if (state == nullptr) {
-            return 0.0f;
-        }
-
-        if (state->range > 0.0f) {
-            return state->range;
-        }
-
-        return HasOwnTierRange(state->tier) ? _tierRanges[static_cast<size_t>(state->tier)] : 0.0f;
     }
 
     std::vector<uint64_t> VoiceRouter::GetPlayersWithRangeRules() const {

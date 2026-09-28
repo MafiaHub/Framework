@@ -414,6 +414,7 @@ namespace Framework::Voice {
             _tierSent            = false;
             _tierSentAtMs        = 0;
             _defaultSpeakerRange = kDefaultProximityRange;
+            _tierRanges          = kDefaultTierRanges;
             return;
         }
 
@@ -554,7 +555,8 @@ namespace Framework::Voice {
     float VoiceClient::ResolveRange(uint64_t speaker) const {
         const auto it     = _speakerRanges.find(speaker);
         const float own   = it != _speakerRanges.end() ? it->second : 0.0f;
-        const float range = own > 0.0f ? own : _defaultSpeakerRange;
+        const float tier  = _tierRanges[static_cast<size_t>(GetSpeakerTier(speaker))];
+        const float range = own > 0.0f ? own : (tier > 0.0f ? tier : _defaultSpeakerRange);
 
         return _hearingRange > 0.0f ? std::min(range, _hearingRange) : range;
     }

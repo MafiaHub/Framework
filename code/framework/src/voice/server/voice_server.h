@@ -11,6 +11,7 @@
 #include "voice_router.h"
 
 #include <mafianet/RakVoice.h>
+#include <networking/rpc/voice_settings.h>
 
 #include <cstdint>
 #include <unordered_map>
@@ -73,8 +74,8 @@ namespace Framework::Voice {
         // the server-wide range.
         void SetPlayerRange(uint64_t guid, float meters);
 
-        // The radius a voice tier carries, likewise mirrored for every player on that tier.
-        // <= 0 makes the tier carry the server-wide range.
+        // The radius a voice tier carries, likewise mirrored. <= 0 makes the tier carry the
+        // server-wide range.
         void SetTierRange(VoiceTier tier, float meters);
 
         float GetTierRange(VoiceTier tier) const {
@@ -100,8 +101,9 @@ namespace Framework::Voice {
         // The client's own voice setting, from the VoicePreference RPC.
         void OnPlayerPreference(uint64_t guid, bool enabled);
 
-        // The player's own tier switch, from the VoiceTierRequest RPC. Dropped when out of
-        // range or closer to the previous one than kTierRequestServerFloorMs.
+        // The player's own tier switch, from the VoiceTierRequest RPC. One arriving sooner than
+        // kTierChangeFloorMs after the last applied switch waits for it, replacing any request
+        // already waiting, rather than being dropped: the client already shows it.
         void OnTierRequest(uint64_t guid, uint8_t tier);
 
         // Moves the tier switches accumulated since the last call into `out`, cleared first.
@@ -122,8 +124,15 @@ namespace Framework::Voice {
         // Queues a start edge on the first frame after silence.
         void MarkTalking(uint64_t talker, int64_t nowMs);
 
-        // Tells every client how far `guid` carries and on which tier.
-        void BroadcastPlayerRange(uint64_t guid);
+        // Applies a player's tier switch unless the last one was too recent; true when it was
+        // applied or needed nothing.
+        bool ApplyTierRequest(uint64_t guid, VoiceTier tier, int64_t nowMs);
+
+        // The server-wide range and the tier radii, as every client needs them.
+        Networking::RPC::VoiceSettings BuildSettings() const;
+
+        // `guid`'s override and tier, as every client needs them.
+        Networking::RPC::VoiceSpeakerRange BuildPlayerRange(uint64_t guid) const;
 
         // A rule changed, so every cached set is suspect -- not just the talker's own, since
         // one player's change removes them from everyone else's.
@@ -138,8 +147,10 @@ namespace Framework::Voice {
         // Talker -> arrival time of their most recent frame. Presence is the talking flag.
         std::unordered_map<uint64_t, int64_t> _talking;
         std::vector<TalkingChange> _talkingChanges;
-        // Player -> time of their last accepted tier request.
-        std::unordered_map<uint64_t, int64_t> _tierRequestedAtMs;
+        // Player -> time of their last applied tier switch, and the switches still waiting on
+        // it. The second is empty but for a client pressing faster than the floor.
+        std::unordered_map<uint64_t, int64_t> _tierAppliedAtMs;
+        std::unordered_map<uint64_t, VoiceTier> _pendingTiers;
         std::vector<TierChange> _tierChanges;
     };
 } // namespace Framework::Voice

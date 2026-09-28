@@ -854,6 +854,7 @@ namespace Framework::Integrations::Client {
         // The server's voice ranges, so the mixer fades a talker out where the frames stop.
         net->RegisterRPC<Framework::Networking::RPC::VoiceSettings>([this](const Framework::Networking::RPC::VoiceSettings &payload, MafiaNet::Packet *) {
             _voiceClient.SetDefaultSpeakerRange(payload.proximityRange);
+            _voiceClient.SetTierRanges(payload.tierRanges);
         });
 
         net->RegisterRPC<Framework::Networking::RPC::VoiceSpeakerRange>([this](const Framework::Networking::RPC::VoiceSpeakerRange &payload, MafiaNet::Packet *) {

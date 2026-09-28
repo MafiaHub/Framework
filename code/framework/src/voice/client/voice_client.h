@@ -168,6 +168,11 @@ namespace Framework::Voice {
             return _defaultSpeakerRange;
         }
 
+        // Each tier's radius, 0 where it carries the default range. Also from VoiceSettings.
+        void SetTierRanges(const VoiceTierRanges &ranges) {
+            _tierRanges = ranges;
+        }
+
         // How far the player projects their voice. Kept across servers as the player's choice,
         // and requested from each one: the server rate-limits and decides, and a tier it sets
         // on its own comes back here. Count is ignored.
@@ -314,7 +319,7 @@ namespace Framework::Voice {
         // Speakers with no known position are still heard, but are evicted first. Our own
         // GUID is ignored.
         void SetSpeakerPosition(uint64_t speaker, const glm::vec3 &position);
-        // From the VoiceSpeakerRange RPC. A range <= 0 restores the server's default. Our own
+        // From the VoiceSpeakerRange RPC. A range <= 0 falls back to the tier's radius. Our own
         // GUID carries the tier the server holds us on, adopted when it is not the one we asked for.
         void SetSpeakerRange(uint64_t speaker, float range, VoiceTier tier);
         void RemoveSpeaker(uint64_t speaker);
@@ -402,7 +407,8 @@ namespace Framework::Voice {
         // Our peer GUID whether or not a session is open, unlike IsSelf.
         bool IsOwnGuid(uint64_t speaker) const;
 
-        // Own override, else the server default, then narrowed by the hearing range.
+        // Own override, else the tier's radius, else the server default, then narrowed by the
+        // hearing range.
         float ResolveRange(uint64_t speaker) const;
 
         // Opened with the session, not at Init: miniaudio's WASAPI backend CoInitializes the
@@ -480,6 +486,7 @@ namespace Framework::Voice {
         uint32_t _placementGeneration = 0;
         float _hearingRange           = 0.0f;
         float _defaultSpeakerRange    = kDefaultProximityRange;
+        VoiceTierRanges _tierRanges   = kDefaultTierRanges;
         std::array<AdmittedSpeaker, kMaxAudibleTalkers> _admitted {};
 
         VoiceTier _tier       = VoiceTier::Normal;

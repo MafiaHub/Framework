@@ -17,6 +17,8 @@
 #include <networking/rpc/voice_settings.h>
 #include <utils/time.h>
 
+#include <iterator>
+
 namespace Framework::Voice {
     bool VoiceServer::Init(Networking::NetworkServer *server) {
         if (server == nullptr || server->GetPeer() == nullptr) {
@@ -64,18 +66,24 @@ namespace Framework::Voice {
         _cache.clear();
         _talking.clear();
         _talkingChanges.clear();
-        _tierRequestedAtMs.clear();
+        _tierAppliedAtMs.clear();
+        _pendingTiers.clear();
         _tierChanges.clear();
     }
 
     void VoiceServer::Update() {
-        // Recipient cache entries expire lazily in RecipientsFor(); the only periodic work is
-        // retiring talkers who went quiet, since silence produces no packet to notice.
-        if (_talking.empty()) {
+        // Recipient cache entries expire lazily in RecipientsFor(); the periodic work is the tier
+        // switches that were waiting on the floor, and retiring talkers who went quiet, since
+        // silence produces no packet to notice.
+        if (_talking.empty() && _pendingTiers.empty()) {
             return;
         }
 
         const int64_t nowMs = Utils::Time::GetTime();
+        for (auto it = _pendingTiers.begin(); it != _pendingTiers.end();) {
+            it = ApplyTierRequest(it->first, it->second, nowMs) ? _pendingTiers.erase(it) : std::next(it);
+        }
+
         for (auto it = _talking.begin(); it != _talking.end();) {
             if ((nowMs - it->second) <= static_cast<int64_t>(kTalkingTimeoutMs)) {
                 ++it;
@@ -111,7 +119,8 @@ namespace Framework::Voice {
         // No stop edge: the avatar is torn down in ReplicationManager::OnClosedConnection,
         // which RakNet fires before this runs, so the event could not name the player.
         _talking.erase(guid);
-        _tierRequestedAtMs.erase(guid);
+        _tierAppliedAtMs.erase(guid);
+        _pendingTiers.erase(guid);
         InvalidateRecipients();
     }
 
@@ -121,38 +130,50 @@ namespace Framework::Voice {
         }
     }
 
+    Networking::RPC::VoiceSettings VoiceServer::BuildSettings() const {
+        Networking::RPC::VoiceSettings payload;
+        payload.proximityRange = _router.GetDefaultRange();
+        payload.tierRanges     = _router.GetTierRanges();
+        return payload;
+    }
+
+    Networking::RPC::VoiceSpeakerRange VoiceServer::BuildPlayerRange(uint64_t guid) const {
+        Networking::RPC::VoiceSpeakerRange payload;
+        payload.player = guid;
+        payload.range  = _router.GetPlayerRange(guid);
+        payload.tier   = static_cast<uint8_t>(_router.GetPlayerTier(guid));
+        return payload;
+    }
+
     void VoiceServer::SetProximityRange(float meters) {
         _router.SetDefaultRange(meters);
         InvalidateRecipients();
 
-        if (_server == nullptr) {
-            return;
+        if (_server != nullptr) {
+            Networking::RPC::VoiceSettings payload = BuildSettings();
+            _server->BroadcastRPC(payload);
         }
+    }
 
-        Networking::RPC::VoiceSettings payload;
-        payload.proximityRange = _router.GetDefaultRange();
-        _server->BroadcastRPC(payload);
+    void VoiceServer::SetTierRange(VoiceTier tier, float meters) {
+        _router.SetTierRange(tier, meters);
+        InvalidateRecipients();
+
+        if (_server != nullptr) {
+            Networking::RPC::VoiceSettings payload = BuildSettings();
+            _server->BroadcastRPC(payload);
+        }
     }
 
     void VoiceServer::SetPlayerRange(uint64_t guid, float meters) {
         _router.SetPlayerRange(guid, meters);
         InvalidateRecipients();
-        BroadcastPlayerRange(guid);
-    }
 
-    void VoiceServer::SetTierRange(VoiceTier tier, float meters) {
-        if (tier >= VoiceTier::Count) {
-            return;
-        }
-
-        _router.SetTierRange(tier, meters);
-        InvalidateRecipients();
-
-        // Only a player on this tier with no override of their own carries the new radius.
-        for (const uint64_t player : _router.GetPlayersWithRangeRules()) {
-            if (_router.GetPlayerTier(player) == tier && _router.GetPlayerRange(player) <= 0.0f) {
-                BroadcastPlayerRange(player);
-            }
+        // Broadcast, not sent to the talker: it is every listener's mixer that has to know
+        // how far this voice carries.
+        if (_server != nullptr) {
+            Networking::RPC::VoiceSpeakerRange payload = BuildPlayerRange(guid);
+            _server->BroadcastRPC(payload);
         }
     }
 
@@ -163,21 +184,12 @@ namespace Framework::Voice {
 
         _router.SetPlayerTier(guid, tier);
         InvalidateRecipients();
-        BroadcastPlayerRange(guid);
-    }
 
-    void VoiceServer::BroadcastPlayerRange(uint64_t guid) {
-        if (_server == nullptr) {
-            return;
+        // The talker included, for their own indicator.
+        if (_server != nullptr) {
+            Networking::RPC::VoiceSpeakerRange payload = BuildPlayerRange(guid);
+            _server->BroadcastRPC(payload);
         }
-
-        // Broadcast, not sent to the talker: it is every listener's mixer that has to know
-        // how far this voice carries. The talker is included, for their own indicator.
-        Networking::RPC::VoiceSpeakerRange payload;
-        payload.player = guid;
-        payload.range  = _router.GetAdvertisedPlayerRange(guid);
-        payload.tier   = static_cast<uint8_t>(_router.GetPlayerTier(guid));
-        _server->BroadcastRPC(payload);
     }
 
     void VoiceServer::SendSettingsTo(MafiaNet::RakNetGUID guid) {
@@ -185,15 +197,11 @@ namespace Framework::Voice {
             return;
         }
 
-        Networking::RPC::VoiceSettings settings;
-        settings.proximityRange = _router.GetDefaultRange();
+        Networking::RPC::VoiceSettings settings = BuildSettings();
         _server->SendRPC(settings, guid);
 
         for (const uint64_t player : _router.GetPlayersWithRangeRules()) {
-            Networking::RPC::VoiceSpeakerRange payload;
-            payload.player = player;
-            payload.range  = _router.GetAdvertisedPlayerRange(player);
-            payload.tier   = static_cast<uint8_t>(_router.GetPlayerTier(player));
+            Networking::RPC::VoiceSpeakerRange payload = BuildPlayerRange(player);
             _server->SendRPC(payload, guid);
         }
     }
@@ -203,26 +211,33 @@ namespace Framework::Voice {
             return;
         }
 
-        // Every accepted request is a broadcast to the whole server, so a client that ignores
-        // its own pacing is paced here instead.
-        const int64_t nowMs       = Utils::Time::GetTime();
-        const auto [it, inserted] = _tierRequestedAtMs.emplace(guid, nowMs);
-        if (!inserted) {
-            if ((nowMs - it->second) < static_cast<int64_t>(kTierRequestServerFloorMs)) {
-                return;
-            }
-            it->second = nowMs;
+        const VoiceTier requested = static_cast<VoiceTier>(tier);
+        if (ApplyTierRequest(guid, requested, Utils::Time::GetTime())) {
+            _pendingTiers.erase(guid);
         }
+        else {
+            _pendingTiers[guid] = requested;
+        }
+    }
 
+    bool VoiceServer::ApplyTierRequest(uint64_t guid, VoiceTier tier, int64_t nowMs) {
         // A request for the tier already held changes nothing anyone needs telling, and is what
         // every client sends on connect.
-        const VoiceTier requested = static_cast<VoiceTier>(tier);
-        if (_router.GetPlayerTier(guid) == requested) {
-            return;
+        if (_router.GetPlayerTier(guid) == tier) {
+            return true;
         }
 
-        SetPlayerTier(guid, requested);
-        _tierChanges.push_back({guid, requested});
+        // Every applied switch is a broadcast to the whole server, so a client that ignores its
+        // own pacing is paced here instead.
+        const auto it = _tierAppliedAtMs.find(guid);
+        if (it != _tierAppliedAtMs.end() && (nowMs - it->second) < static_cast<int64_t>(kTierChangeFloorMs)) {
+            return false;
+        }
+
+        _tierAppliedAtMs[guid] = nowMs;
+        SetPlayerTier(guid, tier);
+        _tierChanges.push_back({guid, tier});
+        return true;
     }
 
     void VoiceServer::DrainTierChanges(std::vector<TierChange> &out) {

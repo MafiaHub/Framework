@@ -12,7 +12,6 @@
 
 #include <glm/glm.hpp>
 
-#include <array>
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
@@ -58,8 +57,11 @@ namespace Framework::Voice {
         // The tier's radius with the default already resolved.
         float GetTierRange(VoiceTier tier) const;
 
-        // Whether the tier carries a radius of its own rather than the default range.
-        bool HasOwnTierRange(VoiceTier tier) const;
+        // Every tier's radius as set, 0 where it carries the default range: what clients are
+        // sent, so a later change of the default reaches them without a resend.
+        const VoiceTierRanges &GetTierRanges() const {
+            return _tierRanges;
+        }
 
         // The tier a player chose. Normal until they choose; Count is ignored.
         void SetPlayerTier(uint64_t guid, VoiceTier tier);
@@ -69,12 +71,8 @@ namespace Framework::Voice {
         // The radius `guid` is actually heard over: the override, else their tier's.
         float GetEffectivePlayerRange(uint64_t guid) const;
 
-        // What a client is told `guid` carries: the effective radius, or 0 when that is simply
-        // the default range, so a later change of the default reaches them without a resend.
-        float GetAdvertisedPlayerRange(uint64_t guid) const;
-
-        // Talkers whose voice differs from the default in range or tier, for replaying the
-        // rules to a late-joining client. Order is unspecified.
+        // Talkers with an override or off Normal, for replaying them to a late-joining
+        // client. Order is unspecified.
         std::vector<uint64_t> GetPlayersWithRangeRules() const;
 
         // Server-wide mute: a muted talker reaches nobody.
@@ -122,7 +120,6 @@ namespace Framework::Voice {
 
         std::unordered_map<uint64_t, PlayerState> _players;
         float _defaultRange = kDefaultProximityRange;
-        // Indexed by VoiceTier; <= 0 carries the default range.
-        std::array<float, static_cast<size_t>(VoiceTier::Count)> _tierRanges {kDefaultWhisperRange, 0.0f, kDefaultShoutRange};
+        VoiceTierRanges _tierRanges = kDefaultTierRanges;
     };
 } // namespace Framework::Voice

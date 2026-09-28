@@ -21,16 +21,20 @@ namespace Framework::Networking::RPC {
         static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::VoiceSettings");
 
         float proximityRange = 0.0f;
+        // Each voice tier's radius, 0 where it carries proximityRange.
+        Framework::Voice::VoiceTierRanges tierRanges = Framework::Voice::kDefaultTierRanges;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, proximityRange);
+            for (float &range : tierRanges) {
+                bs->Serialize(write, range);
+            }
         }
     };
 
-    // Server->client: how far one talker carries, keyed by peer GUID -- the radius above
-    // unless a tier or an override says otherwise, in which case `range` is that radius (0 is
-    // the default). `tier` is the Voice::VoiceTier they chose, for drawing it; the talker is
-    // told too, which is how a tier set by the server reaches the player's own indicator.
+    // Server->client: one talker's override of the radii above (0 for none) and the
+    // Voice::VoiceTier they are on, keyed by peer GUID. The talker is told too, which is how
+    // a tier set by the server reaches the player's own indicator.
     struct VoiceSpeakerRange {
         static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::VoiceSpeakerRange");
 
@@ -45,8 +49,8 @@ namespace Framework::Networking::RPC {
         }
     };
 
-    // Client->server: the Voice::VoiceTier the player switched to. A request: the server
-    // rate-limits it and answers with a VoiceSpeakerRange to everyone, the sender included.
+    // Client->server: the Voice::VoiceTier the player switched to. A request: the server paces
+    // it and answers a change with a VoiceSpeakerRange to everyone, the sender included.
     struct VoiceTierRequest {
         static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::VoiceTierRequest");
 

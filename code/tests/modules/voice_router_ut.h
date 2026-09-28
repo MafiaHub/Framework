@@ -240,20 +240,30 @@ MODULE(voice_router, {
         router.SetPlayerRange(1, 5.0f);
 
         EQUALS(NearlyEqualRange(router.GetEffectivePlayerRange(1), 5.0f), true);
-        EQUALS(NearlyEqualRange(router.GetAdvertisedPlayerRange(1), 5.0f), true);
 
         router.SetPlayerRange(1, 0.0f);
         EQUALS(NearlyEqualRange(router.GetEffectivePlayerRange(1), kDefaultShoutRange), true);
     });
 
-    IT("lets Normal follow the default range and advertises it as no range at all", {
+    IT("lets Normal follow the default range, and needs no replay for it", {
         VoiceRouter router;
         router.SetDefaultRange(40.0f);
         router.SetPlayerTier(1, VoiceTier::Normal);
 
         EQUALS(NearlyEqualRange(router.GetEffectivePlayerRange(1), 40.0f), true);
-        EQUALS(NearlyEqualRange(router.GetAdvertisedPlayerRange(1), 0.0f), true);
         EQUALS(router.GetPlayersWithRangeRules().empty(), true);
+    });
+
+    IT("gives Normal a radius of its own when a server sets one", {
+        VoiceRouter router;
+        router.SetTierRange(VoiceTier::Normal, 30.0f);
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(28, 0, 0));
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+        EQUALS(out.size(), static_cast<size_t>(1));
+        EQUALS(NearlyEqualRange(router.GetTierRanges()[static_cast<size_t>(VoiceTier::Normal)], 30.0f), true);
     });
 
     IT("folds a tier given no range of its own back onto the default range", {
@@ -261,7 +271,7 @@ MODULE(voice_router, {
         router.SetTierRange(VoiceTier::Shout, 0.0f);
         router.SetPlayerTier(1, VoiceTier::Shout);
 
-        EQUALS(router.HasOwnTierRange(VoiceTier::Shout), false);
+        EQUALS(NearlyEqualRange(router.GetTierRanges()[static_cast<size_t>(VoiceTier::Shout)], 0.0f), true);
         EQUALS(NearlyEqualRange(router.GetEffectivePlayerRange(1), kDefaultProximityRange), true);
         EQUALS(router.GetPlayersWithRangeRules().size(), static_cast<size_t>(1));
     });

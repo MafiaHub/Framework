@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace Framework::Voice {
@@ -52,18 +54,22 @@ namespace Framework::Voice {
         Count,
     };
 
-    // Starting radii for the tiers either side of Normal, which carries the proximity range
-    // itself. A server overrides them through VoiceServer::SetTierRange. A shout wider than
-    // the game's player streaming range is pointless: a talker the listener has not streamed
-    // in cannot be placed, and is heard last.
-    constexpr float kDefaultWhisperRange = 8.0f;
-    constexpr float kDefaultShoutRange   = 60.0f;
+    // Each tier's radius, indexed by VoiceTier; 0 carries the proximity range, which is what
+    // Normal starts on. A server overrides them through VoiceServer::SetTierRange. A shout
+    // wider than the game's player streaming range is pointless: a talker the listener has
+    // not streamed in cannot be placed, and is heard last.
+    using VoiceTierRanges = std::array<float, static_cast<size_t>(VoiceTier::Count)>;
+
+    constexpr float kDefaultWhisperRange         = 8.0f;
+    constexpr float kDefaultShoutRange           = 60.0f;
+    constexpr VoiceTierRanges kDefaultTierRanges = {kDefaultWhisperRange, 0.0f, kDefaultShoutRange};
 
     // A client sends at most one tier change per interval, the latest one pressed; the server
-    // drops requests closer together than the shorter floor. Each accepted change costs a
-    // broadcast to every client, so a key held on auto-repeat must not become one per frame.
-    constexpr uint32_t kTierRequestIntervalMs    = 250;
-    constexpr uint32_t kTierRequestServerFloorMs = 200;
+    // applies at most one per floor per player and holds a sooner one until it passes. Each
+    // applied change costs a broadcast to every client, so a key held on auto-repeat must not
+    // become one per frame. The interval is the longer, so a well-behaved client never waits.
+    constexpr uint32_t kTierRequestIntervalMs = 250;
+    constexpr uint32_t kTierChangeFloorMs     = 200;
 
     // Default push-to-talk binding, as a Win32 virtual-key code ('V').
     constexpr int kDefaultPushToTalkKey = 0x56;
