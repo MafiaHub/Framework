@@ -91,6 +91,24 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         args.GetReturnValue().Set(voice != nullptr ? voice->GetDefaultSpeakerRange() : Framework::Voice::kDefaultProximityRange);
     }
 
+    void Voice::SetTierCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+        const double tier = args.Length() > 0 && args[0]->IsNumber() ? args[0]->NumberValue(isolate->GetCurrentContext()).FromMaybe(-1.0) : -1.0;
+        if (tier != 0.0 && tier != 1.0 && tier != 2.0) {
+            ThrowError(isolate, "Voice.setTier: expected (tier), 0 (whisper), 1 (normal) or 2 (shout)");
+            return;
+        }
+        if (auto *voice = Resolve()) {
+            voice->SetTier(static_cast<Framework::Voice::VoiceTier>(static_cast<uint8_t>(tier)));
+        }
+    }
+
+    void Voice::GetTierCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        auto *voice = Resolve();
+        args.GetReturnValue().Set(static_cast<uint32_t>(voice != nullptr ? voice->GetTier() : Framework::Voice::VoiceTier::Normal));
+    }
+
     void Voice::SetPushToTalkKeyCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope hs(isolate);
@@ -267,6 +285,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         attach(voiceObj, "setHearingRange", &Voice::SetHearingRangeCallback);
         attach(voiceObj, "getHearingRange", &Voice::GetHearingRangeCallback);
         attach(voiceObj, "getRange", &Voice::GetRangeCallback);
+        attach(voiceObj, "setTier", &Voice::SetTierCallback);
+        attach(voiceObj, "getTier", &Voice::GetTierCallback);
         attach(voiceObj, "setPushToTalkKey", &Voice::SetPushToTalkKeyCallback);
         attach(voiceObj, "getPushToTalkKey", &Voice::GetPushToTalkKeyCallback);
         attach(voiceObj, "setPushToTalkReleaseDelay", &Voice::SetPushToTalkReleaseDelayCallback);
@@ -298,6 +318,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 "Narrows how far this player hears others. Can only reduce the server's range, since a talker beyond it is never relayed.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getHearingRange", v8pp::metadata::docs("number", {}, "Reads the local hearing-range limit.", "Radius in world units, or 0 when the server's range applies unreduced.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getRange", v8pp::metadata::docs("number", {}, "Reads the server's proximity range for talkers with no override of their own.", "Radius in world units.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setTier",
+            v8pp::metadata::docs("void", {v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout.")},
+                "Switches how far this player's voice carries, as the voice tier key does. A request: the server paces it, decides the radius, and may move the player itself.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getTier", v8pp::metadata::docs("number", {}, "Reads the voice tier this player is on.", "0 whisper, 1 normal, 2 shout.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPushToTalkKey",
             v8pp::metadata::docs("void", {v8pp::metadata::param("key", "string", false, "Case-insensitive key name, using the same names as Key.bind.")},
                 "Rebinds push-to-talk. Unknown key names throw.")));
