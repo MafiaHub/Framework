@@ -159,8 +159,8 @@ namespace Framework::Integrations::Server {
         std::atomic<bool> _shuttingDown;
         // Set after the initial StartAll; gates runtime broadcasts to clients.
         bool _resourcesBooted = false;
-        std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
-        std::chrono::time_point<std::chrono::high_resolution_clock> _lastHitchWarnAt {};
+        std::chrono::steady_clock::time_point _nextTick {};
+        std::chrono::steady_clock::time_point _lastHitchWarnAt {};
         uint32_t _suppressedHitches = 0;
 
         InstanceOptions _opts;
