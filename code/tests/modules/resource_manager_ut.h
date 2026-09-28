@@ -76,12 +76,7 @@ class TestManagerHelper {
         v8::HandleScope handleScope(isolate);
         v8::Local<v8::Context> context = engine.GetContext();
         v8::Context::Scope contextScope(context);
-        v8::Local<v8::Value> coreValue;
-        if (!context->Global()->Get(context, v8::String::NewFromUtf8Literal(isolate, "Core")).ToLocal(&coreValue) || !coreValue->IsObject()) {
-            coreValue = v8::Object::New(isolate);
-            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Core"), coreValue).Check();
-        }
-        manager.GetEvents().Register(isolate, context, coreValue.As<v8::Object>(), &manager);
+        manager.GetEvents().Register(isolate, context, context->Global(), &manager);
     }
 
     static int32_t EvalInt(Framework::Scripting::NodeEngine &engine, const char *source) {
@@ -827,7 +822,7 @@ MODULE(resource_lifecycle, {
         })");
         TestManagerHelper::CreateTestScript("async-dependency", "main.js", R"(
             globalThis.__dependencyReady = 0;
-            Core.Events.on("resourceStart", async (name) => {
+            Events.on("resourceStart", async (name) => {
                 if (name !== "async-dependency") return;
                 await new Promise((resolve) => setTimeout(resolve, 15));
                 globalThis.__dependencyReady = 1;
@@ -876,11 +871,11 @@ MODULE(resource_lifecycle, {
         TestManagerHelper::CreateTestScript("async-stop", "main.js", R"(
             globalThis.__stopFinished = 0;
             globalThis.__stopSawOwnedListener = 0;
-            Core.Events.on("owned-listener", () => {});
-            Core.Events.on("resourceStop", async (name) => {
+            Events.on("owned-listener", () => {});
+            Events.on("resourceStop", async (name) => {
                 if (name !== "async-stop") return;
                 await new Promise((resolve) => setTimeout(resolve, 15));
-                globalThis.__stopSawOwnedListener = Core.Events.listenerCount("owned-listener");
+                globalThis.__stopSawOwnedListener = Events.listenerCount("owned-listener");
                 globalThis.__stopFinished = 1;
             });
         )");
@@ -914,8 +909,8 @@ MODULE(resource_lifecycle, {
             "mafiahub": { "server": "main.js" }
         })");
         TestManagerHelper::CreateTestScript("reject-start", "main.js", R"(
-            Core.Events.on("leaked-start-listener", () => {});
-            Core.Events.on("resourceStart", async (name) => {
+            Events.on("leaked-start-listener", () => {});
+            Events.on("resourceStart", async (name) => {
                 if (name !== "reject-start") return;
                 await Promise.resolve();
                 throw new Error("migration failed");
@@ -949,8 +944,8 @@ MODULE(resource_lifecycle, {
             "mafiahub": { "server": "main.js" }
         })");
         TestManagerHelper::CreateTestScript("timeout-start", "main.js", R"(
-            Core.Events.on("leaked-timeout-listener", () => {});
-            Core.Events.on("resourceStart", (name) =>
+            Events.on("leaked-timeout-listener", () => {});
+            Events.on("resourceStart", (name) =>
                 name === "timeout-start" ? new Promise(() => {}) : undefined);
         )");
 
@@ -978,8 +973,8 @@ MODULE(resource_lifecycle, {
             TestManagerHelper::Cleanup();
             TestManagerHelper::CreateTestResource(name, "{\"name\":\"" + name + "\",\"version\":\"1.0.0\",\"mafiahub\":{\"server\":\"main.js\"}}");
             TestManagerHelper::CreateTestScript(name, "main.js",
-                "Core.Events.on('force-cleanup-listener', () => {});"
-                "Core.Events.on('resourceStop', (name) => name === '"
+                "Events.on('force-cleanup-listener', () => {});"
+                "Events.on('resourceStop', (name) => name === '"
                     + name + "' ? (" + stopBody + ") : undefined);");
 
             NodeEngine engine;

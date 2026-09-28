@@ -139,18 +139,15 @@ MODULE(timer_context, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context,
-                v8::String::NewFromUtf8Literal(isolate, "Core"),
-                coreObj).Check();
-            manager.GetEvents().Register(isolate, context, coreObj, &manager);
+            v8::Local<v8::Object> global = context->Global();
+            manager.GetEvents().Register(isolate, context, global, &manager);
         }
 
         // No ambient context set — function origin is the only signal
         TimerRunJS(engine, R"(
             globalThis.__timerFired = false;
             setTimeout(() => {
-                Core.Events.on('timerEvent', () => {});
+                Events.on('timerEvent', () => {});
                 globalThis.__timerFired = true;
             }, 1);
             0
@@ -229,17 +226,14 @@ MODULE(timer_context, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context,
-                v8::String::NewFromUtf8Literal(isolate, "Core"),
-                coreObj).Check();
-            manager.GetEvents().Register(isolate, context, coreObj, &manager);
+            v8::Local<v8::Object> global = context->Global();
+            manager.GetEvents().Register(isolate, context, global, &manager);
         }
 
         TimerRunJS(engine, R"(
             globalThis.__doneA = false;
             setTimeout(() => {
-                Core.Events.on('eventA', () => {});
+                Events.on('eventA', () => {});
                 globalThis.__doneA = true;
             }, 1);
             0
@@ -248,7 +242,7 @@ MODULE(timer_context, {
         TimerRunJS(engine, R"(
             globalThis.__doneB = false;
             setTimeout(() => {
-                Core.Events.on('eventB', () => {});
+                Events.on('eventB', () => {});
                 globalThis.__doneB = true;
             }, 1);
             0
