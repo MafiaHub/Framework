@@ -256,6 +256,17 @@ namespace Framework::Scripting {
                 destination.variable_(variable.name, variable.value_type, variable.description, variable.readonly);
             }
         }
+
+        // Global functions -- the timers -- have no symbol to ride on, so they cross on their own.
+        const auto &existingFunctions = destination.functions();
+        for (const auto &function : source.functions()) {
+            const bool present = std::any_of(existingFunctions.begin(), existingFunctions.end(), [&function](const v8pp::metadata::function &existing) {
+                return existing.name == function.name;
+            });
+            if (!present) {
+                destination.function_(function);
+            }
+        }
     }
 
     // The catalog as scripts can reach it, for export. A class the runtime never puts on the global --
@@ -290,6 +301,9 @@ namespace Framework::Scripting {
         }
         for (const auto &variable : catalog.variables()) {
             exported.variable_(variable.name, variable.value_type, variable.description, variable.readonly);
+        }
+        for (const auto &function : catalog.functions()) {
+            exported.function_(function);
         }
         return exported;
     }
