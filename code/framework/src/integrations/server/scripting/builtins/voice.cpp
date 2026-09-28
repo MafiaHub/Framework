@@ -56,6 +56,18 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             out = static_cast<float>(info[index]->NumberValue(isolate->GetCurrentContext()).FromMaybe(0.0));
             return true;
         }
+
+        bool ReadTier(const v8::FunctionCallbackInfo<v8::Value> &info, int index, const char *fn, Framework::Voice::VoiceTier &out) {
+            v8::Isolate *isolate = info.GetIsolate();
+            const double value   = info.Length() > index && info[index]->IsNumber() ? info[index]->NumberValue(isolate->GetCurrentContext()).FromMaybe(-1.0) : -1.0;
+            if (value != 0.0 && value != 1.0 && value != 2.0) {
+                isolate->ThrowException(v8::Exception::RangeError(v8pp::to_v8(isolate, std::string(fn) + ": expected a tier, 0 (whisper), 1 (normal) or 2 (shout)")));
+                return false;
+            }
+
+            out = static_cast<Framework::Voice::VoiceTier>(static_cast<uint8_t>(value));
+            return true;
+        }
     } // namespace
 
     void Voice::JS_SetRange(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -101,6 +113,60 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
 
         auto *voice = Resolve();
         info.GetReturnValue().Set(voice != nullptr ? voice->GetRouter().GetEffectivePlayerRange(player) : Framework::Voice::kDefaultProximityRange);
+    }
+
+    void Voice::JS_SetTierRange(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate = info.GetIsolate();
+        v8::HandleScope hs(isolate);
+
+        Framework::Voice::VoiceTier tier = Framework::Voice::VoiceTier::Normal;
+        float range                      = 0.0f;
+        if (!ReadTier(info, 0, "Voice.setTierRange", tier) || !ReadNumber(info, 1, "Voice.setTierRange", "range", range)) {
+            return;
+        }
+        if (auto *voice = Resolve()) {
+            voice->SetTierRange(tier, range);
+        }
+    }
+
+    void Voice::JS_GetTierRange(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate = info.GetIsolate();
+        v8::HandleScope hs(isolate);
+
+        Framework::Voice::VoiceTier tier = Framework::Voice::VoiceTier::Normal;
+        if (!ReadTier(info, 0, "Voice.getTierRange", tier)) {
+            return;
+        }
+
+        auto *voice = Resolve();
+        info.GetReturnValue().Set(voice != nullptr ? voice->GetTierRange(tier) : Framework::Voice::kDefaultProximityRange);
+    }
+
+    void Voice::JS_SetPlayerTier(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate = info.GetIsolate();
+        v8::HandleScope hs(isolate);
+
+        uint64_t player                  = 0;
+        Framework::Voice::VoiceTier tier = Framework::Voice::VoiceTier::Normal;
+        if (!ResolvePlayer(info, 0, "Voice.setPlayerTier", player) || !ReadTier(info, 1, "Voice.setPlayerTier", tier)) {
+            return;
+        }
+        if (auto *voice = Resolve()) {
+            voice->SetPlayerTier(player, tier);
+        }
+    }
+
+    void Voice::JS_GetPlayerTier(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate = info.GetIsolate();
+        v8::HandleScope hs(isolate);
+
+        uint64_t player = 0;
+        if (!ResolvePlayer(info, 0, "Voice.getPlayerTier", player)) {
+            return;
+        }
+
+        auto *voice = Resolve();
+        info.GetReturnValue().Set(static_cast<uint32_t>(voice != nullptr ? voice->GetRouter().GetPlayerTier(player) : Framework::Voice::VoiceTier::Normal));
     }
 
     void Voice::JS_SetPlayerMuted(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -223,6 +289,10 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         attach("getRange", &Voice::JS_GetRange);
         attach("setPlayerRange", &Voice::JS_SetPlayerRange);
         attach("getPlayerRange", &Voice::JS_GetPlayerRange);
+        attach("setTierRange", &Voice::JS_SetTierRange);
+        attach("getTierRange", &Voice::JS_GetTierRange);
+        attach("setPlayerTier", &Voice::JS_SetPlayerTier);
+        attach("getPlayerTier", &Voice::JS_GetPlayerTier);
         attach("setPlayerMuted", &Voice::JS_SetPlayerMuted);
         attach("isPlayerMuted", &Voice::JS_IsPlayerMuted);
         attach("setPlayerDeaf", &Voice::JS_SetPlayerDeaf);
@@ -242,11 +312,29 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             v8pp::metadata::docs("void",
                 {
                     v8pp::metadata::param("player", "Entity", false, "Player whose voice carries the given distance."),
-                    v8pp::metadata::param("range", "number", false, "Audibility radius in world units; values <= 0 return them to the server-wide range."),
+                    v8pp::metadata::param("range", "number", false, "Audibility radius in world units; values <= 0 return them to the radius of their voice tier."),
                 },
-                "Overrides how far one player's voice carries, for whisper and shout modes.")));
+                "Overrides how far one player's voice carries, whichever voice tier they chose.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPlayerRange",
             v8pp::metadata::docs("number", {v8pp::metadata::param("player", "Entity", false, "Player to query.")}, "Reads how far a player's voice carries, with the server-wide default already resolved.", "Radius in world units.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setTierRange",
+            v8pp::metadata::docs("void",
+                {
+                    v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout."),
+                    v8pp::metadata::param("range", "number", false, "Audibility radius in world units; values <= 0 make the tier carry the server-wide range."),
+                },
+                "Sets how far a voice tier carries. Players switch tier themselves; whisper starts at 8, shout at 60, and normal carries the server-wide range. Set a tier to 0 to make it carry the server-wide range, which takes it away. Connected clients are told.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getTierRange",
+            v8pp::metadata::docs("number", {v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout.")}, "Reads how far a voice tier carries, with the server-wide range already resolved.", "Radius in world units.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPlayerTier",
+            v8pp::metadata::docs("void",
+                {
+                    v8pp::metadata::param("player", "Entity", false, "Player to move."),
+                    v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout."),
+                },
+                "Puts a player on a voice tier, as if they had switched to it. Their own indicator follows, and the playerVoiceTierChange event is not raised.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPlayerTier",
+            v8pp::metadata::docs("number", {v8pp::metadata::param("player", "Entity", false, "Player to query.")}, "Reads the voice tier a player is on. A player switching tier raises the playerVoiceTierChange event with the player and the new tier.", "0 whisper, 1 normal, 2 shout.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPlayerMuted",
             v8pp::metadata::docs("void",
                 {

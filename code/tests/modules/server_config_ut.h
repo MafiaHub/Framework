@@ -30,6 +30,7 @@ MODULE(server_config, {
         opts.bindMapName   = "";
         opts.maxPlayers    = 32;
         opts.bindSecretKey = "";
+        opts.bindPassword  = "";
         return opts;
     };
 
@@ -137,6 +138,22 @@ MODULE(server_config, {
     IT("takes a server token with no document at all", {
         const auto opts = resolve(nlohmann::json::object(), {"-t", "from-cli"});
         STREQUALS(opts.bindSecretKey.c_str(), "from-cli");
+    });
+
+    IT("reads the join password from the config document", {
+        const auto opts = resolve({{"password", "hunter2"}}, {});
+        STREQUALS(opts.bindPassword.c_str(), "hunter2");
+    });
+
+    IT("lets the command line override the config document's password", {
+        const auto opts = resolve({{"password", "from-config"}}, {"--password", "from-cli"});
+        STREQUALS(opts.bindPassword.c_str(), "from-cli");
+    });
+
+    // An absent flag must not blank the document's password -- that would open a private server.
+    IT("keeps the document's password when the flag is absent", {
+        const auto opts = resolve({{"password", "from-config"}}, {"-p", "20050"});
+        STREQUALS(opts.bindPassword.c_str(), "from-config");
     });
 
     IT("resolves the config file path from the command line", {

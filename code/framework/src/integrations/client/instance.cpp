@@ -780,7 +780,8 @@ namespace Framework::Integrations::Client {
                 CoreModules::SetReplication(replication);
                 replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(Framework::Utils::Time::SecondsToMs(_serverTickRate)));
             }
-            _chatBox.SetVisible(true);
+            // Visibility is left alone: resources have already started, and a
+            // Chat.setUIVisible(false) they issued must survive the session opening.
             _chatBox.SetSessionActive(true);
             SetConnectionPhase(ConnectionPhase::InGame);
             OnConnectionFinalized(_serverTickRate);
@@ -796,7 +797,7 @@ namespace Framework::Integrations::Client {
             case Framework::Networking::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
             case Framework::Networking::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
             case Framework::Networking::DisconnectionReason::BUILD_VERIFICATION_TIMEOUT: reason = "Could not verify your build with the server in time. Check your connection and try again."; break;
-            case Framework::Networking::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
+            case Framework::Networking::DisconnectionReason::INVALID_PASSWORD: reason = "The server refused the password."; break;
             case Framework::Networking::DisconnectionReason::NO_FREE_SLOT: reason = "The server is full."; break;
             case Framework::Networking::DisconnectionReason::GRACEFUL_SHUTDOWN: reason = "The server closed the connection."; break;
             case Framework::Networking::DisconnectionReason::LOST: reason = "Connection to the server lost."; break;
@@ -825,6 +826,9 @@ namespace Framework::Integrations::Client {
             CoreModules::SetReplication(nullptr);
 
             _chatBox.SetSessionActive(false);
+            // Restored here rather than on finalize, so the next server's resources start
+            // from a visible box and whatever they choose is what the session shows.
+            _chatBox.SetVisible(true);
 
             // Notify mod-level that network integration got closed
             OnConnectionClosed();
@@ -854,10 +858,11 @@ namespace Framework::Integrations::Client {
         // The server's voice ranges, so the mixer fades a talker out where the frames stop.
         net->RegisterRPC<Framework::Networking::RPC::VoiceSettings>([this](const Framework::Networking::RPC::VoiceSettings &payload, MafiaNet::Packet *) {
             _voiceClient.SetDefaultSpeakerRange(payload.proximityRange);
+            _voiceClient.SetTierRanges(payload.tierRanges);
         });
 
         net->RegisterRPC<Framework::Networking::RPC::VoiceSpeakerRange>([this](const Framework::Networking::RPC::VoiceSpeakerRange &payload, MafiaNet::Packet *) {
-            _voiceClient.SetSpeakerRange(payload.player, payload.range);
+            _voiceClient.SetSpeakerRange(payload.player, payload.range, static_cast<Framework::Voice::VoiceTier>(payload.tier));
         });
 
         // Scripted nametag state for our own avatar; our next upstream update carries it to the others.

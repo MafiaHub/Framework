@@ -168,6 +168,28 @@ namespace Framework::Voice {
             return _defaultSpeakerRange;
         }
 
+        // Each tier's radius, 0 where it carries the default range. Also from VoiceSettings.
+        void SetTierRanges(const VoiceTierRanges &ranges) {
+            _tierRanges = ranges;
+        }
+
+        // How far the player projects their voice. Kept across servers as the player's choice,
+        // and requested from each one: the server rate-limits and decides, and a tier it sets
+        // on its own comes back here. Count is ignored.
+        void SetTier(VoiceTier tier);
+
+        VoiceTier GetTier() const {
+            return _tier;
+        }
+
+        // Steps whisper, normal, shout and round again, `steps` times: what a tier key does.
+        void CycleTier(uint32_t steps = 1);
+
+        // How visible the local player's own voice indicator should be, in [0, 1]: full while
+        // talking, and fading out for kTierShownMs after the tier changed, the server's doing
+        // included. 0 means draw nothing.
+        float GetIndicatorAlpha() const;
+
         // --- microphone ---
 
         // Push-to-talk by default. Switching cuts whatever the old mode had open.
@@ -254,6 +276,9 @@ namespace Framework::Voice {
         // Smoothed loudness in [0, 1] of the frames handed to the sink, for mouth animation.
         float GetSpeakerLevel(uint64_t speaker) const;
 
+        // The tier a remote talker chose, for drawing it. Normal until the server says.
+        VoiceTier GetSpeakerTier(uint64_t speaker) const;
+
         // The same for our own microphone; non-zero only while transmitting.
         float GetLocalLevel() const {
             return _localLevel;
@@ -302,8 +327,9 @@ namespace Framework::Voice {
         // Speakers with no known position are still heard, but are evicted first. Our own
         // GUID is ignored.
         void SetSpeakerPosition(uint64_t speaker, const glm::vec3 &position);
-        // <= 0 restores the server's default range.
-        void SetSpeakerRange(uint64_t speaker, float range);
+        // From the VoiceSpeakerRange RPC. A range <= 0 falls back to the tier's radius. Our own
+        // GUID carries the tier the server holds us on, adopted when it is not the one we asked for.
+        void SetSpeakerRange(uint64_t speaker, float range, VoiceTier tier);
         void RemoveSpeaker(uint64_t speaker);
 
         // Blocks transmission regardless of push-to-talk, cutting the release delay short. Set by
@@ -383,7 +409,14 @@ namespace Framework::Voice {
         // Tells the server whether to keep relaying to us. No-op until the connection settles.
         void PublishPreference();
 
-        // Own override, else the server default, then narrowed by the hearing range.
+        // Requests the tier the player chose, at most once per kTierRequestIntervalMs.
+        void PublishTier(int64_t nowMs);
+
+        // Our peer GUID whether or not a session is open, unlike IsSelf.
+        bool IsOwnGuid(uint64_t speaker) const;
+
+        // Own override, else the tier's radius, else the server default, then narrowed by the
+        // hearing range.
         float ResolveRange(uint64_t speaker) const;
 
         // Opened with the session, not at Init: miniaudio's WASAPI backend CoInitializes the
@@ -402,11 +435,13 @@ namespace Framework::Voice {
 
         int FindAdmitted(uint64_t speaker) const;
         bool IsSelf(uint64_t speaker) const;
-        // Evicts the most distant talker if needed; -1 when every slot holds someone nearer.
+        // Evicts the talker farthest out into their own range if needed; -1 when every slot
+        // holds someone heard better.
         int AdmitSpeaker(uint64_t speaker, int64_t nowMs);
         void ReleaseAdmitted(int slot);
-        // Infinity when the position is unknown.
-        float DistanceSqTo(uint64_t speaker) const;
+        // Squared distance as a fraction of the talker's range, so a shout carries past a
+        // whisper at the same distance. Infinity when the position is unknown.
+        float ReachSqTo(uint64_t speaker) const;
 
         Networking::NetworkClient *_client = nullptr;
         MafiaNet::RakVoice _voice;
@@ -454,10 +489,19 @@ namespace Framework::Voice {
         std::unordered_map<uint64_t, PlacementEntry> _placements;
         // Not generational, unlike _placements: a range must outlive the talker streaming out.
         std::unordered_map<uint64_t, float> _speakerRanges;
+        // Only talkers off Normal; kept alongside the ranges, for the same reason.
+        std::unordered_map<uint64_t, VoiceTier> _speakerTiers;
         uint32_t _placementGeneration = 0;
         float _hearingRange           = 0.0f;
         float _defaultSpeakerRange    = kDefaultProximityRange;
+        VoiceTierRanges _tierRanges   = kDefaultTierRanges;
         std::array<AdmittedSpeaker, kMaxAudibleTalkers> _admitted {};
+
+        VoiceTier _tier        = VoiceTier::Normal;
+        VoiceTier _sentTier    = VoiceTier::Normal;
+        bool _tierSent         = false;
+        int64_t _tierSentAtMs  = 0;
+        int64_t _tierShownAtMs = 0;
 
         // Reused every tick so the per-frame path never allocates.
         std::array<int16_t, kFrameSamples> _frame {};

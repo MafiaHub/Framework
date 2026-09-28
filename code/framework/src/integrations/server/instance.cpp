@@ -18,6 +18,7 @@
 #include <fstream>
 
 #include <filesystem>
+#include <optional>
 #include <set>
 #include <fstream>
 #include <sstream>
@@ -186,6 +187,11 @@ namespace Framework::Integrations::Server {
         if (_opts.maxPlayers <= 0) {
             return Error("maxPlayers must be greater than 0 (got " + std::to_string(_opts.maxPlayers) + ")");
         }
+        // MafiaNet keeps 255 bytes and silently drops the rest, so a longer one would be a different
+        // password from the one the operator wrote, and nobody could type the one it enforces.
+        if (_opts.bindPassword.size() > 255) {
+            return Error("password must be at most 255 bytes (got " + std::to_string(_opts.bindPassword.size()) + ")");
+        }
         if (_opts.maxPlayersHardCap > 0 && _opts.maxPlayers > _opts.maxPlayersHardCap) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("maxplayers {} exceeds this build's hard cap; running with {}", _opts.maxPlayers, _opts.maxPlayersHardCap);
             _opts.maxPlayers = _opts.maxPlayersHardCap;
@@ -320,6 +326,7 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Http Port:\t{}", _opts.webBindPort);
         }
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Password:\t{}", _opts.bindPassword.empty() ? "none" : "required");
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
@@ -354,7 +361,7 @@ namespace Framework::Integrations::Server {
             {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)},
                 {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)}, {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.webBindPort))},
                 {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(opts.webBindHost)},
-                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts) {
@@ -371,6 +378,7 @@ namespace Framework::Integrations::Server {
         read("map", opts.bindMapName);
         read("maxplayers", opts.maxPlayers);
         read("server-token", opts.bindSecretKey);
+        read("password", opts.bindPassword);
     }
 
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts) {
@@ -387,6 +395,7 @@ namespace Framework::Integrations::Server {
         read("apihost", opts.webBindHost);
         read("apiport", opts.webBindPort);
         read("server-token", opts.bindSecretKey);
+        read("password", opts.bindPassword);
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -474,6 +483,7 @@ namespace Framework::Integrations::Server {
         frameworkKeys["map"]          = _opts.bindMapName;
         frameworkKeys["maxplayers"]   = _opts.maxPlayers;
         frameworkKeys["server-token"] = _opts.bindSecretKey;
+        frameworkKeys["password"]     = _opts.bindPassword;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
 
@@ -656,6 +666,14 @@ namespace Framework::Integrations::Server {
                 return;
             }
             _voiceServer.OnPlayerPreference(static_cast<uint64_t>(MafiaNet::ToPeerGuid(packet->guid)), payload.enabled);
+        });
+
+        // A player switching how far their voice carries. Same rule: the packet's GUID only.
+        net->RegisterRPC<Framework::Networking::RPC::VoiceTierRequest>([this, net](const Framework::Networking::RPC::VoiceTierRequest &payload, MafiaNet::Packet *packet) {
+            if (!net->IsAuthenticated(packet->guid)) {
+                return;
+            }
+            _voiceServer.OnTierRequest(static_cast<uint64_t>(MafiaNet::ToPeerGuid(packet->guid)), payload.tier);
         });
 
         // Voice frames are not RPCs: RakVoice writes a raw message id, so they surface on the
@@ -1143,10 +1161,11 @@ namespace Framework::Integrations::Server {
         resourceManager->GetEvents().EmitReserved(isolate, context, "consoleCommand", eventArgs);
     }
 
-    void Instance::DispatchVoiceTalkingChanges() {
-        // Drained even without scripting, or the relay's queue grows for the life of the process.
+    void Instance::DispatchVoiceChanges() {
+        // Drained even without scripting, or the relay's queues grow for the life of the process.
         _voiceServer.DrainTalkingChanges(_voiceTalkingChanges);
-        if (_voiceTalkingChanges.empty()) {
+        _voiceServer.DrainTierChanges(_voiceTierChanges);
+        if (_voiceTalkingChanges.empty() && _voiceTierChanges.empty()) {
             return;
         }
 
@@ -1158,31 +1177,42 @@ namespace Framework::Integrations::Server {
         auto *server      = networking ? networking->GetNetworkServer() : nullptr;
         auto *replication = server ? server->GetReplicationManager() : nullptr;
 
+        // A peer whose viewer is already gone is skipped rather than reported against a
+        // network id that no longer names anyone.
+        const auto networkIdOf = [replication](uint64_t guid) -> std::optional<uint64_t> {
+            auto *viewer = replication ? replication->GetViewer(static_cast<MafiaNet::PeerGuid>(guid)) : nullptr;
+            return viewer ? std::optional<uint64_t>(static_cast<uint64_t>(viewer->GetNetworkID())) : std::nullopt;
+        };
+
         for (const Voice::TalkingChange &change : _voiceTalkingChanges) {
-            // A peer whose viewer is already gone is skipped rather than reported against a
-            // network id that no longer names anyone.
-            auto *viewer = replication ? replication->GetViewer(static_cast<MafiaNet::PeerGuid>(change.guid)) : nullptr;
-            if (!viewer) {
-                continue;
+            if (const std::optional<uint64_t> networkId = networkIdOf(change.guid)) {
+                OnPlayerVoiceStateChanged(*networkId, change.talking);
             }
+        }
 
-            const uint64_t networkId = static_cast<uint64_t>(viewer->GetNetworkID());
-            OnPlayerVoiceStateChanged(networkId, change.talking);
+        if (!scripting) {
+            return;
+        }
 
-            if (!scripting) {
-                continue;
+        v8::Isolate *isolate = engine->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine->GetContext();
+        v8::Context::Scope contextScope(context);
+
+        for (const Voice::TalkingChange &change : _voiceTalkingChanges) {
+            if (const std::optional<uint64_t> networkId = networkIdOf(change.guid)) {
+                std::vector<v8::Local<v8::Value>> args {WrapScriptPlayer(isolate, *networkId)};
+                resourceManager->GetEvents().EmitReserved(isolate, context, change.talking ? "playerVoiceStart" : "playerVoiceStop", args);
             }
+        }
 
-            v8::Isolate *isolate = engine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = engine->GetContext();
-            v8::Context::Scope contextScope(context);
-
-            std::vector<v8::Local<v8::Value>> args;
-            args.push_back(WrapScriptPlayer(isolate, networkId));
-            resourceManager->GetEvents().EmitReserved(isolate, context, change.talking ? "playerVoiceStart" : "playerVoiceStop", args);
+        for (const Voice::TierChange &change : _voiceTierChanges) {
+            if (const std::optional<uint64_t> networkId = networkIdOf(change.guid)) {
+                std::vector<v8::Local<v8::Value>> args {WrapScriptPlayer(isolate, *networkId), v8pp::to_v8(isolate, static_cast<uint32_t>(change.tier))};
+                resourceManager->GetEvents().EmitReserved(isolate, context, "playerVoiceTierChange", args);
+            }
         }
     }
 
@@ -1243,7 +1273,7 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::Update() {
-        const auto start = std::chrono::high_resolution_clock::now();
+        const auto start = std::chrono::steady_clock::now();
         if (_nextTick <= start) {
             FW_PROFILE_SCOPE_N("Server::Tick");
 
@@ -1264,7 +1294,7 @@ namespace Framework::Integrations::Server {
                 _voiceServer.Update();
             }
 
-            DispatchVoiceTalkingChanges();
+            DispatchVoiceChanges();
 
             if (_scriptingModule) {
                 FW_PROFILE_SCOPE_N("Server::Scripting");
@@ -1284,6 +1314,7 @@ namespace Framework::Integrations::Server {
                 info.version        = _opts.modVersion;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
+                info.passworded     = !_opts.bindPassword.empty();
                 _masterlist->Ping(info);
             }
 
@@ -1294,7 +1325,7 @@ namespace Framework::Integrations::Server {
 
             FW_PROFILE_FRAME();
 
-            const auto end      = std::chrono::high_resolution_clock::now();
+            const auto end      = std::chrono::steady_clock::now();
             const double tickMs = std::chrono::duration<double, std::milli>(end - start).count();
             if (tickMs >= kTickHitchWarnMs) {
                 ++_suppressedHitches;
@@ -1305,10 +1336,11 @@ namespace Framework::Integrations::Server {
                 }
             }
 
-            _nextTick = end + std::chrono::milliseconds(static_cast<int64_t>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
+            // Tick work consumes the interval; overruns leave no wait and no catch-up backlog.
+            _nextTick = start + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(_opts.worldConfig.tickInterval));
         }
         else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            std::this_thread::sleep_until(_nextTick);
         }
     }
     void Instance::Run() {

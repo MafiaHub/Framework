@@ -97,7 +97,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("send",
             v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", false, "Player-authored chat text sent to the server.")}, "Sends a chat line to the server, bypassing the chatSend event; incoming lines arrive through the reserved chatMessage event.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setUIVisible",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "Whether the chat overlay is rendered.")}, "Changes visibility of the native chat overlay without opening its input field.")));
+            v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "Whether the chat overlay is rendered.")}, "Changes visibility of the native chat overlay without opening its input field. Hidden, the overlay also stops opening on its key. The choice holds for the rest of the session and resets to visible on disconnect, so a resource that replaces the chat calls this once at startup.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isUIVisible", v8pp::metadata::docs("boolean", {}, "Checks whether the native chat overlay is visible.", "True when the overlay is currently rendered.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("open", v8pp::metadata::docs("void", {}, "Opens and focuses the native chat input field.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("close", v8pp::metadata::docs("void", {}, "Closes the native chat input field without submitting its contents.")));

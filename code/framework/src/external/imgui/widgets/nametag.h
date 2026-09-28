@@ -81,12 +81,16 @@ namespace Framework::External::ImGUI::Widgets {
         // speaker and its first wave.
         float voiceLevel = -1.0f;
         ImU32 voiceColor = IM_COL32(255, 255, 255, 255);
+        // How many waves the speaker has, 1 to 3: the voice tier, whisper to shout.
+        int voiceWaves = 3;
     };
 
-    // A loudspeaker with up to three sound waves, sized to `height` and centred on `center`.
-    // The waves light up with `level` in [0, 1]; the first is always on, so a quiet moment
-    // mid-sentence does not look like the speaker stopped. Returns the width it took.
-    inline float DrawVoiceIcon(ImDrawList *drawList, ImVec2 center, float height, float level, ImU32 color) {
+    // A loudspeaker with `waves` sound waves, 1 to 3, sized to `height` and centred on `center`.
+    // The count says how far the voice carries -- whisper, normal, shout -- and is always drawn;
+    // the waves light up with `level` in [0, 1]. The first is always on, so a quiet moment
+    // mid-sentence does not look like the speaker stopped. Returns the width it took, which
+    // does not depend on the count, so switching tier never moves what sits beside the icon.
+    inline float DrawVoiceIcon(ImDrawList *drawList, ImVec2 center, float height, float level, ImU32 color, int waves = 3) {
         if (!drawList || height <= 0.0f) {
             return 0.0f;
         }
@@ -114,7 +118,8 @@ namespace Framework::External::ImGUI::Widgets {
         const float baseAlpha = static_cast<float>((color >> IM_COL32_A_SHIFT) & 0xFF) / 255.0f;
         const float clamped   = std::clamp(level, 0.0f, 1.0f);
         constexpr float kSpan = 0.8f; // radians either side of horizontal
-        for (int wave = 0; wave < 3; wave++) {
+        const int drawn       = std::clamp(waves, 1, 3);
+        for (int wave = 0; wave < drawn; wave++) {
             // The first wave is always lit; the other two need a louder voice to fill in.
             const float lit       = wave == 0 ? 1.0f : std::clamp((clamped - 0.08f * static_cast<float>(wave)) * 6.0f, 0.0f, 1.0f);
             const float radius    = coneW * 0.9f + static_cast<float>(wave) * h * 0.2f;
@@ -125,6 +130,19 @@ namespace Framework::External::ImGUI::Widgets {
         }
 
         return h * 1.1f;
+    }
+
+    // The local player's own voice on a HUD: the speaker icon over a drop shadow, faded by
+    // `alpha` (VoiceClient::GetIndicatorAlpha). Where it sits is the mod's call.
+    inline void DrawVoiceIndicator(ImDrawList *drawList, ImVec2 center, float height, float level, int waves, float alpha) {
+        if (!drawList || alpha <= 0.0f) {
+            return;
+        }
+
+        const float opacity = std::clamp(alpha, 0.0f, 1.0f);
+        const float shadow  = std::max(1.0f, height * 0.06f);
+        DrawVoiceIcon(drawList, ImVec2(center.x + shadow, center.y + shadow), height, level, IM_COL32(0, 0, 0, static_cast<int>(160.0f * opacity)), waves);
+        DrawVoiceIcon(drawList, center, height, level, IM_COL32(255, 255, 255, static_cast<int>(230.0f * opacity)), waves);
     }
 
     // BottomCenter anchors the full widget, including the health bar.
@@ -148,7 +166,7 @@ namespace Framework::External::ImGUI::Widgets {
 
         drawList->AddRectFilled(ImVec2(textPos.x - style.padding - iconWidth, textPos.y - style.padding), ImVec2(textPos.x + textSize.x + style.padding, textPos.y + textSize.y + style.padding), WorldTextModulateAlpha(style.bgColor, alpha), style.rounding);
         if (drawVoice) {
-            DrawVoiceIcon(drawList, ImVec2(textPos.x - iconWidth + textSize.y * 0.5f, textPos.y + textSize.y * 0.5f), textSize.y, style.voiceLevel, WorldTextModulateAlpha(style.voiceColor, alpha));
+            DrawVoiceIcon(drawList, ImVec2(textPos.x - iconWidth + textSize.y * 0.5f, textPos.y + textSize.y * 0.5f), textSize.y, style.voiceLevel, WorldTextModulateAlpha(style.voiceColor, alpha), style.voiceWaves);
         }
         drawList->AddText(font, fontSize, textPos, WorldTextModulateAlpha(style.textColor, alpha), name);
 
