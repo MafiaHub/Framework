@@ -15,6 +15,9 @@ jobs:
           ref: develop
           fetch-depth: 0  # Ensure full history for diff comparisons
 
+      - name: Test version selection
+        run: python3 .github/tests/test_bump_version.py
+
       - name: Run bump semver script
         run: |
           chmod +x ./.github/bump_version.sh
