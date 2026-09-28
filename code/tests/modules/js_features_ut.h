@@ -191,43 +191,39 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            // A scratch namespace to register into; the runtime registers at the global root instead
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context,
-                v8::String::NewFromUtf8Literal(isolate, "Core"),
-                coreObj).Check();
-            Builtins::RegisterValueTypes(isolate, coreObj);
+            v8::Local<v8::Object> global = context->Global();
+            Builtins::RegisterValueTypes(isolate, global);
         }
 
         // Vector3 tests
-        EQUALS(RunJSBool(engine, "typeof Core.Vector3 === 'function'"), true);
-        EQUALS(RunJS(engine, "new Core.Vector3(1, 2, 3).x"), 1);
-        EQUALS(RunJS(engine, "new Core.Vector3(1, 2, 3).y"), 2);
-        EQUALS(RunJS(engine, "new Core.Vector3(1, 2, 3).z"), 3);
-        EQUALS(RunJS(engine, "const v = new Core.Vector3(0,0,0); v.x = 5; v.x"), 5);
-        EQUALS(RunJS(engine, "const a = new Core.Vector3(1,2,3); a.add(new Core.Vector3(4,5,6)); a.x"), 5);
-        EQUALS(RunJS(engine, "new Core.Vector3(1,0,0).dot(new Core.Vector3(0,1,0))"), 0);
-        EQUALS(RunJSBool(engine, "Math.abs(new Core.Vector3(3,4,0).length - 5) < 0.001"), true);
-        EQUALS(RunJS(engine, "Core.Vector3.zero().x + Core.Vector3.zero().y + Core.Vector3.zero().z"), 0);
-        EQUALS(RunJS(engine, "Core.Vector3.one().x + Core.Vector3.one().y + Core.Vector3.one().z"), 3);
+        EQUALS(RunJSBool(engine, "typeof Vector3 === 'function'"), true);
+        EQUALS(RunJS(engine, "new Vector3(1, 2, 3).x"), 1);
+        EQUALS(RunJS(engine, "new Vector3(1, 2, 3).y"), 2);
+        EQUALS(RunJS(engine, "new Vector3(1, 2, 3).z"), 3);
+        EQUALS(RunJS(engine, "const v = new Vector3(0,0,0); v.x = 5; v.x"), 5);
+        EQUALS(RunJS(engine, "const a = new Vector3(1,2,3); a.add(new Vector3(4,5,6)); a.x"), 5);
+        EQUALS(RunJS(engine, "new Vector3(1,0,0).dot(new Vector3(0,1,0))"), 0);
+        EQUALS(RunJSBool(engine, "Math.abs(new Vector3(3,4,0).length - 5) < 0.001"), true);
+        EQUALS(RunJS(engine, "Vector3.zero().x + Vector3.zero().y + Vector3.zero().z"), 0);
+        EQUALS(RunJS(engine, "Vector3.one().x + Vector3.one().y + Vector3.one().z"), 3);
 
         // Vector2 tests
-        EQUALS(RunJSBool(engine, "typeof Core.Vector2 === 'function'"), true);
-        EQUALS(RunJS(engine, "new Core.Vector2(10, 20).x"), 10);
-        EQUALS(RunJS(engine, "new Core.Vector2(10, 20).y"), 20);
+        EQUALS(RunJSBool(engine, "typeof Vector2 === 'function'"), true);
+        EQUALS(RunJS(engine, "new Vector2(10, 20).x"), 10);
+        EQUALS(RunJS(engine, "new Vector2(10, 20).y"), 20);
 
         // Vector4 tests
-        EQUALS(RunJSBool(engine, "typeof Core.Vector4 === 'function'"), true);
-        EQUALS(RunJS(engine, "new Core.Vector4(1,2,3,4).w"), 4);
+        EQUALS(RunJSBool(engine, "typeof Vector4 === 'function'"), true);
+        EQUALS(RunJS(engine, "new Vector4(1,2,3,4).w"), 4);
 
         // Quaternion tests
-        EQUALS(RunJSBool(engine, "typeof Core.Quaternion === 'function'"), true);
-        EQUALS(RunJSBool(engine, "Core.Quaternion.identity().w === 1"), true);
+        EQUALS(RunJSBool(engine, "typeof Quaternion === 'function'"), true);
+        EQUALS(RunJSBool(engine, "Quaternion.identity().w === 1"), true);
 
         // Color tests
-        EQUALS(RunJSBool(engine, "typeof Core.Color === 'function'"), true);
-        EQUALS(RunJS(engine, "new Core.Color(255, 128, 64, 255).r"), 255);
-        EQUALS(RunJS(engine, "new Core.Color(255, 128, 64, 255).g"), 128);
+        EQUALS(RunJSBool(engine, "typeof Color === 'function'"), true);
+        EQUALS(RunJS(engine, "new Color(255, 128, 64, 255).r"), 255);
+        EQUALS(RunJS(engine, "new Color(255, 128, 64, 255).g"), 128);
 
         engine.Shutdown();
     });
@@ -245,9 +241,8 @@ MODULE(js_features, {
             v8::HandleScope handleScope(isolate);
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Core"), coreObj).Check();
-            RegisterValueTypes(isolate, coreObj);
+            v8::Local<v8::Object> global = context->Global();
+            RegisterValueTypes(isolate, global);
 
             // Native C++ hands a Color to JS via NewInstance (the native-SDK direction).
             v8::Local<v8::Object> col = Color::NewInstance(isolate, glm::vec4(0.25f, 0.5f, 0.75f, 1.0f));
@@ -255,17 +250,17 @@ MODULE(js_features, {
         }
 
         // length / lengthSquared, mirroring Vector.
-        EQUALS(RunJSBool(engine, "Math.abs(new Core.Quaternion(0,3,4,0).length - 5) < 0.001"), true);
-        EQUALS(RunJSBool(engine, "Math.abs(new Core.Quaternion(0,3,4,0).lengthSquared - 25) < 0.001"), true);
-        EQUALS(RunJSBool(engine, "Math.abs(Core.Quaternion.identity().length - 1) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "Math.abs(new Quaternion(0,3,4,0).length - 5) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "Math.abs(new Quaternion(0,3,4,0).lengthSquared - 25) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "Math.abs(Quaternion.identity().length - 1) < 0.001"), true);
 
         // mul is the (renamed) composition; multiply is gone.
-        EQUALS(RunJSBool(engine, "typeof new Core.Quaternion(1,0,0,0).mul === 'function'"), true);
-        EQUALS(RunJSBool(engine, "new Core.Quaternion(1,0,0,0).multiply === undefined"), true);
-        EQUALS(RunJSBool(engine, "Core.Quaternion.identity().mul(Core.Quaternion.identity()).w === 1"), true);
+        EQUALS(RunJSBool(engine, "typeof new Quaternion(1,0,0,0).mul === 'function'"), true);
+        EQUALS(RunJSBool(engine, "new Quaternion(1,0,0,0).multiply === undefined"), true);
+        EQUALS(RunJSBool(engine, "Quaternion.identity().mul(Quaternion.identity()).w === 1"), true);
 
-        // Color::NewInstance produced a real, live Core.Color.
-        EQUALS(RunJSBool(engine, "__col instanceof Core.Color"), true);
+        // Color::NewInstance produced a real, live Color.
+        EQUALS(RunJSBool(engine, "__col instanceof Color"), true);
         EQUALS(RunJSBool(engine, "Math.abs(__col.r - 0.25) < 0.001 && Math.abs(__col.g - 0.5) < 0.001 && Math.abs(__col.b - 0.75) < 0.001"), true);
         EQUALS(RunJSBool(engine, "typeof __col.toHex === 'function'"), true);
 
@@ -285,29 +280,28 @@ MODULE(js_features, {
             v8::HandleScope handleScope(isolate);
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Core"), coreObj).Check();
-            RegisterValueTypes(isolate, coreObj);
+            v8::Local<v8::Object> global = context->Global();
+            RegisterValueTypes(isolate, global);
         }
 
         // The 3-argument constructor works and alpha defaults to 1 (v8pp optional-ctor fix).
-        EQUALS(RunJSBool(engine, "new Core.Color(0.25, 0.5, 0.75).a === 1"), true);
+        EQUALS(RunJSBool(engine, "new Color(0.25, 0.5, 0.75).a === 1"), true);
 
         // toHex emits lowercase, as documented (exercised through the 3-arg ctor).
-        std::string hex = RunJSString(engine, "new Core.Color(1, 0.5, 0).toHex()");
+        std::string hex = RunJSString(engine, "new Color(1, 0.5, 0).toHex()");
         STREQUALS(hex.c_str(), "#ff8000");
-        std::string hexA = RunJSString(engine, "new Core.Color(1, 0.5, 0).toHex(true)");
+        std::string hexA = RunJSString(engine, "new Color(1, 0.5, 0).toHex(true)");
         STREQUALS(hexA.c_str(), "#ff8000ff");
 
         // Full-length hex parses; unsupported 3-digit shorthand falls back to opaque white.
-        EQUALS(RunJSBool(engine, "Math.abs(Core.Color.fromHex('#ff0000').r - 1) < 0.001"), true);
-        EQUALS(RunJSBool(engine, "(() => { const c = Core.Color.fromHex('#f00'); return c.r === 1 && c.g === 1 && c.b === 1; })()"), true);
+        EQUALS(RunJSBool(engine, "Math.abs(Color.fromHex('#ff0000').r - 1) < 0.001"), true);
+        EQUALS(RunJSBool(engine, "(() => { const c = Color.fromHex('#f00'); return c.r === 1 && c.g === 1 && c.b === 1; })()"), true);
 
         // normalize maps a zero quaternion to identity rather than NaN.
-        EQUALS(RunJSBool(engine, "(() => { const q = new Core.Quaternion(0,0,0,0).normalize(); return q.w === 1 && q.x === 0 && q.y === 0 && q.z === 0; })()"), true);
+        EQUALS(RunJSBool(engine, "(() => { const q = new Quaternion(0,0,0,0).normalize(); return q.w === 1 && q.x === 0 && q.y === 0 && q.z === 0; })()"), true);
 
         // Constructor is scalar-first: w is the first argument.
-        EQUALS(RunJSBool(engine, "(() => { const p = new Core.Quaternion(1,2,3,4); return p.w === 1 && p.x === 2 && p.y === 3 && p.z === 4; })()"), true);
+        EQUALS(RunJSBool(engine, "(() => { const p = new Quaternion(1,2,3,4); return p.w === 1 && p.x === 2 && p.y === 3 && p.z === 4; })()"), true);
 
         engine.Shutdown();
     });
@@ -350,16 +344,13 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context,
-                v8::String::NewFromUtf8Literal(isolate, "Core"),
-                coreObj).Check();
-            manager.GetEvents().Register(isolate, context, coreObj, &manager);
+            v8::Local<v8::Object> global = context->Global();
+            manager.GetEvents().Register(isolate, context, global, &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
         EQUALS(RunJSBool(engine, R"(
-            const unsub = Core.Events.on('testEvent', () => {});
+            const unsub = Events.on('testEvent', () => {});
             typeof unsub === 'function'
         )"), true);
 
@@ -396,19 +387,16 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context,
-                v8::String::NewFromUtf8Literal(isolate, "Core"),
-                coreObj).Check();
-            manager.GetEvents().Register(isolate, context, coreObj, &manager);
+            v8::Local<v8::Object> global = context->Global();
+            manager.GetEvents().Register(isolate, context, global, &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
-        EQUALS(RunJS(engine, "Core.Events.listenerCount('countTest')"), 0);
-        RunJS(engine, "Core.Events.on('countTest', () => {}); 0");
-        EQUALS(RunJS(engine, "Core.Events.listenerCount('countTest')"), 1);
-        RunJS(engine, "Core.Events.on('countTest', () => {}); 0");
-        EQUALS(RunJS(engine, "Core.Events.listenerCount('countTest')"), 2);
+        EQUALS(RunJS(engine, "Events.listenerCount('countTest')"), 0);
+        RunJS(engine, "Events.on('countTest', () => {}); 0");
+        EQUALS(RunJS(engine, "Events.listenerCount('countTest')"), 1);
+        RunJS(engine, "Events.on('countTest', () => {}); 0");
+        EQUALS(RunJS(engine, "Events.listenerCount('countTest')"), 2);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -439,15 +427,12 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context,
-                v8::String::NewFromUtf8Literal(isolate, "Core"),
-                coreObj).Check();
-            manager.GetEvents().Register(isolate, context, coreObj, &manager);
+            v8::Local<v8::Object> global = context->Global();
+            manager.GetEvents().Register(isolate, context, global, &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
-        RunJS(engine, "globalThis.unsub = Core.Events.on('unsubTest', () => {}); 0");
+        RunJS(engine, "globalThis.unsub = Events.on('unsubTest', () => {}); 0");
         EQUALS(manager.GetEvents().GetListenerCount("unsubTest"), (size_t)1);
 
         RunJS(engine, "globalThis.unsub(); 0");
@@ -482,15 +467,12 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context,
-                v8::String::NewFromUtf8Literal(isolate, "Core"),
-                coreObj).Check();
-            manager.GetEvents().Register(isolate, context, coreObj, &manager);
+            v8::Local<v8::Object> global = context->Global();
+            manager.GetEvents().Register(isolate, context, global, &manager);
             // NOT setting resource context
         }
 
-        EQUALS(RunJSThrows(engine, "Core.Events.on('test', () => {})"), true);
+        EQUALS(RunJSThrows(engine, "Events.on('test', () => {})"), true);
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();
@@ -514,18 +496,15 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context,
-                v8::String::NewFromUtf8Literal(isolate, "Core"),
-                coreObj).Check();
-            manager.GetEvents().Register(isolate, context, coreObj, &manager);
+            v8::Local<v8::Object> global = context->Global();
+            manager.GetEvents().Register(isolate, context, global, &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
-        EQUALS(RunJSThrows(engine, "Core.Events.on()"), true);
-        EQUALS(RunJSThrows(engine, "Core.Events.on('test')"), true);
-        EQUALS(RunJSThrows(engine, "Core.Events.on(123, () => {})"), true);
-        EQUALS(RunJSThrows(engine, "Core.Events.on('test', 'notafunction')"), true);
+        EQUALS(RunJSThrows(engine, "Events.on()"), true);
+        EQUALS(RunJSThrows(engine, "Events.on('test')"), true);
+        EQUALS(RunJSThrows(engine, "Events.on(123, () => {})"), true);
+        EQUALS(RunJSThrows(engine, "Events.on('test', 'notafunction')"), true);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -558,36 +537,35 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Core"), coreObj).Check();
-            manager.GetEvents().Register(isolate, context, coreObj, &manager);
+            v8::Local<v8::Object> global = context->Global();
+            manager.GetEvents().Register(isolate, context, global, &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
         std::string err;
         // Arg-shape failures throw TypeError.
-        err = RunJSErrorName(engine, "Core.Events.on()");
+        err = RunJSErrorName(engine, "Events.on()");
         STREQUALS(err.c_str(), "TypeError");
-        err = RunJSErrorName(engine, "Core.Events.on(123, () => {})");
+        err = RunJSErrorName(engine, "Events.on(123, () => {})");
         STREQUALS(err.c_str(), "TypeError");
-        err = RunJSErrorName(engine, "Core.Events.emit()");
+        err = RunJSErrorName(engine, "Events.emit()");
         STREQUALS(err.c_str(), "TypeError");
-        err = RunJSErrorName(engine, "Core.Events.emitTo('r')");
+        err = RunJSErrorName(engine, "Events.emitTo('r')");
         STREQUALS(err.c_str(), "TypeError");
 
         // Events.off used to silently ignore bad arguments; it now throws TypeError like on().
-        err = RunJSErrorName(engine, "Core.Events.off('e', 'notafn')");
+        err = RunJSErrorName(engine, "Events.off('e', 'notafn')");
         STREQUALS(err.c_str(), "TypeError");
-        err = RunJSErrorName(engine, "Core.Events.off('e')");
+        err = RunJSErrorName(engine, "Events.off('e')");
         STREQUALS(err.c_str(), "TypeError");
         // A well-formed off() with no matching handler stays a quiet no-op.
-        err = RunJSErrorName(engine, "Core.Events.off('e', () => {})");
+        err = RunJSErrorName(engine, "Events.off('e', () => {})");
         STREQUALS(err.c_str(), "");
 
         // State error: with no resource context, off() can't tell which resource's handler to drop,
         // so it throws Exception::Error like Events.on — not a silent return (README idiom).
         manager.SetCurrentResourceContext("");
-        err = RunJSErrorName(engine, "Core.Events.off('e', () => {})");
+        err = RunJSErrorName(engine, "Events.off('e', () => {})");
         STREQUALS(err.c_str(), "Error");
 
         {
@@ -615,11 +593,8 @@ MODULE(js_features, {
         v8::HandleScope handleScope(isolate);
         v8::Local<v8::Context> context = engine.GetContext();
         v8::Context::Scope contextScope(context);
-        v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
-        context->Global()->Set(context,
-            v8::String::NewFromUtf8Literal(isolate, "Core"),
-            coreObj).Check();
-        manager.GetEvents().Register(isolate, context, coreObj, &manager);
+        v8::Local<v8::Object> global = context->Global();
+        manager.GetEvents().Register(isolate, context, global, &manager);
         manager.SetCurrentResourceContext("testResource");
     };
 
@@ -643,17 +618,17 @@ MODULE(js_features, {
         ResourceManager manager(&engine, config);
         registerEvents(engine, manager);
 
-        RunJS(engine, "Core.Events.onClient('shared', () => {}); 0");
+        RunJS(engine, "Events.onClient('shared', () => {}); 0");
         // In the client table, invisible to the global on() count.
         EQUALS(manager.GetEvents().GetClientListenerCount("shared"), (size_t)1);
         EQUALS(manager.GetEvents().GetListenerCount("shared"), (size_t)0);
 
         // Same name on the global bus lands in the other table; neither perturbs the other.
-        RunJS(engine, "Core.Events.on('shared', () => {}); 0");
+        RunJS(engine, "Events.on('shared', () => {}); 0");
         EQUALS(manager.GetEvents().GetListenerCount("shared"), (size_t)1);
         EQUALS(manager.GetEvents().GetClientListenerCount("shared"), (size_t)1);
 
-        RunJS(engine, "Core.Events.onceClient('once1', () => {}); 0");
+        RunJS(engine, "Events.onceClient('once1', () => {}); 0");
         EQUALS(manager.GetEvents().GetClientListenerCount("once1"), (size_t)1);
         EQUALS(manager.GetEvents().GetListenerCount("once1"), (size_t)0);
 
@@ -673,8 +648,8 @@ MODULE(js_features, {
         registerEvents(engine, manager);
 
         RunJS(engine, R"(
-            Core.Events.on('e', () => {});
-            globalThis.u = Core.Events.onClient('e', () => {});
+            Events.on('e', () => {});
+            globalThis.u = Events.onClient('e', () => {});
             0
         )");
         EQUALS(manager.GetEvents().GetClientListenerCount("e"), (size_t)1);
@@ -686,11 +661,11 @@ MODULE(js_features, {
 
         RunJS(engine, R"(
             globalThis.h = () => {};
-            Core.Events.onClient('e', globalThis.h);
+            Events.onClient('e', globalThis.h);
             0
         )");
         EQUALS(manager.GetEvents().GetClientListenerCount("e"), (size_t)1);
-        RunJS(engine, "Core.Events.offClient('e', globalThis.h); 0");
+        RunJS(engine, "Events.offClient('e', globalThis.h); 0");
         EQUALS(manager.GetEvents().GetClientListenerCount("e"), (size_t)0);
 
         cleanupResource(engine, manager);
@@ -709,8 +684,8 @@ MODULE(js_features, {
         registerEvents(engine, manager);
 
         RunJS(engine, R"(
-            Core.Events.on('e', () => {});
-            Core.Events.onClient('e', () => {});
+            Events.on('e', () => {});
+            Events.onClient('e', () => {});
             0
         )");
         EQUALS(manager.GetEvents().GetClientListenerCount("e"), (size_t)1);
@@ -746,8 +721,8 @@ MODULE(js_features, {
             Promise.allSettled = function () {
                 return Promise.resolve([{ get status() { throw new Error('boom'); } }]);
             };
-            Core.Events.on('hostile', () => 1);
-            Core.Events.emit('hostile').then(() => { globalThis.__done = 1; },
+            Events.on('hostile', () => 1);
+            Events.emit('hostile').then(() => { globalThis.__done = 1; },
                                              () => { globalThis.__done = 2; });
             0
         )");
@@ -776,8 +751,8 @@ MODULE(js_features, {
         RunJS(engine, R"(
             globalThis.__done2 = 0;
             Promise.allSettled = function () { return Promise.resolve("not-an-array"); };
-            Core.Events.on('hostile2', () => 1);
-            Core.Events.emit('hostile2').then(() => { globalThis.__done2 = 1; },
+            Events.on('hostile2', () => 1);
+            Events.emit('hostile2').then(() => { globalThis.__done2 = 1; },
                                               () => { globalThis.__done2 = 2; });
             0
         )");
@@ -805,8 +780,8 @@ MODULE(js_features, {
         RunJS(engine, R"(
             globalThis.__done3 = 0;
             Promise.allSettled = function () { return 42; };
-            Core.Events.on('hostile3', () => 1);
-            Core.Events.emit('hostile3').then(() => { globalThis.__done3 = 1; },
+            Events.on('hostile3', () => 1);
+            Events.emit('hostile3').then(() => { globalThis.__done3 = 1; },
                                               () => { globalThis.__done3 = 2; });
             0
         )");
@@ -832,8 +807,8 @@ MODULE(js_features, {
 
         RunJS(engine, R"(
             globalThis.__r = 0;
-            Core.Events.on('boom', () => { throw new Error('handler failed'); });
-            Core.Events.emit('boom').then(() => { globalThis.__r = 1; },
+            Events.on('boom', () => { throw new Error('handler failed'); });
+            Events.emit('boom').then(() => { globalThis.__r = 1; },
                                           () => { globalThis.__r = 2; });
             0
         )");
@@ -1100,7 +1075,7 @@ MODULE(js_features, {
 
         // Stash the unsubscribe closure from the first Register().
         registerEvents(engine, manager);
-        RunJS(engine, "globalThis.oldUnsub = Core.Events.on('persist', () => {}); 0");
+        RunJS(engine, "globalThis.oldUnsub = Events.on('persist', () => {}); 0");
         EQUALS(manager.GetEvents().GetListenerCount("persist"), (size_t)1);
 
         // Re-register on the same Events instance (the path that previously freed the context
@@ -1117,8 +1092,8 @@ MODULE(js_features, {
         EventsTestHelper::Cleanup();
     });
 
-    // The old Core.Events.on function (its template data holds the context) must still dispatch
-    // into the same Events after a second Register(), and the new Core.Events must work too.
+    // The old Events.on function (its template data holds the context) must still dispatch
+    // into the same Events after a second Register(), and the new Events must work too.
     IT("Second Register keeps prior function-template externals valid", {
         EventsTestHelper::Setup();
         NodeEngine engine({});
@@ -1129,15 +1104,15 @@ MODULE(js_features, {
 
         // Capture the on() function from the first Register(), then re-register over it.
         registerEvents(engine, manager);
-        RunJS(engine, "globalThis.oldOn = Core.Events.on; 0");
+        RunJS(engine, "globalThis.oldOn = Events.on; 0");
         registerEvents(engine, manager);
 
         // The captured function still registers into the same Events instance.
         RunJS(engine, "globalThis.oldOn('again', () => {}); 0");
         EQUALS(manager.GetEvents().GetListenerCount("again"), (size_t)1);
 
-        // And the freshly-installed Core.Events works too.
-        RunJS(engine, "Core.Events.on('fresh', () => {}); 0");
+        // And the freshly-installed Events works too.
+        RunJS(engine, "Events.on('fresh', () => {}); 0");
         EQUALS(manager.GetEvents().GetListenerCount("fresh"), (size_t)1);
 
         cleanupResource(engine, manager);
@@ -1155,8 +1130,8 @@ MODULE(js_features, {
 
         registerEvents(engine, manager);
         RunJS(engine, R"(
-            globalThis.oldOn = Core.Events.on;
-            globalThis.oldUnsub = Core.Events.on('beforeReset', () => {});
+            globalThis.oldOn = Events.on;
+            globalThis.oldUnsub = Events.on('beforeReset', () => {});
             0
         )");
         EQUALS(manager.GetEvents().GetListenerCount("beforeReset"), (size_t)1);
@@ -1168,7 +1143,7 @@ MODULE(js_features, {
         RunJS(engine, "globalThis.oldUnsub(); globalThis.oldOn('afterReset', () => {}); 0");
         EQUALS(manager.GetEvents().GetListenerCount("afterReset"), (size_t)1);
 
-        RunJS(engine, "Core.Events.on('freshAfterReset', () => {}); 0");
+        RunJS(engine, "Events.on('freshAfterReset', () => {}); 0");
         EQUALS(manager.GetEvents().GetListenerCount("freshAfterReset"), (size_t)1);
 
         cleanupResource(engine, manager);

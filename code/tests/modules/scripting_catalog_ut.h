@@ -10,6 +10,7 @@
 
 #include "scripting/event_metadata.h"
 #include "scripting/scripting_catalog.h"
+#include "scripting/timer_metadata.h"
 
 #include <v8pp/metadata.hpp>
 
@@ -122,11 +123,11 @@ MODULE(scripting_catalog, {
 
     IT("drops a skipped symbol even when the project has no symbol of that name", {
         v8pp::metadata::registry source;
-        source.global_object("Events").add_property("on", "Function", "");
+        source.constructor("Entity").add_property("id", "number", "");
 
         v8pp::metadata::registry destination;
-        MergeScriptingCatalog(destination, source, {"Events"});
-        EQUALS(countSymbols(destination, "Events") == 0, true);
+        MergeScriptingCatalog(destination, source, {"Entity"});
+        EQUALS(countSymbols(destination, "Entity") == 0, true);
     });
 
     IT("is idempotent: merging twice carries nothing across a second time", {
@@ -234,6 +235,54 @@ MODULE(scripting_catalog, {
         EQUALS(std::count_if(destination.symbols().front().functions.begin(), destination.symbols().front().functions.end(), [](const v8pp::metadata::function &function) {
             return function.name == "sendToPlayer";
         }) == 1, true);
+    });
+
+    const auto globalFunction = [](const v8pp::metadata::registry &registry, const std::string &name) -> const v8pp::metadata::function * {
+        for (const auto &function : registry.functions()) {
+            if (function.name == name) {
+                return &function;
+            }
+        }
+        return nullptr;
+    };
+
+    IT("declares the timers each side installs, with the handle that side returns", {
+        v8pp::metadata::registry client;
+        Framework::Scripting::RegisterTimerMetadata(client, true);
+        v8pp::metadata::registry server;
+        Framework::Scripting::RegisterTimerMetadata(server, false);
+
+        for (const char *name : {"setTimeout", "setInterval", "clearTimeout", "clearInterval", "queueMicrotask"}) {
+            EQUALS(globalFunction(client, name) != nullptr, true);
+            EQUALS(globalFunction(server, name) != nullptr, true);
+        }
+        STREQUALS(globalFunction(client, "setTimeout")->call_signature.return_type.name.c_str(), "number");
+        STREQUALS(globalFunction(server, "setTimeout")->call_signature.return_type.name.c_str(), "Timeout");
+        // Extra arguments reach the handler, so they are a rest parameter rather than one array.
+        EQUALS(globalFunction(client, "setTimeout")->call_signature.parameters.back().variadic, true);
+        // Node's handle is an object a script can call ref/unref on; the client's is a bare id.
+        EQUALS(functionOf(server, "Timeout", "unref") != nullptr, true);
+        EQUALS(countSymbols(client, "Timeout") == 0, true);
+    });
+
+    IT("carries the framework's global functions into a project's catalog once", {
+        v8pp::metadata::registry framework;
+        Framework::Scripting::RegisterTimerMetadata(framework, true);
+
+        v8pp::metadata::registry project;
+        project.function_(v8pp::metadata::function_of<v8::FunctionCallback>("setTimeout", v8pp::metadata::docs("void", {}, "project version")));
+        MergeScriptingCatalog(project, framework);
+        MergeScriptingCatalog(project, framework);
+
+        EQUALS(project.functions().size() == framework.functions().size(), true);
+        // The project's own declaration of a name wins, as it does for every other member.
+        STREQUALS(globalFunction(project, "setTimeout")->description.c_str(), "project version");
+        EQUALS(globalFunction(project, "clearInterval") != nullptr, true);
+
+        const auto exported = Framework::Scripting::ExportableScriptingCatalog(project, [](const std::string &) {
+            return true;
+        });
+        EQUALS(exported.functions().size() == project.functions().size(), true);
     });
 
     IT("exports a class that is not on the global as an interface", {

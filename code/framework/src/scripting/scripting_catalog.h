@@ -102,8 +102,8 @@ namespace Framework::Scripting {
     // the whole set by hand. A property the project already declares still wins.
     //
     // `skip` drops source symbols by name, for globals a project documents through some other
-    // shape than the framework's own -- the event bus is emitted as Core.Events of type
-    // EventBus, so carrying the framework's Events object across would declare it twice.
+    // shape than the framework's own. Never skip Events: the recorded object is the only
+    // declaration of the bus that knows which side owns emitServer, emitAllClients and onClient.
     inline void MergeScriptingCatalog(v8pp::metadata::registry &destination, const v8pp::metadata::registry &source, std::initializer_list<std::string_view> skip = {}) {
         // The destination's symbol of this name, or nullptr. Read-only: adding through the registry
         // is what hands back a mutable one.
@@ -254,6 +254,17 @@ namespace Framework::Scripting {
                 destination.variable_(variable.name, variable.value_type, variable.description, variable.readonly);
             }
         }
+
+        // Global functions -- the timers -- have no symbol to ride on, so they cross on their own.
+        const auto &existingFunctions = destination.functions();
+        for (const auto &function : source.functions()) {
+            const bool present = std::any_of(existingFunctions.begin(), existingFunctions.end(), [&function](const v8pp::metadata::function &existing) {
+                return existing.name == function.name;
+            });
+            if (!present) {
+                destination.function_(function);
+            }
+        }
     }
 
     // The catalog as scripts can reach it, for export. A class the runtime never puts on the global --
@@ -288,6 +299,9 @@ namespace Framework::Scripting {
         }
         for (const auto &variable : catalog.variables()) {
             exported.variable_(variable.name, variable.value_type, variable.description, variable.readonly);
+        }
+        for (const auto &function : catalog.functions()) {
+            exported.function_(function);
         }
         return exported;
     }

@@ -48,7 +48,7 @@ namespace Framework::Scripting::Builtins {
 
         auto &metadata      = GetScriptingCatalog(isolate).global_object("console", "Resource-aware console that routes output through the Framework logger.");
         const auto document = [&](const char *name, const char *description) {
-            metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>(name, v8pp::metadata::docs("void", {v8pp::metadata::param("values", "unknown[]", true, "Values formatted and joined with spaces.")}, description)));
+            metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>(name, v8pp::metadata::docs("void", {v8pp::metadata::rest_param("values", "unknown[]", "Values formatted and joined with spaces.")}, description)));
         };
         document("log", "Writes an informational log entry prefixed with the current resource name.");
         document("info", "Alias of console.log for informational output.");

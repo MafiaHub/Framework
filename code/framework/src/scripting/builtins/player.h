@@ -38,7 +38,7 @@ namespace Framework::Scripting::Builtins {
         // Server-only; a no-op on the client (see NetworkPeer::KickPlayer).
         void Kick(const std::string &reason);
 
-        // Send a named event to this player's client, received there as Core.Events.on(name, data).
+        // Send a named event to this player's client, received there as Events.on(name, data).
         // Server-only; payloadJson is JSON.parsed on the client (pass JSON text, empty = no data).
         void Emit(const std::string &eventName, const std::string &payloadJson);
 
