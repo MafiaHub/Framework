@@ -19,11 +19,11 @@ namespace Framework::Integrations::Client::Networking {
         return {};
     }
 
-    Utils::Result<void, Error> Engine::Connect(const std::string &host, int32_t port, const std::string &password) const {
+    Utils::Result<void, Error> Engine::Connect(const std::string &host, int32_t port, const std::string &password, const std::string &sessionPayload) const {
         if (!_peer) {
             return Error("Network client is not available");
         }
 
-        return _peer->Connect(host, port, password);
+        return _peer->Connect(host, port, password, sessionPayload);
     }
 } // namespace Framework::Integrations::Client::Networking

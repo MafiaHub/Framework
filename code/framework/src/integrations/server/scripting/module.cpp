@@ -13,6 +13,7 @@
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/chat.h>
 
+#include "builtins/pending_connection.h"
 #include "builtins/voice.h"
 #include <scripting/builtins/console.h>
 #include <scripting/builtins/execution_environment.h>
@@ -112,6 +113,9 @@ namespace Framework::Integrations::Server::Scripting {
 
         // The events the framework raises; a mod's catalog blends them into its own EventMap.
         Framework::Scripting::RegisterEventMetadata(Framework::Scripting::GetScriptingCatalog(isolate));
+        Framework::Scripting::GetScriptingCatalog(isolate).data_type("EventMap").add_property("consoleCommand", "[command: string, args: string[]]",
+            "Dispatched for a line typed into the server console that no built-in command (help, ensure, refresh, ...) claimed. `args` is the rest of the line, split on whitespace. The console is the operator's, so this is the "
+            "place for commands no player may run.");
 
         // The engine installs the timers without a binding; declare them for it.
         Framework::Scripting::RegisterTimerMetadata(Framework::Scripting::GetScriptingCatalog(isolate), /*isClient*/ false);
@@ -127,6 +131,7 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, false);
         Framework::Scripting::Builtins::Chat::Register(isolate, global);
         Builtins::Voice::Register(isolate, global);
+        Builtins::PendingConnection::Register(isolate);
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework JS bindings");
     }

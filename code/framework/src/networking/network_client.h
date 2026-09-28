@@ -43,6 +43,7 @@ namespace Framework::Networking {
         DisconnectPacketCallback _onPlayerDisconnectedCallback;
         OnAssetsDownloadFailedCallback _onAssetsDownloadFailedCallback;
         fu2::function<void(int eventId) const> _onConnectionReadyCallback;
+        fu2::function<void(const std::string &status) const> _onSessionStatusCallback;
         AssetFileTransfer _fileListTransfer;
         bool _initialReplicationDownloadComplete {};
 
@@ -63,7 +64,9 @@ namespace Framework::Networking {
         void Update() override;
         bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;
 
-        [[nodiscard]] Utils::Result<void, Error> Connect(const std::string &host, int32_t port, const std::string &password = "");
+        // sessionPayload rides the connection request (MafiaNet's session handshake): it is what the
+        // server's admission gate decides on before either side reports a connection.
+        [[nodiscard]] Utils::Result<void, Error> Connect(const std::string &host, int32_t port, const std::string &password = "", const std::string &sessionPayload = "");
 
         [[nodiscard]] Utils::Result<void, Error> Disconnect();
 
@@ -98,6 +101,12 @@ namespace Framework::Networking {
         }
 
         // Fired when the spawn barrier completes — the client activates replication and finalizes.
+        // A line from the server's admission gate while the connection request waits for its answer.
+        // Remote text, bounded by MafiaNet's session payload size and nothing else.
+        void SetOnSessionStatusCallback(fu2::function<void(const std::string &status) const> callback) {
+            _onSessionStatusCallback = std::move(callback);
+        }
+
         void SetOnConnectionReadyCallback(fu2::function<void(int eventId) const> callback) {
             _onConnectionReadyCallback = std::move(callback);
         }

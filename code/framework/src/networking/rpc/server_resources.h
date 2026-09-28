@@ -34,7 +34,8 @@ namespace Framework::Networking::RPC {
         }
     };
 
-    // Server -> client once the build challenge passes: opens the asset phase. readyEventId is the
+    // Server -> client once the build challenge passes and the admission gate (playerConnecting)
+    // lets the connection in: it is the admission, and opens the asset phase. readyEventId is the
     // per-connection ReadyEvent id both peers use as the spawn barrier; tickRate is the serialize
     // interval (s) the client applies once that barrier completes.
     struct ServerResources {

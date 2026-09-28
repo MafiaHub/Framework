@@ -27,7 +27,10 @@ namespace Framework::Networking {
         KICKED_INVALID_PACKET,
         UNKNOWN,
         // Serialized by DisconnectPayload: append only.
-        BUILD_VERIFICATION_TIMEOUT
+        BUILD_VERIFICATION_TIMEOUT,
+        // The admission gate (playerConnecting) said no. customReason is the script's own text,
+        // shown to the player as written.
+        CONNECTION_REFUSED
     };
 
     // Optional reason carried on a graceful disconnect (CloseConnection's reasonData).

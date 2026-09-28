@@ -103,6 +103,9 @@ namespace Framework::Integrations::Client {
         int32_t port;
         std::string nickname;
         std::string password;
+        // Opaque string handed to the server's playerConnecting handlers (a launcher-issued join
+        // ticket, typically). Empty when the connection was not given one.
+        std::string ticket;
         uint32_t serverIDHash;
     };
 
@@ -180,6 +183,12 @@ namespace Framework::Integrations::Client {
         // moment the connection surfaces. Available before the asset phase and before any client
         // script runs, which is what lets a project pick what to load from it.
         nlohmann::json _serverConfig;
+
+        // Set when the connection is accepted, which is the server's admission: until then the request
+        // waits on the server's playerConnecting gate and the client holds nothing of the server's.
+        bool _admitted {};
+        // Last line the server's gate sent while this connection waited; cleared on admission.
+        std::string _admissionStatus;
 
         // Handshake state carried from ServerResources until the ReadyEvent spawn barrier completes.
         int _readyEventId {};
@@ -274,6 +283,11 @@ namespace Framework::Integrations::Client {
         virtual void OnConnectionPhaseChanged(ConnectionPhase phase) {
             (void)phase;
         }
+        // The server's admission gate sent a line for the player ("checking the whitelist", a queue
+        // position) while this connection waits to be let in. Remote text: bounded, but not trusted.
+        virtual void OnAdmissionStatus(const std::string &message) {
+            (void)message;
+        }
         virtual void OnChatMessageReceived(const Framework::Networking::RPC::ChatMessage &msg) {
             (void)msg;
         }
@@ -325,6 +339,16 @@ namespace Framework::Integrations::Client {
 
         const std::string &GetLastDisconnectionReason() const {
             return _lastDisconnectionReason;
+        }
+
+        // True once the server let this connection in. Before that there is no connection, no session
+        // config and nothing of the server's to load; a refused player never gets this far.
+        bool IsAdmitted() const {
+            return _admitted;
+        }
+
+        const std::string &GetAdmissionStatus() const {
+            return _admissionStatus;
         }
 
         void SetCurrentState(CurrentState state) {

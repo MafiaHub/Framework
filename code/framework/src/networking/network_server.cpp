@@ -17,6 +17,9 @@
 #include <mafianet/guid_util.h>
 #include <logging/logger.h>
 
+#include <algorithm>
+#include <string_view>
+
 namespace Framework::Networking {
     namespace {
         // How long Shutdown() blocks to flush the disconnection notification to connected peers, in
@@ -27,15 +30,21 @@ namespace Framework::Networking {
         constexpr unsigned int kAssetChunkSize = 262144;
     } // namespace
 
-    Utils::Result<void, Error> NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password) {
+    Utils::Result<void, Error> NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password, const AdmissionSettings &admission) {
         if (port <= 0 || port > 65535) {
             return Error("Invalid server port: " + std::to_string(port));
         }
         if (maxPlayers <= 0 || maxPlayers > 65535) {
             return Error("Invalid maxPlayers: " + std::to_string(maxPlayers));
         }
+        // Every connection request waits for the admission gate. Waiting ones are MafiaNet pending
+        // sessions: a pool beside the players' slots, so the peer is started with room for both.
+        _peer->SetSessionConfigInteractive(true);
+        _peer->SetMaximumPendingSessions(admission.pendingConnections, admission.pendingConnectionsPerAddress);
+        _peer->SetSessionTimeout(admission.sessionTimeoutMs);
+
         auto newSocketSd                  = MafiaNet::SocketDescriptor((uint16_t)port, host.c_str());
-        const MafiaNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
+        const MafiaNet::StartupResult result = _peer->Startup(static_cast<unsigned int>(maxPlayers) + admission.pendingConnections, &newSocketSd, 1);
         if (result != MafiaNet::RAKNET_STARTED) {
             return Error(std::string("Failed to start networking peer: ") + GetStartupResultString((uint8_t)result));
         }
@@ -81,6 +90,30 @@ namespace Framework::Networking {
 
     bool NetworkServer::HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) {
         switch (packetID) {
+        // A client asks to join. MafiaNet holds the connection unreported on both sides until it is
+        // answered; the payload after the id is the client's identity.
+        case ID_SESSION_CONFIG_REQUEST: {
+            const unsigned int offset = static_cast<unsigned int>(_packetDataOffset) + 1;
+            const std::string_view payload = packet->length > offset ? std::string_view(reinterpret_cast<const char *>(packet->data) + offset, packet->length - offset) : std::string_view();
+            const std::optional<RPC::ClientIdentity> identity = RPC::ClientIdentity::Decode(payload);
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Connection request from {}", MafiaNet::to_string(packet->guid));
+            if (_onSessionRequestCallback) {
+                _onSessionRequestCallback(packet->guid, identity);
+            }
+            else {
+                AcceptSession(packet->guid);
+            }
+            return true;
+        };
+        case ID_SESSION_CONFIG_ABANDONED: {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Connection request from {} abandoned", MafiaNet::to_string(packet->guid));
+            _peerIdentities.erase(packet->guid.g);
+            if (_onSessionAbandonedCallback) {
+                _onSessionAbandonedCallback(packet->guid);
+            }
+            return true;
+        };
+
         case ID_NEW_INCOMING_CONNECTION: {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Incoming connection request {}", MafiaNet::to_string(packet->guid));
             if (_onPlayerConnectCallback) {
@@ -183,6 +216,23 @@ namespace Framework::Networking {
         if (MafiaNet::Connection_RM3 *connection = _replicationManager->AllocConnection(address, guid)) {
             _replicationManager->PushConnection(connection);
         }
+    }
+
+    void NetworkServer::AcceptSession(MafiaNet::RakNetGUID guid) {
+        _peer->AcceptSession(guid, _sessionConfig.data(), static_cast<unsigned int>(_sessionConfig.size()));
+    }
+
+    void NetworkServer::RejectSession(MafiaNet::RakNetGUID guid, const std::string &reason) {
+        _peerIdentities.erase(guid.g);
+        _peer->RejectSession(guid, reason.c_str());
+    }
+
+    void NetworkServer::SendSessionStatus(MafiaNet::RakNetGUID guid, const std::string &status) {
+        _peer->SendSessionStatus(guid, status.data(), static_cast<unsigned int>(std::min<size_t>(status.size(), MAXIMUM_SESSION_CONFIG_SIZE)));
+    }
+
+    uint32_t NetworkServer::GetPlayerCount() const {
+        return _peer->NumberOfConnections();
     }
 
     void NetworkServer::KickPlayer(MafiaNet::RakNetGUID guid, DisconnectionReason reason, const std::string &customReason) {

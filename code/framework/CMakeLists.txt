@@ -72,11 +72,13 @@ set(FRAMEWORK_SERVER_SRC
     src/networking/network_server.cpp
 
     src/integrations/server/instance.cpp
+    src/integrations/server/connection_gate.cpp
     src/integrations/server/networking/engine.cpp
 
     # JavaScript scripting (server module)
     src/integrations/server/scripting/module.cpp
     src/integrations/server/scripting/builtins/voice.cpp
+    src/integrations/server/scripting/builtins/pending_connection.cpp
 
     src/voice/server/voice_router.cpp
     src/voice/server/voice_server.cpp

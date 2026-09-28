@@ -16,6 +16,7 @@
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/voice_settings.h"
 #include "networking/rpc/client_identity.h"
+#include "networking/rpc/client_join.h"
 #include "networking/rpc/nametag.h"
 #include "networking/rpc/resource_refresh.h"
 #include "networking/rpc/server_resources.h"
@@ -55,6 +56,9 @@
 
 namespace Framework::Integrations::Client {
     namespace {
+        // A status line is one sentence on a connecting screen; the server caps it the same way.
+        constexpr size_t kMaxAdmissionStatusLength = 256;
+
         // Handler for server-emitted scripting events; reaches the scripting engine through the
         // CoreModules singleton.
         void OnEmitScriptEvent(const Shared::RPC::EmitScriptEvent &rpc, MafiaNet::Packet *packet) {
@@ -676,7 +680,20 @@ namespace Framework::Integrations::Client {
                 }
             }
 
+            // The connection exists only because the server's admission gate accepted the request.
+            _admitted = true;
+            _admissionStatus.clear();
             SetConnectionPhase(ConnectionPhase::Authenticating);
+        });
+
+        // A line from the server's admission gate while the connection request waits for its answer.
+        net->SetOnSessionStatusCallback([this](const std::string &status) {
+            if (_admitted) {
+                return;
+            }
+            _admissionStatus = status.substr(0, kMaxAdmissionStatusLength);
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Server admission status: {}", _admissionStatus);
+            OnAdmissionStatus(_admissionStatus);
         });
 
         // Server's resource list. Store it (survives a scripting module reset) and start the asset
@@ -802,6 +819,8 @@ namespace Framework::Integrations::Client {
             case Framework::Networking::DisconnectionReason::GRACEFUL_SHUTDOWN: reason = "The server closed the connection."; break;
             case Framework::Networking::DisconnectionReason::LOST: reason = "Connection to the server lost."; break;
             case Framework::Networking::DisconnectionReason::FAILED: reason = "Could not connect to the server."; break;
+            // The server's own words, as its script wrote them.
+            case Framework::Networking::DisconnectionReason::CONNECTION_REFUSED: reason = customReason.empty() ? "The server refused the connection." : customReason; break;
             default: break;
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection dropped: {}", reason);
@@ -819,6 +838,8 @@ namespace Framework::Integrations::Client {
             _connectionFinalized                       = false;
             _spawnBarrierArmed                         = false;
             _projectSpawnReady                         = false;
+            _admitted                                  = false;
+            _admissionStatus.clear();
             SetConnectionPhase(ConnectionPhase::Disconnected);
             
             // Entity teardown is native: ReplicaManager3 deletes server-created replicas when the
@@ -905,7 +926,25 @@ namespace Framework::Integrations::Client {
     }
 
     Utils::Result<void, Error> Instance::ConnectToServer(const std::string &host, int32_t port, const std::string &password) {
-        auto result = _networkingEngine->Connect(host, port, password);
+        // Who is asking, carried in the connection request itself: the server's admission gate
+        // decides on it before either side reports a connection.
+        //
+        // The Steam id is launcher-set when the game was located through Steam; Win32 read, the CRT's
+        // getenv copy predates it.
+        char steamId[32] = {};
+#ifdef _WIN32
+        GetEnvironmentVariableA("MafiaHubSteamId", steamId, sizeof(steamId));
+#endif
+        Framework::Networking::RPC::ClientIdentity identity;
+        identity.name       = _currentState.nickname;
+        identity.steamId    = steamId;
+        identity.discordId  = _presence ? _presence->GetUserId() : "";
+        identity.hardwareId = Framework::Utils::GetHardwareId();
+        identity.ticket     = _currentState.ticket;
+
+        _admitted = false;
+        _admissionStatus.clear();
+        auto result = _networkingEngine->Connect(host, port, password, identity.Encode());
         SetConnectionPhase(result ? ConnectionPhase::Connecting : ConnectionPhase::Disconnected);
         return result;
     }
@@ -1217,26 +1256,14 @@ namespace Framework::Integrations::Client {
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
 
-        // Announce ourselves (server builds the avatar and opens the replication gate), then arm our
-        // half of the spawn barrier. First connect only.
+        // Ask to join (server builds the avatar and opens the replication gate), then arm our half
+        // of the spawn barrier. First connect only.
         if (!_initialDownloadDone) {
             _initialDownloadDone = true;
 
             const auto serverGuid = net->GetPeer()->GetGUIDFromIndex(0);
-
-            // Launcher-set when the game was located through Steam; Win32 read, the CRT's getenv
-            // copy predates it.
-            char steamId[32] = {};
-#ifdef _WIN32
-            GetEnvironmentVariableA("MafiaHubSteamId", steamId, sizeof(steamId));
-#endif
-
-            Framework::Networking::RPC::ClientIdentity identity;
-            identity.name       = _currentState.nickname;
-            identity.steamId    = steamId;
-            identity.discordId  = _presence ? _presence->GetUserId() : "";
-            identity.hardwareId = Framework::Utils::GetHardwareId();
-            net->SendRPC(identity, serverGuid);
+            Framework::Networking::RPC::ClientJoin join;
+            net->SendRPC(join, serverGuid);
 
             net->GetReadyEvent()->SetEvent(_readyEventId, false);
             net->GetReadyEvent()->AddToWaitList(_readyEventId, serverGuid);

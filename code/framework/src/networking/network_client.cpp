@@ -12,6 +12,11 @@
 
 #include <logging/logger.h>
 
+#include <mafianet/MessageIdentifiers.h>
+#include <mafianet/defines.h>
+
+#include <algorithm>
+
 namespace Framework::Networking {
     namespace {
         // How long Shutdown() blocks to flush the disconnection notification to the server, in ms.
@@ -20,6 +25,10 @@ namespace Framework::Networking {
 
         // The client talks to one server at a time, so the peer reserves a single slot.
         constexpr unsigned short kMaxConnections = 1;
+
+        // Longer than any server's admission window (30 s by default, restarted by every status), so it
+        // is always the server that answers; this only catches a server that stopped answering at all.
+        constexpr MafiaNet::TimeMS kSessionTimeoutMs = 120000;
     } // namespace
 
     NetworkClient::NetworkClient(): NetworkPeer(), _state(PeerState::DISCONNECTED) {}
@@ -62,7 +71,7 @@ namespace Framework::Networking {
         Lifecycle::Shutdown();
     }
 
-    Utils::Result<void, Error> NetworkClient::Connect(const std::string &host, int32_t port, const std::string &password) {
+    Utils::Result<void, Error> NetworkClient::Connect(const std::string &host, int32_t port, const std::string &password, const std::string &sessionPayload) {
         if (_state != PeerState::DISCONNECTED) {
             return Error("Cannot connect: the client is already connected");
         }
@@ -87,6 +96,12 @@ namespace Framework::Networking {
 
         _initialReplicationDownloadComplete = false;
         _state                              = PeerState::CONNECTING;
+
+        // The server decides on this before it reports the connection. How long it may take is its own
+        // business -- a queue keeps restarting the clock with status -- so the client waits generously
+        // and leaves a dead server to the transport's own timeout.
+        _peer->SetSessionConfig(sessionPayload.data(), static_cast<unsigned int>(std::min<size_t>(sessionPayload.size(), MAXIMUM_SESSION_CONFIG_SIZE)));
+        _peer->SetSessionTimeout(kSessionTimeoutMs);
 
         const MafiaNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
         if (result != MafiaNet::CONNECTION_ATTEMPT_STARTED) {
@@ -168,6 +183,14 @@ namespace Framework::Networking {
             _initialReplicationDownloadComplete = true;
             return true;
 
+        case ID_SESSION_CONFIG_STATUS: {
+            const unsigned int offset = static_cast<unsigned int>(_packetDataOffset) + 1;
+            if (_state == PeerState::CONNECTING && _onSessionStatusCallback) {
+                _onSessionStatusCallback(_packet->length > offset ? std::string(reinterpret_cast<const char *>(_packet->data) + offset, _packet->length - offset) : std::string());
+            }
+            return true;
+        };
+
         case ID_CONNECTION_REQUEST_ACCEPTED: {
             _state = PeerState::CONNECTED;
             if (_onPlayerConnectedCallback) {
@@ -222,7 +245,15 @@ namespace Framework::Networking {
 
         case ID_CONNECTION_ATTEMPT_FAILED: {
             if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
-                _onPlayerDisconnectedCallback(_packet, DisconnectionReason::FAILED, "");
+                // A server that refused the session request says why after the id; a plain failure to
+                // reach it, or a session that timed out, carries nothing.
+                const unsigned int offset = static_cast<unsigned int>(_packetDataOffset) + 1;
+                if (_packet->length > offset) {
+                    _onPlayerDisconnectedCallback(_packet, DisconnectionReason::CONNECTION_REFUSED, std::string(reinterpret_cast<const char *>(_packet->data) + offset, _packet->length - offset));
+                }
+                else {
+                    _onPlayerDisconnectedCallback(_packet, DisconnectionReason::FAILED, "");
+                }
             }
             ResetConnectionState();
             return true;
