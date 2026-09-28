@@ -12,6 +12,8 @@
 
 /* TEST CATEGORIES */
 #include "modules/bitops_ut.h"
+#include "modules/connection_admission_ut.h"
+#include "modules/connection_gate_ut.h"
 #include "modules/delegation_ut.h"
 #include "modules/gui_resources_ut.h"
 #include "modules/interest_grid_ut.h"
@@ -97,6 +99,8 @@ int main() {
     UNIT_MODULE(resource_manager_callbacks);
     UNIT_MODULE(js_features);
     UNIT_MODULE(timer_context);
+    UNIT_MODULE(connection_gate);
+    UNIT_MODULE(connection_admission);
 
     return UNIT_RUN();
 }
