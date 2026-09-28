@@ -315,6 +315,7 @@ namespace Framework::Voice {
         _source   = nullptr;
         _placements.clear();
         _speakerRanges.clear();
+        _speakerTiers.clear();
         _published.clear();
     }
 
@@ -370,6 +371,7 @@ namespace Framework::Voice {
         // The same peer GUID may be a different player on the next server.
         _placements.clear();
         _speakerRanges.clear();
+        _speakerTiers.clear();
 
         _self         = MafiaNet::UNASSIGNED_RAKNET_GUID;
         _sessionOpen  = false;
@@ -409,6 +411,8 @@ namespace Framework::Voice {
             // The next server inherits nothing from this one.
             _server              = MafiaNet::UNASSIGNED_RAKNET_GUID;
             _preferenceSent      = false;
+            _tierSent            = false;
+            _tierSentAtMs        = 0;
             _defaultSpeakerRange = kDefaultProximityRange;
             return;
         }
@@ -427,6 +431,10 @@ namespace Framework::Voice {
         if (!_preferenceSent) {
             PublishPreference();
         }
+
+        // Whether or not a session follows, like the preference: the tier is how far our voice
+        // would carry, and the others draw it.
+        PublishTier(Utils::Time::GetTime());
 
         if (_enabled && !_sessionOpen) {
             OpenSession();
@@ -899,8 +907,19 @@ namespace Framework::Voice {
         entry.generation         = _placementGeneration;
     }
 
-    void VoiceClient::SetSpeakerRange(uint64_t speaker, float range) {
-        if (speaker == 0 || IsSelf(speaker)) {
+    void VoiceClient::SetSpeakerRange(uint64_t speaker, float range, VoiceTier tier) {
+        if (speaker == 0 || tier >= VoiceTier::Count) {
+            return;
+        }
+
+        if (IsOwnGuid(speaker)) {
+            // The server's answer to a request we sent is not news, and adopting it would undo
+            // a newer press still waiting its turn. A tier we never asked for is the server's
+            // decision, and wins.
+            if (_tierSent && tier != _sentTier) {
+                _tier     = tier;
+                _sentTier = tier;
+            }
             return;
         }
 
@@ -910,11 +929,61 @@ namespace Framework::Voice {
         else {
             _speakerRanges.erase(speaker);
         }
+
+        if (tier != VoiceTier::Normal) {
+            _speakerTiers[speaker] = tier;
+        }
+        else {
+            _speakerTiers.erase(speaker);
+        }
+    }
+
+    VoiceTier VoiceClient::GetSpeakerTier(uint64_t speaker) const {
+        const auto it = _speakerTiers.find(speaker);
+        return it != _speakerTiers.end() ? it->second : VoiceTier::Normal;
+    }
+
+    bool VoiceClient::IsOwnGuid(uint64_t speaker) const {
+        if (_client == nullptr || _client->GetPeer() == nullptr) {
+            return false;
+        }
+
+        const MafiaNet::RakNetGUID self = _client->GetPeer()->GetMyGUID();
+        return self != MafiaNet::UNASSIGNED_RAKNET_GUID && speaker == static_cast<uint64_t>(MafiaNet::ToPeerGuid(self));
+    }
+
+    void VoiceClient::SetTier(VoiceTier tier) {
+        if (tier >= VoiceTier::Count) {
+            return;
+        }
+
+        // Sent from Update, which paces it: a key pressed three times in a frame is one request.
+        _tier = tier;
+    }
+
+    void VoiceClient::PublishTier(int64_t nowMs) {
+        if (_client == nullptr || _server == MafiaNet::UNASSIGNED_RAKNET_GUID) {
+            return;
+        }
+        if (_tierSent && _sentTier == _tier) {
+            return;
+        }
+        if (_tierSentAtMs != 0 && (nowMs - _tierSentAtMs) < static_cast<int64_t>(kTierRequestIntervalMs)) {
+            return;
+        }
+
+        Networking::RPC::VoiceTierRequest payload;
+        payload.tier = static_cast<uint8_t>(_tier);
+        _client->SendRPC(payload, _server);
+        _sentTier     = _tier;
+        _tierSent     = true;
+        _tierSentAtMs = nowMs;
     }
 
     void VoiceClient::RemoveSpeaker(uint64_t speaker) {
         _placements.erase(speaker);
         _speakerRanges.erase(speaker);
+        _speakerTiers.erase(speaker);
 
         const int slot = FindAdmitted(speaker);
         if (slot >= 0) {

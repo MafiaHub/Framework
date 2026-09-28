@@ -183,6 +183,7 @@ namespace Framework::Integrations::Server {
         Voice::VoiceServer _voiceServer;
         // Reused every tick so the drain never allocates.
         std::vector<Voice::TalkingChange> _voiceTalkingChanges;
+        std::vector<Voice::TierChange> _voiceTierChanges;
         std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
         std::unordered_set<uint64_t> _readyPlayerGuids;
 
@@ -215,6 +216,8 @@ namespace Framework::Integrations::Server {
         void EmitConsoleCommand(const std::string &command, const std::vector<std::string> &args);
         // Runs once per tick, after the relay's own update has retired the talkers who went quiet.
         void DispatchVoiceTalkingChanges();
+        // Runs alongside it, for the tier switches players asked for since the last tick.
+        void DispatchVoiceTierChanges();
         // Subscription raising entityStateChange; released on shutdown.
         Framework::Networking::Replication::StateChangeHandle _stateBagEvents = Framework::Networking::Replication::kInvalidStateChangeHandle;
 
@@ -257,6 +260,12 @@ namespace Framework::Integrations::Server {
         // disconnect ends talking without a stop; clean up on OnPlayerDisconnect too.
         virtual void OnPlayerVoiceStateChanged(uint64_t networkId, bool talking) {
             (void)networkId, (void)talking;
+        }
+        // A player switched voice tier themselves; also emitted as the "playerVoiceTierChange"
+        // event. Already applied: a server that disallows a tier puts them back with
+        // VoiceServer::SetPlayerTier, or narrows the tier itself with SetTierRange.
+        virtual void OnPlayerVoiceTierChanged(uint64_t networkId, Voice::VoiceTier tier) {
+            (void)networkId, (void)tier;
         }
 
         // A console line no built-in command claimed; also emitted as the "consoleCommand" event.

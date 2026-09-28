@@ -28,6 +28,13 @@ namespace Framework::Voice {
         bool talking  = false;
     };
 
+    // One player switching voice tier by their own request. Queued for the same reason as
+    // TalkingChange; a tier the server set itself is not reported, since its caller knows.
+    struct TierChange {
+        uint64_t guid  = 0;
+        VoiceTier tier = VoiceTier::Normal;
+    };
+
     // Server half of voice: owns the routing rule and forwards frames. Deliberately never
     // initialises a codec — RakVoice is attached purely so its relay path can forward
     // payloads, which is what keeps voice off the server's CPU budget.
@@ -66,7 +73,18 @@ namespace Framework::Voice {
         // the server-wide range.
         void SetPlayerRange(uint64_t guid, float meters);
 
-        // The range plus every override in effect, for a freshly connected client.
+        // The radius a voice tier carries, likewise mirrored for every player on that tier.
+        // <= 0 makes the tier carry the server-wide range.
+        void SetTierRange(VoiceTier tier, float meters);
+
+        float GetTierRange(VoiceTier tier) const {
+            return _router.GetTierRange(tier);
+        }
+
+        // Puts a player on a tier, as the server's decision; mirrored like the above.
+        void SetPlayerTier(uint64_t guid, VoiceTier tier);
+
+        // The range plus every override and tier in effect, for a freshly connected client.
         void SendSettingsTo(MafiaNet::RakNetGUID guid);
 
         // Called by the network layer for every ID_RAKVOICE_RELAY_DATA packet.
@@ -81,6 +99,13 @@ namespace Framework::Voice {
 
         // The client's own voice setting, from the VoicePreference RPC.
         void OnPlayerPreference(uint64_t guid, bool enabled);
+
+        // The player's own tier switch, from the VoiceTierRequest RPC. Dropped when out of
+        // range or closer to the previous one than kTierRequestServerFloorMs.
+        void OnTierRequest(uint64_t guid, uint8_t tier);
+
+        // Moves the tier switches accumulated since the last call into `out`, cleared first.
+        void DrainTierChanges(std::vector<TierChange> &out);
 
         void OnPlayerDisconnect(uint64_t guid);
 
@@ -97,6 +122,9 @@ namespace Framework::Voice {
         // Queues a start edge on the first frame after silence.
         void MarkTalking(uint64_t talker, int64_t nowMs);
 
+        // Tells every client how far `guid` carries and on which tier.
+        void BroadcastPlayerRange(uint64_t guid);
+
         // A rule changed, so every cached set is suspect -- not just the talker's own, since
         // one player's change removes them from everyone else's.
         void InvalidateRecipients();
@@ -110,5 +138,8 @@ namespace Framework::Voice {
         // Talker -> arrival time of their most recent frame. Presence is the talking flag.
         std::unordered_map<uint64_t, int64_t> _talking;
         std::vector<TalkingChange> _talkingChanges;
+        // Player -> time of their last accepted tier request.
+        std::unordered_map<uint64_t, int64_t> _tierRequestedAtMs;
+        std::vector<TierChange> _tierChanges;
     };
 } // namespace Framework::Voice

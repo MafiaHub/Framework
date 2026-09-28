@@ -658,6 +658,14 @@ namespace Framework::Integrations::Server {
             _voiceServer.OnPlayerPreference(static_cast<uint64_t>(MafiaNet::ToPeerGuid(packet->guid)), payload.enabled);
         });
 
+        // A player switching how far their voice carries. Same rule: the packet's GUID only.
+        net->RegisterRPC<Framework::Networking::RPC::VoiceTierRequest>([this, net](const Framework::Networking::RPC::VoiceTierRequest &payload, MafiaNet::Packet *packet) {
+            if (!net->IsAuthenticated(packet->guid)) {
+                return;
+            }
+            _voiceServer.OnTierRequest(static_cast<uint64_t>(MafiaNet::ToPeerGuid(packet->guid)), payload.tier);
+        });
+
         // Voice frames are not RPCs: RakVoice writes a raw message id, so they surface on the
         // unknown-packet path (the relay host deliberately declines to consume them itself).
         net->SetUnknownPacketHandler([this, net](MafiaNet::Packet *packet) {
@@ -1186,6 +1194,48 @@ namespace Framework::Integrations::Server {
         }
     }
 
+    void Instance::DispatchVoiceTierChanges() {
+        // Drained even without scripting, for the same reason as the talking edges.
+        _voiceServer.DrainTierChanges(_voiceTierChanges);
+        if (_voiceTierChanges.empty()) {
+            return;
+        }
+
+        auto *engine          = _scriptingModule ? _scriptingModule->GetEngine() : nullptr;
+        auto *resourceManager = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
+        const bool scripting  = engine != nullptr && resourceManager != nullptr && engine->IsInitialized();
+
+        auto *networking  = GetNetworkingEngine();
+        auto *server      = networking ? networking->GetNetworkServer() : nullptr;
+        auto *replication = server ? server->GetReplicationManager() : nullptr;
+
+        for (const Voice::TierChange &change : _voiceTierChanges) {
+            auto *viewer = replication ? replication->GetViewer(static_cast<MafiaNet::PeerGuid>(change.guid)) : nullptr;
+            if (!viewer) {
+                continue;
+            }
+
+            const uint64_t networkId = static_cast<uint64_t>(viewer->GetNetworkID());
+            OnPlayerVoiceTierChanged(networkId, change.tier);
+
+            if (!scripting) {
+                continue;
+            }
+
+            v8::Isolate *isolate = engine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            std::vector<v8::Local<v8::Value>> args;
+            args.push_back(WrapScriptPlayer(isolate, networkId));
+            args.push_back(v8pp::to_v8(isolate, static_cast<uint32_t>(change.tier)));
+            resourceManager->GetEvents().EmitReserved(isolate, context, "playerVoiceTierChange", args);
+        }
+    }
+
     void Instance::Shutdown() {
         if (_shuttingDown) {
             return;
@@ -1265,6 +1315,7 @@ namespace Framework::Integrations::Server {
             }
 
             DispatchVoiceTalkingChanges();
+            DispatchVoiceTierChanges();
 
             if (_scriptingModule) {
                 FW_PROFILE_SCOPE_N("Server::Scripting");

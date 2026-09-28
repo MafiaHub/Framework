@@ -857,7 +857,7 @@ namespace Framework::Integrations::Client {
         });
 
         net->RegisterRPC<Framework::Networking::RPC::VoiceSpeakerRange>([this](const Framework::Networking::RPC::VoiceSpeakerRange &payload, MafiaNet::Packet *) {
-            _voiceClient.SetSpeakerRange(payload.player, payload.range);
+            _voiceClient.SetSpeakerRange(payload.player, payload.range, static_cast<Framework::Voice::VoiceTier>(payload.tier));
         });
 
         // Scripted nametag state for our own avatar; our next upstream update carries it to the others.
