@@ -12,6 +12,7 @@
 
 #include <glm/glm.hpp>
 
+#include <array>
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
@@ -43,19 +44,38 @@ namespace Framework::Voice {
         // entry naming them, so a reused GUID cannot inherit a stale mute.
         void RemovePlayer(uint64_t guid);
 
-        // Overrides the audibility radius for one talker (whisper / normal / shout).
-        // Pass a value <= 0 to fall back to the default range.
+        // Overrides the audibility radius for one talker, whatever tier they chose.
+        // Pass a value <= 0 to fall back to their tier.
         void SetPlayerRange(uint64_t guid, float meters);
 
-        // The override as set, not the effective radius: 0 means "use the default".
+        // The override as set, not the effective radius: 0 means "no override".
         float GetPlayerRange(uint64_t guid) const;
 
-        // The radius `guid` is actually heard over, with the default already resolved.
+        // The radius a tier carries. <= 0 makes it carry the default range, which is what
+        // Normal does unless a server says otherwise. Count is ignored.
+        void SetTierRange(VoiceTier tier, float meters);
+
+        // The tier's radius with the default already resolved.
+        float GetTierRange(VoiceTier tier) const;
+
+        // Whether the tier carries a radius of its own rather than the default range.
+        bool HasOwnTierRange(VoiceTier tier) const;
+
+        // The tier a player chose. Normal until they choose; Count is ignored.
+        void SetPlayerTier(uint64_t guid, VoiceTier tier);
+
+        VoiceTier GetPlayerTier(uint64_t guid) const;
+
+        // The radius `guid` is actually heard over: the override, else their tier's.
         float GetEffectivePlayerRange(uint64_t guid) const;
 
-        // Talkers carrying an override, for replaying the rules to a late-joining client.
-        // Order is unspecified.
-        std::vector<uint64_t> GetPlayersWithRangeOverride() const;
+        // What a client is told `guid` carries: the effective radius, or 0 when that is simply
+        // the default range, so a later change of the default reaches them without a resend.
+        float GetAdvertisedPlayerRange(uint64_t guid) const;
+
+        // Talkers whose voice differs from the default in range or tier, for replaying the
+        // rules to a late-joining client. Order is unspecified.
+        std::vector<uint64_t> GetPlayersWithRangeRules() const;
 
         // Server-wide mute: a muted talker reaches nobody.
         void SetPlayerMuted(uint64_t guid, bool muted);
@@ -87,7 +107,8 @@ namespace Framework::Voice {
       private:
         struct PlayerState {
             glm::vec3 position {0.0f};
-            float range        = 0.0f; // <= 0 means the router's default range
+            float range        = 0.0f; // <= 0 means the tier's range
+            VoiceTier tier     = VoiceTier::Normal;
             bool serverMuted   = false;
             bool deaf          = false;
             bool voiceDisabled = false;
@@ -96,7 +117,12 @@ namespace Framework::Voice {
 
         const PlayerState *Find(uint64_t guid) const;
 
+        // The effective radius of one player's state, shared by the public lookups and the scan.
+        float ResolveRange(const PlayerState &state) const;
+
         std::unordered_map<uint64_t, PlayerState> _players;
         float _defaultRange = kDefaultProximityRange;
+        // Indexed by VoiceTier; <= 0 carries the default range.
+        std::array<float, static_cast<size_t>(VoiceTier::Count)> _tierRanges {kDefaultWhisperRange, 0.0f, kDefaultShoutRange};
     };
 } // namespace Framework::Voice

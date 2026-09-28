@@ -212,4 +212,65 @@ MODULE(voice_router, {
         EQUALS(router.IsPlayerMuted(1), true);
         EQUALS(router.IsPlayerVoiceDisabled(1), false);
     });
+
+    IT("carries a whisper and a shout over their own tier ranges", {
+        VoiceRouter router;
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(20, 0, 0));
+        router.SetPlayerPosition(3, glm::vec3(50, 0, 0));
+
+        std::vector<uint64_t> out;
+        router.SetPlayerTier(1, VoiceTier::Whisper);
+        router.ComputeRecipients(1, out);
+        EQUALS(out.size(), static_cast<size_t>(0));
+
+        router.SetPlayerTier(1, VoiceTier::Normal);
+        router.ComputeRecipients(1, out);
+        EQUALS(out.size(), static_cast<size_t>(1));
+
+        router.SetPlayerTier(1, VoiceTier::Shout);
+        router.ComputeRecipients(1, out);
+        EQUALS(out.size(), static_cast<size_t>(2));
+        EQUALS(NearlyEqualRange(router.GetEffectivePlayerRange(1), kDefaultShoutRange), true);
+    });
+
+    IT("keeps a per-talker override winning over the chosen tier", {
+        VoiceRouter router;
+        router.SetPlayerTier(1, VoiceTier::Shout);
+        router.SetPlayerRange(1, 5.0f);
+
+        EQUALS(NearlyEqualRange(router.GetEffectivePlayerRange(1), 5.0f), true);
+        EQUALS(NearlyEqualRange(router.GetAdvertisedPlayerRange(1), 5.0f), true);
+
+        router.SetPlayerRange(1, 0.0f);
+        EQUALS(NearlyEqualRange(router.GetEffectivePlayerRange(1), kDefaultShoutRange), true);
+    });
+
+    IT("lets Normal follow the default range and advertises it as no range at all", {
+        VoiceRouter router;
+        router.SetDefaultRange(40.0f);
+        router.SetPlayerTier(1, VoiceTier::Normal);
+
+        EQUALS(NearlyEqualRange(router.GetEffectivePlayerRange(1), 40.0f), true);
+        EQUALS(NearlyEqualRange(router.GetAdvertisedPlayerRange(1), 0.0f), true);
+        EQUALS(router.GetPlayersWithRangeRules().empty(), true);
+    });
+
+    IT("folds a tier given no range of its own back onto the default range", {
+        VoiceRouter router;
+        router.SetTierRange(VoiceTier::Shout, 0.0f);
+        router.SetPlayerTier(1, VoiceTier::Shout);
+
+        EQUALS(router.HasOwnTierRange(VoiceTier::Shout), false);
+        EQUALS(NearlyEqualRange(router.GetEffectivePlayerRange(1), kDefaultProximityRange), true);
+        EQUALS(router.GetPlayersWithRangeRules().size(), static_cast<size_t>(1));
+    });
+
+    IT("ignores an out-of-range tier", {
+        VoiceRouter router;
+        router.SetPlayerTier(1, VoiceTier::Shout);
+        router.SetPlayerTier(1, VoiceTier::Count);
+
+        EQUALS(router.GetPlayerTier(1) == VoiceTier::Shout, true);
+    });
 });

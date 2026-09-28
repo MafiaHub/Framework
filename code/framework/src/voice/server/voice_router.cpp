@@ -41,15 +41,61 @@ namespace Framework::Voice {
         return state ? state->range : 0.0f;
     }
 
-    float VoiceRouter::GetEffectivePlayerRange(uint64_t guid) const {
-        const float range = GetPlayerRange(guid);
-        return range > 0.0f ? range : _defaultRange;
+    void VoiceRouter::SetTierRange(VoiceTier tier, float meters) {
+        if (tier >= VoiceTier::Count) {
+            return;
+        }
+
+        _tierRanges[static_cast<size_t>(tier)] = meters > 0.0f ? meters : 0.0f;
     }
 
-    std::vector<uint64_t> VoiceRouter::GetPlayersWithRangeOverride() const {
+    float VoiceRouter::GetTierRange(VoiceTier tier) const {
+        return HasOwnTierRange(tier) ? _tierRanges[static_cast<size_t>(tier)] : _defaultRange;
+    }
+
+    bool VoiceRouter::HasOwnTierRange(VoiceTier tier) const {
+        return tier < VoiceTier::Count && _tierRanges[static_cast<size_t>(tier)] > 0.0f;
+    }
+
+    void VoiceRouter::SetPlayerTier(uint64_t guid, VoiceTier tier) {
+        if (tier >= VoiceTier::Count) {
+            return;
+        }
+
+        _players[guid].tier = tier;
+    }
+
+    VoiceTier VoiceRouter::GetPlayerTier(uint64_t guid) const {
+        const PlayerState *state = Find(guid);
+        return state ? state->tier : VoiceTier::Normal;
+    }
+
+    float VoiceRouter::ResolveRange(const PlayerState &state) const {
+        return state.range > 0.0f ? state.range : GetTierRange(state.tier);
+    }
+
+    float VoiceRouter::GetEffectivePlayerRange(uint64_t guid) const {
+        const PlayerState *state = Find(guid);
+        return state ? ResolveRange(*state) : _defaultRange;
+    }
+
+    float VoiceRouter::GetAdvertisedPlayerRange(uint64_t guid) const {
+        const PlayerState *state = Find(guid);
+        if (state == nullptr) {
+            return 0.0f;
+        }
+
+        if (state->range > 0.0f) {
+            return state->range;
+        }
+
+        return HasOwnTierRange(state->tier) ? _tierRanges[static_cast<size_t>(state->tier)] : 0.0f;
+    }
+
+    std::vector<uint64_t> VoiceRouter::GetPlayersWithRangeRules() const {
         std::vector<uint64_t> out;
         for (const auto &[guid, state] : _players) {
-            if (state.range > 0.0f) {
+            if (state.range > 0.0f || state.tier != VoiceTier::Normal) {
                 out.push_back(guid);
             }
         }
@@ -108,7 +154,7 @@ namespace Framework::Voice {
         }
 
         const auto &talkerState = talkerIt->second;
-        const float range       = talkerState.range > 0.0f ? talkerState.range : _defaultRange;
+        const float range       = ResolveRange(talkerState);
         const float rangeSq     = range * range;
 
         // Every eligible listener in range receives the frame; proximity is the only

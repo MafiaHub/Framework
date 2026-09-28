@@ -43,6 +43,28 @@ namespace Framework::Voice {
     // VoiceServer::SetProximityRange.
     constexpr float kDefaultProximityRange = 25.0f;
 
+    // How far a player chooses to project their voice. Each tier is a radius on the server's
+    // table; a script's per-player range override wins over whichever is chosen.
+    enum class VoiceTier : uint8_t {
+        Whisper,
+        Normal,
+        Shout,
+        Count,
+    };
+
+    // Starting radii for the tiers either side of Normal, which carries the proximity range
+    // itself. A server overrides them through VoiceServer::SetTierRange. A shout wider than
+    // the game's player streaming range is pointless: a talker the listener has not streamed
+    // in cannot be placed, and is heard last.
+    constexpr float kDefaultWhisperRange = 8.0f;
+    constexpr float kDefaultShoutRange   = 60.0f;
+
+    // A client sends at most one tier change per interval, the latest one pressed; the server
+    // drops requests closer together than the shorter floor. Each accepted change costs a
+    // broadcast to every client, so a key held on auto-repeat must not become one per frame.
+    constexpr uint32_t kTierRequestIntervalMs    = 250;
+    constexpr uint32_t kTierRequestServerFloorMs = 200;
+
     // Default push-to-talk binding, as a Win32 virtual-key code ('V').
     constexpr int kDefaultPushToTalkKey = 0x56;
 
