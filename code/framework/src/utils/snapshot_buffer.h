@@ -169,6 +169,11 @@ namespace Framework::Utils {
         MafiaNet::Time RenderTime(MafiaNet::Time now) {
             const double target = glm::max(0.0, static_cast<double>(now) - EffectiveDelayMs());
             if (!_renderClockStarted) {
+                // Not while the target is clamped to zero: the clock would then advance from zero with
+                // wall time and run ahead of a target still held back by the delay.
+                if (target <= 0.0) {
+                    return 0;
+                }
                 _renderClockStarted = true;
                 _renderTimeMs       = target;
                 _lastRenderNow      = now;

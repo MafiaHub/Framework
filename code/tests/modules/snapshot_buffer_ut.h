@@ -226,6 +226,10 @@ MODULE(snapshot_buffer, {
         EQUALS(buffer.RenderTime(1500), 1400U);
         buffer.Clear();
         EQUALS(buffer.RenderTime(10), 0U); // No unsigned clock underflow at startup.
+        // Held at zero until the delay has elapsed, then starting on the target rather than ahead of it.
+        EQUALS(buffer.RenderTime(100), 0U);
+        EQUALS(buffer.RenderTime(110), 10U);
+        EQUALS(buffer.RenderTime(120), 20U);
     });
 
     IT("starts fresh timing history after a teleport", {
