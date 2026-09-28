@@ -18,6 +18,7 @@
 #include <fstream>
 
 #include <filesystem>
+#include <optional>
 #include <set>
 #include <fstream>
 #include <sstream>
@@ -1151,10 +1152,11 @@ namespace Framework::Integrations::Server {
         resourceManager->GetEvents().EmitReserved(isolate, context, "consoleCommand", eventArgs);
     }
 
-    void Instance::DispatchVoiceTalkingChanges() {
-        // Drained even without scripting, or the relay's queue grows for the life of the process.
+    void Instance::DispatchVoiceChanges() {
+        // Drained even without scripting, or the relay's queues grow for the life of the process.
         _voiceServer.DrainTalkingChanges(_voiceTalkingChanges);
-        if (_voiceTalkingChanges.empty()) {
+        _voiceServer.DrainTierChanges(_voiceTierChanges);
+        if (_voiceTalkingChanges.empty() && _voiceTierChanges.empty()) {
             return;
         }
 
@@ -1165,74 +1167,43 @@ namespace Framework::Integrations::Server {
         auto *networking  = GetNetworkingEngine();
         auto *server      = networking ? networking->GetNetworkServer() : nullptr;
         auto *replication = server ? server->GetReplicationManager() : nullptr;
+
+        // A peer whose viewer is already gone is skipped rather than reported against a
+        // network id that no longer names anyone.
+        const auto networkIdOf = [replication](uint64_t guid) -> std::optional<uint64_t> {
+            auto *viewer = replication ? replication->GetViewer(static_cast<MafiaNet::PeerGuid>(guid)) : nullptr;
+            return viewer ? std::optional<uint64_t>(static_cast<uint64_t>(viewer->GetNetworkID())) : std::nullopt;
+        };
 
         for (const Voice::TalkingChange &change : _voiceTalkingChanges) {
-            // A peer whose viewer is already gone is skipped rather than reported against a
-            // network id that no longer names anyone.
-            auto *viewer = replication ? replication->GetViewer(static_cast<MafiaNet::PeerGuid>(change.guid)) : nullptr;
-            if (!viewer) {
-                continue;
+            if (const std::optional<uint64_t> networkId = networkIdOf(change.guid)) {
+                OnPlayerVoiceStateChanged(*networkId, change.talking);
             }
-
-            const uint64_t networkId = static_cast<uint64_t>(viewer->GetNetworkID());
-            OnPlayerVoiceStateChanged(networkId, change.talking);
-
-            if (!scripting) {
-                continue;
-            }
-
-            v8::Isolate *isolate = engine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = engine->GetContext();
-            v8::Context::Scope contextScope(context);
-
-            std::vector<v8::Local<v8::Value>> args;
-            args.push_back(WrapScriptPlayer(isolate, networkId));
-            resourceManager->GetEvents().EmitReserved(isolate, context, change.talking ? "playerVoiceStart" : "playerVoiceStop", args);
         }
-    }
 
-    void Instance::DispatchVoiceTierChanges() {
-        // Drained even without scripting, for the same reason as the talking edges.
-        _voiceServer.DrainTierChanges(_voiceTierChanges);
-        if (_voiceTierChanges.empty()) {
+        if (!scripting) {
             return;
         }
 
-        auto *engine          = _scriptingModule ? _scriptingModule->GetEngine() : nullptr;
-        auto *resourceManager = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
-        const bool scripting  = engine != nullptr && resourceManager != nullptr && engine->IsInitialized();
+        v8::Isolate *isolate = engine->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine->GetContext();
+        v8::Context::Scope contextScope(context);
 
-        auto *networking  = GetNetworkingEngine();
-        auto *server      = networking ? networking->GetNetworkServer() : nullptr;
-        auto *replication = server ? server->GetReplicationManager() : nullptr;
+        for (const Voice::TalkingChange &change : _voiceTalkingChanges) {
+            if (const std::optional<uint64_t> networkId = networkIdOf(change.guid)) {
+                std::vector<v8::Local<v8::Value>> args {WrapScriptPlayer(isolate, *networkId)};
+                resourceManager->GetEvents().EmitReserved(isolate, context, change.talking ? "playerVoiceStart" : "playerVoiceStop", args);
+            }
+        }
 
         for (const Voice::TierChange &change : _voiceTierChanges) {
-            auto *viewer = replication ? replication->GetViewer(static_cast<MafiaNet::PeerGuid>(change.guid)) : nullptr;
-            if (!viewer) {
-                continue;
+            if (const std::optional<uint64_t> networkId = networkIdOf(change.guid)) {
+                std::vector<v8::Local<v8::Value>> args {WrapScriptPlayer(isolate, *networkId), v8pp::to_v8(isolate, static_cast<uint32_t>(change.tier))};
+                resourceManager->GetEvents().EmitReserved(isolate, context, "playerVoiceTierChange", args);
             }
-
-            const uint64_t networkId = static_cast<uint64_t>(viewer->GetNetworkID());
-            OnPlayerVoiceTierChanged(networkId, change.tier);
-
-            if (!scripting) {
-                continue;
-            }
-
-            v8::Isolate *isolate = engine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = engine->GetContext();
-            v8::Context::Scope contextScope(context);
-
-            std::vector<v8::Local<v8::Value>> args;
-            args.push_back(WrapScriptPlayer(isolate, networkId));
-            args.push_back(v8pp::to_v8(isolate, static_cast<uint32_t>(change.tier)));
-            resourceManager->GetEvents().EmitReserved(isolate, context, "playerVoiceTierChange", args);
         }
     }
 
@@ -1314,8 +1285,7 @@ namespace Framework::Integrations::Server {
                 _voiceServer.Update();
             }
 
-            DispatchVoiceTalkingChanges();
-            DispatchVoiceTierChanges();
+            DispatchVoiceChanges();
 
             if (_scriptingModule) {
                 FW_PROFILE_SCOPE_N("Server::Scripting");
