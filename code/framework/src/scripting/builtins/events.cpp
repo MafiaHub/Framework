@@ -129,15 +129,15 @@ namespace Framework::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("once", handlerDocs("void", "Registers a handler that is removed before its first invocation.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("off", handlerDocs("void", "Removes a matching handler owned by the calling resource.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("emit",
-            v8pp::metadata::docs("Promise<void>", {v8pp::metadata::param("eventName", "string", false, "Shared event name."), v8pp::metadata::param("args", "unknown[]", true, "Arguments delivered to every matching handler.")},
+            v8pp::metadata::docs("Promise<void>", {v8pp::metadata::param("eventName", "string", false, "Shared event name."), v8pp::metadata::rest_param("args", "unknown[]", "Arguments delivered to every matching handler.")},
                 "Invokes every shared handler and waits for all synchronous and asynchronous results.", "Promise rejected with an AggregateError when one or more handlers fail.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("emitTo", v8pp::metadata::docs("Promise<void>",
                                                                                         {v8pp::metadata::param("resourceName", "string", false, "Destination running resource."), v8pp::metadata::param("eventName", "string", false, "Shared event name."),
-                                                                                            v8pp::metadata::param("args", "unknown[]", true, "Arguments delivered to matching handlers owned by the destination.")},
+                                                                                            v8pp::metadata::rest_param("args", "unknown[]", "Arguments delivered to matching handlers owned by the destination.")},
                                                                                         "Invokes matching handlers belonging only to one resource.", "Promise rejected when one or more destination handlers fail.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("onLocal", handlerDocs("void", "Registers a handler in the calling resource's private local-event namespace.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("emitLocal",
-            v8pp::metadata::docs("Promise<void>", {v8pp::metadata::param("eventName", "string", false, "Private local event name."), v8pp::metadata::param("args", "unknown[]", true, "Arguments delivered only to handlers owned by the calling resource.")},
+            v8pp::metadata::docs("Promise<void>", {v8pp::metadata::param("eventName", "string", false, "Private local event name."), v8pp::metadata::rest_param("args", "unknown[]", "Arguments delivered only to handlers owned by the calling resource.")},
                 "Emits an event only within the calling resource.", "Promise rejected when one or more local handlers fail.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("listenerCount",
             v8pp::metadata::docs("number", {v8pp::metadata::param("eventName", "string", false, "Shared event name to inspect.")}, "Counts persistent and one-shot shared handlers across resources.", "Number of matching handlers.")));
