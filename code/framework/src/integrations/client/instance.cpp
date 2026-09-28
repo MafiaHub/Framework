@@ -780,7 +780,8 @@ namespace Framework::Integrations::Client {
                 CoreModules::SetReplication(replication);
                 replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(Framework::Utils::Time::SecondsToMs(_serverTickRate)));
             }
-            _chatBox.SetVisible(true);
+            // Visibility is left alone: resources have already started, and a
+            // Chat.setUIVisible(false) they issued must survive the session opening.
             _chatBox.SetSessionActive(true);
             SetConnectionPhase(ConnectionPhase::InGame);
             OnConnectionFinalized(_serverTickRate);
@@ -825,6 +826,9 @@ namespace Framework::Integrations::Client {
             CoreModules::SetReplication(nullptr);
 
             _chatBox.SetSessionActive(false);
+            // Restored here rather than on finalize, so the next server's resources start
+            // from a visible box and whatever they choose is what the session shows.
+            _chatBox.SetVisible(true);
 
             // Notify mod-level that network integration got closed
             OnConnectionClosed();
