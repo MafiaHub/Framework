@@ -235,6 +235,13 @@ namespace Framework::Networking::Replication {
         // Override to quantize or extend; the default carries position/velocity/rotation.
         virtual void SerializeTransform(FieldSerializer &fields);
 
+        // Owning an entity -- simulating it for DelegationManager, say -- need
+        // not mean owning its lifetime. Return false and the server refuses the
+        // owner's destruction; the server's own DestroyEntity is unaffected.
+        virtual bool CanOwnerDestroy() const {
+            return true;
+        }
+
         // Called at the end of every per-tick Deserialize. transformUpdated is true when the update
         // carried the transform channel — the seam an interpolating receiver uses to push a snapshot.
         virtual void OnDeserialized(bool transformUpdated) {

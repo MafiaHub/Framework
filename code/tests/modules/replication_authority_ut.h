@@ -52,6 +52,33 @@ MODULE(replication_authority, {
     MafiaNet::Connection_RM3 *ownerConn    = serverManager->AllocConnection(noAddress, ownerGuid);
     MafiaNet::Connection_RM3 *attackerConn = serverManager->AllocConnection(noAddress, attackerGuid);
 
+    struct ServerLifetimeEntity final: Framework::Networking::Replication::NetworkEntity {
+        bool CanOwnerDestroy() const override {
+            return false;
+        }
+    };
+
+    IT("refuses an owner's destruction of an entity whose lifetime the server keeps", {
+        ServerLifetimeEntity entity;
+        entity.replicaManager = serverManager;
+        entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+
+        MafiaNet::BitStream bs;
+        EQUALS(entity.DeserializeDestruction(&bs, ownerConn), false);
+        EQUALS(entity.DeserializeDestruction(&bs, attackerConn), false);
+        EQUALS(entity.DeserializeDestruction(&bs, nullptr), false);
+    });
+
+    IT("accepts the server's destruction on a client whatever the owner policy", {
+        ServerLifetimeEntity entity;
+        entity.replicaManager = clientManager;
+        entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+
+        MafiaNet::BitStream bs;
+        EQUALS(entity.DeserializeDestruction(&bs, ownerConn), true);
+        EQUALS(entity.DeserializeDestruction(&bs, nullptr), true);
+    });
+
     IT("lets the server delete an entity when the request comes from its owner", {
         NetworkEntity entity;
         entity.replicaManager = serverManager;
