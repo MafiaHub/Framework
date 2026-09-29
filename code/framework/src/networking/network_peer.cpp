@@ -24,6 +24,12 @@ namespace Framework::Networking {
         _peer->AttachPlugin(&_twoWayAuth);
         _peer->AttachPlugin(&_readyEvent);
         _statisticsHistory.SetTrackConnections(true, 0, true);
+        // RakPeer updates every plugin once per received packet; a busy drain would otherwise sample
+        // every connection's statistics per packet.
+        _statisticsHistory.SetSampleInterval(kStatisticsSampleIntervalMs);
+        // A peer stalled past MafiaNet's default handshake window (a client loading, a server under a
+        // join burst) would otherwise be dropped with a build verification timeout. Both ends need it.
+        _twoWayAuth.SetTimeout(kBuildVerificationTimeoutMs);
 
         _replicationManager = std::make_unique<Replication::ReplicationManager>();
     }
@@ -68,16 +74,17 @@ namespace Framework::Networking {
         // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance, then
         // send this tick's state-bag changes — the flush asks each connection what it has
         // constructed, so it reads the relevance this rebuild just settled.
-        if (_replicationManager) {
-            _replicationManager->RebuildInterest();
-            // After the rebuild and before the flush: the election reads the positions this tick
-            // settled, and a handover it decides is an ownership change the flush then sees, so an
-            // owner-scoped bag key travels to the peer that has just been given the entity rather
-            // than to the one that had it a moment ago.
-            _replicationManager->Delegation().Update();
-            _replicationManager->FlushStateBags();
-        }
+        _replicationManager->RebuildInterest();
+        // After the rebuild and before the flush: the election reads the positions this tick
+        // settled, and a handover it decides is an ownership change the flush then sees, so an
+        // owner-scoped bag key travels to the peer that has just been given the entity rather
+        // than to the one that had it a moment ago.
+        _replicationManager->Delegation().Update();
+        _replicationManager->FlushStateBags();
 
+        // Receive() updates every plugin before each packet; the replication pass runs on the first
+        // one only, ahead of this drain's packets, which the next pass then serializes.
+        _replicationManager->BeginNetworkUpdate();
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
             if (_packet->length == 0) {
                 continue;
@@ -99,6 +106,7 @@ namespace Framework::Networking {
                 }
             }
         }
+        _replicationManager->EndNetworkUpdate();
     }
 
     int NetworkPeer::ResolvePacketDataOffset(const uint8_t *data, uint32_t length) {

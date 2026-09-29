@@ -12,6 +12,13 @@ else
     REFERENCE_COMMIT="$LAST_SKIP_CI"
 fi
 
+# A manually versioned release may not have an automatic [skip ci] commit.
+# Once tagged, use that release as the baseline for subsequent changes.
+RELEASE_TAG=$(git describe --tags --match 'v[0-9]*' --abbrev=0 HEAD 2>/dev/null || true)
+if [[ -n "$RELEASE_TAG" ]] && git merge-base --is-ancestor "$REFERENCE_COMMIT" "$RELEASE_TAG"; then
+    REFERENCE_COMMIT="$RELEASE_TAG"
+fi
+
 # Get the list of changed files between the last [skip ci] commit and HEAD
 mapfile -t changed_files < <(git diff --name-only "$REFERENCE_COMMIT" HEAD)
 echo "Changed files: ${changed_files[@]}"
@@ -81,7 +88,10 @@ fi
 CURRENT_VERSION=$(cat VERSION)
 echo "Current version: $CURRENT_VERSION"
 
-IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+# Compute the required bump from the baseline, not from a version already
+# raised by the PR. Otherwise an explicit protocol major gets bumped twice.
+BASE_VERSION=$(git show "${REFERENCE_COMMIT}:VERSION" 2>/dev/null || printf '%s' "$CURRENT_VERSION")
+IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
 
 # Calculate the new version based on the bump type
 case "$BUMP_TYPE" in
@@ -98,6 +108,15 @@ case "$BUMP_TYPE" in
         NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
         ;;
 esac
+
+IFS='.' read -r CURRENT_MAJOR CURRENT_MINOR CURRENT_PATCH <<< "$CURRENT_VERSION"
+IFS='.' read -r NEW_MAJOR NEW_MINOR NEW_PATCH <<< "$NEW_VERSION"
+if (( CURRENT_MAJOR > NEW_MAJOR ||
+      (CURRENT_MAJOR == NEW_MAJOR && CURRENT_MINOR > NEW_MINOR) ||
+      (CURRENT_MAJOR == NEW_MAJOR && CURRENT_MINOR == NEW_MINOR && CURRENT_PATCH >= NEW_PATCH) )); then
+    echo "Keeping explicit version: $CURRENT_VERSION (required: $NEW_VERSION)"
+    exit 0
+fi
 
 # Update the VERSION file with the new version
 echo "$NEW_VERSION" > VERSION

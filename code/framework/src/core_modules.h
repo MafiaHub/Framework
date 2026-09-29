@@ -38,6 +38,10 @@ namespace Framework::Integrations::Client {
     class Instance;
 } // namespace Framework::Integrations::Client
 
+namespace Framework::Integrations::Server {
+    class ConnectionGate;
+} // namespace Framework::Integrations::Server
+
 namespace Framework {
 
 #define FW_ASSERT_MODULE_REGISTRATION(current, incoming, name)                \
@@ -59,6 +63,7 @@ namespace Framework {
             _webManager       = nullptr;
             _input            = nullptr;
             _clientInstance   = nullptr;
+            _connectionGate   = nullptr;
             _tickInterval     = 1.0 / 60.0;
         }
 
@@ -103,6 +108,11 @@ namespace Framework {
             _clientInstance = instance;
         }
 
+        static void SetConnectionGate(Integrations::Server::ConnectionGate *gate) {
+            FW_ASSERT_MODULE_REGISTRATION(_connectionGate, gate, "ConnectionGate");
+            _connectionGate = gate;
+        }
+
         static void SetTickInterval(double seconds) noexcept {
             _tickInterval = (seconds > 0.0) ? seconds : (1.0 / 60.0);
         }
@@ -140,6 +150,10 @@ namespace Framework {
             return _clientInstance;
         }
 
+        static Integrations::Server::ConnectionGate *GetConnectionGate() noexcept {
+            return _connectionGate;
+        }
+
         static double GetTickInterval() noexcept {
             return _tickInterval;
         }
@@ -153,6 +167,7 @@ namespace Framework {
         static inline GUI::Manager *_webManager {};
         static inline Input::IInput *_input {};
         static inline Integrations::Client::Instance *_clientInstance {};
+        static inline Integrations::Server::ConnectionGate *_connectionGate {};
         static inline double _tickInterval {1.0 / 60.0};
     };
 } // namespace Framework

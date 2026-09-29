@@ -28,10 +28,10 @@
 # tree, so bumping the pin here and reconfiguring incrementally would silently
 # keep the old release. This file is the single source of truth, and there is no
 # reason to let -D override the wire format of the protocol.
-set(MAFIANET_PIN_VERSION "0.19.0") # RakVoice receive ordering + in-band FEC, unique Linux GUIDs (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
+set(MAFIANET_PIN_VERSION "0.21.0") # pending-session pool, session timeout, session status and abandonment for connection admission (RAKNET_PROTOCOL_VERSION still 7, new ids take reserved slots)
 
-set(MAFIANET_PIN_SHA256_linux-x86_64 "dfad8bccfe66ee968b3b242b742988a79cbcd95c5b6b2b5c83ceaa9cbed1a7ad")
-set(MAFIANET_PIN_SHA256_macos-arm64 "bf3458265fc17c2bf877457e357b0d707cc6a1e2272d0797fec684c3a6be99c6")
-set(MAFIANET_PIN_SHA256_macos-x86_64 "3548b7489bc14bd83e9d16525e75578e4375a5b4fa73aa0f31c465d210e47703")
-set(MAFIANET_PIN_SHA256_windows-x64 "4aafe6bc3f27ddbc7be7d9bde3b96cf36783c38b6f8ee0a58ba0caa9112eb5fd")
-set(MAFIANET_PIN_SHA256_windows-x86 "a394d6a959cd4e69b8d613b6937666108c4ca25d5e6d8dceaa6a6b8502acfee4")
+set(MAFIANET_PIN_SHA256_linux-x86_64 "6f95b8a1f61697e68b17b89fea8575ab3f140353fb98ebed86ac5af98f2cd27a")
+set(MAFIANET_PIN_SHA256_macos-arm64 "2db384b4770c2a0186562011700dd58ab7c3c69cb206c1b5c4af576c09d48b96")
+set(MAFIANET_PIN_SHA256_macos-x86_64 "918fc75dded6b8a519bfd6c59fa5f1ada5125fc2d2881f1b03c001eae6e20484")
+set(MAFIANET_PIN_SHA256_windows-x64 "2bc716d7722455e7e70cab841bbca5d3f2cbf7a83ecfbe9386cb06d1f5700b8c")
+set(MAFIANET_PIN_SHA256_windows-x86 "9e68925affc383afeb296defd01a2e311af10a7013df462581514ccd06fe3761")

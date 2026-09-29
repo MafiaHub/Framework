@@ -14,6 +14,7 @@
 #include <utils/crypto.h>
 #include <utils/package/package.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 
@@ -30,6 +31,7 @@
 #include "networking/replication/replication_manager.h"
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/client_identity.h"
+#include "networking/rpc/client_join.h"
 #include "networking/rpc/resource_refresh.h"
 #include "networking/rpc/server_resources.h"
 #include "networking/rpc/voice_settings.h"
@@ -64,6 +66,14 @@
 namespace Framework::Integrations::Server {
     namespace {
         constexpr double kTickHitchWarnMs         = 100.0;
+
+        // How much longer MafiaNet keeps a waiting connection request than the gate takes to time it
+        // out, so the player always gets the gate's reason rather than a silent drop.
+        constexpr uint32_t kAdmissionTimeoutMarginMs = 15000;
+
+        // What a player reads when the server refuses without a script having said anything.
+        constexpr const char *kServerFullReason   = "The server is full.";
+        constexpr const char *kUnidentifiedReason = "Your client could not be identified. Update it and try again.";
         constexpr double kTickHitchWarnIntervalMs = 1000.0;
 
         // The default 15.6 ms Windows sleep quantum would hold the tick to ~32 Hz. Restored on every
@@ -187,6 +197,11 @@ namespace Framework::Integrations::Server {
         if (_opts.maxPlayers <= 0) {
             return Error("maxPlayers must be greater than 0 (got " + std::to_string(_opts.maxPlayers) + ")");
         }
+        // MafiaNet keeps 255 bytes and silently drops the rest, so a longer one would be a different
+        // password from the one the operator wrote, and nobody could type the one it enforces.
+        if (_opts.bindPassword.size() > 255) {
+            return Error("password must be at most 255 bytes (got " + std::to_string(_opts.bindPassword.size()) + ")");
+        }
         if (_opts.maxPlayersHardCap > 0 && _opts.maxPlayers > _opts.maxPlayersHardCap) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("maxplayers {} exceeds this build's hard cap; running with {}", _opts.maxPlayers, _opts.maxPlayersHardCap);
             _opts.maxPlayers = _opts.maxPlayersHardCap;
@@ -201,7 +216,12 @@ namespace Framework::Integrations::Server {
         }
 
         // Initialize our networking engine
-        if (auto netResult = _networkingEngine->Init(_opts.bindHost, _opts.bindPort, _opts.maxPlayers, _opts.bindPassword); !netResult) {
+        // MafiaNet drops a request nobody answers; the gate always answers first, with a reason.
+        Framework::Networking::AdmissionSettings admission;
+        admission.pendingConnections           = _opts.pendingConnections;
+        admission.pendingConnectionsPerAddress = _opts.pendingConnectionsPerAddress;
+        admission.sessionTimeoutMs             = static_cast<uint32_t>(std::max(_opts.admissionTimeoutMs, 1)) + kAdmissionTimeoutMarginMs;
+        if (auto netResult = _networkingEngine->Init(_opts.bindHost, _opts.bindPort, _opts.maxPlayers, _opts.bindPassword, admission); !netResult) {
             return netResult;
         }
 
@@ -270,6 +290,9 @@ namespace Framework::Integrations::Server {
 
         CoreModules::SetScriptingModule(_scriptingModule.get());
 
+        _connectionGate.Init(_scriptingModule.get(), _networkingEngine->GetNetworkServer(), std::chrono::milliseconds(std::max(_opts.admissionTimeoutMs, 1)));
+        CoreModules::SetConnectionGate(&_connectionGate);
+
         // A resource owns the entities it spawns; they are destroyed when it stops.
         if (replication) {
             auto *resourceManager = _scriptingModule->GetResourceManager();
@@ -321,6 +344,7 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Http Port:\t{}", _opts.webBindPort);
         }
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Password:\t{}", _opts.bindPassword.empty() ? "none" : "required");
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
@@ -355,7 +379,7 @@ namespace Framework::Integrations::Server {
             {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)},
                 {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)}, {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.webBindPort))},
                 {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(opts.webBindHost)},
-                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts) {
@@ -372,6 +396,7 @@ namespace Framework::Integrations::Server {
         read("map", opts.bindMapName);
         read("maxplayers", opts.maxPlayers);
         read("server-token", opts.bindSecretKey);
+        read("password", opts.bindPassword);
     }
 
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts) {
@@ -388,6 +413,7 @@ namespace Framework::Integrations::Server {
         read("apihost", opts.webBindHost);
         read("apiport", opts.webBindPort);
         read("server-token", opts.bindSecretKey);
+        read("password", opts.bindPassword);
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -475,6 +501,7 @@ namespace Framework::Integrations::Server {
         frameworkKeys["map"]          = _opts.bindMapName;
         frameworkKeys["maxplayers"]   = _opts.maxPlayers;
         frameworkKeys["server-token"] = _opts.bindSecretKey;
+        frameworkKeys["password"]     = _opts.bindPassword;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
 
@@ -511,7 +538,18 @@ namespace Framework::Integrations::Server {
             net->SetBuildToken(Framework::Networking::NetworkPeer::kBuildVerificationDisabledToken);
         }
 
-        // Build verified -> send the resource list (carries the ReadyEvent id and tick rate).
+        // A client asks to join. The request waits in MafiaNet's pending pool -- no player slot, not
+        // counted as online, sent nothing -- until the admission gate answers it.
+        net->SetOnSessionRequestCallback([this](MafiaNet::RakNetGUID guid, const std::optional<Framework::Networking::RPC::ClientIdentity> &identity) {
+            OnSessionRequest(guid, identity);
+        });
+
+        // A waiting request went away: the client gave up, or MafiaNet timed it out.
+        net->SetOnSessionAbandonedCallback([this](MafiaNet::RakNetGUID guid) {
+            _connectionGate.Drop(guid.g);
+        });
+
+        // Admitted and build verified -> send the resource list (carries the ReadyEvent id and tick rate).
         net->SetOnClientAuthenticatedCallback([this, net](MafiaNet::RakNetGUID guid) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Build verified for player guid {}, sending resource list", guid.g);
 
@@ -561,38 +599,25 @@ namespace Framework::Integrations::Server {
             net->GetReadyEvent()->SetEvent(eventId, true);
         });
 
-        // Client announces itself after assets. Gated on authentication so an unverified peer can't
-        // conjure an avatar by sending this directly.
-        net->RegisterRPC<Framework::Networking::RPC::ClientIdentity>([this, net](const Framework::Networking::RPC::ClientIdentity &payload, MafiaNet::Packet *packet) {
+        // Client is done downloading and its resources run: build the avatar. Gated on the build check
+        // so an unverified peer cannot conjure one; admission needs no check, because a refused or
+        // still-waiting peer has no connection to send this over.
+        net->RegisterRPC<Framework::Networking::RPC::ClientJoin>([this, net](const Framework::Networking::RPC::ClientJoin &, MafiaNet::Packet *packet) {
             const auto guid = packet->guid;
             if (!net->IsAuthenticated(guid)) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring identity from unauthenticated peer {}", guid.g);
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring join from unauthenticated peer {}", guid.g);
                 return;
             }
 
             auto *replication = net->GetReplicationManager();
             const auto peerGuid = MafiaNet::ToPeerGuid(guid);
             if (replication && (replication->GetConnectionByGUID(guid) || replication->GetViewer(peerGuid))) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring duplicate identity from {}", guid.g);
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring duplicate join from {}", guid.g);
                 return;
             }
 
-            // Sanitize before retention: nickname length-capped, ids digit strings or dropped.
-            auto identity = payload;
-            if (identity.name.size() > 64) {
-                identity.name.resize(64);
-            }
-            const auto digits = [](std::string &value, size_t max) {
-                if (value.size() > max || value.find_first_not_of("0123456789") != std::string::npos) {
-                    value.clear();
-                }
-            };
-            digits(identity.steamId, 32);
-            digits(identity.discordId, 32);
-            digits(identity.hardwareId, 128);
-            net->SetPeerIdentity(guid, identity);
-
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {}", identity.name, guid.g, identity.hardwareId);
+            // Only a request carrying an identity is ever accepted, so a connection has one.
+            const Framework::Networking::RPC::ClientIdentity &identity = *net->GetPeerIdentity(guid);
 
             // The game builds the avatar and registers it as this connection's viewer; hand it the
             // metadata so it spawns with the real nickname/slot.
@@ -682,6 +707,67 @@ namespace Framework::Integrations::Server {
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
+    }
+
+    void Instance::OnSessionRequest(MafiaNet::RakNetGUID guid, const std::optional<Framework::Networking::RPC::ClientIdentity> &request) {
+        auto *net = _networkingEngine->GetNetworkServer();
+        if (!request) {
+            // Not a framework client of this protocol: there is nobody to ask playerConnecting about.
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Refusing a connection request from {} that carried no identity", guid.g);
+            net->RejectSession(guid, kUnidentifiedReason);
+            return;
+        }
+
+        // Sanitize before retention: nickname length-capped, ids digit strings or dropped, a ticket too
+        // long to be one dropped rather than cut.
+        auto identity = *request;
+        if (identity.name.size() > 64) {
+            identity.name.resize(64);
+        }
+        const auto digits = [](std::string &value, size_t max) {
+            if (value.size() > max || value.find_first_not_of("0123456789") != std::string::npos) {
+                value.clear();
+            }
+        };
+        digits(identity.steamId, 32);
+        digits(identity.discordId, 32);
+        digits(identity.hardwareId, 128);
+        if (identity.ticket.size() > Framework::Networking::RPC::ClientIdentity::kMaxTicketLength) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropping a {} byte ticket from {}", identity.ticket.size(), guid.g);
+            identity.ticket.clear();
+        }
+        net->SetPeerIdentity(guid, identity);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {} is connecting", identity.name, guid.g, identity.hardwareId);
+        if (!_connectionGate.Begin(guid, identity, net->GetAddress(guid))) {
+            AdmitSession(guid);
+        }
+    }
+
+    void Instance::AdmitSession(MafiaNet::RakNetGUID guid) {
+        auto *net = _networkingEngine->GetNetworkServer();
+        // The pool let the request in whatever the player count, so a queue can hold people while the
+        // server is full. Letting one in still needs a free slot.
+        if (net->GetPlayerCount() >= static_cast<uint32_t>(_opts.maxPlayers)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refusing guid {}: the server is full", guid.g);
+            net->RejectSession(guid, kServerFullReason);
+            return;
+        }
+        net->AcceptSession(guid);
+    }
+
+    void Instance::ApplyAdmissionDecisions() {
+        _admissionDecisions.clear();
+        _connectionGate.Collect(_admissionDecisions);
+        auto *net = _networkingEngine->GetNetworkServer();
+        for (const AdmissionDecision &decision : _admissionDecisions) {
+            if (decision.admitted) {
+                AdmitSession(decision.guid);
+            }
+            else {
+                net->RejectSession(decision.guid, decision.reason);
+            }
+        }
     }
 
     void Instance::HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) {
@@ -1218,6 +1304,10 @@ namespace Framework::Integrations::Server {
 
         Integrations::Shared::Scripting::ReleaseStateBagEvents(_stateBagEvents);
 
+        // Holds Promises of the engine torn down below.
+        _connectionGate.Shutdown();
+        CoreModules::SetConnectionGate(nullptr);
+
         if (_scriptingModule) {
             _scriptingModule->PreShutdown();
         }
@@ -1264,7 +1354,7 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::Update() {
-        const auto start = std::chrono::high_resolution_clock::now();
+        const auto start = std::chrono::steady_clock::now();
         if (_nextTick <= start) {
             FW_PROFILE_SCOPE_N("Server::Tick");
 
@@ -1292,6 +1382,11 @@ namespace Framework::Integrations::Server {
                 _scriptingModule->Update();
             }
 
+            if (_networkingEngine) {
+                FW_PROFILE_SCOPE_N("Server::Admission");
+                ApplyAdmissionDecisions();
+            }
+
             if (_commandListener) {
                 FW_PROFILE_SCOPE_N("Server::Commands");
                 _commandListener->Update();
@@ -1305,6 +1400,7 @@ namespace Framework::Integrations::Server {
                 info.version        = _opts.modVersion;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
+                info.passworded     = !_opts.bindPassword.empty();
                 _masterlist->Ping(info);
             }
 
@@ -1315,7 +1411,7 @@ namespace Framework::Integrations::Server {
 
             FW_PROFILE_FRAME();
 
-            const auto end      = std::chrono::high_resolution_clock::now();
+            const auto end      = std::chrono::steady_clock::now();
             const double tickMs = std::chrono::duration<double, std::milli>(end - start).count();
             if (tickMs >= kTickHitchWarnMs) {
                 ++_suppressedHitches;
@@ -1326,10 +1422,11 @@ namespace Framework::Integrations::Server {
                 }
             }
 
-            _nextTick = end + std::chrono::milliseconds(static_cast<int64_t>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
+            // Tick work consumes the interval; overruns leave no wait and no catch-up backlog.
+            _nextTick = start + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(_opts.worldConfig.tickInterval));
         }
         else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            std::this_thread::sleep_until(_nextTick);
         }
     }
     void Instance::Run() {

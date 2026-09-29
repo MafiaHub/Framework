@@ -81,6 +81,7 @@ MODULE(network_packets, {
         out.steamId    = "steam-1";
         out.discordId  = "discord-2";
         out.hardwareId = "hw-3";
+        out.ticket     = "one-time-ticket";
 
         MafiaNet::BitStream bs;
         out.Serialize(&bs, true);
@@ -89,6 +90,49 @@ MODULE(network_packets, {
         STREQUALS(in.steamId.c_str(), "steam-1");
         STREQUALS(in.discordId.c_str(), "discord-2");
         STREQUALS(in.hardwareId.c_str(), "hw-3");
+        STREQUALS(in.ticket.c_str(), "one-time-ticket");
+    });
+
+    // The identity is the MafiaNet session payload: bytes the server decodes before any connection
+    // exists, so what a client encodes must decode whole, and nothing else may.
+    IT("decodes a ClientIdentity session payload it encoded", {
+        RPC::ClientIdentity out {};
+        out.name       = "Jan";
+        out.steamId    = "76561198000000000";
+        out.discordId  = "123";
+        out.hardwareId = "456";
+        out.ticket     = "tkt-abc+123";
+
+        const auto in = RPC::ClientIdentity::Decode(out.Encode());
+        EQUALS(in.has_value(), true);
+        STREQUALS(in->name.c_str(), "Jan");
+        STREQUALS(in->steamId.c_str(), "76561198000000000");
+        STREQUALS(in->discordId.c_str(), "123");
+        STREQUALS(in->hardwareId.c_str(), "456");
+        STREQUALS(in->ticket.c_str(), "tkt-abc+123");
+    });
+
+    IT("decodes an identity with every field empty", {
+        RPC::ClientIdentity out {};
+        const auto in = RPC::ClientIdentity::Decode(out.Encode());
+        EQUALS(in.has_value(), true);
+        EQUALS(in->name.empty() && in->ticket.empty(), true);
+    });
+
+    IT("refuses an empty session payload", {
+        EQUALS(RPC::ClientIdentity::Decode("").has_value(), false);
+    });
+
+    IT("refuses a truncated session payload", {
+        RPC::ClientIdentity out {};
+        out.name   = "Jan";
+        out.ticket = "a-ticket-long-enough-to-cut";
+        const std::string encoded = out.Encode();
+        EQUALS(RPC::ClientIdentity::Decode(encoded.substr(0, encoded.size() - 4)).has_value(), false);
+    });
+
+    IT("refuses a payload from something that is not a framework client", {
+        EQUALS(RPC::ClientIdentity::Decode("{\"build\":\"m2o|1.2.3\"}").has_value(), false);
     });
 
     IT("round-trips a ServerResources payload with a resource list", {

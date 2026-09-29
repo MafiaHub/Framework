@@ -15,6 +15,7 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
+#include "connection_gate.h"
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
@@ -38,6 +39,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <sig.h>
 #include <string>
 #include <string_view>
@@ -102,6 +104,16 @@ namespace Framework::Integrations::Server {
         std::string bindPassword;
         bool bindPublicServer = true;
 
+        // How long playerConnecting handlers may take to settle before the connection is turned
+        // away. Each PendingConnection.update() restarts it for that connection.
+        int32_t admissionTimeoutMs = 30000;
+
+        // Connections waiting on playerConnecting are held by MafiaNet in a pool of their own, beside
+        // the maxPlayers slots: they take no player slot and are not counted as online. The pool bounds
+        // how many may wait at once, and how many of those one IP address may hold (0: unbounded).
+        uint16_t pendingConnections           = 32;
+        uint16_t pendingConnectionsPerAddress = 4;
+
         // MafiaHub Services
         struct Services {
             std::string apiUrl = "https://api.mafiahub.dev";
@@ -159,8 +171,8 @@ namespace Framework::Integrations::Server {
         std::atomic<bool> _shuttingDown;
         // Set after the initial StartAll; gates runtime broadcasts to clients.
         bool _resourcesBooted = false;
-        std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
-        std::chrono::time_point<std::chrono::high_resolution_clock> _lastHitchWarnAt {};
+        std::chrono::steady_clock::time_point _nextTick {};
+        std::chrono::steady_clock::time_point _lastHitchWarnAt {};
         uint32_t _suppressedHitches = 0;
 
         InstanceOptions _opts;
@@ -187,6 +199,11 @@ namespace Framework::Integrations::Server {
         std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
         std::unordered_set<uint64_t> _readyPlayerGuids;
 
+        // Holds each authenticated connection until the playerConnecting handlers answer.
+        ConnectionGate _connectionGate;
+        // Reused every tick so the drain never allocates.
+        std::vector<AdmissionDecision> _admissionDecisions;
+
         // Loaded from (or written to) the staging directory; sent with the resource list.
         Utils::Crypto::Key _packageKey {};
         std::string _packageKeyHex;
@@ -195,6 +212,14 @@ namespace Framework::Integrations::Server {
 
         void InitEndpoints();
         void InitNetworkingMessages();
+        // A connection request arrived: hand it to the admission gate, or admit it at once when no
+        // script gates connections. Refused outright when it carries no identity.
+        void OnSessionRequest(MafiaNet::RakNetGUID guid, const std::optional<Framework::Networking::RPC::ClientIdentity> &identity);
+        // Let a waiting request in, if a player slot is free; the connection then becomes real on both
+        // sides and the usual build check, resource list and join follow.
+        void AdmitSession(MafiaNet::RakNetGUID guid);
+        // Runs once per tick, after scripting: acts on what the gate settled.
+        void ApplyAdmissionDecisions();
         void InitAssetStreamer();
         // Directory the built .fwpak containers are staged in for the streamer to upload.
         std::string GetPackageStagingDir() const;

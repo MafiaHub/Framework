@@ -11,7 +11,10 @@ add_executable(FrameworkTests
         ../framework/src/gui/resources/memory_provider.cpp
         # Free of CEF and of Integrations::Client::Instance, so the package mounter is testable
         # without linking FrameworkClient.
-        ../framework/src/integrations/client/resource_packages.cpp)
+        ../framework/src/integrations/client/resource_packages.cpp
+        # The transport half of the client, for the admission handshake over loopback. It needs
+        # nothing of FrameworkClient beyond itself.
+        ../framework/src/networking/network_client.cpp)
 
 # The pattern table and the base-relocation helpers live in FrameworkClient/FrameworkLoader,
 # neither of which the tests link. They depend on nothing but <windows.h>, so they compile

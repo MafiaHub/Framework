@@ -35,6 +35,7 @@ set(FRAMEWORK_SRC
     src/networking/replication/delegation.cpp
     src/networking/replication/replication_manager.cpp
     src/networking/replication/replication_connection.cpp
+    src/networking/replication/transform_batch.cpp
 
     # JavaScript scripting engine base and builtins (used by both client and server)
     # Note: node_engine.cpp and v8_engine.cpp are in OBJECT libraries due to special compile flags
@@ -71,11 +72,13 @@ set(FRAMEWORK_SERVER_SRC
     src/networking/network_server.cpp
 
     src/integrations/server/instance.cpp
+    src/integrations/server/connection_gate.cpp
     src/integrations/server/networking/engine.cpp
 
     # JavaScript scripting (server module)
     src/integrations/server/scripting/module.cpp
     src/integrations/server/scripting/builtins/voice.cpp
+    src/integrations/server/scripting/builtins/pending_connection.cpp
 
     src/voice/server/voice_router.cpp
     src/voice/server/voice_server.cpp

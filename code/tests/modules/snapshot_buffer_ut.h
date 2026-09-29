@@ -173,4 +173,76 @@ MODULE(snapshot_buffer, {
         config.adaptiveDelay = false;
         EQUALS(buffer.EffectiveDelayMs(), config.interpDelayMs);
     });
+
+    IT("keeps a moving body advancing when a late snapshot increases delay", {
+        TransformSnapshotBuffer buffer;
+        TransformSnapshot snap, before, after;
+        snap.velocity = glm::vec3(1.0f, 0.0f, 0.0f);
+        for (MafiaNet::Time time = 1000; time <= 1100; time += 50) {
+            snap.position.x = static_cast<float>(time - 1000) / 1000.0f;
+            buffer.Push(snap, time);
+        }
+        const auto previous = buffer.RenderTime(1199);
+        buffer.Sample(previous, before);
+        snap.position.x = 0.2f;
+        buffer.Push(snap, 1200); // One missing update increases the adaptive delay.
+        const auto current = buffer.RenderTime(1215);
+        // The former now-delay clock goes backwards from 1149 to 1145.
+        LESSER(1215.0f - buffer.EffectiveDelayMs(), static_cast<float>(previous));
+        GREATEREQ(current - previous, 14U);
+        LESSEREQ(current - previous, 18U);
+        buffer.Sample(current, after);
+        GREATER(after.position.x, before.position.x);
+        LESSER(after.position.x - before.position.x, 0.018f);
+    });
+
+    IT("bounds catch-up speed and converges without losing fractional milliseconds", {
+        SnapshotBufferConfig config;
+        config.adaptiveDelay = false;
+        config.interpDelayMs = 100.0f;
+        TransformSnapshotBuffer buffer(&config);
+        auto previous        = buffer.RenderTime(1000);
+        config.interpDelayMs = 50.0f;
+        for (MafiaNet::Time now = 1001; now <= 2000; ++now) {
+            const auto current = buffer.RenderTime(now);
+            GREATEREQ(current, previous);
+            LESSEREQ(current - previous, 2U);
+            previous = current;
+        }
+        EQUALS(previous, 1950U);
+        EQUALS(buffer.RenderTime(2000), previous); // Sampling twice in a frame cannot advance time.
+        EQUALS(buffer.RenderTime(1999), previous);
+    });
+
+    IT("resets adaptive timing and the presentation clock when history is cleared", {
+        TransformSnapshotBuffer buffer;
+        TransformSnapshot snap;
+        buffer.Push(snap, 1000);
+        buffer.Push(snap, 1200);
+        EQUALS(buffer.EffectiveDelayMs(), 200.0f);
+        EQUALS(buffer.RenderTime(1500), 1300U);
+        buffer.Clear();
+        EQUALS(buffer.EffectiveDelayMs(), 100.0f);
+        EQUALS(buffer.RenderTime(1500), 1400U);
+        buffer.Clear();
+        EQUALS(buffer.RenderTime(10), 0U); // No unsigned clock underflow at startup.
+        // Held at zero until the delay has elapsed, then starting on the target rather than ahead of it.
+        EQUALS(buffer.RenderTime(100), 0U);
+        EQUALS(buffer.RenderTime(110), 10U);
+        EQUALS(buffer.RenderTime(120), 20U);
+    });
+
+    IT("starts fresh timing history after a teleport", {
+        TransformSnapshotBuffer buffer;
+        TransformSnapshot snap, out;
+        buffer.Push(snap, 1000);
+        buffer.Push(snap, 1200);
+        buffer.RenderTime(1300);
+        snap.position.x = 1000.0f;
+        buffer.Push(snap, 1400);
+        EQUALS(buffer.EffectiveDelayMs(), 100.0f);
+        EQUALS(buffer.RenderTime(1400), 1300U);
+        buffer.Sample(1300, out);
+        EQUALS(out.position.x, 1000.0f);
+    });
 });

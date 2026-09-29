@@ -17,7 +17,7 @@
 namespace Framework::Integrations::Server::Networking {
     class Engine final : public Shared::Networking::PeerEngine<Framework::Networking::NetworkServer> {
       public:
-        [[nodiscard]] Utils::Result<void, Error> Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password);
+        [[nodiscard]] Utils::Result<void, Error> Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password, const Framework::Networking::AdmissionSettings &admission = {});
 
         Framework::Networking::NetworkServer *GetNetworkServer() const {
             return _peer.get();

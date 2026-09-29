@@ -11,6 +11,7 @@
 #include "integrations/shared/rpc/emit_script_event.h"
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/client_identity.h"
+#include "networking/rpc/client_join.h"
 #include "networking/rpc/resource_refresh.h"
 #include "networking/rpc/rpc_identifier.h"
 #include "networking/rpc/server_resources.h"
@@ -40,7 +41,7 @@ MODULE(rpc_identifier, {
         const char *token;
     };
     static const Identifier kIdentifiers[] = {
-        {"Framework::ClientIdentity", RPC::ClientIdentity::kIdentifier},
+        {"Framework::ClientJoin", RPC::ClientJoin::kIdentifier},
         {"Framework::ChatMessage", RPC::ChatMessage::kIdentifier},
         {"Framework::ServerResources", RPC::ServerResources::kIdentifier},
         {"Framework::ResourceRefresh", RPC::ResourceRefresh::kIdentifier},

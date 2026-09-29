@@ -12,31 +12,35 @@
 
 /* TEST CATEGORIES */
 #include "modules/bitops_ut.h"
-#include "modules/string_utils_ut.h"
+#include "modules/connection_admission_ut.h"
+#include "modules/connection_gate_ut.h"
+#include "modules/delegation_ut.h"
+#include "modules/gui_resources_ut.h"
+#include "modules/interest_grid_ut.h"
 #include "modules/interpolator_ut.h"
-#include "modules/result_ut.h"
 #include "modules/network_packets_ut.h"
+#include "modules/network_work_ut.h"
+#include "modules/persistent_config_ut.h"
 #include "modules/replication_authority_ut.h"
 #include "modules/replication_rate_ut.h"
-#include "modules/interest_grid_ut.h"
-#include "modules/delegation_ut.h"
-#include "modules/state_bag_ut.h"
-#include "modules/state_bag_scripting_ut.h"
-#include "modules/scripting_catalog_ut.h"
-#include "modules/rpc_identifier_ut.h"
-#include "modules/state_machine_ut.h"
-#include "modules/persistent_config_ut.h"
-#include "modules/server_config_ut.h"
-#include "modules/url_protocol_ut.h"
-#include "modules/snapshot_buffer_ut.h"
-#include "modules/voice_router_ut.h"
-#include "modules/voice_positions_ut.h"
-#include "modules/spsc_ring_ut.h"
-#include "modules/voice_mixer_ut.h"
-#include "modules/voice_ptt_gate_ut.h"
-#include "modules/voice_activity_ut.h"
-#include "modules/gui_resources_ut.h"
 #include "modules/resource_package_ut.h"
+#include "modules/result_ut.h"
+#include "modules/rpc_identifier_ut.h"
+#include "modules/scripting_catalog_ut.h"
+#include "modules/server_config_ut.h"
+#include "modules/snapshot_buffer_ut.h"
+#include "modules/spsc_ring_ut.h"
+#include "modules/state_bag_scripting_ut.h"
+#include "modules/state_bag_ut.h"
+#include "modules/state_machine_ut.h"
+#include "modules/string_utils_ut.h"
+#include "modules/transform_batch_ut.h"
+#include "modules/url_protocol_ut.h"
+#include "modules/voice_activity_ut.h"
+#include "modules/voice_mixer_ut.h"
+#include "modules/voice_positions_ut.h"
+#include "modules/voice_ptt_gate_ut.h"
+#include "modules/voice_router_ut.h"
 
 #ifdef _WIN32
 // The hooking layer, and so the pattern table, is Windows-only.
@@ -45,9 +49,9 @@
 
 // Scripting tests
 #include "modules/engine_ut.h"
-#include "modules/resource_ut.h"
-#include "modules/resource_manager_ut.h"
 #include "modules/js_features_ut.h"
+#include "modules/resource_manager_ut.h"
+#include "modules/resource_ut.h"
 #include "modules/timer_context_ut.h"
 
 int main() {
@@ -60,8 +64,10 @@ int main() {
     UNIT_MODULE(interpolator);
     UNIT_MODULE(result);
     UNIT_MODULE(network_packets);
+    UNIT_MODULE(network_work);
     UNIT_MODULE(replication_authority);
     UNIT_MODULE(replication_rate);
+    UNIT_MODULE(transform_batch);
     UNIT_MODULE(interest_grid);
     UNIT_MODULE(delegation);
     UNIT_MODULE(state_bag);
@@ -93,6 +99,8 @@ int main() {
     UNIT_MODULE(resource_manager_callbacks);
     UNIT_MODULE(js_features);
     UNIT_MODULE(timer_context);
+    UNIT_MODULE(connection_gate);
+    UNIT_MODULE(connection_admission);
 
     return UNIT_RUN();
 }
