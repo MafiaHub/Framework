@@ -1,38 +1,13 @@
 # Server-owned entity lifetime
 
-An entity can delegate physics to a client while retaining server control
-over its existence. Override `NetworkEntity::CanOwnerDestroy()` to return
-false for durable world objects. The existing authenticated-owner check
-still applies; this policy adds a restriction rather than granting access.
-Clients continue accepting the server's destruction messages.
+`DelegationManager` hands an entity to the client best placed to simulate
+it by making that client the entity's owner. Ownership also lets the owner
+destroy the entity, which is right for an entity the client created and
+wrong for one the server keeps -- a stack of items on the ground, say: its
+simulator must be able to move it, never make it disappear.
 
-The base construction and state snapshots now include the server's virtual
-world. Changes also push it directly to the current owner, which is excluded
-from ordinary relays. It precedes game-specific forced fields, so an override
-cannot accidentally omit it. Owner updates cannot change it on the server.
-This changes the shared wire format and requires matching version 29 clients and servers.
-
-Script handles can override the Entity position, rotation and virtual-world
-setters. A durable object can therefore commit its placement before exposing
-the new transform. The rotation property converts a rejected override into
-a catchable JavaScript error, matching the other bound setter paths.
-
-## Verification
-
-Run `builds\build.bat RunFrameworkTests 64`. The replication authority tests
-cover owner/non-owner destruction, server destruction on clients, world
-seeding on construction, subsequent world updates, forced owner updates and forged owner worlds.
-
-For an integrating mod, create a durable entity with a client physics owner.
-Verify that an owner destruction request leaves it alive, a server removal
-removes it from both clients, and a late joiner receives its current world.
-Exercise the script placement overrides with valid and refused writes;
-refusal must leave the durable placement unchanged and throw to the caller.
-
-## API example
-
-An existing registered entity type can keep its usual physics delegation
-while refusing owner-authored deletion:
+Override `NetworkEntity::CanOwnerDestroy()` to return false for such an
+entity:
 
 ```cpp
 bool CanOwnerDestroy() const override {
@@ -40,27 +15,17 @@ bool CanOwnerDestroy() const override {
 }
 ```
 
-`CanOwnerDestroy()` defaults to true. The server calls this policy only after
-validating the sender's ownership. Returning true never authorizes another
-client to delete the entity. Normal server destruction remains available
-through `ReplicationManager::DestroyEntity(entity)`.
+The server then refuses a destruction from the owner, as it already refuses
+one from any other client. It adds a restriction, never a permission.
+Clients still apply the server's destructions, and the server removes the
+entity as usual with `ReplicationManager::DestroyEntity(entity)`.
 
-Server code changes the entity's world through the normal typed setter:
+Everything else a delegated entity needs is the delegation feature's: the
+simulator writes the fields it owns, and every server write is followed by
+`ForceState()` (see `delegation.h`).
 
-```cpp
-entity->SetVirtualWorld(7);
-```
+## Verification
 
-This sends the current owner a forced snapshot when the value changes;
-other observers receive ordinary state updates or streaming changes. The
-world is also included in construction for late joiners. The framework's
-`SerializeForcedSnapshot` places the world before the game's
-`SerializeForcedState` extension, even if that override omits a base call.
-Game implementations should keep overriding `SerializeForcedState` for
-their own forced fields.
-
-Durable script handles can override `Entity::SetPosition`,
-`SetRotationFromEuler`, `SetRotationFromQuaternion` and `SetVirtualWorld`.
-Validate and commit the durable placement before updating the replica.
-Throwing `std::runtime_error` from a rejected setter reaches JavaScript as
-a catchable error; do not change the replica before rejecting the write.
+`builds\build.bat RunFrameworkTests 64`: the replication authority tests
+cover an owner's destruction refused under the policy and the server's
+destruction still applied on a client.

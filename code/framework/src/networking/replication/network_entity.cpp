@@ -76,13 +76,6 @@ namespace Framework::Networking::Replication {
     }
 
     void NetworkEntity::SerializeBaseFields(FieldSerializer &fields) {
-        // Interest filtering uses the server's world, but clients need it for
-        // native state restoration and scripting. Only the server may assign it.
-        uint32_t world = GetVirtualWorld();
-        fields.ServerField(world);
-        if (!fields.Writing() && !IsServerPeer()) {
-            SetVirtualWorld(world);
-        }
         if (fields.Writing()) {
             fields.Field(ownerGUID);
             fields.Field(streaming.isViewer);
@@ -165,25 +158,6 @@ namespace Framework::Networking::Replication {
     void NetworkEntity::SerializeForcedState(FieldSerializer &fields) {
         fields.Field(position);
         fields.Field(rotation);
-    }
-
-    void NetworkEntity::SerializeForcedSnapshot(FieldSerializer &fields) {
-        uint32_t world = GetVirtualWorld();
-        fields.ServerField(world);
-        if (!fields.Writing() && fields.Good() && !IsServerPeer()) {
-            SetVirtualWorld(world);
-        }
-        SerializeForcedState(fields);
-    }
-
-    void NetworkEntity::SetVirtualWorld(uint32_t world) {
-        if (GetVirtualWorld() == world) {
-            return;
-        }
-        MafiaNet::VirtualWorldReplica3::SetVirtualWorld(world);
-        if (IsServerPeer()) {
-            ForceState();
-        }
     }
 
     void NetworkEntity::MarkStateDirty() {

@@ -235,8 +235,9 @@ namespace Framework::Networking::Replication {
         // Override to quantize or extend; the default carries position/velocity/rotation.
         virtual void SerializeTransform(FieldSerializer &fields);
 
-        // Pose ownership need not grant lifetime ownership. The destruction
-        // gate validates the source before consulting this entity policy.
+        // Owning an entity -- simulating it for DelegationManager, say -- need
+        // not mean owning its lifetime. Return false and the server refuses the
+        // owner's destruction; the server's own DestroyEntity is unaffected.
         virtual bool CanOwnerDestroy() const {
             return true;
         }
@@ -250,14 +251,6 @@ namespace Framework::Networking::Replication {
         // Server -> owner override of an owned entity (the owner is otherwise authoritative). Default
         // carries the transform; override to add state, e.g. a vehicle's engine/config.
         virtual void SerializeForcedState(FieldSerializer &fields);
-
-        // Mandatory owner snapshot fields precede the game's extension, even
-        // when an override does not call SerializeForcedState on the base.
-        void SerializeForcedSnapshot(FieldSerializer &fields);
-
-        // A current owner is excluded from normal state relays, so a world
-        // change also pushes a forced snapshot directly to that connection.
-        void SetVirtualWorld(uint32_t world);
 
         // Called on the owning client after SerializeForcedState has applied the forced fields.
         virtual void OnStateForced() {}

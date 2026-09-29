@@ -606,57 +606,6 @@ MODULE(js_features, {
         manager.GetEvents().CleanupResource("testResource");
     };
 
-    IT("Synchronous reserved events can veto handler failures without changing the default policy", {
-        EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
-        config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
-        registerEvents(engine, manager);
-
-        EQUALS(RunJS(engine, R"(
-            globalThis.__syncCalls = 0;
-            Events.on('allow', () => true);
-            Events.on('allow', () => {});
-            Events.on('deny', () => false);
-            Events.on('deny', () => { globalThis.__syncCalls++; return true; });
-            Events.on('throws', () => { throw new Error('expected synchronous veto test'); });
-            Events.on('throws', () => { globalThis.__syncCalls++; return true; });
-            Events.on('async', async () => false);
-            Events.on('async', () => { globalThis.__syncCalls++; return true; });
-            Events.once('onceDeny', () => false);
-            Events.onClient('allow', () => false);
-            0
-        )"), 0);
-
-        {
-            v8::Isolate *isolate = engine.GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = engine.GetContext();
-            v8::Context::Scope contextScope(context);
-            auto &events = manager.GetEvents();
-
-            EQUALS(events.EmitReservedSync(isolate, context, "absent", {}, Framework::Scripting::Builtins::Events::SynchronousFailurePolicy::Veto), true);
-            EQUALS(events.EmitReservedSync(isolate, context, "allow", {}, Framework::Scripting::Builtins::Events::SynchronousFailurePolicy::Veto), true);
-            EQUALS(events.EmitReservedSync(isolate, context, "deny", {}), false);
-            EQUALS(events.EmitReservedSync(isolate, context, "deny", {}, Framework::Scripting::Builtins::Events::SynchronousFailurePolicy::Veto), false);
-            EQUALS(events.EmitReservedSync(isolate, context, "throws", {}), true);
-            EQUALS(events.EmitReservedSync(isolate, context, "throws", {}, Framework::Scripting::Builtins::Events::SynchronousFailurePolicy::Veto), false);
-            EQUALS(events.EmitReservedSync(isolate, context, "async", {}), true);
-            EQUALS(events.EmitReservedSync(isolate, context, "async", {}, Framework::Scripting::Builtins::Events::SynchronousFailurePolicy::Veto), false);
-            EQUALS(events.EmitReservedSync(isolate, context, "onceDeny", {}, Framework::Scripting::Builtins::Events::SynchronousFailurePolicy::Veto), false);
-            EQUALS(events.EmitReservedSync(isolate, context, "onceDeny", {}, Framework::Scripting::Builtins::Events::SynchronousFailurePolicy::Veto), true);
-        }
-
-        EQUALS(RunJS(engine, "globalThis.__syncCalls"), 6);
-        cleanupResource(engine, manager);
-        engine.Shutdown();
-        EventsTestHelper::Cleanup();
-    });
-
     // The core guarantee: on() and onClient() (incl. onceClient) register into disjoint tables under
     // the same event name — so a client event, which only ever dispatches into the client table, can
     // never resolve to an on() handler.

@@ -58,7 +58,7 @@ MODULE(replication_authority, {
         }
     };
 
-    IT("keeps server-owned lifetime even when a client owns the pose", {
+    IT("refuses an owner's destruction of an entity whose lifetime the server keeps", {
         ServerLifetimeEntity entity;
         entity.replicaManager = serverManager;
         entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
@@ -69,7 +69,7 @@ MODULE(replication_authority, {
         EQUALS(entity.DeserializeDestruction(&bs, nullptr), false);
     });
 
-    IT("accepts server destruction on a client even when owners cannot destroy", {
+    IT("accepts the server's destruction on a client whatever the owner policy", {
         ServerLifetimeEntity entity;
         entity.replicaManager = clientManager;
         entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
@@ -254,84 +254,6 @@ MODULE(replication_authority, {
         deliverState(server, observer, nullptr);
         EQUALS(observer.measured, 7);
         EQUALS(observer.verdict, 2);
-    });
-
-    IT("seeds the virtual world when a client constructs an entity", {
-        NetworkEntity server;
-        server.replicaManager = serverManager;
-        server.SetVirtualWorld(123);
-        NetworkEntity observer;
-        observer.replicaManager = clientManager;
-        MafiaNet::BitStream construction;
-        server.SerializeConstruction(&construction, nullptr);
-        EQUALS(observer.DeserializeConstruction(&construction, nullptr), true);
-        EQUALS(observer.GetVirtualWorld(), 123u);
-    });
-
-    IT("replicates world changes and refuses the owning client's world assignment", {
-        VerdictEntity server;
-        server.replicaManager = serverManager;
-        server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
-        server.SetVirtualWorld(123);
-        VerdictEntity observer;
-        observer.replicaManager = clientManager;
-        deliverState(server, observer, nullptr);
-        EQUALS(observer.GetVirtualWorld(), 123u);
-        server.SetVirtualWorld(456);
-        deliverState(server, observer, nullptr);
-        EQUALS(observer.GetVirtualWorld(), 456u);
-        observer.SetVirtualWorld(999);
-        deliverState(observer, server, ownerConn);
-        EQUALS(server.GetVirtualWorld(), 456u);
-    });
-
-    IT("pushes a world change to an owner that remains visible but receives no relays", {
-        NetworkEntity server;
-        server.replicaManager = serverManager;
-        server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
-        ownerConn->SetVirtualWorld(MafiaNet::VIRTUAL_WORLD_GLOBAL);
-        EQUALS(server.QuerySerialization(ownerConn), MafiaNet::RM3QSR_DO_NOT_CALL_SERIALIZE);
-        const auto oldEpoch = server.stateEpoch;
-        server.SetVirtualWorld(123);
-        EQUALS(server.stateEpoch, static_cast<uint8_t>(oldEpoch + 1));
-        EQUALS(server.QuerySerialization(ownerConn), MafiaNet::RM3QSR_DO_NOT_CALL_SERIALIZE);
-        server.SetVirtualWorld(123);
-        EQUALS(server.stateEpoch, static_cast<uint8_t>(oldEpoch + 1));
-
-        NetworkEntity owner;
-        owner.replicaManager = clientManager;
-        MafiaNet::BitStream payload;
-        Framework::Networking::Replication::FieldSerializer output(&payload, true);
-        server.SerializeForcedSnapshot(output);
-        Framework::Networking::Replication::FieldSerializer input(&payload, false);
-        owner.SerializeForcedSnapshot(input);
-        EQUALS(input.Good(), true);
-        EQUALS(owner.GetVirtualWorld(), 123u);
-        EQUALS(owner.stateEpoch, 0u);
-        ownerConn->SetVirtualWorld(MafiaNet::VIRTUAL_WORLD_DEFAULT);
-    });
-
-    IT("carries the forced world even when a game replaces the base forced fields", {
-        struct CustomForcedEntity final: NetworkEntity {
-            int custom = 0;
-            void SerializeForcedState(Framework::Networking::Replication::FieldSerializer &fields) override {
-                fields.Field(custom);
-            }
-        };
-        CustomForcedEntity server;
-        server.replicaManager = serverManager;
-        server.SetVirtualWorld(456);
-        server.custom = 42;
-        CustomForcedEntity owner;
-        owner.replicaManager = clientManager;
-        MafiaNet::BitStream payload;
-        Framework::Networking::Replication::FieldSerializer output(&payload, true);
-        server.SerializeForcedSnapshot(output);
-        Framework::Networking::Replication::FieldSerializer input(&payload, false);
-        owner.SerializeForcedSnapshot(input);
-        EQUALS(input.Good(), true);
-        EQUALS(owner.GetVirtualWorld(), 456u);
-        EQUALS(owner.custom, 42);
     });
 
     serverManager->DeallocConnection(ownerConn);
