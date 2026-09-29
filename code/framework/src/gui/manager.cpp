@@ -22,6 +22,7 @@
 
 #include <imgui.h>
 
+#include <cstdlib>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -270,7 +271,12 @@ namespace Framework::GUI {
         settings.windowless_rendering_enabled = true;
         settings.multi_threaded_message_loop  = false;
         settings.no_sandbox                   = true;
-        settings.log_severity                 = LOGSEVERITY_ERROR;
+        // Chromium logs a failed Hyper-V CPU counter every 15 seconds on any
+        // machine running VBS (CpuHealthTracker, which no switch or feature
+        // disables), burying every real error. CEF filters by severity only,
+        // so ERROR is opt-in for when the browser itself is being debugged.
+        const char *cefErrorLog = std::getenv("MafiaHubCefErrorLog");
+        settings.log_severity   = (cefErrorLog && *cefErrorLog) ? LOGSEVERITY_ERROR : LOGSEVERITY_FATAL;
 
         std::error_code logDirError;
         const std::filesystem::path logDir = std::filesystem::path(rootDir) / "logs";
