@@ -62,6 +62,18 @@ namespace Framework::Voice {
             return true;
         }
 
+        // Consumer side. Advances without copying; only the consumer owns _read.
+        bool Skip(size_t count) {
+            const size_t read  = _read.load(std::memory_order_relaxed);
+            const size_t write = _write.load(std::memory_order_acquire);
+            if (((write - read) & kMask) < count) {
+                return false;
+            }
+
+            _read.store(read + count, std::memory_order_release);
+            return true;
+        }
+
         // Consumer side. Elements currently readable.
         size_t Available() const {
             const size_t write = _write.load(std::memory_order_acquire);

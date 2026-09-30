@@ -214,7 +214,7 @@ namespace Framework::Voice {
             const uint64_t id = slot.id.load(std::memory_order_acquire);
             if (id == 0) {
                 // Draining here rather than on release keeps the ring single-consumer.
-                slot.audio.Discard(scratch, kRenderChunkSamples);
+                slot.audio.Discard();
                 continue;
             }
 
