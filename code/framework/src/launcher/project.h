@@ -29,9 +29,12 @@ namespace Framework::Launcher {
     };
     enum class ProjectLaunchType {
         PE_LOADING,
+#ifdef FW_DLL_INJECTION
         DLL_INJECTION
+#endif
     };
 
+#ifdef FW_DLL_INJECTION
     enum class DLLInjectionResult {
         INJECT_LIBRARY_RESULT_OK,
 
@@ -45,6 +48,7 @@ namespace Framework::Launcher {
 
         INJECT_LIBRARY_OPEN_PROCESS_FAIL
     };
+#endif
 
     // UNAVAILABLE: the store could not resolve the game, the manual prompt can still recover
     enum class PlatformCheckStatus {
@@ -210,6 +214,7 @@ namespace Framework::Launcher {
         void AllocateDeveloperConsole() const;
 
         bool RunWithPELoading();
+#ifdef FW_DLL_INJECTION
         bool RunWithDLLInjection();
 
         const char *InjectLibraryResultToString(const DLLInjectionResult result) {
@@ -223,5 +228,6 @@ namespace Framework::Launcher {
             default: return "Unknown error";
             }
         }
+#endif
     };
 } // namespace Framework::Launcher

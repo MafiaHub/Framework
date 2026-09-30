@@ -76,6 +76,7 @@ namespace Framework::Launcher::RGL {
      * Usage patterns:
      * 1. In-process (PE Loading): Call Apply* methods directly
      * 2. Cross-process (DLL Injection): Use ProcessMonitor to inject a DLL that calls Apply*
+     *    (only built with FW_DLL_INJECTION)
      */
     class Bypass final {
       public:
@@ -118,6 +119,7 @@ namespace Framework::Launcher::RGL {
         bool PatchMemory(uintptr_t address, const uint8_t *data, size_t size);
     };
 
+#ifdef FW_DLL_INJECTION
     /**
      * Process Monitor for cross-process injection
      *
@@ -163,5 +165,6 @@ namespace Framework::Launcher::RGL {
          */
         static DWORD FindProcessByName(const wchar_t *processName);
     };
+#endif
 
 } // namespace Framework::Launcher::RGL

@@ -411,9 +411,11 @@ namespace Framework::Launcher {
         if (_config.launchType == ProjectLaunchType::PE_LOADING) {
             return RunWithPELoading();
         }
+#ifdef FW_DLL_INJECTION
         else if (_config.launchType == ProjectLaunchType::DLL_INJECTION) {
             return RunWithDLLInjection();
         }
+#endif
         else {
             return false;
         }
@@ -831,6 +833,7 @@ namespace Framework::Launcher {
         }
     }
 
+#ifdef FW_DLL_INJECTION
     DLLInjectionResult InjectLibraryIntoProcess(HANDLE hProcess, const wchar_t *szLibraryPath) {
         DLLInjectionResult result = DLLInjectionResult::INJECT_LIBRARY_RESULT_OK;
 
@@ -963,6 +966,7 @@ namespace Framework::Launcher {
 
         return true;
     }
+#endif
 
     bool Project::RunWithPELoading() {
         // Method cannot be called directly

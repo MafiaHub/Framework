@@ -15,9 +15,11 @@
 namespace Framework::Launcher::RGL {
 
     namespace {
+#ifdef FW_DLL_INJECTION
         // How long to wait for the injected LoadLibraryW thread to finish, in ms. Bounded so a hung
         // loader can't wedge injection forever; a timeout is treated as a failed injection.
         constexpr DWORD kInjectionWaitMs = 10000;
+#endif
 
         // Stub tail: add eax, <entry RVA> applied to the PEB-read image base, then the hand-off
         constexpr uint8_t kEntryStubTail[]  = {0x05, 0x00, 0x00, 0x00, 0x00, 0x8B, 0xE5, 0x89, 0x44, 0x24, 0x20, 0x5D, 0x61, 0xFF, 0xE0};
@@ -294,6 +296,7 @@ namespace Framework::Launcher::RGL {
         return BypassResult::SUCCESS;
     }
 
+#ifdef FW_DLL_INJECTION
     // =========================================================================
     // ProcessMonitor Implementation
     // =========================================================================
@@ -416,5 +419,6 @@ namespace Framework::Launcher::RGL {
         CloseHandle(hProcess);
         return result;
     }
+#endif
 
 } // namespace Framework::Launcher::RGL

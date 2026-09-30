@@ -20,6 +20,11 @@ endif()
 # ON by default with on-demand mode - zero overhead until a profiler connects.
 option(FW_PROFILING "Enable Tracy profiler instrumentation" ON)
 
+# DLL injection launch path (VirtualAllocEx + WriteProcessMemory + CreateRemoteThread).
+# OFF by default: every project PE-loads its game, and those imports alone get the
+# launcher flagged as a trojan by Windows Defender.
+option(FW_DLL_INJECTION "Build the launcher's DLL injection launch path" OFF)
+
 if (WIN32)
     if (MSVC)
         add_compile_options(

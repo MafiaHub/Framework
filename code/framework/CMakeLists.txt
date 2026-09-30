@@ -196,6 +196,10 @@ if(WIN32)
         src/utils/memory.cpp)
     target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /FORCE:MULTIPLE /STACK:12000000,4096 /INCREMENTAL:NO /SUBSYSTEM:windows /LAST:.zdata /ENTRY:mainCRTStartup /MANIFEST:EMBED /MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/launcher.manifest)
 
+    if(FW_DLL_INJECTION)
+        target_compile_definitions(FrameworkLoader PUBLIC FW_DLL_INJECTION)
+    endif()
+
     if(CMAKE_CL_64)
         target_link_options(FrameworkLoader PUBLIC /BASE:0x140000000)
     else()
