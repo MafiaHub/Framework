@@ -30,6 +30,7 @@ namespace Framework::External::Epic {
         constexpr const wchar_t *kAuthHost  = L"account-public-service-prod.ol.epicgames.com";
         constexpr const wchar_t *kTokenPath = L"/account/api/oauth/token";
         constexpr const wchar_t *kExchPath  = L"/account/api/oauth/exchange";
+        constexpr const wchar_t *kEcomHost  = L"ecommerceintegration-public-service-ecomprod02.ol.epicgames.com";
 
         // Browser sign-in: lands on a page whose JSON body contains "authorizationCode".
         constexpr const wchar_t *kLoginUrl =
@@ -43,19 +44,23 @@ namespace Framework::External::Epic {
             return std::filesystem::path(buf).parent_path();
         }
 
-        std::filesystem::path AuthFile() {
-            // Per-user secret -> %LOCALAPPDATA%\MafiaHub: survives launcher reinstalls, works under a
-            // read-only install, shared across Framework Epic games. Fall back to the exe dir.
+        // Per-user secrets -> %LOCALAPPDATA%\MafiaHub: survives launcher reinstalls, works under a
+        // read-only install, shared across Framework Epic games. Fall back to the exe dir.
+        std::filesystem::path DataDir() {
             wchar_t localAppData[MAX_PATH] = {};
             if (GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData, MAX_PATH)) {
                 std::error_code ec;
                 const std::filesystem::path dir = std::filesystem::path(localAppData) / L"MafiaHub";
                 std::filesystem::create_directories(dir, ec);
                 if (!ec) {
-                    return dir / L"epic_auth.bin";
+                    return dir;
                 }
             }
-            return ExeDir() / L"epic_auth.bin";
+            return ExeDir();
+        }
+
+        std::filesystem::path AuthFile() {
+            return DataDir() / L"epic_auth.bin";
         }
 
         std::filesystem::path LogFile() {
@@ -84,9 +89,9 @@ namespace Framework::External::Epic {
             return w;
         }
 
-        // One HTTPS request to the Epic account service. Headers are CRLF-joined. Returns false on
-        // transport failure; an HTTP error still returns true with outStatus set for the caller.
-        bool HttpsRequest(const wchar_t *path, const wchar_t *method, const std::wstring &headers,
+        // One HTTPS request to an Epic service. Headers are CRLF-joined. Returns false on transport
+        // failure; an HTTP error still returns true with outStatus set for the caller.
+        bool HttpsRequest(const wchar_t *host, const wchar_t *path, const wchar_t *method, const std::wstring &headers,
                           const std::string &body, std::string &outResp, DWORD &outStatus) {
             outResp.clear();
             outStatus = 0;
@@ -99,7 +104,7 @@ namespace Framework::External::Epic {
             WinHttpSetTimeouts(hSession, 5000, 5000, 15000, 30000);
 
             bool ok            = false;
-            HINTERNET hConnect = WinHttpConnect(hSession, kAuthHost, INTERNET_DEFAULT_HTTPS_PORT, 0);
+            HINTERNET hConnect = WinHttpConnect(hSession, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
             if (hConnect) {
                 HINTERNET hReq = WinHttpOpenRequest(hConnect, method, path, nullptr, WINHTTP_NO_REFERER,
                                                     WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
@@ -168,7 +173,7 @@ namespace Framework::External::Epic {
         bool TokenGrant(const std::string &formBody, Tokens &out) {
             std::string resp;
             DWORD status = 0;
-            if (!HttpsRequest(kTokenPath, L"POST", BasicAuthHeader(), formBody, resp, status)) {
+            if (!HttpsRequest(kAuthHost, kTokenPath, L"POST", BasicAuthHeader(), formBody, resp, status)) {
                 Log("token: transport failure");
                 return false;
             }
@@ -316,6 +321,49 @@ namespace Framework::External::Epic {
             }
             return {};
         }
+
+        // Mint a fresh ownership token, as the Epic launcher does per launch: the .egstore copy is
+        // only as fresh as the last launch from Epic, and a stale one is refused. Written to DataDir.
+        std::wstring MintOwnershipToken(const Tokens &tokens, const std::string &catalogNamespace,
+                                        const std::string &catalogItemId) {
+            if (!tokens.Valid() || tokens.accountId.empty() || catalogNamespace.empty() || catalogItemId.empty()) {
+                return {};
+            }
+            const std::wstring path = L"/ecommerceintegration/api/public/platforms/EPIC/identities/" +
+                                      Widen(tokens.accountId) + L"/ownershipToken";
+            const std::wstring headers = L"Authorization: Bearer " + Widen(tokens.accessToken) +
+                                         L"\r\nContent-Type: application/x-www-form-urlencoded";
+            const std::string body     = "nsCatalogItemId=" + catalogNamespace + "%3A" + catalogItemId;
+
+            std::string resp;
+            DWORD status = 0;
+            if (!HttpsRequest(kEcomHost, path.c_str(), L"POST", headers, body, resp, status)) {
+                Log("ovt: mint transport failure");
+                return {};
+            }
+            if (status != 200) {
+                Log("ovt: mint HTTP " + std::to_string(status));
+                return {};
+            }
+            try {
+                if (!nlohmann::json::parse(resp).contains("token")) {
+                    Log("ovt: mint response has no token");
+                    return {};
+                }
+            }
+            catch (const std::exception &) {
+                Log("ovt: mint response is not JSON");
+                return {};
+            }
+
+            const std::filesystem::path file = DataDir() / Widen(catalogNamespace + catalogItemId + ".ovt");
+            std::ofstream f(file, std::ios::binary | std::ios::trunc);
+            if (!f.write(resp.data(), static_cast<std::streamsize>(resp.size()))) {
+                Log("ovt: could not write minted token");
+                return {};
+            }
+            return file.wstring();
+        }
     } // namespace
 
     bool TryRefreshStoredAuth(Tokens &out) {
@@ -367,7 +415,7 @@ namespace Framework::External::Epic {
         }
         std::string resp;
         DWORD status = 0;
-        if (!HttpsRequest(kExchPath, L"GET", L"Authorization: Bearer " + Widen(tokens.accessToken), {}, resp, status)) {
+        if (!HttpsRequest(kAuthHost, kExchPath, L"GET", L"Authorization: Bearer " + Widen(tokens.accessToken), {}, resp, status)) {
             Log("exchange: transport failure");
             return false;
         }
@@ -387,7 +435,7 @@ namespace Framework::External::Epic {
 
     std::wstring BuildLaunchArgs(const Tokens &tokens, const std::string &exchangeCode,
                                  const std::string &appName, const std::string &sandboxId,
-                                 const std::string &installDir) {
+                                 const std::string &catalogItemId, const std::string &installDir) {
         std::wstring a = L" -AUTH_LOGIN=unused -AUTH_PASSWORD=" + Widen(exchangeCode) + L" -AUTH_TYPE=exchangecode";
         if (!appName.empty()) {
             a += L" -epicapp=" + Widen(appName);
@@ -395,16 +443,21 @@ namespace Framework::External::Epic {
         a += L" -epicenv=Prod";
 
         // Ownership proof — the piece the "use the Epic launcher" gate actually checks.
-        const std::wstring ovt = FindOwnershipToken(installDir);
         if (!sandboxId.empty()) {
             a += L" -epicsandboxid=" + Widen(sandboxId);
         }
+        std::wstring ovt = MintOwnershipToken(tokens, sandboxId, catalogItemId);
         if (!ovt.empty()) {
-            a += L" -epicovt=\"" + ovt + L"\"";
-            Log("ovt: found ownership token");
+            Log("ovt: minted fresh ownership token");
+        }
+        else if (ovt = FindOwnershipToken(installDir); !ovt.empty()) {
+            Log("ovt: falling back to the .egstore token");
         }
         else {
-            Log("ovt: NONE found under .egstore (launch once via Epic to seed it)");
+            Log("ovt: NONE minted or found under .egstore");
+        }
+        if (!ovt.empty()) {
+            a += L" -epicovt=\"" + ovt + L"\"";
         }
 
         if (!tokens.accountId.empty()) {
