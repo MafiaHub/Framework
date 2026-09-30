@@ -194,11 +194,20 @@ if(WIN32)
         src/utils/hooking/pattern_table.cpp
         src/utils/hooking/hooking.cpp
         src/utils/memory.cpp)
-    target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /FORCE:MULTIPLE /STACK:12000000,4096 /INCREMENTAL:NO /SUBSYSTEM:windows /LAST:.zdata /ENTRY:mainCRTStartup /MANIFEST:EMBED /MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/launcher.manifest)
+    target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /FORCE:MULTIPLE /STACK:12000000,4096 /INCREMENTAL:NO /SUBSYSTEM:windows /LAST:.zdata /ENTRY:mainCRTStartup /MANIFEST:EMBED)
 
     if(FW_DLL_INJECTION)
         target_compile_definitions(FrameworkLoader PUBLIC FW_DLL_INJECTION)
     endif()
+
+    # A launcher embeds the manifest fw_set_binary_identity() generated for it, else this generic one.
+    # The architecture stays amd64 on every build, as the manifest this replaces always declared.
+    set(FW_MANIFEST_NAME "MafiaHub.Framework.Launcher")
+    set(FW_MANIFEST_VERSION "1.0.0.0")
+    set(FW_MANIFEST_ARCH "amd64")
+    set(FW_MANIFEST_DESCRIPTION "MafiaHub Framework Launcher")
+    configure_file(src/launcher/launcher.manifest.in "${CMAKE_CURRENT_BINARY_DIR}/launcher.manifest" @ONLY)
+    target_link_options(FrameworkLoader PUBLIC "/MANIFESTINPUT:$<IF:$<BOOL:$<TARGET_PROPERTY:FW_LAUNCHER_MANIFEST>>,$<TARGET_PROPERTY:FW_LAUNCHER_MANIFEST>,${CMAKE_CURRENT_BINARY_DIR}/launcher.manifest>")
 
     # The game reservation is compiled into each launcher, sized by its FW_LAUNCHER_GAME_RESERVE
     target_sources(FrameworkLoader INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/game_reserve.cpp)

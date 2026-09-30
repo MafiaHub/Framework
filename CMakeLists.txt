@@ -12,6 +12,9 @@ set(FW_STANDALONE true)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
 
+# fw_set_binary_identity(): version info, icon and manifest identity for shipped binaries
+include(FrameworkBinaryIdentity)
+
 if(FW_STANDALONE)
     include(FrameworkSetup)
 endif()

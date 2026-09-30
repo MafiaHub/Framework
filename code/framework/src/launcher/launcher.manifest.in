@@ -2,11 +2,11 @@
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity
     type="win32"
-    name="MafiaHub.Framework.Launcher"
-    version="1.0.0.0"
-    processorArchitecture="amd64"
+    name="@FW_MANIFEST_NAME@"
+    version="@FW_MANIFEST_VERSION@"
+    processorArchitecture="@FW_MANIFEST_ARCH@"
   />
-  <description>MafiaHub Framework Launcher</description>
+  <description>@FW_MANIFEST_DESCRIPTION@</description>
 
   <!-- Request elevation if needed -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">

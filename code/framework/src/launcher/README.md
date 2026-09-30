@@ -188,6 +188,34 @@ message box and a logged `Game image ... does not fit the reservation` line, whe
 does not start at image base + `0x1000` or does not reach the game's `SizeOfImage`. A game update
 that outgrows a tight reservation fails there rather than overwriting the launcher.
 
+## Product Identity
+
+A shipped binary should say what it is and who publishes it: Explorer, SmartScreen and antivirus
+reputation systems key on that, and a launcher that only identifies as the generic
+`MafiaHub.Framework.Launcher` gives them nothing stable to attach a reputation to.
+`fw_set_binary_identity()` (in `cmake/FrameworkBinaryIdentity.cmake`, available to every project)
+stamps a target with a `VERSIONINFO` resource, an optional icon and, for a launcher, the identity in
+its application manifest:
+
+```cmake
+fw_set_binary_identity(KCDCLauncher PRODUCT "Kingdoms Connected" VERSION ${KCDC_VERSION} COMPANY "MafiaHub" DESCRIPTION "Kingdoms Connected Launcher" ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/kcdc.ico")
+fw_set_binary_identity(KCDCClient PRODUCT "Kingdoms Connected" VERSION ${KCDC_VERSION} COMPANY "MafiaHub" DESCRIPTION "Kingdoms Connected Client")
+```
+
+- `VERSION` takes one to four numbers and is padded to the four the fixed version and the manifest
+  need; `1.5.3` becomes `1.5.3.0`. `DESCRIPTION` defaults to `PRODUCT`, `COPYRIGHT` to
+  `Copyright (C) <COMPANY>`. `OriginalFilename` comes from the target's real output name.
+- The launcher's manifest is generated from `launcher.manifest.in` with only its identity changed -
+  `<COMPANY>.<PRODUCT>.<target>` stripped to letters and digits, the padded version, the build's
+  architecture and the description. Compatibility, DPI awareness, long paths, `asInvoker` and
+  Common Controls stay exactly as in the generic one. FrameworkLoader embeds it through the
+  `FW_LAUNCHER_MANIFEST` property of the consuming launcher, and a launcher that never calls the
+  helper keeps the generic manifest.
+- Only Windows binaries are stamped; the call does nothing elsewhere, so a server built for Linux
+  can make it unconditionally.
+
+`CompanyName` should match the subject of the certificate the release is signed with.
+
 ## Launch Types
 
 `ProjectLaunchType::PE_LOADING` is the default and what every project uses. The cross-process
