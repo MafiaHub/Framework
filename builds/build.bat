@@ -36,7 +36,7 @@ popd
 exit /b 0
 :toolchain_check
 if not exist "builds\%FW_BUILD%" mkdir "builds\%FW_BUILD%"
-cl /nologo /std:c++20 /EHsc /MD /Zi /Fd"builds\%FW_BUILD%\toolchain-check.pdb" /Fo"builds\%FW_BUILD%\toolchain-check.obj" /Fe"builds\%FW_BUILD%\toolchain-check.exe" scripts\windows-container\toolchain-check.cpp
+cl /nologo /std:c++20 /EHsc /MD /Zi /DFW_CHECK_POINTER_BITS=%FW_ARCH% /Fd"builds\%FW_BUILD%\toolchain-check.pdb" /Fo"builds\%FW_BUILD%\toolchain-check.obj" /Fe"builds\%FW_BUILD%\toolchain-check.exe" scripts\windows-container\toolchain-check.cpp
 if errorlevel 1 goto failed
 "builds\%FW_BUILD%\toolchain-check.exe"
 if errorlevel 1 goto failed
