@@ -90,6 +90,12 @@ namespace Framework::Launcher {
         // launcher-authorised run and replay it, so the mapped image can be entered past the stub.
         bool useRockstarImageSnapshot = false;
 
+        // Captures the snapshot on the first run of a build. A launcher that can set
+        // useRockstarImageSnapshot sets this to Loaders::CaptureImageSnapshot: naming it is what links
+        // the process-reading code into that launcher and no other.
+        using ImageSnapshotCaptureProc = bool (*)(Loaders::ImageSnapshot &snapshot, const std::wstring &gamePath, const std::wstring &executableName, const std::vector<uint8_t> &sourceImage);
+        ImageSnapshotCaptureProc captureImageSnapshot = nullptr;
+
         // game exe integrity checks (uses CRC32 checksum)
         bool verifyGameIntegrity = false;
         std::vector<uint32_t> supportedGameVersions;

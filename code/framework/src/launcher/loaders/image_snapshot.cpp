@@ -187,7 +187,7 @@ namespace Framework::Launcher::Loaders {
         return true;
     }
 
-    bool ImageSnapshot::CaptureFrom(HANDLE process, const std::vector<uint8_t> &sourceImage) {
+    bool ImageSnapshot::CaptureFrom(const ProcessReader &read, const std::vector<uint8_t> &sourceImage) {
         const auto logger    = Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER);
         const auto ntHeaders = NtHeadersOf(sourceImage.data(), sourceImage.size());
         if (!ntHeaders) {
@@ -217,8 +217,7 @@ namespace Framework::Launcher::Loaders {
             entry.virtualAddress = section->VirtualAddress;
             entry.data.resize(section->SizeOfRawData);
 
-            SIZE_T read = 0;
-            if (!ReadProcessMemory(process, reinterpret_cast<LPCVOID>(base + section->VirtualAddress), entry.data.data(), entry.data.size(), &read) || read != entry.data.size()) {
+            if (!read(base + section->VirtualAddress, entry.data.data(), entry.data.size())) {
                 logger->warn("Could not read the authorised game's section at {:#x}", section->VirtualAddress);
                 return false;
             }

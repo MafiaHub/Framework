@@ -21,7 +21,6 @@
 #include "utils/url_protocol.h"
 
 #include <Psapi.h>
-#include <TlHelp32.h>
 #include <ShellScalingApi.h>
 #include <Windows.h>
 #include <algorithm>
@@ -611,83 +610,19 @@ namespace Framework::Launcher {
         return PlatformCheckStatus::OK;
     }
 
-    namespace {
-        // Generous: the store may have to start its own launcher first
-        constexpr uint64_t kSnapshotCaptureTimeoutMs = 120000;
-
-        std::vector<DWORD> FindProcessesByName(const wchar_t *executableName) {
-            std::vector<DWORD> processes;
-
-            const auto snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-            if (snapshot == INVALID_HANDLE_VALUE) {
-                return processes;
-            }
-
-            PROCESSENTRY32W entry {};
-            entry.dwSize = sizeof(entry);
-            if (Process32FirstW(snapshot, &entry)) {
-                do {
-                    if (_wcsicmp(entry.szExeFile, executableName) == 0) {
-                        processes.push_back(entry.th32ProcessID);
-                    }
-                } while (Process32NextW(snapshot, &entry));
-            }
-
-            CloseHandle(snapshot);
-            return processes;
-        }
-    } // namespace
-
     bool Project::EnsureImageSnapshot(Loaders::ImageSnapshot &snapshot, const std::vector<uint8_t> &sourceImage) {
         const auto logger = Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER);
         if (snapshot.IsAvailable()) {
             return true;
         }
 
-        logger->info("No cached image snapshot for this build of the game, running it once so its decrypted code can be captured");
-
-        // Enough for an authorised run: the wrapper refuses us and hands the launch to the launcher
-        auto commandLine = L"\"" + _gamePath + L"\"";
-        const auto workDir = std::filesystem::path(_gamePath).parent_path().wstring();
-
-        STARTUPINFOW startupInfo {};
-        startupInfo.cb = sizeof(startupInfo);
-        PROCESS_INFORMATION processInfo {};
-
-        if (!CreateProcessW(_gamePath.c_str(), commandLine.data(), nullptr, nullptr, FALSE, 0, nullptr, workDir.c_str(), &startupInfo, &processInfo)) {
-            logger->error("Could not start the game to capture its decrypted code, error {}", GetLastError());
+        if (!_config.captureImageSnapshot) {
+            logger->error("No cached image snapshot for this build of the game, and this launcher sets no captureImageSnapshot to take one");
             return false;
         }
 
-        CloseHandle(processInfo.hThread);
-        CloseHandle(processInfo.hProcess);
-
-        const auto executableName = std::filesystem::path(_config.executableName).filename().wstring();
-        const auto deadline       = GetTickCount64() + kSnapshotCaptureTimeoutMs;
-
-        while (GetTickCount64() < deadline) {
-            // The capture rejects a run the wrapper has not decrypted, so just try each in turn
-            for (const auto processId : FindProcessesByName(executableName.c_str())) {
-                const auto process = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION | PROCESS_TERMINATE, FALSE, processId);
-                if (!process) {
-                    continue;
-                }
-
-                const auto captured = snapshot.CaptureFrom(process, sourceImage);
-                if (captured) {
-                    TerminateProcess(process, 0);
-                    CloseHandle(process);
-                    return true;
-                }
-
-                CloseHandle(process);
-            }
-
-            Sleep(500);
-        }
-
-        logger->error("No authorised run of the game appeared in time, its decrypted code could not be captured");
-        return false;
+        logger->info("No cached image snapshot for this build of the game, running it once so its decrypted code can be captured");
+        return _config.captureImageSnapshot(snapshot, _gamePath, std::filesystem::path(_config.executableName).filename().wstring(), sourceImage);
     }
 
     std::wstring Project::GetGameWorkDir(const std::wstring &gameRoot) const {

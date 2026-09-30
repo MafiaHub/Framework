@@ -133,7 +133,14 @@ does exactly that, following the executable snapshot FiveM uses for the same cla
 config.platform                 = Framework::Launcher::ProjectPlatform::ROCKSTAR;
 config.rockstarTitleKey         = L"GTA: San Andreas";
 config.useRockstarImageSnapshot = true;
+config.captureImageSnapshot     = &Framework::Launcher::Loaders::CaptureImageSnapshot; // <launcher/loaders/image_snapshot_capture.h>
 ```
+
+`captureImageSnapshot` is what links the capture into the launcher. It is the only launcher code that
+enumerates, opens, reads and terminates another process, and a launcher that does not name it ships
+without those imports - which, next to a PE loader, are what antivirus heuristics read as a
+memory-scraping trojan. A launcher that sets `useRockstarImageSnapshot` without it can still replay an
+existing cache, but refuses with a logged error when a new build needs capturing.
 
 On the first run for a given build the launcher starts the game once - which the wrapper hands to
 the Rockstar Games Launcher - waits until every ciphertext page in the authorised process has been
@@ -233,3 +240,4 @@ asking for it fails to compile.
 - `data/tls.cpp` - TLS buffer for allocated slot approach (in FrameworkLoaderData.dll)
 - `rgl_bypass.cpp` / `rgl_bypass.h` - Rockstar Games Launcher entry-stub decoding and signature-check bypasses; `ProcessMonitor` only with `FW_DLL_INJECTION`
 - `loaders/image_snapshot.cpp` / `image_snapshot.h` - capture and replay of the code a store wrapper decrypts at runtime
+- `loaders/image_snapshot_capture.cpp` / `image_snapshot_capture.h` - the authorised run the snapshot is captured from, linked only through `captureImageSnapshot`

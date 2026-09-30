@@ -186,6 +186,7 @@ if(WIN32)
         src/launcher/loaders/exe_ldr.cpp
         src/launcher/loaders/process_identity.cpp
         src/launcher/loaders/image_snapshot.cpp
+        src/launcher/loaders/image_snapshot_capture.cpp
         src/external/steam/wrapper.cpp
         src/external/epic/manifest.cpp
         src/external/rockstar/library.cpp

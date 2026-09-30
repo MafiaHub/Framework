@@ -11,6 +11,7 @@
 #include <Windows.h>
 #include <cstdint>
 #include <filesystem>
+#include <function2/function2.hpp>
 #include <string>
 #include <vector>
 
@@ -33,8 +34,12 @@ namespace Framework::Launcher::Loaders {
         // Sections must already be mapped and imports not yet resolved.
         bool Apply(HMODULE module) const;
 
-        // False while the wrapper has not finished decrypting, so the caller can keep polling.
-        bool CaptureFrom(HANDLE process, const std::vector<uint8_t> &sourceImage);
+        // Reads `size` bytes of the authorised run at `address`, true only when all of them arrived
+        using ProcessReader = fu2::function<bool(uintptr_t address, void *buffer, size_t size) const>;
+
+        // False while the wrapper has not finished decrypting, so the caller can keep polling. The
+        // reader keeps the process handle, and its APIs, in CaptureImageSnapshot.
+        bool CaptureFrom(const ProcessReader &read, const std::vector<uint8_t> &sourceImage);
 
       private:
         struct Section {
