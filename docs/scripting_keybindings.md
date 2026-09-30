@@ -61,6 +61,11 @@ Key.unbind("space", "down", onJump);
 
 Names are **case-insensitive**. The recognised set:
 
+Letters and digits name physical positions on a US keyboard. For example,
+`Key.bind("w", ...)` follows the same key with English, Russian (Ц), or
+French AZERTY (Z) active. Switching layouts does not change the binding.
+Text typed into chat or web views still follows the active layout.
+
 | Group      | Names |
 |------------|-------|
 | Letters    | `a`–`z` |

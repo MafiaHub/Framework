@@ -18,6 +18,7 @@
 
 #include <core_modules.h>
 #include <input/input.h>
+#include <input/physical_keys.h>
 #include <logging/logger.h>
 #include <utils/key_names.h>
 
@@ -61,19 +62,20 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         bool IsPhysicallyDown(int vk) {
-            // Device state is already window-scoped and layout-mapped, so it skips both guards below.
+            // Opt-in device sources expose physical positions in the FW_KEY namespace.
             if (const auto *input = PhysicalKeySource()) {
                 return !input->IsStateStale() && input->IsKeyDown(vk);
-            }
-            if ((::GetAsyncKeyState(vk) & 0x8000) == 0) {
-                return false;
             }
             // GetAsyncKeyState is a GLOBAL key state — it reads the key even while our window is in the
             // background (alt-tab). Honor the documented "false while backgrounded" by requiring our own
             // process to own the foreground window.
-            DWORD pid = 0;
-            ::GetWindowThreadProcessId(::GetForegroundWindow(), &pid);
-            return pid == ::GetCurrentProcessId();
+            DWORD pid          = 0;
+            const DWORD thread = ::GetWindowThreadProcessId(::GetForegroundWindow(), &pid);
+            if (pid != ::GetCurrentProcessId()) {
+                return false;
+            }
+            const UINT layoutKey = Input::PhysicalKeys::ToLayoutVirtualKey(static_cast<UINT>(vk), ::GetKeyboardLayout(thread));
+            return layoutKey != 0 && (::GetAsyncKeyState(static_cast<int>(layoutKey)) & 0x8000) != 0;
         }
     } // anonymous namespace
 
