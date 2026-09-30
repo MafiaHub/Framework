@@ -200,6 +200,9 @@ if(WIN32)
         target_compile_definitions(FrameworkLoader PUBLIC FW_DLL_INJECTION)
     endif()
 
+    # The game reservation is compiled into each launcher, sized by its FW_LAUNCHER_GAME_RESERVE
+    target_sources(FrameworkLoader INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/game_reserve.cpp)
+
     if(CMAKE_CL_64)
         target_link_options(FrameworkLoader PUBLIC /BASE:0x140000000)
     else()

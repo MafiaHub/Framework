@@ -52,14 +52,17 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 #pragma comment(linker, "/merge:.text=.zdata")
 #pragma comment(linker, "/section:.zdata,re")
 
-// allocate space for game
-#ifdef _M_AMD64
-#pragma bss_seg(".fwgame")
-char fwgame_seg[0x6fffffff];
-#else
-#pragma bss_seg(".fwgame")
-char fwgame_seg[0x2500000];
-#endif
+// The space the game image is mapped into. Its bulk, .fwgame$b, is compiled into each launcher
+// by game_reserve.cpp so a project can size it to its game; these two markers bound it. The
+// linker joins .fwgame$* into one section ordered by the suffix, which is the only ordering it
+// documents, so where .fwgame itself lands is checked on every launch in RunWithPELoading().
+#pragma bss_seg(".fwgame$a")
+char fwgame_begin[1];
+#pragma bss_seg(".fwgame$c")
+char fwgame_end[1];
+
+// The launcher's own uninitialized globals below have always sat after the reservation
+#pragma bss_seg(".fwgame$d")
 
 // mark the end section we merge with .text
 #pragma data_seg(".fwend")
@@ -1011,6 +1014,19 @@ namespace Framework::Launcher {
         Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loaded game ({:.02f} MB or {})", (float(dwFileLength) / 1024.0f / 1024.0f), dwFileLength);
 
         auto base = GetModuleHandle(nullptr);
+
+        // The game lands at our image base with its sections from RVA 0x1000 on, so the
+        // reservation must start right after our headers and reach past the game's last page
+        const auto imageBase     = reinterpret_cast<uintptr_t>(base);
+        const auto gameImageSize = reinterpret_cast<const IMAGE_NT_HEADERS *>(data + reinterpret_cast<const IMAGE_DOS_HEADER *>(data)->e_lfanew)->OptionalHeader.SizeOfImage;
+        if (reinterpret_cast<uintptr_t>(fwgame_begin) != imageBase + 0x1000 || reinterpret_cast<uintptr_t>(fwgame_end) < imageBase + gameImageSize) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Game image of {:#x} bytes does not fit the reservation at {:#x}-{:#x} (image base {:#x})", gameImageSize, reinterpret_cast<uintptr_t>(fwgame_begin), reinterpret_cast<uintptr_t>(fwgame_end), imageBase);
+            UnmapViewOfFile(data);
+            CloseHandle(hMapping);
+            CloseHandle(hFile);
+            MessageBoxA(nullptr, "The game executable does not fit the space this launcher reserves for it. The game may have been updated; please update the mod.", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
 
         // Get file size
         DWORD fileSize = GetFileSize(hFile, NULL);
