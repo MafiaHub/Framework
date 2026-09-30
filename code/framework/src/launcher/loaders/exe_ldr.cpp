@@ -139,9 +139,9 @@ namespace Framework::Launcher::Loaders {
         // Copy the data
         memcpy(targetAddress, sourceAddress, sizeOfData);
 
-        // Change the protection attributes of the target address
+        // Writable, not executable, until Protect(): nothing runs from the image before then
         DWORD oldProtect;
-        if (!VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+        if (!VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_READWRITE, &oldProtect)) {
             return;
         }
 
@@ -348,7 +348,7 @@ namespace Framework::Launcher::Loaders {
         _entryPoint         = GetTargetRVA<void>(ntHeader->OptionalHeader.AddressOfEntryPoint);
 
         DWORD oldProtect1;
-        if (!VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect1)) {
+        if (!VirtualProtect(sourceNtHeader, 0x1000, PAGE_READWRITE, &oldProtect1)) {
             Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not make the target NT header writable. Error code was {}.", GetLastError());
             throw std::runtime_error("Could not make the target NT header writable");
         }
@@ -493,7 +493,7 @@ namespace Framework::Launcher::Loaders {
                 void *addr           = GetTargetRVA<void>(rva);
                 const SIZE_T relSize = (type == IMAGE_REL_BASED_DIR64) ? 8 : 4;
                 DWORD oldProtect;
-                if (!VirtualProtect(addr, relSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+                if (!VirtualProtect(addr, relSize, PAGE_READWRITE, &oldProtect)) {
                     Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not make relocation target {} writable. Error code was {}.", addr, GetLastError());
                     return false;
                 }

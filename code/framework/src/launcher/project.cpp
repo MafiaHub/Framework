@@ -1139,6 +1139,9 @@ namespace Framework::Launcher {
             loader.LoadIntoModule(base);
             loader.Protect();
 
+            // The code was written in place and only now made executable
+            FlushInstructionCache(GetCurrentProcess(), nullptr, 0);
+
             // Once loaded, we can close handles
             UnmapViewOfFile(data);
             CloseHandle(hMapping);

@@ -171,7 +171,7 @@ namespace Framework::Launcher::Loaders {
             const auto target = base + section.virtualAddress;
 
             DWORD oldProtect = 0;
-            if (!VirtualProtect(target, section.data.size(), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            if (!VirtualProtect(target, section.data.size(), PAGE_READWRITE, &oldProtect)) {
                 Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not make the mapped section at {:#x} writable for the image snapshot", section.virtualAddress);
                 return false;
             }
