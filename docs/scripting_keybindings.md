@@ -110,6 +110,10 @@ its binds are removed automatically — you do not need to `unbind` them in a
 - Binds are dispatched by polling once per frame, so this is edge detection on
   the game's frame rate — fine for gameplay actions, not for text entry (use a
   `Web` view for typed input).
+- Native `IInput` implementations keep their existing key-mapping contract.
+  For device providers that accept layout virtual keys, the scripting reader
+  converts a physical position to that layout before querying the provider.
+  This does not change a mod's native hotkeys or gameplay input.
 - There is no user-facing rebinding UI yet: the key a resource asks for is the
   key it gets. A default-plus-rebind model (FiveM-style) may be added later.
 - Server-driven binds (a server telling a specific client to bind a key) are

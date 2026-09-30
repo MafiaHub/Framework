@@ -62,9 +62,14 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         bool IsPhysicallyDown(int vk) {
-            // Opt-in device sources expose physical positions in the FW_KEY namespace.
             if (const auto *input = PhysicalKeySource()) {
-                return !input->IsStateStale() && input->IsKeyDown(vk);
+                if (input->IsStateStale()) {
+                    return false;
+                }
+                // Existing device providers accept layout VKs and map them to
+                // scan codes with MapVirtualKey on this thread (Mafia2Online).
+                const UINT layoutKey = Input::PhysicalKeys::ToLayoutVirtualKey(static_cast<UINT>(vk), ::GetKeyboardLayout(0));
+                return layoutKey != 0 && input->IsKeyDown(static_cast<int>(layoutKey));
             }
             // GetAsyncKeyState is a GLOBAL key state — it reads the key even while our window is in the
             // background (alt-tab). Honor the documented "false while backgrounded" by requiring our own

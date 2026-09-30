@@ -38,8 +38,6 @@ namespace Framework::Input {
             return false;
         }
 
-        // Printable FW_KEY values name US keyboard positions, independently
-        // of the active layout. Character input belongs to the UI text path.
         virtual bool IsKeyDown(int key) const     = 0;
         virtual bool IsKeyUp(int key) const       = 0;
         virtual bool IsKeyPressed(int key) const  = 0;

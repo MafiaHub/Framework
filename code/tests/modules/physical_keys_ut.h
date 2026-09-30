@@ -24,9 +24,20 @@ MODULE(physical_keys, {
 
     IT("polls the same positions through real English, Russian and AZERTY layouts", {
         const HKL original = GetKeyboardLayout(0);
-        const HKL english  = LoadKeyboardLayoutW(L"00000409", KLF_NOTELLSHELL);
-        const HKL russian  = LoadKeyboardLayoutW(L"00000419", KLF_NOTELLSHELL);
-        const HKL french   = LoadKeyboardLayoutW(L"0000040C", KLF_NOTELLSHELL);
+        struct LayoutRestore {
+            HKL original;
+
+            void Restore() const {
+                ActivateKeyboardLayout(original, 0);
+            }
+
+            ~LayoutRestore() {
+                Restore();
+            }
+        } layoutRestore {original};
+        const HKL english = LoadKeyboardLayoutW(L"00000409", KLF_NOTELLSHELL);
+        const HKL russian = LoadKeyboardLayoutW(L"00000419", KLF_NOTELLSHELL);
+        const HKL french  = LoadKeyboardLayoutW(L"0000040C", KLF_NOTELLSHELL);
         // Headless Wine can return the host layout for every request. Do not
         // call that a successful multi-layout test; run this case on Windows.
         if (LOWORD(reinterpret_cast<ULONG_PTR>(english)) != 0x0409 || LOWORD(reinterpret_cast<ULONG_PTR>(russian)) != 0x0419 || LOWORD(reinterpret_cast<ULONG_PTR>(french)) != 0x040C) {
@@ -36,9 +47,23 @@ MODULE(physical_keys, {
         for (HKL layout : {english, russian, french}) {
             EQUALS(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('W', layout), MapVirtualKeyExW(0x11, MAPVK_VSC_TO_VK_EX, layout));
             EQUALS(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('T', layout), MapVirtualKeyExW(0x14, MAPVK_VSC_TO_VK_EX, layout));
+            // Mafia2Online's IInput provider converts a layout VK back into
+            // a DirectInput scan code. Preserve that existing API contract.
+            EQUALS(MapVirtualKeyExW(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('W', layout), MAPVK_VK_TO_VSC_EX, layout), 0x11U);
+            EQUALS(MapVirtualKeyExW(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('T', layout), MAPVK_VK_TO_VSC_EX, layout), 0x14U);
         }
         EQUALS(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('W', french), 'Z');
+        layoutRestore.Restore();
         EQUALS(GetKeyboardLayout(0), original);
+    });
+
+    IT("adapts a layout-aware device provider without changing its native key API", {
+        const HKL layout = GetKeyboardLayout(0);
+        for (UINT key : {'W', 'T', 'A', 'Z', '1', '9'}) {
+            const UINT layoutKey = Framework::Input::PhysicalKeys::ToLayoutVirtualKey(key, layout);
+            // Match GameInput::MapKey: it uses the current thread's layout.
+            EQUALS(MapVirtualKeyW(layoutKey, MAPVK_VK_TO_VSC_EX), Framework::Input::PhysicalKeys::ToScanCode(key));
+        }
     });
 
     IT("releases the same key after a layout change", {
