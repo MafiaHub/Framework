@@ -169,6 +169,10 @@ namespace Framework::Integrations::Server {
     class Instance : public Framework::Lifecycle {
       private:
         std::atomic<bool> _shuttingDown;
+        // Raised by SIGINT/SIGTERM, read by Run(). The handler interrupts whatever
+        // the main thread was doing, so it may only store this flag; the teardown
+        // itself runs back on the main thread once the tick in flight returns.
+        std::atomic<bool> _stopRequested = false;
         // Set after the initial StartAll; gates runtime broadcasts to clients.
         bool _resourcesBooted = false;
         std::chrono::steady_clock::time_point _nextTick {};

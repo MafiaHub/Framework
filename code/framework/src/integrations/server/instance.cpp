@@ -1431,24 +1431,28 @@ namespace Framework::Integrations::Server {
     }
     void Instance::Run() {
         const TimerResolutionScope timerResolution;
-        while (_initialized) {
+        while (_initialized && !_stopRequested) {
             Update();
             std::this_thread::yield();
+        }
+
+        if (_stopRequested) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Received shutdown signal, shutting down");
         }
     }
 
     void Instance::OnSignal(const sig_signal_t signal) {
-        if (!_initialized || _shuttingDown) {
-            return;
-        }
-
+        // Runs inside the signal handler, on top of whatever the interrupted
+        // thread was doing -- a V8 call, a socket read, a malloc. Tearing the
+        // server down from here frees everything under that frame and returns
+        // into it, which ends in SIGABRT, and logging or allocating is not
+        // signal-safe either. Only raise the flag; Run() returns on its next
+        // check and the caller's Shutdown() does the rest on the main thread.
         if (signal.context != sig_ctx_sys()) {
             return;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received shutdown signal. In progress...");
-
-        Shutdown();
+        _stopRequested = true;
     }
 
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {
