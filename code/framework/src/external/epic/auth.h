@@ -33,6 +33,9 @@ namespace Framework::External::Epic {
     // On success the refresh token is (re)persisted, DPAPI-encrypted, next to the launcher exe.
     bool EnsureAuthenticated(Tokens &out, const std::wstring &productName = {});
 
+    // The silent half of EnsureAuthenticated: refresh the stored token, never show any UI.
+    bool TryRefreshStoredAuth(Tokens &out);
+
     // Mint a fresh single-use exchange code from a valid access token (expires in ~5 min).
     bool GetExchangeCode(const Tokens &tokens, std::string &outCode);
 
