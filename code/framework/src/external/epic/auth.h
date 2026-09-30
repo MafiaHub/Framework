@@ -44,14 +44,12 @@ namespace Framework::External::Epic {
     std::wstring GetLoginUrl();
     bool SignInWithAuthorizationCode(const std::string &pageTextOrCode);
 
-    // Build the "-AUTH_TYPE=exchangecode ..." command-line fragment (leading space) the game's
-    // EOS init consumes. appName/sandboxId come from the game's Epic manifest (AppName /
-    // CatalogNamespace); installDir is the game root, used to locate the ownership-verification
-    // token (.ovt) the game checks — without it the Epic build shows the "use the Epic launcher"
-    // gate. See Framework::External::Epic::FindInstalledApp for the manifest fields.
+    // The "-AUTH_TYPE=exchangecode ..." fragment (leading space) for the game's EOS init. The ids
+    // come from the Epic manifest and mint a fresh ownership token (.ovt), without which the game
+    // shows the "use the Epic launcher" gate; installDir's .egstore copy is the fallback.
     std::wstring BuildLaunchArgs(const Tokens &tokens, const std::string &exchangeCode,
                                  const std::string &appName, const std::string &sandboxId,
-                                 const std::string &installDir);
+                                 const std::string &catalogItemId, const std::string &installDir);
 
     // Forget the stored credentials (e.g. after a hard auth failure so the next launch re-prompts).
     void ClearStoredAuth();
