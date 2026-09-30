@@ -149,8 +149,9 @@ namespace hook {
         TransformPattern(std::string_view(pattern, length), m_bytes, m_mask);
 
 #if PATTERNS_USE_HINTS
-        // if there's hints, try those first
-        if (m_module == GetModuleHandle(nullptr)) {
+        // if there's hints, try those first. They are keyed to the image set_base() named, which
+        // is not the process executable when a project hooks a DLL or a manually mapped image.
+        if (m_module == getRVA<void>(0)) {
             const auto range = GetHints().equal_range(m_hash);
 
             if (range.first != range.second) {
