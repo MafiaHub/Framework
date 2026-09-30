@@ -13,12 +13,17 @@
 #include "input_keymap.h"
 
 namespace Framework::Input {
+    enum class KeyCodeSpace {
+        LayoutVirtualKey,
+        PhysicalPosition
+    };
+
     class IInput {
       public:
-        virtual ~IInput() = default;
+        virtual ~IInput()     = default;
         virtual void Update() = 0;
 
-        virtual void SetMousePosition(int x, int y)   = 0;
+        virtual void SetMousePosition(int x, int y)         = 0;
         virtual void GetMousePosition(int &x, int &y) const = 0;
         virtual void SetMouseVisible(bool visible)          = 0;
         virtual bool IsMouseVisible() const                 = 0;
@@ -27,10 +32,16 @@ namespace Framework::Input {
         virtual void SetInputLocked(bool locked)            = 0;
         virtual bool IsInputLocked() const                  = 0;
 
-        // Opt-in: WndProc-fed modules can't answer a physical poll (no mouse VKs, no left/right
-        // modifiers, and keys latch when a focus loss eats their WM_KEYUP).
+        // Opt-in: a device provider can answer held state independently of window events.
+        // Event-only providers cannot discover keys already held on focus reacquisition.
         virtual bool ProvidesPhysicalKeyState() const {
             return false;
+        }
+
+        // Legacy device adapters map layout VKs to scan codes. A provider
+        // storing physical-position codes must declare it to avoid translation twice.
+        virtual KeyCodeSpace GetKeyCodeSpace() const {
+            return KeyCodeSpace::LayoutVirtualKey;
         }
 
         // Device state frozen rather than idle; callers edge-detecting must hold, not latch.

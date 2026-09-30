@@ -17,6 +17,7 @@
 #include "modules/delegation_ut.h"
 #include "modules/gui_resources_ut.h"
 #include "modules/interest_grid_ut.h"
+#include "modules/input_state_ut.h"
 #include "modules/interpolator_ut.h"
 #include "modules/network_packets_ut.h"
 #include "modules/network_work_ut.h"
@@ -46,6 +47,7 @@
 // The hooking layer, and so the pattern table, is Windows-only.
 #include "modules/pattern_table_ut.h"
 #include "modules/physical_keys_ut.h"
+#include "modules/window_input_ut.h"
 #endif
 
 // Scripting tests
@@ -70,6 +72,7 @@ int main() {
     UNIT_MODULE(replication_rate);
     UNIT_MODULE(transform_batch);
     UNIT_MODULE(interest_grid);
+    UNIT_MODULE(input_state);
     UNIT_MODULE(delegation);
     UNIT_MODULE(state_bag);
     UNIT_MODULE(state_bag_scripting);
@@ -91,6 +94,7 @@ int main() {
 #ifdef _WIN32
     UNIT_MODULE(pattern_table);
     UNIT_MODULE(physical_keys);
+    UNIT_MODULE(window_input);
 #endif
 
     // Scripting tests
