@@ -5,10 +5,11 @@ vcpkg, PowerShell, Python and the Microsoft VS 2022 compiler/linker inside a Lin
 Wine. It does not use MinGW or clang-cl. Both CMake's host and target are Windows,
 so the existing Windows targets, precompiled libraries and vcpkg ports are used.
 
-The container currently builds x64 targets. Opt in by using the wrapper below;
+The container builds x64 and x86 targets. The wrapper defaults to x64; pass `32`
+as its third argument for x86. Opt in by using the wrapper below;
 no CMake platform override is needed because Windows CMake itself runs under Wine.
 The native Linux/macOS configuration is unchanged. Native Windows builds can use
-`builds\build.bat <target> 64 [Debug|Release|RelWithDebInfo]`.
+`builds\build.bat <target> <32|64> [Debug|Release|RelWithDebInfo]`.
 
 For running the resulting launcher with Linux Steam, see
 [Starting a launcher through GE-Proton](proton-launcher.md).
@@ -28,6 +29,8 @@ scripts/build_windows_container.sh image
 scripts/build_windows_container.sh ToolchainCheck
 scripts/build_windows_container.sh SampleLauncher
 scripts/build_windows_container.sh SampleClient
+# 32-bit client using the x64-hosted x86 compiler:
+scripts/build_windows_container.sh SampleClient Debug 32
 # Optional server and framework tests:
 scripts/build_windows_container.sh SampleServer
 scripts/build_windows_container.sh RunFrameworkTests
@@ -85,11 +88,20 @@ The Windows console output is streamed to the terminal and retained in
 
 The container invokes the same `builds\build.bat` entry point and canonical trees:
 
-| Configuration | Output directory |
-| --- | --- |
-| Debug (default) | `builds/build-64/bin` |
-| Release | `builds/build-prod-64/bin` |
-| RelWithDebInfo | `builds/build-release-64/bin` |
+| Configuration | x64 output | x86 output |
+| --- | --- | --- |
+| Debug (default) | `builds/build-64/bin` | `builds/build/bin` |
+| Release | `builds/build-prod-64/bin` | `builds/build-prod/bin` |
+| RelWithDebInfo | `builds/build-release-64/bin` | `builds/build-release/bin` |
+
+The image downloads both target toolchains, including the x64-hosted x86
+cross-compiler and x86 libraries.
+The runner selects `vcvarsall.bat amd64_x86` for a 32-bit target; Windows CMake
+and vcpkg helper tools still run as x64 host tools. Target dependencies use the
+`x86-windows-mh` triplet and a separate installed tree. Rebuild an older image
+with `scripts/build_windows_container.sh image`: the extra target download
+supplies both the x86 compiler and the standard `vcvarsamd64_x86.bat` entry point
+that vcpkg uses to discover x86 support.
 
 Use a dedicated checkout for Wine builds. CMake caches contain absolute Windows
 paths (`W:/...`); do not reuse a cache configured on native Windows at another

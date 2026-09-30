@@ -7,11 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Use the VS 2022 toolset, matching the native build. Keep the download manifest
 # in the image so the exact Microsoft package versions remain inspectable.
+# Download both target toolchains while retaining x64 compiler hosts.
 ARG MSVC_WINE_REVISION=514f8ea34842cd6d831804d0e9658d3a32870ae1
 RUN git init /opt/msvc-wine && cd /opt/msvc-wine && \
     git fetch --depth=1 https://github.com/mstorsjo/msvc-wine.git ${MSVC_WINE_REVISION} && \
     git checkout --detach FETCH_HEAD && \
-    python3 vsdownload.py --accept-license --major 17 --architecture x64 \
+    python3 vsdownload.py --accept-license --major 17 --architecture x64 x86 \
         --with-msbuild no --save-manifest --dest /opt/msvc
 
 ARG VCPKG_REVISION=5f96cd15fd745122cf27e0524606d6c1efc5fd07
