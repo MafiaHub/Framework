@@ -47,23 +47,29 @@ MODULE(physical_keys, {
         for (HKL layout : {english, russian, french}) {
             EQUALS(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('W', layout), MapVirtualKeyExW(0x11, MAPVK_VSC_TO_VK_EX, layout));
             EQUALS(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('T', layout), MapVirtualKeyExW(0x14, MAPVK_VSC_TO_VK_EX, layout));
-            // A layout-aware IInput provider converts a layout VK back into
-            // a DirectInput scan code. Preserve that existing API contract.
+            // Layout conversion stays inside the OS reader. Native device
+            // adapters map the same framework position straight to DirectInput.
             EQUALS(MapVirtualKeyExW(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('W', layout), MAPVK_VK_TO_VSC_EX, layout), 0x11U);
             EQUALS(MapVirtualKeyExW(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('T', layout), MAPVK_VK_TO_VSC_EX, layout), 0x14U);
+            ActivateKeyboardLayout(layout, 0);
+            EQUALS(Framework::Input::PhysicalKeys::ToDirectInputCode('W'), 0x11U);
+            EQUALS(Framework::Input::PhysicalKeys::ToDirectInputCode('T'), 0x14U);
         }
         EQUALS(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('W', french), 'Z');
         layoutRestore.Restore();
         EQUALS(GetKeyboardLayout(0), original);
     });
 
-    IT("adapts a layout-aware device provider without changing its native key API", {
-        const HKL layout = GetKeyboardLayout(0);
-        for (UINT key : {'W', 'T', 'A', 'Z', '1', '9'}) {
-            const UINT layoutKey = Framework::Input::PhysicalKeys::ToLayoutVirtualKey(key, layout);
-            // Match GameInput::MapKey: it uses the current thread's layout.
-            EQUALS(MapVirtualKeyW(layoutKey, MAPVK_VK_TO_VSC_EX), Framework::Input::PhysicalKeys::ToScanCode(key));
-        }
+    IT("maps framework positions directly to native DirectInput codes", {
+        EQUALS(Framework::Input::PhysicalKeys::ToDirectInputCode('W'), 0x11U);
+        EQUALS(Framework::Input::PhysicalKeys::ToDirectInputCode('T'), 0x14U);
+        EQUALS(Framework::Input::PhysicalKeys::ToDirectInputCode(FW_KEY_LCONTROL), 0x1DU);
+        EQUALS(Framework::Input::PhysicalKeys::ToDirectInputCode(FW_KEY_RCONTROL), 0x9DU);
+        EQUALS(Framework::Input::PhysicalKeys::ToDirectInputCode(FW_KEY_UP), 0xC8U);
+        EQUALS(Framework::Input::PhysicalKeys::ToDirectInputCode(FW_KEY_NUMPAD8), 0x48U);
+        EQUALS(Framework::Input::PhysicalKeys::ToDirectInputCode(FW_KEY_NUMLOCK), 0x45U);
+        EQUALS(Framework::Input::PhysicalKeys::ToDirectInputCode(FW_KEY_PAUSE), 0xC5U);
+        EQUALS(Framework::Input::PhysicalKeys::ToDirectInputCode(256), 0U);
     });
 
     IT("releases the same key after a layout change", {

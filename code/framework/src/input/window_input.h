@@ -9,13 +9,13 @@
 #pragma once
 
 #include "button_state.h"
-#include "input.h"
 #include "physical_keys.h"
+#include "win32_input.h"
 
 namespace Framework::Input {
     // State acquisition only. Cursor presentation and native control locking
     // remain on the game's adapter. This does not process WM_CHAR or IME.
-    class WindowInput: public IInput {
+    class WindowInput: public Win32Input {
       public:
         void Update() override {
             _keys.ClearEdges();
@@ -27,32 +27,14 @@ namespace Framework::Input {
             y = _mouseY;
         }
 
-        uint32_t MapKey(uint32_t key) const override {
-            return key;
-        }
-        KeyCodeSpace GetKeyCodeSpace() const override {
-            return KeyCodeSpace::PhysicalPosition;
-        }
-        bool IsKeyDown(int key) const override {
-            return _keys.IsDown(key);
-        }
-        bool IsKeyUp(int key) const override {
-            return _keys.IsUp(key);
-        }
         bool IsKeyPressed(int key) const override {
-            return _keys.IsPressed(key);
+            return IsAvailable() && _keys.IsPressed(key);
         }
         bool IsKeyReleased(int key) const override {
             return _keys.IsReleased(key);
         }
-        bool IsMouseButtonDown(int button) const override {
-            return _buttons.IsDown(button);
-        }
-        bool IsMouseButtonUp(int button) const override {
-            return _buttons.IsUp(button);
-        }
         bool IsMouseButtonPressed(int button) const override {
-            return _buttons.IsPressed(button);
+            return IsAvailable() && _buttons.IsPressed(button);
         }
         bool IsMouseButtonReleased(int button) const override {
             return _buttons.IsReleased(button);
@@ -69,43 +51,52 @@ namespace Framework::Input {
                 // Retain the generic modifier while either side is held.
                 UINT generic = physical;
                 UINT side    = physical;
-                if (physical == VK_SHIFT) {
-                    side = ((flags >> 16) & 0xFF) == 0x36 ? VK_RSHIFT : VK_LSHIFT;
+                if (physical == FW_KEY_SHIFT) {
+                    side = ((flags >> 16) & 0xFF) == 0x36 ? FW_KEY_RSHIFT : FW_KEY_LSHIFT;
                 }
-                else if (physical == VK_CONTROL) {
-                    side = (flags & (1L << 24)) != 0 ? VK_RCONTROL : VK_LCONTROL;
+                else if (physical == FW_KEY_CONTROL) {
+                    side = (flags & (1L << 24)) != 0 ? FW_KEY_RCONTROL : FW_KEY_LCONTROL;
                 }
-                else if (physical == VK_MENU) {
-                    side = (flags & (1L << 24)) != 0 ? VK_RMENU : VK_LMENU;
+                else if (physical == FW_KEY_MENU) {
+                    side = (flags & (1L << 24)) != 0 ? FW_KEY_RMENU : FW_KEY_LMENU;
                 }
-                if (physical == VK_LSHIFT || physical == VK_RSHIFT)
-                    generic = VK_SHIFT;
-                else if (physical == VK_LCONTROL || physical == VK_RCONTROL)
-                    generic = VK_CONTROL;
-                else if (physical == VK_LMENU || physical == VK_RMENU)
-                    generic = VK_MENU;
+                if (physical == FW_KEY_LSHIFT || physical == FW_KEY_RSHIFT)
+                    generic = FW_KEY_SHIFT;
+                else if (physical == FW_KEY_LCONTROL || physical == FW_KEY_RCONTROL)
+                    generic = FW_KEY_CONTROL;
+                else if (physical == FW_KEY_LMENU || physical == FW_KEY_RMENU)
+                    generic = FW_KEY_MENU;
                 const bool recordEdge = !down || (flags & (1L << 30)) == 0;
                 _keys.Set(static_cast<int>(side), down, recordEdge);
                 if (side != generic) {
-                    _keys.Set(static_cast<int>(generic), _keys.IsDown(static_cast<int>(side)) || _keys.IsDown(static_cast<int>(side == VK_LSHIFT || side == VK_LCONTROL || side == VK_LMENU ? side + 1 : side - 1)), recordEdge);
+                    _keys.Set(static_cast<int>(generic), _keys.IsDown(static_cast<int>(side)) || _keys.IsDown(static_cast<int>(side == FW_KEY_LSHIFT || side == FW_KEY_LCONTROL || side == FW_KEY_LMENU ? side + 1 : side - 1)), recordEdge);
                 }
                 break;
             }
-            case WM_LBUTTONDOWN: SetButton(0, VK_LBUTTON, true); break;
-            case WM_LBUTTONUP: SetButton(0, VK_LBUTTON, false); break;
-            case WM_RBUTTONDOWN: SetButton(1, VK_RBUTTON, true); break;
-            case WM_RBUTTONUP: SetButton(1, VK_RBUTTON, false); break;
-            case WM_MBUTTONDOWN: SetButton(2, VK_MBUTTON, true); break;
-            case WM_MBUTTONUP: SetButton(2, VK_MBUTTON, false); break;
+            case WM_LBUTTONDOWN: SetButton(0, FW_KEY_LBUTTON, true); break;
+            case WM_LBUTTONUP: SetButton(0, FW_KEY_LBUTTON, false); break;
+            case WM_RBUTTONDOWN: SetButton(1, FW_KEY_RBUTTON, true); break;
+            case WM_RBUTTONUP: SetButton(1, FW_KEY_RBUTTON, false); break;
+            case WM_MBUTTONDOWN: SetButton(2, FW_KEY_MBUTTON, true); break;
+            case WM_MBUTTONUP: SetButton(2, FW_KEY_MBUTTON, false); break;
             case WM_XBUTTONDOWN:
             case WM_XBUTTONUP: {
                 const bool first = HIWORD(key) == XBUTTON1;
-                SetButton(first ? 3 : 4, first ? VK_XBUTTON1 : VK_XBUTTON2, message == WM_XBUTTONDOWN);
+                SetButton(first ? 3 : 4, first ? FW_KEY_XBUTTON1 : FW_KEY_XBUTTON2, message == WM_XBUTTONDOWN);
                 break;
             }
             case WM_MOUSEMOVE:
                 _mouseX = static_cast<short>(LOWORD(flags));
                 _mouseY = static_cast<short>(HIWORD(flags));
+                break;
+            case WM_SETFOCUS:
+                Update();
+                for (int index = 0; index < 256; ++index) {
+                    _keys.Set(index, IsKeyDown(index), false);
+                }
+                for (int index = 0; index < 5; ++index) {
+                    _buttons.Set(index, IsMouseButtonDown(index), false);
+                }
                 break;
             case WM_KILLFOCUS:
                 // Discard pending presses too: a focus transfer must not fire

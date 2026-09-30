@@ -66,20 +66,16 @@ namespace Framework::Input {
     };
 
     // Sampled state: seed on acquisition/resume, so keys already held do not
-    // become new presses. A frozen device must not manufacture releases.
+    // become new presses. Unavailable input does not publish release edges.
     class KeySnapshot final {
       public:
         template <typename Reader>
-        void Update(Reader &&read, bool available, bool stale = false) {
+        void Update(Reader &&read, bool available) {
             _keys.ClearEdges();
-            _available = available && !stale;
+            _available = available;
             if (!available) {
                 _keys.ReleaseAll();
                 _keys.ClearEdges();
-                _resync = true;
-                return;
-            }
-            if (stale) {
                 _resync = true;
                 return;
             }

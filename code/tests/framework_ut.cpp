@@ -47,6 +47,7 @@
 // The hooking layer, and so the pattern table, is Windows-only.
 #include "modules/pattern_table_ut.h"
 #include "modules/physical_keys_ut.h"
+#include "modules/polling_input_ut.h"
 #include "modules/window_input_ut.h"
 #endif
 
@@ -95,6 +96,7 @@ int main() {
     UNIT_MODULE(pattern_table);
     UNIT_MODULE(physical_keys);
     UNIT_MODULE(window_input);
+    UNIT_MODULE(polling_input);
 #endif
 
     // Scripting tests

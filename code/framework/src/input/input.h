@@ -8,16 +8,9 @@
 
 #pragma once
 
-#include <cstdint>
-
 #include "input_keymap.h"
 
 namespace Framework::Input {
-    enum class KeyCodeSpace {
-        LayoutVirtualKey,
-        PhysicalPosition
-    };
-
     class IInput {
       public:
         virtual ~IInput()     = default;
@@ -32,23 +25,11 @@ namespace Framework::Input {
         virtual void SetInputLocked(bool locked)            = 0;
         virtual bool IsInputLocked() const                  = 0;
 
-        // Opt-in: a device provider can answer held state independently of window events.
-        // Event-only providers cannot discover keys already held on focus reacquisition.
-        virtual bool ProvidesPhysicalKeyState() const {
-            return false;
-        }
+        // Fresh source state is available. Edge detectors reseed after an unavailable period.
+        virtual bool IsAvailable() const = 0;
 
-        // Legacy device adapters map layout VKs to scan codes. A provider
-        // storing physical-position codes must declare it to avoid translation twice.
-        virtual KeyCodeSpace GetKeyCodeSpace() const {
-            return KeyCodeSpace::LayoutVirtualKey;
-        }
-
-        // Device state frozen rather than idle; callers edge-detecting must hold, not latch.
-        virtual bool IsStateStale() const {
-            return false;
-        }
-
+        // Every adapter accepts FW_KEY_* codes and US physical letter/digit positions.
+        // Native layout and scan-code conversion belongs inside the adapter.
         virtual bool IsKeyDown(int key) const     = 0;
         virtual bool IsKeyUp(int key) const       = 0;
         virtual bool IsKeyPressed(int key) const  = 0;
@@ -58,7 +39,5 @@ namespace Framework::Input {
         virtual bool IsMouseButtonUp(int button) const       = 0;
         virtual bool IsMouseButtonPressed(int button) const  = 0;
         virtual bool IsMouseButtonReleased(int button) const = 0;
-
-        virtual uint32_t MapKey(uint32_t key) const = 0;
     };
 } // namespace Framework::Input

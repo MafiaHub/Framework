@@ -6,8 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-// safe_win32 first: pulls in WinSock2 before Windows.h to avoid winsock1 conflicts.
-#include "safe_win32.h"
+#include <input/input_keymap.h>
 
 #include "key_names.h"
 
@@ -36,46 +35,46 @@ namespace Framework::Utils::KeyNames {
                     t.emplace_back(std::string(1, c), c);
                 }
                 for (int i = 1; i <= 12; ++i) {
-                    t.emplace_back("f" + std::to_string(i), VK_F1 + (i - 1));
+                    t.emplace_back("f" + std::to_string(i), FW_KEY_F1 + (i - 1));
                 }
                 for (int i = 0; i <= 9; ++i) {
-                    const int vk = VK_NUMPAD0 + i;
+                    const int vk = FW_KEY_NUMPAD0 + i;
                     t.emplace_back("numpad" + std::to_string(i), vk);
                     t.emplace_back("num" + std::to_string(i), vk);
                 }
-                t.emplace_back("space", VK_SPACE);
-                t.emplace_back("enter", VK_RETURN);
-                t.emplace_back("return", VK_RETURN);
-                t.emplace_back("escape", VK_ESCAPE);
-                t.emplace_back("esc", VK_ESCAPE);
-                t.emplace_back("tab", VK_TAB);
-                t.emplace_back("backspace", VK_BACK);
-                t.emplace_back("capslock", VK_CAPITAL);
-                t.emplace_back("shift", VK_SHIFT);
-                t.emplace_back("lshift", VK_LSHIFT);
-                t.emplace_back("rshift", VK_RSHIFT);
-                t.emplace_back("ctrl", VK_CONTROL);
-                t.emplace_back("control", VK_CONTROL);
-                t.emplace_back("lctrl", VK_LCONTROL);
-                t.emplace_back("rctrl", VK_RCONTROL);
-                t.emplace_back("alt", VK_MENU);
-                t.emplace_back("lalt", VK_LMENU);
-                t.emplace_back("ralt", VK_RMENU);
-                t.emplace_back("up", VK_UP);
-                t.emplace_back("down", VK_DOWN);
-                t.emplace_back("left", VK_LEFT);
-                t.emplace_back("right", VK_RIGHT);
-                t.emplace_back("insert", VK_INSERT);
-                t.emplace_back("delete", VK_DELETE);
-                t.emplace_back("home", VK_HOME);
-                t.emplace_back("end", VK_END);
-                t.emplace_back("pageup", VK_PRIOR);
-                t.emplace_back("pagedown", VK_NEXT);
-                t.emplace_back("mouse1", VK_LBUTTON);
-                t.emplace_back("mouse2", VK_RBUTTON);
-                t.emplace_back("mouse3", VK_MBUTTON);
-                t.emplace_back("mouse4", VK_XBUTTON1);
-                t.emplace_back("mouse5", VK_XBUTTON2);
+                t.emplace_back("space", FW_KEY_SPACE);
+                t.emplace_back("enter", FW_KEY_RETURN);
+                t.emplace_back("return", FW_KEY_RETURN);
+                t.emplace_back("escape", FW_KEY_ESCAPE);
+                t.emplace_back("esc", FW_KEY_ESCAPE);
+                t.emplace_back("tab", FW_KEY_TAB);
+                t.emplace_back("backspace", FW_KEY_BACK);
+                t.emplace_back("capslock", FW_KEY_CAPITAL);
+                t.emplace_back("shift", FW_KEY_SHIFT);
+                t.emplace_back("lshift", FW_KEY_LSHIFT);
+                t.emplace_back("rshift", FW_KEY_RSHIFT);
+                t.emplace_back("ctrl", FW_KEY_CONTROL);
+                t.emplace_back("control", FW_KEY_CONTROL);
+                t.emplace_back("lctrl", FW_KEY_LCONTROL);
+                t.emplace_back("rctrl", FW_KEY_RCONTROL);
+                t.emplace_back("alt", FW_KEY_MENU);
+                t.emplace_back("lalt", FW_KEY_LMENU);
+                t.emplace_back("ralt", FW_KEY_RMENU);
+                t.emplace_back("up", FW_KEY_UP);
+                t.emplace_back("down", FW_KEY_DOWN);
+                t.emplace_back("left", FW_KEY_LEFT);
+                t.emplace_back("right", FW_KEY_RIGHT);
+                t.emplace_back("insert", FW_KEY_INSERT);
+                t.emplace_back("delete", FW_KEY_DELETE);
+                t.emplace_back("home", FW_KEY_HOME);
+                t.emplace_back("end", FW_KEY_END);
+                t.emplace_back("pageup", FW_KEY_PRIOR);
+                t.emplace_back("pagedown", FW_KEY_NEXT);
+                t.emplace_back("mouse1", FW_KEY_LBUTTON);
+                t.emplace_back("mouse2", FW_KEY_RBUTTON);
+                t.emplace_back("mouse3", FW_KEY_MBUTTON);
+                t.emplace_back("mouse4", FW_KEY_XBUTTON1);
+                t.emplace_back("mouse5", FW_KEY_XBUTTON2);
                 return t;
             }();
             return table;

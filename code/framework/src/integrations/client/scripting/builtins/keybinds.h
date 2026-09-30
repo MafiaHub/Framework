@@ -71,7 +71,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static std::mutex _mutex;
 
         // Update() only.
-        static bool _stateWasStale;
+        static bool _sourceWasUnavailable;
 
         static std::function<bool()> _activeCallback;
 

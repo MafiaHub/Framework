@@ -4,43 +4,57 @@ Native multiplayer controls and scripted `Key` bindings share the framework's
 input primitives. Game adapters keep native device acquisition, control locking,
 cursor presentation and engine action-map policy.
 
-## Window-message adapters
+## One query API
 
-Derive the game adapter from `Framework::Input::WindowInput` and implement the
-remaining cursor and control-lock methods. Forward every window message to
-`ProcessEvent` before a UI handler can consume it. Call `Update` once, after all
-consumers have read that frame's pressed/released edges.
+All native consumers and scripted `Key` bindings query an `IInput` instance:
 
-The backend normalizes printable keys to US physical positions, filters
-repeats, tracks both sides of modifiers, publishes mouse buttons by index and
-as virtual keys, preserves signed client coordinates, and releases held state
-on focus loss. Character and IME messages remain on the text/UI path.
+```cpp
+input->IsKeyDown(FW_KEY_SPACE);
+input->IsKeyPressed(FW_KEY_F9);
+input->IsKeyDown('W');
+```
 
-This is an event backend. It does not opt into `ProvidesPhysicalKeyState()`:
-window events cannot discover keys which were already held when focus returned.
-`PhysicalKeyState` uses its foreground-aware OS fallback for these adapters.
+Use the existing `FW_KEY_*` macros from `<input/input.h>`. Letters and digits
+use their uppercase character codes. Every adapter interprets printable codes
+as US physical positions, independent of keyboard layout. Native scan-code and
+layout conversions stay inside the backend. There is no public physical-key
+query helper, provider opt-in or alternate key-code space.
 
-## Physical polling and UI snapshots
+`IsAvailable()` reports whether the source has fresh state. Held queries return
+false while focus or native acquisition is unavailable; edge detectors seed
+held state when availability returns so held keys do not become new presses.
+Gameplay policy is separate: use the client's `IsLocalInputAvailable()` for
+controls which must stop while a menu owns gameplay input.
 
-`PhysicalKeyState::IsDown(key, input)` accepts a key in the same physical
-namespace as `Key`. An opted-in device provider must declare its key space:
+## Window and UI sources
 
-- `KeyCodeSpace::LayoutVirtualKey` is the default for existing device adapters
-  which translate layout virtual keys to native scan codes.
-- `KeyCodeSpace::PhysicalPosition` means the adapter already accepts physical
-  positions, so the reader must not translate a second time.
+`PollingInput` implements the query API through foreground-aware OS acquisition.
+Its polled press/release snapshots are advanced by `Update()` before consumers
+read them. Initial acquisition and foreground regain seed state without new
+presses. It also supplies ordinary Win32 cursor operations; game adapters can
+override those with their native cursor/control-lock policy.
 
-A stale provider answers false. Without an opted-in provider the helper polls
-only while this process owns the foreground window, using that window's layout
-to translate the requested physical position.
+`WindowInput` adds window-message press/release edges, including taps shorter
+than a frame. Derive the game adapter from it and forward every window message
+to `ProcessEvent` before a UI handler consumes it. Call `Update()` after all
+consumers have read the frame's edges. Held queries use the same live OS source,
+so they also detect keys held before focus returned. Message decoding tracks
+both modifier sides, stable mouse-button indices and signed client coordinates.
+Focus loss clears pending presses and releases tracked event state for cleanup.
+Focus acquisition seeds event state from held keys, including both modifier
+sides, so subsequent messages do not manufacture an aggregate modifier press.
+Character and IME messages remain on the text/UI path.
 
-Use `PhysicalKeyState::Update(snapshot)` for UI hotkeys which must remain live
-while native gameplay devices are paused. `KeySnapshot` seeds held keys on
-initial acquisition, foreground regain and stale-state recovery without firing
-new press edges. Its state is unavailable while the source is unavailable or
-stale. Gameplay availability remains a separate policy: use the client's
-`IsLocalInputAvailable()` for gameplay hotkeys and explicit UI/editor policy for
-controls which must work while a menu owns gameplay input.
+A native device adapter implements the same `IInput` contract using physical
+positions and declares itself unavailable when acquisition is paused. Use
+`PhysicalKeys::ToDirectInputCode` inside DirectInput adapters. The layout
+translation used by Win32 polling is an internal backend operation.
+
+UI controls which must remain live while gameplay devices are paused can own a
+`PollingInput` source and use exactly the same query methods. M2O does this for
+its debug/chat/escape hotkeys and key capture; gameplay and voice use its native
+adapter. Source lifetime belongs to the feature/application, not to a query
+flag or a compatibility switch.
 
 ## Resource-owned controls
 
@@ -58,9 +72,9 @@ inherit native rebinding, priority, combat or inventory behavior.
 
 `FrameworkInputTests` has no renderer, browser, server or game dependency. Its
 portable suite covers transitions, repeat filtering, frame edge retention,
-focus/stale resynchronization and resource ownership. Windows additionally
-covers actual window messages, modifiers, mouse masks, physical key spaces and
-the physical-key mapping suite. The same modules run in `FrameworkTests`.
+availability resynchronization and resource ownership. Windows additionally
+covers actual window messages, modifiers, mouse masks, common query behavior
+and physical-to-native key mapping. The same modules run in `FrameworkTests`.
 
 Linux, using the canonical build:
 

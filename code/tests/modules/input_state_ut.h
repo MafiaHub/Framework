@@ -96,7 +96,7 @@ MODULE(input_state, {
         EQUALS(snapshot.IsDown('W'), true);
         EQUALS(snapshot.IsPressed('W'), false);
     });
-    IT("stale device state holds the detector and resynchronizes on resume", {
+    IT("unavailable device state discards edges and reseeds on resume", {
         Framework::Input::KeySnapshot snapshot;
         bool held       = false;
         const auto read = [&held](int key) {
@@ -104,15 +104,15 @@ MODULE(input_state, {
         };
         snapshot.Update(read, true);
         held = true;
-        snapshot.Update(read, true, true);
+        snapshot.Update(read, false);
         EQUALS(snapshot.IsPressed('T'), false);
         snapshot.Update(read, true);
         EQUALS(snapshot.IsDown('T'), true);
         EQUALS(snapshot.IsPressed('T'), false);
-        snapshot.Update(read, true, true);
+        snapshot.Update(read, false);
         EQUALS(snapshot.IsDown('T'), false);
         held = false;
-        snapshot.Update(read, true, true);
+        snapshot.Update(read, false);
         EQUALS(snapshot.IsReleased('T'), false);
         snapshot.Update(read, true);
         EQUALS(snapshot.IsDown('T'), false);

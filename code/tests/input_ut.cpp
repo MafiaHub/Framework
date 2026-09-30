@@ -13,6 +13,7 @@
 #ifdef _WIN32
 #include "modules/physical_keys_ut.h"
 #include "modules/window_input_ut.h"
+#include "modules/polling_input_ut.h"
 #endif
 
 // clang-format on
@@ -23,6 +24,7 @@ int main() {
 #ifdef _WIN32
     UNIT_MODULE(window_input);
     UNIT_MODULE(physical_keys);
+    UNIT_MODULE(polling_input);
 #endif
     return UNIT_RUN();
 }
