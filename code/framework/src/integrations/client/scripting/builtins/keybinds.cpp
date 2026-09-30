@@ -67,7 +67,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                     return false;
                 }
                 // Existing device providers accept layout VKs and map them to
-                // scan codes with MapVirtualKey on this thread (Mafia2Online).
+                // scan codes with MapVirtualKey on this thread.
                 const UINT layoutKey = Input::PhysicalKeys::ToLayoutVirtualKey(static_cast<UINT>(vk), ::GetKeyboardLayout(0));
                 return layoutKey != 0 && input->IsKeyDown(static_cast<int>(layoutKey));
             }

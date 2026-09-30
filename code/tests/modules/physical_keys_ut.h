@@ -47,7 +47,7 @@ MODULE(physical_keys, {
         for (HKL layout : {english, russian, french}) {
             EQUALS(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('W', layout), MapVirtualKeyExW(0x11, MAPVK_VSC_TO_VK_EX, layout));
             EQUALS(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('T', layout), MapVirtualKeyExW(0x14, MAPVK_VSC_TO_VK_EX, layout));
-            // Mafia2Online's IInput provider converts a layout VK back into
+            // A layout-aware IInput provider converts a layout VK back into
             // a DirectInput scan code. Preserve that existing API contract.
             EQUALS(MapVirtualKeyExW(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('W', layout), MAPVK_VK_TO_VSC_EX, layout), 0x11U);
             EQUALS(MapVirtualKeyExW(Framework::Input::PhysicalKeys::ToLayoutVirtualKey('T', layout), MAPVK_VK_TO_VSC_EX, layout), 0x14U);
