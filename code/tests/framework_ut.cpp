@@ -45,6 +45,7 @@
 #ifdef _WIN32
 // The hooking layer, and so the pattern table, is Windows-only.
 #include "modules/pattern_table_ut.h"
+#include "modules/physical_keys_ut.h"
 #endif
 
 // Scripting tests
@@ -89,6 +90,7 @@ int main() {
     UNIT_MODULE(resource_package);
 #ifdef _WIN32
     UNIT_MODULE(pattern_table);
+    UNIT_MODULE(physical_keys);
 #endif
 
     // Scripting tests
