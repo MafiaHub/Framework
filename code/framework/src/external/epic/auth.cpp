@@ -318,11 +318,18 @@ namespace Framework::External::Epic {
         }
     } // namespace
 
-    bool EnsureAuthenticated(Tokens &out, const std::wstring &productName) {
+    bool TryRefreshStoredAuth(Tokens &out) {
         std::string rt;
-        if (LoadRefreshToken(rt) && RefreshGrant(rt, out)) {
-            Log("auth: refreshed stored token");
-            SaveRefreshToken(out.refreshToken); // Epic rotates the refresh token
+        if (!LoadRefreshToken(rt) || !RefreshGrant(rt, out)) {
+            return false;
+        }
+        Log("auth: refreshed stored token");
+        SaveRefreshToken(out.refreshToken); // Epic rotates the refresh token
+        return true;
+    }
+
+    bool EnsureAuthenticated(Tokens &out, const std::wstring &productName) {
+        if (TryRefreshStoredAuth(out)) {
             return true;
         }
 
