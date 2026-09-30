@@ -146,10 +146,62 @@ The completeness check matters: the wrapper decrypts progressively, and a captur
 still working bakes half-decrypted code into the cache. `ImageSnapshot::CaptureFrom` only accepts a
 capture once every page that is ciphertext on disk has changed in memory.
 
+## Launcher Image Layout
+
+The game is mapped into the launcher's own image, at the launcher's image base: the game's
+headers overwrite the launcher's, and its sections land from RVA `0x1000` on. The launcher is
+laid out to leave that range empty:
+
+| Section | Holds |
+|---|---|
+| `.fwgame` | The game reservation: empty, uninitialised, first after the headers |
+| `.pdata`, `.fwend`, `.cld`, `.clr` | The launcher's own exception table and data (`.data` and `.rdata` merged) |
+| `.zdata` | The launcher's own code (`.text` merged), kept last by `/LAST:.zdata` |
+| `.rsrc` | Resources |
+
+FrameworkLoader forces the rest: `/BASE:0x140000000` (`0x400000` on 32-bit) and
+`/DYNAMICBASE:NO`, so the launcher sits where a 64-bit game expects to be.
+
+### Sizing the game reservation
+
+The reservation must cover the game executable's `SizeOfImage`, and nothing more is gained by
+making it larger. Every launcher gets a default sized for the largest game any project maps -
+`0x6fffffff` (1.75 GiB) on 64-bit and `0x2500000` on 32-bit. A small executable should set its
+own, because an image that is almost entirely empty section with its entry point at the far end
+reads as a custom packer to antivirus heuristics:
+
+```cmake
+# KingdomCome.exe maps to 1.5 MiB; the game itself is WHGame.dll, which Windows loads on its own
+target_compile_definitions(KCDCLauncher PRIVATE FW_LAUNCHER_GAME_RESERVE=0x1000000)
+```
+
+Read the executable's `SizeOfImage` from its optional header and leave room for game updates to
+grow it. Only the executable counts: modules the game loads itself, such as a CryEngine game DLL
+(see [cryengine_games.md](../../../../docs/cryengine_games.md)), get their own address from Windows.
+
+The reservation itself is compiled into each launcher by `game_reserve.cpp`, which FrameworkLoader
+adds as an interface source, so the launcher's own definition reaches it. `project.cpp` bounds it
+with markers in `.fwgame$a` and `.fwgame$c`; the linker orders `$`-suffixed parts of a section by
+suffix, which is the only section ordering it documents. Where `.fwgame` lands among the other
+sections is not documented, so `RunWithPELoading()` checks it on every launch and refuses, with a
+message box and a logged `Game image ... does not fit the reservation` line, when the reservation
+does not start at image base + `0x1000` or does not reach the game's `SizeOfImage`. A game update
+that outgrows a tight reservation fails there rather than overwriting the launcher.
+
+## Launch Types
+
+`ProjectLaunchType::PE_LOADING` is the default and what every project uses. The cross-process
+`DLL_INJECTION` type - `CreateProcess` suspended, then `VirtualAllocEx`, `WriteProcessMemory` and
+`CreateRemoteThread` into `LoadLibraryW` - and `RGL::ProcessMonitor`, which injects the same way,
+are only compiled with `-DFW_DLL_INJECTION=ON`. Those imports alone get a launcher flagged as a
+trojan by Windows Defender, so without the option the enum value does not exist and a project
+asking for it fails to compile.
+
 ## Files
 
 - `project.cpp` / `project.h` - Main launcher project class and configuration
+- `game_reserve.cpp` - the game reservation, compiled into each launcher and sized by `FW_LAUNCHER_GAME_RESERVE`
 - `loaders/exe_ldr.cpp` / `exe_ldr.h` - PE executable loader implementation
 - `data/tls.cpp` - TLS buffer for allocated slot approach (in FrameworkLoaderData.dll)
-- `rgl_bypass.cpp` / `rgl_bypass.h` - Rockstar Games Launcher entry-stub decoding and signature-check bypasses
+- `rgl_bypass.cpp` / `rgl_bypass.h` - Rockstar Games Launcher entry-stub decoding and signature-check bypasses; `ProcessMonitor` only with `FW_DLL_INJECTION`
 - `loaders/image_snapshot.cpp` / `image_snapshot.h` - capture and replay of the code a store wrapper decrypts at runtime

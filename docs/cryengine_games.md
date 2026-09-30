@@ -109,3 +109,7 @@ every `PE_LOADING` launch — projects do not opt in.
 4. Resolve patterns against the game module, not the executable — its preferred base
    is typically `0x180000000`, and it is relocated by ASLR at runtime, so never
    hardcode a base.
+5. Size the launcher's game reservation to the bootstrap, not the game module:
+   `FW_LAUNCHER_GAME_RESERVE=0x1000000` covers KCD2's 1.5 MiB `KingdomCome.exe`, where
+   the 1.75 GiB default is what got the launcher flagged by antivirus. See "Launcher
+   Image Layout" in `code/framework/src/launcher/README.md`.
