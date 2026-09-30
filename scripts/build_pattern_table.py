@@ -40,7 +40,10 @@ from pathlib import Path
 
 MAGIC = b"FWPATTBL"
 FORMAT_VERSION = 2
-LITERAL_RE = re.compile(r'(?:get_pattern|get_opcode_address)\s*(?:<[^>]*>)?\s*\(\s*\n?\s*"([0-9A-Fa-f? ]+)"')
+# The literal may sit inside one macro call, as KCDC's get_pattern(KCDC_HIDE("...")) does to
+# keep it encrypted in the shipped binary; the bytes hashed at runtime are still the literal's.
+# It may also be a run of adjacent literals, which read_literals() joins as the compiler does.
+LITERAL_RE = re.compile(r'(?:get_pattern|get_opcode_address)\s*(?:<[^>]*>)?\s*\(\s*(?:[A-Za-z_]\w*\s*\(\s*)?((?:"[0-9A-Fa-f? ]*"\s*)+)')
 
 # A C string literal, and a run of adjacent literals the compiler concatenates.
 CXX_STRING = r'"(?:[^"\\]|\\.)*"'
@@ -119,7 +122,7 @@ def read_literals(path: Path, style: str = "call"):
     out, seen = [], set()
 
     if style == "call":
-        found = [lit.strip() for lit in LITERAL_RE.findall(text)]
+        found = ["".join(part[1:-1] for part in CXX_STRING_RE.findall(run)).strip() for run in LITERAL_RE.findall(text)]
     else:
         found = []
         for run in LITERAL_RUN_RE.findall(LINE_COMMENT_RE.sub("", text)):
