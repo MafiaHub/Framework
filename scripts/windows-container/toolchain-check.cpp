@@ -28,7 +28,7 @@ static bool CheckStructuredExceptions() {
 }
 
 int main() {
-    static_assert(sizeof(void *) == 8, "The Windows container builds x64 targets.");
+    static_assert(sizeof(void *) * 8 == FW_CHECK_POINTER_BITS, "The compiler target must match the requested architecture.");
     std::cout << "MSVC " << _MSC_VER << ", pointer size " << sizeof(void *) << '\n';
     const auto directory = std::filesystem::current_path();
     std::cout << "Windows filesystem: " << directory.string() << '\n';
