@@ -36,3 +36,13 @@ target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
 add_custom_target(RunFrameworkTests
         COMMAND $<TARGET_FILE:FrameworkTests>
         DEPENDS $<TARGET_FILE:FrameworkTests>)
+
+# Native input primitives can be tested without building or launching clients.
+add_executable(FrameworkInputTests input_ut.cpp)
+target_include_directories(FrameworkInputTests PRIVATE . ../framework/src)
+if(WIN32)
+    target_link_libraries(FrameworkInputTests PRIVATE user32)
+endif()
+add_custom_target(RunFrameworkInputTests
+    COMMAND $<TARGET_FILE:FrameworkInputTests>
+    DEPENDS FrameworkInputTests)

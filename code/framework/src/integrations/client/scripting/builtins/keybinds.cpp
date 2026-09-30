@@ -18,7 +18,6 @@
 
 #include <core_modules.h>
 #include <input/input.h>
-#include <input/physical_keys.h>
 #include <logging/logger.h>
 #include <utils/key_names.h>
 
@@ -56,31 +55,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return s;
         }
 
-        const Input::IInput *PhysicalKeySource() {
+        bool IsKeyDown(int key) {
             const auto *input = CoreModules::GetInput();
-            return input && input->ProvidesPhysicalKeyState() ? input : nullptr;
-        }
-
-        bool IsPhysicallyDown(int vk) {
-            if (const auto *input = PhysicalKeySource()) {
-                if (input->IsStateStale()) {
-                    return false;
-                }
-                // Existing device providers accept layout VKs and map them to
-                // scan codes with MapVirtualKey on this thread.
-                const UINT layoutKey = Input::PhysicalKeys::ToLayoutVirtualKey(static_cast<UINT>(vk), ::GetKeyboardLayout(0));
-                return layoutKey != 0 && input->IsKeyDown(static_cast<int>(layoutKey));
-            }
-            // GetAsyncKeyState is a GLOBAL key state — it reads the key even while our window is in the
-            // background (alt-tab). Honor the documented "false while backgrounded" by requiring our own
-            // process to own the foreground window.
-            DWORD pid          = 0;
-            const DWORD thread = ::GetWindowThreadProcessId(::GetForegroundWindow(), &pid);
-            if (pid != ::GetCurrentProcessId()) {
-                return false;
-            }
-            const UINT layoutKey = Input::PhysicalKeys::ToLayoutVirtualKey(static_cast<UINT>(vk), ::GetKeyboardLayout(thread));
-            return layoutKey != 0 && (::GetAsyncKeyState(static_cast<int>(layoutKey)) & 0x8000) != 0;
+            return input && input->IsKeyDown(key);
         }
     } // anonymous namespace
 
@@ -88,15 +65,15 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     std::mutex Keybinds::_mutex;
     std::function<bool()> Keybinds::_activeCallback;
     Framework::Scripting::ResourceManager *Keybinds::_resourceManager = nullptr;
-    bool Keybinds::_stateWasStale                                     = false;
+    bool Keybinds::_sourceWasUnavailable                              = false;
 
     void Keybinds::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
         {
             std::scoped_lock lock(_mutex);
             _buckets.clear();
         }
-        _stateWasStale   = false;
-        _resourceManager = resourceManager;
+        _sourceWasUnavailable = false;
+        _resourceManager      = resourceManager;
 
         v8::Local<v8::Object> keyObj = v8::Object::New(isolate);
 
@@ -211,7 +188,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             if (bucket.handlers.empty()) {
                 // Seed from live state so a held key doesn't fire on bind.
                 bucket.vk       = vk;
-                bucket.prevDown = IsPhysicallyDown(vk);
+                bucket.prevDown = IsKeyDown(vk);
             }
             Handler entry;
             entry.callback.Reset(isolate, handler);
@@ -300,7 +277,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             std::scoped_lock lock(_mutex);
             allowed = GateAllowed();
         }
-        args.GetReturnValue().Set(allowed && IsPhysicallyDown(vk));
+        args.GetReturnValue().Set(allowed && IsKeyDown(vk));
     }
 
     void Keybinds::Update() {
@@ -309,16 +286,15 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        // A frozen source reads every key up: right for dispatch, a lie to edge detection. Latching
-        // it would fire a phantom "down" for a key still held when the freeze lifts, so hold the
-        // detector and re-seed prevDown on the first fresh frame instead.
-        const auto *input = PhysicalKeySource();
-        if (input && input->IsStateStale()) {
-            _stateWasStale = true;
+        // An unavailable source must not publish releases or manufacture presses when it
+        // resumes. Hold the detector and seed it from the first fresh source state.
+        const auto *input = CoreModules::GetInput();
+        if (!input || !input->IsAvailable()) {
+            _sourceWasUnavailable = true;
             return;
         }
-        const bool resync = _stateWasStale;
-        _stateWasStale    = false;
+        const bool resync     = _sourceWasUnavailable;
+        _sourceWasUnavailable = false;
 
         // Phase 1: edge-detect without touching V8.
         struct Edge {
@@ -333,7 +309,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
             const bool allowed = GateAllowed();
             for (auto &[keyName, bucket] : _buckets) {
-                const bool down = IsPhysicallyDown(bucket.vk);
+                const bool down = IsKeyDown(bucket.vk);
                 if (resync) {
                     bucket.prevDown = down;
                     continue;
@@ -345,7 +321,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 // Alt+Enter / Alt+Space), not a script keystroke. Drop it WITHOUT latching prevDown so
                 // the later release fires no stray "up" and a genuine press after Alt releases still
                 // registers. Held keys (prevDown already set) and releases are unaffected.
-                if (down && bucket.vk != VK_MENU && IsPhysicallyDown(VK_MENU)) {
+                if (down && bucket.vk != FW_KEY_MENU && IsKeyDown(FW_KEY_MENU)) {
                     continue;
                 }
                 bucket.prevDown = down;
@@ -431,7 +407,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     void Keybinds::Shutdown() {
         std::scoped_lock lock(_mutex);
         _buckets.clear();
-        _stateWasStale = false;
+        _sourceWasUnavailable = false;
         // NOTE: do NOT reset _activeCallback here. It is a HOST gate (installed via SetActiveCallback)
         // that captures host state living for the whole process — well beyond a single scripting session.
         // Clearing it on every Shutdown (disconnect) dropped keybind suppression after a RECONNECT (the

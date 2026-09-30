@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-// Friendly key name <-> Win32 virtual-key code, shared by everything that lets a player or a
+// Friendly key name <-> framework input code, shared by everything that lets a player or a
 // script name a key. Canonical names are lowercase and unspaced: "f5", "lshift", "mouse4".
 namespace Framework::Utils::KeyNames {
     // -1 for an unsupported name. Case-insensitive.
