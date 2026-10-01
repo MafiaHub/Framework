@@ -69,4 +69,20 @@ MODULE(spsc_ring, {
         ring.Clear();
         EQUALS(ring.Available(), static_cast<size_t>(0));
     });
+
+    IT("skips exactly the requested elements across a wrap", {
+        SpscRing<int16_t, 8> ring;
+        const int16_t first[5]  = {1, 2, 3, 4, 5};
+        const int16_t second[5] = {6, 7, 8, 9, 10};
+        int16_t out[3] {};
+        ring.Push(first, 5);
+        EQUALS(ring.Skip(5), true);
+        ring.Push(second, 5);
+        EQUALS(ring.Skip(6), false);
+        EQUALS(ring.Available(), size_t {5});
+        EQUALS(ring.Skip(2), true);
+        EQUALS(ring.Pop(out, 3), true);
+        EQUALS(out[0], static_cast<int16_t>(8));
+        EQUALS(out[2], static_cast<int16_t>(10));
+    });
 });

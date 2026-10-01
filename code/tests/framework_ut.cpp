@@ -16,12 +16,13 @@
 #include "modules/connection_gate_ut.h"
 #include "modules/delegation_ut.h"
 #include "modules/gui_resources_ut.h"
-#include "modules/interest_grid_ut.h"
 #include "modules/input_state_ut.h"
+#include "modules/interest_grid_ut.h"
 #include "modules/interpolator_ut.h"
 #include "modules/network_packets_ut.h"
 #include "modules/network_work_ut.h"
 #include "modules/persistent_config_ut.h"
+#include "modules/playout_buffer_ut.h"
 #include "modules/replication_authority_ut.h"
 #include "modules/replication_rate_ut.h"
 #include "modules/resource_package_ut.h"
@@ -88,6 +89,7 @@ int main() {
     UNIT_MODULE(voice_router);
     UNIT_MODULE(voice_positions);
     UNIT_MODULE(spsc_ring);
+    UNIT_MODULE(playout_buffer);
     UNIT_MODULE(voice_mixer);
     UNIT_MODULE(voice_ptt_gate);
     UNIT_MODULE(voice_activity);

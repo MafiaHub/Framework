@@ -108,7 +108,7 @@ namespace Framework::Voice {
     // Ceiling on buffered audio per speaker, in 20ms frames. Late-packet bursts and
     // capture/playback clock drift only ever add depth, so without a ceiling voice falls
     // steadily further behind. Past this, the oldest audio is skipped back to
-    // kJitterBufferFrames: one audible skip in exchange for bounded latency.
+    // kJitterBufferFrames, with a short blend at the join to avoid a click.
     constexpr uint32_t kJitterBufferMaxFrames = 12;
 
     // Bounds on the adaptive start depth, in 20ms frames. kJitterBufferFrames is where a

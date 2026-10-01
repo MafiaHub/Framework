@@ -13,6 +13,7 @@
 #include "voice/voice_config.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -32,12 +33,14 @@ namespace Framework::Voice {
     class PlayoutBuffer final {
       public:
         // Producer. `nowMs` is when the audio reached the client; frames pushed in the same
-        // millisecond count as one arrival. Drops the audio if the ring is full rather than
-        // stall: a ring that full means the consumer has stopped, not slowed.
+        // millisecond count as one arrival. On a full ring, signal the consumer to resync;
+        // the producer must never advance the consumer's read position or stall it.
         void Push(const int16_t *mono, uint32_t samples, int64_t nowMs) {
             _estimator.OnArrival(nowMs);
             _targetFrames.store(_estimator.GetTargetFrames(), std::memory_order_relaxed);
-            _ring.Push(mono, samples);
+            if (!_ring.Push(mono, samples)) {
+                _overflowed.store(true, std::memory_order_release);
+            }
         }
 
         // Producer. The slot has changed hands; the next talker's connection is not the last.
@@ -50,54 +53,78 @@ namespace Framework::Voice {
             return _targetFrames.load(std::memory_order_relaxed);
         }
 
-        // Consumer. Writes exactly `samples` into `out` and returns true, or leaves `out`
-        // alone and returns false while the buffer is priming or has run dry.
+        // Consumer. Always writes exactly `samples`, including silence while priming.
+        // Returns true if PCM or a fade tail was rendered. Partial and oversized device
+        // requests consume what is available rather than strand it behind an all-or-nothing
+        // pop. Start, underrun and latency-trim joins are smoothed over 5ms.
         bool Pull(int16_t *out, uint32_t samples) {
             if (samples == 0) {
                 return false;
             }
 
+            // The producer dropped PCM while this ring was full. Playing the old backlog
+            // into the next accepted frame would join two unrelated points in the waveform.
+            // Only this thread can discard safely; fade out and re-prime with fresh audio.
+            if (_overflowed.exchange(false, std::memory_order_acquire)) {
+                BeginCrossfade();
+                _ring.Skip(_ring.Available());
+                _primed = false;
+            }
+
             const size_t target = static_cast<size_t>(GetTargetFrames()) * kFrameSamples;
+            size_t available    = _ring.Available();
 
             // Frames arrive in bursts, so playing the first one to land leaves the buffer
             // riding empty and every hiccup punches a hole mid-word.
             if (!_primed) {
-                if (_ring.Available() < target) {
-                    return false;
+                if (available < target) {
+                    std::fill_n(out, samples, int16_t {0});
+                    const bool fading = _fadeRemaining != 0;
+                    ApplyFade(out, samples);
+                    return fading;
                 }
                 _primed = true;
-            }
-
-            // Ran dry. Hold the remainder and re-prime: splicing silence into the middle of a
-            // waveform is what makes an underrun sound like distortion rather than a pause.
-            if (_ring.Available() < samples) {
-                _primed = false;
-                return false;
+                BeginFade();
             }
 
             // Drifted deep. Late bursts and clock drift only ever add depth, so without a
-            // ceiling voice falls steadily further behind: skip the oldest audio back to the
-            // target, one audible skip in exchange for bounded latency. A whole request of
-            // headroom is kept, so the trim cannot starve the pop that follows it.
-            const size_t ceiling = target + static_cast<size_t>(kJitterBufferMaxFrames - kJitterBufferFrames) * kFrameSamples;
-            if (_ring.Available() > ceiling) {
-                const size_t keep = std::max(target, static_cast<size_t>(samples));
-                while (_ring.Available() >= keep + samples) {
-                    _ring.Pop(out, samples);
-                }
+            // ceiling voice falls steadily further behind. Skip once against this snapshot and
+            // crossfade the audio that would have played next into the audio skipped to. A
+            // whole request of headroom is kept, so the trim cannot starve this same pull.
+            const size_t ceiling = target + kCeilingHeadroomSamples;
+            if (available > ceiling) {
+                const size_t keep = std::min(std::max<size_t>(target, samples), available - kFadeSamples);
+                BeginCrossfade();
+                _ring.Skip(available - kFadeSamples - keep);
+                available = keep;
             }
 
-            return _ring.Pop(out, samples);
+            const uint32_t readable = static_cast<uint32_t>(std::min<size_t>(samples, available));
+            _ring.Pop(out, readable);
+            ApplyFade(out, readable);
+            bool rendered = readable != 0;
+
+            if (readable < samples) {
+                _primed = false;
+                BeginFade();
+                rendered = rendered || _fadeFrom != 0;
+                std::fill_n(out + readable, samples - readable, int16_t {0});
+                ApplyFade(out + readable, samples - readable);
+            }
+
+            return rendered;
         }
 
-        // Consumer. Throws everything buffered away, down to the last sample -- a remainder
-        // smaller than `scratchSamples` would otherwise leave the buffer permanently
-        // non-empty -- and re-primes.
-        void Discard(int16_t *scratch, uint32_t scratchSamples) {
-            for (size_t pending = std::min<size_t>(scratchSamples, _ring.Available()); pending != 0; pending = std::min<size_t>(scratchSamples, _ring.Available())) {
-                _ring.Pop(scratch, pending);
-            }
-            _primed = false;
+        // Consumer. Discards the current snapshot in constant time, remainder included.
+        // A released slot must not carry the previous talker's fade into its next binding.
+        void Discard() {
+            _ring.Skip(_ring.Available());
+            _primed        = false;
+            _lastSample    = 0;
+            _fadeFrom      = 0;
+            _fadeRemaining = 0;
+            _crossfading   = false;
+            _overflowed.store(false, std::memory_order_relaxed);
         }
 
         // Either side; exact only on the consumer.
@@ -108,19 +135,71 @@ namespace Framework::Voice {
         // Only while neither side is running.
         void Clear() {
             _ring.Clear();
-            _primed = false;
+            Discard();
             ResetEstimate();
         }
 
       private:
+        static constexpr uint32_t kFadeSamples = kSampleRate / 200; // 5ms
+
+        // Depth allowed above the target before the oldest audio is trimmed.
+        static constexpr size_t kCeilingHeadroomSamples = static_cast<size_t>(kJitterBufferMaxFrames - kJitterBufferFrames) * kFrameSamples;
+
+        // A ring that fills before the deepest ceiling is reached never trims: the producer
+        // overflows instead and the consumer flushes everything, a far longer gap than one
+        // trim. The extra frame is room for the push that lands while the depth sits there.
+        static_assert(RingSamples > static_cast<size_t>(kJitterBufferMaxTargetFrames) * kFrameSamples + kCeilingHeadroomSamples + kFrameSamples, "Playout ring must hold the deepest latency ceiling plus a frame");
+
+        // Ramps from the last sample played; for an underrun, which has nothing to blend from.
+        void BeginFade() {
+            _fadeFrom      = _lastSample;
+            _fadeRemaining = kFadeSamples;
+            _crossfading   = false;
+        }
+
+        // Takes the audio that would have played next, so a skip blends two real waveforms
+        // rather than ramping from one held sample. A trim always has it, sitting above the
+        // ceiling; an overflow seen only after a trim and a large pull may not.
+        void BeginCrossfade() {
+            if (!_ring.Pop(_crossfadeFrom.data(), kFadeSamples)) {
+                BeginFade();
+                return;
+            }
+            _fadeRemaining = kFadeSamples;
+            _crossfading   = true;
+        }
+
+        // Consumer only. A convex blend stays within PCM16, even across opposite peaks.
+        // The counter spans callbacks, so a backend requesting tiny blocks gets the same
+        // waveform as one requesting a whole voice frame.
+        void ApplyFade(int16_t *out, uint32_t samples) {
+            const uint32_t fading = std::min(samples, _fadeRemaining);
+            for (uint32_t i = 0; i < fading; i++) {
+                const int16_t from = _crossfading ? _crossfadeFrom[kFadeSamples - _fadeRemaining] : _fadeFrom;
+                --_fadeRemaining;
+                const int32_t oldWeight = static_cast<int32_t>(_fadeRemaining);
+                const int32_t newWeight = static_cast<int32_t>(kFadeSamples - _fadeRemaining);
+                out[i]                  = static_cast<int16_t>((static_cast<int32_t>(from) * oldWeight + static_cast<int32_t>(out[i]) * newWeight) / static_cast<int32_t>(kFadeSamples));
+            }
+            if (samples != 0) {
+                _lastSample = out[samples - 1];
+            }
+        }
+
         SpscRing<int16_t, RingSamples> _ring;
 
         // Consumer only.
-        bool _primed = false;
+        bool _primed            = false;
+        int16_t _lastSample     = 0;
+        int16_t _fadeFrom       = 0;
+        uint32_t _fadeRemaining = 0;
+        bool _crossfading       = false;
+        std::array<int16_t, kFadeSamples> _crossfadeFrom {};
 
         // Producer only.
         JitterEstimator _estimator;
 
         std::atomic<uint32_t> _targetFrames {kJitterBufferFrames};
+        std::atomic<bool> _overflowed {false};
     };
 } // namespace Framework::Voice

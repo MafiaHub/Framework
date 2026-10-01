@@ -137,7 +137,7 @@ MODULE(voice_activity, {
     });
 
     IT("primes to the target, plays, and re-primes when it runs dry", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, kFrameSamples> frame {};
         frame.fill(7);
         std::array<int16_t, kFrameSamples> out {};
@@ -148,9 +148,12 @@ MODULE(voice_activity, {
 
         buffer.Push(frame.data(), kFrameSamples, 1000);
         EQUALS(buffer.Pull(out.data(), kFrameSamples), true);
-        EQUALS(out[0], static_cast<int16_t>(7));
+        EQUALS(out.back(), static_cast<int16_t>(7));
         EQUALS(buffer.Pull(out.data(), kFrameSamples), true);
         EQUALS(buffer.Pull(out.data(), kFrameSamples), true);
+        // One smoothed tail bridges the last sample to silence before re-priming.
+        EQUALS(buffer.Pull(out.data(), kFrameSamples), true);
+        EQUALS(out.back(), static_cast<int16_t>(0));
         EQUALS(buffer.Pull(out.data(), kFrameSamples), false);
 
         // Re-priming: one frame is not enough to start again.
@@ -159,7 +162,7 @@ MODULE(voice_activity, {
     });
 
     IT("trims a buffer that drifted past its ceiling back to the target", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, kFrameSamples> frame {};
         std::array<int16_t, kFrameSamples> out {};
 
@@ -171,11 +174,10 @@ MODULE(voice_activity, {
     });
 
     IT("discards everything, remainder included", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, 1000> odd {};
-        std::array<int16_t, 480> scratch {};
         buffer.Push(odd.data(), static_cast<uint32_t>(odd.size()), 1000);
-        buffer.Discard(scratch.data(), static_cast<uint32_t>(scratch.size()));
+        buffer.Discard();
         EQUALS(buffer.Available(), static_cast<size_t>(0));
     });
 });
