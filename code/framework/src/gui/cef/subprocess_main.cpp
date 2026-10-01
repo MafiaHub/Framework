@@ -15,6 +15,9 @@
 #include "include/cef_command_line.h"
 #include "renderer_app.h"
 
+// Antivirus heuristics judge this exe more than anything else we ship; read
+// docs/cef_subprocess.md before adding anything to it.
+
 namespace {
     // Self-exit when the parent (game) process dies, so an abrupt quit or crash
     // that skips CEF teardown doesn't leave this helper orphaned. The parent is
