@@ -341,6 +341,19 @@ namespace Framework::Networking::Replication {
         }
     }
 
+    void ReplicationManager::ForEachStreamingPeer(NetworkEntity *entity, const fu2::function<void(MafiaNet::PeerGuid) const> &fn) const {
+        if (!_isServer || _owner == nullptr || entity == nullptr) {
+            return;
+        }
+        const unsigned connectionCount = GetConnectionCount();
+        for (unsigned i = 0; i < connectionCount; ++i) {
+            MafiaNet::Connection_RM3 *connection = GetConnectionAtIndex(i);
+            if (connection != nullptr && connection->HasReplicaConstructed(entity)) {
+                fn(MafiaNet::ToPeerGuid(connection->GetRakNetGUID()));
+            }
+        }
+    }
+
     void ReplicationManager::FlushStateBags() {
         if (_dirtyStateBags.empty()) {
             return;

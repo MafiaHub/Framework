@@ -191,6 +191,12 @@ namespace Framework::Networking::Replication {
         // proximity voice keys a speaker's position on.
         void ForEachAvatar(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const;
 
+        // Server: every peer that has `entity` constructed -- the audience interest, virtual worlds
+        // and budgets have already chosen, and so the one an event about the entity belongs to. The
+        // same question FlushStateBags asks, answered from the connections rather than re-derived
+        // from positions and ranges. O(connections); visits nothing on a client.
+        void ForEachStreamingPeer(NetworkEntity *entity, const fu2::function<void(MafiaNet::PeerGuid) const> &fn) const;
+
         // --- Delegated simulation ---
         // Election of which client simulates which server-owned entity. Server-side; on a client the
         // manager exists but does nothing. See delegation.h.
