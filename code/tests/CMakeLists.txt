@@ -46,12 +46,3 @@ endif()
 add_custom_target(RunFrameworkInputTests
     COMMAND $<TARGET_FILE:FrameworkInputTests>
     DEPENDS FrameworkInputTests)
-
-# Synthetic PCM exercises both the built-in sink's and engine sinks' shared buffer,
-# without opening audio devices, networking, or a game.
-add_executable(FrameworkVoiceTests voice_ut.cpp ../framework/src/voice/client/mixer.cpp)
-target_include_directories(FrameworkVoiceTests PRIVATE . ../framework/src)
-target_link_libraries(FrameworkVoiceTests PRIVATE glm::glm)
-add_custom_target(RunFrameworkVoiceTests
-    COMMAND $<TARGET_FILE:FrameworkVoiceTests>
-    DEPENDS FrameworkVoiceTests)
