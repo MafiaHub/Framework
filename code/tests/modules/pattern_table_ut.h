@@ -20,6 +20,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -84,12 +85,24 @@ namespace FwPatternTableUT {
 MODULE(pattern_table, {
     using namespace FwPatternTableUT;
 
-    // This test binary's own PE headers stand in for the game image.
-    const auto *self        = reinterpret_cast<const uint8_t *>(GetModuleHandleW(nullptr));
-    const auto *dosHeader   = reinterpret_cast<const IMAGE_DOS_HEADER *>(self);
-    const auto *ntHeader    = reinterpret_cast<const IMAGE_NT_HEADERS *>(self + dosHeader->e_lfanew);
-    const uint64_t selfBase = ntHeader->OptionalHeader.ImageBase;
-    const uint32_t selfSize = ntHeader->OptionalHeader.SizeOfImage;
+    // This test binary stands in for the game image. Its identity is read from the file, the way
+    // the generator reads the game's: the mapped header's ImageBase is rewritten by the loader to
+    // wherever ASLR put the image, so taking it from memory would let these tests agree with a
+    // loader that rejects every real table.
+    const auto *self = reinterpret_cast<const uint8_t *>(GetModuleHandleW(nullptr));
+    wchar_t selfPath[MAX_PATH * 4];
+    GetModuleFileNameW(nullptr, selfPath, static_cast<DWORD>(std::size(selfPath)));
+    IMAGE_DOS_HEADER dosHeader {};
+    IMAGE_NT_HEADERS ntHeader {};
+    {
+        std::ifstream image(selfPath, std::ios::binary);
+        image.read(reinterpret_cast<char *>(&dosHeader), sizeof(dosHeader));
+        image.seekg(dosHeader.e_lfanew);
+        image.read(reinterpret_cast<char *>(&ntHeader), sizeof(ntHeader));
+    }
+    const uint64_t selfBase     = ntHeader.OptionalHeader.ImageBase;
+    const uint32_t selfSize     = ntHeader.OptionalHeader.SizeOfImage;
+    const uint32_t selfFileSize = static_cast<uint32_t>(std::filesystem::file_size(selfPath));
 
     // load_pattern_table() resolves the loaded module through getRVA(), which reads
     // baseAddressDifference — zero until set_base() runs, which would send it dereferencing
@@ -105,13 +118,14 @@ MODULE(pattern_table, {
         return e.empty() ? Crc32(nullptr, 0) : Crc32(reinterpret_cast<const uint8_t *>(e.data()), e.size() * sizeof(Entry));
     };
 
-    const auto writeTable = [&](uint32_t version, uint64_t imageBase, uint32_t sizeOfImage, const std::vector<Entry> &entries, uint32_t declaredCount) {
+    const auto writeTable = [&](uint32_t version, uint64_t imageBase, uint32_t sizeOfImage, const std::vector<Entry> &entries, uint32_t declaredCount, uint32_t fileSize) {
         Header header {};
         memcpy(header.magic, "FWPATTBL", 8);
         header.version           = version;
         header.entryCount        = declaredCount;
         header.targetImageBase   = imageBase;
         header.targetSizeOfImage = sizeOfImage;
+        header.targetFileSize    = fileSize;
         header.entriesCrc        = entryBytes(entries);
 
         std::ofstream out(tempPath, std::ios::binary | std::ios::trunc);
@@ -122,12 +136,24 @@ MODULE(pattern_table, {
     };
 
     const auto writeValid = [&](uint64_t imageBase, uint32_t sizeOfImage) {
-        writeTable(2, imageBase, sizeOfImage, oneEntry, 1);
+        writeTable(2, imageBase, sizeOfImage, oneEntry, 1, selfFileSize);
     };
 
     IT("accepts a v2 table whose 64-bit image base matches the loaded module", {
         writeValid(selfBase, selfSize);
         UEQUALS(hook::load_pattern_table(tempPath), size_t {1});
+    });
+
+    IT("accepts the preferred base even when the loader relocated the image", {
+        // A table records the base the image was linked at. The mapped header carries the base
+        // ASLR chose instead, so a check against it rejected every table for a relocated DLL.
+        const auto *mapped = reinterpret_cast<const IMAGE_NT_HEADERS *>(self + reinterpret_cast<const IMAGE_DOS_HEADER *>(self)->e_lfanew);
+        if (mapped->OptionalHeader.ImageBase != selfBase) {
+            writeValid(selfBase, selfSize);
+            UEQUALS(hook::load_pattern_table(tempPath), size_t {1});
+            writeValid(mapped->OptionalHeader.ImageBase, selfSize);
+            UEQUALS(hook::load_pattern_table(tempPath), size_t {0});
+        }
     });
 
     IT("rejects a table that records only the low dword of an x64 image base", {
@@ -144,6 +170,11 @@ MODULE(pattern_table, {
         UEQUALS(hook::load_pattern_table(tempPath), size_t {0});
     });
 
+    IT("rejects a table built for a file of a different size", {
+        writeTable(2, selfBase, selfSize, oneEntry, 1, selfFileSize + 1);
+        UEQUALS(hook::load_pattern_table(tempPath), size_t {0});
+    });
+
     IT("still recognises the legacy v1 layout", {
         HeaderV1 header {};
         memcpy(header.magic, "FWPATTBL", 8);
@@ -151,6 +182,7 @@ MODULE(pattern_table, {
         header.entryCount        = 1;
         header.targetSizeOfImage = selfSize;
         header.targetImageBase   = static_cast<uint32_t>(selfBase);
+        header.targetFileSize    = selfFileSize;
         header.entriesCrc        = entryBytes(oneEntry);
 
         std::ofstream out(tempPath, std::ios::binary | std::ios::trunc);
@@ -165,7 +197,7 @@ MODULE(pattern_table, {
     });
 
     IT("rejects an unknown format version", {
-        writeTable(99, selfBase, selfSize, oneEntry, 1);
+        writeTable(99, selfBase, selfSize, oneEntry, 1, selfFileSize);
         UEQUALS(hook::load_pattern_table(tempPath), size_t {0});
     });
 
@@ -181,7 +213,7 @@ MODULE(pattern_table, {
     });
 
     IT("rejects a table that declares more entries than it carries", {
-        writeTable(2, selfBase, selfSize, {}, 4);
+        writeTable(2, selfBase, selfSize, {}, 4, selfFileSize);
         UEQUALS(hook::load_pattern_table(tempPath), size_t {0});
     });
 

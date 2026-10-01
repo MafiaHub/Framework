@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <vector>
 
 #include <logging/logger.h>
@@ -72,7 +73,42 @@ namespace hook {
             uint32_t entryCount;
             uint64_t imageBase;
             uint32_t sizeOfImage;
+            uint32_t fileSize;
         };
+
+        // The identity has to come from the module's file, not its mapped headers: when the
+        // loader relocates an image it rewrites OptionalHeader.ImageBase in memory to the address
+        // it actually chose, so under ASLR the mapped header never carries the preferred base the
+        // generator recorded and every table was rejected.
+        bool ReadImageIdentity(const uint8_t *base, TableIdentity &identity) {
+            wchar_t modulePath[MAX_PATH * 4];
+            const DWORD length = GetModuleFileNameW(reinterpret_cast<HMODULE>(const_cast<uint8_t *>(base)), modulePath, static_cast<DWORD>(std::size(modulePath)));
+            if (length == 0 || length >= std::size(modulePath)) {
+                return false;
+            }
+
+            std::ifstream image(modulePath, std::ios::binary | std::ios::ate);
+            if (!image.is_open()) {
+                return false;
+            }
+            const auto fileSize = static_cast<uint64_t>(image.tellg());
+
+            IMAGE_DOS_HEADER dosHeader {};
+            IMAGE_NT_HEADERS ntHeader {};
+            image.seekg(0);
+            if (!image.read(reinterpret_cast<char *>(&dosHeader), sizeof(dosHeader))) {
+                return false;
+            }
+            image.seekg(dosHeader.e_lfanew);
+            if (!image.read(reinterpret_cast<char *>(&ntHeader), sizeof(ntHeader))) {
+                return false;
+            }
+
+            identity.imageBase   = ntHeader.OptionalHeader.ImageBase;
+            identity.sizeOfImage = ntHeader.OptionalHeader.SizeOfImage;
+            identity.fileSize    = static_cast<uint32_t>(fileSize);
+            return fileSize <= UINT32_MAX;
+        }
 
         uint32_t Crc32(const uint8_t *data, size_t size) {
             uint32_t crc = 0xFFFFFFFFu;
@@ -111,11 +147,11 @@ namespace hook {
 
         TableIdentity identity {};
         if (header->version == kFormatVersion) {
-            identity = {header->entryCount, header->targetImageBase, header->targetSizeOfImage};
+            identity = {header->entryCount, header->targetImageBase, header->targetSizeOfImage, header->targetFileSize};
         }
         else if (header->version == kFormatVersionLegacy) {
             const auto *v1 = reinterpret_cast<const TableHeaderV1 *>(blob.data());
-            identity       = {v1->entryCount, v1->targetImageBase, v1->targetSizeOfImage};
+            identity       = {v1->entryCount, v1->targetImageBase, v1->targetSizeOfImage, v1->targetFileSize};
         }
         else {
             log->warn("Pattern table {} is format v{}, not v{} or v{}; every pattern will be resolved by scanning", path, header->version, kFormatVersionLegacy, kFormatVersion);
@@ -133,11 +169,14 @@ namespace hook {
             return 0;
         }
 
-        auto *base            = reinterpret_cast<const uint8_t *>(getRVA<void>(0));
-        const auto *dosHeader = reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
-        const auto *ntHeader  = reinterpret_cast<const IMAGE_NT_HEADERS *>(base + dosHeader->e_lfanew);
-        if (ntHeader->OptionalHeader.SizeOfImage != identity.sizeOfImage || ntHeader->OptionalHeader.ImageBase != identity.imageBase) {
-            log->warn("Pattern table {} was built for a different game image, every pattern will be resolved by scanning", path);
+        auto *base = reinterpret_cast<const uint8_t *>(getRVA<void>(0));
+        TableIdentity loaded {};
+        if (!ReadImageIdentity(base, loaded)) {
+            log->warn("Pattern table {} cannot be checked against the game image on disk, every pattern will be resolved by scanning", path);
+            return 0;
+        }
+        if (loaded.imageBase != identity.imageBase || loaded.sizeOfImage != identity.sizeOfImage || loaded.fileSize != identity.fileSize) {
+            log->warn("Pattern table {} was built for a different game image (table base 0x{:X} size 0x{:X} file {}, game base 0x{:X} size 0x{:X} file {}), every pattern will be resolved by scanning", path, identity.imageBase, identity.sizeOfImage, identity.fileSize, loaded.imageBase, loaded.sizeOfImage, loaded.fileSize);
             return 0;
         }
 
