@@ -96,7 +96,7 @@ namespace Framework::Networking::Replication {
             return 0;
         }
         const SerializeRateBands &bands = _manager->GetSerializeRateBands(entity->GetTypeId());
-        if (bands.midIntervalMs == 0 && bands.farIntervalMs == 0) {
+        if (bands.nearIntervalMs == 0 && bands.midIntervalMs == 0 && bands.farIntervalMs == 0) {
             return 0;
         }
         const glm::vec3 delta = entity->position - viewer->position;

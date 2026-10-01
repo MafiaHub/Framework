@@ -55,6 +55,9 @@ namespace Framework::Networking::Replication {
         float midDistance      = 0.0f;
         uint32_t midIntervalMs = 0;
         uint32_t farIntervalMs = 0;
+        // Interval inside nearDistance. Zero, the default, sends every tick: a type whose receivers
+        // re-simulate between samples (input replay, interpolation) can take a lower near rate.
+        uint32_t nearIntervalMs = 0;
 
         // Distances are clamped to 0 <= nearDistance <= midDistance, so an inverted or negative band
         // cannot hand a far viewer the near interval.

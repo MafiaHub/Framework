@@ -85,6 +85,14 @@ MODULE(replication_rate, {
         EQUALS(static_cast<int>(ReplicationManager::TransformSendIntervalMs(bands, 150.5f * 150.5f)), 66);
     });
 
+    IT("throttles the near band only when a near interval is set", {
+        SerializeRateBands bands {50.0f, 150.0f, 50, 100};
+        EQUALS(static_cast<int>(ReplicationManager::TransformSendIntervalMs(bands, 10.0f * 10.0f)), 0);
+        bands.nearIntervalMs = 33;
+        EQUALS(static_cast<int>(ReplicationManager::TransformSendIntervalMs(bands, 10.0f * 10.0f)), 33);
+        EQUALS(static_cast<int>(ReplicationManager::TransformSendIntervalMs(bands, 100.0f * 100.0f)), 50);
+    });
+
     IT("lets a type override the default bands and falls back for the rest", {
         ReplicationManager manager;
         manager.SetSerializeRateBands(SerializeRateBands {50.0f, 150.0f, 33, 50});

@@ -150,7 +150,7 @@ namespace Framework::Networking::Replication {
 
     uint32_t ReplicationManager::TransformSendIntervalMs(const SerializeRateBands &bands, float distSq) {
         if (distSq <= bands.nearDistance * bands.nearDistance) {
-            return 0;
+            return bands.nearIntervalMs;
         }
         if (distSq <= bands.midDistance * bands.midDistance) {
             return bands.midIntervalMs;
