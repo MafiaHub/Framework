@@ -357,4 +357,54 @@ MODULE(voice_router, {
         EQUALS(out.size(), static_cast<size_t>(1));
         EQUALS(router.GetPlayerVirtualWorld(2), MafiaNet::VIRTUAL_WORLD_DEFAULT);
     });
+
+    IT("routes nobody to or from a player who has no position yet", {
+        // A client picks a tier, or a script mutes them, before their avatar exists. That must
+        // not stand them at the origin of the default world, hearing whoever is there.
+        VoiceRouter router;
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerTier(2, VoiceTier::Shout);
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+        EQUALS(RouterContains(out, 2), false);
+
+        router.ComputeRecipients(2, out);
+        EQUALS(out.size(), static_cast<size_t>(0));
+    });
+
+    IT("takes a player an avatar pass did not reach out of routing until placed again", {
+        VoiceRouter router;
+        router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(5, 0, 0));
+
+        router.BeginAvatarPass();
+        router.SetPlayerAvatar(1, glm::vec3(0, 0, 0), MafiaNet::VIRTUAL_WORLD_DEFAULT);
+        EQUALS(router.EndAvatarPass(), true);
+
+        std::vector<uint64_t> out;
+        router.ComputeRecipients(1, out);
+        EQUALS(RouterContains(out, 2), false);
+        router.ComputeRecipients(2, out);
+        EQUALS(out.size(), static_cast<size_t>(0));
+
+        router.BeginAvatarPass();
+        router.SetPlayerAvatar(1, glm::vec3(0, 0, 0), MafiaNet::VIRTUAL_WORLD_DEFAULT);
+        EQUALS(router.SetPlayerAvatar(2, glm::vec3(5, 0, 0), MafiaNet::VIRTUAL_WORLD_DEFAULT), true);
+        EQUALS(router.EndAvatarPass(), false);
+
+        router.ComputeRecipients(1, out);
+        EQUALS(RouterContains(out, 2), true);
+    });
+
+    IT("reports an avatar as a change only when it places the player or changes their world", {
+        // Moves ride the recipient refresh interval; only a placement or a world change has to
+        // cut audio at once.
+        VoiceRouter router;
+        EQUALS(router.SetPlayerAvatar(1, glm::vec3(0, 0, 0), 7), true);
+
+        EQUALS(router.SetPlayerAvatar(1, glm::vec3(3, 0, 0), 7), false);
+        EQUALS(router.SetPlayerAvatar(1, glm::vec3(3, 0, 0), 8), true);
+        EQUALS(router.GetPlayerVirtualWorld(1), static_cast<MafiaNet::VirtualWorldId>(8));
+    });
 });

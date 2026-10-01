@@ -19,7 +19,10 @@ namespace Framework::Voice {
     }
 
     void VoiceRouter::SetPlayerPosition(uint64_t guid, const glm::vec3 &pos) {
-        _players[guid].position = pos;
+        PlayerState &state = _players[guid];
+        state.position     = pos;
+        state.placed       = true;
+        state.avatarPass   = _avatarPass;
     }
 
     void VoiceRouter::SetPlayerVirtualWorld(uint64_t guid, MafiaNet::VirtualWorldId world) {
@@ -29,6 +32,32 @@ namespace Framework::Voice {
     MafiaNet::VirtualWorldId VoiceRouter::GetPlayerVirtualWorld(uint64_t guid) const {
         const PlayerState *state = Find(guid);
         return state ? state->virtualWorld : MafiaNet::VIRTUAL_WORLD_DEFAULT;
+    }
+
+    void VoiceRouter::BeginAvatarPass() {
+        _avatarPass++;
+    }
+
+    bool VoiceRouter::SetPlayerAvatar(uint64_t guid, const glm::vec3 &pos, MafiaNet::VirtualWorldId world) {
+        PlayerState &state = _players[guid];
+        const bool changed = !state.placed || state.virtualWorld != world;
+        state.position     = pos;
+        state.virtualWorld = world;
+        state.placed       = true;
+        state.avatarPass   = _avatarPass;
+        return changed;
+    }
+
+    bool VoiceRouter::EndAvatarPass() {
+        bool changed = false;
+        for (auto &[guid, state] : _players) {
+            if (state.placed && state.avatarPass != _avatarPass) {
+                state.placed = false;
+                changed      = true;
+            }
+        }
+
+        return changed;
     }
 
     void VoiceRouter::RemovePlayer(uint64_t guid) {
@@ -142,7 +171,7 @@ namespace Framework::Voice {
         out.clear();
 
         const auto talkerIt = _players.find(talker);
-        if (talkerIt == _players.end() || talkerIt->second.serverMuted || talkerIt->second.voiceDisabled) {
+        if (talkerIt == _players.end() || !talkerIt->second.placed || talkerIt->second.serverMuted || talkerIt->second.voiceDisabled) {
             return;
         }
 
@@ -155,7 +184,7 @@ namespace Framework::Voice {
         out.reserve(_players.size());
 
         for (const auto &[guid, state] : _players) {
-            if (guid == talker || state.deaf || state.voiceDisabled) {
+            if (guid == talker || !state.placed || state.deaf || state.voiceDisabled) {
                 continue;
             }
             if (state.locallyMuted.count(talker) != 0) {

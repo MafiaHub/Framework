@@ -101,19 +101,16 @@ namespace Framework::Voice {
     void VoiceServer::SyncAvatars(const Networking::Replication::ReplicationManager &replication) {
         // Avatars, not every owned entity: a delegated NPC or ridden horse carries the player's
         // guid too, and taking it would move their voice to wherever that entity stands.
-        bool worldChanged = false;
-        replication.ForEachAvatar([this, &worldChanged](MafiaNet::PeerGuid peer, Networking::Replication::NetworkEntity *avatar) {
-            const auto guid = static_cast<uint64_t>(peer);
-            _router.SetPlayerPosition(guid, avatar->position);
-            const MafiaNet::VirtualWorldId world = avatar->GetVirtualWorld();
-            if (_router.GetPlayerVirtualWorld(guid) != world) {
-                _router.SetPlayerVirtualWorld(guid, world);
-                worldChanged = true;
-            }
+        bool audibilityChanged = false;
+        _router.BeginAvatarPass();
+        replication.ForEachAvatar([this, &audibilityChanged](MafiaNet::PeerGuid peer, Networking::Replication::NetworkEntity *avatar) {
+            audibilityChanged |= _router.SetPlayerAvatar(static_cast<uint64_t>(peer), avatar->position, avatar->GetVirtualWorld());
         });
+        audibilityChanged |= _router.EndAvatarPass();
 
-        // Moves ride the refresh interval; a world change cuts audio now, in both directions.
-        if (worldChanged) {
+        // Moves ride the refresh interval; a world change, or an avatar appearing or going, cuts
+        // or restores audio now, in both directions.
+        if (audibilityChanged) {
             InvalidateRecipients();
         }
     }

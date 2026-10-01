@@ -175,6 +175,85 @@ MODULE(voice_positions, {
         EQUALS(bobHearsAliceAgain, true);
     });
 
+    IT("stops routing a player whose avatar is gone, in both directions", {
+        // A mod moving a player to another map can tear the avatar down before making the next
+        // one. In between they stand nowhere, so they must not be heard where they last stood.
+        NetworkEntity aliceAvatar;
+        NetworkEntity bobAvatar;
+        serverManager->Reference(&aliceAvatar);
+        serverManager->Reference(&bobAvatar);
+        aliceAvatar.ownerGUID = alice;
+        aliceAvatar.position  = aliceAt;
+        serverManager->SetViewer(alice, &aliceAvatar);
+        bobAvatar.ownerGUID = bob;
+        bobAvatar.position  = bobAt;
+        serverManager->SetViewer(bob, &bobAvatar);
+
+        VoiceServer voice;
+        const auto hears = [&voice](MafiaNet::PeerGuid talker, MafiaNet::PeerGuid listener) {
+            std::vector<uint64_t> recipients;
+            voice.GetRouter().ComputeRecipients(static_cast<uint64_t>(talker), recipients);
+            return std::find(recipients.begin(), recipients.end(), static_cast<uint64_t>(listener)) != recipients.end();
+        };
+
+        voice.SyncAvatars(*serverManager);
+        const bool bobHeardWithAvatar = hears(alice, bob);
+
+        serverManager->ClearViewer(bob);
+        voice.SyncAvatars(*serverManager);
+        const bool bobHearsAlice = hears(alice, bob);
+        const bool aliceHearsBob = hears(bob, alice);
+
+        serverManager->ClearViewer(alice);
+        EQUALS(bobHeardWithAvatar, true);
+        EQUALS(bobHearsAlice, false);
+        EQUALS(aliceHearsBob, false);
+    });
+
+    IT("drops a listener from the relay's cached recipients the tick their world or avatar changes", {
+        // The relay reuses a talker's recipients for kRecipientRefreshMs. A world change or a lost
+        // avatar has to bypass that, or audio keeps crossing for the rest of the interval.
+        NetworkEntity aliceAvatar;
+        NetworkEntity bobAvatar;
+        serverManager->Reference(&aliceAvatar);
+        serverManager->Reference(&bobAvatar);
+        aliceAvatar.ownerGUID = alice;
+        aliceAvatar.position  = aliceAt;
+        serverManager->SetViewer(alice, &aliceAvatar);
+        bobAvatar.ownerGUID = bob;
+        bobAvatar.position  = bobAt;
+        serverManager->SetViewer(bob, &bobAvatar);
+
+        VoiceServer voice;
+        const auto relays = [&voice](MafiaNet::PeerGuid talker, MafiaNet::PeerGuid listener) {
+            const std::vector<MafiaNet::RakNetGUID> &recipients = voice.RecipientsFor(static_cast<uint64_t>(talker));
+            return std::any_of(recipients.begin(), recipients.end(), [listener](const MafiaNet::RakNetGUID &guid) {
+                return MafiaNet::ToPeerGuid(guid) == listener;
+            });
+        };
+
+        voice.SyncAvatars(*serverManager);
+        const bool relayedTogether = relays(alice, bob);
+
+        bobAvatar.SetVirtualWorld(42);
+        voice.SyncAvatars(*serverManager);
+        const bool relayedAcrossWorlds = relays(alice, bob);
+
+        bobAvatar.SetVirtualWorld(aliceAvatar.GetVirtualWorld());
+        voice.SyncAvatars(*serverManager);
+        const bool relayedOnReturn = relays(alice, bob);
+
+        serverManager->ClearViewer(bob);
+        voice.SyncAvatars(*serverManager);
+        const bool relayedWithoutAvatar = relays(alice, bob);
+
+        serverManager->ClearViewer(alice);
+        EQUALS(relayedTogether, true);
+        EQUALS(relayedAcrossWorlds, false);
+        EQUALS(relayedOnReturn, true);
+        EQUALS(relayedWithoutAvatar, false);
+    });
+
     IT("gives the server no position for a player who owns entities but has no avatar", {
         NetworkEntity ownedProp;
         serverManager->Reference(&ownedProp);
