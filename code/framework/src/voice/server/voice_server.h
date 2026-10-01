@@ -21,6 +21,10 @@ namespace Framework::Networking {
     class NetworkServer;
 } // namespace Framework::Networking
 
+namespace Framework::Networking::Replication {
+    class ReplicationManager;
+} // namespace Framework::Networking::Replication
+
 namespace Framework::Voice {
     // One player starting or stopping talking. Queued rather than dispatched inline: the edges
     // are found inside a packet handler, where a script handler could re-enter the relay.
@@ -57,6 +61,14 @@ namespace Framework::Voice {
         // Call once per server tick. Frame forwarding itself happens on packet arrival, not
         // here; kept as an explicit hook for periodic bookkeeping.
         void Update();
+
+        // Feeds the router each player's avatar position and virtual world. Call once per tick,
+        // before that tick's packets, so its voice frames route on current worlds.
+        void SyncAvatars(const Networking::Replication::ReplicationManager &replication);
+
+        // Who `talker`'s next frame is relayed to. Reused for kRecipientRefreshMs; anything that
+        // decides audibility other than distance recomputes it sooner.
+        const std::vector<MafiaNet::RakNetGUID> &RecipientsFor(uint64_t talker);
 
         VoiceRouter &GetRouter() {
             return _router;
@@ -118,8 +130,6 @@ namespace Framework::Voice {
             std::vector<MafiaNet::RakNetGUID> guids;
             int64_t computedAtMs = 0;
         };
-
-        const std::vector<MafiaNet::RakNetGUID> &RecipientsFor(uint64_t talker);
 
         // Queues a start edge on the first frame after silence.
         void MarkTalking(uint64_t talker, int64_t nowMs);

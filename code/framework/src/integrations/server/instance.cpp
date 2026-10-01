@@ -1358,20 +1358,20 @@ namespace Framework::Integrations::Server {
         if (_nextTick <= start) {
             FW_PROFILE_SCOPE_N("Server::Tick");
 
+            // Before the packet pump: voice frames are routed inline there, and must see the worlds
+            // scripts and PostUpdate set last tick, not the ones from before them.
+            auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr;
+            if (replication) {
+                FW_PROFILE_SCOPE_N("Server::VoicePositions");
+                _voiceServer.SyncAvatars(*replication);
+            }
+
             if (_networkingEngine) {
                 FW_PROFILE_SCOPE_N("Server::Networking");
                 _networkingEngine->Update();
             }
 
-            // Refresh the voice router's world view from each player's avatar. Not from every owned
-            // entity: a player also owns what the server delegated to them, and any of those would
-            // move their voice to wherever it stands.
-            if (auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr) {
-                FW_PROFILE_SCOPE_N("Server::VoicePositions");
-                auto &router = _voiceServer.GetRouter();
-                replication->ForEachAvatar([&router](MafiaNet::PeerGuid guid, Framework::Networking::Replication::NetworkEntity *avatar) {
-                    router.SetPlayerPosition(static_cast<uint64_t>(guid), avatar->position);
-                });
+            if (replication) {
                 _voiceServer.Update();
             }
 
