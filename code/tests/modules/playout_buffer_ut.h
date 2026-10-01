@@ -17,7 +17,7 @@ MODULE(playout_buffer, {
     using namespace Framework::Voice;
 
     IT("smooths the transition from silence without changing steady PCM", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, kFrameSamples * kJitterBufferFrames> input {};
         input.fill(24000);
         buffer.Push(input.data(), static_cast<uint32_t>(input.size()), 1000);
@@ -30,7 +30,7 @@ MODULE(playout_buffer, {
     });
 
     IT("plays a short remainder and fades to silence instead of stranding it", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, kFrameSamples * kJitterBufferFrames + 100> input {};
         input.fill(24000);
         buffer.Push(input.data(), static_cast<uint32_t>(input.size()), 1000);
@@ -57,7 +57,7 @@ MODULE(playout_buffer, {
     });
 
     IT("keeps the underrun fade continuous across tiny callbacks", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, kFrameSamples * kJitterBufferFrames> input {};
         input.fill(24000);
         buffer.Push(input.data(), static_cast<uint32_t>(input.size()), 1000);
@@ -77,7 +77,7 @@ MODULE(playout_buffer, {
     });
 
     IT("smooths an opposite-polarity latency trim and bounds the backlog", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, kFrameSamples> frame {};
         std::array<int16_t, kFrameSamples> out {};
         frame.fill(30000);
@@ -102,8 +102,47 @@ MODULE(playout_buffer, {
         EQUALS(buffer.Available() <= static_cast<size_t>(buffer.GetTargetFrames()) * kFrameSamples, true);
     });
 
-    IT("handles a callback larger than the ring without permanent silence", {
-        PlayoutBuffer<16384> buffer;
+    IT("crossfades a latency trim from the audio it skips, not the last sample played", {
+        PlayoutBuffer<32768> buffer;
+        std::array<int16_t, kFrameSamples> frame {};
+        std::array<int16_t, kFrameSamples> out {};
+        frame.fill(30000);
+        buffer.Push(frame.data(), kFrameSamples, 1000);
+        frame.fill(10000);
+        buffer.Push(frame.data(), kFrameSamples, 1000);
+        buffer.Push(frame.data(), kFrameSamples, 1000);
+        buffer.Pull(out.data(), kFrameSamples);
+        EQUALS(out.back(), static_cast<int16_t>(30000));
+
+        frame.fill(-30000);
+        for (uint32_t i = 0; i < kJitterBufferMaxFrames + 1; ++i) {
+            buffer.Push(frame.data(), kFrameSamples, 1050);
+        }
+        EQUALS(buffer.Pull(out.data(), kFrameSamples), true);
+        EQUALS(out.front(), static_cast<int16_t>(9833));
+        EQUALS(out.back(), static_cast<int16_t>(-30000));
+    });
+
+    IT("keeps a whole request of headroom when trimming for a large callback", {
+        PlayoutBuffer<32768> buffer;
+        std::array<int16_t, kFrameSamples> frame {};
+        std::array<int16_t, kFrameSamples * 4> out {};
+        frame.fill(24000);
+        for (uint32_t i = 0; i < kJitterBufferFrames; ++i) {
+            buffer.Push(frame.data(), kFrameSamples, 1000);
+        }
+        buffer.Pull(out.data(), kFrameSamples);
+        for (uint32_t i = 0; i < kJitterBufferMaxFrames + 1; ++i) {
+            buffer.Push(frame.data(), kFrameSamples, 1050);
+        }
+
+        // Four frames is deeper than the three-frame target the trim skips back to.
+        EQUALS(buffer.Pull(out.data(), static_cast<uint32_t>(out.size())), true);
+        EQUALS(out.back(), static_cast<int16_t>(24000));
+    });
+
+    IT("plays what is buffered of a callback larger than it, then fades", {
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, kFrameSamples * kJitterBufferFrames> input {};
         input.fill(24000);
         buffer.Push(input.data(), static_cast<uint32_t>(input.size()), 1000);
@@ -119,7 +158,7 @@ MODULE(playout_buffer, {
     });
 
     IT("does not leak a released speaker's fade into a new binding", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, kFrameSamples * kJitterBufferFrames> input {};
         input.fill(24000);
         buffer.Push(input.data(), static_cast<uint32_t>(input.size()), 1000);
@@ -135,7 +174,7 @@ MODULE(playout_buffer, {
     });
 
     IT("fades out a full-ring overrun and restarts on fresh PCM", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, kFrameSamples> frame {};
         std::array<int16_t, kFrameSamples> out {};
         frame.fill(24000);
@@ -144,8 +183,8 @@ MODULE(playout_buffer, {
         }
         buffer.Pull(out.data(), kFrameSamples);
 
-        // Seventeen frames fill the ring; the eighteenth Push cannot fit.
-        for (int i = 0; i < 16; ++i) {
+        // Thirty-four frames fill the ring; the thirty-fifth Push cannot fit.
+        for (int i = 0; i < 33; ++i) {
             buffer.Push(frame.data(), kFrameSamples, 1050);
         }
         EQUALS(buffer.Pull(out.data(), kFrameSamples), true);

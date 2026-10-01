@@ -32,8 +32,9 @@ namespace Framework::Networking {
 } // namespace Framework::Networking
 
 namespace Framework::Voice {
-    // ~340ms of decoded audio per speaker.
-    constexpr size_t kSpeakerRingSamples = 16384;
+    // ~680ms of decoded audio per speaker: deep enough that the latency trim, not an overflow,
+    // is what bounds a jittery speaker sitting at the deepest target.
+    constexpr size_t kSpeakerRingSamples = 32768;
 
     // What opens the microphone.
     enum class TransmitMode : uint8_t {

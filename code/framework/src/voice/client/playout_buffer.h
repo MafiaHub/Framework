@@ -13,6 +13,7 @@
 #include "voice/voice_config.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -65,9 +66,9 @@ namespace Framework::Voice {
             // into the next accepted frame would join two unrelated points in the waveform.
             // Only this thread can discard safely; fade out and re-prime with fresh audio.
             if (_overflowed.exchange(false, std::memory_order_acquire)) {
+                BeginCrossfade();
                 _ring.Skip(_ring.Available());
                 _primed = false;
-                BeginFade();
             }
 
             const size_t target = static_cast<size_t>(GetTargetFrames()) * kFrameSamples;
@@ -87,14 +88,15 @@ namespace Framework::Voice {
             }
 
             // Drifted deep. Late bursts and clock drift only ever add depth, so without a
-            // ceiling voice falls steadily further behind. Skip once against this snapshot,
-            // then blend the new waveform from the last sample actually played. Copying in a
-            // loop used to make callback work depend on a concurrently refilling producer.
-            const size_t ceiling = target + static_cast<size_t>(kJitterBufferMaxFrames - kJitterBufferFrames) * kFrameSamples;
+            // ceiling voice falls steadily further behind. Skip once against this snapshot and
+            // crossfade the audio that would have played next into the audio skipped to. A
+            // whole request of headroom is kept, so the trim cannot starve this same pull.
+            const size_t ceiling = target + kCeilingHeadroomSamples;
             if (available > ceiling) {
-                _ring.Skip(available - target);
-                available = target;
-                BeginFade();
+                const size_t keep = std::min(std::max<size_t>(target, samples), available - kFadeSamples);
+                BeginCrossfade();
+                _ring.Skip(available - kFadeSamples - keep);
+                available = keep;
             }
 
             const uint32_t readable = static_cast<uint32_t>(std::min<size_t>(samples, available));
@@ -121,6 +123,7 @@ namespace Framework::Voice {
             _lastSample    = 0;
             _fadeFrom      = 0;
             _fadeRemaining = 0;
+            _crossfading   = false;
             _overflowed.store(false, std::memory_order_relaxed);
         }
 
@@ -139,9 +142,31 @@ namespace Framework::Voice {
       private:
         static constexpr uint32_t kFadeSamples = kSampleRate / 200; // 5ms
 
+        // Depth allowed above the target before the oldest audio is trimmed.
+        static constexpr size_t kCeilingHeadroomSamples = static_cast<size_t>(kJitterBufferMaxFrames - kJitterBufferFrames) * kFrameSamples;
+
+        // A ring that fills before the deepest ceiling is reached never trims: the producer
+        // overflows instead and the consumer flushes everything, a far longer gap than one
+        // trim. The extra frame is room for the push that lands while the depth sits there.
+        static_assert(RingSamples > static_cast<size_t>(kJitterBufferMaxTargetFrames) * kFrameSamples + kCeilingHeadroomSamples + kFrameSamples, "Playout ring must hold the deepest latency ceiling plus a frame");
+
+        // Ramps from the last sample played; for an underrun, which has nothing to blend from.
         void BeginFade() {
             _fadeFrom      = _lastSample;
             _fadeRemaining = kFadeSamples;
+            _crossfading   = false;
+        }
+
+        // Takes the audio that would have played next, so a skip blends two real waveforms
+        // rather than ramping from one held sample. A trim always has it, sitting above the
+        // ceiling; an overflow seen only after a trim and a large pull may not.
+        void BeginCrossfade() {
+            if (!_ring.Pop(_crossfadeFrom.data(), kFadeSamples)) {
+                BeginFade();
+                return;
+            }
+            _fadeRemaining = kFadeSamples;
+            _crossfading   = true;
         }
 
         // Consumer only. A convex blend stays within PCM16, even across opposite peaks.
@@ -150,10 +175,11 @@ namespace Framework::Voice {
         void ApplyFade(int16_t *out, uint32_t samples) {
             const uint32_t fading = std::min(samples, _fadeRemaining);
             for (uint32_t i = 0; i < fading; i++) {
+                const int16_t from = _crossfading ? _crossfadeFrom[kFadeSamples - _fadeRemaining] : _fadeFrom;
                 --_fadeRemaining;
                 const int32_t oldWeight = static_cast<int32_t>(_fadeRemaining);
                 const int32_t newWeight = static_cast<int32_t>(kFadeSamples - _fadeRemaining);
-                out[i]                  = static_cast<int16_t>((static_cast<int32_t>(_fadeFrom) * oldWeight + static_cast<int32_t>(out[i]) * newWeight) / static_cast<int32_t>(kFadeSamples));
+                out[i]                  = static_cast<int16_t>((static_cast<int32_t>(from) * oldWeight + static_cast<int32_t>(out[i]) * newWeight) / static_cast<int32_t>(kFadeSamples));
             }
             if (samples != 0) {
                 _lastSample = out[samples - 1];
@@ -167,6 +193,8 @@ namespace Framework::Voice {
         int16_t _lastSample     = 0;
         int16_t _fadeFrom       = 0;
         uint32_t _fadeRemaining = 0;
+        bool _crossfading       = false;
+        std::array<int16_t, kFadeSamples> _crossfadeFrom {};
 
         // Producer only.
         JitterEstimator _estimator;

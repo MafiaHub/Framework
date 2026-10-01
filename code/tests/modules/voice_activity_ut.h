@@ -137,7 +137,7 @@ MODULE(voice_activity, {
     });
 
     IT("primes to the target, plays, and re-primes when it runs dry", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, kFrameSamples> frame {};
         frame.fill(7);
         std::array<int16_t, kFrameSamples> out {};
@@ -162,7 +162,7 @@ MODULE(voice_activity, {
     });
 
     IT("trims a buffer that drifted past its ceiling back to the target", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, kFrameSamples> frame {};
         std::array<int16_t, kFrameSamples> out {};
 
@@ -174,7 +174,7 @@ MODULE(voice_activity, {
     });
 
     IT("discards everything, remainder included", {
-        PlayoutBuffer<16384> buffer;
+        PlayoutBuffer<32768> buffer;
         std::array<int16_t, 1000> odd {};
         buffer.Push(odd.data(), static_cast<uint32_t>(odd.size()), 1000);
         buffer.Discard();
