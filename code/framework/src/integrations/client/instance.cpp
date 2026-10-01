@@ -338,7 +338,7 @@ namespace Framework::Integrations::Client {
 
             // Attaches RakVoice to the live peer, so it must follow the networking engine.
             // The relay session itself opens later, on connect.
-            if (_voiceClient.Init(_networkingEngine->GetNetworkClient())) {
+            if (_opts.useVoice && _voiceClient.Init(_networkingEngine->GetNetworkClient())) {
                 CoreModules::SetVoiceClient(&_voiceClient);
             }
             else {

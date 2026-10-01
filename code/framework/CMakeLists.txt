@@ -3,6 +3,7 @@ update_git_version(FW "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/version.cpp.in" "${
 
 # List the source files
 set(FRAMEWORK_SRC
+    src/automation/session.cpp
     src/logging/logger.cpp
 
     ${CMAKE_CURRENT_BINARY_DIR}/version.cpp
