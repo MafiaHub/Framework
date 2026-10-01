@@ -16,6 +16,9 @@
 #include <unordered_map>
 
 namespace Framework::GUI::CEF {
+    // Carries the browser process id to every child, which exits when that process does
+    inline constexpr const char *kParentProcessSwitch = "fw-parent-pid";
+
     class CallEventHandler final: public CefV8Handler {
       private:
         CefRefPtr<CefBrowser> _browser;

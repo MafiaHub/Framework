@@ -46,6 +46,7 @@
 
 #ifdef _WIN32
 // The hooking layer, and so the pattern table, is Windows-only.
+#include "modules/pattern_hints_ut.h"
 #include "modules/pattern_table_ut.h"
 #include "modules/physical_keys_ut.h"
 #include "modules/polling_input_ut.h"
@@ -95,6 +96,7 @@ int main() {
     UNIT_MODULE(gui_resources);
     UNIT_MODULE(resource_package);
 #ifdef _WIN32
+    UNIT_MODULE(pattern_hints);
     UNIT_MODULE(pattern_table);
     UNIT_MODULE(physical_keys);
     UNIT_MODULE(window_input);

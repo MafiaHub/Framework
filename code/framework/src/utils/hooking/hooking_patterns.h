@@ -12,6 +12,8 @@
 #include "hooking.h"
 
 #include <cassert>
+#include <map>
+#include <string>
 #include <vector>
 
 #pragma warning(push)
@@ -178,6 +180,14 @@ namespace hook {
     auto get_pattern(std::string_view pattern_view, ptrdiff_t offset = 0) {
         return pattern(pattern_view).get_first<T>(offset);
     }
+
+#if PATTERNS_USE_HINTS
+    // Reads an fw_hints.dat-format file (packed 64-bit hash + pointer-sized address records) into
+    // a map holding each pair once. A missing file reads as empty and a trailing partial record
+    // is dropped. The process-wide hint map is this, applied to fw_hints.dat in the working
+    // directory on first use.
+    std::multimap<uint64_t, uintptr_t> load_hints(const std::string &path);
+#endif
 
     template <typename T = void, size_t Len>
     auto get_opcode_address(const char (&pattern_string)[Len], ptrdiff_t offset = 0) {

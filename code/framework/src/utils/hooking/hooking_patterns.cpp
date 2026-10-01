@@ -54,22 +54,37 @@ using fnv_1 = basic_fnv_1<fnv_prime, fnv_offset_basis>;
 #endif
 
 namespace hook {
-    inline std::multimap<uint64_t, uintptr_t> &GetHints() {
-        static std::multimap<uint64_t, uintptr_t> hints;
-        static int init = false;
-        if (!init) {
-            auto hintsFile = std::ifstream("fw_hints.dat", std::ios::binary);
-            if (hintsFile.good()) {
-                while (!hintsFile.eof()) {
-                    uint64_t hash;
-                    uintptr_t hint;
-                    hintsFile.read((char *)&hash, sizeof(hash));
-                    hintsFile.read((char *)&hint, sizeof(hint));
-                    hook::pattern::hint(hash, hint);
-                }
+    // Returns false when the pair is already known, so callers persist only what is new.
+    static bool InsertHint(std::multimap<uint64_t, uintptr_t> &hints, uint64_t hash, uintptr_t address) {
+        const auto range = hints.equal_range(hash);
+        for (auto it = range.first; it != range.second; ++it) {
+            if (it->second == address) {
+                return false;
             }
-            init = true;
         }
+
+        hints.emplace(hash, address);
+        return true;
+    }
+
+    // The file is read straight into a local map rather than through pattern::hint(), which calls
+    // back into GetHints(): while the map was still loading that re-entered, reopened the file,
+    // and recursed until the CRT ran out of stdio streams (~510 deep), after which every level
+    // read the whole file again. With duplicates appended on every scan, a 374k-entry file
+    // cost every boot ~40 s.
+    std::multimap<uint64_t, uintptr_t> load_hints(const std::string &path) {
+        std::multimap<uint64_t, uintptr_t> loaded;
+        std::ifstream hintsFile(path, std::ios::binary);
+        uint64_t hash;
+        uintptr_t address;
+        while (hintsFile.read((char *)&hash, sizeof(hash)) && hintsFile.read((char *)&address, sizeof(address))) {
+            InsertHint(loaded, hash, address);
+        }
+        return loaded;
+    }
+
+    inline std::multimap<uint64_t, uintptr_t> &GetHints() {
+        static std::multimap<uint64_t, uintptr_t> hints = load_hints("fw_hints.dat");
         return hints;
     }
 
@@ -179,8 +194,9 @@ namespace hook {
 
         auto matchSuccess = [&](uintptr_t address) {
 #if PATTERNS_USE_HINTS
-            GetHints().emplace(m_hash, hook::get_unadjusted(address));
-            Citizen_PatternSaveHint(m_hash, hook::get_unadjusted(address));
+            if (InsertHint(GetHints(), m_hash, hook::get_unadjusted(address))) {
+                Citizen_PatternSaveHint(m_hash, hook::get_unadjusted(address));
+            }
 #else
             (void)address;
 #endif
@@ -247,15 +263,7 @@ namespace hook {
 
 #if PATTERNS_USE_HINTS
     void pattern::hint(uint64_t hash, uintptr_t address) {
-        const auto range = GetHints().equal_range(hash);
-
-        for (auto it = range.first; it != range.second; it++) {
-            if (it->second == address) {
-                return;
-            }
-        }
-
-        GetHints().emplace(hash, address);
+        InsertHint(GetHints(), hash, address);
     }
 #endif
 } // namespace hook

@@ -12,6 +12,10 @@
 
 #include "include/cef_parser.h"
 
+#include <windows.h>
+
+#include <string>
+
 namespace Framework::GUI::CEF {
 
     CefRefPtr<CefResourceHandler> App::Create(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, const CefString &scheme_name, CefRefPtr<CefRequest> request) {
@@ -69,6 +73,11 @@ namespace Framework::GUI::CEF {
 
     void App::OnContextInitialized() {
         _contextInitialized = true;
+    }
+
+    void App::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> commandLine) {
+        // Handed over on the command line so the child never asks the kernel who launched it
+        commandLine->AppendSwitchWithValue(kParentProcessSwitch, std::to_string(GetCurrentProcessId()));
     }
 
     void App::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) {
