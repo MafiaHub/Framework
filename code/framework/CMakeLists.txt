@@ -455,6 +455,8 @@ if(WIN32)
         # Windowed subsystem (no black console window per CEF child) while keeping the int main() entry.
         LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
     )
+    # Shared by every project, so it carries the Framework's identity rather than a mod's
+    fw_set_binary_identity(cef_subprocess PRODUCT "MafiaHub Framework" VERSION ${FW_VERSION} COMPANY "MafiaHub" DESCRIPTION "MafiaHub Framework Web Helper")
     if(TARGET CEFCopyDlls)
         add_dependencies(FrameworkClient CEFCopyDlls)
         add_dependencies(cef_subprocess CEFCopyDlls)
