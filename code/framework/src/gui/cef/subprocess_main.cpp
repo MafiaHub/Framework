@@ -7,36 +7,21 @@
  */
 
 #include <windows.h>
-#include <winternl.h>
+
+#include <cstdlib>
+#include <string>
 
 #include "include/cef_app.h"
+#include "include/cef_command_line.h"
 #include "renderer_app.h"
 
 namespace {
-    DWORD GetParentProcessId() {
-        using NtQueryInformationProcess_t = NTSTATUS(NTAPI *)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
-        const auto ntQuery = reinterpret_cast<NtQueryInformationProcess_t>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryInformationProcess"));
-        if (!ntQuery) {
-            return 0;
-        }
-        PROCESS_BASIC_INFORMATION pbi {};
-        if (ntQuery(GetCurrentProcess(), ProcessBasicInformation, &pbi, sizeof(pbi), nullptr) < 0) {
-            return 0;
-        }
-        return static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(pbi.Reserved3)); // InheritedFromUniqueProcessId
-    }
-
     // Self-exit when the parent (game) process dies, so an abrupt quit or crash
-    // that skips CEF teardown doesn't leave this helper orphaned.
-    DWORD WINAPI MonitorParentProcess(LPVOID) {
-        const DWORD parentPid = GetParentProcessId();
-        if (!parentPid) {
-            return 0;
-        }
-        HANDLE parent = OpenProcess(SYNCHRONIZE, FALSE, parentPid);
-        if (!parent) {
-            return 0;
-        }
+    // that skips CEF teardown doesn't leave this helper orphaned. The parent is
+    // named by the switch App::OnBeforeChildProcessLaunch adds: querying it from
+    // ntdll is a pattern antivirus heuristics flag the helper for.
+    DWORD WINAPI MonitorParentProcess(LPVOID param) {
+        HANDLE parent = static_cast<HANDLE>(param);
         if (WaitForSingleObject(parent, INFINITE) == WAIT_OBJECT_0) {
             ExitProcess(0);
         }
@@ -46,8 +31,18 @@ namespace {
 } // namespace
 
 int main(int argc, char *argv[]) {
-    if (HANDLE monitor = CreateThread(nullptr, 0, MonitorParentProcess, nullptr, 0, nullptr)) {
-        CloseHandle(monitor);
+    CefRefPtr<CefCommandLine> commandLine = CefCommandLine::CreateCommandLine();
+    commandLine->InitFromString(GetCommandLineW());
+    const std::string parentPid = commandLine->GetSwitchValue(Framework::GUI::CEF::kParentProcessSwitch).ToString();
+    if (const DWORD pid = std::strtoul(parentPid.c_str(), nullptr, 10)) {
+        if (HANDLE parent = OpenProcess(SYNCHRONIZE, FALSE, pid)) {
+            if (HANDLE monitor = CreateThread(nullptr, 0, MonitorParentProcess, parent, 0, nullptr)) {
+                CloseHandle(monitor);
+            }
+            else {
+                CloseHandle(parent);
+            }
+        }
     }
 
     CefMainArgs mainArgs(GetModuleHandle(nullptr));
