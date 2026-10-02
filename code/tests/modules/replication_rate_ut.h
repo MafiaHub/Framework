@@ -224,4 +224,39 @@ MODULE(replication_rate, {
         deliver(target, glm::vec3(4.0f, 0.0f, 0.0f), 0);
         EQUALS(static_cast<int>(target.position.x), 4);
     });
+
+    IT("keeps pose timestamps independent of newer state-channel delivery", {
+        struct PoseObserver: NetworkEntity {
+            MafiaNet::Time sampledAt = 0;
+            void OnDeserialized(bool transformUpdated) override {
+                if (transformUpdated) {
+                    sampledAt = GetLastTransformTime();
+                }
+            }
+        };
+        PoseObserver target;
+        deliver(target, glm::vec3(1.0f, 0.0f, 0.0f), 200);
+        EQUALS(target.sampledAt, MafiaNet::Time(200));
+
+        NetworkEntity source;
+        MafiaNet::SerializeParameters sp {};
+        source.Serialize(&sp);
+        MafiaNet::DeserializeParameters dp {};
+        dp.timeStamp             = 400;
+        dp.bitstreamWrittenTo[1] = true;
+        dp.serializationBitstream[1].Write(&sp.outputBitstream[1]);
+        target.Deserialize(&dp);
+        EQUALS(target.lastUpdateTime, MafiaNet::Time(400));
+        EQUALS(target.sampledAt, MafiaNet::Time(200));
+
+        // The next pose is valid on its own channel despite trailing state.
+        deliver(target, glm::vec3(2.0f, 0.0f, 0.0f), 300);
+        EQUALS(target.position.x, 2.0f);
+        EQUALS(target.lastUpdateTime, MafiaNet::Time(400));
+        EQUALS(target.sampledAt, MafiaNet::Time(300));
+        // Reordered old poses cannot move either the body or its clock back.
+        deliver(target, glm::vec3(-1.0f, 0.0f, 0.0f), 250);
+        EQUALS(target.position.x, 2.0f);
+        EQUALS(target.sampledAt, MafiaNet::Time(300));
+    });
 });

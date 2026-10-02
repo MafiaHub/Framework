@@ -195,6 +195,13 @@ namespace Framework::Networking::Replication {
         // Local-clock send time of the last applied update (MafiaNet shifts it on receipt). Not replicated.
         MafiaNet::Time lastUpdateTime = 0;
 
+        // Timestamp of the latest accepted stamped transform, independent of newer state-channel
+        // activity. Pose buffers must use this clock: lastUpdateTime can advance on a state-only
+        // packet that arrives before an older, still valid transform from the other channel.
+        MafiaNet::Time GetLastTransformTime() const {
+            return _lastTransformTime;
+        }
+
         // --- Server-side streaming metadata (not replicated, isViewer aside; unused on the client) ---
         // Grouped under `streaming` so the server-only nature is explicit and these don't read as
         // per-entity wire state. Dimension lives in the VirtualWorldReplica3 base (Get/SetVirtualWorld).
