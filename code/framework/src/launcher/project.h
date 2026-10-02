@@ -82,6 +82,11 @@ namespace Framework::Launcher {
         // empty the Epic manifest is matched by the launch executable's file name instead.
         std::wstring epicAppName;
 
+        // EPIC platform: signs the player in when no stored Epic sign-in refreshes, persisting it
+        // through External::Epic::SignInWithAuthorizationCode. Unset: browser + clipboard sign-in.
+        using EpicSignInProc = fu2::function<bool() const>;
+        EpicSignInProc epicSignIn;
+
         // ROCKSTAR platform: the title's registry sub-key, e.g. L"GTA: San Andreas". Optional —
         // when empty the title holding `executableName` is used instead.
         std::wstring rockstarTitleKey;
