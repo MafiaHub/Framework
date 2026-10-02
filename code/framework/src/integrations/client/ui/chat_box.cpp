@@ -236,9 +236,7 @@ namespace Framework::Integrations::Client::UI {
             ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, IM_COL32(0, 0, 0, 0));
             ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, IM_COL32(255, 255, 255, 38));
             ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, IM_COL32(255, 255, 255, 70));
-            // Handle the wheel for the whole chat panel, including the input and padding.
-            // Disable ImGui's automatic wheel handling to avoid scrolling twice over the log.
-            const bool chatHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+            // Chat uses keyboard scrolling; the cursor stays hidden while typing.
             ImGui::BeginChild("##fw_chat_log", ImVec2(0.0f, -footer), false, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollWithMouse);
             float scrollDelta = 0.0f;
             if (typing) {
@@ -249,9 +247,6 @@ namespace Framework::Integrations::Client::UI {
                 }
                 if (chatFocused && ImGui::IsKeyPressed(ImGuiKey_PageDown)) {
                     scrollDelta += page;
-                }
-                if (chatHovered) {
-                    scrollDelta -= ImGui::GetIO().MouseWheel * ImGui::GetTextLineHeightWithSpacing() * 3.0f;
                 }
             }
 

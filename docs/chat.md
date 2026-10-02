@@ -165,9 +165,8 @@ input (Up/Down history, Enter sends, Esc cancels). It lives in the framework as
 `Instance`** (`Instance::GetChatBox()`), alongside the renderer and web manager.
 
 While chat input is open, **Page Up / Page Down** scroll through the backlog
-one page at a time. The **mouse wheel** scrolls when the pointer is anywhere
-inside the chat box, including over the input. Up/Down still recall sent
-messages. Incoming messages keep your reading position; scroll back to the
+one page at a time. Up/Down still recall sent messages.
+Incoming messages keep your reading position; scroll back to the
 bottom to follow new messages again. Closing or reopening chat returns to the
 latest messages. The backlog retains the most recent 100 messages.
 
