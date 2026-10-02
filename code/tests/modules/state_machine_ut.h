@@ -62,6 +62,21 @@ public:
     bool OnExit(Framework::Utils::States::Machine* machine) override { return true; }
 };
 
+// Models a startup state's synchronous completion or cancellation on entry.
+class RedirectOnEntryState final: public Framework::Utils::States::IState {
+  public:
+    const char *GetName() const override { return "RedirectOnEntry"; }
+    int32_t GetId() const override { return 5; }
+    bool OnEnter(Framework::Utils::States::Machine *machine) override {
+        machine->RequestNextState(2);
+        return machine->GetNextState() == nullptr;
+    }
+    bool OnUpdate(Framework::Utils::States::Machine *) override {
+        throw std::runtime_error("a completed startup stage must not update");
+    }
+    bool OnExit(Framework::Utils::States::Machine *) override { return true; }
+};
+
 // Initialize static members
 std::atomic<int> ProcessingState::_counter(0);
 std::atomic<int> FailingState::_failures(0);
@@ -239,5 +254,38 @@ MODULE(state_machine, {
         machine->Update();
         machine->Update();
     });
+    IT("honors a completion requested synchronously during state entry", {
+        Machine machine;
+        ProcessingState::ResetCounter();
+        machine.RegisterState<RedirectOnEntryState>();
+        machine.RegisterState<ProcessingState>();
+        EQUALS(machine.RequestNextState(5), true);
+        for (int tick = 0; tick < 5; ++tick)
+            machine.Update();
+        EQUALS(machine.GetCurrentState()->GetId(), 2);
+        EQUALS(ProcessingState::GetCounter(), 1);
+        EQUALS(machine.GetNextState(), nullptr);
+    });
+
+    IT("lets the destination redirect a transition already queued before cancellation", {
+        Machine machine;
+        ProcessingState::ResetCounter();
+        machine.RegisterState<InitialState>();
+        machine.RegisterState<RedirectOnEntryState>();
+        machine.RegisterState<ProcessingState>();
+        machine.RequestNextState(1);
+        machine.Update();
+        machine.Update();
+        EQUALS(machine.RequestNextState(5), true);
+        // The machine keeps its first request. The destination must observe
+        // cancellation on entry and request cleanup before doing any work.
+        EQUALS(machine.RequestNextState(2), false);
+        for (int tick = 0; tick < 6; ++tick)
+            machine.Update();
+        EQUALS(machine.GetCurrentState()->GetId(), 2);
+        EQUALS(ProcessingState::GetCounter(), 1);
+        EQUALS(machine.GetNextState(), nullptr);
+    });
+
 });
 
