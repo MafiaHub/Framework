@@ -10,6 +10,7 @@
 
 #include <imgui.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <ctime>
 
@@ -23,9 +24,9 @@ namespace Framework::Integrations::Client::UI {
         constexpr float kHeight = 264.0f;
         constexpr float kMargin = 18.0f;
 
-        const ImVec4 kColAccent = ImVec4(0.36f, 0.66f, 1.00f, 1.0f); // sender handle
-        const ImVec4 kColText   = ImVec4(0.88f, 0.89f, 0.93f, 1.0f); // message body
-        const ImVec4 kColNotice = ImVec4(0.98f, 0.84f, 0.45f, 1.0f); // server/system line
+        const ImVec4 kColAccent = ImVec4(0.36f, 0.66f, 1.00f, 1.0f);  // sender handle
+        const ImVec4 kColText   = ImVec4(0.88f, 0.89f, 0.93f, 1.0f);  // message body
+        const ImVec4 kColNotice = ImVec4(0.98f, 0.84f, 0.45f, 1.0f);  // server/system line
         const ImVec4 kColStamp  = ImVec4(1.00f, 1.00f, 1.00f, 0.34f); // timestamp
 
         ImVec4 WithAlpha(ImVec4 c, float a) {
@@ -88,9 +89,11 @@ namespace Framework::Integrations::Client::UI {
         }
         _messages.push_back({author, text, color, stamp, ImGui::GetTime()});
         while (_messages.size() > kMaxMessages) {
+            if (_inputActive) {
+                _removedHeight += _messages.front().height;
+            }
             _messages.pop_front();
         }
-        _scrollToBottom = true;
     }
 
     void ChatBox::OpenInput() {
@@ -102,14 +105,16 @@ namespace Framework::Integrations::Client::UI {
         _inputBuf[0]    = '\0';
         _historyPos     = -1;
         _scrollToBottom = true;
+        _removedHeight  = 0.0f;
     }
 
     void ChatBox::CloseInput(bool send) {
         if (send) {
             Submit();
         }
-        _inputActive = false;
-        _inputBuf[0] = '\0';
+        _inputActive    = false;
+        _inputBuf[0]    = '\0';
+        _scrollToBottom = true;
     }
 
     void ChatBox::Submit() {
@@ -171,6 +176,8 @@ namespace Framework::Integrations::Client::UI {
             _inputActive = false;
             _inputBuf[0] = '\0';
             _messages.clear();
+            _removedHeight  = 0.0f;
+            _scrollToBottom = true;
         }
     }
 
@@ -206,7 +213,8 @@ namespace Framework::Integrations::Client::UI {
         ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 9.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, 4.0f);
 
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground;
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing
+                                 | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground;
         if (!typing) {
             flags |= ImGuiWindowFlags_NoInputs; // log-only: clicks pass through to the game
         }
@@ -228,8 +236,23 @@ namespace Framework::Integrations::Client::UI {
             ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, IM_COL32(0, 0, 0, 0));
             ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, IM_COL32(255, 255, 255, 38));
             ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, IM_COL32(255, 255, 255, 70));
-            ImGui::BeginChild("##fw_chat_log", ImVec2(0.0f, -footer), false, ImGuiWindowFlags_NoSavedSettings);
-            for (const auto &m : _messages) {
+            // Chat uses keyboard scrolling; the cursor stays hidden while typing.
+            ImGui::BeginChild("##fw_chat_log", ImVec2(0.0f, -footer), false, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollWithMouse);
+            float scrollDelta = 0.0f;
+            if (typing) {
+                const float page       = ImGui::GetContentRegionAvail().y;
+                const bool chatFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+                if (chatFocused && ImGui::IsKeyPressed(ImGuiKey_PageUp)) {
+                    scrollDelta -= page;
+                }
+                if (chatFocused && ImGui::IsKeyPressed(ImGuiKey_PageDown)) {
+                    scrollDelta += page;
+                }
+            }
+
+            const float scrollY = ImGui::GetScrollY();
+            const bool atBottom = scrollY >= ImGui::GetScrollMaxY() - 1.0f;
+            for (auto &m : _messages) {
                 float alpha = 1.0f;
                 if (!typing) {
                     const double age = now - m.time;
@@ -240,13 +263,24 @@ namespace Framework::Integrations::Client::UI {
                         alpha = 1.0f - static_cast<float>((age - kFadeDelay) / kFadeFade);
                     }
                 }
+                const float lineStart = ImGui::GetCursorPosY();
                 DrawLine(m.author, m.text, m.color, m.stamp, alpha);
+                if (typing) {
+                    m.height = ImGui::GetCursorPosY() - lineStart;
+                }
             }
-            // Auto-scroll: snap on new lines, and keep pinned while already at the bottom.
-            if (_scrollToBottom || ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+            // Explicit scrolling wins over following new messages, even when starting at the bottom.
+            if (scrollDelta != 0.0f) {
+                ImGui::SetScrollY(std::clamp(scrollY - _removedHeight + scrollDelta, 0.0f, ImGui::GetScrollMaxY()));
+            }
+            else if (_scrollToBottom || atBottom || !typing) {
                 ImGui::SetScrollHereY(1.0f);
-                _scrollToBottom = false;
             }
+            else if (_removedHeight > 0.0f) {
+                ImGui::SetScrollY(std::max(0.0f, scrollY - _removedHeight));
+            }
+            _scrollToBottom = false;
+            _removedHeight  = 0.0f;
             ImGui::EndChild();
             ImGui::PopStyleColor(4);
 
