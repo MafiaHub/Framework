@@ -44,7 +44,7 @@ namespace Framework::External::Sentry {
         /** `module+0xoffset`, or the bare address when no module holds it. */
         std::string Describe(std::uint64_t address) {
             HMODULE module = nullptr;
-            if (address == 0 || !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(address), &module)) {
+            if (address == 0 || !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(static_cast<ULONG_PTR>(address)), &module)) {
                 return fmt::format("0x{:X}", address);
             }
 
@@ -79,7 +79,15 @@ namespace Framework::External::Sentry {
         }
 
         bool OnStack(std::uint64_t address, std::uint64_t low, std::uint64_t high) {
-            return address >= low && address + sizeof(std::uint64_t) <= high && (address & 7) == 0;
+            return address >= low && address + sizeof(ULONG_PTR) <= high && (address & (sizeof(ULONG_PTR) - 1)) == 0;
+        }
+
+        std::uint64_t StackPointer(const CONTEXT &context) {
+#if defined(_M_X64)
+            return context.Rsp;
+#else
+            return context.Esp;
+#endif
         }
 
         /**
@@ -89,6 +97,7 @@ namespace Framework::External::Sentry {
          * unwind data is wrong for where it stopped must end the walk, not
          * fault inside the filter.
          */
+#if defined(_M_X64)
         int Walk(CONTEXT context, std::uint64_t low, std::uint64_t high, std::uint64_t *frames) {
             int count = 0;
             __try {
@@ -120,10 +129,39 @@ namespace Framework::External::Sentry {
             }
             return count;
         }
+#else
+        /**
+         * x86 has no table-based unwind: follow the EBP chain. A frame built
+         * without a frame pointer ends it early, and the stack scan below
+         * covers what it misses.
+         */
+        int Walk(CONTEXT context, std::uint64_t low, std::uint64_t high, std::uint64_t *frames) {
+            int count = 0;
+            __try {
+                frames[count++]     = context.Eip;
+                std::uint64_t frame = context.Ebp;
+                while (count < kMaxFrames && OnStack(frame, low, high) && OnStack(frame + sizeof(DWORD), low, high)) {
+                    const DWORD returnAddress = *reinterpret_cast<const DWORD *>(static_cast<ULONG_PTR>(frame + sizeof(DWORD)));
+                    const DWORD nextFrame     = *reinterpret_cast<const DWORD *>(static_cast<ULONG_PTR>(frame));
+                    if (returnAddress == 0) {
+                        break;
+                    }
+                    frames[count++] = returnAddress;
+                    if (nextFrame <= frame) {
+                        break;
+                    }
+                    frame = nextFrame;
+                }
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) {
+            }
+            return count;
+        }
+#endif
 
         bool IsCode(std::uint64_t address) {
             MEMORY_BASIC_INFORMATION region {};
-            if (VirtualQuery(reinterpret_cast<LPCVOID>(address), &region, sizeof(region)) == 0 || region.State != MEM_COMMIT) {
+            if (VirtualQuery(reinterpret_cast<LPCVOID>(static_cast<ULONG_PTR>(address)), &region, sizeof(region)) == 0 || region.State != MEM_COMMIT) {
                 return false;
             }
             return (region.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)) != 0;
@@ -151,11 +189,17 @@ namespace Framework::External::Sentry {
                 text += fmt::format("Faulting {} of 0x{:X}\n", AccessKind(record->ExceptionInformation[0]), record->ExceptionInformation[1]);
             }
 
+#if defined(_M_X64)
             text += fmt::format("RIP {:016X} RSP {:016X} RBP {:016X}\n", context->Rip, context->Rsp, context->Rbp);
             text += fmt::format("RAX {:016X} RBX {:016X} RCX {:016X} RDX {:016X}\n", context->Rax, context->Rbx, context->Rcx, context->Rdx);
             text += fmt::format("RSI {:016X} RDI {:016X} R8  {:016X} R9  {:016X}\n", context->Rsi, context->Rdi, context->R8, context->R9);
             text += fmt::format("R10 {:016X} R11 {:016X} R12 {:016X} R13 {:016X}\n", context->R10, context->R11, context->R12, context->R13);
             text += fmt::format("R14 {:016X} R15 {:016X}\n", context->R14, context->R15);
+#else
+            text += fmt::format("EIP {:08X} ESP {:08X} EBP {:08X}\n", context->Eip, context->Esp, context->Ebp);
+            text += fmt::format("EAX {:08X} EBX {:08X} ECX {:08X} EDX {:08X}\n", context->Eax, context->Ebx, context->Ecx, context->Edx);
+            text += fmt::format("ESI {:08X} EDI {:08X}\n", context->Esi, context->Edi);
+#endif
 
             std::uint64_t frames[kMaxFrames] {};
             const int frameCount = Walk(*context, stackLow, stackHigh, frames);
@@ -171,13 +215,13 @@ namespace Framework::External::Sentry {
                 text += "Code addresses on the stack:\n";
                 int hits = 0;
                 for (int word = 0; word < kMaxScannedWords && hits < kMaxScannedHits; ++word) {
-                    const std::uint64_t slot = context->Rsp + word * sizeof(std::uint64_t);
+                    const std::uint64_t slot = StackPointer(*context) + word * sizeof(ULONG_PTR);
                     if (!OnStack(slot, stackLow, stackHigh)) {
                         break;
                     }
-                    const std::uint64_t value = *reinterpret_cast<const std::uint64_t *>(slot);
+                    const std::uint64_t value = *reinterpret_cast<const ULONG_PTR *>(static_cast<ULONG_PTR>(slot));
                     if (IsCode(value)) {
-                        text += fmt::format("  [RSP+0x{:X}] {}\n", word * sizeof(std::uint64_t), Describe(value));
+                        text += fmt::format("  [SP+0x{:X}] {}\n", word * sizeof(ULONG_PTR), Describe(value));
                         ++hits;
                     }
                 }
