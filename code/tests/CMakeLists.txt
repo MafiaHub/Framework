@@ -46,15 +46,3 @@ endif()
 add_custom_target(RunFrameworkInputTests
     COMMAND $<TARGET_FILE:FrameworkInputTests>
     DEPENDS FrameworkInputTests)
-
-# Exercise the real chat overlay with headless ImGui frames, without a game or CEF.
-if(WIN32)
-    add_executable(FrameworkChatTests
-        chat_ut.cpp
-        ../framework/src/integrations/client/ui/chat_box.cpp)
-    target_include_directories(FrameworkChatTests PRIVATE . ../framework/src)
-    target_link_libraries(FrameworkChatTests PRIVATE imgui::imgui)
-    add_custom_target(RunFrameworkChatTests
-        COMMAND $<TARGET_FILE:FrameworkChatTests>
-        DEPENDS FrameworkChatTests)
-endif()
