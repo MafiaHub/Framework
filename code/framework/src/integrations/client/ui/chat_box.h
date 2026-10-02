@@ -54,11 +54,12 @@ namespace Framework::Integrations::Client::UI {
 
       private:
         struct Line {
-            std::string author; // sender handle; empty = notice line
-            std::string text;   // message body
-            uint32_t color = 0; // packed 0xRRGGBBAA for the body; 0 = theme default
-            std::string stamp;  // "HH:MM" wall-clock, shown dimmed
-            double time = 0.0;  // ImGui::GetTime() when added, for idle fade-out
+            std::string author;  // sender handle; empty = notice line
+            std::string text;    // message body
+            uint32_t color = 0;  // packed 0xRRGGBBAA for the body; 0 = theme default
+            std::string stamp;   // "HH:MM" wall-clock, shown dimmed
+            double time  = 0.0;  // ImGui::GetTime() when added, for idle fade-out
+            float height = 0.0f; // last rendered height, including spacing, while input is open
         };
 
         void Submit();
@@ -76,6 +77,7 @@ namespace Framework::Integrations::Client::UI {
         bool _scrollToBottom = false;
         bool _sessionActive  = false;
         bool _visible        = true;
+        float _removedHeight = 0.0f; // compensate the viewport when old lines leave the backlog
 
         std::deque<std::string> _history; // sent lines, oldest at front
         int _historyPos = -1;             // -1: editing new line; else index into _history for recall

@@ -164,6 +164,13 @@ input (Up/Down history, Enter sends, Esc cancels). It lives in the framework as
 `Framework::Integrations::Client::UI::ChatBox` and is **owned by the client
 `Instance`** (`Instance::GetChatBox()`), alongside the renderer and web manager.
 
+While chat input is open, **Page Up / Page Down** scroll through the backlog
+one page at a time. The **mouse wheel** scrolls when the pointer is anywhere
+inside the chat box, including over the input. Up/Down still recall sent
+messages. Incoming messages keep your reading position; scroll back to the
+bottom to follow new messages again. Closing or reopening chat returns to the
+latest messages. The backlog retains the most recent 100 messages.
+
 It is **inert until a mod renders it** — the framework instantiates it, wires
 its submit path to `SendChatMessage`, feeds it received lines, and tracks its
 session/visibility, but draws nothing. A mod opts in by rendering it and
