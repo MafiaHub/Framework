@@ -66,8 +66,7 @@ namespace Framework::Networking::RPC {
             }
             MafiaNet::BitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(payload.data())), static_cast<unsigned int>(payload.size()), false);
             ClientIdentity identity;
-            if (!bs.Read(identity.name) || !bs.Read(identity.steamId) || !bs.Read(identity.discordId) || !bs.Read(identity.hardwareId) || !bs.Read(identity.epicId)
-                || !bs.Read(identity.ticket)) {
+            if (!bs.Read(identity.name) || !bs.Read(identity.steamId) || !bs.Read(identity.discordId) || !bs.Read(identity.hardwareId) || !bs.Read(identity.epicId) || !bs.Read(identity.ticket)) {
                 return std::nullopt;
             }
             return identity;

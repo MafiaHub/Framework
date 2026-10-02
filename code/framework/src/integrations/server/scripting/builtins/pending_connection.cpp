@@ -44,6 +44,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
 
         DefineValue(isolate, context, connection, "nickname", v8pp::to_v8(isolate, identity.name));
         DefineValue(isolate, context, connection, "steamId", v8pp::to_v8(isolate, identity.steamId));
+        DefineValue(isolate, context, connection, "epicId", v8pp::to_v8(isolate, identity.epicId));
         DefineValue(isolate, context, connection, "discordId", v8pp::to_v8(isolate, identity.discordId));
         DefineValue(isolate, context, connection, "hardwareId", v8pp::to_v8(isolate, identity.hardwareId));
         DefineValue(isolate, context, connection, "ticket", v8pp::to_v8(isolate, identity.ticket));
@@ -109,6 +110,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         auto &type = catalog.data_type("PendingConnection", "A player asking to join, handed to `playerConnecting`. Every identifier is reported by the player's own client and is not verified by the server.");
         type.add_property("nickname", "string", "The name the player asked to join under.", true);
         type.add_property("steamId", "string", "Steam identifier the client reported, or an empty string when it had none.", true);
+        type.add_property("epicId", "string", "Epic Games account identifier the client reported, or an empty string when it had none.", true);
         type.add_property("discordId", "string", "Discord identifier the client reported, or an empty string when it had none.", true);
         type.add_property("hardwareId", "string", "Framework hardware identifier the client reported, or an empty string when it had none.", true);
         type.add_property("ticket", "string",
