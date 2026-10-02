@@ -208,6 +208,10 @@ namespace Framework::Voice {
         int16_t scratch[kRenderChunkSamples];
         bool mixedAnything = false;
 
+        // The clock Submit stamps arrivals with, so a playout buffer can tell a word that has
+        // ended from one still arriving.
+        const int64_t nowMs = Utils::Time::GetTime();
+
         for (size_t i = 0; i < _slots.size(); i++) {
             Slot &slot = _slots[i];
 
@@ -237,7 +241,7 @@ namespace Framework::Voice {
             // The playout buffer decides priming, underrun and drift; a false is silence.
             while (remaining > 0) {
                 const uint32_t chunk = std::min(remaining, kRenderChunkSamples);
-                if (!slot.audio.Pull(scratch, chunk)) {
+                if (!slot.audio.Pull(scratch, chunk, nowMs)) {
                     break;
                 }
 

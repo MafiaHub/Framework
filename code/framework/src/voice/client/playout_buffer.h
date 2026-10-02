@@ -28,7 +28,8 @@ namespace Framework::Voice {
     // mixer uses it the same way a game's own audio engine does.
     //
     // Push and ResetEstimate are the producer thread, Pull and Discard the consumer. The only
-    // thing they share besides the ring is the target depth, which is atomic.
+    // things they share besides the ring are the target depth and the last arrival time, which
+    // are atomic.
     template <size_t RingSamples>
     class PlayoutBuffer final {
       public:
@@ -38,6 +39,7 @@ namespace Framework::Voice {
         void Push(const int16_t *mono, uint32_t samples, int64_t nowMs) {
             _estimator.OnArrival(nowMs);
             _targetFrames.store(_estimator.GetTargetFrames(), std::memory_order_relaxed);
+            _lastArrivalMs.store(nowMs, std::memory_order_relaxed);
             if (!_ring.Push(mono, samples)) {
                 _overflowed.store(true, std::memory_order_release);
             }
@@ -56,8 +58,9 @@ namespace Framework::Voice {
         // Consumer. Always writes exactly `samples`, including silence while priming.
         // Returns true if PCM or a fade tail was rendered. Partial and oversized device
         // requests consume what is available rather than strand it behind an all-or-nothing
-        // pop. Start, underrun and latency-trim joins are smoothed over 5ms.
-        bool Pull(int16_t *out, uint32_t samples) {
+        // pop. Start, underrun and latency-trim joins are smoothed over 5ms. `nowMs` is on the
+        // producer's clock.
+        bool Pull(int16_t *out, uint32_t samples, int64_t nowMs) {
             if (samples == 0) {
                 return false;
             }
@@ -76,8 +79,16 @@ namespace Framework::Voice {
 
             // Frames arrive in bursts, so playing the first one to land leaves the buffer
             // riding empty and every hiccup punches a hole mid-word.
+            //
+            // Unless nothing more is coming. VAD sends nothing between words, so the end of a
+            // word that ran the buffer dry is all there will be until the next one: waiting for
+            // the depth would hold it back and play it glued to the front of the next word.
+            // Nothing arriving for as long as the buffer is deep is the cue -- the depth is
+            // sized to outlast the longest gap that still belongs to the same word.
             if (!_primed) {
-                if (available < target) {
+                const int64_t targetMs = static_cast<int64_t>(GetTargetFrames()) * kFrameMs;
+                const bool ended       = available != 0 && nowMs - _lastArrivalMs.load(std::memory_order_relaxed) >= targetMs;
+                if (available < target && !ended) {
                     std::fill_n(out, samples, int16_t {0});
                     const bool fading = _fadeRemaining != 0;
                     ApplyFade(out, samples);
@@ -141,6 +152,7 @@ namespace Framework::Voice {
 
       private:
         static constexpr uint32_t kFadeSamples = kSampleRate / 200; // 5ms
+        static constexpr int64_t kFrameMs      = (kFrameSamples * 1000) / kSampleRate;
 
         // Depth allowed above the target before the oldest audio is trimmed.
         static constexpr size_t kCeilingHeadroomSamples = static_cast<size_t>(kJitterBufferMaxFrames - kJitterBufferFrames) * kFrameSamples;
@@ -200,6 +212,7 @@ namespace Framework::Voice {
         JitterEstimator _estimator;
 
         std::atomic<uint32_t> _targetFrames {kJitterBufferFrames};
+        std::atomic<int64_t> _lastArrivalMs {0};
         std::atomic<bool> _overflowed {false};
     };
 } // namespace Framework::Voice

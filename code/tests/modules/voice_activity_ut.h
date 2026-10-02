@@ -144,21 +144,21 @@ MODULE(voice_activity, {
 
         buffer.Push(frame.data(), kFrameSamples, 1000);
         buffer.Push(frame.data(), kFrameSamples, 1000);
-        EQUALS(buffer.Pull(out.data(), kFrameSamples), false);
+        EQUALS(buffer.Pull(out.data(), kFrameSamples, 1000), false);
 
         buffer.Push(frame.data(), kFrameSamples, 1000);
-        EQUALS(buffer.Pull(out.data(), kFrameSamples), true);
+        EQUALS(buffer.Pull(out.data(), kFrameSamples, 1000), true);
         EQUALS(out.back(), static_cast<int16_t>(7));
-        EQUALS(buffer.Pull(out.data(), kFrameSamples), true);
-        EQUALS(buffer.Pull(out.data(), kFrameSamples), true);
+        EQUALS(buffer.Pull(out.data(), kFrameSamples, 1000), true);
+        EQUALS(buffer.Pull(out.data(), kFrameSamples, 1000), true);
         // One smoothed tail bridges the last sample to silence before re-priming.
-        EQUALS(buffer.Pull(out.data(), kFrameSamples), true);
+        EQUALS(buffer.Pull(out.data(), kFrameSamples, 1000), true);
         EQUALS(out.back(), static_cast<int16_t>(0));
-        EQUALS(buffer.Pull(out.data(), kFrameSamples), false);
+        EQUALS(buffer.Pull(out.data(), kFrameSamples, 1000), false);
 
         // Re-priming: one frame is not enough to start again.
         buffer.Push(frame.data(), kFrameSamples, 1050);
-        EQUALS(buffer.Pull(out.data(), kFrameSamples), false);
+        EQUALS(buffer.Pull(out.data(), kFrameSamples, 1050), false);
     });
 
     IT("trims a buffer that drifted past its ceiling back to the target", {
@@ -169,7 +169,7 @@ MODULE(voice_activity, {
         for (uint32_t i = 0; i < kJitterBufferMaxFrames + 2; i++) {
             buffer.Push(frame.data(), kFrameSamples, 1000);
         }
-        EQUALS(buffer.Pull(out.data(), kFrameSamples), true);
+        EQUALS(buffer.Pull(out.data(), kFrameSamples, 1000), true);
         EQUALS(buffer.Available() <= static_cast<size_t>(buffer.GetTargetFrames()) * kFrameSamples, true);
     });
 
