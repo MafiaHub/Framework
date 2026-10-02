@@ -43,6 +43,7 @@ namespace Framework::Networking {
         DisconnectPacketCallback _onPlayerDisconnectedCallback;
         OnAssetsDownloadFailedCallback _onAssetsDownloadFailedCallback;
         fu2::function<void(int eventId) const> _onConnectionReadyCallback;
+        fu2::function<void() const> _onInitialReplicationDownloadedCallback;
         fu2::function<void(const std::string &status) const> _onSessionStatusCallback;
         AssetFileTransfer _fileListTransfer;
         bool _initialReplicationDownloadComplete {};
@@ -109,6 +110,10 @@ namespace Framework::Networking {
 
         void SetOnConnectionReadyCallback(fu2::function<void(int eventId) const> callback) {
             _onConnectionReadyCallback = std::move(callback);
+        }
+
+        void SetOnInitialReplicationDownloadedCallback(fu2::function<void() const> callback) {
+            _onInitialReplicationDownloadedCallback = std::move(callback);
         }
     };
 } // namespace Framework::Networking

@@ -180,7 +180,11 @@ namespace Framework::Networking {
     bool NetworkClient::HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) {
         switch (packetID) {
         case ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE:
+            if (_initialReplicationDownloadComplete)
+                return true;
             _initialReplicationDownloadComplete = true;
+            if (_onInitialReplicationDownloadedCallback)
+                _onInitialReplicationDownloadedCallback();
             return true;
 
         case ID_SESSION_CONFIG_STATUS: {
