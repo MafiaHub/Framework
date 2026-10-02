@@ -228,7 +228,8 @@ namespace Framework::Integrations::Client {
         void InitNetworkingMessages();
         void InitAssetDownloader();
         void InitProtocolHandler();
-        void OnAssetsDownloaded(bool success);
+        // True once the initial resources started on a connection that is still current.
+        bool OnAssetsDownloaded(bool success);
         // Registers the origin once, and re-points it at the current asset cache
         // on every call.
         void RegisterResourceSchemeHandler();
@@ -251,7 +252,9 @@ namespace Framework::Integrations::Client {
 
         // Override what you need; this is the whole extension surface (no Set*Callback setters).
         // Order: Init -> PostInit; tick: Update -> PostUpdate, Render -> PostRender; Shutdown -> PreShutdown.
-        // On connect: assets -> OnInitialAssetDownloadReady -> scripting init (ModuleRegister) -> PostScriptInit -> OnConnectionFinalized.
+        // On connect: assets -> OnInitialAssetDownloadReady -> scripting init
+        // (ModuleRegister) -> PostScriptInit -> OnInitialReplicationDownloaded
+        // -> OnConnectionFinalized.
         virtual void PostInit() {}
         virtual void PostUpdate() {}
         virtual void PostRender() {}
@@ -269,6 +272,8 @@ namespace Framework::Integrations::Client {
             return false;
         }
         virtual void OnConnectionClosed() {}
+        /** First replica download for this connection completed. */
+        virtual void OnInitialReplicationDownloaded() {}
         virtual void OnAssetsDownloadFinished(bool success) {
             (void)success;
         }
@@ -311,6 +316,9 @@ namespace Framework::Integrations::Client {
 
         void DownloadsAssetsFromConnectedServer();
         void SignalConnectionSpawnReady();
+        // Resumes a deferred initial asset phase. True only when every announced
+        // resource started (resourceStart promises settled) and the connection
+        // that asked for them is still the current one.
         bool CompleteDeferredInitialAssetProcessing(uint64_t generation, bool success);
 
       private:

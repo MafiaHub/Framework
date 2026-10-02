@@ -345,6 +345,14 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Discover all resources in the cache path
         size_t discovered = _resourceManager->DiscoverResources();
+        // A verified package can still contain an invalid manifest. The
+        // announced set must be discoverable before startup can succeed.
+        for (const auto &resource : _serverResourceList) {
+            if (!_resourceManager->HasResource(resource.name)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Announced client resource '{}' could not be discovered", resource.name);
+                return false;
+            }
+        }
         if (discovered == 0) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No JS resources discovered in: {}", _resourceCachePath);
             return true; // Not an error, just no resources

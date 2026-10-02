@@ -571,7 +571,6 @@ namespace Framework::Integrations::Client {
 
         FW_PROFILE_SCOPE_N("Client::Networking");
         _networkingEngine->Update();
-        TrySignalConnectionSpawnReady();
 
         // After the peer pump: RakVoice decodes inbound frames from inside RakPeer::Receive,
         // so draining speakers here picks up this tick's audio rather than last tick's.
@@ -779,6 +778,11 @@ namespace Framework::Integrations::Client {
                     }
                 }
             }
+        });
+
+        net->SetOnInitialReplicationDownloadedCallback([this]() {
+            TrySignalConnectionSpawnReady();
+            OnInitialReplicationDownloaded();
         });
 
         // Spawn barrier complete: activate replication and report the connection final.
@@ -1131,10 +1135,10 @@ namespace Framework::Integrations::Client {
         return failed;
     }
 
-    void Instance::OnAssetsDownloaded(bool success) {
+    bool Instance::OnAssetsDownloaded(bool success) {
         if (success && _deferredInitialAssetProcessingGeneration != 0 && !_resumingDeferredInitialAssetProcessing) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Ignoring duplicate initial asset completion while generation {} is deferred", _deferredInitialAssetProcessingGeneration);
-            return;
+            return false;
         }
 
         const auto net = GetNetworkingEngine()->GetNetworkClient();
@@ -1175,7 +1179,7 @@ namespace Framework::Integrations::Client {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
                 _downloadStatus = {};
                 OnAssetsDownloadFinished(success);
-                return;
+                return true;
             }
             // A refresh that raced an initial connect falls through to full init.
             _pendingRefreshResources.clear();
@@ -1185,15 +1189,16 @@ namespace Framework::Integrations::Client {
                 if (OnInitialAssetDownloadReady(generation, _downloadStatus) == InitialAssetProcessingDecision::Defer) {
                     if (generation != _assetProcessingGeneration || net->GetConnectionState() != Framework::Networking::PeerState::CONNECTED) {
                         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Initial asset processing generation {} requested deferral after the connection became stale", generation);
-                        return;
+                        return false;
                     }
                     _deferredInitialAssetProcessingGeneration = generation;
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Initial asset processing deferred for generation {} before scripting startup", generation);
-                    return;
+                    return false;
                 }
             }
 
             SetConnectionPhase(ConnectionPhase::Starting);
+            const uint64_t startupGeneration = _assetProcessingGeneration;
 
             if (scriptingModule) {
                 // Set resource cache path before init
@@ -1209,7 +1214,7 @@ namespace Framework::Integrations::Client {
                 if (scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
                     (void)net->Disconnect();
-                    return;
+                    return false;
                 }
                 CoreModules::SetScriptingModule(scriptingModule);
 
@@ -1232,18 +1237,25 @@ namespace Framework::Integrations::Client {
                         _pendingServerResources.clear();
                         _packageMounter.Reset();
                         (void)net->Disconnect();
-                        return;
+                        return false;
                     }
                     scriptingModule->SetServerResourceList(_pendingServerResources);
                 }
 
                 // Start all resources via ResourceManager
                 if (!scriptingModule->StartAllResources()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to start client resources");
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to start client resources; refusing to join");
+                    (void)net->Disconnect();
+                    return false;
                 }
                 else {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client resources started successfully");
                 }
+            }
+            // Startup executes user scripts; a lifecycle callback can close
+            // or replace the connection whose resources were being started.
+            if (startupGeneration != _assetProcessingGeneration || net->GetConnectionState() != Framework::Networking::PeerState::CONNECTED) {
+                return false;
             }
         }
         else {
@@ -1252,7 +1264,7 @@ namespace Framework::Integrations::Client {
             (void)net->Disconnect();
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
-            return;
+            return false;
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
 
@@ -1276,6 +1288,7 @@ namespace Framework::Integrations::Client {
 
         // Let the mod-level know assets have just been finished processing
         OnAssetsDownloadFinished(success);
+        return true;
     }
 
     bool Instance::CompleteDeferredInitialAssetProcessing(uint64_t generation, bool success) {
@@ -1294,9 +1307,9 @@ namespace Framework::Integrations::Client {
         _deferredInitialAssetProcessingGeneration = 0;
         _resumingDeferredInitialAssetProcessing    = true;
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("{} deferred initial asset processing for generation {}", success ? "Resuming" : "Failing", generation);
-        OnAssetsDownloaded(success);
+        const bool started                      = OnAssetsDownloaded(success);
         _resumingDeferredInitialAssetProcessing = false;
-        return true;
+        return started;
     }
 
     void Instance::SignalConnectionSpawnReady() {
