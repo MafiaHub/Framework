@@ -24,6 +24,7 @@ set(FRAMEWORK_SRC
     src/utils/states/machine.cpp
 
     src/external/sentry/wrapper.cpp
+    src/external/sentry/crash_trail.cpp
 
     src/networking/network_peer.cpp
     src/networking/errors.cpp

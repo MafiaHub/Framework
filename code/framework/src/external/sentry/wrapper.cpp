@@ -8,6 +8,8 @@
 
 #include "wrapper.h"
 
+#include "crash_trail.h"
+
 #include <sentry.h>
 
 #include <cppfs/FileHandle.h>
@@ -104,6 +106,10 @@ namespace Framework::External::Sentry {
             return Framework::Error("Failed to initialize Sentry");
         }
         _initialized = true;
+
+        // In front of crashpad, so a crash on a thread nothing else wraps still
+        // leaves its location in the log the report carries.
+        CrashTrail::Install();
         return {};
     }
 
