@@ -60,6 +60,11 @@ namespace Framework::Integrations::Client {
     };
 
     struct InstanceOptions {
+        // Root of everything the client caches from servers (resource packages, under `servers/`).
+        // Empty keeps the legacy %APPDATA%\MafiaHubIntegration; a mod that must not write outside its
+        // own folder points this inside it.
+        std::string cacheRoot;
+
         int64_t discordAppId                = 0;
         bool usePresence                    = true;
         bool useRenderer                    = true;
@@ -446,6 +451,9 @@ namespace Framework::Integrations::Client {
         const std::string &GetAssetCachePath() const {
             return _assetCachePath;
         }
+
+        // The folder InstanceOptions::cacheRoot names, or the legacy one under %APPDATA%.
+        std::string GetCacheRoot() const;
 
         // The entity object passed to entityStateChange handlers. Default is the base Entity
         // builtin; a game with handles of its own overrides this to hand scripts the specific one.

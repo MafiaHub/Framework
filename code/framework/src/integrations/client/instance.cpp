@@ -416,10 +416,16 @@ namespace Framework::Integrations::Client {
 #endif
     }
 
+    std::string Instance::GetCacheRoot() const {
+        if (!_opts.cacheRoot.empty()) {
+            return _opts.cacheRoot;
+        }
+        return fmt::format("{}\\MafiaHubIntegration", Framework::Utils::GetAppDataPathA());
+    }
+
     void Instance::InitCacheAssetFolders() {
-        const auto appDataPath = Framework::Utils::GetAppDataPathA();
-        cppfs::fs::open(fmt::format("{}\\MafiaHubIntegration", appDataPath)).createDirectory();
-        cppfs::fs::open(fmt::format("{}\\MafiaHubIntegration\\servers", appDataPath)).createDirectory();
+        std::error_code code;
+        std::filesystem::create_directories(std::filesystem::path(GetCacheRoot()) / "servers", code);
     }
 
     Utils::Result<void, Error> Instance::RenderInit() {
@@ -975,8 +981,7 @@ namespace Framework::Integrations::Client {
         const auto streamer = net->GetAssetStreamer();
 
         // Compute the destination path
-        const auto appDataPath = Framework::Utils::GetAppDataPathA();
-        const auto cacheDir   = fmt::format("{}\\MafiaHubIntegration\\servers\\{}", appDataPath, _currentState.serverIDHash);
+        const auto cacheDir = fmt::format("{}\\servers\\{}", GetCacheRoot(), _currentState.serverIDHash);
 
         if (!Framework::Utils::Vfs::Get().Init(nullptr)) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not initialize the virtual file system; client resources will not load");
