@@ -65,6 +65,7 @@ namespace Framework::Integrations::Client {
         bool useRenderer                    = true;
         [[maybe_unused]] bool useNetworking = true;
         bool useImGUI                       = false;
+        bool useVoice                       = true;
 
         // networked game metadata (required)
         std::string gameName;

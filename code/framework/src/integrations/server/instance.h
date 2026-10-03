@@ -310,6 +310,8 @@ namespace Framework::Integrations::Server {
         void Update() override;
 
         void Run();
+        // Defer teardown until the current tick returns.
+        void RequestStop() { _stopRequested.store(true); }
 
         void OnSignal(sig_signal_t);
 

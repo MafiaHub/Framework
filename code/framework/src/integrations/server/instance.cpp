@@ -1437,7 +1437,7 @@ namespace Framework::Integrations::Server {
         }
 
         if (_stopRequested) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Received shutdown signal, shutting down");
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Shutdown requested, shutting down");
         }
     }
 
