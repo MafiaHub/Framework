@@ -28,10 +28,10 @@
 # tree, so bumping the pin here and reconfiguring incrementally would silently
 # keep the old release. This file is the single source of truth, and there is no
 # reason to let -D override the wire format of the protocol.
-set(MAFIANET_PIN_VERSION "0.21.1") # RakVoice sends no DTX comfort-noise refresh frames (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
+set(MAFIANET_PIN_VERSION "0.22.1") # FileListTransfer reference push window; DirectoryDeltaTransfer compares AddFile uploads by hash and writes streamed downloads as they arrive (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
 
-set(MAFIANET_PIN_SHA256_linux-x86_64 "4334fada9dc21305a5f0c96a9e46d907258a229a94ee98be6002eb57c192f92a")
-set(MAFIANET_PIN_SHA256_macos-arm64 "7eecac8b58c96ec86597919528ab55bf5d62d75bfd65fda54230f6886c94fa78")
-set(MAFIANET_PIN_SHA256_macos-x86_64 "cc15f42220d255b4f4b952cfc06eb302203b3ffa50a0dfe6bcc836f97584b246")
-set(MAFIANET_PIN_SHA256_windows-x64 "c5ae1f5d4876a7d4d4ae6dcd02d9d77369750ce541443d3ced4bb1a086fe52c6")
-set(MAFIANET_PIN_SHA256_windows-x86 "f319a632c53c2eb66bfe3763c88e246e360aed8ab986e0594c6f551c4dd713c9")
+set(MAFIANET_PIN_SHA256_linux-x86_64 "fc554afe031a4c4b3b064d0beb96aa40c42b3b92337df87fcf0cbeb0f338626d")
+set(MAFIANET_PIN_SHA256_macos-arm64 "a36e7ff318e117c34b84822ef54f9d8c3cdcf971945cb7ebe34582ca2636a35b")
+set(MAFIANET_PIN_SHA256_macos-x86_64 "234cfca4c6bd4d88d2fa0a6f97dbd3ecadde6ac6eee93ced816fc9af06cef8a1")
+set(MAFIANET_PIN_SHA256_windows-x64 "14c6317d6ddb2299de8fdff3c71373bb1c25fbab2b491187d28db4e8a7356e4e")
+set(MAFIANET_PIN_SHA256_windows-x86 "b39568dabbf241d291a0f8e1ef2bde4f156edd6bad9f6cda282d4fed571e0c77")
