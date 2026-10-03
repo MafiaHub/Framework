@@ -86,26 +86,9 @@ silently never firing.
 
 ## Showing key prompts
 
-Use the binding name for input and `Key.getLabel` for the text you show players:
-
-```ts
-const INTERACT_KEY = "y";
-
-Key.bind(INTERACT_KEY, "down", () => {
-    Events.emitServer("interact");
-});
-
-// Call when showing or refreshing the prompt. viewId is your existing Web view.
-function refreshInteractionHint(viewId: number): void {
-    Web.emit(viewId, "interaction:hint", {
-        key: Key.getLabel(INTERACT_KEY),
-        text: "Interact",
-    });
-}
-```
-
-The page receives `Y` on US QWERTY and `Z` on German QWERTZ for the same
-physical position. Keep `"y"` in `bind`, `unbind`, and `isDown`.
+Use the binding name for input and `Key.getLabel` for the text you show players.
+`Key.getLabel("y")` returns `Y` on US QWERTY and `Z` on German QWERTZ for the
+same physical position. Keep `"y"` in `bind`, `unbind`, and `isDown`.
 
 Each call reads the current Windows layout. Refresh visible prompts to reflect
 layout changes; there is no layout-change event. In the background, the query
