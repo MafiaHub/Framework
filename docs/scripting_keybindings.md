@@ -15,6 +15,7 @@ Key.bind(key, state, handler)   // state: "down" | "up" | "both"
 Key.bind(key, handler)           // state defaults to "down"
 Key.unbind(key, state?, handler?)
 Key.isDown(key) -> boolean
+Key.getLabel(key) -> string
 ```
 
 - **`bind(key, state, handler)`** — registers `handler`. It is called as
@@ -29,6 +30,9 @@ Key.isDown(key) -> boolean
 - **`isDown(key)`** — the live physical state of a key, for polling inside your
   own loop. Returns `false` whenever binds are suppressed (see *When binds
   fire* below).
+- **`getLabel(key)`** — display text for a physical key in the player's current
+  keyboard layout. Works without registering a binding, including while menus
+  or web views own input. Throws on an unknown key name or a non-string argument.
 
 ## Examples
 
@@ -80,6 +84,45 @@ Text typed into chat or web views still follows the active layout.
 Binding an unrecognised name throws, so a typo fails loudly rather than
 silently never firing.
 
+## Showing key prompts
+
+Use the binding name for input and `Key.getLabel` for the text you show players:
+
+```ts
+const INTERACT_KEY = "y";
+
+Key.bind(INTERACT_KEY, "down", () => {
+    Events.emitServer("interact");
+});
+
+// Call when showing or refreshing the prompt. viewId is your existing Web view.
+function refreshInteractionHint(viewId: number): void {
+    Web.emit(viewId, "interaction:hint", {
+        key: Key.getLabel(INTERACT_KEY),
+        text: "Interact",
+    });
+}
+```
+
+The page receives `Y` on US QWERTY and `Z` on German QWERTZ. Both refer to
+the same physical position, between T and U. Keep `"y"` in `bind`, `unbind`,
+and `isDown`; the returned label is display text, not a binding identifier.
+
+The label uses the current Windows layout on every call. Refresh it when
+showing a prompt, and periodically while the prompt stays visible if players
+may switch layouts. There is no layout-change event in this API. While the
+game is in the background, the query uses the calling game thread's layout.
+
+Printable labels are uppercase Unicode text and ignore held modifiers and
+Caps Lock. Other keys have English labels such as `Enter`, `Left Shift`,
+`Numpad 1`, and `Mouse 1`. If Windows cannot translate a printable key, the
+query falls back to its uppercase canonical name. This does not detect the
+physical keyboard's printed legends if they differ from the selected layout.
+
+Lookup leaves text composition untouched. Windows may include a pending
+dead-key accent in a printable label while the player is composing text;
+refreshing the prompt after composition finishes returns the ordinary label.
+
 ## When binds fire
 
 Handlers fire only when the player is actually in control of the game:
@@ -110,10 +153,9 @@ its binds are removed automatically — you do not need to `unbind` them in a
 - Binds are dispatched by polling once per frame, so this is edge detection on
   the game's frame rate — fine for gameplay actions, not for text entry (use a
   `Web` view for typed input).
-- Native `IInput` implementations keep their existing key-mapping contract.
-  For device providers that accept layout virtual keys, the scripting reader
-  converts a physical position to that layout before querying the provider.
-  This does not change a mod's native hotkeys or gameplay input.
+- Native `IInput` implementations interpret printable codes as US physical
+  positions. Layout conversion belongs to the input backend; label lookup
+  does not change bindings or gameplay input.
 - There is no user-facing rebinding UI yet: the key a resource asks for is the
   key it gets. A default-plus-rebind model (FiveM-style) may be added later.
 - Server-driven binds (a server telling a specific client to bind a key) are

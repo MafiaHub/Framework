@@ -3,6 +3,7 @@
 # FrameworkClient and a browser.
 add_executable(FrameworkTests
         framework_ut.cpp
+        ../framework/src/utils/key_names.cpp
         ../framework/src/voice/client/mixer.cpp
         ../framework/src/gui/resources/resource_path.cpp
         ../framework/src/gui/resources/mime.cpp
@@ -21,6 +22,7 @@ add_executable(FrameworkTests
 # straight in — same reasoning as the GUI resource units above.
 if(WIN32)
     target_sources(FrameworkTests PRIVATE
+        ../framework/src/integrations/client/scripting/builtins/keybinds.cpp
         ../framework/src/utils/hooking/pattern_table.cpp
         ../framework/src/utils/hooking/hooking_patterns.cpp
         ../framework/src/utils/hooking/hooking.cpp)
@@ -38,7 +40,7 @@ add_custom_target(RunFrameworkTests
         DEPENDS $<TARGET_FILE:FrameworkTests>)
 
 # Native input primitives can be tested without building or launching clients.
-add_executable(FrameworkInputTests input_ut.cpp)
+add_executable(FrameworkInputTests input_ut.cpp ../framework/src/utils/key_names.cpp)
 target_include_directories(FrameworkInputTests PRIVATE . ../framework/src)
 if(WIN32)
     target_link_libraries(FrameworkInputTests PRIVATE user32)

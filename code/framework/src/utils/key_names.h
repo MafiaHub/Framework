@@ -21,6 +21,10 @@ namespace Framework::Utils::KeyNames {
     // preferred spelling.
     std::string FromVirtualKey(int virtualKey);
 
+    // UTF-8 display label for a physical key in the active game layout. Reads
+    // the layout on each call; works while UI owns input. Empty for unknown keys.
+    std::string GetLabel(int virtualKey);
+
     // Every bindable key, deduplicated, for a settings UI polling to capture a press.
     const std::vector<int> &All();
 } // namespace Framework::Utils::KeyNames

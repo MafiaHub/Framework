@@ -10,6 +10,10 @@
 
 #include "key_names.h"
 
+#ifdef _WIN32
+#include <input/key_labels.h>
+#endif
+
 #include <algorithm>
 #include <cctype>
 #include <unordered_map>
@@ -113,6 +117,28 @@ namespace Framework::Utils::KeyNames {
         const auto &map = Reverse();
         const auto it   = map.find(virtualKey);
         return it == map.end() ? std::string() : it->second;
+    }
+
+    std::string GetLabel(int virtualKey) {
+        std::string fallback = FromVirtualKey(virtualKey);
+        if (fallback.empty()) {
+            return {};
+        }
+#ifdef _WIN32
+        DWORD process      = 0;
+        const DWORD thread = GetWindowThreadProcessId(GetForegroundWindow(), &process);
+        // Match input polling while the game is foregrounded. In the background,
+        // use our own thread's layout rather than another application's layout.
+        const HKL layout        = GetKeyboardLayout(process == GetCurrentProcessId() ? thread : 0);
+        const std::string label = Input::KeyLabels::Get(virtualKey, layout);
+        if (!label.empty()) {
+            return label;
+        }
+#endif
+        std::transform(fallback.begin(), fallback.end(), fallback.begin(), [](unsigned char c) {
+            return static_cast<char>(std::toupper(c));
+        });
+        return fallback;
     }
 
     const std::vector<int> &All() {

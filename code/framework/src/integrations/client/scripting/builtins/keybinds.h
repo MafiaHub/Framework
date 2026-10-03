@@ -62,6 +62,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static void BindCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void UnbindCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void IsDownCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void GetLabelCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
 
         static bool ParseState(const std::string &s, State &out);
         static bool GateAllowed();
