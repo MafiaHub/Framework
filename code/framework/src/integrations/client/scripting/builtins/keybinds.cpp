@@ -85,10 +85,15 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         bind("bind", BindCallback);
         bind("unbind", UnbindCallback);
         bind("isDown", IsDownCallback);
+        bind("getLabel", GetLabelCallback);
 
         target->Set(context, v8pp::to_v8(isolate, "Key"), keyObj).Check();
 
         auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Key", "Client-only, resource-owned physical key bindings exposed as the global Key.");
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getLabel",
+            v8pp::metadata::docs("string", {v8pp::metadata::param("key", "string", false, "Case-insensitive physical key name, using the same names as bind.")},
+                "Returns the current layout's label for a physical key, even while UI owns input. Query again when refreshing prompts. Throws for unknown keys or non-string arguments.",
+                "Uppercase printable text, or an English name such as Enter or Mouse 1. Falls back to the uppercase canonical key name when translation is unavailable.")));
         metadata.record(
             v8pp::metadata::function_of<v8::FunctionCallback>("bind", v8pp::metadata::docs("boolean",
                                                                           {
@@ -110,6 +115,22 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                                                                                 v8pp::metadata::param("key", "string", false, "Case-insensitive supported key name."),
                                                                             },
                                                                             "Queries live physical key state using the same foreground and UI-input gate as binding dispatch.", "False when the key is up, the game is backgrounded, UI owns input, or the key name is invalid.")));
+    }
+
+    void Keybinds::GetLabelCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+        if (args.Length() < 1 || !args[0]->IsString()) {
+            ThrowError(isolate, "Key.getLabel requires a key name");
+            return;
+        }
+        const std::string keyName = v8pp::from_v8<std::string>(isolate, args[0]);
+        const int key             = Utils::KeyNames::ToVirtualKey(keyName);
+        if (key < 0) {
+            ThrowError(isolate, "Key.getLabel: unknown key name '" + keyName + "'");
+            return;
+        }
+        args.GetReturnValue().Set(v8pp::to_v8(isolate, Utils::KeyNames::GetLabel(key)));
     }
 
     void Keybinds::SetActiveCallback(std::function<bool()> callback) {

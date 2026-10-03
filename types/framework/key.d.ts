@@ -17,6 +17,9 @@
  * - Numpad `numpad0`–`numpad9` (aliases `num0`–`num9`)
  * - Mouse `mouse1` (left) `mouse2` (right) `mouse3` (middle) `mouse4` `mouse5`
  *
+ * Letters and digits identify physical positions on a US keyboard. Use
+ * `getLabel` to show the corresponding label in the player's current layout.
+ *
  * @example
  * // Toggle a HUD on key-down:
  * Key.bind("f6", "down", () => toggleHud());
@@ -52,4 +55,17 @@ declare const Key: {
      * game window is in the background (same gate as bind dispatch).
      */
     isDown(key: string): boolean;
+
+    /**
+     * Display label for a physical key using the current keyboard layout.
+     * For example, `getLabel("y")` returns `"Z"` on German QWERTZ.
+     * Works while menus/web views own input and without registering a binding.
+     * Query again when refreshing a prompt so layout changes are reflected.
+     * Labels are display text; keep using the original key name for bindings.
+     * @returns Uppercase printable text, or an English name such as `"Enter"`
+     *   or `"Mouse 1"`. Falls back to the uppercase canonical key name if the
+     *   layout cannot translate it. Ignores held modifiers and Caps Lock.
+     * @throws If the key is unknown or the argument is not a string.
+     */
+    getLabel(key: string): string;
 };
