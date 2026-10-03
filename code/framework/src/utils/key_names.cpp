@@ -86,11 +86,24 @@ namespace Framework::Utils::KeyNames {
             if (length <= 0 || length > static_cast<int>(std::size(text)) || text[0] < L' ') {
                 return {};
             }
-            CharUpperBuffW(text, length);
-            const int bytes = WideCharToMultiByte(CP_UTF8, 0, text, length, nullptr, 0, nullptr, nullptr);
+            // Use the selected layout's language, including Turkish dotted I.
+            wchar_t locale[LOCALE_NAME_MAX_LENGTH] {};
+            if (LCIDToLocaleName(MAKELCID(LOWORD(reinterpret_cast<ULONG_PTR>(layout)), SORT_DEFAULT), locale, static_cast<int>(std::size(locale)), 0) == 0) {
+                return {};
+            }
+            const DWORD casing    = LCMAP_UPPERCASE | LCMAP_LINGUISTIC_CASING;
+            const int upperLength = LCMapStringEx(locale, casing, text, length, nullptr, 0, nullptr, nullptr, 0);
+            if (upperLength == 0) {
+                return {};
+            }
+            std::wstring upper(upperLength, L'\0');
+            if (LCMapStringEx(locale, casing, text, length, upper.data(), upperLength, nullptr, nullptr, 0) == 0) {
+                return {};
+            }
+            const int bytes = WideCharToMultiByte(CP_UTF8, 0, upper.data(), upperLength, nullptr, 0, nullptr, nullptr);
             std::string label(bytes, '\0');
             if (bytes != 0) {
-                WideCharToMultiByte(CP_UTF8, 0, text, length, label.data(), bytes, nullptr, nullptr);
+                WideCharToMultiByte(CP_UTF8, 0, upper.data(), upperLength, label.data(), bytes, nullptr, nullptr);
             }
             return label;
         }
