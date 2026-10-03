@@ -557,18 +557,7 @@ namespace Framework::Integrations::Server {
             resources.readyEventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
             resources.tickRate     = _opts.worldConfig.tickInterval;
             resources.packageKey   = _packageKeyHex;
-            if (_scriptingModule) {
-                for (const auto &resource : _scriptingModule->GetClientResourceList()) {
-                    Framework::Networking::RPC::ResourceInfo info;
-                    info.name    = resource.name;
-                    info.version = resource.version;
-                    // Announced without a hash when packaging failed; the client refuses those.
-                    if (const auto hash = _packageHashes.find(resource.name); hash != _packageHashes.end()) {
-                        info.packageHash = hash->second;
-                    }
-                    resources.resources.push_back(std::move(info));
-                }
-            }
+            resources.resources = DescribeClientResources();
             net->SendRPC(resources, guid);
 
             // Travels with the resource list: a client that learns the ranges only when
@@ -953,7 +942,68 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Packaged client resource '{}': {} files, {} bytes, sha256 {}{}", resourceName, packaged.fileCount, packaged.blob.size(), packaged.sha256.substr(0, 16), needsWrite ? "" : " (unchanged)");
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset streamer ready with {} encrypted resource packages ({} files)", _packageHashes.size(), packagedFiles);
+        // Asset paks: plain ZIPs the client's engine mounts, staged beside the packages and sent by
+        // the same delta transfer. A resource stopped at runtime ships none until it starts again.
+        _assetPaks.clear();
+        if (_opts.assetPakPolicy) {
+            if (!_assetPakBuilder.IsActive()) {
+                _assetPakBuilder.Init(_opts.assetPakPolicy, stagingDir);
+            }
+            for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
+                const auto resource = resourceManager->GetResource(resourceName);
+                if (!resource || (_resourcesBooted && !resource->IsRunning())) {
+                    _assetPakBuilder.Forget(resourceName);
+                    continue;
+                }
+                std::vector<Framework::Networking::RPC::AssetPakInfo> paks = _assetPakBuilder.Build(resourceName, resource->GetPath());
+                for (const auto &pak : paks) {
+                    const std::string pakName = Framework::Utils::StreamedAssets::PakFileName(resourceName, pak.lane, pak.sha256);
+                    streamer->AddFile(_assetPakBuilder.PathOf(resourceName, pak).string().c_str(), pakName.c_str());
+                }
+                if (!paks.empty()) {
+                    _assetPaks[resourceName] = std::move(paks);
+                }
+            }
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset streamer ready with {} encrypted resource packages ({} files) and {} resource(s) shipping asset paks", _packageHashes.size(), packagedFiles, _assetPaks.size());
+    }
+
+    Framework::Networking::RPC::ResourceInfo Instance::DescribeResource(const std::string &name, const std::string &version) const {
+        Framework::Networking::RPC::ResourceInfo info;
+        info.name    = name;
+        info.version = version;
+        // Announced without a hash when packaging failed; the client refuses those unless the
+        // resource ships assets only.
+        if (const auto hash = _packageHashes.find(name); hash != _packageHashes.end()) {
+            info.packageHash = hash->second;
+        }
+        if (const auto paks = _assetPaks.find(name); paks != _assetPaks.end()) {
+            info.assetPaks = paks->second;
+        }
+        return info;
+    }
+
+    std::vector<Framework::Networking::RPC::ResourceInfo> Instance::DescribeClientResources() const {
+        std::vector<Framework::Networking::RPC::ResourceInfo> resources;
+        if (!_scriptingModule) {
+            return resources;
+        }
+        for (const auto &resource : _scriptingModule->GetClientResourceList()) {
+            resources.push_back(DescribeResource(resource.name, resource.version));
+        }
+        // A running resource with no client scripts still has its assets to send.
+        const auto *manager = _scriptingModule->GetResourceManager();
+        for (const auto &[name, paks] : _assetPaks) {
+            const auto described = std::find_if(resources.begin(), resources.end(), [&name](const Framework::Networking::RPC::ResourceInfo &info) {
+                return info.name == name;
+            });
+            const auto *resource = manager != nullptr ? manager->GetResource(name) : nullptr;
+            if (described == resources.end() && resource != nullptr && resource->IsRunning()) {
+                resources.push_back(DescribeResource(name, resource->GetVersion()));
+            }
+        }
+        return resources;
     }
 
     void Instance::BroadcastResourceRefresh(const std::string &name) {
@@ -968,11 +1018,6 @@ namespace Framework::Integrations::Server {
         if (!resource) {
             return;
         }
-        // Only resources with a client entry point need a client-side refresh.
-        if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
-            return;
-        }
-
         const auto net = _networkingEngine->GetNetworkServer();
         if (!net) {
             return;
@@ -985,18 +1030,19 @@ namespace Framework::Integrations::Server {
         }
         InitAssetStreamer();
 
-        const auto hash = _packageHashes.find(resource->GetName());
-        if (hash == _packageHashes.end()) {
+        // Only resources with a client entry point or asset paks need a client-side refresh.
+        const bool scripts = resource->GetManifest().GetMafiaHubConfig().HasClientContent();
+        const bool assets  = _assetPaks.contains(resource->GetName());
+        if (!scripts && !assets) {
+            return;
+        }
+        if (scripts && !_packageHashes.contains(resource->GetName())) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Not broadcasting refresh of '{}': packaging failed", name);
             return;
         }
 
         Framework::Networking::RPC::ResourceRefresh refresh;
-        Framework::Networking::RPC::ResourceInfo info;
-        info.name        = resource->GetName();
-        info.version     = resource->GetVersion();
-        info.packageHash = hash->second;
-        refresh.resources.push_back(std::move(info));
+        refresh.resources.push_back(DescribeResource(resource->GetName(), resource->GetVersion()));
         net->BroadcastRPC(refresh);
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Broadcasting hot-reload of resource '{}' to clients", name);
@@ -1014,8 +1060,10 @@ namespace Framework::Integrations::Server {
         if (!resource) {
             return;
         }
-        // Only client resources need a client-side stop.
-        if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
+        // Only client resources, and those shipping assets, need a client-side stop.
+        const bool assets = _assetPaks.erase(resource->GetName()) > 0;
+        _assetPakBuilder.Forget(resource->GetName());
+        if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent() && !assets) {
             return;
         }
 

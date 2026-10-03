@@ -18,6 +18,8 @@ set(FRAMEWORK_SRC
     src/utils/crypto.cpp
     src/utils/vfs.cpp
     src/utils/package/package.cpp
+    src/utils/streamed_assets/pak_archive.cpp
+    src/utils/streamed_assets/policy.cpp
     src/utils/path.cpp
     src/utils/safe_string.cpp
     src/utils/url_protocol.cpp
@@ -74,6 +76,7 @@ set(FRAMEWORK_SERVER_SRC
 
     src/integrations/server/instance.cpp
     src/integrations/server/connection_gate.cpp
+    src/integrations/server/asset_paks/asset_pak_builder.cpp
     src/integrations/server/networking/engine.cpp
 
     # JavaScript scripting (server module)

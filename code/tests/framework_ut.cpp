@@ -35,6 +35,7 @@
 #include "modules/state_bag_scripting_ut.h"
 #include "modules/state_bag_ut.h"
 #include "modules/state_machine_ut.h"
+#include "modules/streamed_assets_ut.h"
 #include "modules/string_utils_ut.h"
 #include "modules/transform_batch_ut.h"
 #include "modules/url_protocol_ut.h"
@@ -95,6 +96,7 @@ int main() {
     UNIT_MODULE(voice_activity);
     UNIT_MODULE(gui_resources);
     UNIT_MODULE(resource_package);
+    UNIT_MODULE(streamed_assets);
 #ifdef _WIN32
     UNIT_MODULE(pattern_hints);
     UNIT_MODULE(pattern_table);

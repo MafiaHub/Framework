@@ -24,6 +24,7 @@
 
 #include "networking/engine.h"
 #include "networking/rpc/chat_message.h"
+#include "networking/rpc/server_resources.h"
 #include "integrations/client/ui/chat_box.h"
 #include "voice/client/voice_client.h"
 #include <mafianet/FileListTransferCBInterface.h>
@@ -59,11 +60,21 @@ namespace Framework::Integrations::Client {
         bool OnDownloadComplete(DownloadCompleteStruct *dcs) override;
     };
 
+    /** One asset pak a resource ships, at its place in this server's cache once downloaded. */
+    struct ResourceAssetPak {
+        std::string resource;
+        Framework::Networking::RPC::AssetPakInfo info;
+        std::string path;
+    };
+
     struct InstanceOptions {
-        // Root of everything the client caches from servers (resource packages, under `servers/`).
-        // Empty keeps the legacy %APPDATA%\MafiaHubIntegration; a mod that must not write outside its
-        // own folder points this inside it.
+        // Root of everything the client caches from servers (resource packages and asset paks, under
+        // `servers/`). Empty keeps the legacy %APPDATA%\MafiaHubIntegration; a mod that must not write
+        // outside its own folder points this inside it.
         std::string cacheRoot;
+
+        // A first download whose missing asset paks exceed this waits for GrantAssetConsent().
+        uint64_t assetConsentThreshold = ~0ull;
 
         int64_t discordAppId                = 0;
         bool usePresence                    = true;
@@ -184,6 +195,21 @@ namespace Framework::Integrations::Client {
 
         ResourcePackageMounter _packageMounter;
 
+        // The asset paks the server announced for this session, and whether they are on disk.
+        std::vector<ResourceAssetPak> _assetPaks;
+        bool _assetPaksDownloaded {};
+        // Bytes a held first download is waiting on consent for; 0 when none is held.
+        uint64_t _assetConsentBytes {};
+
+        // Replaces the asset paks of every resource in `resources` with what it announces.
+        void AnnounceAssetPaks(const std::vector<Client::Scripting::ServerResourceInfo> &resources);
+        // Every announced asset pak is on disk at its announced size. The delta transfer only
+        // completes once each file matches the server's, so this catches what it cannot: a file
+        // it could not write.
+        bool VerifyAssetPaks() const;
+        // Removes cached paks the server no longer announces; one still mounted stays until the next session.
+        void PruneAssetPaks(const std::string &cacheDir) const;
+
         // The server's replicated server.json subset, decoded from the MafiaNet session payload the
         // moment the connection surfaces. Available before the asset phase and before any client
         // script runs, which is what lets a project pick what to load from it.
@@ -290,6 +316,12 @@ namespace Framework::Integrations::Client {
         virtual void OnAssetsDownloadProgress(const AssetDownloadStatus &status) {
             (void)status;
         }
+        /**
+         * The session's asset paks changed: the first download completed (just before
+         * OnInitialAssetDownloadReady), a refresh downloaded a resource's new paks, or a resource
+         * stopped. Read them with GetResourceAssetPaks().
+         */
+        virtual void OnResourceAssetPaksChanged() {}
         virtual void OnConnectionPhaseChanged(ConnectionPhase phase) {
             (void)phase;
         }
@@ -454,6 +486,28 @@ namespace Framework::Integrations::Client {
 
         // The folder InstanceOptions::cacheRoot names, or the legacy one under %APPDATA%.
         std::string GetCacheRoot() const;
+
+        /** The asset paks the server announced for this session, with their cache paths. */
+        const std::vector<ResourceAssetPak> &GetResourceAssetPaks() const {
+            return _assetPaks;
+        }
+
+        /** Whether every announced asset pak is on disk: the first download completed and was verified. */
+        bool AreResourceAssetPaksDownloaded() const {
+            return _assetPaksDownloaded;
+        }
+
+        /** Bytes of asset paks the first download waits on consent for; 0 when it is not waiting. */
+        uint64_t GetAssetConsentBytes() const {
+            return _assetConsentBytes;
+        }
+
+        void SetAssetConsentThreshold(uint64_t bytes) {
+            _opts.assetConsentThreshold = bytes;
+        }
+
+        /** Lets a held first download start. */
+        void GrantAssetConsent();
 
         // The entity object passed to entityStateChange handlers. Default is the base Entity
         // builtin; a game with handles of its own overrides this to hand scripts the specific one.

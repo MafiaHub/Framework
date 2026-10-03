@@ -15,6 +15,7 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
+#include "asset_paks/asset_pak_builder.h"
 #include "connection_gate.h"
 #include "http/webserver.h"
 #include "logging/logger.h"
@@ -78,6 +79,10 @@ namespace Framework::Integrations::Server {
         // Development mode: watch resource files and hot-reload on change.
         // Leave off in production.
         bool developmentMode = false;
+
+        // What a resource's asset paks may carry, one lane per folder (`<resource>/<lane>/`). Null
+        // ships none. See AssetPakBuilder.
+        std::shared_ptr<const Utils::StreamedAssets::Policy> assetPakPolicy;
 
         // networked game metadata (required)
         std::string gameName;
@@ -213,6 +218,15 @@ namespace Framework::Integrations::Server {
         std::string _packageKeyHex;
         bool _packageKeyReady = false;
         std::unordered_map<std::string, std::string> _packageHashes;
+
+        // Each running resource's asset paks, staged and served beside the packages.
+        AssetPakBuilder _assetPakBuilder;
+        std::unordered_map<std::string, std::vector<Framework::Networking::RPC::AssetPakInfo>> _assetPaks;
+
+        // What the resource list says about one resource: its package hash and asset paks.
+        Framework::Networking::RPC::ResourceInfo DescribeResource(const std::string &name, const std::string &version) const;
+        // Every running resource a client needs: those with client scripts, and those shipping assets only.
+        std::vector<Framework::Networking::RPC::ResourceInfo> DescribeClientResources() const;
 
         void InitEndpoints();
         void InitNetworkingMessages();
@@ -351,6 +365,11 @@ namespace Framework::Integrations::Server {
         }
         void RemoveCommand(std::string_view name) {
             _commandProcessor->RemoveCommand(name);
+        }
+
+        /** The asset paks the server ships, to check a path a script names against them. */
+        const AssetPakBuilder &GetAssetPaks() const {
+            return _assetPakBuilder;
         }
     };
 } // namespace Framework::Integrations::Server

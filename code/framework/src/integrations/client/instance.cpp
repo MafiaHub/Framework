@@ -38,10 +38,12 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <iterator>
 
 #include <logging/logger.h>
 
 #include "utils/path.h"
+#include "utils/streamed_assets/pak_archive.h"
 #include "utils/vfs.h"
 #include "utils/profiler.h"
 #include "utils/version.h"
@@ -711,6 +713,10 @@ namespace Framework::Integrations::Client {
             _serverTickRate = payload.tickRate;
 
             _pendingServerResources = payload.resources;
+            _assetPaks.clear();
+            _assetPaksDownloaded = false;
+            _assetConsentBytes   = 0;
+            AnnounceAssetPaks(_pendingServerResources);
 
             // A server that predates encrypted resource packages writes a different layout, so the
             // key lands on whatever followed it and the rest of the stream is garbage. Fail here
@@ -723,7 +729,7 @@ namespace Framework::Integrations::Client {
                 return;
             }
 
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", _pendingServerResources.size());
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources and {} asset pak(s)", _pendingServerResources.size(), _assetPaks.size());
 
             SetConnectionPhase(ConnectionPhase::Downloading);
             DownloadsAssetsFromConnectedServer();
@@ -776,6 +782,13 @@ namespace Framework::Integrations::Client {
                 // Drop any queued refresh so a pending sync can't resurrect it.
                 for (auto it = _pendingRefreshResources.begin(); it != _pendingRefreshResources.end();) {
                     it = (it->name == res.name) ? _pendingRefreshResources.erase(it) : it + 1;
+                }
+                const auto paks = std::remove_if(_assetPaks.begin(), _assetPaks.end(), [&res](const ResourceAssetPak &pak) {
+                    return pak.resource == res.name;
+                });
+                if (paks != _assetPaks.end()) {
+                    _assetPaks.erase(paks, _assetPaks.end());
+                    OnResourceAssetPaksChanged();
                 }
                 if (rm->IsResourceRunning(res.name)) {
                     auto result = rm->StopResource(res.name);
@@ -845,6 +858,9 @@ namespace Framework::Integrations::Client {
             _serverConfig                              = nlohmann::json::object();
             _initialDownloadDone                       = false;
             _downloadStatus                            = {};
+            _assetPaks.clear();
+            _assetPaksDownloaded = false;
+            _assetConsentBytes   = 0;
             _connectionFinalized                       = false;
             _spawnBarrierArmed                         = false;
             _projectSpawnReady                         = false;
@@ -1020,7 +1036,84 @@ namespace Framework::Integrations::Client {
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
 
+        // Asset paks can be large: what this cache lacks waits for the player's consent above the
+        // mod's threshold. Scripts alone never ask.
+        PruneAssetPaks(cacheDir);
+        uint64_t missing = 0;
+        for (auto &pak : _assetPaks) {
+            pak.path = (std::filesystem::path(cacheDir) / Framework::Utils::StreamedAssets::PakFileName(pak.resource, pak.info.lane, pak.info.sha256)).string();
+            std::error_code code;
+            if (std::filesystem::file_size(pak.path, code) != pak.info.size || code) {
+                missing += pak.info.size;
+            }
+        }
+        if (missing > _opts.assetConsentThreshold) {
+            _assetConsentBytes = missing;
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("The server ships {} bytes of asset paks this cache lacks; waiting for consent", missing);
+            return;
+        }
+
         StartAssetDownload();
+    }
+
+    void Instance::GrantAssetConsent() {
+        if (_assetConsentBytes == 0) {
+            return;
+        }
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Asset download of {} bytes accepted", _assetConsentBytes);
+        _assetConsentBytes = 0;
+        StartAssetDownload();
+    }
+
+    void Instance::AnnounceAssetPaks(const std::vector<Client::Scripting::ServerResourceInfo> &resources) {
+        for (const auto &resource : resources) {
+            _assetPaks.erase(std::remove_if(_assetPaks.begin(), _assetPaks.end(), [&resource](const ResourceAssetPak &pak) {
+                return pak.resource == resource.name;
+            }), _assetPaks.end());
+            for (const auto &info : resource.assetPaks) {
+                // Untrusted: a lane or hash that could not name a cache file is dropped, and the
+                // mod's own validation decides what the rest may carry.
+                if (!info.IsSane() || !Framework::Utils::StreamedAssets::IsSha256(info.sha256) || !Framework::Utils::StreamedAssets::IsValidResourceName(resource.name)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Ignoring a malformed asset pak of '{}'", resource.name);
+                    continue;
+                }
+                ResourceAssetPak pak;
+                pak.resource = resource.name;
+                pak.info     = info;
+                if (!GetAssetCachePath().empty()) {
+                    pak.path = (std::filesystem::path(GetAssetCachePath()) / Framework::Utils::StreamedAssets::PakFileName(resource.name, info.lane, info.sha256)).string();
+                }
+                _assetPaks.push_back(std::move(pak));
+            }
+        }
+    }
+
+    bool Instance::VerifyAssetPaks() const {
+        for (const auto &pak : _assetPaks) {
+            std::error_code code;
+            if (pak.path.empty() || std::filesystem::file_size(pak.path, code) != pak.info.size || code) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Asset pak '{}' {} is missing or incomplete after the download", pak.resource, pak.info.lane);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void Instance::PruneAssetPaks(const std::string &cacheDir) const {
+        std::error_code code;
+        for (const auto &entry : std::filesystem::directory_iterator(cacheDir, code)) {
+            if (entry.path().extension() != ".pak") {
+                continue;
+            }
+            const std::string name = entry.path().filename().string();
+            const bool announced   = std::any_of(_assetPaks.begin(), _assetPaks.end(), [&name](const ResourceAssetPak &pak) {
+                return Framework::Utils::StreamedAssets::PakFileName(pak.resource, pak.info.lane, pak.info.sha256) == name;
+            });
+            if (!announced) {
+                std::error_code removeError;
+                std::filesystem::remove(entry.path(), removeError);
+            }
+        }
     }
 
     void Instance::StartAssetDownload() {
@@ -1124,6 +1217,10 @@ namespace Framework::Integrations::Client {
         size_t reported                       = 0;
 
         for (const auto &resource : resources) {
+            // Assets only: nothing to decrypt or run.
+            if (resource.packageHash.empty() && !resource.assetPaks.empty()) {
+                continue;
+            }
             std::string error;
             if (!_packageMounter.Mount(cacheDir, resource.name, resource.packageHash, error)) {
                 if (reported < kMaxReportedFailures) {
@@ -1157,10 +1254,14 @@ namespace Framework::Integrations::Client {
             if (scriptingModule && scriptingModule->GetScriptingEngine()
                 && scriptingModule->GetScriptingEngine()->IsInitialized()
                 && !_pendingRefreshResources.empty()) {
+                AnnounceAssetPaks(_pendingRefreshResources);
+                if (VerifyAssetPaks()) {
+                    OnResourceAssetPaksChanged();
+                }
                 if (auto *rm = scriptingModule->GetResourceManager()) {
                     const auto failed = MountResourcePackages(_pendingRefreshResources);
                     for (const auto &res : _pendingRefreshResources) {
-                        if (std::find(failed.begin(), failed.end(), res.name) != failed.end()) {
+                        if (std::find(failed.begin(), failed.end(), res.name) != failed.end() || res.packageHash.empty()) {
                             continue;
                         }
                         // Newly started server-side: discover from cache first.
@@ -1190,6 +1291,15 @@ namespace Framework::Integrations::Client {
             _pendingRefreshResources.clear();
 
             if (!_resumingDeferredInitialAssetProcessing) {
+                if (!VerifyAssetPaks()) {
+                    (void)net->Disconnect();
+                    return false;
+                }
+                _assetPaksDownloaded = true;
+                if (!_assetPaks.empty()) {
+                    OnResourceAssetPaksChanged();
+                }
+
                 const uint64_t generation = _assetProcessingGeneration;
                 if (OnInitialAssetDownloadReady(generation, _downloadStatus) == InitialAssetProcessingDecision::Defer) {
                     if (generation != _assetProcessingGeneration || net->GetConnectionState() != Framework::Networking::PeerState::CONNECTED) {
@@ -1244,7 +1354,12 @@ namespace Framework::Integrations::Client {
                         (void)net->Disconnect();
                         return false;
                     }
-                    scriptingModule->SetServerResourceList(_pendingServerResources);
+                    // Resources that ship assets only have nothing to run here.
+                    std::vector<Client::Scripting::ServerResourceInfo> scripted;
+                    std::copy_if(_pendingServerResources.begin(), _pendingServerResources.end(), std::back_inserter(scripted), [](const Client::Scripting::ServerResourceInfo &resource) {
+                        return !resource.packageHash.empty() || resource.assetPaks.empty();
+                    });
+                    scriptingModule->SetServerResourceList(scripted);
                 }
 
                 // Start all resources via ResourceManager

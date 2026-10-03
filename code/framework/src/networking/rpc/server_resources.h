@@ -19,7 +19,33 @@
 #include <vector>
 
 namespace Framework::Networking::RPC {
+    /**
+     * One asset pak a resource ships for the game engine to mount: a plain ZIP built from the
+     * resource's `<lane>/` folder, staged and downloaded beside its .fwpak as
+     * Utils::StreamedAssets::PakFileName(resource, lane, sha256). What a lane may carry is the
+     * mod's policy, checked by both ends.
+     */
+    struct AssetPakInfo {
+        static constexpr size_t kMaxLaneLength = 32;
+
+        std::string lane;
+        std::string sha256;
+        uint64_t size = 0;
+
+        void Serialize(MafiaNet::BitStream *bs, bool write) {
+            bs->Serialize(write, lane);
+            bs->Serialize(write, sha256);
+            bs->Serialize(write, size);
+        }
+
+        bool IsSane() const {
+            return !lane.empty() && lane.size() <= kMaxLaneLength && sha256.size() == 64 && size > 0;
+        }
+    };
+
     struct ResourceInfo {
+        static constexpr uint8_t kMaxAssetPaks = 8;
+
         std::string name;
         std::string version;
 
@@ -27,10 +53,24 @@ namespace Framework::Networking::RPC {
         // when the resource has no client entry point.
         std::string packageHash;
 
+        // The resource's asset paks, one per lane folder it ships. A resource with paks and no
+        // packageHash ships assets only: there is nothing of it to run on the client.
+        std::vector<AssetPakInfo> assetPaks;
+
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, name);
             bs->Serialize(write, version);
             bs->Serialize(write, packageHash);
+
+            uint8_t count = static_cast<uint8_t>(std::min<size_t>(assetPaks.size(), kMaxAssetPaks));
+            bs->Serialize(write, count);
+            if (!write) {
+                assetPaks.clear();
+                assetPaks.resize(std::min<uint8_t>(count, kMaxAssetPaks));
+            }
+            for (uint8_t i = 0; i < count; ++i) {
+                assetPaks[i].Serialize(bs, write);
+            }
         }
     };
 
