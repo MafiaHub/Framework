@@ -8,6 +8,7 @@
 
 #include "project.h"
 
+#include "external/epic/auth.h"
 #include "external/epic/manifest.h"
 #include "external/rockstar/library.h"
 #include "gpu_preference.h"
@@ -121,6 +122,35 @@ LPSTR BuildGameCommandLineA() {
     const auto commandLine    = Framework::Utils::StringUtils::WideToNormal(BuildGameCommandLineW());
     strcpy_s(buffer, commandLine.c_str());
     return buffer;
+}
+
+// The launch arguments carry live credentials (store exchange code, account id, ownership-token
+// path). This line reaches the dev console and log files, so log the shape and never the values.
+// Markers match in any case: the game parses them that way, and additionalLaunchArguments is free text.
+std::string RedactGameCommandLine(std::string commandLine) {
+    for (const char *key : {"-auth_password=", "-epicuserid=", "-epicovt="}) {
+        const std::string marker(key);
+        std::string lowered = Framework::Utils::StringUtils::ToLower(commandLine);
+        for (size_t pos = lowered.find(marker); pos != std::string::npos; pos = lowered.find(marker, pos)) {
+            const size_t valueStart = pos + marker.size();
+            size_t valueEnd         = std::string::npos;
+            if (valueStart < commandLine.size() && commandLine[valueStart] == '"') {
+                const size_t closing = commandLine.find('"', valueStart + 1);
+                valueEnd             = (closing == std::string::npos) ? commandLine.size() : closing + 1;
+            }
+            else {
+                valueEnd = commandLine.find(' ', valueStart);
+                if (valueEnd == std::string::npos) {
+                    valueEnd = commandLine.size();
+                }
+            }
+            const std::string placeholder = "<redacted>";
+            commandLine.replace(valueStart, valueEnd - valueStart, placeholder);
+            lowered.replace(valueStart, valueEnd - valueStart, placeholder);
+            pos = valueStart + placeholder.size();
+        }
+    }
+    return commandLine;
 }
 
 bool SynchronizeUCRTCommandLine() {
@@ -575,8 +605,41 @@ namespace Framework::Launcher {
         // stash it in classicGamePath purely so it lands in the persisted JSON config.
         _config.classicGamePath = _gamePath;
 
-        // Unlike Steam there's no runtime DLL to inject or app-id file to drop; any Epic launch
-        // args go through ProjectConfiguration::additionalLaunchArguments.
+        // Outside the Epic launcher the game's EOS ownership check wants what that launcher would
+        // pass: a signed-in account's single-use exchange code and a fresh ownership token. Any
+        // failure is final; the manual-path fallback would only reach the same check.
+        const auto abort = [&](const std::string &reason) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Epic launch preparation failed: {}", reason);
+            MessageBox(nullptr, reason.c_str(), _config.name.c_str(), MB_ICONERROR);
+            return PlatformCheckStatus::ABORT;
+        };
+
+        // The project's own sign-in UI persists a refresh token that we then use like a stored one.
+        const auto signIn = [&]() -> std::optional<External::Epic::Tokens> {
+            if (!_config.epicSignIn) {
+                return External::Epic::EnsureAuthenticated(Utils::StringUtils::Utf8ToWide(_config.name));
+            }
+            if (auto tokens = External::Epic::TryRefreshStoredAuth()) {
+                return tokens;
+            }
+            return _config.epicSignIn() ? External::Epic::TryRefreshStoredAuth() : std::nullopt;
+        };
+        const auto tokens = signIn();
+        if (!tokens) {
+            return abort("Epic sign-in is required to play the Epic version of the game");
+        }
+
+        const auto exchangeCode = External::Epic::GetExchangeCode(*tokens);
+        if (!exchangeCode) {
+            External::Epic::ClearStoredAuth(); // the next launch signs in afresh
+            return abort("Could not obtain an Epic launch code, please try again");
+        }
+
+        // Hand the account id to the in-process client (ClientIdentity), as Steam does above.
+        if (!tokens->accountId.empty()) {
+            SetProcessEnvironmentVariable(L"MafiaHubEpicId", Utils::StringUtils::Utf8ToWide(tokens->accountId));
+        }
+        _config.additionalLaunchArguments += External::Epic::BuildLaunchArgs(*tokens, *exchangeCode, app.appName, app.catalogNamespace, app.catalogItemId, app.installLocation);
         return PlatformCheckStatus::OK;
     }
 
@@ -1105,8 +1168,7 @@ namespace Framework::Launcher {
             Loaders::ApplyMappedImageIdentity(_gamePath);
 
             if (SynchronizeUCRTCommandLine()) {
-                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info(
-                    "Mapped game command line: {}", BuildGameCommandLineA());
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Mapped game command line: {}", RedactGameCommandLine(BuildGameCommandLineA()));
             }
 
             // The OS loader normally dispatches executable TLS callbacks before the entry

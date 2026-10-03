@@ -163,6 +163,7 @@ namespace Framework::Integrations::Server {
         std::string nickname;
         std::string hardwareID;
         std::string steamId;
+        std::string epicId;
         std::string discordId;
     };
 
