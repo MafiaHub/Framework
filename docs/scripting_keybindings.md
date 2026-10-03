@@ -104,24 +104,20 @@ function refreshInteractionHint(viewId: number): void {
 }
 ```
 
-The page receives `Y` on US QWERTY and `Z` on German QWERTZ. Both refer to
-the same physical position, between T and U. Keep `"y"` in `bind`, `unbind`,
-and `isDown`; the returned label is display text, not a binding identifier.
+The page receives `Y` on US QWERTY and `Z` on German QWERTZ for the same
+physical position. Keep `"y"` in `bind`, `unbind`, and `isDown`.
 
-The label uses the current Windows layout on every call. Refresh it when
-showing a prompt, and periodically while the prompt stays visible if players
-may switch layouts. There is no layout-change event in this API. While the
-game is in the background, the query uses the calling game thread's layout.
+Each call reads the current Windows layout. Refresh visible prompts to reflect
+layout changes; there is no layout-change event. In the background, the query
+uses the calling game thread's layout.
 
-Printable labels are uppercase Unicode text and ignore held modifiers and
-Caps Lock. Other keys have English labels such as `Enter`, `Left Shift`,
-`Numpad 1`, and `Mouse 1`. If Windows cannot translate a printable key, the
-query falls back to its uppercase canonical name. This does not detect the
-physical keyboard's printed legends if they differ from the selected layout.
+Printable labels are uppercase Unicode text, ignoring held modifiers and Caps
+Lock. Other keys have English names such as `Enter`, `Left Shift`, `Numpad 1`,
+and `Mouse 1`. Unavailable translations fall back to the uppercase canonical
+name. Labels follow the selected layout, which may differ from printed keycaps.
 
-Lookup leaves text composition untouched. Windows may include a pending
-dead-key accent in a printable label while the player is composing text;
-refreshing the prompt after composition finishes returns the ordinary label.
+Lookup preserves text composition, but Windows may include a pending dead-key
+accent in a label until composition finishes.
 
 ## When binds fire
 

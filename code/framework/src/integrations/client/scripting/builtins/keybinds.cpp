@@ -92,15 +92,16 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Key", "Client-only, resource-owned physical key bindings exposed as the global Key.");
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getLabel",
             v8pp::metadata::docs("string", {v8pp::metadata::param("key", "string", false, "Case-insensitive physical key name, using the same names as bind.")},
-                "Returns a display label using the current keyboard layout, even while UI owns input. For example, y displays as Z on German QWERTZ. Query again when refreshing a prompt; labels are not binding identifiers. Throws for an unknown key or a non-string argument.",
+                "Returns the current layout's label for a physical key, even while UI owns input. Query again when refreshing prompts. Throws for unknown keys or non-string arguments.",
                 "Uppercase printable text, or an English name such as Enter or Mouse 1. Falls back to the uppercase canonical key name when translation is unavailable.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("bind", v8pp::metadata::docs("boolean",
-                                                                                      {
-                                                                                          v8pp::metadata::param("key", "string", false, "Case-insensitive supported keyboard or mouse key name."),
-                                                                                          v8pp::metadata::param("stateOrHandler", "\"down\" | \"up\" | \"both\" | KeyHandler", false, "Trigger state, or the handler itself to use the default down state."),
-                                                                                          v8pp::metadata::param("handler", "KeyHandler", true, "Handler required when an explicit trigger state is provided."),
-                                                                                      },
-                                                                                      "Binds a resource-owned handler that fires while the game has foreground input and no UI is capturing it.", "True after the binding is installed; invalid keys or states throw.")));
+        metadata.record(
+            v8pp::metadata::function_of<v8::FunctionCallback>("bind", v8pp::metadata::docs("boolean",
+                                                                          {
+                                                                              v8pp::metadata::param("key", "string", false, "Case-insensitive supported keyboard or mouse key name."),
+                                                                              v8pp::metadata::param("stateOrHandler", "\"down\" | \"up\" | \"both\" | KeyHandler", false, "Trigger state, or the handler itself to use the default down state."),
+                                                                              v8pp::metadata::param("handler", "KeyHandler", true, "Handler required when an explicit trigger state is provided."),
+                                                                          },
+                                                                          "Binds a resource-owned handler that fires while the game has foreground input and no UI is capturing it.", "True after the binding is installed; invalid keys or states throw.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("unbind", v8pp::metadata::docs("boolean",
                                                                                         {
                                                                                             v8pp::metadata::param("key", "string", false, "Case-insensitive supported key name."),
