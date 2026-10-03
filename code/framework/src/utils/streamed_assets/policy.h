@@ -20,7 +20,6 @@ namespace Framework::Utils::StreamedAssets {
     inline constexpr std::uint64_t kMaxPakSize    = 0x7FFFFFFFull;
     inline constexpr std::size_t kMaxPakEntries   = 65535;
     inline constexpr std::uint64_t kMaxEntrySize  = 512ull * 1024 * 1024;
-    inline constexpr std::size_t kMaxPaks         = 128;
     inline constexpr std::size_t kMaxPathLength   = 240;
     inline constexpr std::size_t kMaxResourceName = 64;
 
