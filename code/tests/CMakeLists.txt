@@ -35,7 +35,14 @@ target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
 
 add_custom_target(RunFrameworkTests
         COMMAND $<TARGET_FILE:FrameworkTests>
-        DEPENDS $<TARGET_FILE:FrameworkTests>)
+        COMMAND $<TARGET_FILE:FrameworkClientScriptingTests>
+        DEPENDS FrameworkTests FrameworkClientScriptingTests)
+
+# NodeEngine and V8Engine each initialize V8's process-wide platform, so exercise
+# the client runtime in its own process.
+add_executable(FrameworkClientScriptingTests client_scripting_ut.cpp)
+target_include_directories(FrameworkClientScriptingTests PRIVATE . ../framework/src)
+target_link_libraries(FrameworkClientScriptingTests Framework FrameworkServer libnode)
 
 # Native input primitives can be tested without building or launching clients.
 add_executable(FrameworkInputTests input_ut.cpp)

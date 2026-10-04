@@ -813,6 +813,88 @@ MODULE(resource_manager, {
 MODULE(resource_lifecycle, {
     using namespace Framework::Scripting;
 
+    IT("reloads dynamic ESM imports and their dependencies after resource restart", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("esm-restart", R"({
+            "name": "esm-restart", "version": "1.0.0", "mafiahub": { "server": "main.cjs" }
+        })");
+        TestManagerHelper::CreateTestResource("esm-restart-other", R"({
+            "name": "esm-restart-other", "version": "1.0.0", "mafiahub": { "server": "main.cjs" }
+        })");
+        TestManagerHelper::CreateTestScript("esm-restart-other", "main.cjs", R"(
+            Events.on('resourceStart', async (name) => {
+                if (name !== 'esm-restart-other') return;
+                globalThis.__esmOther = await import('./value.mjs');
+            });
+        )");
+        TestManagerHelper::CreateTestScript("esm-restart-other", "value.mjs", "export const value = 100;");
+        TestManagerHelper::CreateTestScript("esm-restart", "main.cjs", R"(
+            Events.on('resourceStart', async (name) => {
+                if (name !== 'esm-restart') return;
+                const module = await import('./entry.mjs?mode=test#fragment');
+                globalThis.__esmValue = module.value;
+                globalThis.__esmSame = module === await import('./entry.mjs?mode=test#fragment') ? 1 : 0;
+                globalThis.__esmOtherSame = globalThis.__esmOther === await import('../esm-restart-other/value.mjs') ? 1 : 0;
+                const legacy = require('./legacy.cjs');
+                globalThis.__esmLegacyValue = legacy.value;
+                globalThis.__esmLegacySame = legacy === (await import('./legacy.cjs')).default ? 1 : 0;
+            });
+        )");
+        const auto writeModules = [](int version) {
+            TestManagerHelper::CreateTestScript("esm-restart", "nested #/value.mjs", "export const value = " + std::to_string(version) + ";");
+            TestManagerHelper::CreateTestScript("esm-restart", "legacy.cjs", "exports.value = " + std::to_string(version) + ";");
+            TestManagerHelper::CreateTestScript("esm-restart", "entry.mjs",
+                "import { value as nested } from './nested%20%23/value.mjs';"
+                "await Promise.resolve();"
+                "globalThis.__esmLoads = (globalThis.__esmLoads || 0) + 1;"
+                "export const value = nested + "
+                    + std::to_string(version * 10) + ";");
+        };
+        writeModules(1);
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath          = TestManagerHelper::GetTestResourcePath();
+        config.resourceStartTimeoutMs = 2000;
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 2u);
+        EQUALS((bool)manager.StartResource("esm-restart-other"), true);
+        EQUALS((bool)manager.StartResource("esm-restart"), true);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmValue"), 11);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmSame"), 1);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmOtherSame"), 1);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmLegacyValue"), 1);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmLegacySame"), 1);
+
+        EQUALS((bool)manager.StopResource("esm-restart"), true);
+        writeModules(2);
+        TestManagerHelper::CreateTestScript("esm-restart-other", "value.mjs", "export const value = 999;");
+        EQUALS((bool)manager.StartResource("esm-restart"), true);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmValue"), 22);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmLoads"), 2);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmSame"), 1);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmOtherSame"), 1);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmOther.value"), 100);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmLegacyValue"), 2);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmLegacySame"), 1);
+
+        writeModules(3);
+        EQUALS((bool)manager.RestartResource("esm-restart"), true);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmValue"), 33);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmLoads"), 3);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmSame"), 1);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmOtherSame"), 1);
+        EQUALS(manager.IsResourceRunning("esm-restart-other"), true);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmLegacyValue"), 3);
+        EQUALS(TestManagerHelper::EvalInt(engine, "globalThis.__esmLegacySame"), 1);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
     IT("awaits async resourceStart before starting dependents", {
         TestManagerHelper::Cleanup();
         TestManagerHelper::CreateTestResource("async-dependency", R"({

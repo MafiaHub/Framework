@@ -201,6 +201,31 @@ namespace Framework::Scripting {
             _env,
             "const publicRequire = require('node:module').createRequire(process.cwd() + '/');"
             "globalThis.require = publicRequire;"
+            // Node has no public ESM cache eviction API. Give file imports under
+            // an evicted root a new URL identity, including transitive imports.
+            // Keep the hook and generations private and leave other roots alone.
+            "const esmGenerations = new Map();"
+            "let esmGeneration = 0;"
+            "const { fileURLToPath } = publicRequire('node:url');"
+            "publicRequire('node:module').registerHooks({"
+            "  resolve(specifier, context, nextResolve) {"
+            "    const result = nextResolve(specifier, context);"
+            "    if (!result.url.startsWith('file:')) return result;"
+            "    const path = fileURLToPath(result.url).replace(/\\\\/g, '/');"
+            "    let generation = 0;"
+            "    for (const [root, entry] of esmGenerations) {"
+            "      if ((entry.ci ? path.toLowerCase() : path).startsWith(root)) {"
+            "        generation = Math.max(generation, entry.generation);"
+            "      }"
+            "    }"
+            "    if (generation) {"
+            "      const url = new URL(result.url);"
+            "      url.searchParams.set('__fw_resource_generation', String(generation));"
+            "      return { ...result, url: url.href };"
+            "    }"
+            "    return result;"
+            "  }"
+            "});"
             // Capture the real require.cache before sandboxing hides it, so
             // C++ can evict a resource's modules on reload.
             "Object.defineProperty(globalThis, '__fw_evictModulesUnderPath', {"
@@ -208,6 +233,7 @@ namespace Framework::Scripting {
             "    try {"
             "      const cache = publicRequire.cache; if (!cache) return 0;"
             "      let r = String(root).replace(/\\\\/g, '/'); if (ci) r = r.toLowerCase();"
+            "      esmGenerations.set(r, { ci, generation: ++esmGeneration });"
             "      let removed = 0;"
             "      for (const k of Object.keys(cache)) {"
             "        let nk = k.replace(/\\\\/g, '/'); if (ci) nk = nk.toLowerCase();"

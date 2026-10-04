@@ -528,6 +528,12 @@ namespace Framework::Scripting {
             return ResourceOperationResult("Invalid state transition for resource: " + std::string(name));
         }
 
+        // A plain stop/start (including client refresh notifications) must run
+        // the scripts again, not reuse exports from the previous execution.
+        if (_jsEngine) {
+            _jsEngine->EvictModulesUnderPath(resource->GetPath());
+        }
+
         // Execute the entry point script
         std::string error;
         if (!ExecuteResourceScript(*resource, error)) {

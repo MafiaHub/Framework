@@ -86,7 +86,7 @@ namespace Framework::Scripting {
         void Shutdown() override;
         bool ExecuteFile(std::string_view filepath) override;
 
-        // Evict CommonJS modules cached under rootPath (require.cache).
+        // Evict CommonJS modules and advance ESM import identities under rootPath.
         void EvictModulesUnderPath(const std::string &rootPath) override;
 
         // Cancel timers the named resource created (via the bootstrap shim).
