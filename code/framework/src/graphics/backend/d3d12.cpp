@@ -101,6 +101,7 @@ namespace Framework::Graphics {
     }
 
     void D3D12Backend::Shutdown() {
+        _premultipliedImage = D3D12Image {};
         // release objects; Init can fail partway through, so any of these may
         // still be null
         if (_currentBackBuffer) {

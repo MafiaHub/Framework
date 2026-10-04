@@ -152,6 +152,11 @@ namespace Framework::External::ImGUI {
         } break;
 #ifdef FW_IMGUI_DX12
         case Graphics::RendererBackend::BACKEND_D3D_12: {
+            if (!_config.renderer->GetD3D12Backend()->WaitForGpu()) {
+                Logging::GetLogger("ImGui")->error("GPU drain failed; retaining DX12 UI resources");
+                return;
+            }
+            _dx12Compositor.Reset();
             ImGui_ImplDX12_Shutdown();
         } break;
 #endif
@@ -211,9 +216,9 @@ namespace Framework::External::ImGUI {
 #ifdef FW_IMGUI_DX12
     void Wrapper::InitDX12Backend() {
         const auto renderBackend = _config.renderer->GetD3D12Backend();
-        const auto rtvFormat     = renderBackend->GetBackBufferFormat();
+        const auto rtvFormat     = Graphics::D3D12UICompositor::RenderFormat(renderBackend->GetBackBufferFormat());
         _dx12RtvFormat           = static_cast<int>(rtvFormat);
-        Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGui DX12 pipeline built for back buffer format {}", _dx12RtvFormat);
+        Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGui DX12 pipeline format {}, back buffer format {}", _dx12RtvFormat, static_cast<int>(renderBackend->GetBackBufferFormat()));
 
         ImGui_ImplDX12_InitInfo initInfo {};
         initInfo.Device               = renderBackend->GetDevice();
@@ -229,7 +234,7 @@ namespace Framework::External::ImGUI {
 
     void Wrapper::SyncDX12RtvFormat() {
         const auto renderBackend = _config.renderer->GetD3D12Backend();
-        if (static_cast<int>(renderBackend->GetBackBufferFormat()) == _dx12RtvFormat) {
+        if (static_cast<int>(Graphics::D3D12UICompositor::RenderFormat(renderBackend->GetBackBufferFormat())) == _dx12RtvFormat) {
             return;
         }
 
@@ -287,9 +292,38 @@ namespace Framework::External::ImGUI {
         } break;
 #ifdef FW_IMGUI_DX12
         case Graphics::RendererBackend::BACKEND_D3D_12: {
-            // TODO(DavoSK): pass second argument here
             const auto renderBackend = _config.renderer->GetD3D12Backend();
-            ImGui_ImplDX12_RenderDrawData(drawData, renderBackend->GetGraphicsCommandList());
+            auto *backBuffer         = renderBackend->GetCurrentBackBuffer();
+            if (!backBuffer) {
+                return {}; // Begin() did not acquire a frame.
+            }
+            const auto description = backBuffer->GetDesc();
+            auto *commands         = renderBackend->GetGraphicsCommandList();
+            if (static_cast<int>(Graphics::D3D12UICompositor::RenderFormat(description.Format)) != _dx12RtvFormat) {
+                // SyncDX12RtvFormat may defer a rebuild if its GPU drain fails.
+                return Framework::Error("DX12 UI render-target format change is pending");
+            }
+            const bool linearOutput = description.Format == DXGI_FORMAT_R16G16B16A16_FLOAT;
+            if (linearOutput) {
+                const auto width = static_cast<UINT>(description.Width);
+                if (!_dx12Compositor.Matches(width, description.Height)) {
+                    if (!renderBackend->WaitForGpu()) {
+                        return Framework::Error("GPU drain failed before resizing the UI compositor");
+                    }
+                    const HRESULT result = _dx12Compositor.Resize(renderBackend->GetDevice(), width, description.Height);
+                    if (FAILED(result)) {
+                        Logging::GetLogger("ImGui")->error("DX12 UI compositor allocation failed: {:#x}", static_cast<unsigned>(result));
+                        return Framework::Error("Could not create the DX12 UI compositor");
+                    }
+                }
+                _dx12Compositor.Begin(commands);
+            }
+            ImGui_ImplDX12_RenderDrawData(drawData, commands);
+            if (linearOutput) {
+                _dx12Compositor.Composite(commands, renderBackend->GetCurrentRenderTarget());
+                auto *heap = renderBackend->GetSRVHeap();
+                commands->SetDescriptorHeaps(1, &heap);
+            }
         } break;
 #endif
         }
