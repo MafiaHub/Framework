@@ -23,7 +23,6 @@
 #include <memory>
 #include <random>
 #include <string>
-#include <thread>
 #include <vector>
 
 // Asset paks: a resource's lane folders built into plain ZIPs an engine mounts, staged beside its
@@ -138,9 +137,10 @@ MODULE(streamed_assets, {
         EQUALS(again[0].sha256 == first[0].sha256, true);
         EQUALS(std::filesystem::last_write_time(firstPath) == firstWritten, true);
 
-        // A changed file: a new pak under a new name, and the old one gone from staging.
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        WriteBytes(root / "demo" / "stream" / "a.bin", 4100, 6);
+        // A same-size edit must change the timestamp fingerprint and replace the pak.
+        const auto modified = std::filesystem::last_write_time(root / "demo" / "stream" / "a.bin");
+        WriteBytes(root / "demo" / "stream" / "a.bin", 4000, 6);
+        std::filesystem::last_write_time(root / "demo" / "stream" / "a.bin", modified + std::chrono::seconds(2));
         const auto changed = builder.Build("demo", root / "demo");
         UEQUALS(changed.size(), 1u);
         EQUALS(changed[0].sha256 != first[0].sha256, true);
