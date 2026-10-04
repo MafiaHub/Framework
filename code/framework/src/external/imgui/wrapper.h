@@ -16,6 +16,7 @@
 #include <utils/result.h>
 
 #include "graphics/types.h"
+#include "graphics/backend/d3d12_ui_compositor.h"
 
 #include <atomic>
 #include <function2/function2.hpp>
@@ -87,6 +88,7 @@ namespace Framework::External::ImGUI {
         void ScaleToBackBuffer();
 
         int _dx12RtvFormat = 0;
+        Graphics::D3D12UICompositor _dx12Compositor;
         void InitDX12Backend();
         void SyncDX12RtvFormat();
 

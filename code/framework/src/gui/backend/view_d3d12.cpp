@@ -156,7 +156,22 @@ namespace Framework::GUI {
 
         const uint32_t srcPitch = static_cast<uint32_t>(_width) * 4;
         for (int y = 0; y < _height; y++) {
-            memcpy(dst + static_cast<size_t>(y) * _uploadPitch, pixels.data() + static_cast<size_t>(y) * srcPitch, srcPitch);
+            auto *row = dst + static_cast<size_t>(y) * _uploadPitch;
+            memcpy(row, pixels.data() + static_cast<size_t>(y) * srcPitch, srcPitch);
+            // CEF supplies premultiplied BGRA; ImGui blends straight alpha.
+            // Convert the upload only: other backends need the original pixels.
+            for (int x = 0; x < _width; ++x) {
+                auto *pixel          = row + static_cast<size_t>(x) * 4;
+                const unsigned alpha = pixel[3];
+                if (alpha == 0) {
+                    pixel[0] = pixel[1] = pixel[2] = 0;
+                }
+                else if (alpha != 255) {
+                    for (int channel = 0; channel < 3; ++channel) {
+                        pixel[channel] = static_cast<uint8_t>(std::min(255U, (pixel[channel] * 255U + alpha / 2) / alpha));
+                    }
+                }
+            }
         }
 
         D3D12_RESOURCE_BARRIER barrier {};

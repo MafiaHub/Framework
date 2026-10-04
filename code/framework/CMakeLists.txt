@@ -158,6 +158,7 @@ if(WIN32)
         src/graphics/backend/d3d9.cpp
         src/graphics/backend/d3d11.cpp
         src/graphics/backend/d3d12.cpp
+        src/graphics/backend/d3d12_ui_compositor.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/pattern_table.cpp

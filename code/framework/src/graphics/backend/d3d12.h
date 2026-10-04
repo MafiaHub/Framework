@@ -119,6 +119,14 @@ namespace Framework::Graphics {
 
         DXGI_FORMAT GetBackBufferFormat() const;
 
+        ID3D12Resource *GetCurrentBackBuffer() const {
+            return _currentBackBuffer;
+        }
+
+        D3D12_CPU_DESCRIPTOR_HANDLE GetCurrentRenderTarget() const {
+            return _frameContext[GetCurrentFrameIndex()]._mainRenderTargetDescriptor;
+        }
+
         // Drain the GPU queue before freeing resources in-flight lists may use.
         // Returns false if the drain can't be confirmed (caller should keep the
         // resources); returns true during teardown, where freeing is always safe.
