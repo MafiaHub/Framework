@@ -21,7 +21,7 @@ namespace Framework::Networking::Replication {
     };
 
     // A player avatar's nametag state. Games embed one, return it from NetworkEntity::GetNametag and
-    // serialize it in their own SerializeFields. Scripted changes route through the owner (SetNametagState).
+    // serialize it in their own SerializeFields. Server-written: the owner neither sends nor overrides it.
     struct NametagState {
         static constexpr uint8_t kAllComponents = static_cast<uint8_t>(NametagComponent::Name) | static_cast<uint8_t>(NametagComponent::Health);
 
@@ -39,9 +39,9 @@ namespace Framework::Networking::Replication {
         }
 
         void Serialize(FieldSerializer &fields) {
-            fields.Field(components);
-            fields.Field(color);
-            fields.Field(text);
+            fields.ServerField(components);
+            fields.ServerField(color);
+            fields.ServerField(text);
         }
     };
 } // namespace Framework::Networking::Replication

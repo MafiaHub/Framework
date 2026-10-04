@@ -13,7 +13,6 @@
 #include <integrations/shared/rpc/emit_script_event.h>
 #include <networking/network_peer.h>
 #include <networking/rpc/client_identity.h>
-#include <networking/rpc/nametag.h>
 #include <networking/replication/nametag_state.h>
 
 #include <sstream>
@@ -86,35 +85,15 @@ namespace Framework::Scripting::Builtins {
         return entity ? entity->GetNametag() : nullptr;
     }
 
-    void Player::SendNametag(const Networking::Replication::NametagState &state) const {
-        // Server-only, like Kick; the getters still read the local replica.
-        if (CoreModules::GetClientInstance()) {
-            return;
-        }
-        auto *entity = Resolve();
-        if (!entity) {
-            return;
-        }
-        auto *peer = CoreModules::GetNetworkPeer();
-        if (!peer) {
-            return;
-        }
-        Networking::RPC::SetNametagState msg;
-        msg.networkId  = entity->GetNetworkID();
-        msg.components = state.components;
-        msg.color      = state.color;
-        msg.text       = state.text;
-        peer->SendRPC(msg, MafiaNet::ToGuid(entity->ownerGUID));
+    Networking::Replication::NametagState *Player::WritableNametag() const {
+        // Server-only, like Kick: the state is a ServerField, so a client write would never leave it.
+        return CoreModules::GetClientInstance() ? nullptr : ResolveNametag();
     }
 
     void Player::SetNametagComponent(Networking::Replication::NametagComponent component, bool enabled) {
-        const auto *current = ResolveNametag();
-        if (!current) {
-            return;
+        if (auto *state = WritableNametag()) {
+            state->Set(component, enabled);
         }
-        Networking::Replication::NametagState next = *current;
-        next.Set(component, enabled);
-        SendNametag(next);
     }
 
     bool Player::HasNametagComponent(Networking::Replication::NametagComponent component) const {
@@ -139,13 +118,9 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Player::SetNametagText(const std::string &text) {
-        const auto *current = ResolveNametag();
-        if (!current) {
-            return;
+        if (auto *state = WritableNametag()) {
+            state->text = text;
         }
-        Networking::Replication::NametagState next = *current;
-        next.text                                  = text;
-        SendNametag(next);
     }
 
     std::string Player::GetNametagText() const {
@@ -154,13 +129,9 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Player::SetNametagColor(uint32_t color) {
-        const auto *current = ResolveNametag();
-        if (!current) {
-            return;
+        if (auto *state = WritableNametag()) {
+            state->color = color;
         }
-        Networking::Replication::NametagState next = *current;
-        next.color                                 = color;
-        SendNametag(next);
     }
 
     uint32_t Player::GetNametagColor() const {
