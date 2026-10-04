@@ -94,6 +94,7 @@ namespace Framework::External::ImGUI {
 
       public:
         [[nodiscard]] Utils::Result<void, Framework::Error> Init(Config &config);
+        // If the DX12 GPU drain fails, stays initialized; retain the renderer and retry.
         void Shutdown() override;
 
         InputState ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;

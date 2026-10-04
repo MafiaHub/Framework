@@ -321,6 +321,8 @@ namespace Framework::External::ImGUI {
             ImGui_ImplDX12_RenderDrawData(drawData, commands);
             if (linearOutput) {
                 _dx12Compositor.Composite(commands, renderBackend->GetCurrentRenderTarget());
+                auto *heap = renderBackend->GetSRVHeap();
+                commands->SetDescriptorHeaps(1, &heap);
             }
         } break;
 #endif
