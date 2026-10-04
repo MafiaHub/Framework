@@ -11,6 +11,7 @@
 #include <logging/logger.h>
 #include <utils/crypto.h>
 
+#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -109,7 +110,7 @@ namespace Framework::Integrations::Server {
         for (const Utils::StreamedAssets::PakSourceEntry &entry : entries) {
             const auto size     = std::filesystem::file_size(entry.sourceFile, code);
             const auto modified = std::filesystem::last_write_time(entry.sourceFile, code).time_since_epoch().count();
-            fingerprint += entry.path + "|" + std::to_string(size) + "|" + std::to_string(modified) + "\n";
+            fingerprint += fmt::format("{}|{}|{}\n", entry.path, size, modified);
         }
         const std::string fingerprintHash = Utils::Crypto::Sha256Hex(fingerprint);
 
