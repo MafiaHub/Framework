@@ -69,6 +69,12 @@ namespace Framework::Utils::StreamedAssets {
             return true;
         }
 
+        bool SeekFile(std::FILE *file, std::uint64_t offset) {
+            // Paks are capped below 2 GiB, so their offsets fit even a 32-bit long.
+            // Check untrusted ZIP offsets before narrowing for the portable API.
+            return offset <= kMaxPakSize && std::fseek(file, static_cast<long>(offset), SEEK_SET) == 0;
+        }
+
         // A pak carries no archive comment -- CryEngine parses one of eight bytes or more as its
         // extended header -- so the end-of-central-directory record is the file's last 22 bytes.
         bool HasNoArchiveComment(std::FILE *file, std::uint64_t fileSize) {
@@ -76,7 +82,7 @@ namespace Framework::Utils::StreamedAssets {
                 return false;
             }
             unsigned char record[kEndOfCentralDirSize];
-            if (_fseeki64(file, static_cast<long long>(fileSize - kEndOfCentralDirSize), SEEK_SET) != 0 || std::fread(record, 1, sizeof(record), file) != sizeof(record)) {
+            if (!SeekFile(file, fileSize - kEndOfCentralDirSize) || std::fread(record, 1, sizeof(record), file) != sizeof(record)) {
                 return false;
             }
             return ReadU32(record) == kEndOfCentralDirSig && ReadU16(record + 20) == 0 && ReadU16(record + 4) == 0 && ReadU16(record + 6) == 0;
@@ -86,7 +92,7 @@ namespace Framework::Utils::StreamedAssets {
         // method, name.
         bool LocalHeaderAgrees(std::FILE *file, const mz_zip_archive_file_stat &stat, std::string &error) {
             unsigned char header[kLocalHeaderSize];
-            if (_fseeki64(file, static_cast<long long>(stat.m_local_header_ofs), SEEK_SET) != 0 || std::fread(header, 1, sizeof(header), file) != sizeof(header)) {
+            if (!SeekFile(file, stat.m_local_header_ofs) || std::fread(header, 1, sizeof(header), file) != sizeof(header)) {
                 error = "cannot read the local header of " + std::string(stat.m_filename);
                 return false;
             }
@@ -236,8 +242,8 @@ namespace Framework::Utils::StreamedAssets {
             return false;
         }
 
-        std::FILE *file = nullptr;
-        if (fopen_s(&file, pakPath.c_str(), "rb") != 0 || file == nullptr) {
+        std::FILE *file = std::fopen(pakPath.c_str(), "rb");
+        if (file == nullptr) {
             error = "cannot open the pak";
             return false;
         }
@@ -249,7 +255,7 @@ namespace Framework::Utils::StreamedAssets {
 
         // miniz takes the stream's current position as the archive's first byte.
         mz_zip_archive zip {};
-        if (_fseeki64(file, 0, SEEK_SET) != 0 || !mz_zip_reader_init_cfile(&zip, file, fileSize, 0)) {
+        if (!SeekFile(file, 0) || !mz_zip_reader_init_cfile(&zip, file, fileSize, 0)) {
             std::fclose(file);
             error = "the pak is not a readable zip";
             return false;
