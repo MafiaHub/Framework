@@ -79,7 +79,9 @@ as a 1ms bounded timeout.
    keep firing — or duplicate — them across reloads.
 3. **Evicts the resource's cached modules.** `Engine::EvictModulesUnderPath`
    removes the resource's entries from the module cache (Node `require.cache`
-   on the server, the V8 module cache on the client), so re-execution re-reads
+   on the server, the V8 module cache on the client). On the server, it also
+   assigns a new generation to file-backed ESM imports under the resource's
+   path, including their local dependencies, so re-execution re-reads
    the edited files instead of returning stale exports.
 4. **Re-parses `package.json`** from disk (manifest edits — entry points,
    dependencies — take effect) and rebuilds the dependency graph.
@@ -124,9 +126,13 @@ Clients that haven't finished connecting ignore `ResourceRefresh`/`ResourceStop`
   third-party Promise has no general cancellation mechanism. Code after a late
   external I/O completion may still resume and must tolerate the resource
   already being stopped.
-- **CommonJS only.** Module-cache eviction covers the framework's CJS load path.
-  Resources loaded via dynamic ESM `import()` are not in `require.cache` and
-  won't be re-read on reload.
+- **ESM reloads retain previous generations.** Server-side `import()` uses a
+  resource generation in the resolved file URL because Node has no public ESM
+  cache eviction API. Imports under the restarted resource's path load fresh
+  exports; modules outside that path keep their existing identities. Node
+  retains older generations until the engine shuts down, so repeated reloads
+  can grow memory use. Existing references to old exports are not rewritten.
+  Client scripts support CommonJS only.
 - **Raw `EventEmitter` listeners leak.** Only framework event listeners
   (`on(...)`) and engine timers are cleaned up. Listeners a resource adds to its
   own emitters (or `process.on`) must be removed in a `resourceStop` handler.
@@ -143,11 +149,10 @@ cache to evict or timer to cancel.
 
 This framework runs **one shared Node runtime** for all resources. Everything in
 the reload sequence above (module eviction, timer cancellation, listener
-cleanup) exists to compensate for that shared runtime. A consequence worth
-knowing: a plain stop+start does **not** reload code here — the entry point
-re-executes against stale module caches. `RestartResource` therefore evicts the
-resource's modules between stop and start, so "restart" reloads code the way it
-does in a per-resource-runtime engine.
+cleanup) exists to compensate for that shared runtime. Starting a stopped
+resource invalidates its module cache before executing its entry point, so
+both a plain stop+start and `RestartResource` pick up edited code. Starting an
+already running resource is a no-op.
 
 The robust long-term direction, if reload correctness becomes a recurring
 concern, is **per-resource isolation** (a dedicated V8 context per resource):
