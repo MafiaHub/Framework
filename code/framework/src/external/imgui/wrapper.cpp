@@ -293,12 +293,12 @@ namespace Framework::External::ImGUI {
 #ifdef FW_IMGUI_DX12
         case Graphics::RendererBackend::BACKEND_D3D_12: {
             const auto renderBackend = _config.renderer->GetD3D12Backend();
-            auto *backBuffer = renderBackend->GetCurrentBackBuffer();
+            auto *backBuffer         = renderBackend->GetCurrentBackBuffer();
             if (!backBuffer) {
                 return {}; // Begin() did not acquire a frame.
             }
-            const auto description  = backBuffer->GetDesc();
-            auto *commands          = renderBackend->GetGraphicsCommandList();
+            const auto description = backBuffer->GetDesc();
+            auto *commands         = renderBackend->GetGraphicsCommandList();
             if (static_cast<int>(Graphics::D3D12UICompositor::RenderFormat(description.Format)) != _dx12RtvFormat) {
                 // SyncDX12RtvFormat may defer a rebuild if its GPU drain fails.
                 return Framework::Error("DX12 UI render-target format change is pending");
