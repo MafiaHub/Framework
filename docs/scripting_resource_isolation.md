@@ -161,7 +161,12 @@ rules.
   either the inspector attached to that resource's environment on demand, or
   Node's worker-style inspector parent handles.
 - **Cost per runtime.** Each environment pays for an isolate and Node's
-  bootstrap. To be measured on a server with many resources before this lands.
+  bootstrap. Measured on Apple Silicon (release build, 30 trivial resources):
+  about 15 ms to start a resource, 6.4 MB of resident memory each, 0.2 ms to
+  stop one, and 0.015 ms to tick all 30 when idle. A server with 200 resources
+  would spend about 3 s starting them and 1.3 GB holding them. Starting from a
+  Node snapshot could cut the bootstrap; the embedder API to do it is not
+  public yet. Still to measure on Windows and Linux servers.
 - **Worker permission.** FiveM refuses workers unless the operator names the
   resource. Whether to do the same is a security decision; adding it later
   breaks servers that already rely on workers.
