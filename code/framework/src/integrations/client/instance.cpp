@@ -485,6 +485,12 @@ namespace Framework::Integrations::Client {
         // nulls both, so freeing the atlas after it faults.
         if (_imguiApp && _imguiApp->IsInitialized()) {
             _imguiApp->Shutdown();
+            if (_imguiApp->IsInitialized()) {
+                // A failed GPU drain retains ImGui's resources. Keep their renderer
+                // and this instance alive so a later Shutdown() can retry safely.
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client shutdown deferred: ImGui is waiting for the GPU");
+                return;
+            }
         }
 
         if (_renderer && _renderer->IsInitialized()) {

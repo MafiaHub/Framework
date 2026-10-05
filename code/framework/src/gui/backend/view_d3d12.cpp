@@ -10,11 +10,44 @@
 #include "logging/logger.h"
 
 #include "graphics/backend/d3d12.h"
+#include "graphics/backend/d3d12_ui_compositor.h"
 
 #include <algorithm>
 #include <imgui.h>
+#ifdef FW_IMGUI_DX12
+#include <imgui_impl_dx12.h>
+#endif
 
 namespace Framework::GUI {
+    namespace {
+#ifdef FW_IMGUI_DX12
+        struct ImageDraw {
+            Graphics::D3D12Backend *backend;
+            D3D12_GPU_DESCRIPTOR_HANDLE texture;
+            float x, y, width, height;
+        };
+
+        void DrawPremultipliedImage(const ImDrawList *, const ImDrawCmd *command) {
+            // ImGui owns a copy of this data; it never points back into the view.
+            const auto &image = *static_cast<const ImageDraw *>(command->UserCallbackData);
+            const auto *data  = ImGui::GetDrawData();
+            auto *state       = static_cast<ImGui_ImplDX12_RenderState *>(ImGui::GetPlatformIO().Renderer_RenderState);
+            const D3D12_RECT scissor {static_cast<LONG>(std::max(0.0f, (command->ClipRect.x - data->DisplayPos.x) * data->FramebufferScale.x)), static_cast<LONG>(std::max(0.0f, (command->ClipRect.y - data->DisplayPos.y) * data->FramebufferScale.y)),
+                static_cast<LONG>((command->ClipRect.z - data->DisplayPos.x) * data->FramebufferScale.x), static_cast<LONG>((command->ClipRect.w - data->DisplayPos.y) * data->FramebufferScale.y)};
+            if (scissor.right <= scissor.left || scissor.bottom <= scissor.top) {
+                return;
+            }
+            state->CommandList->RSSetScissorRects(1, &scissor);
+            const float rect[4] {(image.x - data->DisplayPos.x) * 2 / data->DisplaySize.x - 1, 1 - (image.y - data->DisplayPos.y) * 2 / data->DisplaySize.y, image.width * 2 / data->DisplaySize.x, -image.height * 2 / data->DisplaySize.y};
+            const auto format    = Graphics::D3D12UICompositor::RenderFormat(image.backend->GetCurrentBackBuffer()->GetDesc().Format);
+            const HRESULT result = image.backend->GetPremultipliedImage().Draw(state->Device, state->CommandList, format, image.texture, rect);
+            if (FAILED(result)) {
+                Framework::Logging::GetLogger("Web")->error("DX12 premultiplied image pipeline failed: {:#x}", static_cast<unsigned>(result));
+            }
+        }
+#endif
+    } // namespace
+
     ViewD3D12::ViewD3D12(int id, Graphics::Renderer *graphicsRenderer, Manager *manager): View(id, graphicsRenderer, manager) {}
 
     ViewD3D12::~ViewD3D12() {
@@ -156,6 +189,8 @@ namespace Framework::GUI {
 
         const uint32_t srcPitch = static_cast<uint32_t>(_width) * 4;
         for (int y = 0; y < _height; y++) {
+            // Upload memory may be write-combined: only write to it. CEF's
+            // premultiplied alpha is handled by the image draw's GPU blend state.
             memcpy(dst + static_cast<size_t>(y) * _uploadPitch, pixels.data() + static_cast<size_t>(y) * srcPitch, srcPitch);
         }
 
@@ -243,9 +278,13 @@ namespace Framework::GUI {
             return;
         }
 
-        // ImTextureID must be 64-bit (ImU64) — the GPU descriptor handle is the id
+        // Keep the web draw in the background list's ordering, then restore
+        // ImGui's straight-alpha pipeline for the following widgets.
+#ifdef FW_IMGUI_DX12
         auto *drawList = ImGui::GetBackgroundDrawList();
-        drawList->AddImage(static_cast<ImTextureID>(_srvGpuHandle.ptr), ImVec2(static_cast<float>(_x), static_cast<float>(_y)),
-            ImVec2(static_cast<float>(_x + _width), static_cast<float>(_y + _height)));
+        ImageDraw image {_graphicsRenderer->GetD3D12Backend(), _srvGpuHandle, static_cast<float>(_x), static_cast<float>(_y), static_cast<float>(_width), static_cast<float>(_height)};
+        drawList->AddCallback(DrawPremultipliedImage, &image, sizeof(image));
+        drawList->AddCallback(ImGui::GetPlatformIO().DrawCallback_ResetRenderState);
+#endif
     }
 } // namespace Framework::GUI

@@ -13,6 +13,11 @@ namespace Framework::Networking {
     // later sequenced message on the same channel until it is retransmitted, so the pose stream gets a
     // channel of its own. RPCs name entities, so they share the construction channel to stay ordered
     // after it.
+    //
+    // Presentation carries what a game times against a body's drawn pose -- a swing, a block, the
+    // ruling on a blow -- so a lost inventory or chat message never holds one back. A project that
+    // sends on it keeps every message of one ordered stream there: messages a receiver sequences
+    // against each other must never be split across channels.
     enum class Channel : char {
         Transform    = 0,
         State        = 1,
@@ -21,6 +26,7 @@ namespace Framework::Networking {
         Construction = 3,
         VoiceFrames  = 4,
         VoiceControl = 5,
+        Presentation = 6,
     };
 
     constexpr char ToOrderingChannel(Channel channel) {
@@ -31,4 +37,6 @@ namespace Framework::Networking {
     static_assert(ToOrderingChannel(Channel::Construction) == ToOrderingChannel(Channel::Events));
     static_assert(ToOrderingChannel(Channel::Transform) != ToOrderingChannel(Channel::VoiceFrames));
     static_assert(ToOrderingChannel(Channel::Transform) != ToOrderingChannel(Channel::Assets));
+    static_assert(ToOrderingChannel(Channel::Presentation) != ToOrderingChannel(Channel::Events));
+    static_assert(ToOrderingChannel(Channel::Presentation) != ToOrderingChannel(Channel::Transform));
 } // namespace Framework::Networking

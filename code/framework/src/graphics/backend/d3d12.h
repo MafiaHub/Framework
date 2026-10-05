@@ -9,6 +9,7 @@
 #pragma once
 
 #include "backend.h"
+#include "d3d12_image.h"
 
 #include <memory>
 #include <mutex>
@@ -46,6 +47,7 @@ namespace Framework::Graphics {
         // acquired fresh in Begin(), released in End(); never held across frames
         // so the game can resize/recreate the swapchain freely
         ID3D12Resource *_currentBackBuffer = nullptr;
+        D3D12Image _premultipliedImage;
 
       public:
         bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
@@ -118,6 +120,18 @@ namespace Framework::Graphics {
         }
 
         DXGI_FORMAT GetBackBufferFormat() const;
+
+        D3D12Image &GetPremultipliedImage() {
+            return _premultipliedImage;
+        }
+
+        ID3D12Resource *GetCurrentBackBuffer() const {
+            return _currentBackBuffer;
+        }
+
+        D3D12_CPU_DESCRIPTOR_HANDLE GetCurrentRenderTarget() const {
+            return _frameContext[GetCurrentFrameIndex()]._mainRenderTargetDescriptor;
+        }
 
         // Drain the GPU queue before freeing resources in-flight lists may use.
         // Returns false if the drain can't be confirmed (caller should keep the
