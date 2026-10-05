@@ -41,10 +41,9 @@ namespace Framework::Integrations::Server::Scripting {
         /**
          * Initialize the Node.js engine and resource manager.
          * @param sdkCallback Optional callback for registering additional SDK bindings
-         * @param modVersion Local multiplayer mod version exposed to scripts
          * @return true if initialization succeeded
          */
-        [[nodiscard]] Framework::Scripting::ScriptingError Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback = nullptr, const std::string &modVersion = {});
+        [[nodiscard]] Framework::Scripting::ScriptingError Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback = nullptr);
 
         /**
          * Pre-shutdown: stop all resources before engine shutdown.
@@ -95,6 +94,11 @@ namespace Framework::Integrations::Server::Scripting {
          * before Init(); also updates an already-created resource manager.
          */
         void SetDevMode(bool enabled);
+
+        /**
+         * Set the mod version exposed as ExecutionEnvironment.modVersion. Must be set before Init().
+         */
+        void SetModVersion(const std::string &version) { _modVersion = version; }
 
         /**
          * Get list of resources to send to clients.

@@ -64,8 +64,7 @@ namespace Framework::Integrations::Client::Scripting {
         Shutdown();
     }
 
-    Framework::Scripting::ScriptingError ClientScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback, const std::string &modVersion) {
-        _modVersion = modVersion;
+    Framework::Scripting::ScriptingError ClientScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
         if (!_engine) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
                 ->error("Cannot initialize client scripting: engine is null (Shutdown() was called). "

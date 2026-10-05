@@ -18,16 +18,16 @@ namespace Framework::Scripting::Builtins {
         v8pp::module env(isolate);
         env.const_("isClient", isClient);
         env.const_("isServer", !isClient);
-        env.const_("frameworkVersion", std::string(Framework::Utils::Version::rel));
+        env.const_("frameworkVersion", Framework::Utils::Version::rel);
         env.const_("modVersion", modVersion);
 
         target->Set(context, v8pp::to_v8(isolate, "ExecutionEnvironment"), env.new_instance()).Check();
 
-        auto &metadata = GetScriptingCatalog(isolate).global_object("ExecutionEnvironment", "Runtime-side flags and local release versions exposed as the global ExecutionEnvironment.");
+        auto &metadata = GetScriptingCatalog(isolate).global_object("ExecutionEnvironment", "Runtime-side flags exposed as the global ExecutionEnvironment.");
         metadata.add_property("isClient", "boolean", "True in the sandboxed client scripting runtime.", true);
         metadata.add_property("isServer", "boolean", "True in the authoritative server scripting runtime.", true);
-        metadata.add_property("frameworkVersion", "string", "Release version of the Framework running this script. This is the local client or server version, not the remote peer's version.", true);
-        metadata.add_property("modVersion", "string", "Multiplayer mod version supplied by the local application through InstanceOptions.modVersion. Empty when no mod version was supplied. This is not the underlying game's version or the remote peer's version.", true);
+        metadata.add_property("frameworkVersion", "string", "Local Framework release version.", true);
+        metadata.add_property("modVersion", "string", "Local mod version from InstanceOptions.modVersion; empty when unset.", true);
     }
 
 } // namespace Framework::Scripting::Builtins

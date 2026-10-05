@@ -1324,6 +1324,7 @@ namespace Framework::Integrations::Client {
             if (scriptingModule) {
                 // Set resource cache path before init
                 scriptingModule->SetResourceCachePath(GetAssetCachePath());
+                scriptingModule->SetModVersion(_opts.modVersion);
 
                 RegisterResourceSchemeHandler();
 
@@ -1332,7 +1333,7 @@ namespace Framework::Integrations::Client {
                     this->RegisterScriptingBuiltins(engine);
                 };
 
-                if (scriptingModule->Init(sdkCallback, _opts.modVersion) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
+                if (scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
                     (void)net->Disconnect();
                     return false;

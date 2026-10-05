@@ -52,10 +52,9 @@ namespace Framework::Integrations::Client::Scripting {
         /**
          * Initialize the V8 engine and resource manager.
          * @param sdkCallback Optional callback for registering additional SDK bindings
-         * @param modVersion Local multiplayer mod version exposed to scripts
          * @return true if initialization succeeded
          */
-        [[nodiscard]] Framework::Scripting::ScriptingError Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback = nullptr, const std::string &modVersion = {});
+        [[nodiscard]] Framework::Scripting::ScriptingError Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback = nullptr);
 
         /**
          * Shutdown the V8 engine.
@@ -97,6 +96,11 @@ namespace Framework::Integrations::Client::Scripting {
          * Set the resource cache path (where downloaded resources are stored).
          */
         void SetResourceCachePath(const std::string &path);
+
+        /**
+         * Set the mod version exposed as ExecutionEnvironment.modVersion. Must be set before Init().
+         */
+        void SetModVersion(const std::string &version) { _modVersion = version; }
 
         /**
          * Get the resource cache path.

@@ -44,8 +44,7 @@ namespace Framework::Integrations::Server::Scripting {
         Shutdown();
     }
 
-    Framework::Scripting::ScriptingError ServerScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback, const std::string &modVersion) {
-        _modVersion = modVersion;
+    Framework::Scripting::ScriptingError ServerScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
         // Set the SDK callback before initialization
         if (sdkCallback) {
             _nodeEngine->SetSDKRegisterCallback(sdkCallback);
