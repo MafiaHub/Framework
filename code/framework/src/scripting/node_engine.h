@@ -14,6 +14,7 @@
 #include <cerrno>
 
 #include "engine.h"
+#include "node_runtime.h"
 
 #include <node.h>
 #include <uv.h>
@@ -142,17 +143,24 @@ namespace Framework::Scripting {
         }
 
         /**
+         * Create a further environment on the platform this engine initialised, bootstrapped the
+         * same way as the engine's own: its own isolate, loop and context.
+         * @return The runtime, or null with the reason in `error`.
+         */
+        std::unique_ptr<NodeRuntime> CreateRuntime(std::string &error) const;
+
+        /**
          * Get the Node.js environment.
          */
         node::Environment *GetEnvironment() const {
-            return _env;
+            return _runtime ? _runtime->GetEnvironment() : nullptr;
         }
 
         /**
          * Get the V8 isolate (Node.js uses V8 internally).
          */
         v8::Isolate *GetIsolate() const override {
-            return _isolate;
+            return _runtime ? _runtime->GetIsolate() : nullptr;
         }
 
         /**
@@ -176,10 +184,7 @@ namespace Framework::Scripting {
         static std::shared_ptr<node::InitializationResult> _initResult;
         static bool _platformInitialized;
 
-        // Using CommonEnvironmentSetup for proper Node.js embedding
-        std::unique_ptr<node::CommonEnvironmentSetup> _setup;
-        node::Environment *_env = nullptr;
-        v8::Isolate *_isolate = nullptr;
+        std::unique_ptr<NodeRuntime> _runtime;
 
         // Cached JS function that calls setImmediate(()=>{}) each tick.
         // This serves two purposes for inspector CDP message processing:

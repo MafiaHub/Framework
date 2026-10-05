@@ -294,7 +294,7 @@ option(FW_NODE_INSPECTOR "Enable Node.js inspector for script debugging" OFF)
 if(LIBNODE_AVAILABLE)
     # This is separate because it needs NODE_WANT_INTERNALS and libuv headers which
     # cause Windows SDK errno conflicts (EINVAL/ERANGE undefined) when applied to PCH.
-    add_library(FrameworkNodeEngine OBJECT src/scripting/node_engine.cpp)
+    add_library(FrameworkNodeEngine OBJECT src/scripting/node_engine.cpp src/scripting/node_runtime.cpp)
 
     # Apply the same shared dependencies as Framework
     target_include_directories(FrameworkNodeEngine PUBLIC

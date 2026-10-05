@@ -37,6 +37,133 @@ namespace {
         }
         return result;
     }
+
+    // Node.js internals with require setup and uncaught exception/rejection
+    // handlers. These prevent async errors (timers, promises) from crashing
+    // the host process.
+    //
+    // setUncaughtExceptionCaptureCallback is preferred over process.on('uncaughtException')
+    // because it:
+    //   - Cannot be removed by user scripts (process.removeAllListeners)
+    //   - Prevents abort even with --abort-on-uncaught-exception
+    //   - Is designed for embedder use cases
+    //
+    // For unhandled promise rejections, process.on('unhandledRejection') is used
+    // as there is no capture callback equivalent.
+    //
+    // Both route to __fw_handleUncaughtError if installed later via
+    // InstallUncaughtExceptionHandler(), otherwise log to stderr.
+    constexpr const char *kRuntimeBootstrap =
+        "const publicRequire = require('node:module').createRequire(process.cwd() + '/');"
+        "globalThis.require = publicRequire;"
+        // Node has no public ESM cache eviction API. Give file imports under
+        // an evicted root a new URL identity, including transitive imports.
+        // Keep the hook and generations private and leave other roots alone.
+        "const esmGenerations = new Map();"
+        "let esmGeneration = 0;"
+        "const { fileURLToPath } = publicRequire('node:url');"
+        "publicRequire('node:module').registerHooks({"
+        "  resolve(specifier, context, nextResolve) {"
+        "    const result = nextResolve(specifier, context);"
+        "    if (!result.url.startsWith('file:')) return result;"
+        "    const path = fileURLToPath(result.url).replace(/\\\\/g, '/');"
+        "    let generation = 0;"
+        "    for (const [root, entry] of esmGenerations) {"
+        "      if ((entry.ci ? path.toLowerCase() : path).startsWith(root)) {"
+        "        generation = Math.max(generation, entry.generation);"
+        "      }"
+        "    }"
+        "    if (generation) {"
+        "      const url = new URL(result.url);"
+        "      url.searchParams.set('__fw_resource_generation', String(generation));"
+        "      return { ...result, url: url.href };"
+        "    }"
+        "    return result;"
+        "  }"
+        "});"
+        // Capture the real require.cache before sandboxing hides it, so
+        // C++ can evict a resource's modules on reload.
+        "Object.defineProperty(globalThis, '__fw_evictModulesUnderPath', {"
+        "  value: function(root, ci) {"
+        "    try {"
+        "      const cache = publicRequire.cache; if (!cache) return 0;"
+        "      let r = String(root).replace(/\\\\/g, '/'); if (ci) r = r.toLowerCase();"
+        "      esmGenerations.set(r, { ci, generation: ++esmGeneration });"
+        "      let removed = 0;"
+        "      for (const k of Object.keys(cache)) {"
+        "        let nk = k.replace(/\\\\/g, '/'); if (ci) nk = nk.toLowerCase();"
+        "        if (nk.indexOf(r) === 0) { delete cache[k]; removed++; }"
+        "      }"
+        "      return removed;"
+        "    } catch (e) { return 0; }"
+        "  }, writable: false, configurable: false, enumerable: false"
+        "});"
+        // Wrap global timers to track them per resource (attributed via
+        // __fw_ownerOf) so a resource's timers can be cancelled on stop.
+        // The real handle is returned, so clearTimeout/unref/promisify work.
+        "(function(){"
+        "  const reg = new Map();"
+        "  const _st = globalThis.setTimeout, _si = globalThis.setInterval,"
+        "        _ct = globalThis.clearTimeout, _ci = globalThis.clearInterval;"
+        "  function ownerSet(n){ let s = reg.get(n); if (!s) { s = new Set(); reg.set(n, s); } return s; }"
+        "  function ownerOf(fn){ try { return (typeof fn === 'function' && typeof globalThis.__fw_ownerOf === 'function') ? globalThis.__fw_ownerOf(fn) : ''; } catch (e) { return ''; } }"
+        "  globalThis.setTimeout = function(fn){"
+        "    const name = ownerOf(fn);"
+        "    let handle;"
+        "    const a = Array.prototype.slice.call(arguments);"
+        "    if (typeof fn === 'function' && name) {"
+        "      a[0] = function(){ const s = reg.get(name); if (s) s.delete(handle); return fn.apply(this, arguments); };"
+        "    }"
+        "    handle = _st.apply(this, a);"
+        "    if (name) ownerSet(name).add(handle);"
+        "    return handle;"
+        "  };"
+        "  globalThis.setInterval = function(fn){"
+        "    const name = ownerOf(fn);"
+        "    const handle = _si.apply(this, arguments);"
+        "    if (name) ownerSet(name).add(handle);"
+        "    return handle;"
+        "  };"
+        "  globalThis.clearTimeout = function(h){ for (const s of reg.values()) s.delete(h); return _ct(h); };"
+        "  globalThis.clearInterval = function(h){ for (const s of reg.values()) s.delete(h); return _ci(h); };"
+        "  try {"
+        "    const PCS = Symbol.for('nodejs.util.promisify.custom');"
+        "    if (_st[PCS]) globalThis.setTimeout[PCS] = _st[PCS];"
+        "    if (_si[PCS]) globalThis.setInterval[PCS] = _si[PCS];"
+        "  } catch (e) {}"
+        "  Object.defineProperty(globalThis, '__fw_clearResourceTimers', {"
+        "    value: function(name){"
+        "      const s = reg.get(name); if (!s) return 0;"
+        "      let n = 0;"
+        "      for (const h of s) { try { _ct(h); _ci(h); } catch (e) {} n++; }"
+        "      reg.delete(name); return n;"
+        "    }, writable: false, configurable: false, enumerable: false"
+        "  });"
+        "})();"
+        "process.setUncaughtExceptionCaptureCallback((err) => {"
+        "  try {"
+        "    const msg = err instanceof Error ? (err.stack || err.message) : String(err);"
+        "    if (typeof globalThis.__fw_handleUncaughtError === 'function') {"
+        "      globalThis.__fw_handleUncaughtError(msg, 'uncaughtException');"
+        "    } else {"
+        "      console.error('[uncaughtException]', msg);"
+        "    }"
+        "  } catch(e) {"
+        "    console.error('Error in uncaught exception handler:', e);"
+        "  }"
+        "});"
+        "process.on('unhandledRejection', (reason) => {"
+        "  try {"
+        "    const msg = reason instanceof Error ? (reason.stack || reason.message) : String(reason);"
+        "    if (typeof globalThis.__fw_handleUncaughtError === 'function') {"
+        "      globalThis.__fw_handleUncaughtError(msg, 'unhandledRejection');"
+        "    } else {"
+        "      console.error('[unhandledRejection]', msg);"
+        "    }"
+        "  } catch(e) {"
+        "    console.error('Error in unhandled rejection handler:', e);"
+        "  }"
+        "});";
 } // anonymous namespace
 
 namespace Framework::Scripting {
@@ -72,41 +199,29 @@ namespace Framework::Scripting {
     }
 
     void NodeEngine::Shutdown() {
-        if (!_initialized || !_setup) {
+        if (!_initialized || !_runtime) {
             _initialized = false;
             return;
         }
 
-        // Following Node.js embedtest.cc pattern exactly:
-        // 1. V8 scopes in a block for any final JS operations
-        // 2. Scopes exit when block ends
-        // 3. node::Stop() called AFTER scopes are released
-        // 4. CommonEnvironmentSetup destructor runs last
+        v8::Isolate *isolate = _runtime->GetIsolate();
         {
-            v8::Locker locker(_isolate);
-            v8::Isolate::Scope isolateScope(_isolate);
-            v8::HandleScope handleScope(_isolate);
-            v8::Context::Scope contextScope(_setup->context());
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Context::Scope contextScope(_runtime->GetContext());
 
             Builtins::Messages::Shutdown();
         }
-        // All V8 scopes have now exited
-
-        // Stop Node.js environment AFTER scopes are released (per embedtest.cc)
-        node::Stop(_env);
 
         // Release persistent handles before destroying the isolate
         _interruptDrainFn.Reset();
 
         // Drop cached builtin class wrappers before the isolate dies (avoids leak + stale reuse).
-        Builtins::UnregisterAll(_isolate);
+        Builtins::UnregisterAll(isolate);
 
-        // Clear our references before destroying setup
-        _env = nullptr;
-        _isolate = nullptr;
-
-        // CommonEnvironmentSetup destructor handles isolate disposal
-        _setup.reset();
+        // Stops the environment with no V8 scope held, then disposes the isolate (embedtest.cc order).
+        _runtime.reset();
 
         _initialized = false;
     }
@@ -155,166 +270,26 @@ namespace Framework::Scripting {
         return true;
     }
 
+    std::unique_ptr<NodeRuntime> NodeEngine::CreateRuntime(std::string &error) const {
+        if (!_platformInitialized) {
+            error = "Node.js platform not initialized";
+            return nullptr;
+        }
+        // The engine's own environment holds the inspector and the process state.
+        return NodeRuntime::Create(_platform.get(), _initResult->args(), _initResult->exec_args(), node::EnvironmentFlags::kNoCreateInspector, kRuntimeBootstrap, error);
+    }
+
     bool NodeEngine::CreateEnvironment() {
-        // Use CommonEnvironmentSetup for proper Node.js embedding
-        std::vector<std::string> errors;
-        _setup = node::CommonEnvironmentSetup::Create(
-            _platform.get(),
-            &errors,
-            _initResult->args(),
-            _initResult->exec_args()
-        );
-
-        if (!_setup) {
-            _lastError = "Failed to create Node.js environment setup";
-            for (const auto &err : errors) {
-                _lastError += "\n" + err;
-            }
+        _runtime = NodeRuntime::Create(_platform.get(), _initResult->args(), _initResult->exec_args(), node::EnvironmentFlags::kDefaultFlags, kRuntimeBootstrap, _lastError);
+        if (!_runtime) {
             return false;
         }
 
-        _isolate = _setup->isolate();
-        _env = _setup->env();
-
-        // Enter scopes for LoadEnvironment as required by Node.js docs
-        v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolateScope(_isolate);
-        v8::HandleScope handleScope(_isolate);
-        v8::Context::Scope contextScope(_setup->context());
-
-        // Load Node.js internals with require setup and uncaught exception/rejection
-        // handlers. These prevent async errors (timers, promises) from crashing
-        // the host process.
-        //
-        // setUncaughtExceptionCaptureCallback is preferred over process.on('uncaughtException')
-        // because it:
-        //   - Cannot be removed by user scripts (process.removeAllListeners)
-        //   - Prevents abort even with --abort-on-uncaught-exception
-        //   - Is designed for embedder use cases
-        //
-        // For unhandled promise rejections, process.on('unhandledRejection') is used
-        // as there is no capture callback equivalent.
-        //
-        // Both route to __fw_handleUncaughtError if installed later via
-        // InstallUncaughtExceptionHandler(), otherwise log to stderr.
-        v8::MaybeLocal<v8::Value> loadResult = node::LoadEnvironment(
-            _env,
-            "const publicRequire = require('node:module').createRequire(process.cwd() + '/');"
-            "globalThis.require = publicRequire;"
-            // Node has no public ESM cache eviction API. Give file imports under
-            // an evicted root a new URL identity, including transitive imports.
-            // Keep the hook and generations private and leave other roots alone.
-            "const esmGenerations = new Map();"
-            "let esmGeneration = 0;"
-            "const { fileURLToPath } = publicRequire('node:url');"
-            "publicRequire('node:module').registerHooks({"
-            "  resolve(specifier, context, nextResolve) {"
-            "    const result = nextResolve(specifier, context);"
-            "    if (!result.url.startsWith('file:')) return result;"
-            "    const path = fileURLToPath(result.url).replace(/\\\\/g, '/');"
-            "    let generation = 0;"
-            "    for (const [root, entry] of esmGenerations) {"
-            "      if ((entry.ci ? path.toLowerCase() : path).startsWith(root)) {"
-            "        generation = Math.max(generation, entry.generation);"
-            "      }"
-            "    }"
-            "    if (generation) {"
-            "      const url = new URL(result.url);"
-            "      url.searchParams.set('__fw_resource_generation', String(generation));"
-            "      return { ...result, url: url.href };"
-            "    }"
-            "    return result;"
-            "  }"
-            "});"
-            // Capture the real require.cache before sandboxing hides it, so
-            // C++ can evict a resource's modules on reload.
-            "Object.defineProperty(globalThis, '__fw_evictModulesUnderPath', {"
-            "  value: function(root, ci) {"
-            "    try {"
-            "      const cache = publicRequire.cache; if (!cache) return 0;"
-            "      let r = String(root).replace(/\\\\/g, '/'); if (ci) r = r.toLowerCase();"
-            "      esmGenerations.set(r, { ci, generation: ++esmGeneration });"
-            "      let removed = 0;"
-            "      for (const k of Object.keys(cache)) {"
-            "        let nk = k.replace(/\\\\/g, '/'); if (ci) nk = nk.toLowerCase();"
-            "        if (nk.indexOf(r) === 0) { delete cache[k]; removed++; }"
-            "      }"
-            "      return removed;"
-            "    } catch (e) { return 0; }"
-            "  }, writable: false, configurable: false, enumerable: false"
-            "});"
-            // Wrap global timers to track them per resource (attributed via
-            // __fw_ownerOf) so a resource's timers can be cancelled on stop.
-            // The real handle is returned, so clearTimeout/unref/promisify work.
-            "(function(){"
-            "  const reg = new Map();"
-            "  const _st = globalThis.setTimeout, _si = globalThis.setInterval,"
-            "        _ct = globalThis.clearTimeout, _ci = globalThis.clearInterval;"
-            "  function ownerSet(n){ let s = reg.get(n); if (!s) { s = new Set(); reg.set(n, s); } return s; }"
-            "  function ownerOf(fn){ try { return (typeof fn === 'function' && typeof globalThis.__fw_ownerOf === 'function') ? globalThis.__fw_ownerOf(fn) : ''; } catch (e) { return ''; } }"
-            "  globalThis.setTimeout = function(fn){"
-            "    const name = ownerOf(fn);"
-            "    let handle;"
-            "    const a = Array.prototype.slice.call(arguments);"
-            "    if (typeof fn === 'function' && name) {"
-            "      a[0] = function(){ const s = reg.get(name); if (s) s.delete(handle); return fn.apply(this, arguments); };"
-            "    }"
-            "    handle = _st.apply(this, a);"
-            "    if (name) ownerSet(name).add(handle);"
-            "    return handle;"
-            "  };"
-            "  globalThis.setInterval = function(fn){"
-            "    const name = ownerOf(fn);"
-            "    const handle = _si.apply(this, arguments);"
-            "    if (name) ownerSet(name).add(handle);"
-            "    return handle;"
-            "  };"
-            "  globalThis.clearTimeout = function(h){ for (const s of reg.values()) s.delete(h); return _ct(h); };"
-            "  globalThis.clearInterval = function(h){ for (const s of reg.values()) s.delete(h); return _ci(h); };"
-            "  try {"
-            "    const PCS = Symbol.for('nodejs.util.promisify.custom');"
-            "    if (_st[PCS]) globalThis.setTimeout[PCS] = _st[PCS];"
-            "    if (_si[PCS]) globalThis.setInterval[PCS] = _si[PCS];"
-            "  } catch (e) {}"
-            "  Object.defineProperty(globalThis, '__fw_clearResourceTimers', {"
-            "    value: function(name){"
-            "      const s = reg.get(name); if (!s) return 0;"
-            "      let n = 0;"
-            "      for (const h of s) { try { _ct(h); _ci(h); } catch (e) {} n++; }"
-            "      reg.delete(name); return n;"
-            "    }, writable: false, configurable: false, enumerable: false"
-            "  });"
-            "})();"
-            "process.setUncaughtExceptionCaptureCallback((err) => {"
-            "  try {"
-            "    const msg = err instanceof Error ? (err.stack || err.message) : String(err);"
-            "    if (typeof globalThis.__fw_handleUncaughtError === 'function') {"
-            "      globalThis.__fw_handleUncaughtError(msg, 'uncaughtException');"
-            "    } else {"
-            "      console.error('[uncaughtException]', msg);"
-            "    }"
-            "  } catch(e) {"
-            "    console.error('Error in uncaught exception handler:', e);"
-            "  }"
-            "});"
-            "process.on('unhandledRejection', (reason) => {"
-            "  try {"
-            "    const msg = reason instanceof Error ? (reason.stack || reason.message) : String(reason);"
-            "    if (typeof globalThis.__fw_handleUncaughtError === 'function') {"
-            "      globalThis.__fw_handleUncaughtError(msg, 'unhandledRejection');"
-            "    } else {"
-            "      console.error('[unhandledRejection]', msg);"
-            "    }"
-            "  } catch(e) {"
-            "    console.error('Error in unhandled rejection handler:', e);"
-            "  }"
-            "});"
-        );
-
-        if (loadResult.IsEmpty()) {
-            _lastError = "Failed to load Node.js environment";
-            return false;
-        }
+        v8::Isolate *isolate = _runtime->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Context::Scope contextScope(_runtime->GetContext());
 
         // Apply sandbox restrictions if enabled
         if (_options.sandboxed && !ApplySandbox()) {
@@ -331,14 +306,14 @@ namespace Framework::Scripting {
         // V8 safepoint for interrupt draining) and activates CheckImmediate
         // which calls RunAndClearNativeImmediates → RunAndClearInterrupts.
         if (_options.enableInspector) {
-            v8::Local<v8::Context> ctx = _setup->context();
+            v8::Local<v8::Context> ctx = _runtime->GetContext();
             v8::Local<v8::String> source = v8::String::NewFromUtf8Literal(
-                _isolate, "(function(){ setImmediate(function(){}); })");
+                GetIsolate(), "(function(){ setImmediate(function(){}); })");
             v8::Local<v8::Script> script;
             if (v8::Script::Compile(ctx, source).ToLocal(&script)) {
                 v8::Local<v8::Value> result;
                 if (script->Run(ctx).ToLocal(&result) && result->IsFunction()) {
-                    _interruptDrainFn.Reset(_isolate, result.As<v8::Function>());
+                    _interruptDrainFn.Reset(GetIsolate(), result.As<v8::Function>());
                 }
             }
         }
@@ -348,15 +323,9 @@ namespace Framework::Scripting {
     }
 
     void NodeEngine::Tick() {
-        if (!_initialized || !_setup) {
+        if (!_initialized || !_runtime) {
             return;
         }
-
-        v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolateScope(_isolate);
-        v8::HandleScope handleScope(_isolate);
-        v8::Local<v8::Context> context = _setup->context();
-        v8::Context::Scope contextScope(context);
 
 #ifdef FW_NODE_INSPECTOR
         // Trigger V8 interrupt processing for inspector CDP messages.
@@ -364,22 +333,17 @@ namespace Framework::Scripting {
         // safepoint) and activates Node's CheckImmediate uv_check handle,
         // which calls RunAndClearNativeImmediates → RunAndClearInterrupts.
         if (!_interruptDrainFn.IsEmpty()) {
-            _interruptDrainFn.Get(_isolate)->Call(context, v8::Undefined(_isolate), 0, nullptr)
-                .FromMaybe(v8::Local<v8::Value>());
+            v8::Isolate *isolate = _runtime->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = _runtime->GetContext();
+            v8::Context::Scope contextScope(context);
+            _interruptDrainFn.Get(isolate)->Call(context, v8::Undefined(isolate), 0, nullptr).FromMaybe(v8::Local<v8::Value>());
         }
 #endif
 
-        // Process microtasks (Promise continuations, async/await)
-        _isolate->PerformMicrotaskCheckpoint();
-
-        // Run pending libuv events (non-blocking)
-        uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
-
-        // Drain V8 platform tasks (background compile, etc.)
-        _platform->DrainTasks(_isolate);
-
-        // Process any microtasks that were queued by I/O callbacks or platform tasks
-        _isolate->PerformMicrotaskCheckpoint();
+        _runtime->Tick();
     }
 
     bool NodeEngine::ExecuteFile(std::string_view filepath) {
@@ -440,8 +404,8 @@ namespace Framework::Scripting {
     }
 
     v8::Local<v8::Context> NodeEngine::GetContext() const {
-        if (_setup) {
-            return _setup->context();
+        if (_runtime) {
+            return _runtime->GetContext();
         }
         return v8::Local<v8::Context>();
     }
@@ -453,29 +417,29 @@ namespace Framework::Scripting {
         _resourcesPath = ec ? resourcesPath : canonicalPath.string();
 
         // Create C++ handler function accessible from JS
-        v8::Local<v8::Context> context = _setup->context();
-        v8::Local<v8::External> data = v8::External::New(_isolate, this);
+        v8::Local<v8::Context> context = _runtime->GetContext();
+        v8::Local<v8::External> data = v8::External::New(GetIsolate(), this);
         v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(
-            _isolate, OnUncaughtError, data);
+            GetIsolate(), OnUncaughtError, data);
         v8::Local<v8::Function> fn = tmpl->GetFunction(context).ToLocalChecked();
 
         v8::Local<v8::String> key = v8::String::NewFromUtf8(
-            _isolate, "__fw_handleUncaughtError").ToLocalChecked();
+            GetIsolate(), "__fw_handleUncaughtError").ToLocalChecked();
         context->Global()->Set(context, key, fn).Check();
     }
 
     void NodeEngine::InstallResourceTimerTracking() {
-        if (!_setup) {
+        if (!_runtime) {
             return;
         }
-        v8::Local<v8::Context> context = _setup->context();
-        v8::Local<v8::External> data = v8::External::New(_isolate, this);
+        v8::Local<v8::Context> context = _runtime->GetContext();
+        v8::Local<v8::External> data = v8::External::New(GetIsolate(), this);
         v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(
-            _isolate, OnTimerOwnerLookup, data);
+            GetIsolate(), OnTimerOwnerLookup, data);
         v8::Local<v8::Function> fn = tmpl->GetFunction(context).ToLocalChecked();
 
         v8::Local<v8::String> key = v8::String::NewFromUtf8(
-            _isolate, "__fw_ownerOf").ToLocalChecked();
+            GetIsolate(), "__fw_ownerOf").ToLocalChecked();
         // Read-only/non-configurable so scripts can't replace it and break
         // timer ownership tracking.
         context->Global()->DefineOwnProperty(context, key, fn,
@@ -710,27 +674,27 @@ namespace Framework::Scripting {
 })();
 )JS";
 
-        v8::Local<v8::Context> context = _setup->context();
+        v8::Local<v8::Context> context = _runtime->GetContext();
 
         // Set inspector flag before sandbox code runs so it can conditionally
         // allow the inspector module for debugging
         if (_options.enableInspector) {
             v8::Local<v8::String> key =
-                v8::String::NewFromUtf8(_isolate, "__INSPECTOR_ENABLED__").ToLocalChecked();
-            context->Global()->Set(context, key, v8::Boolean::New(_isolate, true)).Check();
+                v8::String::NewFromUtf8(GetIsolate(), "__INSPECTOR_ENABLED__").ToLocalChecked();
+            context->Global()->Set(context, key, v8::Boolean::New(GetIsolate(), true)).Check();
         }
 
-        v8::TryCatch tryCatch(_isolate);
+        v8::TryCatch tryCatch(GetIsolate());
 
         v8::Local<v8::String> source =
-            v8::String::NewFromUtf8(_isolate, sandboxCode).ToLocalChecked();
+            v8::String::NewFromUtf8(GetIsolate(), sandboxCode).ToLocalChecked();
         v8::ScriptOrigin origin(
-            v8::String::NewFromUtf8(_isolate, "<sandbox-init>").ToLocalChecked());
+            v8::String::NewFromUtf8(GetIsolate(), "<sandbox-init>").ToLocalChecked());
 
         v8::Local<v8::Script> script;
         if (!v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
             if (tryCatch.HasCaught()) {
-                _lastError = FormatV8Exception(_isolate, tryCatch, "Sandbox script compilation error");
+                _lastError = FormatV8Exception(GetIsolate(), tryCatch, "Sandbox script compilation error");
             } else {
                 _lastError = "Failed to compile sandbox script";
             }
@@ -740,7 +704,7 @@ namespace Framework::Scripting {
         v8::Local<v8::Value> result;
         if (!script->Run(context).ToLocal(&result)) {
             if (tryCatch.HasCaught()) {
-                _lastError = FormatV8Exception(_isolate, tryCatch, "Sandbox script execution error");
+                _lastError = FormatV8Exception(GetIsolate(), tryCatch, "Sandbox script execution error");
             } else {
                 _lastError = "Failed to execute sandbox script";
             }
