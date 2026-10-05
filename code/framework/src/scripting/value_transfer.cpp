@@ -139,8 +139,8 @@ namespace Framework::Scripting {
                     if (!_functions.exportFunction) {
                         return Fail(where, "a function cannot be copied here");
                     }
-                    out.kind      = TransferredValue::Kind::Function;
-                    out.reference = _functions.exportFunction(_isolate, value.As<v8::Function>());
+                    out.kind = TransferredValue::Kind::Function;
+                    _functions.exportFunction(_isolate, value.As<v8::Function>(), out);
                     return true;
                 }
 

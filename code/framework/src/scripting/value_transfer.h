@@ -17,6 +17,7 @@
 #include <utils/result.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -72,16 +73,17 @@ namespace Framework::Scripting {
         // ride in `properties` too, under those names).
         std::vector<std::pair<std::string, TransferredValue>> properties;
 
-        // Function: the id the exporting side handed out for it.
+        // Function: the id the exporting side handed out for it, and what keeps it exported while this copy exists.
         uint64_t reference = 0;
+        std::shared_ptr<void> retainer;
     };
 
     /**
      * How functions cross. Without these, copying a function fails.
      */
     struct TransferFunctions {
-        // Source side: keep the function reachable and return the id the other side will call it by.
-        fu2::function<uint64_t(v8::Isolate *, v8::Local<v8::Function>) const> exportFunction;
+        // Source side: keep the function reachable and fill in `reference` and `retainer`.
+        fu2::function<void(v8::Isolate *, v8::Local<v8::Function>, TransferredValue &) const> exportFunction;
 
         // Target side: make the callable stand-in for an exported function.
         fu2::function<v8::MaybeLocal<v8::Function>(v8::Isolate *, v8::Local<v8::Context>, uint64_t) const> importFunction;

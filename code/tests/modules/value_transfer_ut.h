@@ -168,7 +168,7 @@ MODULE(value_transfer, {
     IT("hands functions to the export and import hooks", {
         ValueTransferTest::Pair pair;
         TransferFunctions functions;
-        functions.exportFunction = [](v8::Isolate *, v8::Local<v8::Function>) -> uint64_t { return 7; };
+        functions.exportFunction = [](v8::Isolate *, v8::Local<v8::Function>, TransferredValue &out) { out.reference = 7; };
         functions.importFunction = [](v8::Isolate *isolate, v8::Local<v8::Context> context, uint64_t reference) -> v8::MaybeLocal<v8::Function> {
             return v8::Function::New(context, [](const v8::FunctionCallbackInfo<v8::Value> &info) { info.GetReturnValue().Set(info.Data()); }, v8::Number::New(isolate, static_cast<double>(reference)));
         };

@@ -114,10 +114,10 @@ rules.
 1. **Runtime split** - `NodeRuntime` extracted from `NodeEngine`; the engine
    can create further runtimes. No behaviour change. *(done)*
 2. **Value transfer** - copy a value out of one isolate and into another, with
-   the table above; unit-tested across two runtimes.
+   the table above; unit-tested across two runtimes. *(done)*
 3. **Function references** - call a function owned by another runtime,
    synchronously, with arguments and results transferred; promises settle
-   across runtimes.
+   across runtimes. *(done)*
 4. **Per-resource runtimes** - `ResourceManager` creates and destroys a runtime
    with each resource; builtins and the SDK callback register per runtime;
    every runtime is ticked; uncaught errors are attributed by runtime instead
