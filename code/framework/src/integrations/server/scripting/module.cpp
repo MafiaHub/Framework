@@ -97,7 +97,6 @@ namespace Framework::Integrations::Server::Scripting {
             v8::Context::Scope contextScope(context);
 
             _nodeEngine->InstallUncaughtExceptionHandler(_resourcesPath);
-            _nodeEngine->InstallResourceTimerTracking();
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("JS Server scripting module initialized with Node.js engine");

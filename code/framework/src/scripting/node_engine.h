@@ -90,16 +90,6 @@ namespace Framework::Scripting {
         void Shutdown() override;
         bool ExecuteFile(std::string_view filepath) override;
 
-        // Evict CommonJS modules and advance ESM import identities under rootPath.
-        void EvictModulesUnderPath(const std::string &rootPath) override;
-
-        // Cancel timers the named resource created (via the bootstrap shim).
-        void ClearResourceTimers(const std::string &resourceName) override;
-
-        // Install the privileged __fw_ownerOf(fn) helper for the timer shim.
-        // Call once after Init() with V8 scopes active.
-        void InstallResourceTimerTracking();
-
         /**
          * Process pending Node.js events (non-blocking).
          * Call this from game loop to process async operations.
@@ -211,8 +201,6 @@ namespace Framework::Scripting {
         // Destroy the runtimes whose destruction was deferred because they were executing.
         void FlushRetiredRuntimes();
 
-        // __fw_ownerOf(fn): resource owning a function, from its script origin.
-        static void OnTimerOwnerLookup(const v8::FunctionCallbackInfo<v8::Value> &info);
 
         NodeEngineOptions _options;
 

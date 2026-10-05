@@ -146,8 +146,9 @@ rules.
 5. **Cross-runtime builtins** - events, exports, imports and messages dispatch
    across runtimes through the transfer and references above; state bag
    subscriptions are per isolate already and go with the runtime. *(done)*
-6. **Remove the shims** - timer ownership, module eviction and stack-based
-   resource lookup go from the Node engine.
+6. **Remove the shims** - the timer-ownership wrapper, module eviction and the
+   ESM reload hooks go from the Node engine; a fresh runtime per start does
+   their work. The client's V8 engine keeps its own. *(done)*
 7. **Projects** - kcd2, m2o, m3o and hogwarts register their handle types and
    drop the handles they keep in a resource's runtime when it stops.
 8. **Follow-ups** - a per-resource monitor (time and heap per runtime, slow

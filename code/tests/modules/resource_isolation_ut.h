@@ -92,6 +92,56 @@ MODULE(resource_isolation, {
         TestManagerHelper::Cleanup();
     });
 
+    IT("stops a resource's timers and closes its servers when the resource stops", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("ticker", R"(
+            let ticks = 0;
+            setInterval(() => __record('ticks', ++ticks), 2);
+            const server = require('node:http').createServer();
+            server.on('error', (error) => __record('listenError', 1));
+            server.listen(47311, '127.0.0.1', () => __record('listening', __recorded('listening') + 1));
+        )");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        TestManagerHelper::Recorded()["listening"] = 0;
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("ticker"), true);
+        EQUALS(ResourceIsolationTest::TickUntilRecorded(engine, "ticks"), true);
+        const auto listenDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (TestManagerHelper::RecordedValue("listening") < 1 && std::chrono::steady_clock::now() < listenDeadline) {
+            engine.Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(TestManagerHelper::RecordedValue("listening"), 1);
+
+        EQUALS((bool)manager.StopResource("ticker"), true);
+        const int32_t ticksAtStop = TestManagerHelper::RecordedValue("ticks");
+        for (int i = 0; i < 20; ++i) {
+            engine.Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        EQUALS(TestManagerHelper::RecordedValue("ticks"), ticksAtStop);
+
+        // The port came back with the runtime: a fresh start listens on it again.
+        EQUALS((bool)manager.StartResource("ticker"), true);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (TestManagerHelper::RecordedValue("listening") < 2 && std::chrono::steady_clock::now() < deadline) {
+            engine.Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(TestManagerHelper::RecordedValue("listening"), 2);
+        EQUALS(TestManagerHelper::RecordedValue("listenError"), -1);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
     IT("gives every resource its own globals", {
         TestManagerHelper::Cleanup();
         ResourceIsolationTest::WriteResource("globals-first", "globalThis.shared = 'first';");
