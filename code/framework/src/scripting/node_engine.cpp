@@ -11,6 +11,7 @@
 #include "builtins/builtins.h"
 #include "builtins/messages.h"
 #include "resource/resource_manager.h"
+#include "scripting_catalog.h"
 
 #include <logging/logger.h>
 
@@ -204,6 +205,13 @@ namespace Framework::Scripting {
             return;
         }
 
+        // Resources have normally stopped by now; any runtime left goes before the engine's own.
+        FlushRetiredRuntimes();
+        while (!_resourceRuntimes.empty()) {
+            auto node = _resourceRuntimes.extract(_resourceRuntimes.begin());
+            TeardownResourceRuntime(std::move(node.mapped()));
+        }
+
         v8::Isolate *isolate = _runtime->GetIsolate();
         {
             v8::Locker locker(isolate);
@@ -212,7 +220,9 @@ namespace Framework::Scripting {
             v8::Context::Scope contextScope(_runtime->GetContext());
 
             Builtins::Messages::Shutdown();
+            _references->RemoveRuntime(_hostReference);
         }
+        _references.reset();
 
         // Release persistent handles before destroying the isolate
         _interruptDrainFn.Reset();
@@ -291,6 +301,9 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(isolate);
         v8::Context::Scope contextScope(_runtime->GetContext());
 
+        _references    = std::make_unique<FunctionReferences>();
+        _hostReference = _references->AddRuntime(isolate, _runtime->GetContext(), "server");
+
         // Apply sandbox restrictions if enabled
         if (_options.sandboxed && !ApplySandbox()) {
             _lastError = "Failed to apply sandbox: " + _lastError;
@@ -343,7 +356,28 @@ namespace Framework::Scripting {
         }
 #endif
 
-        _runtime->Tick();
+        FlushRetiredRuntimes();
+
+        // A runtime that is executing further up this thread's stack is not ticked from inside itself: uv_run does
+        // not nest.
+        if (!_runtime->GetIsolate()->IsInUse()) {
+            _runtime->Tick();
+        }
+
+        // A tick can stop resources, so walk the names rather than the map.
+        std::vector<std::string> names;
+        names.reserve(_resourceRuntimes.size());
+        for (const auto &[name, runtime] : _resourceRuntimes) {
+            names.push_back(name);
+        }
+        for (const auto &name : names) {
+            const auto it = _resourceRuntimes.find(name);
+            if (it != _resourceRuntimes.end() && !it->second->runtime->GetIsolate()->IsInUse()) {
+                it->second->runtime->Tick();
+            }
+        }
+
+        FlushRetiredRuntimes();
     }
 
     bool NodeEngine::ExecuteFile(std::string_view filepath) {
@@ -403,11 +437,144 @@ namespace Framework::Scripting {
         Execute(code, "<clear-timers>");
     }
 
-    v8::Local<v8::Context> NodeEngine::GetContext() const {
-        if (_runtime) {
-            return _runtime->GetContext();
+    v8::Isolate *NodeEngine::GetIsolate() const {
+        if (!_runtime) {
+            return nullptr;
         }
-        return v8::Local<v8::Context>();
+        v8::Isolate *current = v8::Isolate::TryGetCurrent();
+        if (current != nullptr && _runtimeByIsolate.contains(current)) {
+            return current;
+        }
+        return _runtime->GetIsolate();
+    }
+
+    v8::Local<v8::Context> NodeEngine::GetContext() const {
+        if (!_runtime) {
+            return v8::Local<v8::Context>();
+        }
+        v8::Isolate *current = v8::Isolate::TryGetCurrent();
+        if (current != nullptr) {
+            const auto it = _runtimeByIsolate.find(current);
+            if (it != _runtimeByIsolate.end()) {
+                return it->second->runtime->GetContext();
+            }
+        }
+        return _runtime->GetContext();
+    }
+
+    bool NodeEngine::CreateResourceRuntime(const std::string &resourceName) {
+        if (!_initialized) {
+            _lastError = "Engine not initialized";
+            return false;
+        }
+        if (_resourceRuntimes.contains(resourceName)) {
+            return true;
+        }
+
+        auto entry          = std::make_unique<ResourceRuntime>();
+        entry->resourceName = resourceName;
+        entry->engine       = this;
+        entry->runtime      = CreateRuntime(_lastError);
+        if (!entry->runtime) {
+            return false;
+        }
+
+        ResourceRuntime *runtime = entry.get();
+        v8::Isolate *isolate     = runtime->runtime->GetIsolate();
+        _runtimeByIsolate[isolate]      = runtime;
+        _resourceRuntimes[resourceName] = std::move(entry);
+
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = runtime->runtime->GetContext();
+        v8::Context::Scope contextScope(context);
+
+        // Uncaught errors in this runtime can only be this resource's; no stack to read.
+        v8::Local<v8::Function> sink = v8::FunctionTemplate::New(isolate, OnResourceUncaughtError, v8::External::New(isolate, runtime))->GetFunction(context).ToLocalChecked();
+        context->Global()->DefineOwnProperty(context, v8::String::NewFromUtf8Literal(isolate, "__fw_handleUncaughtError"), sink, static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum | v8::DontDelete)).Check();
+
+        runtime->reference = _references->AddRuntime(isolate, context, resourceName);
+
+        // GetIsolate() names this runtime while it is entered, so the bindings land in it.
+        if (_runtimeSetupCallback) {
+            _runtimeSetupCallback(this);
+        }
+        return true;
+    }
+
+    void NodeEngine::DestroyResourceRuntime(const std::string &resourceName) {
+        const auto it = _resourceRuntimes.find(resourceName);
+        if (it == _resourceRuntimes.end()) {
+            return;
+        }
+        std::unique_ptr<ResourceRuntime> runtime = std::move(it->second);
+        _resourceRuntimes.erase(it);
+
+        // Stopped from inside itself (or from a call it is waiting on): freeing it now would pull the isolate out
+        // from under the code that is running. The name is free at once, so a restart can create its next runtime.
+        if (runtime->runtime->GetIsolate()->IsInUse()) {
+            _retiredRuntimes.push_back(std::move(runtime));
+            return;
+        }
+        TeardownResourceRuntime(std::move(runtime));
+    }
+
+    void NodeEngine::TeardownResourceRuntime(std::unique_ptr<ResourceRuntime> runtime) {
+        v8::Isolate *isolate = runtime->runtime->GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            _references->RemoveRuntime(runtime->reference);
+
+            // Handles the builtins keep in this isolate (an emission still waiting, a queued reply) go while it lives.
+            if (_resourceManager != nullptr) {
+                _resourceManager->OnRuntimeDisposing(isolate);
+            }
+        }
+        Builtins::UnregisterAll(isolate);
+        ClearScriptingCatalog(isolate);
+        _runtimeByIsolate.erase(isolate);
+
+        // Frees the environment: its timers, handles and worker threads stop with it.
+        runtime->runtime.reset();
+    }
+
+    void NodeEngine::FlushRetiredRuntimes() {
+        for (auto it = _retiredRuntimes.begin(); it != _retiredRuntimes.end();) {
+            if ((*it)->runtime->GetIsolate()->IsInUse()) {
+                ++it;
+                continue;
+            }
+            std::unique_ptr<ResourceRuntime> runtime = std::move(*it);
+            it                                       = _retiredRuntimes.erase(it);
+            TeardownResourceRuntime(std::move(runtime));
+        }
+    }
+
+    bool NodeEngine::ExecuteResourceFile(const std::string &resourceName, std::string_view filepath) {
+        const auto it = _resourceRuntimes.find(resourceName);
+        if (it == _resourceRuntimes.end()) {
+            _lastError = "Resource '" + resourceName + "' has no runtime";
+            return false;
+        }
+
+        // Entered, the runtime is the one GetIsolate() names, so the file runs in it.
+        v8::Isolate *isolate = it->second->runtime->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        return ExecuteFile(filepath);
+    }
+
+    std::string NodeEngine::GetResourceForIsolate(v8::Isolate *isolate) const {
+        const auto it = _runtimeByIsolate.find(isolate);
+        return it != _runtimeByIsolate.end() ? it->second->resourceName : std::string();
+    }
+
+    NodeRuntime *NodeEngine::GetResourceRuntime(const std::string &resourceName) const {
+        const auto it = _resourceRuntimes.find(resourceName);
+        return it != _resourceRuntimes.end() ? it->second->runtime.get() : nullptr;
     }
 
     void NodeEngine::InstallUncaughtExceptionHandler(const std::string &resourcesPath) {
@@ -467,6 +634,29 @@ namespace Framework::Scripting {
         }
         info.GetReturnValue().Set(
             v8::String::NewFromUtf8(isolate, name.c_str()).ToLocalChecked());
+    }
+
+    void NodeEngine::OnResourceUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate = info.GetIsolate();
+        auto *runtime        = static_cast<ResourceRuntime *>(info.Data().As<v8::External>()->Value());
+
+        std::string errorMsg = "Unknown error";
+        std::string origin   = "uncaughtException";
+        if (info.Length() > 0) {
+            v8::String::Utf8Value msg(isolate, info[0]);
+            if (*msg) {
+                errorMsg = *msg;
+            }
+        }
+        if (info.Length() > 1) {
+            v8::String::Utf8Value orig(isolate, info[1]);
+            if (*orig) {
+                origin = *orig;
+            }
+        }
+
+        // Queued for Tick()'s caller, like the engine's own errors.
+        runtime->engine->_pendingErrors.push_back({runtime->resourceName, "[" + origin + "] " + errorMsg});
     }
 
     void NodeEngine::OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info) {

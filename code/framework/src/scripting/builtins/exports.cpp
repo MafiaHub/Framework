@@ -7,6 +7,7 @@
  */
 
 #include "exports.h"
+#include "../function_references.h"
 #include "../resource/resource.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
@@ -141,23 +142,42 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        // Validate isolate ownership - export values are bound to their resource's isolate
+        // Export values are bound to their resource's isolate; nothing registered yet means none.
         v8::Isolate *resourceIsolate = resource->GetIsolate();
-        if (resourceIsolate != isolate) {
-            // Cross-isolate access is not supported - V8 values cannot be shared across isolates
-            // This typically happens when resources run in separate isolates (e.g., different threads)
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: cannot access export '" + exportName + "' from resource '" + resourceName + "' - cross-isolate access is not supported. Both resources must share the same isolate.")));
+        const std::string notFound   = "Exports.get: export '" + exportName + "' not found in resource '" + resourceName + "'";
+        if (resourceIsolate == nullptr) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, notFound)));
             return;
         }
 
-        // Get the export value (safe since we validated isolate ownership above)
-        v8::Local<v8::Value> exportValue = resource->GetExportValue(exportName);
-        if (exportValue.IsEmpty()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: export '" + exportName + "' not found in resource '" + resourceName + "'")));
+        if (resourceIsolate == isolate) {
+            v8::Local<v8::Value> exportValue = resource->GetExportValue(exportName);
+            if (exportValue.IsEmpty()) {
+                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, notFound)));
+                return;
+            }
+            args.GetReturnValue().Set(exportValue);
             return;
         }
 
-        args.GetReturnValue().Set(exportValue);
+        // The resource runs in a runtime of its own: the export arrives as a copy, its functions as references.
+        FunctionReferences *references = manager->GetJSEngine() != nullptr ? manager->GetJSEngine()->GetFunctionReferences() : nullptr;
+        if (references == nullptr) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: resource '" + resourceName + "' is not reachable from here")));
+            return;
+        }
+        v8::Local<v8::Value> copied;
+        const bool fetched = references->Fetch(isolate, resourceIsolate, [&](v8::Isolate *owner, v8::Local<v8::Context>) -> v8::MaybeLocal<v8::Value> {
+            v8::Local<v8::Value> exportValue = resource->GetExportValue(exportName);
+            if (exportValue.IsEmpty()) {
+                owner->ThrowException(v8::Exception::Error(v8pp::to_v8(owner, notFound)));
+                return {};
+            }
+            return exportValue;
+        }).ToLocal(&copied);
+        if (fetched) {
+            args.GetReturnValue().Set(copied);
+        }
     }
 
 } // namespace Framework::Scripting::Builtins

@@ -534,6 +534,14 @@ namespace Framework::Scripting {
             _jsEngine->EvictModulesUnderPath(resource->GetPath());
         }
 
+        // An engine that isolates resources gives this one a fresh runtime; a shared engine has nothing to create.
+        if (_jsEngine && !_jsEngine->CreateResourceRuntime(std::string(name))) {
+            const std::string error = "Failed to create the resource's runtime: " + _jsEngine->GetLastError();
+            resource->SetError(error);
+            FireOnResourceError(std::string(name), error);
+            return ResourceOperationResult(error);
+        }
+
         // Execute the entry point script
         std::string error;
         if (!ExecuteResourceScript(*resource, error)) {
@@ -949,7 +957,7 @@ namespace Framework::Scripting {
 
             // Set resource context so Events.on() etc. know which resource is executing.
             SetCurrentResourceContext(resourceName);
-            const bool ok = _jsEngine->ExecuteFile(resolved);
+            const bool ok = _jsEngine->ExecuteResourceFile(resourceName, resolved);
             SetCurrentResourceContext("");
 
             if (!ok) {
@@ -962,6 +970,13 @@ namespace Framework::Scripting {
     }
 
     std::string ResourceManager::ResolveResourceContext(v8::Isolate *isolate, v8::Local<v8::Function> handler) const {
+        // A runtime of its own names its resource outright.
+        if (_jsEngine != nullptr && isolate != nullptr) {
+            std::string owner = _jsEngine->GetResourceForIsolate(isolate);
+            if (!owner.empty()) {
+                return owner;
+            }
+        }
         if (!handler.IsEmpty()) {
             std::string name = GetResourceNameFromFunction(isolate, handler);
             if (!name.empty()) {
@@ -994,12 +1009,24 @@ namespace Framework::Scripting {
         return true;
     }
 
+    void ResourceManager::OnRuntimeDisposing(v8::Isolate *isolate) {
+        _events.ForgetIsolate(isolate);
+        Builtins::Messages::ForgetIsolate(isolate);
+    }
+
     void ResourceManager::CleanupResourceRuntime(Resource &resource, std::string_view resourceName) {
         CallResourceStop(resourceName);
         if (_jsEngine) {
             _jsEngine->ClearResourceTimers(std::string(resourceName));
         }
         resource.ClearExports();
+        // The isolate goes with the runtime below, and a later one may reuse its address.
+        resource.SetIsolate(nullptr);
+
+        // Last: the handles dropped above belong to the runtime, which takes whatever the resource left running.
+        if (_jsEngine) {
+            _jsEngine->DestroyResourceRuntime(std::string(resourceName));
+        }
     }
 
     std::vector<std::string> ResourceManager::GetAllResourceNames() const {
@@ -1217,6 +1244,13 @@ namespace Framework::Scripting {
             return "";
         }
 
+        if (_jsEngine != nullptr) {
+            std::string owner = _jsEngine->GetResourceForIsolate(isolate);
+            if (!owner.empty()) {
+                return owner;
+            }
+        }
+
         // Get stack trace with up to 20 frames
         v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(isolate, 20);
         if (stackTrace.IsEmpty()) {
@@ -1254,7 +1288,10 @@ namespace Framework::Scripting {
     }
 
     Resource *ResourceManager::GetCurrentResourceWithStackFallback(v8::Isolate *isolate) {
-        std::string name = GetCurrentResourceContext();
+        std::string name = (_jsEngine != nullptr && isolate != nullptr) ? _jsEngine->GetResourceForIsolate(isolate) : std::string();
+        if (name.empty()) {
+            name = GetCurrentResourceContext();
+        }
 
         // If no context set (e.g., during async ES module loading), try to get from stack
         if (name.empty() && isolate) {

@@ -14,13 +14,16 @@
 #include <cerrno>
 
 #include "engine.h"
+#include "function_references.h"
 #include "node_runtime.h"
 
 #include <node.h>
 #include <uv.h>
 
+#include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace Framework::Scripting {
@@ -157,16 +160,33 @@ namespace Framework::Scripting {
         }
 
         /**
-         * Get the V8 isolate (Node.js uses V8 internally).
+         * The isolate of the runtime this thread is executing in: a resource's own while inside it, the
+         * engine's otherwise. Native code reached from a resource therefore builds its values in that
+         * resource's isolate.
          */
-        v8::Isolate *GetIsolate() const override {
-            return _runtime ? _runtime->GetIsolate() : nullptr;
-        }
+        v8::Isolate *GetIsolate() const override;
 
         /**
-         * Get the main context.
+         * The context of the runtime GetIsolate() names.
          */
         v8::Local<v8::Context> GetContext() const override;
+
+        // One runtime per resource: see docs/scripting_resource_isolation.md.
+        bool CreateResourceRuntime(const std::string &resourceName) override;
+        void DestroyResourceRuntime(const std::string &resourceName) override;
+        bool ExecuteResourceFile(const std::string &resourceName, std::string_view filepath) override;
+        std::string GetResourceForIsolate(v8::Isolate *isolate) const override;
+        FunctionReferences *GetFunctionReferences() const override {
+            return _references.get();
+        }
+
+        // The runtime a running resource executes in, or null. For diagnostics and tests.
+        NodeRuntime *GetResourceRuntime(const std::string &resourceName) const;
+
+        // The engine's own runtime: where native code builds values outside any resource.
+        NodeRuntime *GetHostRuntime() const {
+            return _runtime.get();
+        }
 
       private:
         bool InitializeNode();
@@ -174,6 +194,22 @@ namespace Framework::Scripting {
         bool ApplySandbox();
 
         static void OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info);
+
+        // A resource's runtime reports its uncaught errors here, already attributed to it.
+        static void OnResourceUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info);
+
+        struct ResourceRuntime {
+            std::string resourceName;
+            std::unique_ptr<NodeRuntime> runtime;
+            uint32_t reference = 0;
+            NodeEngine *engine = nullptr; // What the runtime's error sink reports to.
+        };
+
+        // Leave the references and free the environment. The runtime must not be executing.
+        void TeardownResourceRuntime(std::unique_ptr<ResourceRuntime> runtime);
+
+        // Destroy the runtimes whose destruction was deferred because they were executing.
+        void FlushRetiredRuntimes();
 
         // __fw_ownerOf(fn): resource owning a function, from its script origin.
         static void OnTimerOwnerLookup(const v8::FunctionCallbackInfo<v8::Value> &info);
@@ -185,6 +221,17 @@ namespace Framework::Scripting {
         static bool _platformInitialized;
 
         std::unique_ptr<NodeRuntime> _runtime;
+
+        // Calls and values between the engine's runtime and every resource's.
+        std::unique_ptr<FunctionReferences> _references;
+        uint32_t _hostReference = 0;
+
+        // One runtime per running resource, and the isolate each one owns.
+        std::map<std::string, std::unique_ptr<ResourceRuntime>, std::less<>> _resourceRuntimes;
+        std::unordered_map<v8::Isolate *, ResourceRuntime *> _runtimeByIsolate;
+
+        // Runtimes stopped while they were executing; destroyed at the next tick.
+        std::vector<std::unique_ptr<ResourceRuntime>> _retiredRuntimes;
 
         // Cached JS function that calls setImmediate(()=>{}) each tick.
         // This serves two purposes for inspector CDP message processing:

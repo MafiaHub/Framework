@@ -49,7 +49,21 @@ a worker thread; what changes is that the worker now dies with its resource.
   Every further environment is created with `kNoCreateInspector`: Node allows
   one inspector agent per process and asserts on a second.
 - A resource's runtime is created when the resource starts and destroyed after
-  its `resourceStop` handlers settle.
+  its `resourceStop` handlers settle. A runtime stopped from inside itself (a
+  resource stopping itself, or one it is waiting on) is destroyed at the next
+  tick instead, once nothing is executing in it.
+- The engine keeps its own runtime too, the host. Native code that runs outside
+  any resource builds its values there, and they are copied into each resource
+  that receives them.
+- `Engine::GetIsolate()` and `GetContext()` name the runtime the thread is
+  executing in: a resource's own while inside it, the host otherwise. Native
+  code reached from a resource (a binding, an event it emits) therefore works
+  in that resource's isolate without being told which one it is.
+- Each runtime gets the same bindings: the engine runs the setup callback
+  inside every runtime it creates, and the server module registers the
+  framework builtins and the project's SDK callback from it.
+- An uncaught error in a runtime belongs to its resource. It is attributed
+  directly, not by reading file paths out of the stack.
 
 ### What crosses between resources
 
@@ -95,16 +109,23 @@ threads is unaffected.
 Resources that pass plain data through events and exports, and call exported
 functions with it, are not affected.
 
-### Breaking changes for projects (C++)
+### Changes for projects (C++)
 
-- `Engine::GetIsolate()` and `GetContext()` stop naming "the" scripting
-  isolate. Code that needs a resource's isolate asks for that resource's
-  runtime.
-- Native events are emitted with an argument builder that is called once per
-  runtime, inside that runtime, instead of with a ready-made argument vector.
-  Projects that already build their arguments in a callback (kcd2's
-  `EmitReservedEvent`) change one call.
-- The SDK register callback runs once per runtime rather than once per server.
+Most project code keeps working, because `GetIsolate()` follows the runtime
+that is executing and values built in the host are copied into resources:
+
+- `ModuleRegister` runs once per runtime, not once per server, and registers
+  into whichever runtime is being set up.
+- Native events keep their shape. Arguments built in the host are copied into
+  each resource that handles them, so a project that builds them per isolate
+  (kcd2's `EmitReservedEvent`) needs no change.
+- A project's own handle types (kcd2's `Horse`, `Npc`, ...) must be registered
+  with `ValueTransfer::RegisterHostType`, after the framework's, or they arrive
+  in resources as plain objects. The framework's value types and `Entity`,
+  `Player`, `TextLabel` and `StateBag` are registered already.
+- A `v8::Global` a project keeps beyond one call is bound to the runtime it was
+  made in, which may now be a resource's that is destroyed when the resource
+  stops. Such handles must be dropped when the resource stops.
 
 This is a scripting-layer change and a minor version bump under the versioning
 rules.
@@ -121,13 +142,14 @@ rules.
 4. **Per-resource runtimes** - `ResourceManager` creates and destroys a runtime
    with each resource; builtins and the SDK callback register per runtime;
    every runtime is ticked; uncaught errors are attributed by runtime instead
-   of by stack.
-5. **Cross-runtime builtins** - events, exports, messages and state bags
-   dispatch across runtimes through the transfer and references above.
+   of by stack. *(done)*
+5. **Cross-runtime builtins** - events, exports, imports and messages dispatch
+   across runtimes through the transfer and references above; state bag
+   subscriptions are per isolate already and go with the runtime. *(done)*
 6. **Remove the shims** - timer ownership, module eviction and stack-based
    resource lookup go from the Node engine.
-7. **Projects** - kcd2, m2o, m3o and hogwarts move to per-runtime emission and
-   registration.
+7. **Projects** - kcd2, m2o, m3o and hogwarts register their handle types and
+   drop the handles they keep in a resource's runtime when it stops.
 8. **Follow-ups** - a per-resource monitor (time and heap per runtime, slow
    handler warnings), an opt-in for worker threads per resource, and inspector
    access to a chosen resource.

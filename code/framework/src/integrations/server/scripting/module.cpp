@@ -37,6 +37,10 @@ namespace Framework::Integrations::Server::Scripting {
         // inspectorPort keeps its NodeEngine default (the standard Node debug port).
 #endif
         _nodeEngine = std::make_unique<Framework::Scripting::NodeEngine>(options);
+
+        // Before any project registers its own handle types (PostInit runs ahead of Init): the newest is tried first,
+        // so the framework's bases must come first.
+        Framework::Scripting::Builtins::RegisterTransferTypes();
     }
 
     ServerScriptingModule::~ServerScriptingModule() {
@@ -70,6 +74,13 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Initialize Framework SDK in the engine
         _nodeEngine->InitFrameworkSDK();
+
+        // Every resource runs in a runtime of its own, which needs the same bindings as the engine's.
+        // The engine runs this inside each new runtime, where GetIsolate() names it.
+        _nodeEngine->SetRuntimeSetupCallback([this](Framework::Scripting::Engine *engine) {
+            RegisterFrameworkBindings();
+            engine->InitFrameworkSDK();
+        });
 
         if (!v8pp::metadata::export_catalog_from_environment("framework-server", "FRAMEWORK_SCRIPTING_API_METADATA")) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export Framework server scripting API metadata");

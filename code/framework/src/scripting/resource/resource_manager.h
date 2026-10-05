@@ -322,6 +322,12 @@ namespace Framework::Scripting {
          */
         Resource *GetCurrentResourceWithStackFallback(v8::Isolate *isolate);
 
+        /**
+         * A resource's runtime is about to be disposed (its isolate is still alive): drop every handle the scripting
+         * builtins hold in it. Called by an engine that gives resources runtimes of their own.
+         */
+        void OnRuntimeDisposing(v8::Isolate *isolate);
+
         // Wired to ReplicationManager::SetOnEntityCreated/Destroyed.
         void OnEntityCreated(uint64_t networkId);
         void OnEntityDestroyed(uint64_t networkId);

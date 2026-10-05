@@ -78,6 +78,13 @@ namespace Framework::Scripting::Builtins {
     } // namespace
 
     void RegisterTransferTypes() {
+        // Once: registering again would move these after a project's handles, and the newest is tried first.
+        static bool registered = false;
+        if (registered) {
+            return;
+        }
+        registered = true;
+
         RegisterValueTransfer<Vector2, glm::vec2, &Vector2::vec>("Vector2");
         RegisterValueTransfer<Vector3, glm::vec3, &Vector3::vec>("Vector3");
         RegisterValueTransfer<Vector4, glm::vec4, &Vector4::vec>("Vector4");

@@ -28,6 +28,7 @@
 namespace Framework::Scripting {
 
     class ResourceManager; // Forward declaration for resource context tracking
+    class FunctionReferences;
 
     /**
      * Base class for JavaScript engines.
@@ -76,6 +77,45 @@ namespace Framework::Scripting {
         // shared runtime doesn't keep firing them after stop. Call after stop.
         virtual void ClearResourceTimers(const std::string &resourceName) {}
 
+        // Resource runtimes (docs/scripting_resource_isolation.md). An engine that isolates resources gives each one a
+        // runtime of its own; a shared engine runs every resource in its single runtime, and these default to that.
+
+        /**
+         * Create the runtime a resource's scripts run in, with the runtime setup callback already run inside it.
+         * @return false with the reason in GetLastError().
+         */
+        virtual bool CreateResourceRuntime(const std::string &resourceName) {
+            return true;
+        }
+
+        // Destroy it, and with it everything the resource left running there. A runtime that is executing is destroyed
+        // at the next tick instead.
+        virtual void DestroyResourceRuntime(const std::string &resourceName) {}
+
+        // Run one of a resource's script files in its runtime.
+        virtual bool ExecuteResourceFile(const std::string &resourceName, std::string_view filepath) {
+            return ExecuteFile(filepath);
+        }
+
+        // The resource an isolate was created for, or empty for a runtime every resource shares.
+        virtual std::string GetResourceForIsolate(v8::Isolate *isolate) const {
+            return {};
+        }
+
+        // Calls and values between runtimes; null for an engine whose resources share one.
+        virtual FunctionReferences *GetFunctionReferences() const {
+            return nullptr;
+        }
+
+        /**
+         * Set what installs the bindings in a runtime. Run inside every runtime an isolating engine creates for a
+         * resource, with GetIsolate() and GetContext() naming that runtime.
+         */
+        using RuntimeSetupCallback = fu2::function<void(Engine *) const>;
+        void SetRuntimeSetupCallback(RuntimeSetupCallback callback) {
+            _runtimeSetupCallback = std::move(callback);
+        }
+
         /**
          * Register framework SDK bindings.
          * Called after Init() to set up Framework.* APIs.
@@ -99,7 +139,8 @@ namespace Framework::Scripting {
 
         // Escape hatch: raw V8 handles. The caller owns the v8::Locker / Isolate::Scope / HandleScope /
         // Context::Scope setup before touching these — prefer Execute() and the SDK-register callback,
-        // which establish the scopes for you.
+        // which establish the scopes for you. An engine that isolates resources names the runtime the
+        // thread is executing in, or its own when it is in none.
         virtual v8::Isolate *GetIsolate() const = 0;
         virtual v8::Local<v8::Context> GetContext() const = 0;
 
@@ -121,6 +162,7 @@ namespace Framework::Scripting {
       protected:
         std::string _lastError;
         SDKRegisterCallback _sdkRegisterCallback;
+        RuntimeSetupCallback _runtimeSetupCallback;
         ResourceManager *_resourceManager = nullptr;
     };
 

@@ -7,6 +7,7 @@
  */
 
 #include "imports.h"
+#include "../function_references.h"
 #include "../resource/resource.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
@@ -81,16 +82,26 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
-        // Validate isolate ownership - export values are bound to their resource's isolate.
-        // Mirrors Exports::GetCallback: V8 values cannot be shared across isolates.
+        // Export values are bound to their resource's isolate. In this one (or with none registered yet) the object
+        // holds the real values; from a runtime of its own it arrives as a copy, its functions as references.
         v8::Isolate *resourceIsolate = resource->GetIsolate();
-        if (resourceIsolate != isolate) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Imports.get: cannot access exports from resource '" + resourceName + "' - cross-isolate access is not supported. Both resources must share the same isolate.")));
-            return;
+        v8::Local<v8::Value> exportsObj;
+        if (resourceIsolate == nullptr || resourceIsolate == isolate) {
+            exportsObj = BuildImportsObject(isolate, context, resource);
         }
-
-        // Build an object mapping every registered export name to its real value.
-        v8::Local<v8::Object> exportsObj = BuildImportsObject(isolate, context, resource);
+        else {
+            FunctionReferences *references = manager->GetJSEngine() != nullptr ? manager->GetJSEngine()->GetFunctionReferences() : nullptr;
+            if (references == nullptr) {
+                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Imports.get: resource '" + resourceName + "' is not reachable from here")));
+                return;
+            }
+            const bool fetched = references->Fetch(isolate, resourceIsolate, [&](v8::Isolate *owner, v8::Local<v8::Context> ownerContext) -> v8::MaybeLocal<v8::Value> {
+                return BuildImportsObject(owner, ownerContext, resource);
+            }).ToLocal(&exportsObj);
+            if (!fetched) {
+                return;
+            }
+        }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Imported {} exports from '{}'", callerResource, resource->GetRegisteredExportNames().size(), resourceName);
 

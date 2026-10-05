@@ -41,8 +41,8 @@ namespace Framework::Scripting::Builtins {
     void UnregisterAll(v8::Isolate *isolate);
 
     // Teaches ValueTransfer the builtin value types and handles, so they cross between resources as themselves rather
-    // than as plain objects. Process-wide; call once, before any script runs, and before a project registers its own
-    // handle types.
+    // than as plain objects. Process-wide and idempotent; it must run before a project registers its own handle types,
+    // which the server scripting module's constructor sees to.
     void RegisterTransferTypes();
 
 } // namespace Framework::Scripting::Builtins

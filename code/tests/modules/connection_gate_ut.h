@@ -76,8 +76,9 @@ class ConnectionGateTestRig {
         }
     }
 
+    // The handler under test runs in the gate resource's own runtime, so that is where these evaluate.
     static int32_t EvalInt(Framework::Scripting::NodeEngine *engine, const char *source) {
-        v8::Isolate *isolate = engine->GetIsolate();
+        v8::Isolate *isolate = engine->GetResourceRuntime("gate")->GetIsolate();
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
         v8::HandleScope handleScope(isolate);
@@ -93,7 +94,7 @@ class ConnectionGateTestRig {
     }
 
     static std::string EvalString(Framework::Scripting::NodeEngine *engine, const char *source) {
-        v8::Isolate *isolate = engine->GetIsolate();
+        v8::Isolate *isolate = engine->GetResourceRuntime("gate")->GetIsolate();
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
         v8::HandleScope handleScope(isolate);
