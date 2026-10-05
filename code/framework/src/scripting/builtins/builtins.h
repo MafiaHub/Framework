@@ -40,4 +40,9 @@ namespace Framework::Scripting::Builtins {
     // the dead isolate. Out-of-line so callers don't pull in the handle types' networking headers.
     void UnregisterAll(v8::Isolate *isolate);
 
+    // Teaches ValueTransfer the builtin value types and handles, so they cross between resources as themselves rather
+    // than as plain objects. Process-wide; call once, before any script runs, and before a project registers its own
+    // handle types.
+    void RegisterTransferTypes();
+
 } // namespace Framework::Scripting::Builtins

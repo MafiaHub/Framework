@@ -66,10 +66,18 @@ is copied out of one isolate and rebuilt in the other:
 | framework entities (`Player`, ...) | the same entity, wrapped again |
 | functions | a callable reference into the owning resource |
 | instances of a resource's own classes | plain objects; the prototype does not cross |
+| symbols, promises, cycles, weak collections | refused, with the path to the value |
+| `SharedArrayBuffer` and views on one | refused (see below) |
 
 A function reference calls back into the resource that owns the function, with
 its arguments and its result copied the same way. A reference whose owner has
 stopped throws when called.
+
+Shared memory cannot be shared between resources. Each environment frees its
+array buffers through its own allocator, which dies with the resource, so a
+`SharedArrayBuffer` that outlived the resource that made it would crash the
+server when its last holder let go. Sharing it with the resource's own worker
+threads is unaffected.
 
 ### Breaking changes for resources
 
