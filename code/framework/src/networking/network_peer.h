@@ -128,19 +128,21 @@ namespace Framework::Networking {
 
         // Send an RPC payload to every connected system, optionally excluding one (in broadcast mode
         // RakNet treats the guid as the system to SKIP — e.g. don't echo a client's own update back).
+        // `channel` is the ordering channel: Events, the construction channel, unless the message
+        // belongs to a stream that must not queue behind unrelated traffic.
         template <RPC::Payload T>
-        void BroadcastRPC(T &payload, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered, MafiaNet::RakNetGUID except = MafiaNet::UNASSIGNED_RAKNET_GUID) {
+        void BroadcastRPC(T &payload, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered, MafiaNet::RakNetGUID except = MafiaNet::UNASSIGNED_RAKNET_GUID, Channel channel = Channel::Events) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
-            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, ToOrderingChannel(Channel::Events), except, true, false);
+            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, ToOrderingChannel(channel), except, true, false);
         }
 
-        // Send an RPC payload to a single system.
+        // Send an RPC payload to a single system, on the ordering channel `channel`.
         template <RPC::Payload T>
-        void SendRPC(T &payload, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
+        void SendRPC(T &payload, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered, Channel channel = Channel::Events) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
-            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, ToOrderingChannel(Channel::Events), guid, false, false);
+            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, ToOrderingChannel(channel), guid, false, false);
         }
 
         // Raw variant of RegisterRPC for handlers that decode the bitstream themselves (e.g. a
