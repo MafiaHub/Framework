@@ -98,6 +98,11 @@ namespace Framework::Integrations::Client::Scripting {
         void SetResourceCachePath(const std::string &path);
 
         /**
+         * Set the mod version exposed as ExecutionEnvironment.modVersion. Must be set before Init().
+         */
+        void SetModVersion(const std::string &version) { _modVersion = version; }
+
+        /**
          * Get the resource cache path.
          */
         const std::string &GetResourceCachePath() const {
@@ -175,6 +180,7 @@ namespace Framework::Integrations::Client::Scripting {
       private:
         std::unique_ptr<Framework::Scripting::V8Engine> _engine;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
+        std::string _modVersion;
 
         // Resource synchronization state
         std::vector<ServerResourceInfo> _serverResourceList;

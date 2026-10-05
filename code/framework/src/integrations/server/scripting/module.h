@@ -96,6 +96,11 @@ namespace Framework::Integrations::Server::Scripting {
         void SetDevMode(bool enabled);
 
         /**
+         * Set the mod version exposed as ExecutionEnvironment.modVersion. Must be set before Init().
+         */
+        void SetModVersion(const std::string &version) { _modVersion = version; }
+
+        /**
          * Get list of resources to send to clients.
          * Only includes resources with client entry points defined.
          */
@@ -114,6 +119,7 @@ namespace Framework::Integrations::Server::Scripting {
       private:
         std::unique_ptr<Framework::Scripting::NodeEngine> _nodeEngine;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
+        std::string _modVersion;
 
         std::string _resourcesPath = "resources";
         bool _devMode = false;
