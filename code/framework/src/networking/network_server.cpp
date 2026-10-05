@@ -203,10 +203,10 @@ namespace Framework::Networking {
         address.ToString(false, buffer, sizeof(buffer));
         return buffer;
     }
-    void NetworkServer::SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, MafiaNet::Priority priority, MafiaNet::Reliability reliability) {
+    void NetworkServer::SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, MafiaNet::Priority priority, MafiaNet::Reliability reliability, Channel channel) {
         // When broadcasting, the system identifier is the peer to exclude, so a single Signal reaches
         // everyone but the sender.
-        _rpc.Signal(identifier, &bs, priority, reliability, ToOrderingChannel(Channel::Events), excludeGUID, true, false);
+        _rpc.Signal(identifier, &bs, priority, reliability, ToOrderingChannel(channel), excludeGUID, true, false);
     }
 
     void NetworkServer::PushReplicationConnection(MafiaNet::RakNetGUID guid) {

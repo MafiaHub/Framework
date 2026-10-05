@@ -338,7 +338,7 @@ namespace Framework::Launcher {
             addDllDirectory((std::wstring(gProjectDllPath) + L"\\bin").c_str());
 
             if (_config.useAlternativeWorkDir) {
-                _gamePath += L"/" + _config.alternativeWorkDir;
+                _gamePath = GetGameWorkDir(_gamePath);
                 addDllDirectory(_gamePath.c_str());
             }
 
@@ -625,12 +625,39 @@ namespace Framework::Launcher {
         return _config.captureImageSnapshot(snapshot, _gamePath, std::filesystem::path(_config.executableName).filename().wstring(), sourceImage);
     }
 
-    std::wstring Project::GetGameWorkDir(const std::wstring &gameRoot) const {
-        std::filesystem::path path(gameRoot);
-        if (_config.useAlternativeWorkDir && !_config.alternativeWorkDir.empty()) {
-            path /= _config.alternativeWorkDir;
+    std::vector<std::wstring> Project::GetAlternativeWorkDirCandidates() const {
+        std::vector<std::wstring> candidates;
+        if (!_config.useAlternativeWorkDir) {
+            return candidates;
         }
-        return path.wstring();
+
+        if (!_config.alternativeWorkDir.empty()) {
+            candidates.push_back(_config.alternativeWorkDir);
+        }
+        for (const auto &fallback : _config.alternativeWorkDirFallbacks) {
+            if (!fallback.empty()) {
+                candidates.push_back(fallback);
+            }
+        }
+        return candidates;
+    }
+
+    std::wstring Project::GetGameWorkDir(const std::wstring &gameRoot) const {
+        const auto candidates = GetAlternativeWorkDirCandidates();
+        if (candidates.empty()) {
+            return gameRoot;
+        }
+
+        // the first layout that holds the executable, else the primary one so errors name it
+        for (const auto &candidate : candidates) {
+            const auto workDir = std::filesystem::path(gameRoot) / candidate;
+
+            std::error_code ec;
+            if (std::filesystem::is_regular_file(workDir / _config.executableName, ec)) {
+                return workDir.wstring();
+            }
+        }
+        return (std::filesystem::path(gameRoot) / candidates.front()).wstring();
     }
 
     bool Project::GameExecutableExistsIn(const std::wstring &gameRoot) const {
@@ -677,9 +704,9 @@ namespace Framework::Launcher {
 
         // stores hand back the game root, so strip the work dir off the picked executable's folder
         auto gameRoot = exePath.parent_path();
-        if (_config.useAlternativeWorkDir && !_config.alternativeWorkDir.empty()) {
+        for (const auto &candidate : GetAlternativeWorkDirCandidates()) {
             std::vector<std::wstring> parts;
-            for (const auto &part : std::filesystem::path(_config.alternativeWorkDir)) {
+            for (const auto &part : std::filesystem::path(candidate)) {
                 if (!part.empty()) {
                     parts.push_back(part.wstring());
                 }
@@ -698,6 +725,7 @@ namespace Framework::Launcher {
 
             if (matched) {
                 gameRoot = stripped;
+                break;
             }
         }
 

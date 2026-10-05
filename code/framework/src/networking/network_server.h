@@ -84,7 +84,7 @@ namespace Framework::Networking {
         // Signal an RPC to every connected system except one (typically the originator) — the
         // server-authoritative relay primitive, since RPC4::Signal has no exclusion parameter. The
         // bitstream holds the already-written RPC arguments.
-        void SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered);
+        void SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered, Channel channel = Channel::Events);
 
         int GetPing(MafiaNet::RakNetGUID guid) const override;
         std::string GetAddress(MafiaNet::RakNetGUID guid) const override;

@@ -114,6 +114,10 @@ namespace Framework::Launcher {
         bool useAlternativeWorkDir = false; // Uses the game's root directory by default
         std::wstring alternativeWorkDir;
 
+        // other layouts the same game ships under, such as another store's build. A game root
+        // resolves to the first of alternativeWorkDir and these that holds the executable.
+        std::vector<std::wstring> alternativeWorkDirFallbacks;
+
         // prompt for game exe (CLASSIC platform, or the store fallback above)
         bool promptForGameExe        = false;
         std::string promptTitle      = "Select your game's executable";
@@ -206,6 +210,7 @@ namespace Framework::Launcher {
         bool ResolveGamePathFromPrompt();
         void PrepareSteamAppIdentity() const;
 
+        std::vector<std::wstring> GetAlternativeWorkDirCandidates() const;
         std::wstring GetGameWorkDir(const std::wstring &gameRoot) const;
         bool GameExecutableExistsIn(const std::wstring &gameRoot) const;
 
