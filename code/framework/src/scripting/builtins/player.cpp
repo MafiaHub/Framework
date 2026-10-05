@@ -14,6 +14,7 @@
 #include <networking/network_peer.h>
 #include <networking/rpc/client_identity.h>
 #include <networking/replication/nametag_state.h>
+#include <utils/string_utils.h>
 
 #include <sstream>
 
@@ -120,6 +121,7 @@ namespace Framework::Scripting::Builtins {
     void Player::SetNametagText(const std::string &text) {
         if (auto *state = WritableNametag()) {
             state->text = text;
+            Utils::StringUtils::TruncateUtf8(state->text, Networking::Replication::NametagState::kMaxTextBytes);
         }
     }
 
@@ -184,7 +186,7 @@ namespace Framework::Scripting::Builtins {
                 v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "True to show the health bar under this player's name, false to hide it.")},
                     "Shows or hides the health bar under this player's nametag, leaving the name itself alone."));
             cls->function("setNametagText", &Player::SetNametagText,
-                v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", true, "Text to show instead of the player's name; empty or omitted restores the name.")},
+                v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", true, "Text to show instead of the player's name, cut to 64 bytes; empty or omitted restores the name.")},
                     "Overrides the text drawn on this player's nametag."));
             cls->function("setNametagColor", &Player::SetNametagColor,
                 v8pp::metadata::docs("void", {v8pp::metadata::param("color", "number", false, "Packed 0xAARRGGBB color.")},

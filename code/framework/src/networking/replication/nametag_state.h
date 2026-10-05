@@ -10,6 +10,7 @@
 
 #include "network_entity.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -24,6 +25,8 @@ namespace Framework::Networking::Replication {
     // serialize it in their own SerializeFields. Server-written: the owner neither sends nor overrides it.
     struct NametagState {
         static constexpr uint8_t kAllComponents = static_cast<uint8_t>(NametagComponent::Name) | static_cast<uint8_t>(NametagComponent::Health);
+        // Replicated to every client, so a script cannot push an unbounded string through it.
+        static constexpr std::size_t kMaxTextBytes = 64;
 
         uint8_t components = kAllComponents;
         uint32_t color     = 0xFFFFFFFF; // packed 0xAARRGGBB
