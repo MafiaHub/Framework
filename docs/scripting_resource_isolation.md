@@ -120,12 +120,19 @@ that is executing and values built in the host are copied into resources:
   each resource that handles them, so a project that builds them per isolate
   (kcd2's `EmitReservedEvent`) needs no change.
 - A project's own handle types (kcd2's `Horse`, `Npc`, ...) must be registered
-  with `ValueTransfer::RegisterHostType`, after the framework's, or they arrive
-  in resources as plain objects. The framework's value types and `Entity`,
-  `Player`, `TextLabel` and `StateBag` are registered already.
+  with `Builtins::RegisterHandleTransfer<T>(name)` in `PostInit`, each derived
+  class after its base; anything else with `ValueTransfer::RegisterHostType`.
+  Unregistered, a handle derived from `Player` or `Entity` arrives as the
+  framework base class. The framework's value types and `Entity`, `Player`,
+  `TextLabel` and `StateBag` are registered already.
+- Per-isolate state must really be per isolate. A class cache held in a single
+  static (one `v8pp::class_<T>` for the whole server) breaks the first time a
+  resource's runtime registers bindings; key it by isolate.
 - A `v8::Global` a project keeps beyond one call is bound to the runtime it was
   made in, which may now be a resource's that is destroyed when the resource
-  stops. Such handles must be dropped when the resource stops.
+  stops. Drop such handles from `Engine::AddRuntimeDisposingListener`, which
+  runs with the isolate still alive, and resolve a pending promise inside the
+  isolate it was made in, not the one `GetIsolate()` names at that moment.
 
 This is a scripting-layer change and a minor version bump under the versioning
 rules.

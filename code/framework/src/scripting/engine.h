@@ -22,6 +22,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <utils/lifecycle.h>
 
@@ -117,6 +118,16 @@ namespace Framework::Scripting {
         }
 
         /**
+         * Hear about a resource's runtime just before it is disposed, with its isolate still alive and entered: the
+         * place to drop handles a project keeps in it (class caches, pending promises). Listeners live as long as the
+         * engine. An engine whose resources share one runtime never calls them.
+         */
+        using RuntimeDisposingCallback = fu2::function<void(v8::Isolate *) const>;
+        void AddRuntimeDisposingListener(RuntimeDisposingCallback callback) {
+            _runtimeDisposingListeners.push_back(std::move(callback));
+        }
+
+        /**
          * Register framework SDK bindings.
          * Called after Init() to set up Framework.* APIs.
          */
@@ -163,6 +174,7 @@ namespace Framework::Scripting {
         std::string _lastError;
         SDKRegisterCallback _sdkRegisterCallback;
         RuntimeSetupCallback _runtimeSetupCallback;
+        std::vector<RuntimeDisposingCallback> _runtimeDisposingListeners;
         ResourceManager *_resourceManager = nullptr;
     };
 

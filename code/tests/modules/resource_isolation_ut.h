@@ -142,6 +142,35 @@ MODULE(resource_isolation, {
         TestManagerHelper::Cleanup();
     });
 
+    IT("tells listeners about a runtime before it is disposed", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("short-lived", "");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+
+        v8::Isolate *disposed  = nullptr;
+        bool aliveWhenNotified = false;
+        engine.AddRuntimeDisposingListener([&](v8::Isolate *isolate) {
+            disposed          = isolate;
+            aliveWhenNotified = isolate->IsInUse();
+        });
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("short-lived"), true);
+        v8::Isolate *resourceIsolate = engine.GetResourceRuntime("short-lived")->GetIsolate();
+
+        EQUALS((bool)manager.StopResource("short-lived"), true);
+        EQUALS(disposed == resourceIsolate, true);
+        EQUALS(aliveWhenNotified, true);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
     IT("gives every resource its own globals", {
         TestManagerHelper::Cleanup();
         ResourceIsolationTest::WriteResource("globals-first", "globalThis.shared = 'first';");

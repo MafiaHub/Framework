@@ -409,6 +409,9 @@ namespace Framework::Scripting {
             if (_resourceManager != nullptr) {
                 _resourceManager->OnRuntimeDisposing(isolate);
             }
+            for (const auto &listener : _runtimeDisposingListeners) {
+                listener(isolate);
+            }
         }
         Builtins::UnregisterAll(isolate);
         ClearScriptingCatalog(isolate);

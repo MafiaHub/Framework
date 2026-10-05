@@ -45,36 +45,6 @@ namespace Framework::Scripting::Builtins {
                 });
         }
 
-        // An entity handle crosses as its network id and is wrapped again on the other side, as the same class.
-        template <typename T>
-        void RegisterEntityTransfer(const char *name) {
-            ValueTransfer::RegisterHostType(
-                name,
-                [](v8::Isolate *isolate, v8::Local<v8::Object> object, std::vector<uint8_t> &bytes) {
-                    T::GetClass(isolate);
-                    const auto handle = v8pp::class_<T>::unwrap_object(isolate, object);
-                    if (handle == nullptr) {
-                        return false;
-                    }
-                    const uint64_t id = handle->GetId();
-                    bytes.resize(sizeof(id));
-                    std::memcpy(bytes.data(), &id, sizeof(id));
-                    return true;
-                },
-                [](v8::Isolate *isolate, v8::Local<v8::Context>, const std::vector<uint8_t> &bytes) -> v8::MaybeLocal<v8::Value> {
-                    uint64_t id = 0;
-                    std::memcpy(&id, bytes.data(), std::min(bytes.size(), sizeof(id)));
-                    T::GetClass(isolate);
-                    // A handle constructor throws when its entity is gone by the time the value arrives.
-                    try {
-                        return v8pp::class_<T>::create_object(isolate, id);
-                    }
-                    catch (const std::exception &ex) {
-                        isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, ex.what()).ToLocalChecked()));
-                        return {};
-                    }
-                });
-        }
     } // namespace
 
     void RegisterTransferTypes() {
@@ -92,10 +62,10 @@ namespace Framework::Scripting::Builtins {
         RegisterValueTransfer<Color, glm::vec4, &Color::vec>("Color");
 
         // Bases before the handles derived from them: the transfer tries the newest registration first.
-        RegisterEntityTransfer<Entity>("Entity");
-        RegisterEntityTransfer<Player>("Player");
-        RegisterEntityTransfer<TextLabel>("TextLabel");
-        RegisterEntityTransfer<StateBag>("StateBag");
+        RegisterHandleTransfer<Entity>("Entity");
+        RegisterHandleTransfer<Player>("Player");
+        RegisterHandleTransfer<TextLabel>("TextLabel");
+        RegisterHandleTransfer<StateBag>("StateBag");
     }
 
     void UnregisterAll(v8::Isolate *isolate) {
