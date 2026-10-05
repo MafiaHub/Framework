@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace Framework::Scripting {
 
@@ -61,6 +62,55 @@ namespace Framework::Scripting {
          * from it in the first place).
          */
         TransferFunctions For(uint32_t runtime) const;
+
+        /**
+         * The runtime an isolate belongs to, or 0 when it takes no part in calls.
+         */
+        uint32_t FindRuntime(v8::Isolate *isolate) const;
+
+        /**
+         * Call a function that lives in `owner` from inside `caller`, whose scopes the caller holds. The arguments are
+         * copied out of the caller, the function runs inside its owner, and what it returns arrives in the caller: a
+         * promise becomes a promise there that settles with the owner's. On a throw, or on arguments that cannot cross,
+         * an exception is pending in the caller and the result is empty.
+         */
+        v8::MaybeLocal<v8::Value> Call(uint32_t caller, uint32_t owner, const v8::Global<v8::Function> &function, const std::vector<v8::Local<v8::Value>> &arguments);
+
+        // As above, with the arguments already copied out of the caller: one emit to many runtimes copies them once.
+        v8::MaybeLocal<v8::Value> Call(uint32_t caller, uint32_t owner, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments);
+
+        /**
+         * Bring a value that lives in `owner` into `caller`, whose scopes the caller holds: `produce` runs inside the
+         * owner and returns the value, which arrives as a copy. On failure an exception is pending in the caller.
+         */
+        v8::MaybeLocal<v8::Value> Fetch(uint32_t caller, uint32_t owner, fu2::function_view<v8::MaybeLocal<v8::Value>(v8::Isolate *, v8::Local<v8::Context>)> produce);
+
+        // As above, naming the runtimes by isolate. Throws in the caller when either takes no part in calls.
+        v8::MaybeLocal<v8::Value> Fetch(v8::Isolate *caller, v8::Isolate *owner, fu2::function_view<v8::MaybeLocal<v8::Value>(v8::Isolate *, v8::Local<v8::Context>)> produce);
+
+        /**
+         * Enter a runtime for the lifetime of the object: the lock, the isolate, a handle scope and its context.
+         */
+        class Scope final {
+          public:
+            Scope(const FunctionReferences &references, uint32_t runtime);
+
+            v8::Isolate *GetIsolate() const {
+                return _isolate;
+            }
+
+            v8::Local<v8::Context> GetContext() const {
+                return _context;
+            }
+
+          private:
+            v8::Isolate *_isolate;
+            v8::Locker _locker;
+            v8::Isolate::Scope _isolateScope;
+            v8::HandleScope _handleScope;
+            v8::Local<v8::Context> _context;
+            v8::Context::Scope _contextScope;
+        };
 
         // Diagnostics and tests: live exports, and stand-ins still tracked.
         size_t GetExportCount() const;
