@@ -284,7 +284,7 @@ namespace Framework::Integrations::Server {
         // Initialize the scripting engine
         _scriptingModule->SetResourcesPath(_opts.resourcesPath);
         _scriptingModule->SetDevMode(_opts.developmentMode);
-        if (_scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
+        if (_scriptingModule->Init(sdkCallback, _opts.modVersion) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
             return Error("Failed to initialize the scripting engine");
         }
 

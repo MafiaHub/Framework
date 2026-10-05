@@ -19,6 +19,8 @@
 #include "scripting/builtins/player.h"
 #include "scripting/resource/resource.h"
 #include "scripting/resource/resource_manager.h"
+#include "integrations/server/scripting/module.h"
+#include "utils/version.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
@@ -1049,12 +1051,47 @@ MODULE(js_features, {
         // ExecutionEnvironment at root, camelCase flags; old Environment name and PascalCase are gone.
         EQUALS(RunJSBool(engine, "ExecutionEnvironment.isClient === true"), true);
         EQUALS(RunJSBool(engine, "ExecutionEnvironment.isServer === false"), true);
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.modVersion === ''"), true);
         EQUALS(RunJSBool(engine, "typeof Environment === 'undefined'"), true);
         EQUALS(RunJSBool(engine, "ExecutionEnvironment.IsClient === undefined"), true);
         EQUALS(RunJSBool(engine, "ExecutionEnvironment.IsServer === undefined"), true);
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();
+    });
+
+    IT("server environment exposes immutable local release versions", {
+        Framework::Integrations::Server::Scripting::ServerScriptingModule module;
+        EQUALS(module.Init(nullptr, "2.4.0-rc.1+server"), ScriptingError::SCRIPTING_NONE);
+        auto &engine = *module.GetEngine();
+
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.isServer && !ExecutionEnvironment.isClient"), true);
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.modVersion === '2.4.0-rc.1+server'"), true);
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            auto context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            auto environment = context->Global()->Get(context, v8pp::to_v8(isolate, "ExecutionEnvironment")).ToLocalChecked().As<v8::Object>();
+            auto version = environment->Get(context, v8pp::to_v8(isolate, "frameworkVersion")).ToLocalChecked();
+            EQUALS(version->IsString(), true);
+            STREQUALS(v8pp::from_v8<std::string>(isolate, version).c_str(), Framework::Utils::Version::rel);
+        }
+        EQUALS(RunJSBool(engine, R"JS((() => {
+            for (const name of ['frameworkVersion', 'modVersion']) {
+                const original = ExecutionEnvironment[name];
+                if (Reflect.set(ExecutionEnvironment, name, 'changed')) return false;
+                if (Reflect.deleteProperty(ExecutionEnvironment, name)) return false;
+                if (ExecutionEnvironment[name] !== original) return false;
+            }
+            return true;
+        })())JS"), true);
+
+        module.RegisterFrameworkBindings();
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.modVersion === '2.4.0-rc.1+server'"), true);
+        module.Shutdown();
     });
 
     // ========================================

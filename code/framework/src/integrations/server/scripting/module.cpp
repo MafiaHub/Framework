@@ -44,7 +44,8 @@ namespace Framework::Integrations::Server::Scripting {
         Shutdown();
     }
 
-    Framework::Scripting::ScriptingError ServerScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
+    Framework::Scripting::ScriptingError ServerScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback, const std::string &modVersion) {
+        _modVersion = modVersion;
         // Set the SDK callback before initialization
         if (sdkCallback) {
             _nodeEngine->SetSDKRegisterCallback(sdkCallback);
@@ -128,7 +129,7 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Builtins::Imports::Register(isolate, context, global, _resourceManager.get());
         Framework::Scripting::Builtins::Exports::Register(isolate, context, global, _resourceManager.get());
         Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
-        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, false);
+        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, false, _modVersion);
         Framework::Scripting::Builtins::Chat::Register(isolate, global);
         Builtins::Voice::Register(isolate, global);
         Builtins::PendingConnection::Register(isolate);

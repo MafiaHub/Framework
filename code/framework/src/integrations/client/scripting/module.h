@@ -52,9 +52,10 @@ namespace Framework::Integrations::Client::Scripting {
         /**
          * Initialize the V8 engine and resource manager.
          * @param sdkCallback Optional callback for registering additional SDK bindings
+         * @param modVersion Local multiplayer mod version exposed to scripts
          * @return true if initialization succeeded
          */
-        [[nodiscard]] Framework::Scripting::ScriptingError Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback = nullptr);
+        [[nodiscard]] Framework::Scripting::ScriptingError Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback = nullptr, const std::string &modVersion = {});
 
         /**
          * Shutdown the V8 engine.
@@ -175,6 +176,7 @@ namespace Framework::Integrations::Client::Scripting {
       private:
         std::unique_ptr<Framework::Scripting::V8Engine> _engine;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
+        std::string _modVersion;
 
         // Resource synchronization state
         std::vector<ServerResourceInfo> _serverResourceList;

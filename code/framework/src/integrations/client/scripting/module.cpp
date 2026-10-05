@@ -64,7 +64,8 @@ namespace Framework::Integrations::Client::Scripting {
         Shutdown();
     }
 
-    Framework::Scripting::ScriptingError ClientScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
+    Framework::Scripting::ScriptingError ClientScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback, const std::string &modVersion) {
+        _modVersion = modVersion;
         if (!_engine) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
                 ->error("Cannot initialize client scripting: engine is null (Shutdown() was called). "
@@ -160,7 +161,7 @@ namespace Framework::Integrations::Client::Scripting {
         Framework::Scripting::Builtins::Exports::Register(isolate, context, global, _resourceManager.get());
         Framework::Scripting::Builtins::Imports::Register(isolate, context, global, _resourceManager.get());
         Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
-        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, true);
+        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, true, _modVersion);
 
         // Client-only surface.
         Builtins::Web::Register(isolate, context, global, _resourceManager.get());
