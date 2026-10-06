@@ -9,3 +9,4 @@
 /// <reference path="framework/exports.d.ts" />
 /// <reference path="framework/key.d.ts" />
 /// <reference path="framework/discord.d.ts" />
+/// <reference path="framework/execution_environment.d.ts" />

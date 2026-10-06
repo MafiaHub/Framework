@@ -160,7 +160,7 @@ namespace Framework::Integrations::Client::Scripting {
         Framework::Scripting::Builtins::Exports::Register(isolate, context, global, _resourceManager.get());
         Framework::Scripting::Builtins::Imports::Register(isolate, context, global, _resourceManager.get());
         Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
-        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, true);
+        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, true, _modVersion);
 
         // Client-only surface.
         Builtins::Web::Register(isolate, context, global, _resourceManager.get());
