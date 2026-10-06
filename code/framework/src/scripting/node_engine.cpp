@@ -439,9 +439,11 @@ namespace Framework::Scripting {
         _resourceRuntimes.erase(it);
         ++_runtimesGeneration;
 
-        // Stopped from inside itself (or from a call it is waiting on): freeing it now would pull the isolate out
-        // from under the code that is running. The name is free at once, so a restart can create its next runtime.
-        if (runtime->runtime->GetIsolate()->IsInUse()) {
+        // Stopped while any script is running, its own or another's (an event handler stopping another resource,
+        // say): native code further up the stack may still hold handles into it, such as an emission's snapshot of
+        // its handlers. It is freed at the next tick, from the top. The name is free at once, so a restart can
+        // create its next runtime.
+        if (!CanTeardownNow(*runtime)) {
             _retiredRuntimes.push_back(std::move(runtime));
             return;
         }
@@ -480,9 +482,13 @@ namespace Framework::Scripting {
         runtime->runtime.reset();
     }
 
+    bool NodeEngine::CanTeardownNow(const ResourceRuntime &runtime) const {
+        return v8::Isolate::TryGetCurrent() == nullptr && !runtime.runtime->GetIsolate()->IsInUse();
+    }
+
     void NodeEngine::FlushRetiredRuntimes() {
         for (auto it = _retiredRuntimes.begin(); it != _retiredRuntimes.end();) {
-            if ((*it)->runtime->GetIsolate()->IsInUse()) {
+            if (!CanTeardownNow(**it)) {
                 ++it;
                 continue;
             }

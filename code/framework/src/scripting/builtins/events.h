@@ -150,6 +150,9 @@ namespace Framework::Scripting::Builtins {
          */
         void ForgetIsolate(v8::Isolate *isolate);
 
+        // Emissions still waiting for their handlers to settle, across every Events. For diagnostics and tests.
+        static size_t GetWaitingEmissionCount();
+
         /**
          * Clear all per-session event state.
          */
@@ -287,6 +290,13 @@ namespace Framework::Scripting::Builtins {
         // Track pending AllSettled callbacks for cleanup on destruction
         std::set<std::shared_ptr<AllSettledCallbackData>> _pendingCallbacks;
         std::mutex _pendingCallbacksMutex;
+
+        // Emissions waiting for their handlers to settle, by the key their then-handler holds. Static, because the
+        // then-handler can run after this Events is gone, and the disposal of a runtime must reach the emissions whose
+        // then-handlers will now never run.
+        static std::map<uint64_t, std::shared_ptr<AllSettledCallbackData>> _waitingEmissions;
+        static std::mutex _waitingEmissionsMutex;
+        static uint64_t _nextWaitingEmission;
     };
 
 } // namespace Framework::Scripting::Builtins

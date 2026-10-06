@@ -52,8 +52,10 @@ a worker thread; what changes is that the worker now dies with its resource.
   applies its sandbox to every resource's environment, not only its own.
 - A resource's runtime is created when the resource starts and destroyed after
   its `resourceStop` handlers settle. A runtime stopped from inside itself (a
-  resource stopping itself, or one it is waiting on) is destroyed at the next
-  tick instead, once nothing is executing in it. Before it goes, its
+  resource stopping itself, one it is waiting on, or one stopped by another
+  resource's event handler) is destroyed at the next tick instead, once no
+  script is running at all: native code further up the stack may still hold
+  handles into it. Before it goes, its
   `process.on('exit')` handlers run, as Node runs them before it frees an
   environment.
 - `process.exit()` stops the resource that calls it, not the server. Node's
@@ -98,7 +100,12 @@ nested references from expanding into a copy without end.
 A function reference calls back into the resource that owns the function, with
 its arguments and its result copied the same way. A reference whose owner has
 stopped throws when called. A resource that receives the same function twice
-gets the same reference both times.
+gets the same reference both times. A function sent as a property of an object
+(an exported API's method) runs with the owner's object as `this`, so methods
+work across resources and act on the owner's state, not on the caller's copy.
+
+Properties are rebuilt as own data properties: an own `"__proto__"` key arrives
+as an own property and never replaces the prototype.
 
 An event or message handler in another resource is called for its outcome
 only: what it returns is never copied back, so returning an object that cannot

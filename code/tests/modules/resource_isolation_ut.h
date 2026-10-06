@@ -75,6 +75,20 @@ namespace ResourceIsolationTest {
         context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Probe"), cls->js_function_template()->GetFunction(context).ToLocalChecked()).Check();
     }
 
+    // The manager __stop(name) stops resources through, as a project binding might.
+    static Framework::Scripting::ResourceManager *&StopTarget() {
+        static Framework::Scripting::ResourceManager *manager = nullptr;
+        return manager;
+    }
+
+    static void InstallStop(v8::Isolate *isolate, v8::Local<v8::Context> context) {
+        auto stop = [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+            v8::String::Utf8Value name(info.GetIsolate(), info[0]);
+            StopTarget()->StopResource(*name ? *name : "");
+        };
+        context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "__stop"), v8::Function::New(context, stop).ToLocalChecked()).Check();
+    }
+
     static std::uintmax_t FileSize(const std::filesystem::path &path) {
         std::error_code ec;
         const auto size = std::filesystem::file_size(path, ec);
@@ -514,5 +528,64 @@ MODULE(resource_isolation, {
 
         engine.DestroyResourceRuntime("boxed");
         engine.Shutdown();
+    });
+    IT("frees a resource stopped by another resource's event handler only once the dispatch is over", {
+        TestManagerHelper::Cleanup();
+        // The emission snapshots both handlers; the first stops the second's resource while the snapshot still holds it.
+        ResourceIsolationTest::WriteResource("stopper", "Events.on('probe', () => __stop('stopped'));");
+        ResourceIsolationTest::WriteResource("stopped", "Events.on('probe', () => {});");
+        ResourceIsolationTest::WriteResource("prober", "Events.on('resourceStart', (name) => { if (name === 'prober') { Events.emit('probe'); __record('emitReturned', 1); } });");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        ResourceIsolationTest::StopTarget() = &manager;
+        TestManagerHelper::RegisterEvents(engine, manager, ResourceIsolationTest::InstallStop);
+        // Freed while the emission still ran, the snapshot would release its handle into a disposed isolate.
+        bool disposed               = false;
+        bool disposedDuringDispatch = false;
+        engine.AddRuntimeDisposingListener([&](v8::Isolate *) {
+            disposed               = true;
+            disposedDuringDispatch = TestManagerHelper::RecordedValue("emitReturned") != 1;
+        });
+        EQUALS(manager.DiscoverResources(), 3u);
+        EQUALS((bool)manager.StartResource("stopper"), true);
+        EQUALS((bool)manager.StartResource("stopped"), true);
+        EQUALS((bool)manager.StartResource("prober"), true);
+
+        // Stopped at once, freed once nothing runs: StartResource ticks the engine while it waits for resourceStart.
+        EQUALS(manager.IsResourceRunning("stopped"), false);
+        engine.Tick();
+        EQUALS(disposed, true);
+        EQUALS(disposedDuringDispatch, false);
+
+        manager.StopAll();
+        engine.Shutdown();
+        ResourceIsolationTest::StopTarget() = nullptr;
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("frees the emissions a stopped resource was still waiting on", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("hanger", "Events.on('hang', () => new Promise(() => {})); Events.emit('hang');");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 1u);
+        const size_t before = Builtins::Events::GetWaitingEmissionCount();
+        EQUALS((bool)manager.StartResource("hanger"), true);
+        EQUALS(Builtins::Events::GetWaitingEmissionCount(), before + 1);
+
+        EQUALS((bool)manager.StopResource("hanger"), true);
+        EQUALS(Builtins::Events::GetWaitingEmissionCount(), before);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
     });
 });

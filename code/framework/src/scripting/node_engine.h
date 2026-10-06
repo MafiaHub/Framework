@@ -206,7 +206,11 @@ namespace Framework::Scripting {
         // Leave the references and free the environment. The runtime must not be executing.
         void TeardownResourceRuntime(std::unique_ptr<ResourceRuntime> runtime);
 
-        // Destroy the runtimes whose destruction was deferred because they were executing.
+        // Whether a runtime can be freed now: nothing runs in any isolate on this thread, so no native code holds a
+        // borrowed handle into it.
+        bool CanTeardownNow(const ResourceRuntime &runtime) const;
+
+        // Destroy the runtimes whose destruction was deferred because script was running.
         void FlushRetiredRuntimes();
 
         // Stop the resources that called process.exit() since the last tick.
@@ -231,7 +235,7 @@ namespace Framework::Scripting {
         std::map<std::string, std::unique_ptr<ResourceRuntime>, std::less<>> _resourceRuntimes;
         std::unordered_map<v8::Isolate *, ResourceRuntime *> _runtimeByIsolate;
 
-        // Runtimes stopped while they were executing; destroyed at the next tick.
+        // Runtimes stopped while script was running; destroyed at the next tick.
         std::vector<std::unique_ptr<ResourceRuntime>> _retiredRuntimes;
 
         std::vector<PendingExit> _pendingExits;

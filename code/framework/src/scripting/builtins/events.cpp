@@ -29,6 +29,15 @@ namespace Framework::Scripting::Builtins {
         std::atomic<bool> cancelled {false}; // Set when Events is destroyed
     };
 
+    std::map<uint64_t, std::shared_ptr<Events::AllSettledCallbackData>> Events::_waitingEmissions;
+    std::mutex Events::_waitingEmissionsMutex;
+    uint64_t Events::_nextWaitingEmission = 1;
+
+    size_t Events::GetWaitingEmissionCount() {
+        std::scoped_lock lock(_waitingEmissionsMutex);
+        return _waitingEmissions.size();
+    }
+
     Events::~Events() {
         // Invalidate the callback context so any outstanding unsubscribe
         // lambdas holding a reference will safely bail out
@@ -598,10 +607,19 @@ namespace Framework::Scripting::Builtins {
             _pendingCallbacks.insert(callbackData);
         }
 
-        // Give the handler its own strong reference via the External, so ~Events() clearing
-        // _pendingCallbacks can't free the data out from under a still-pending microtask.
-        auto *handlerRef                     = new std::shared_ptr<AllSettledCallbackData>(callbackData);
-        v8::Local<v8::External> resolverData = v8::External::New(isolate, handlerRef);
+        // The handler holds a key to its own strong reference, so ~Events() clearing _pendingCallbacks can't free the
+        // data out from under a still-pending microtask, and disposing the isolate can still free it.
+        uint64_t key = 0;
+        {
+            std::scoped_lock lock(_waitingEmissionsMutex);
+            key = _nextWaitingEmission++;
+            _waitingEmissions.emplace(key, callbackData);
+        }
+        auto forget = [key]() {
+            std::scoped_lock lock(_waitingEmissionsMutex);
+            _waitingEmissions.erase(key);
+        };
+        v8::Local<v8::Value> resolverData = v8::BigInt::NewFromUnsigned(isolate, key);
 
         v8::MaybeLocal<v8::Function> maybeThenHandler = v8::Function::New(
             context,
@@ -609,10 +627,17 @@ namespace Framework::Scripting::Builtins {
                 v8::Isolate *iso           = info.GetIsolate();
                 v8::Local<v8::Context> ctx = iso->GetCurrentContext();
 
-                // Own the data for this call, then free the heap holder (a then-handler runs once).
-                auto *handlerRef                             = static_cast<std::shared_ptr<AllSettledCallbackData> *>(info.Data().As<v8::External>()->Value());
-                std::shared_ptr<AllSettledCallbackData> data = *handlerRef;
-                delete handlerRef;
+                // Take the data for this call (a then-handler runs once). Gone when the emitter's runtime was disposed.
+                std::shared_ptr<AllSettledCallbackData> data;
+                {
+                    std::scoped_lock lock(_waitingEmissionsMutex);
+                    const auto waiting = _waitingEmissions.find(info.Data().As<v8::BigInt>()->Uint64Value());
+                    if (waiting == _waitingEmissions.end()) {
+                        return;
+                    }
+                    data = std::move(waiting->second);
+                    _waitingEmissions.erase(waiting);
+                }
 
                 if (data->cancelled.load(std::memory_order_acquire)) {
                     return; // Events destroyed, bail out safely
@@ -693,16 +718,16 @@ namespace Framework::Scripting::Builtins {
             resolverData);
 
         // Function::New / Promise::Then return empty on a terminating isolate; ToLocalChecked()
-        // would abort. Fail soft: the handler won't run, so free its holder and untrack here.
+        // would abort. Fail soft: the handler won't run, so forget its data and untrack here.
         v8::Local<v8::Function> thenHandler;
         if (!maybeThenHandler.ToLocal(&thenHandler)) {
-            delete handlerRef;
+            forget();
             RemovePendingCallback(callbackData.get());
             return;
         }
 
         if (allPromise->Then(context, thenHandler).IsEmpty()) {
-            delete handlerRef;
+            forget();
             RemovePendingCallback(callbackData.get());
             return;
         }
@@ -1010,19 +1035,23 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
-        // An emission from this isolate still waiting on its handlers never settles now. Its then-handler dies with
-        // the isolate, so the small holder it would have freed is left behind.
-        std::scoped_lock lock(_pendingCallbacksMutex);
-        for (auto it = _pendingCallbacks.begin(); it != _pendingCallbacks.end();) {
-            if ((*it)->isolate == isolate) {
-                (*it)->cancelled.store(true, std::memory_order_release);
-                (*it)->resolver.Reset();
-                it = _pendingCallbacks.erase(it);
-            }
-            else {
-                ++it;
+        // An emission from this isolate still waiting on its handlers never settles now: its then-handler dies with
+        // the isolate, so the data it would have taken is freed here.
+        {
+            std::scoped_lock lock(_pendingCallbacksMutex);
+            for (auto it = _pendingCallbacks.begin(); it != _pendingCallbacks.end();) {
+                if ((*it)->isolate == isolate) {
+                    (*it)->cancelled.store(true, std::memory_order_release);
+                    (*it)->resolver.Reset();
+                    it = _pendingCallbacks.erase(it);
+                }
+                else {
+                    ++it;
+                }
             }
         }
+        std::scoped_lock lock(_waitingEmissionsMutex);
+        std::erase_if(_waitingEmissions, [&](const auto &entry) { return entry.second->isolate == isolate; });
     }
 
     void Events::Reset() {
