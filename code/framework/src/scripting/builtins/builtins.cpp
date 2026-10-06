@@ -78,5 +78,12 @@ namespace Framework::Scripting::Builtins {
         StateBag::UnregisterIsolate(isolate);
         Player::UnregisterIsolate(isolate);
         TextLabel::UnregisterIsolate(isolate);
+
+        // v8pp keeps its own per-isolate state: every class registry, the C++ objects they wrap, and the data of every
+        // bound function. Weak callbacks do not run on disposal, so without this a stopped resource leaked all of it.
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8pp::cleanup(isolate);
     }
 } // namespace Framework::Scripting::Builtins

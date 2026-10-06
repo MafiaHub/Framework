@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <map>
 
 // Helper class to manage test resource directories for manager tests
@@ -99,9 +100,10 @@ class TestManagerHelper {
     }
 
     // Events, Exports, Messages and the recorder, in the engine's runtime and in every runtime it creates for a resource.
-    static void RegisterEvents(Framework::Scripting::NodeEngine &engine, Framework::Scripting::ResourceManager &manager) {
+    // `extra` installs anything further a test needs in each runtime.
+    static void RegisterEvents(Framework::Scripting::NodeEngine &engine, Framework::Scripting::ResourceManager &manager, std::function<void(v8::Isolate *, v8::Local<v8::Context>)> extra = {}) {
         Recorded().clear();
-        const auto install = [&manager](Framework::Scripting::Engine *target) {
+        const auto install = [&manager, extra](Framework::Scripting::Engine *target) {
             v8::Isolate *isolate = target->GetIsolate();
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
@@ -112,6 +114,9 @@ class TestManagerHelper {
             Framework::Scripting::Builtins::Exports::Register(isolate, context, context->Global(), &manager);
             Framework::Scripting::Builtins::Messages::Register(isolate, context, context->Global(), &manager);
             InstallRecorder(isolate, context);
+            if (extra) {
+                extra(isolate, context);
+            }
         };
         install(&engine);
         engine.SetRuntimeSetupCallback(install);

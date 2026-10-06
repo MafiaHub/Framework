@@ -13,8 +13,12 @@
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
 
+#include <v8pp/class.hpp>
+
 #include <chrono>
 #include <filesystem>
+#include <map>
+#include <memory>
 #include <string>
 #include <thread>
 
@@ -44,6 +48,29 @@ namespace ResourceIsolationTest {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         return false;
+    }
+
+    // A native type a resource wraps, counting the live instances.
+    struct Probe {
+        static inline int alive = 0;
+        Probe() {
+            ++alive;
+        }
+        ~Probe() {
+            --alive;
+        }
+    };
+
+    static std::map<v8::Isolate *, std::unique_ptr<v8pp::class_<Probe>>> &ProbeClasses() {
+        static std::map<v8::Isolate *, std::unique_ptr<v8pp::class_<Probe>>> classes;
+        return classes;
+    }
+
+    static void InstallProbe(v8::Isolate *isolate, v8::Local<v8::Context> context) {
+        auto &cls = ProbeClasses()[isolate];
+        cls       = std::make_unique<v8pp::class_<Probe>>(isolate);
+        cls->ctor<>();
+        context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "Probe"), cls->js_function_template()->GetFunction(context).ToLocalChecked()).Check();
     }
 
     static std::uintmax_t FileSize(const std::filesystem::path &path) {
@@ -168,6 +195,31 @@ MODULE(resource_isolation, {
         EQUALS(aliveWhenNotified, true);
 
         engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("frees the native objects a resource wrapped when it stops", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("prober", "globalThis.kept = [new Probe(), new Probe(), new Probe()];");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager, ResourceIsolationTest::InstallProbe);
+        engine.AddRuntimeDisposingListener([](v8::Isolate *isolate) { ResourceIsolationTest::ProbeClasses().erase(isolate); });
+        ResourceIsolationTest::Probe::alive = 0;
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("prober"), true);
+        EQUALS(ResourceIsolationTest::Probe::alive, 3);
+
+        // Still referenced from the resource's globals, so no collection frees them: only the teardown can.
+        EQUALS((bool)manager.StopResource("prober"), true);
+        EQUALS(ResourceIsolationTest::Probe::alive, 0);
+
+        engine.Shutdown();
+        ResourceIsolationTest::ProbeClasses().clear();
         TestManagerHelper::Cleanup();
     });
 
