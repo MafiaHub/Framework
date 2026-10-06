@@ -31,6 +31,7 @@ namespace Framework::Scripting {
      * An export lives while a copy of it exists or a stand-in for it is reachable. Removing a runtime drops what it
      * exported, so its stand-ins elsewhere throw instead of calling into a dead isolate, and releases what its own
      * stand-ins held. A runtime gets one stand-in per export, so the same function arrives as the same stand-in.
+     * A function sent as a property of an object runs with that object, in its owner, as `this`.
      *
      * Every runtime is entered from the one scripting thread, so a call nests the owner's isolate inside the caller's.
      */
@@ -41,9 +42,9 @@ namespace Framework::Scripting {
             // A copy of what the function returned; a promise settles with a copy of its value.
             Value,
 
-            // Only what the caller can act on without the value: primitives arrive, objects arrive as undefined and are
-            // never copied, a promise settles with undefined. Throws and rejections still carry their reason. For
-            // callers that discard the result, such as event dispatch.
+            // Only what the caller can act on without the value: a boolean arrives (a handler's veto), anything else
+            // arrives as undefined and is never copied, a promise settles with undefined. Throws and rejections still
+            // carry their reason. For callers that discard the result, such as event dispatch.
             Outcome,
         };
 

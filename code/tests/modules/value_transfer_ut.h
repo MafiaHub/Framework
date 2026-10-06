@@ -178,10 +178,16 @@ MODULE(value_transfer, {
         STREQUALS(NodeTest::Eval(*pair.target, "typeof received.large").c_str(), "bigint");
     });
 
+    IT("keeps an own __proto__ property an own property, not the prototype", {
+        ValueTransferTest::Pair pair;
+        STREQUALS(ValueTransferTest::Send(pair, "JSON.parse('{\"__proto__\":{\"isAdmin\":true},\"ok\":1}')").c_str(), "");
+        STREQUALS(NodeTest::Eval(*pair.target, "[Object.getPrototypeOf(received) === Object.prototype, Object.hasOwn(received, '__proto__'), received.isAdmin, received.ok, received['__proto__'].isAdmin].join('|')").c_str(), "true|true||1|true");
+    });
+
     IT("hands functions to the export and import hooks", {
         ValueTransferTest::Pair pair;
         TransferFunctions functions;
-        functions.exportFunction = [](v8::Isolate *, v8::Local<v8::Function>, TransferredValue &out) { out.reference = 7; };
+        functions.exportFunction = [](v8::Isolate *, v8::Local<v8::Function>, v8::Local<v8::Object>, TransferredValue &out) { out.reference = 7; };
         functions.importFunction = [](v8::Isolate *isolate, v8::Local<v8::Context> context, uint64_t reference) -> v8::MaybeLocal<v8::Function> {
             return v8::Function::New(context, [](const v8::FunctionCallbackInfo<v8::Value> &info) { info.GetReturnValue().Set(info.Data()); }, v8::Number::New(isolate, static_cast<double>(reference)));
         };

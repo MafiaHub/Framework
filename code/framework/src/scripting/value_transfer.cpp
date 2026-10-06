@@ -103,7 +103,8 @@ namespace Framework::Scripting {
           public:
             Copier(v8::Isolate *isolate, v8::Local<v8::Context> context, const TransferFunctions &functions): _isolate(isolate), _context(context), _functions(functions) {}
 
-            bool Copy(v8::Local<v8::Value> value, TransferredValue &out, const Path &where) {
+            // `holder` is the object or array `value` was read from, if any.
+            bool Copy(v8::Local<v8::Value> value, TransferredValue &out, const Path &where, v8::Local<v8::Object> holder = {}) {
                 if (_valuesLeft == 0) {
                     return Fail(where, "it is too large to copy");
                 }
@@ -143,7 +144,7 @@ namespace Framework::Scripting {
                         return Fail(where, "a function cannot be copied here");
                     }
                     out.kind = TransferredValue::Kind::Function;
-                    _functions.exportFunction(_isolate, value.As<v8::Function>(), out);
+                    _functions.exportFunction(_isolate, value.As<v8::Function>(), holder, out);
                     return true;
                 }
 
@@ -208,7 +209,7 @@ namespace Framework::Scripting {
                     out.items.resize(length);
                     for (uint32_t i = 0; i < length; ++i) {
                         v8::Local<v8::Value> element;
-                        if (!array->Get(_context, i).ToLocal(&element) || !Copy(element, out.items[i], where.At(Path::Step::Index, i))) {
+                        if (!array->Get(_context, i).ToLocal(&element) || !Copy(element, out.items[i], where.At(Path::Step::Index, i), object)) {
                             return Fail(where, "an element could not be read");
                         }
                     }
@@ -337,7 +338,7 @@ namespace Framework::Scripting {
                         return false;
                     }
                     TransferredValue copied;
-                    if (!Copy(field, copied, where.Property(name))) {
+                    if (!Copy(field, copied, where.Property(name), object)) {
                         return false;
                     }
                     out.properties.emplace_back(std::move(name), std::move(copied));
@@ -427,14 +428,15 @@ namespace Framework::Scripting {
                 return array;
             }
 
-            // Writes the copied properties onto `object`, leaving out the one named `skip`.
+            // Writes the copied properties onto `object` as its own, leaving out the one named `skip`. Defined, not
+            // assigned: assigning an own "__proto__" would run Object.prototype's setter and replace the prototype.
             v8::MaybeLocal<v8::Value> BuildProperties(v8::Local<v8::Object> object, const TransferredValue &value, const char *skip) {
                 for (const auto &[name, field] : value.properties) {
                     if (skip != nullptr && name == skip) {
                         continue;
                     }
                     v8::Local<v8::Value> built;
-                    if (!Build(field).ToLocal(&built) || object->Set(_context, v8pp::to_v8(_isolate, name), built).IsNothing()) {
+                    if (!Build(field).ToLocal(&built) || object->CreateDataProperty(_context, v8pp::to_v8(_isolate, name), built).IsNothing()) {
                         return {};
                     }
                 }

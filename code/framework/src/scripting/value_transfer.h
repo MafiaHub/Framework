@@ -83,8 +83,9 @@ namespace Framework::Scripting {
      * How functions cross. Without these, copying a function fails.
      */
     struct TransferFunctions {
-        // Source side: keep the function reachable and fill in `reference` and `retainer`.
-        fu2::function<void(v8::Isolate *, v8::Local<v8::Function>, TransferredValue &) const> exportFunction;
+        // Source side: keep the function reachable and fill in `reference` and `retainer`. `holder` is the object or
+        // array the function was found in, empty for a function sent on its own: what it is called on later.
+        fu2::function<void(v8::Isolate *, v8::Local<v8::Function>, v8::Local<v8::Object> holder, TransferredValue &) const> exportFunction;
 
         // Target side: make the callable stand-in for an exported function.
         fu2::function<v8::MaybeLocal<v8::Function>(v8::Isolate *, v8::Local<v8::Context>, uint64_t) const> importFunction;

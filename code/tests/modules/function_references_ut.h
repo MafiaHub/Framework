@@ -256,7 +256,7 @@ MODULE(function_references, {
     IT("brings back only the outcome when the caller wants no value", {
         using Returned = FunctionReferences::Returned;
         FunctionReferencesTest::Pair pair;
-        NodeTest::Eval(*pair.owner, "globalThis.fns = { timer: () => setTimeout(() => {}, 60000), veto: () => false, fail: () => { throw new Error('refused') }, later: async () => { const loop = {}; loop.self = loop; return loop; } }");
+        NodeTest::Eval(*pair.owner, "globalThis.fns = { timer: () => setTimeout(() => {}, 60000), veto: () => false, tag: () => Symbol('x'), count: () => 42, fail: () => { throw new Error('refused') }, later: async () => { const loop = {}; loop.self = loop; return loop; } }");
 
         // A Node timer links back to itself: as a value it cannot cross, as an outcome it is never copied.
         const std::string asValue = FunctionReferencesTest::CallOwner(pair, "timer", Returned::Value);
@@ -264,6 +264,9 @@ MODULE(function_references, {
         STREQUALS(FunctionReferencesTest::CallOwner(pair, "timer", Returned::Outcome).c_str(), "undefined");
 
         STREQUALS(FunctionReferencesTest::CallOwner(pair, "veto", Returned::Outcome).c_str(), "false");
+        // Only a veto is an outcome: a symbol, which could not even be copied, and a number both arrive as undefined.
+        STREQUALS(FunctionReferencesTest::CallOwner(pair, "tag", Returned::Outcome).c_str(), "undefined");
+        STREQUALS(FunctionReferencesTest::CallOwner(pair, "count", Returned::Outcome).c_str(), "undefined");
         STREQUALS(FunctionReferencesTest::CallOwner(pair, "fail", Returned::Outcome).c_str(), "<threw> Error: refused");
 
         STREQUALS(FunctionReferencesTest::CallOwner(pair, "later", Returned::Outcome).c_str(), "[object Promise]");
@@ -299,5 +302,13 @@ MODULE(function_references, {
         NodeTest::Eval(*pair.owner, "release(1)");
         EQUALS(pair.TickUntil("out !== ''"), true);
         STREQUALS(NodeTest::Eval(*pair.caller, "out").c_str(), "owner stopped before the call finished");
+    });
+    IT("calls a method sent on an object with that object as this", {
+        FunctionReferencesTest::Pair pair;
+        STREQUALS(FunctionReferencesTest::Export(pair, "{ balance: 10, getBalance() { 'use strict'; return this.balance; }, nested: { name: 'inner', who() { 'use strict'; return this.name; } }, list: [function () { 'use strict'; return Array.isArray(this); }] }").c_str(), "");
+        STREQUALS(NodeTest::Eval(*pair.caller, "[api.getBalance(), api.nested.who(), api.list[0]()].join('|')").c_str(), "10|inner|true");
+        // The owner's object, not the caller's copy of it: what the method changes is the owner's state.
+        NodeTest::Eval(*pair.caller, "api.balance = 999");
+        STREQUALS(NodeTest::Eval(*pair.caller, "api.getBalance()").c_str(), "10");
     });
 });

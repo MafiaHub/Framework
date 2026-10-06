@@ -27,9 +27,12 @@ namespace Framework::Scripting {
         };
 
         // A function kept alive for other runtimes to call. `holds` counts the copies and stand-ins that refer to it.
+        // `receiver` is the object it was sent as a method of, which it is called on: a method exported on an object
+        // keeps its `this`.
         struct Export {
             uint32_t runtime = 0;
             v8::Global<v8::Function> function;
+            v8::Global<v8::Object> receiver;
             uint32_t holds = 0;
         };
 
@@ -123,9 +126,9 @@ namespace Framework::Scripting {
         TransferFunctions Hooks(uint32_t runtime) {
             TransferFunctions functions;
             std::weak_ptr<State> weak = weak_from_this();
-            functions.exportFunction  = [weak, runtime](v8::Isolate *isolate, v8::Local<v8::Function> function, TransferredValue &out) {
+            functions.exportFunction  = [weak, runtime](v8::Isolate *isolate, v8::Local<v8::Function> function, v8::Local<v8::Object> holder, TransferredValue &out) {
                 if (auto state = weak.lock()) {
-                    state->ExportFunction(runtime, isolate, function, out);
+                    state->ExportFunction(runtime, isolate, function, holder, out);
                 }
             };
             functions.importFunction = [weak, runtime](v8::Isolate *isolate, v8::Local<v8::Context> context, uint64_t id) -> v8::MaybeLocal<v8::Function> {
@@ -138,7 +141,7 @@ namespace Framework::Scripting {
             return functions;
         }
 
-        void ExportFunction(uint32_t runtime, v8::Isolate *isolate, v8::Local<v8::Function> function, TransferredValue &out) {
+        void ExportFunction(uint32_t runtime, v8::Isolate *isolate, v8::Local<v8::Function> function, v8::Local<v8::Object> holder, TransferredValue &out) {
             v8::Local<v8::Context> context = isolate->GetCurrentContext();
             v8::Local<v8::Private> key     = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.functionReference"));
 
@@ -161,7 +164,11 @@ namespace Framework::Scripting {
                 function->SetPrivate(context, key, v8::Number::New(isolate, static_cast<double>(id))).Check();
             }
 
-            ++exports[id].holds;
+            Export &exported = exports[id];
+            if (exported.receiver.IsEmpty() && !holder.IsEmpty() && exported.runtime == runtime) {
+                exported.receiver.Reset(isolate, holder);
+            }
+            ++exported.holds;
             // Built in place: a temporary Hold would release the export as it went out of scope.
             auto hold     = std::make_shared<Hold>();
             hold->state   = weak_from_this();
@@ -283,9 +290,12 @@ namespace Framework::Scripting {
                 return;
             }
             // Held by value: the call may export or release entries, and the map may move under an iterator.
-            v8::Global<v8::Function> function(state.runtimes.at(owner).isolate, state.exports.at(id).function);
+            v8::Isolate *ownerIsolate = state.runtimes.at(owner).isolate;
+            const Export &exported    = state.exports.at(id);
+            v8::Global<v8::Function> function(ownerIsolate, exported.function);
+            v8::Global<v8::Object> receiver(ownerIsolate, exported.receiver);
             v8::Local<v8::Value> result;
-            if (state.Invoke(caller, isolate, isolate->GetCurrentContext(), owner, function, copied, Returned::Value).ToLocal(&result)) {
+            if (state.Invoke(caller, isolate, isolate->GetCurrentContext(), owner, function, copied, Returned::Value, receiver).ToLocal(&result)) {
                 info.GetReturnValue().Set(result);
             }
         }
@@ -316,7 +326,8 @@ namespace Framework::Scripting {
 
         // Calls `function` inside `ownerId` with copied arguments and brings back what it returned or threw. The
         // caller holds its own scopes; on a throw the exception is pending there and the result is empty.
-        v8::MaybeLocal<v8::Value> Invoke(uint32_t callerId, v8::Isolate *isolate, v8::Local<v8::Context> context, uint32_t ownerId, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments, Returned returned) {
+        // `receiver`, when set, is the `this` the function runs with.
+        v8::MaybeLocal<v8::Value> Invoke(uint32_t callerId, v8::Isolate *isolate, v8::Local<v8::Context> context, uint32_t ownerId, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments, Returned returned, const v8::Global<v8::Object> &receiver = {}) {
             const auto ownerIt = runtimes.find(ownerId);
             if (ownerIt == runtimes.end()) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
@@ -342,8 +353,9 @@ namespace Framework::Scripting {
                     argv.push_back(rebuilt);
                 }
 
+                v8::Local<v8::Value> self = receiver.IsEmpty() ? v8::Undefined(owner.isolate).As<v8::Value>() : receiver.Get(owner.isolate).As<v8::Value>();
                 v8::Local<v8::Value> value;
-                const bool called = argv.size() == arguments.size() && function.Get(owner.isolate)->Call(entered.context, v8::Undefined(owner.isolate), static_cast<int>(argv.size()), argv.data()).ToLocal(&value);
+                const bool called = argv.size() == arguments.size() && function.Get(owner.isolate)->Call(entered.context, self, static_cast<int>(argv.size()), argv.data()).ToLocal(&value);
                 if (!called) {
                     // Terminated (the owner called process.exit(), say): there is no exception value to copy.
                     thrown = tryCatch.HasTerminated() ? ErrorValue(owner.name + " stopped during the call") : CopyOut(owner.isolate, entered.context, tryCatch.HasCaught() ? tryCatch.Exception() : v8::Local<v8::Value>(), ownerHooks, "The call failed");
@@ -351,8 +363,8 @@ namespace Framework::Scripting {
                 else if (value->IsPromise()) {
                     settlement = Await(ownerId, callerId, entered.context, value.As<v8::Promise>(), returned == Returned::Value);
                 }
-                else if (returned == Returned::Outcome && value->IsObject()) {
-                    result.emplace(); // Undefined: the caller does not want the object, so it is never copied.
+                else if (returned == Returned::Outcome && !value->IsBoolean()) {
+                    result.emplace(); // Undefined: only a boolean (a veto) is an outcome, so nothing else is copied.
                 }
                 else {
                     auto copied = ValueTransfer::Copy(owner.isolate, entered.context, value, ownerHooks);
