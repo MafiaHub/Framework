@@ -401,15 +401,13 @@ namespace Framework::Scripting::Builtins {
             return handler.function.Get(isolate)->Call(context, context->Global(), 2, argv);
         }
 
-        Engine *engine                 = manager != nullptr ? manager->GetJSEngine() : nullptr;
-        FunctionReferences *references = engine != nullptr ? engine->GetFunctionReferences() : nullptr;
-        const uint32_t caller          = references != nullptr ? references->FindRuntime(isolate) : 0;
-        const uint32_t owner           = references != nullptr ? references->FindRuntime(handler.isolate) : 0;
-        if (caller == 0 || owner == 0) {
+        // Only a throw matters to the caller; the answer goes through reply(), so the return value is never copied.
+        FunctionReferences *references = manager != nullptr ? manager->GetFunctionReferences() : nullptr;
+        if (references == nullptr) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Messages: the handler's resource is not reachable from here")));
             return {};
         }
-        return references->Call(caller, owner, handler.function, std::vector<v8::Local<v8::Value>> {payload, reply});
+        return references->Call(isolate, handler.isolate, handler.function, std::vector<v8::Local<v8::Value>> {payload, reply}, FunctionReferences::Returned::Outcome);
     }
 
     void Messages::Settle(PendingRequest &request, fu2::function_view<void(v8::Isolate *, v8::Local<v8::Context>, v8::Local<v8::Promise::Resolver>)> settle) {

@@ -10,12 +10,11 @@
 
 #include "value_transfer.h"
 
-#include <cerrno>
-
 #include <v8.h>
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -31,12 +30,23 @@ namespace Framework::Scripting {
      *
      * An export lives while a copy of it exists or a stand-in for it is reachable. Removing a runtime drops what it
      * exported, so its stand-ins elsewhere throw instead of calling into a dead isolate, and releases what its own
-     * stand-ins held.
+     * stand-ins held. A runtime gets one stand-in per export, so the same function arrives as the same stand-in.
      *
      * Every runtime is entered from the one scripting thread, so a call nests the owner's isolate inside the caller's.
      */
     class FunctionReferences final {
       public:
+        // What a call brings back to the caller.
+        enum class Returned : uint8_t {
+            // A copy of what the function returned; a promise settles with a copy of its value.
+            Value,
+
+            // Only what the caller can act on without the value: primitives arrive, objects arrive as undefined and are
+            // never copied, a promise settles with undefined. Throws and rejections still carry their reason. For
+            // callers that discard the result, such as event dispatch.
+            Outcome,
+        };
+
         FunctionReferences();
         ~FunctionReferences();
 
@@ -69,48 +79,34 @@ namespace Framework::Scripting {
         uint32_t FindRuntime(v8::Isolate *isolate) const;
 
         /**
+         * Copy call arguments out of `caller`, whose scopes the caller holds, once for any number of calls. On failure
+         * an exception naming the argument is pending in the caller and the result is empty.
+         */
+        std::optional<std::vector<TransferredValue>> CopyArguments(v8::Isolate *caller, const std::vector<v8::Local<v8::Value>> &arguments);
+
+        /**
          * Call a function that lives in `owner` from inside `caller`, whose scopes the caller holds. The arguments are
-         * copied out of the caller, the function runs inside its owner, and what it returns arrives in the caller: a
-         * promise becomes a promise there that settles with the owner's. On a throw, or on arguments that cannot cross,
+         * copied out of the caller, the function runs inside its owner, and what it returns arrives in the caller as
+         * `returned` says. On a throw, on arguments that cannot cross, or when either runtime takes no part in calls,
          * an exception is pending in the caller and the result is empty.
          */
-        v8::MaybeLocal<v8::Value> Call(uint32_t caller, uint32_t owner, const v8::Global<v8::Function> &function, const std::vector<v8::Local<v8::Value>> &arguments);
+        v8::MaybeLocal<v8::Value> Call(v8::Isolate *caller, v8::Isolate *owner, const v8::Global<v8::Function> &function, const std::vector<v8::Local<v8::Value>> &arguments, Returned returned = Returned::Value);
 
         // As above, with the arguments already copied out of the caller: one emit to many runtimes copies them once.
-        v8::MaybeLocal<v8::Value> Call(uint32_t caller, uint32_t owner, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments);
+        v8::MaybeLocal<v8::Value> Call(v8::Isolate *caller, v8::Isolate *owner, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments, Returned returned = Returned::Value);
 
         /**
          * Bring a value that lives in `owner` into `caller`, whose scopes the caller holds: `produce` runs inside the
-         * owner and returns the value, which arrives as a copy. On failure an exception is pending in the caller.
+         * owner and returns the value, which arrives as a copy. On failure, or when either runtime takes no part in
+         * calls, an exception is pending in the caller.
          */
-        v8::MaybeLocal<v8::Value> Fetch(uint32_t caller, uint32_t owner, fu2::function_view<v8::MaybeLocal<v8::Value>(v8::Isolate *, v8::Local<v8::Context>)> produce);
-
-        // As above, naming the runtimes by isolate. Throws in the caller when either takes no part in calls.
         v8::MaybeLocal<v8::Value> Fetch(v8::Isolate *caller, v8::Isolate *owner, fu2::function_view<v8::MaybeLocal<v8::Value>(v8::Isolate *, v8::Local<v8::Context>)> produce);
 
         /**
-         * Enter a runtime for the lifetime of the object: the lock, the isolate, a handle scope and its context.
+         * Release what collected stand-ins held. Garbage collection only marks them, because V8 allows nothing else
+         * inside a weak callback; call this regularly, outside any collection, such as once per tick.
          */
-        class Scope final {
-          public:
-            Scope(const FunctionReferences &references, uint32_t runtime);
-
-            v8::Isolate *GetIsolate() const {
-                return _isolate;
-            }
-
-            v8::Local<v8::Context> GetContext() const {
-                return _context;
-            }
-
-          private:
-            v8::Isolate *_isolate;
-            v8::Locker _locker;
-            v8::Isolate::Scope _isolateScope;
-            v8::HandleScope _handleScope;
-            v8::Local<v8::Context> _context;
-            v8::Context::Scope _contextScope;
-        };
+        void ReleaseCollected();
 
         // Diagnostics and tests: live exports, and stand-ins still tracked.
         size_t GetExportCount() const;

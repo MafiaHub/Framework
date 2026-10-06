@@ -7,9 +7,13 @@
  */
 
 #include "function_references.h"
+#include "engine_helpers.h"
+
+#include <v8pp/convert.hpp>
 
 #include <map>
 #include <optional>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -32,7 +36,8 @@ namespace Framework::Scripting {
         // A callable in one runtime that forwards to an export of another. Collected with its JS function.
         struct StandIn {
             State *state = nullptr;
-            uint64_t id = 0;
+            uint64_t key = 0;
+            uint64_t id  = 0;
             uint32_t runtime = 0;
             v8::Global<v8::Function> handle;
         };
@@ -43,6 +48,7 @@ namespace Framework::Scripting {
             State *state = nullptr;
             uint32_t owner = 0;
             uint32_t caller = 0;
+            bool keepValue  = true;
             v8::Global<v8::Promise::Resolver> resolver;
         };
 
@@ -70,28 +76,30 @@ namespace Framework::Scripting {
         };
 
         std::map<uint32_t, Runtime> runtimes;
+        std::unordered_map<v8::Isolate *, uint32_t> runtimeByIsolate;
         std::map<uint64_t, Export> exports;
-        std::map<StandIn *, std::unique_ptr<StandIn>> standIns;
+        std::unordered_map<uint64_t, std::unique_ptr<StandIn>> standIns;
+        // The stand-in each runtime holds for an export, keyed by (runtime, export id).
+        std::map<std::pair<uint32_t, uint64_t>, uint64_t> standInByExport;
+        // Stand-ins whose functions were collected, waiting for ReleaseCollected().
+        std::vector<uint64_t> collected;
         std::map<Settlement *, std::unique_ptr<Settlement>> settlements;
         uint32_t nextRuntime = 1;
         uint64_t nextExport  = 1;
-
-        static v8::Local<v8::String> Text(v8::Isolate *isolate, const std::string &text) {
-            return v8::String::NewFromUtf8(isolate, text.data(), v8::NewStringType::kNormal, static_cast<int>(text.size())).ToLocalChecked();
-        }
+        uint64_t nextStandIn = 1;
 
         static void Throw(v8::Isolate *isolate, const std::string &message) {
-            isolate->ThrowException(v8::Exception::Error(Text(isolate, message)));
-        }
-
-        static std::string ToUtf8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
-            v8::String::Utf8Value text(isolate, value);
-            return *text ? std::string(*text, text.length()) : std::string();
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, message)));
         }
 
         std::string NameOf(uint32_t runtime) const {
             const auto it = runtimes.find(runtime);
             return it != runtimes.end() ? it->second.name : std::string("a stopped resource");
+        }
+
+        uint32_t FindRuntime(v8::Isolate *isolate) const {
+            const auto it = runtimeByIsolate.find(isolate);
+            return it != runtimeByIsolate.end() ? it->second : 0;
         }
 
         TransferFunctions Hooks(uint32_t runtime) {
@@ -166,8 +174,18 @@ namespace Framework::Scripting {
                 return it->second.function.Get(isolate);
             }
 
+            // The runtime already holds a stand-in for it: the same function arrives as the same stand-in.
+            const auto cached = standInByExport.find({runtime, id});
+            if (cached != standInByExport.end()) {
+                const auto existing = standIns.find(cached->second);
+                if (existing != standIns.end() && !existing->second->handle.IsEmpty()) {
+                    return existing->second->handle.Get(isolate);
+                }
+            }
+
             auto standIn     = std::make_unique<StandIn>();
             standIn->state   = this;
+            standIn->key     = nextStandIn++;
             standIn->id      = id;
             standIn->runtime = runtime;
 
@@ -180,44 +198,80 @@ namespace Framework::Scripting {
             function->SetPrivate(context, key, v8::Number::New(isolate, static_cast<double>(id))).Check();
             standIn->handle.Reset(isolate, function);
             standIn->handle.SetWeak(standIn.get(), OnStandInCollected, v8::WeakCallbackType::kParameter);
-            standIns.emplace(standIn.get(), std::move(standIn));
+            standInByExport[{runtime, id}] = standIn->key;
+            standIns.emplace(standIn->key, std::move(standIn));
             return function;
         }
 
+        // A first-pass weak callback: V8 allows nothing in it but resetting the handle. Releasing the export destroys a
+        // handle of another isolate, so it waits for ReleaseCollected().
         static void OnStandInCollected(const v8::WeakCallbackInfo<StandIn> &info) {
             StandIn *standIn = info.GetParameter();
-            State *state     = standIn->state;
             standIn->handle.Reset();
-            state->Release(standIn->id);
-            state->standIns.erase(standIn);
+            standIn->state->collected.push_back(standIn->key);
+        }
+
+        void ReleaseCollected() {
+            std::vector<uint64_t> keys;
+            keys.swap(collected);
+            for (const uint64_t key : keys) {
+                const auto it = standIns.find(key);
+                if (it == standIns.end()) {
+                    continue; // Its runtime left first and released it then.
+                }
+                const auto cached = standInByExport.find({it->second->runtime, it->second->id});
+                if (cached != standInByExport.end() && cached->second == key) {
+                    standInByExport.erase(cached);
+                }
+                Release(it->second->id);
+                standIns.erase(it);
+            }
         }
 
         // Runs in the caller's runtime: forward the call to the export's owner.
         static void CallStandIn(const v8::FunctionCallbackInfo<v8::Value> &info) {
-            auto *standIn        = static_cast<StandIn *>(info.Data().As<v8::External>()->Value());
-            State &state         = *standIn->state;
-            v8::Isolate *isolate = info.GetIsolate();
+            auto *standIn          = static_cast<StandIn *>(info.Data().As<v8::External>()->Value());
+            State &state           = *standIn->state;
+            v8::Isolate *isolate   = info.GetIsolate();
+            const uint64_t id      = standIn->id;
+            const uint32_t caller  = standIn->runtime;
 
-            const auto exported = state.exports.find(standIn->id);
-            if (exported == state.exports.end() || !state.runtimes.contains(exported->second.runtime)) {
+            if (state.OwnerOf(id) == 0) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
                 return;
             }
 
             std::vector<v8::Local<v8::Value>> arguments;
+            arguments.reserve(static_cast<size_t>(info.Length()));
             for (int i = 0; i < info.Length(); ++i) {
                 arguments.push_back(info[i]);
             }
             std::vector<TransferredValue> copied;
-            if (!state.CopyArguments(standIn->runtime, isolate, isolate->GetCurrentContext(), arguments, copied)) {
+            if (!state.CopyArguments(caller, isolate, isolate->GetCurrentContext(), arguments, copied)) {
+                return;
+            }
+
+            // Copying ran the arguments' getters, which may have stopped the owner: look it up again.
+            const uint32_t owner = state.OwnerOf(id);
+            if (owner == 0) {
+                Throw(isolate, "The function belongs to a resource that has stopped");
                 return;
             }
             // Held by value: the call may export or release entries, and the map may move under an iterator.
-            v8::Global<v8::Function> function(state.runtimes.at(exported->second.runtime).isolate, exported->second.function);
+            v8::Global<v8::Function> function(state.runtimes.at(owner).isolate, state.exports.at(id).function);
             v8::Local<v8::Value> result;
-            if (state.Invoke(standIn->runtime, isolate, isolate->GetCurrentContext(), exported->second.runtime, function, copied).ToLocal(&result)) {
+            if (state.Invoke(caller, isolate, isolate->GetCurrentContext(), owner, function, copied, Returned::Value).ToLocal(&result)) {
                 info.GetReturnValue().Set(result);
             }
+        }
+
+        // The runtime that owns a live export, or 0 when the export or its runtime is gone.
+        uint32_t OwnerOf(uint64_t id) const {
+            const auto exported = exports.find(id);
+            if (exported == exports.end() || !runtimes.contains(exported->second.runtime)) {
+                return 0;
+            }
+            return exported->second.runtime;
         }
 
         // Copies arguments out of the caller. On failure an exception is pending there, naming the argument.
@@ -230,14 +284,14 @@ namespace Framework::Scripting {
                     Throw(isolate, "Argument " + std::to_string(i) + ": " + copied.GetError());
                     return false;
                 }
-                out[i] = copied.GetValue();
+                out[i] = std::move(copied).GetValue();
             }
             return true;
         }
 
         // Calls `function` inside `ownerId` with copied arguments and brings back what it returned or threw. The
         // caller holds its own scopes; on a throw the exception is pending there and the result is empty.
-        v8::MaybeLocal<v8::Value> Invoke(uint32_t callerId, v8::Isolate *isolate, v8::Local<v8::Context> context, uint32_t ownerId, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments) {
+        v8::MaybeLocal<v8::Value> Invoke(uint32_t callerId, v8::Isolate *isolate, v8::Local<v8::Context> context, uint32_t ownerId, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments, Returned returned) {
             const auto ownerIt = runtimes.find(ownerId);
             if (ownerIt == runtimes.end()) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
@@ -254,6 +308,7 @@ namespace Framework::Scripting {
                 const TransferFunctions ownerHooks = Hooks(ownerId);
 
                 std::vector<v8::Local<v8::Value>> argv;
+                argv.reserve(arguments.size());
                 for (const auto &argument : arguments) {
                     v8::Local<v8::Value> rebuilt;
                     if (!ValueTransfer::Rebuild(owner.isolate, entered.context, argument, ownerHooks).ToLocal(&rebuilt)) {
@@ -262,18 +317,22 @@ namespace Framework::Scripting {
                     argv.push_back(rebuilt);
                 }
 
-                v8::Local<v8::Value> returned;
-                const bool called = argv.size() == arguments.size() && function.Get(owner.isolate)->Call(entered.context, v8::Undefined(owner.isolate), static_cast<int>(argv.size()), argv.data()).ToLocal(&returned);
+                v8::Local<v8::Value> value;
+                const bool called = argv.size() == arguments.size() && function.Get(owner.isolate)->Call(entered.context, v8::Undefined(owner.isolate), static_cast<int>(argv.size()), argv.data()).ToLocal(&value);
                 if (!called) {
-                    thrown = CopyOut(owner.isolate, entered.context, tryCatch.HasCaught() ? tryCatch.Exception() : v8::Local<v8::Value>(), ownerHooks, "The call failed");
+                    // Terminated (the owner called process.exit(), say): there is no exception value to copy.
+                    thrown = tryCatch.HasTerminated() ? ErrorValue(owner.name + " stopped during the call") : CopyOut(owner.isolate, entered.context, tryCatch.HasCaught() ? tryCatch.Exception() : v8::Local<v8::Value>(), ownerHooks, "The call failed");
                 }
-                else if (returned->IsPromise()) {
-                    settlement = Await(ownerId, callerId, entered.context, returned.As<v8::Promise>());
+                else if (value->IsPromise()) {
+                    settlement = Await(ownerId, callerId, entered.context, value.As<v8::Promise>(), returned == Returned::Value);
+                }
+                else if (returned == Returned::Outcome && value->IsObject()) {
+                    result.emplace(); // Undefined: the caller does not want the object, so it is never copied.
                 }
                 else {
-                    auto copied = ValueTransfer::Copy(owner.isolate, entered.context, returned, ownerHooks);
+                    auto copied = ValueTransfer::Copy(owner.isolate, entered.context, value, ownerHooks);
                     if (copied) {
-                        result = copied.GetValue();
+                        result = std::move(copied).GetValue();
                     }
                     else {
                         thrown = ErrorValue("Return value: " + copied.GetError());
@@ -321,18 +380,19 @@ namespace Framework::Scripting {
             }
             auto copied = ValueTransfer::Copy(isolate, context, value, hooks);
             if (copied) {
-                return copied.GetValue();
+                return std::move(copied).GetValue();
             }
             return ErrorValue(ToUtf8(isolate, value) + " (" + copied.GetError() + ")");
         }
 
         // Called inside the owner: react to its promise, and settle the caller's when it does.
-        Settlement *Await(uint32_t owner, uint32_t caller, v8::Local<v8::Context> context, v8::Local<v8::Promise> promise) {
+        Settlement *Await(uint32_t owner, uint32_t caller, v8::Local<v8::Context> context, v8::Local<v8::Promise> promise, bool keepValue) {
             v8::Isolate *isolate      = context->GetIsolate();
             auto settlement           = std::make_unique<Settlement>();
             settlement->state         = this;
             settlement->owner         = owner;
             settlement->caller        = caller;
+            settlement->keepValue     = keepValue;
             v8::Local<v8::External> data = v8::External::New(isolate, settlement.get());
 
             v8::Local<v8::Function> onFulfilled;
@@ -372,17 +432,17 @@ namespace Framework::Scripting {
             v8::Isolate *isolate = info.GetIsolate();
             v8::Local<v8::Value> value = info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>();
             TransferredValue copied;
-            if (fulfilled) {
+            if (fulfilled && owned->keepValue) {
                 auto result = ValueTransfer::Copy(isolate, isolate->GetCurrentContext(), value, state.Hooks(owned->owner));
                 if (result) {
-                    copied = result.GetValue();
+                    copied = std::move(result).GetValue();
                 }
                 else {
                     copied    = ErrorValue("Resolved value: " + result.GetError());
                     fulfilled = false;
                 }
             }
-            else {
+            else if (!fulfilled) {
                 copied = state.CopyOut(isolate, isolate->GetCurrentContext(), value, state.Hooks(owned->owner), "The promise was rejected");
             }
 
@@ -407,13 +467,16 @@ namespace Framework::Scripting {
 
     FunctionReferences::~FunctionReferences() {
         // Runtimes leave before their isolates die; anything still here would fire a weak callback into freed state.
-        for (auto &[raw, standIn] : _state->standIns) {
+        for (auto &[key, standIn] : _state->standIns) {
             standIn->handle.Reset();
         }
         _state->standIns.clear();
+        _state->standInByExport.clear();
+        _state->collected.clear();
         _state->settlements.clear();
         _state->exports.clear();
         _state->runtimes.clear();
+        _state->runtimeByIsolate.clear();
     }
 
     uint32_t FunctionReferences::AddRuntime(v8::Isolate *isolate, v8::Local<v8::Context> context, std::string name) {
@@ -422,6 +485,7 @@ namespace Framework::Scripting {
         entry.isolate          = isolate;
         entry.context.Reset(isolate, context);
         entry.name = std::move(name);
+        _state->runtimeByIsolate[isolate] = id;
         return id;
     }
 
@@ -447,6 +511,7 @@ namespace Framework::Scripting {
                 ++standIn;
             }
         }
+        std::erase_if(state.standInByExport, [&](const auto &entry) { return entry.first.first == runtime; });
 
         // Promises it owed to callers will never settle: reject them. Promises owed to it have nobody to settle.
         std::vector<std::unique_ptr<State::Settlement>> owed;
@@ -461,6 +526,7 @@ namespace Framework::Scripting {
             }
             ++settlement;
         }
+        state.runtimeByIsolate.erase(it->second.isolate);
         state.runtimes.erase(it);
 
         for (auto &settlement : owed) {
@@ -469,7 +535,7 @@ namespace Framework::Scripting {
                 continue;
             }
             State::Entered entered(caller->second);
-            v8::Local<v8::Value> error = v8::Exception::Error(State::Text(caller->second.isolate, name + " stopped before the call finished"));
+            v8::Local<v8::Value> error = v8::Exception::Error(v8pp::to_v8(caller->second.isolate, name + " stopped before the call finished"));
             settlement->resolver.Get(caller->second.isolate)->Reject(entered.context, error).Check();
         }
     }
@@ -479,52 +545,69 @@ namespace Framework::Scripting {
     }
 
     uint32_t FunctionReferences::FindRuntime(v8::Isolate *isolate) const {
-        for (const auto &[id, runtime] : _state->runtimes) {
-            if (runtime.isolate == isolate) {
-                return id;
-            }
-        }
-        return 0;
+        return _state->FindRuntime(isolate);
     }
 
-    v8::MaybeLocal<v8::Value> FunctionReferences::Call(uint32_t caller, uint32_t owner, const v8::Global<v8::Function> &function, const std::vector<v8::Local<v8::Value>> &arguments) {
-        v8::Isolate *isolate           = _state->runtimes.at(caller).isolate;
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    std::optional<std::vector<TransferredValue>> FunctionReferences::CopyArguments(v8::Isolate *caller, const std::vector<v8::Local<v8::Value>> &arguments) {
+        const uint32_t callerId = _state->FindRuntime(caller);
+        if (callerId == 0) {
+            State::Throw(caller, "The resource is not reachable from here");
+            return std::nullopt;
+        }
         std::vector<TransferredValue> copied;
-        if (!_state->CopyArguments(caller, isolate, context, arguments, copied)) {
-            return {};
+        if (!_state->CopyArguments(callerId, caller, caller->GetCurrentContext(), arguments, copied)) {
+            return std::nullopt;
         }
-        return _state->Invoke(caller, isolate, context, owner, function, copied);
+        return copied;
     }
 
-    v8::MaybeLocal<v8::Value> FunctionReferences::Call(uint32_t caller, uint32_t owner, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments) {
-        v8::Isolate *isolate = _state->runtimes.at(caller).isolate;
-        return _state->Invoke(caller, isolate, isolate->GetCurrentContext(), owner, function, arguments);
-    }
-
-    v8::MaybeLocal<v8::Value> FunctionReferences::Fetch(uint32_t caller, uint32_t owner, fu2::function_view<v8::MaybeLocal<v8::Value>(v8::Isolate *, v8::Local<v8::Context>)> produce) {
-        State &state                   = *_state;
-        v8::Isolate *isolate           = state.runtimes.at(caller).isolate;
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        const auto ownerIt             = state.runtimes.find(owner);
-        if (ownerIt == state.runtimes.end()) {
-            State::Throw(isolate, "The resource has stopped");
+    v8::MaybeLocal<v8::Value> FunctionReferences::Call(v8::Isolate *caller, v8::Isolate *owner, const v8::Global<v8::Function> &function, const std::vector<v8::Local<v8::Value>> &arguments, Returned returned) {
+        auto copied = CopyArguments(caller, arguments);
+        if (!copied) {
             return {};
         }
+        return Call(caller, owner, function, *copied, returned);
+    }
+
+    v8::MaybeLocal<v8::Value> FunctionReferences::Call(v8::Isolate *caller, v8::Isolate *owner, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments, Returned returned) {
+        const uint32_t callerId = _state->FindRuntime(caller);
+        const uint32_t ownerId  = _state->FindRuntime(owner);
+        if (callerId == 0 || ownerId == 0) {
+            State::Throw(caller, "The resource is not reachable from here");
+            return {};
+        }
+        return _state->Invoke(callerId, caller, caller->GetCurrentContext(), ownerId, function, arguments, returned);
+    }
+
+    v8::MaybeLocal<v8::Value> FunctionReferences::Fetch(v8::Isolate *caller, v8::Isolate *owner, fu2::function_view<v8::MaybeLocal<v8::Value>(v8::Isolate *, v8::Local<v8::Context>)> produce) {
+        State &state            = *_state;
+        const uint32_t callerId = state.FindRuntime(caller);
+        const uint32_t ownerId  = state.FindRuntime(owner);
+        if (callerId == 0 || ownerId == 0) {
+            State::Throw(caller, "The resource is not reachable from here");
+            return {};
+        }
+        v8::Local<v8::Context> context = caller->GetCurrentContext();
+        State::Runtime &ownerRuntime   = state.runtimes.at(ownerId);
 
         TransferredValue copied;
         std::string error;
         {
-            State::Entered entered(ownerIt->second);
-            v8::TryCatch tryCatch(entered.context->GetIsolate());
+            State::Entered entered(ownerRuntime);
+            v8::TryCatch tryCatch(owner);
             v8::Local<v8::Value> value;
-            if (!produce(ownerIt->second.isolate, entered.context).ToLocal(&value)) {
-                error = tryCatch.HasCaught() ? State::ToUtf8(ownerIt->second.isolate, tryCatch.Exception()) : std::string("The value could not be read");
+            if (!produce(owner, entered.context).ToLocal(&value)) {
+                if (tryCatch.HasTerminated()) {
+                    error = ownerRuntime.name + " stopped while the value was read";
+                }
+                else {
+                    error = tryCatch.HasCaught() ? ToUtf8(owner, tryCatch.Exception()) : std::string("The value could not be read");
+                }
             }
             else {
-                auto result = ValueTransfer::Copy(ownerIt->second.isolate, entered.context, value, state.Hooks(owner));
+                auto result = ValueTransfer::Copy(owner, entered.context, value, state.Hooks(ownerId));
                 if (result) {
-                    copied = result.GetValue();
+                    copied = std::move(result).GetValue();
                 }
                 else {
                     error = result.GetError();
@@ -532,29 +615,15 @@ namespace Framework::Scripting {
             }
         }
         if (!error.empty()) {
-            State::Throw(isolate, error);
+            State::Throw(caller, error);
             return {};
         }
-        return ValueTransfer::Rebuild(isolate, context, copied, state.Hooks(caller));
+        return ValueTransfer::Rebuild(caller, context, copied, state.Hooks(callerId));
     }
 
-    v8::MaybeLocal<v8::Value> FunctionReferences::Fetch(v8::Isolate *caller, v8::Isolate *owner, fu2::function_view<v8::MaybeLocal<v8::Value>(v8::Isolate *, v8::Local<v8::Context>)> produce) {
-        const uint32_t callerId = FindRuntime(caller);
-        const uint32_t ownerId  = FindRuntime(owner);
-        if (callerId == 0 || ownerId == 0) {
-            State::Throw(caller, "The resource is not reachable from here");
-            return {};
-        }
-        return Fetch(callerId, ownerId, produce);
+    void FunctionReferences::ReleaseCollected() {
+        _state->ReleaseCollected();
     }
-
-    FunctionReferences::Scope::Scope(const FunctionReferences &references, uint32_t runtime)
-        : _isolate(references._state->runtimes.at(runtime).isolate)
-        , _locker(_isolate)
-        , _isolateScope(_isolate)
-        , _handleScope(_isolate)
-        , _context(references._state->runtimes.at(runtime).context.Get(_isolate))
-        , _contextScope(_context) {}
 
     size_t FunctionReferences::GetExportCount() const {
         return _state->exports.size();

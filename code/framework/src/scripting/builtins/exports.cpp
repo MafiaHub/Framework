@@ -150,31 +150,32 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        if (resourceIsolate == isolate) {
-            v8::Local<v8::Value> exportValue = resource->GetExportValue(exportName);
-            if (exportValue.IsEmpty()) {
-                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, notFound)));
-                return;
-            }
-            args.GetReturnValue().Set(exportValue);
-            return;
-        }
-
-        // The resource runs in a runtime of its own: the export arrives as a copy, its functions as references.
-        FunctionReferences *references = manager->GetJSEngine() != nullptr ? manager->GetJSEngine()->GetFunctionReferences() : nullptr;
-        if (references == nullptr) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: resource '" + resourceName + "' is not reachable from here")));
-            return;
-        }
-        v8::Local<v8::Value> copied;
-        const bool fetched = references->Fetch(isolate, resourceIsolate, [&](v8::Isolate *owner, v8::Local<v8::Context>) -> v8::MaybeLocal<v8::Value> {
+        // Read inside whichever runtime holds the export.
+        auto read = [&](v8::Isolate *owner) -> v8::MaybeLocal<v8::Value> {
             v8::Local<v8::Value> exportValue = resource->GetExportValue(exportName);
             if (exportValue.IsEmpty()) {
                 owner->ThrowException(v8::Exception::Error(v8pp::to_v8(owner, notFound)));
                 return {};
             }
             return exportValue;
-        }).ToLocal(&copied);
+        };
+
+        if (resourceIsolate == isolate) {
+            v8::Local<v8::Value> exportValue;
+            if (read(isolate).ToLocal(&exportValue)) {
+                args.GetReturnValue().Set(exportValue);
+            }
+            return;
+        }
+
+        // The resource runs in a runtime of its own: the export arrives as a copy, its functions as references.
+        FunctionReferences *references = manager->GetFunctionReferences();
+        if (references == nullptr) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: resource '" + resourceName + "' is not reachable from here")));
+            return;
+        }
+        v8::Local<v8::Value> copied;
+        const bool fetched = references->Fetch(isolate, resourceIsolate, [&](v8::Isolate *owner, v8::Local<v8::Context>) { return read(owner); }).ToLocal(&copied);
         if (fetched) {
             args.GetReturnValue().Set(copied);
         }

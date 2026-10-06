@@ -90,7 +90,7 @@ namespace Framework::Scripting::Builtins {
             exportsObj = BuildImportsObject(isolate, context, resource);
         }
         else {
-            FunctionReferences *references = manager->GetJSEngine() != nullptr ? manager->GetJSEngine()->GetFunctionReferences() : nullptr;
+            FunctionReferences *references = manager->GetFunctionReferences();
             if (references == nullptr) {
                 isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Imports.get: resource '" + resourceName + "' is not reachable from here")));
                 return;

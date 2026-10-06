@@ -452,28 +452,20 @@ namespace Framework::Scripting::Builtins {
             return handler.callback.Get(isolate)->Call(context, context->Global(), static_cast<int>(argv.size()), argv.empty() ? nullptr : argv.data());
         }
 
-        // The handler's resource runs in a runtime of its own: call it there with the arguments copied across.
-        FunctionReferences *references = (_callbackContext && _callbackContext->resourceManager && _callbackContext->resourceManager->GetJSEngine()) ? _callbackContext->resourceManager->GetJSEngine()->GetFunctionReferences() : nullptr;
-        const uint32_t caller          = references != nullptr ? references->FindRuntime(isolate) : 0;
-        const uint32_t owner           = references != nullptr ? references->FindRuntime(handler.isolate) : 0;
-        if (caller == 0 || owner == 0) {
+        // The handler's resource runs in a runtime of its own: call it there with the arguments copied across. What it
+        // returns only matters as a veto or a promise to wait on, so its value is never copied back.
+        FunctionReferences *references = (_callbackContext && _callbackContext->resourceManager) ? _callbackContext->resourceManager->GetFunctionReferences() : nullptr;
+        if (references == nullptr) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "The handler's resource is not reachable from here")));
             return {};
         }
         if (!copied) {
-            const TransferFunctions hooks = references->For(caller);
-            std::vector<TransferredValue> out(args.size());
-            for (size_t i = 0; i < args.size(); ++i) {
-                auto result = ValueTransfer::Copy(isolate, context, args[i], hooks);
-                if (!result) {
-                    isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Argument " + std::to_string(i) + ": " + result.GetError())));
-                    return {};
-                }
-                out[i] = result.GetValue();
+            copied = references->CopyArguments(isolate, args);
+            if (!copied) {
+                return {};
             }
-            copied = std::move(out);
         }
-        return references->Call(caller, owner, handler.callback, *copied);
+        return references->Call(isolate, handler.isolate, handler.callback, *copied, FunctionReferences::Returned::Outcome);
     }
 
     v8::Local<v8::Array> Events::InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName) {
@@ -735,11 +727,7 @@ namespace Framework::Scripting::Builtins {
             }
 
             // Copy the callback for calling outside the lock, in the isolate it belongs to
-            CollectedHandler collected;
-            collected.callback.Reset(handler.isolate, handler.callback);
-            collected.resourceName = handler.resourceName;
-            collected.isolate      = handler.isolate;
-            handlersToCall.push_back(std::move(collected));
+            handlersToCall.emplace_back(handler);
 
             if (handler.once) {
                 indicesToRemove.push_back(idx);
@@ -955,11 +943,7 @@ namespace Framework::Scripting::Builtins {
                 auto evtIt = resIt->second.find(eventName);
                 if (evtIt != resIt->second.end()) {
                     for (const auto &handler : evtIt->second) {
-                        CollectedHandler collected;
-                        collected.callback.Reset(handler.isolate, handler.callback);
-                        collected.resourceName = resourceName;
-                        collected.isolate      = handler.isolate;
-                        handlersToCall.push_back(std::move(collected));
+                        handlersToCall.emplace_back(handler);
                     }
                 }
             }

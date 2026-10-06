@@ -47,6 +47,8 @@ namespace Framework::Scripting::Builtins {
         v8::Global<v8::Function> callback;
         std::string resourceName;
         v8::Isolate *isolate = nullptr;
+
+        explicit CollectedHandler(const EventHandler &handler): callback(handler.isolate, handler.callback), resourceName(handler.resourceName), isolate(handler.isolate) {}
     };
 
     /**

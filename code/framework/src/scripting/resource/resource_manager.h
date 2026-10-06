@@ -258,6 +258,11 @@ namespace Framework::Scripting {
         Engine *GetJSEngine() const;
 
         /**
+         * Calls and values between resources' runtimes, or null when every resource shares one.
+         */
+        FunctionReferences *GetFunctionReferences() const;
+
+        /**
          * Get the Events instance owned by this manager.
          */
         Builtins::Events &GetEvents();
@@ -283,6 +288,9 @@ namespace Framework::Scripting {
          * @return Resource name extracted from stack, or empty string
          */
         std::string GetResourceContextFromStack(v8::Isolate *isolate) const;
+
+        // The resource a runtime of its own was created for; empty for a shared runtime or no isolate.
+        std::string ResourceOfIsolate(v8::Isolate *isolate) const;
 
         /**
          * Extract resource name from a script file path.

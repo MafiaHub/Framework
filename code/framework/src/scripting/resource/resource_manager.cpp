@@ -971,11 +971,8 @@ namespace Framework::Scripting {
 
     std::string ResourceManager::ResolveResourceContext(v8::Isolate *isolate, v8::Local<v8::Function> handler) const {
         // A runtime of its own names its resource outright.
-        if (_jsEngine != nullptr && isolate != nullptr) {
-            std::string owner = _jsEngine->GetResourceForIsolate(isolate);
-            if (!owner.empty()) {
-                return owner;
-            }
+        if (std::string owner = ResourceOfIsolate(isolate); !owner.empty()) {
+            return owner;
         }
         if (!handler.IsEmpty()) {
             std::string name = GetResourceNameFromFunction(isolate, handler);
@@ -1128,6 +1125,14 @@ namespace Framework::Scripting {
         return _jsEngine;
     }
 
+    std::string ResourceManager::ResourceOfIsolate(v8::Isolate *isolate) const {
+        return (_jsEngine != nullptr && isolate != nullptr) ? _jsEngine->GetResourceForIsolate(isolate) : std::string();
+    }
+
+    FunctionReferences *ResourceManager::GetFunctionReferences() const {
+        return _jsEngine != nullptr ? _jsEngine->GetFunctionReferences() : nullptr;
+    }
+
     Builtins::Events &ResourceManager::GetEvents() {
         return _events;
     }
@@ -1244,11 +1249,8 @@ namespace Framework::Scripting {
             return "";
         }
 
-        if (_jsEngine != nullptr) {
-            std::string owner = _jsEngine->GetResourceForIsolate(isolate);
-            if (!owner.empty()) {
-                return owner;
-            }
+        if (std::string owner = ResourceOfIsolate(isolate); !owner.empty()) {
+            return owner;
         }
 
         // Get stack trace with up to 20 frames
@@ -1288,7 +1290,7 @@ namespace Framework::Scripting {
     }
 
     Resource *ResourceManager::GetCurrentResourceWithStackFallback(v8::Isolate *isolate) {
-        std::string name = (_jsEngine != nullptr && isolate != nullptr) ? _jsEngine->GetResourceForIsolate(isolate) : std::string();
+        std::string name = ResourceOfIsolate(isolate);
         if (name.empty()) {
             name = GetCurrentResourceContext();
         }
