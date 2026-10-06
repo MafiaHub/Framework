@@ -12,6 +12,7 @@
 
 #include <utils/crypto.h>
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -27,8 +28,14 @@ namespace Framework::Scripting {
     // mafiahub.files globs, or a filtered scan of the script directories when none are declared.
     class ResourcePackager final {
       public:
-        // Null |key| emits an unencrypted container.
-        static bool Package(const std::string &resourceName, const std::string &resourcePath, const PackageManifest &manifest, const Utils::Crypto::Key *key, PackagedResource &out, std::string &outError);
+        // Null |key| emits an unencrypted container. |serverOnlyResources| names the resources
+        // clients never receive; the shipped package.json drops its dependencies on them, since
+        // the client validates dependencies against only the resources it was sent.
+        static bool Package(const std::string &resourceName, const std::string &resourcePath, const PackageManifest &manifest, const Utils::Crypto::Key *key, PackagedResource &out, std::string &outError, const std::set<std::string> &serverOnlyResources = {});
+
+        // Rewrites |packageJson| without the resourceDependencies entries naming a resource in
+        // |serverOnlyResources|. False, leaving |out| untouched, when there is nothing to drop.
+        static bool StripServerOnlyDependencies(const std::string &packageJson, const std::set<std::string> &serverOnlyResources, std::string &out);
 
         // Only consulted by the scan used when mafiahub.files is absent.
         static bool IsClientAssetExtension(const std::string &extension);

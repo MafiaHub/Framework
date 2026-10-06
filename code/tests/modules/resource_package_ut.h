@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <string>
 
 MODULE(resource_package, {
@@ -718,6 +719,100 @@ MODULE(resource_package, {
         vfs.Unmount("ut_app.zip");
         vfs.Unmount("ut_lib.zip");
         engine.Shutdown();
+    });
+
+    IT("drops dependencies on server-only resources from the shipped manifest", {
+        const std::set<std::string> serverOnly = {"ut_srv_core", "ut_srv_db"};
+        std::string out;
+
+        // Both declaration forms go; client dependencies and every other key stay, in order.
+        const std::string manifest = R"({"name":"ut_chars","version":"1.0.0","mafiahub":{"clientScripts":["client.js"],"resourceDependencies":["ut_srv_core",{"name":"ut_srv_db","version":">=1.0.0"},"ut_lib",{"name":"ut_ui","optional":true}],"priority":5}})";
+        EQUALS(Framework::Scripting::ResourcePackager::StripServerOnlyDependencies(manifest, serverOnly, out), true);
+        const auto stripped = nlohmann::ordered_json::parse(out);
+        STREQUALS(stripped["name"].get<std::string>().c_str(), "ut_chars");
+        STREQUALS(stripped["mafiahub"].begin().key().c_str(), "clientScripts");
+        EQUALS(stripped["mafiahub"]["priority"].get<int>(), 5);
+        const auto &deps = stripped["mafiahub"]["resourceDependencies"];
+        UEQUALS(deps.size(), 2u);
+        STREQUALS(deps[0].get<std::string>().c_str(), "ut_lib");
+        STREQUALS(deps[1]["name"].get<std::string>().c_str(), "ut_ui");
+        EQUALS(deps[1]["optional"].get<bool>(), true);
+
+        // Nothing to drop leaves the manifest byte-for-byte as the author wrote it.
+        out = "untouched";
+        EQUALS(Framework::Scripting::ResourcePackager::StripServerOnlyDependencies(R"({"name":"a","mafiahub":{"resourceDependencies":["ut_lib"]}})", serverOnly, out), false);
+        EQUALS(Framework::Scripting::ResourcePackager::StripServerOnlyDependencies(R"({"name":"a"})", serverOnly, out), false);
+        EQUALS(Framework::Scripting::ResourcePackager::StripServerOnlyDependencies(manifest, {}, out), false);
+        EQUALS(Framework::Scripting::ResourcePackager::StripServerOnlyDependencies("not json", serverOnly, out), false);
+        STREQUALS(out.c_str(), "untouched");
+    });
+
+    IT("passes client validation when a dependency is server-only", {
+        // A dependency with only serverScripts is never packaged, so the client has no such
+        // resource. The shipped manifest still named it, and the client's dependency check
+        // refused to join: "Resource 'ut_chars' depends on missing resource 'ut_srv_core'".
+        auto &vfs = Framework::Utils::Vfs::Get();
+
+        const auto root = std::filesystem::temp_directory_path() / "fwpak_ut_server_only_dep";
+        std::filesystem::remove_all(root);
+        writeFile(root / "package.json", R"({"name":"ut_chars","version":"1.0.0","mafiahub":{"clientScripts":["client.js"],"resourceDependencies":["ut_srv_core"]}})");
+        writeFile(root / "client.js", "globalThis.utChars = 1;");
+
+        Framework::Scripting::PackageManifest manifest;
+        EQUALS(manifest.Parse((root / "package.json").string()), true);
+
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+
+        Framework::Scripting::ResourceManagerConfig config;
+        config.resourcesPath = Framework::Utils::Vfs::kResourceMountRoot;
+        config.isClient      = true;
+
+        // The checks break out of the enclosing loop, so the lambda reports through its result:
+        // the dependencies the client sees, then what StartAll said.
+        const auto startPackaged = [&](const std::set<std::string> &serverOnly) -> std::pair<std::set<std::string>, std::string> {
+            Framework::Scripting::PackagedResource packaged;
+            std::string zip, error;
+            if (!Framework::Scripting::ResourcePackager::Package("ut_chars", root.string(), manifest, &key, packaged, error, serverOnly) || !Framework::Utils::Package::Open(packaged.blob, &key, zip, error) || !vfs.MountMemory(std::move(zip), "ut_chars.zip", "/resources/ut_chars", error)) {
+                return {{}, "packaging failed: " + error};
+            }
+
+            std::pair<std::set<std::string>, std::string> seen;
+            {
+                Framework::Scripting::ResourceManager manager(&engine, config);
+                if (manager.DiscoverResources() != 1) {
+                    seen.second = "not discovered";
+                }
+                else {
+                    seen.first        = manager.GetDependencies("ut_chars");
+                    const auto result = manager.StartAll();
+                    seen.second       = static_cast<bool>(result) ? std::string() : result.GetError();
+                    manager.StopAll();
+                }
+            }
+            vfs.Unmount("ut_chars.zip");
+            return seen;
+        };
+
+        // Without the server-only set the manifest ships as written and the join is refused.
+        const auto unfiltered = startPackaged({});
+        UEQUALS(unfiltered.first.size(), 1u);
+        EQUALS(unfiltered.first.contains("ut_srv_core"), true);
+        STREQUALS(unfiltered.second.c_str(), "Resource 'ut_chars' depends on missing resource 'ut_srv_core'");
+
+        // With it, the dependency the client can never satisfy is gone and StartAll gets past
+        // validation. Only that is asserted: the client's V8Engine cannot be Init()ed in this
+        // binary, so the script itself does not run here.
+        const auto filtered = startPackaged({"ut_srv_core"});
+        UEQUALS(filtered.first.size(), 0u);
+        EQUALS(filtered.second.find("depends on missing resource") == std::string::npos, true);
+
+        engine.Shutdown();
+        std::filesystem::remove_all(root);
     });
 
     IT("reports a resource that failed to start", {

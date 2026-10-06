@@ -11,6 +11,8 @@
 #include <logging/logger.h>
 #include <utils/package/package.h>
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -133,7 +135,48 @@ namespace Framework::Scripting {
         return MatchGlobAt(pattern, 0, path, 0);
     }
 
-    bool ResourcePackager::Package(const std::string &resourceName, const std::string &resourcePath, const PackageManifest &manifest, const Utils::Crypto::Key *key, PackagedResource &out, std::string &outError) {
+    bool ResourcePackager::StripServerOnlyDependencies(const std::string &packageJson, const std::set<std::string> &serverOnlyResources, std::string &out) {
+        if (serverOnlyResources.empty()) {
+            return false;
+        }
+
+        // Ordered, so the rewrite keeps the author's key order and the container stays deterministic.
+        nlohmann::ordered_json json = nlohmann::ordered_json::parse(packageJson, nullptr, false);
+        if (json.is_discarded() || !json.is_object()) {
+            return false;
+        }
+        const auto mafiahub = json.find("mafiahub");
+        if (mafiahub == json.end() || !mafiahub->is_object()) {
+            return false;
+        }
+        const auto deps = mafiahub->find("resourceDependencies");
+        if (deps == mafiahub->end() || !deps->is_array()) {
+            return false;
+        }
+
+        // Both declaration forms: a bare name, or an object carrying it.
+        const auto isServerOnly = [&serverOnlyResources](const nlohmann::ordered_json &dep) {
+            if (dep.is_string()) {
+                return serverOnlyResources.contains(dep.get<std::string>());
+            }
+            if (dep.is_object()) {
+                const auto name = dep.find("name");
+                return name != dep.end() && name->is_string() && serverOnlyResources.contains(name->get<std::string>());
+            }
+            return false;
+        };
+
+        const auto before = deps->size();
+        deps->erase(std::remove_if(deps->begin(), deps->end(), isServerOnly), deps->end());
+        if (deps->size() == before) {
+            return false;
+        }
+
+        out = json.dump(4);
+        return true;
+    }
+
+    bool ResourcePackager::Package(const std::string &resourceName, const std::string &resourcePath, const PackageManifest &manifest, const Utils::Crypto::Key *key, PackagedResource &out, std::string &outError, const std::set<std::string> &serverOnlyResources) {
         const auto &config = manifest.GetMafiaHubConfig();
         if (!config.HasClientContent()) {
             outError = "resource has no client scripts";
@@ -230,6 +273,13 @@ namespace Framework::Scripting {
             if (!ReadFile(root / relative, contents)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}': could not read '{}'; skipping", resourceName, relative);
                 continue;
+            }
+            if (relative == "package.json") {
+                std::string stripped;
+                if (StripServerOnlyDependencies(contents, serverOnlyResources, stripped)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}': dropped dependencies on server-only resources from the client manifest", resourceName);
+                    contents = std::move(stripped);
+                }
             }
             writer.Add(relative, std::move(contents));
         }

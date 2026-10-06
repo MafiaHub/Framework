@@ -896,6 +896,15 @@ namespace Framework::Integrations::Server {
             return;
         }
 
+        // Clients never receive these, so a client manifest must not depend on them.
+        std::set<std::string> serverOnlyResources;
+        for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
+            const auto resource = resourceManager->GetResource(resourceName);
+            if (resource && !resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
+                serverOnlyResources.insert(resourceName);
+            }
+        }
+
         size_t packagedFiles = 0;
         for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
             const auto resource = resourceManager->GetResource(resourceName);
@@ -908,7 +917,7 @@ namespace Framework::Integrations::Server {
 
             Framework::Scripting::PackagedResource packaged;
             std::string error;
-            if (!Framework::Scripting::ResourcePackager::Package(resourceName, resource->GetPath(), resource->GetManifest(), &_packageKey, packaged, error)) {
+            if (!Framework::Scripting::ResourcePackager::Package(resourceName, resource->GetPath(), resource->GetManifest(), &_packageKey, packaged, error, serverOnlyResources)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not package client resource '{}': {}", resourceName, error);
                 continue;
             }
