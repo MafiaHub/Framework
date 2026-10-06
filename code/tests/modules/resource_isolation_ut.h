@@ -24,10 +24,6 @@
 #include <string>
 #include <thread>
 
-#ifndef _WIN32
-#include <fcntl.h>
-#endif
-
 namespace ResourceIsolationTest {
     static void WriteResource(const std::string &name, const std::string &script, const std::string &exports = "") {
         TestManagerHelper::CreateTestResource(name, "{\"name\":\"" + name + "\",\"version\":\"1.0.0\",\"mafiahub\":{\"server\":\"main.js\",\"exports\":[" + exports + "]}}");
@@ -447,7 +443,6 @@ MODULE(resource_isolation, {
         TestManagerHelper::Cleanup();
     });
 
-#ifndef _WIN32
     IT("closes the files a resource opened when it stops", {
         TestManagerHelper::Cleanup();
         ResourceIsolationTest::WriteResource("opener", "__record('fd', require('node:fs').openSync(__filename, 'r'));");
@@ -460,17 +455,24 @@ MODULE(resource_isolation, {
         TestManagerHelper::RegisterEvents(engine, manager);
         EQUALS(manager.DiscoverResources(), 1u);
         EQUALS((bool)manager.StartResource("opener"), true);
-        const int fd = TestManagerHelper::RecordedValue("fd");
+        const int32_t fd = TestManagerHelper::RecordedValue("fd");
         EQUALS(fd > 2, true);
-        EQUALS(fcntl(fd, F_GETFD) != -1, true);
+
+        // Checked from another resource: the descriptor belongs to Node's C runtime, which on Windows is not this one.
+        ResourceIsolationTest::WriteResource("fd-checker", "try { require('node:fs').fstatSync(" + std::to_string(fd) + "); __record('open', 1); } catch (e) { __record('open', 0); }");
+        EQUALS(manager.DiscoverResources() >= 1u, true);
+        EQUALS((bool)manager.StartResource("fd-checker"), true);
+        EQUALS(TestManagerHelper::RecordedValue("open"), 1);
+        EQUALS((bool)manager.StopResource("fd-checker"), true);
 
         EQUALS((bool)manager.StopResource("opener"), true);
-        EQUALS(fcntl(fd, F_GETFD), -1);
+        EQUALS((bool)manager.StartResource("fd-checker"), true);
+        EQUALS(TestManagerHelper::RecordedValue("open"), 0);
 
+        manager.StopAll();
         engine.Shutdown();
         TestManagerHelper::Cleanup();
     });
-#endif
 
     IT("does not copy back what a handler in another resource returns", {
         TestManagerHelper::Cleanup();
