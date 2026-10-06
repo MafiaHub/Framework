@@ -182,6 +182,7 @@ namespace Framework::Integrations::Client::Scripting {
         // Releases V8 globals; must precede engine shutdown (isolate disposal)
         Builtins::Web::Shutdown();
         Builtins::Keybinds::Shutdown();
+        Builtins::Discord::Shutdown();
 
         if (_engine) {
             Framework::Scripting::ClearScriptingCatalog(_engine->GetIsolate());
@@ -202,6 +203,7 @@ namespace Framework::Integrations::Client::Scripting {
 
         Builtins::Web::Shutdown();
         Builtins::Keybinds::Shutdown();
+        Builtins::Discord::Shutdown();
 
         if (_engine && _engine->IsInitialized()) {
             if (!_engine->ResetContext()) {

@@ -56,6 +56,9 @@ interface DiscordPresenceOptions {
  * calls no-op (setters silently, commits return `false`) when Discord presence
  * is disabled or unavailable.
  *
+ * A game may keep its own presence and open only some fields to scripts;
+ * writes to the other fields are ignored.
+ *
  * @example
  * // Batch form — apply several fields and publish in one call:
  * Discord.setPresence({
@@ -135,7 +138,7 @@ declare const Discord: {
     update(): boolean;
 
     /**
-     * Clear the activity on Discord and reset the staged state.
+     * Clear what scripts published and reset the staged state.
      * @returns `true` if dispatched, `false` if unavailable.
      */
     clear(): boolean;
