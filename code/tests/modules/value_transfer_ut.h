@@ -142,6 +142,13 @@ MODULE(value_transfer, {
         STREQUALS(ValueTransferTest::Eval(*pair.target, "[received.at instanceof Vector3, received.at.x, received.at.y, received.at.z, received.turn instanceof Quaternion].join('|')").c_str(), "true|1|2|3|true");
     });
 
+    IT("does not mistake Node's own native objects for framework handles", {
+        ValueTransferTest::Pair pair;
+        // A MessagePort is a Node BaseObject: two internal fields, like a v8pp object, but neither is v8pp's.
+        STREQUALS(ValueTransferTest::Send(pair, "{ port: new (require('node:worker_threads').MessageChannel)().port1 }").c_str(), "");
+        STREQUALS(ValueTransferTest::Eval(*pair.target, "typeof received.port").c_str(), "object");
+    });
+
     IT("turns a class instance into a plain object", {
         ValueTransferTest::Pair pair;
         STREQUALS(ValueTransferTest::Send(pair, "new (class Account { constructor() { this.balance = 10; } deposit() {} })()").c_str(), "");

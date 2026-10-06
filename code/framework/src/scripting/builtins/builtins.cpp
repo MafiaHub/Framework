@@ -28,7 +28,11 @@ namespace Framework::Scripting::Builtins {
             ValueTransfer::RegisterHostType(
                 name,
                 [](v8::Isolate *isolate, v8::Local<v8::Object> object, std::vector<uint8_t> &bytes) {
-                    T::GetClass(isolate);
+                    // Node's own native objects carry two internal fields too; unwrapping one would read Node's slot as a v8pp
+                    // registry. Only an instance of this class (or one derived from it) is unwrapped.
+                    if (!T::GetClass(isolate).js_function_template()->HasInstance(object)) {
+                        return false;
+                    }
                     const auto value = v8pp::class_<T>::unwrap_object(isolate, object);
                     if (value == nullptr) {
                         return false;
