@@ -43,9 +43,9 @@ namespace Framework::Scripting {
         };
 
         // A promise returned to a caller in another runtime, waiting on the owner's promise. Owned here until the
-        // owner's promise settles or the owner goes away; the owner's reaction functions point at it.
+        // owner's promise settles or the owner goes away; the owner's reaction functions name it by key.
         struct Settlement {
-            State *state = nullptr;
+            uint64_t key   = 0;
             uint32_t owner = 0;
             uint32_t caller = 0;
             bool keepValue  = true;
@@ -83,10 +83,28 @@ namespace Framework::Scripting {
         std::map<std::pair<uint32_t, uint64_t>, uint64_t> standInByExport;
         // Stand-ins whose functions were collected, waiting for ReleaseCollected().
         std::vector<uint64_t> collected;
-        std::map<Settlement *, std::unique_ptr<Settlement>> settlements;
-        uint32_t nextRuntime = 1;
-        uint64_t nextExport  = 1;
-        uint64_t nextStandIn = 1;
+        std::map<uint64_t, std::unique_ptr<Settlement>> settlements;
+        uint32_t nextRuntime    = 1;
+        uint64_t nextExport     = 1;
+        uint64_t nextStandIn    = 1;
+        uint64_t nextSettlement = 1;
+
+        // What a V8 callback (a stand-in, a promise reaction) is handed: this state and the key of its target. A key, not
+        // a pointer: the target can go while the function still exists, such as when its runtime has left but a
+        // disposing listener still runs code in the isolate, so the callback looks it up and finds it gone.
+        // The state itself outlives every runtime that takes part, so the pointer to it stays valid.
+        v8::Local<v8::Value> CallbackData(v8::Isolate *isolate, uint64_t key) {
+            v8::Local<v8::Value> parts[] = {v8::External::New(isolate, this), v8::BigInt::NewFromUnsigned(isolate, key)};
+            return v8::Array::New(isolate, parts, 2);
+        }
+
+        static std::pair<State *, uint64_t> ReadCallbackData(const v8::FunctionCallbackInfo<v8::Value> &info) {
+            v8::Local<v8::Context> context = info.GetIsolate()->GetCurrentContext();
+            v8::Local<v8::Array> parts     = info.Data().As<v8::Array>();
+            auto *state                    = static_cast<State *>(parts->Get(context, 0).ToLocalChecked().As<v8::External>()->Value());
+            const uint64_t key             = parts->Get(context, 1).ToLocalChecked().As<v8::BigInt>()->Uint64Value();
+            return {state, key};
+        }
 
         static void Throw(v8::Isolate *isolate, const std::string &message) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, message)));
@@ -190,7 +208,7 @@ namespace Framework::Scripting {
             standIn->runtime = runtime;
 
             v8::Local<v8::Function> function;
-            if (!v8::Function::New(context, CallStandIn, v8::External::New(isolate, standIn.get())).ToLocal(&function)) {
+            if (!v8::Function::New(context, CallStandIn, CallbackData(isolate, standIn->key)).ToLocal(&function)) {
                 return {};
             }
             ++it->second.holds;
@@ -230,11 +248,18 @@ namespace Framework::Scripting {
 
         // Runs in the caller's runtime: forward the call to the export's owner.
         static void CallStandIn(const v8::FunctionCallbackInfo<v8::Value> &info) {
-            auto *standIn          = static_cast<StandIn *>(info.Data().As<v8::External>()->Value());
-            State &state           = *standIn->state;
-            v8::Isolate *isolate   = info.GetIsolate();
-            const uint64_t id      = standIn->id;
-            const uint32_t caller  = standIn->runtime;
+            auto [statePointer, key] = ReadCallbackData(info);
+            State &state             = *statePointer;
+            v8::Isolate *isolate     = info.GetIsolate();
+
+            // Gone when the runtime holding it has left; its isolate can still run code until it is disposed.
+            const auto standIn = state.standIns.find(key);
+            if (standIn == state.standIns.end()) {
+                Throw(isolate, "This resource can no longer call other resources");
+                return;
+            }
+            const uint64_t id     = standIn->second->id;
+            const uint32_t caller = standIn->second->runtime;
 
             if (state.OwnerOf(id) == 0) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
@@ -301,7 +326,7 @@ namespace Framework::Scripting {
 
             std::optional<TransferredValue> result;
             std::optional<TransferredValue> thrown;
-            Settlement *settlement = nullptr;
+            uint64_t settlement = 0;
             {
                 Entered entered(owner);
                 v8::TryCatch tryCatch(owner.isolate);
@@ -348,12 +373,13 @@ namespace Framework::Scripting {
                 }
                 return {};
             }
-            if (settlement != nullptr) {
+            if (settlement != 0) {
+                const auto waiting = settlements.find(settlement);
                 v8::Local<v8::Promise::Resolver> resolver;
-                if (!v8::Promise::Resolver::New(context).ToLocal(&resolver)) {
+                if (waiting == settlements.end() || !v8::Promise::Resolver::New(context).ToLocal(&resolver)) {
                     return {};
                 }
-                settlement->resolver.Reset(isolate, resolver);
+                waiting->second->resolver.Reset(isolate, resolver);
                 return resolver->GetPromise();
             }
             if (!result) {
@@ -385,24 +411,25 @@ namespace Framework::Scripting {
             return ErrorValue(ToUtf8(isolate, value) + " (" + copied.GetError() + ")");
         }
 
-        // Called inside the owner: react to its promise, and settle the caller's when it does.
-        Settlement *Await(uint32_t owner, uint32_t caller, v8::Local<v8::Context> context, v8::Local<v8::Promise> promise, bool keepValue) {
-            v8::Isolate *isolate      = context->GetIsolate();
-            auto settlement           = std::make_unique<Settlement>();
-            settlement->state         = this;
-            settlement->owner         = owner;
-            settlement->caller        = caller;
-            settlement->keepValue     = keepValue;
-            v8::Local<v8::External> data = v8::External::New(isolate, settlement.get());
+        // Called inside the owner: react to its promise, and settle the caller's when it does. Returns the
+        // settlement's key, or 0 when the reaction could not be attached.
+        uint64_t Await(uint32_t owner, uint32_t caller, v8::Local<v8::Context> context, v8::Local<v8::Promise> promise, bool keepValue) {
+            v8::Isolate *isolate  = context->GetIsolate();
+            auto settlement       = std::make_unique<Settlement>();
+            settlement->key       = nextSettlement++;
+            settlement->owner     = owner;
+            settlement->caller    = caller;
+            settlement->keepValue = keepValue;
+            v8::Local<v8::Value> data = CallbackData(isolate, settlement->key);
 
             v8::Local<v8::Function> onFulfilled;
             v8::Local<v8::Function> onRejected;
             if (!v8::Function::New(context, OnFulfilled, data).ToLocal(&onFulfilled) || !v8::Function::New(context, OnRejected, data).ToLocal(&onRejected) || promise->Then(context, onFulfilled, onRejected).IsEmpty()) {
-                return nullptr;
+                return 0;
             }
-            Settlement *raw = settlement.get();
-            settlements.emplace(raw, std::move(settlement));
-            return raw;
+            const uint64_t key = settlement->key;
+            settlements.emplace(key, std::move(settlement));
+            return key;
         }
 
         static void OnFulfilled(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -415,11 +442,11 @@ namespace Framework::Scripting {
 
         // Runs inside the owner, from its microtask queue.
         static void Settle(const v8::FunctionCallbackInfo<v8::Value> &info, bool fulfilled) {
-            auto *settlement = static_cast<Settlement *>(info.Data().As<v8::External>()->Value());
-            State &state     = *settlement->state;
-            const auto it    = state.settlements.find(settlement);
+            auto [statePointer, key] = ReadCallbackData(info);
+            State &state             = *statePointer;
+            const auto it            = state.settlements.find(key);
             if (it == state.settlements.end()) {
-                return;
+                return; // Already settled, or its owner or caller has left.
             }
             std::unique_ptr<Settlement> owned = std::move(it->second);
             state.settlements.erase(it);

@@ -282,4 +282,22 @@ MODULE(function_references, {
         // Once the termination has unwound, the owner runs again.
         STREQUALS(NodeTest::Eval(*pair.owner, "1 + 1").c_str(), "2");
     });
+    IT("throws when a runtime that has left calls through a stand-in it still holds", {
+        FunctionReferencesTest::Pair pair;
+        STREQUALS(FunctionReferencesTest::Export(pair, "{ ping() { return 'pong' } }").c_str(), "");
+        // Left, but not yet disposed: a disposing listener can still run code in it.
+        pair.references->RemoveRuntime(pair.callerId);
+        STREQUALS(NodeTest::Eval(*pair.caller, "try { api.ping() } catch (e) { e.message }").c_str(), "This resource can no longer call other resources");
+    });
+
+    IT("ignores a promise that settles after its owner has left", {
+        FunctionReferencesTest::Pair pair;
+        STREQUALS(FunctionReferencesTest::Export(pair, "{ wait() { return new Promise((resolve) => globalThis.release = resolve) } }").c_str(), "");
+        NodeTest::Eval(*pair.caller, "globalThis.out = ''; api.wait().then(() => out = 'resolved', (e) => out = e.message)");
+        pair.references->RemoveRuntime(pair.ownerId);
+        // The owner still runs: its promise settles into a reaction whose settlement went with the owner.
+        NodeTest::Eval(*pair.owner, "release(1)");
+        EQUALS(pair.TickUntil("out !== ''"), true);
+        STREQUALS(NodeTest::Eval(*pair.caller, "out").c_str(), "owner stopped before the call finished");
+    });
 });
