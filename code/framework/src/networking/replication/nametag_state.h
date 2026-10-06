@@ -10,6 +10,7 @@
 
 #include "network_entity.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -21,9 +22,11 @@ namespace Framework::Networking::Replication {
     };
 
     // A player avatar's nametag state. Games embed one, return it from NetworkEntity::GetNametag and
-    // serialize it in their own SerializeFields. Scripted changes route through the owner (SetNametagState).
+    // serialize it in their own SerializeFields. Server-written: the owner neither sends nor overrides it.
     struct NametagState {
         static constexpr uint8_t kAllComponents = static_cast<uint8_t>(NametagComponent::Name) | static_cast<uint8_t>(NametagComponent::Health);
+        // Replicated to every client, so a script cannot push an unbounded string through it.
+        static constexpr std::size_t kMaxTextBytes = 64;
 
         uint8_t components = kAllComponents;
         uint32_t color     = 0xFFFFFFFF; // packed 0xAARRGGBB
@@ -39,9 +42,9 @@ namespace Framework::Networking::Replication {
         }
 
         void Serialize(FieldSerializer &fields) {
-            fields.Field(components);
-            fields.Field(color);
-            fields.Field(text);
+            fields.ServerField(components);
+            fields.ServerField(color);
+            fields.ServerField(text);
         }
     };
 } // namespace Framework::Networking::Replication

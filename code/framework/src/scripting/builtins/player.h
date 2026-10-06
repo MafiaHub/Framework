@@ -53,8 +53,8 @@ namespace Framework::Scripting::Builtins {
         // Connection's remote IP address (no port). Server-only; empty when unavailable.
         std::string GetAddress() const;
 
-        // Nametag over this player's avatar (games whose entity carries a NametagState). Server-only:
-        // the owner applies and replicates the change, so a getter reflects a set a round-trip later.
+        // Nametag over this player's avatar (games whose entity carries a NametagState). The setters
+        // are server-only and write the server's copy, which every other client replicates.
         void SetNametagVisible(bool visible);
         bool IsNametagVisible() const;
         void SetNametagHealthVisible(bool visible);
@@ -83,7 +83,7 @@ namespace Framework::Scripting::Builtins {
         const Networking::RPC::ClientIdentity *ResolveIdentity() const;
 
         Networking::Replication::NametagState *ResolveNametag() const;
-        void SendNametag(const Networking::Replication::NametagState &state) const;
+        Networking::Replication::NametagState *WritableNametag() const;
         void SetNametagComponent(Networking::Replication::NametagComponent component, bool enabled);
         bool HasNametagComponent(Networking::Replication::NametagComponent component) const;
 

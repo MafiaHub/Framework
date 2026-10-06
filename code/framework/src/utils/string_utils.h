@@ -133,4 +133,16 @@ namespace Framework::Utils::StringUtils {
         const auto pos = path.find_last_of("/\\");
         return std::string(pos == std::string_view::npos ? path : path.substr(pos + 1));
     }
+
+    // Cut to at most maxBytes without splitting a UTF-8 sequence: a split glyph renders as garbage.
+    inline void TruncateUtf8(std::string &text, std::size_t maxBytes) {
+        if (text.size() <= maxBytes) {
+            return;
+        }
+        std::size_t end = maxBytes;
+        while (end > 0 && (static_cast<unsigned char>(text[end]) & 0xC0) == 0x80) {
+            --end;
+        }
+        text.resize(end);
+    }
 } // namespace Framework::Utils::StringUtils

@@ -72,4 +72,19 @@ MODULE(string_utils, {
         const std::wstring out = Framework::Utils::StringUtils::NormalToWide("n\xC3\xAD");
         UEQUALS(out.size(), 3u);
     });
+
+    IT("TruncateUtf8 cuts to the cap without splitting a character", {
+        std::string ascii = "abcdef";
+        Framework::Utils::StringUtils::TruncateUtf8(ascii, 4);
+        STREQUALS(ascii.c_str(), "abcd");
+
+        std::string fits = "n\xC3\xAD";
+        Framework::Utils::StringUtils::TruncateUtf8(fits, 3);
+        STREQUALS(fits.c_str(), "n\xC3\xAD");
+
+        // A cap inside the two-byte "\xC3\xAD" backs off to before it.
+        std::string split = "n\xC3\xAD";
+        Framework::Utils::StringUtils::TruncateUtf8(split, 2);
+        STREQUALS(split.c_str(), "n");
+    });
 });
