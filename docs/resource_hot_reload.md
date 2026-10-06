@@ -74,18 +74,18 @@ as a 1ms bounded timeout.
 1. **Stops** the resource (and any dependents that cascade), firing
    `resourceStop` and running `Events::CleanupResource` so the resource's
    framework event listeners are removed.
-2. **Cancels the resource's timers.** `Engine::ClearResourceTimers` cancels any
-   `setTimeout`/`setInterval` the resource created, so a shared runtime doesn't
-   keep firing — or duplicate — them across reloads.
-3. **Evicts the resource's cached modules.** `Engine::EvictModulesUnderPath`
-   removes the resource's entries from the module cache (Node `require.cache`
-   on the server, the V8 module cache on the client). On the server, it also
-   assigns a new generation to file-backed ESM imports under the resource's
-   path, including their local dependencies, so re-execution re-reads
-   the edited files instead of returning stale exports.
-4. **Re-parses `package.json`** from disk (manifest edits — entry points,
+2. **Drops what the resource left running.** On the server every resource runs
+   in a Node environment of its own (see
+   [scripting_resource_isolation.md](scripting_resource_isolation.md)), and
+   stopping the resource destroys it: its timers, sockets, worker threads and
+   module cache go with it. The client shares one V8 isolate between resources,
+   so there `Engine::ClearResourceTimers` cancels the resource's
+   `setTimeout`/`setInterval` and `Engine::EvictModulesUnderPath` removes its
+   modules from the V8 module cache.
+3. **Re-parses `package.json`** from disk (manifest edits — entry points,
    dependencies — take effect) and rebuilds the dependency graph.
-5. **Restarts** the resource and the dependents that were stopped.
+4. **Restarts** the resource and the dependents that were stopped. On the server
+   the restart is a fresh environment, so every file is read from disk again.
 
 `RefreshAll` additionally rescans the resources directory and registers
 newly-added resource directories (left stopped — `start` them explicitly).
@@ -126,19 +126,11 @@ Clients that haven't finished connecting ignore `ResourceRefresh`/`ResourceStop`
   third-party Promise has no general cancellation mechanism. Code after a late
   external I/O completion may still resume and must tolerate the resource
   already being stopped.
-- **ESM reloads retain previous generations.** Server-side `import()` uses a
-  resource generation in the resolved file URL because Node has no public ESM
-  cache eviction API. Imports under the restarted resource's path load fresh
-  exports; modules outside that path keep their existing identities. Node
-  retains older generations until the engine shuts down, so repeated reloads
-  can grow memory use. Existing references to old exports are not rewritten.
-  Client scripts support CommonJS only.
-- **Raw `EventEmitter` listeners leak.** Only framework event listeners
-  (`on(...)`) and engine timers are cleaned up. Listeners a resource adds to its
-  own emitters (or `process.on`) must be removed in a `resourceStop` handler.
-- **`require('timers')` bypasses timer tracking.** Timer cleanup wraps the
-  global `setTimeout`/`setInterval`; code importing the `timers` module
-  directly is not tracked.
+- **The client's shared isolate.** On the client, only framework event
+  listeners (`on(...)`) and engine timers are cleaned up; listeners a resource
+  adds to its own emitters must be removed in a `resourceStop` handler. The
+  server has no such limit: whatever a resource created dies with its
+  environment. Client scripts support CommonJS only.
 
 ## Design notes (vs FiveM / MTASA)
 
@@ -147,18 +139,12 @@ Mono domain / native script state). Reloading destroys and recreates that runtim
 modules, timers, and event listeners are freed automatically — there is no
 cache to evict or timer to cancel.
 
-This framework runs **one shared Node runtime** for all resources. Everything in
-the reload sequence above (module eviction, timer cancellation, listener
-cleanup) exists to compensate for that shared runtime. Starting a stopped
-resource invalidates its module cache before executing its entry point, so
-both a plain stop+start and `RestartResource` pick up edited code. Starting an
-already running resource is a no-op.
-
-The robust long-term direction, if reload correctness becomes a recurring
-concern, is **per-resource isolation** (a dedicated V8 context per resource):
-reload would drop the context and rebuild it, eliminating the module-eviction,
-timer-leak, and listener-leak classes at the source — the same property FiveM
-and MTASA rely on.
+The server does the same: each resource runs in its own Node environment, and
+stopping it frees the environment with everything in it. Values that cross
+between resources are copied, and functions cross as references into their
+owner; [scripting_resource_isolation.md](scripting_resource_isolation.md) has
+the details. The client still shares one V8 isolate between resources, which
+is what the timer cancellation and module eviction above are for.
 
 Where this framework is already ahead of FiveM: reloading a dependency restarts
 the dependents that cascaded down (FiveM leaves them stopped — see its

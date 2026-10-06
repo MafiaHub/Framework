@@ -11,10 +11,13 @@
 #include <v8pp/convert.hpp>
 #include <v8.h>
 
+#include "../value_transfer.h"
+
 #include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -33,6 +36,19 @@ namespace Framework::Scripting::Builtins {
         v8::Global<v8::Function> callback;
         std::string resourceName;
         bool once;
+
+        // The isolate the callback lives in. A handler in another isolate than the emitter's is called through the
+        // engine's function references, with the arguments copied across.
+        v8::Isolate *isolate = nullptr;
+    };
+
+    // A handler picked for one emission, held outside the table lock while it runs.
+    struct CollectedHandler {
+        v8::Global<v8::Function> callback;
+        std::string resourceName;
+        v8::Isolate *isolate = nullptr;
+
+        explicit CollectedHandler(const EventHandler &handler): callback(handler.isolate, handler.callback), resourceName(handler.resourceName), isolate(handler.isolate) {}
     };
 
     /**
@@ -129,6 +145,15 @@ namespace Framework::Scripting::Builtins {
         void CleanupResource(std::string_view resourceName);
 
         /**
+         * Drop every handle that lives in an isolate about to be disposed: handlers, and the resolvers of emissions
+         * still waiting on their handlers. Call while the isolate is alive.
+         */
+        void ForgetIsolate(v8::Isolate *isolate);
+
+        // Emissions still waiting for their handlers to settle, across every Events. For diagnostics and tests.
+        static size_t GetWaitingEmissionCount();
+
+        /**
          * Clear all per-session event state.
          */
         void Reset();
@@ -194,10 +219,7 @@ namespace Framework::Scripting::Builtins {
 
         // Snapshot (callback, resourceName) pairs for an event, consuming once handlers, so
         // dispatch runs outside the table lock.
-        std::vector<std::pair<v8::Global<v8::Function>, std::string>> CollectHandlers(v8::Isolate *isolate,
-                                                                                      const std::string &eventName,
-                                                                                      const std::string &targetResource,
-                                                                                      HandlerScope scope);
+        std::vector<CollectedHandler> CollectHandlers(const std::string &eventName, const std::string &targetResource, HandlerScope scope);
 
         // Internal registration helper
         void RegisterHandler(v8::Isolate *isolate,
@@ -215,14 +237,22 @@ namespace Framework::Scripting::Builtins {
                                             const std::string &targetResource = "",
                                             HandlerScope scope = HandlerScope::Global);
 
-        // Helper: invoke handlers and collect results as promises
-        // handlers: pairs of (callback, logContext) where logContext is used for error logging
-        static v8::Local<v8::Array> InvokeHandlersToPromiseArray(
+        // Helper: invoke handlers and collect results as promises in the emitter's isolate. A handler's resource name
+        // is its log context.
+        v8::Local<v8::Array> InvokeHandlersToPromiseArray(
             v8::Isolate *isolate,
             v8::Local<v8::Context> context,
-            std::vector<std::pair<v8::Global<v8::Function>, std::string>> &handlers,
+            std::vector<CollectedHandler> &handlers,
             const std::vector<v8::Local<v8::Value>> &args,
             const std::string &eventName);
+
+        // Calls one handler and returns what it returned, or empty with the exception caught by the caller's TryCatch.
+        // `copied` holds the arguments copied out of the emitter, made on the first handler in another isolate.
+        v8::MaybeLocal<v8::Value> InvokeHandler(v8::Isolate *isolate,
+                                                v8::Local<v8::Context> context,
+                                                CollectedHandler &handler,
+                                                const std::vector<v8::Local<v8::Value>> &args,
+                                                std::optional<std::vector<TransferredValue>> &copied);
 
         // Forward declaration for callback data tracking
         struct AllSettledCallbackData;
@@ -260,6 +290,13 @@ namespace Framework::Scripting::Builtins {
         // Track pending AllSettled callbacks for cleanup on destruction
         std::set<std::shared_ptr<AllSettledCallbackData>> _pendingCallbacks;
         std::mutex _pendingCallbacksMutex;
+
+        // Emissions waiting for their handlers to settle, by the key their then-handler holds. Static, because the
+        // then-handler can run after this Events is gone, and the disposal of a runtime must reach the emissions whose
+        // then-handlers will now never run.
+        static std::map<uint64_t, std::shared_ptr<AllSettledCallbackData>> _waitingEmissions;
+        static std::mutex _waitingEmissionsMutex;
+        static uint64_t _nextWaitingEmission;
     };
 
 } // namespace Framework::Scripting::Builtins

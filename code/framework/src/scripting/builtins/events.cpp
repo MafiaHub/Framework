@@ -8,6 +8,7 @@
 
 #include "events.h"
 #include "../engine_helpers.h"
+#include "../function_references.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
 
@@ -22,10 +23,20 @@ namespace Framework::Scripting::Builtins {
     // Defined early so destructor can access it
     struct Events::AllSettledCallbackData {
         v8::Global<v8::Promise::Resolver> resolver;
+        v8::Isolate *isolate = nullptr; // Where the resolver lives; its runtime may go before the emission settles.
         std::string errorMessage;
         Events *owner;                       // For removing from pending set on completion
         std::atomic<bool> cancelled {false}; // Set when Events is destroyed
     };
+
+    std::map<uint64_t, std::shared_ptr<Events::AllSettledCallbackData>> Events::_waitingEmissions;
+    std::mutex Events::_waitingEmissionsMutex;
+    uint64_t Events::_nextWaitingEmission = 1;
+
+    size_t Events::GetWaitingEmissionCount() {
+        std::scoped_lock lock(_waitingEmissionsMutex);
+        return _waitingEmissions.size();
+    }
 
     Events::~Events() {
         // Invalidate the callback context so any outstanding unsubscribe
@@ -231,6 +242,7 @@ namespace Framework::Scripting::Builtins {
         entry.callback.Reset(isolate, handler);
         entry.resourceName = resourceName;
         entry.once         = once;
+        entry.isolate      = isolate;
 
         std::scoped_lock lock(_handlersMutex);
         HandlerTable(scope)[std::string(eventName)].push_back(std::move(entry));
@@ -330,7 +342,7 @@ namespace Framework::Scripting::Builtins {
                     auto &handlers = it->second;
                     handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
                                        [&](const EventHandler &h) {
-                                           return h.resourceName == resName && h.callback.Get(iso)->StrictEquals(hnd);
+                                           return h.resourceName == resName && h.isolate == iso && h.callback.Get(iso)->StrictEquals(hnd);
                                        }),
                         handlers.end());
                 }
@@ -437,23 +449,43 @@ namespace Framework::Scripting::Builtins {
             auto &handlers = it->second;
             handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
                                [&](const EventHandler &h) {
-                                   return h.resourceName == resourceName && h.callback.Get(isolate)->StrictEquals(handler);
+                                   return h.resourceName == resourceName && h.isolate == isolate && h.callback.Get(isolate)->StrictEquals(handler);
                                }),
                 handlers.end());
         }
     }
 
-    v8::Local<v8::Array> Events::InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<std::pair<v8::Global<v8::Function>, std::string>> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName) {
+    v8::MaybeLocal<v8::Value> Events::InvokeHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, std::optional<std::vector<TransferredValue>> &copied) {
+        if (handler.isolate == isolate) {
+            std::vector<v8::Local<v8::Value>> argv(args.begin(), args.end());
+            return handler.callback.Get(isolate)->Call(context, context->Global(), static_cast<int>(argv.size()), argv.empty() ? nullptr : argv.data());
+        }
+
+        // The handler's resource runs in a runtime of its own: call it there with the arguments copied across. What it
+        // returns only matters as a veto or a promise to wait on, so its value is never copied back.
+        FunctionReferences *references = (_callbackContext && _callbackContext->resourceManager) ? _callbackContext->resourceManager->GetFunctionReferences() : nullptr;
+        if (references == nullptr) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "The handler's resource is not reachable from here")));
+            return {};
+        }
+        if (!copied) {
+            copied = references->CopyArguments(isolate, args);
+            if (!copied) {
+                return {};
+            }
+        }
+        return references->Call(isolate, handler.isolate, handler.callback, *copied, FunctionReferences::Returned::Outcome);
+    }
+
+    v8::Local<v8::Array> Events::InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName) {
         v8::Local<v8::Array> promises = v8::Array::New(isolate, static_cast<int>(handlers.size()));
+        std::optional<std::vector<TransferredValue>> copied;
 
         for (size_t i = 0; i < handlers.size(); ++i) {
-            auto &[callback, logContext] = handlers[i];
-            v8::Local<v8::Function> func = callback.Get(isolate);
+            const std::string &logContext = handlers[i].resourceName;
 
             v8::TryCatch tryCatch(isolate);
-            std::vector<v8::Local<v8::Value>> argv(args.begin(), args.end());
-
-            v8::MaybeLocal<v8::Value> maybeResult = func->Call(context, context->Global(), static_cast<int>(argv.size()), argv.empty() ? nullptr : argv.data());
+            v8::MaybeLocal<v8::Value> maybeResult = InvokeHandler(isolate, context, handlers[i], args, copied);
 
             if (tryCatch.HasCaught()) {
                 // FormatV8Exception pulls the JS stack trace when available and
@@ -510,8 +542,9 @@ namespace Framework::Scripting::Builtins {
 
         std::scoped_lock lock(_pendingCallbacksMutex);
         for (auto it = _pendingCallbacks.begin(); it != _pendingCallbacks.end(); ++it) {
+            // Emissions from every resource's runtime wait here; only this isolate's resolvers can be read in it.
             const auto &data = *it;
-            if (data->resolver.IsEmpty()) {
+            if (data->resolver.IsEmpty() || data->isolate != isolate) {
                 continue;
             }
 
@@ -565,6 +598,7 @@ namespace Framework::Scripting::Builtins {
         // - Events is destroyed and releases its reference
         auto callbackData = std::make_shared<AllSettledCallbackData>();
         callbackData->resolver.Reset(isolate, resolver);
+        callbackData->isolate      = isolate;
         callbackData->errorMessage = aggregateErrorMessage;
         callbackData->owner        = this;
 
@@ -573,10 +607,19 @@ namespace Framework::Scripting::Builtins {
             _pendingCallbacks.insert(callbackData);
         }
 
-        // Give the handler its own strong reference via the External, so ~Events() clearing
-        // _pendingCallbacks can't free the data out from under a still-pending microtask.
-        auto *handlerRef                     = new std::shared_ptr<AllSettledCallbackData>(callbackData);
-        v8::Local<v8::External> resolverData = v8::External::New(isolate, handlerRef);
+        // The handler holds a key to its own strong reference, so ~Events() clearing _pendingCallbacks can't free the
+        // data out from under a still-pending microtask, and disposing the isolate can still free it.
+        uint64_t key = 0;
+        {
+            std::scoped_lock lock(_waitingEmissionsMutex);
+            key = _nextWaitingEmission++;
+            _waitingEmissions.emplace(key, callbackData);
+        }
+        auto forget = [key]() {
+            std::scoped_lock lock(_waitingEmissionsMutex);
+            _waitingEmissions.erase(key);
+        };
+        v8::Local<v8::Value> resolverData = v8::BigInt::NewFromUnsigned(isolate, key);
 
         v8::MaybeLocal<v8::Function> maybeThenHandler = v8::Function::New(
             context,
@@ -584,10 +627,17 @@ namespace Framework::Scripting::Builtins {
                 v8::Isolate *iso           = info.GetIsolate();
                 v8::Local<v8::Context> ctx = iso->GetCurrentContext();
 
-                // Own the data for this call, then free the heap holder (a then-handler runs once).
-                auto *handlerRef                             = static_cast<std::shared_ptr<AllSettledCallbackData> *>(info.Data().As<v8::External>()->Value());
-                std::shared_ptr<AllSettledCallbackData> data = *handlerRef;
-                delete handlerRef;
+                // Take the data for this call (a then-handler runs once). Gone when the emitter's runtime was disposed.
+                std::shared_ptr<AllSettledCallbackData> data;
+                {
+                    std::scoped_lock lock(_waitingEmissionsMutex);
+                    const auto waiting = _waitingEmissions.find(info.Data().As<v8::BigInt>()->Uint64Value());
+                    if (waiting == _waitingEmissions.end()) {
+                        return;
+                    }
+                    data = std::move(waiting->second);
+                    _waitingEmissions.erase(waiting);
+                }
 
                 if (data->cancelled.load(std::memory_order_acquire)) {
                     return; // Events destroyed, bail out safely
@@ -668,23 +718,23 @@ namespace Framework::Scripting::Builtins {
             resolverData);
 
         // Function::New / Promise::Then return empty on a terminating isolate; ToLocalChecked()
-        // would abort. Fail soft: the handler won't run, so free its holder and untrack here.
+        // would abort. Fail soft: the handler won't run, so forget its data and untrack here.
         v8::Local<v8::Function> thenHandler;
         if (!maybeThenHandler.ToLocal(&thenHandler)) {
-            delete handlerRef;
+            forget();
             RemovePendingCallback(callbackData.get());
             return;
         }
 
         if (allPromise->Then(context, thenHandler).IsEmpty()) {
-            delete handlerRef;
+            forget();
             RemovePendingCallback(callbackData.get());
             return;
         }
     }
 
-    std::vector<std::pair<v8::Global<v8::Function>, std::string>> Events::CollectHandlers(v8::Isolate *isolate, const std::string &eventName, const std::string &targetResource, HandlerScope scope) {
-        std::vector<std::pair<v8::Global<v8::Function>, std::string>> handlersToCall;
+    std::vector<CollectedHandler> Events::CollectHandlers(const std::string &eventName, const std::string &targetResource, HandlerScope scope) {
+        std::vector<CollectedHandler> handlersToCall;
         std::vector<size_t> indicesToRemove;
 
         std::scoped_lock lock(_handlersMutex);
@@ -702,10 +752,8 @@ namespace Framework::Scripting::Builtins {
                 continue;
             }
 
-            // Copy the callback for calling outside the lock
-            v8::Global<v8::Function> callbackCopy;
-            callbackCopy.Reset(isolate, handler.callback.Get(isolate));
-            handlersToCall.emplace_back(std::move(callbackCopy), handler.resourceName);
+            // Copy the callback for calling outside the lock, in the isolate it belongs to
+            handlersToCall.emplace_back(handler);
 
             if (handler.once) {
                 indicesToRemove.push_back(idx);
@@ -727,7 +775,7 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Promise::Resolver> resolver = v8::Promise::Resolver::New(context).ToLocalChecked();
         v8::Local<v8::Promise> promise            = resolver->GetPromise();
 
-        auto handlersToCall = CollectHandlers(isolate, eventName, targetResource, scope);
+        auto handlersToCall = CollectHandlers(eventName, targetResource, scope);
 
         if (handlersToCall.empty()) {
             resolver->Resolve(context, v8::Undefined(isolate)).Check();
@@ -750,14 +798,15 @@ namespace Framework::Scripting::Builtins {
     bool Events::EmitReservedSync(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args) {
         v8::HandleScope handleScope(isolate);
 
-        auto handlersToCall = CollectHandlers(isolate, eventName, "", HandlerScope::Global);
+        auto handlersToCall = CollectHandlers(eventName, "", HandlerScope::Global);
         bool proceed        = true;
+        std::optional<std::vector<TransferredValue>> copied;
 
-        for (auto &[callback, logContext] : handlersToCall) {
+        for (auto &handler : handlersToCall) {
+            const std::string &logContext = handler.resourceName;
             v8::TryCatch tryCatch(isolate);
-            std::vector<v8::Local<v8::Value>> argv(args.begin(), args.end());
 
-            v8::MaybeLocal<v8::Value> maybeResult = callback.Get(isolate)->Call(context, context->Global(), static_cast<int>(argv.size()), argv.empty() ? nullptr : argv.data());
+            v8::MaybeLocal<v8::Value> maybeResult = InvokeHandler(isolate, context, handler, args, copied);
 
             if (tryCatch.HasCaught()) {
                 std::string errorStr = FormatV8Exception(isolate, tryCatch, "Unknown error in event handler");
@@ -879,6 +928,7 @@ namespace Framework::Scripting::Builtins {
         entry.callback.Reset(isolate, handler);
         entry.resourceName = resourceName;
         entry.once         = false;
+        entry.isolate      = isolate;
 
         std::scoped_lock lock(events->_handlersMutex);
         events->_localHandlers[resourceName][eventName].push_back(std::move(entry));
@@ -911,7 +961,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         // Collect local handlers (convert to pairs with resource name as log context)
-        std::vector<std::pair<v8::Global<v8::Function>, std::string>> handlersToCall;
+        std::vector<CollectedHandler> handlersToCall;
         {
             std::scoped_lock lock(events->_handlersMutex);
             auto resIt = events->_localHandlers.find(resourceName);
@@ -919,9 +969,7 @@ namespace Framework::Scripting::Builtins {
                 auto evtIt = resIt->second.find(eventName);
                 if (evtIt != resIt->second.end()) {
                     for (const auto &handler : evtIt->second) {
-                        v8::Global<v8::Function> copy;
-                        copy.Reset(isolate, handler.callback.Get(isolate));
-                        handlersToCall.emplace_back(std::move(copy), resourceName);
+                        handlersToCall.emplace_back(handler);
                     }
                 }
             }
@@ -943,7 +991,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         // Invoke handlers and collect results as promises
-        v8::Local<v8::Array> promises = InvokeHandlersToPromiseArray(isolate, context, handlersToCall, eventArgs, eventName);
+        v8::Local<v8::Array> promises = events->InvokeHandlersToPromiseArray(isolate, context, handlersToCall, eventArgs, eventName);
 
         // Aggregate results using Promise.allSettled
         events->AggregateWithAllSettled(isolate, context, promises, resolver, "One or more local event handlers failed");
@@ -970,6 +1018,40 @@ namespace Framework::Scripting::Builtins {
         if (localIt != _localHandlers.end()) {
             _localHandlers.erase(localIt);
         }
+    }
+
+    void Events::ForgetIsolate(v8::Isolate *isolate) {
+        {
+            std::scoped_lock lock(_handlersMutex);
+            for (auto *table : {&_globalHandlers, &_clientHandlers}) {
+                for (auto &[eventName, handlers] : *table) {
+                    std::erase_if(handlers, [&](const EventHandler &h) { return h.isolate == isolate; });
+                }
+            }
+            for (auto &[resourceName, eventMap] : _localHandlers) {
+                for (auto &[eventName, handlers] : eventMap) {
+                    std::erase_if(handlers, [&](const EventHandler &h) { return h.isolate == isolate; });
+                }
+            }
+        }
+
+        // An emission from this isolate still waiting on its handlers never settles now: its then-handler dies with
+        // the isolate, so the data it would have taken is freed here.
+        {
+            std::scoped_lock lock(_pendingCallbacksMutex);
+            for (auto it = _pendingCallbacks.begin(); it != _pendingCallbacks.end();) {
+                if ((*it)->isolate == isolate) {
+                    (*it)->cancelled.store(true, std::memory_order_release);
+                    (*it)->resolver.Reset();
+                    it = _pendingCallbacks.erase(it);
+                }
+                else {
+                    ++it;
+                }
+            }
+        }
+        std::scoped_lock lock(_waitingEmissionsMutex);
+        std::erase_if(_waitingEmissions, [&](const auto &entry) { return entry.second->isolate == isolate; });
     }
 
     void Events::Reset() {
