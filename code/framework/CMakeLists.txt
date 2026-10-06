@@ -43,6 +43,8 @@ set(FRAMEWORK_SRC
     # JavaScript scripting engine base and builtins (used by both client and server)
     # Note: node_engine.cpp and v8_engine.cpp are in OBJECT libraries due to special compile flags
     src/scripting/engine.cpp
+    src/scripting/value_transfer.cpp
+    src/scripting/function_references.cpp
     src/scripting/builtins/builtins.cpp
     src/scripting/builtins/vector2.cpp
     src/scripting/builtins/vector3.cpp
@@ -294,7 +296,7 @@ option(FW_NODE_INSPECTOR "Enable Node.js inspector for script debugging" OFF)
 if(LIBNODE_AVAILABLE)
     # This is separate because it needs NODE_WANT_INTERNALS and libuv headers which
     # cause Windows SDK errno conflicts (EINVAL/ERANGE undefined) when applied to PCH.
-    add_library(FrameworkNodeEngine OBJECT src/scripting/node_engine.cpp)
+    add_library(FrameworkNodeEngine OBJECT src/scripting/node_engine.cpp src/scripting/node_runtime.cpp)
 
     # Apply the same shared dependencies as Framework
     target_include_directories(FrameworkNodeEngine PUBLIC

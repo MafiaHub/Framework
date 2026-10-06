@@ -19,6 +19,7 @@
 #include "scripting/builtins/player.h"
 #include "scripting/resource/resource.h"
 #include "scripting/resource/resource_manager.h"
+#include "utils/version.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
@@ -1038,7 +1039,7 @@ MODULE(js_features, {
             v8::Context::Scope contextScope(context);
             // Registered at the global root, as production does.
             Exports::Register(isolate, context, context->Global(), &manager);
-            ExecutionEnvironment::Register(isolate, context, context->Global(), /*isClient*/ true);
+            ExecutionEnvironment::Register(isolate, context, context->Global(), /*isClient*/ true, "1.2.3-rc.1");
         }
 
         EQUALS(RunJSBool(engine, "typeof Exports === 'object' && Exports !== null"), true);
@@ -1049,6 +1050,9 @@ MODULE(js_features, {
         // ExecutionEnvironment at root, camelCase flags; old Environment name and PascalCase are gone.
         EQUALS(RunJSBool(engine, "ExecutionEnvironment.isClient === true"), true);
         EQUALS(RunJSBool(engine, "ExecutionEnvironment.isServer === false"), true);
+        EQUALS(RunJSBool(engine, (std::string("ExecutionEnvironment.frameworkVersion === '") + Framework::Utils::Version::rel + "'").c_str()), true);
+        EQUALS(RunJSBool(engine, "ExecutionEnvironment.modVersion === '1.2.3-rc.1'"), true);
+        EQUALS(RunJSBool(engine, "!Reflect.set(ExecutionEnvironment, 'modVersion', 'x') && !Reflect.deleteProperty(ExecutionEnvironment, 'modVersion')"), true);
         EQUALS(RunJSBool(engine, "typeof Environment === 'undefined'"), true);
         EQUALS(RunJSBool(engine, "ExecutionEnvironment.IsClient === undefined"), true);
         EQUALS(RunJSBool(engine, "ExecutionEnvironment.IsServer === undefined"), true);

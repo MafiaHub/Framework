@@ -57,8 +57,12 @@
 
 // Scripting tests
 #include "modules/engine_ut.h"
+#include "modules/node_runtime_ut.h"
+#include "modules/value_transfer_ut.h"
+#include "modules/function_references_ut.h"
 #include "modules/js_features_ut.h"
 #include "modules/resource_manager_ut.h"
+#include "modules/resource_isolation_ut.h"
 #include "modules/resource_ut.h"
 #include "modules/timer_context_ut.h"
 
@@ -108,10 +112,14 @@ int main() {
 
     // Scripting tests
     UNIT_MODULE(engine);
+    UNIT_MODULE(node_runtime);
+    UNIT_MODULE(value_transfer);
+    UNIT_MODULE(function_references);
     UNIT_MODULE(resource);
     UNIT_MODULE(resource_manager);
     UNIT_MODULE(resource_lifecycle);
     UNIT_MODULE(resource_manager_callbacks);
+    UNIT_MODULE(resource_isolation);
     UNIT_MODULE(js_features);
     UNIT_MODULE(timer_context);
     UNIT_MODULE(connection_gate);

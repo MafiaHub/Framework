@@ -28,8 +28,13 @@ namespace Framework::Utils {
             return _errorCode;
         }
 
-        inline const ResultType &GetValue() const noexcept {
+        inline const ResultType &GetValue() const & noexcept {
             return _value;
+        }
+
+        // From a result about to go away, the value moves out instead of being copied.
+        inline ResultType GetValue() && {
+            return std::move(_value);
         }
 
         inline bool IsOk() const noexcept {

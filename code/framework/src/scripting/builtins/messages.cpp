@@ -7,6 +7,8 @@
  */
 
 #include "messages.h"
+#include "../engine.h"
+#include "../function_references.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
 
@@ -91,15 +93,14 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        std::string messageType  = v8pp::from_v8<std::string>(isolate, args[0]);
-        std::string resourceName = manager->GetCurrentResourceContext();
+        std::string messageType         = v8pp::from_v8<std::string>(isolate, args[0]);
+        v8::Local<v8::Function> handler = args[1].As<v8::Function>();
+        std::string resourceName        = manager->ResolveResourceContext(isolate, handler);
 
         if (resourceName.empty()) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Messages.handle: must be called from within a resource")));
             return;
         }
-
-        v8::Local<v8::Function> handler = args[1].As<v8::Function>();
 
         {
             std::scoped_lock lock(_handlersMutex);
@@ -137,7 +138,7 @@ namespace Framework::Scripting::Builtins {
 
         std::string targetResource = v8pp::from_v8<std::string>(isolate, args[0]);
         std::string messageType    = v8pp::from_v8<std::string>(isolate, args[1]);
-        std::string sourceResource = manager->GetCurrentResourceContext();
+        std::string sourceResource = manager->ResolveResourceContext(isolate);
 
         v8::Local<v8::Value> payload = args.Length() > 2 ? args[2] : v8::Undefined(isolate).As<v8::Value>();
 
@@ -146,7 +147,7 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Promise> promise            = resolver->GetPromise();
 
         // Check if target resource has a handler
-        v8::Global<v8::Function> handler;
+        Handler handler;
         {
             std::scoped_lock lock(_handlersMutex);
             auto resourceIt = _handlers.find(targetResource);
@@ -163,16 +164,9 @@ namespace Framework::Scripting::Builtins {
                 return;
             }
 
-            // The handler's Global<Function> is bound to the isolate it was registered on.
-            // Getting it from a different isolate crashes, so reject cross-isolate requests
-            // (mirrors the Exports.get isolate-ownership guard).
-            if (handlerIt->second.isolate != isolate) {
-                resolver->Reject(context, v8pp::to_v8(isolate, "Messages.request: cannot invoke handler '" + messageType + "' in resource '" + targetResource + "' - cross-isolate access is not supported. Both resources must share the same isolate.")).Check();
-                args.GetReturnValue().Set(promise);
-                return;
-            }
-
-            handler.Reset(isolate, handlerIt->second.function.Get(isolate));
+            // Held by value, in the isolate it belongs to: the handler may live in another resource's runtime.
+            handler.isolate = handlerIt->second.isolate;
+            handler.function.Reset(handler.isolate, handlerIt->second.function);
         }
 
         // Generate request ID and store pending request
@@ -180,7 +174,7 @@ namespace Framework::Scripting::Builtins {
         {
             std::scoped_lock lock(_pendingRequestsMutex);
             requestId = _nextRequestId++;
-            _pendingRequests.try_emplace(requestId, requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource, targetResource);
+            _pendingRequests.try_emplace(requestId, requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource, targetResource, isolate, context);
         }
 
         // Create reply function - passes requestId as BigInt to avoid dangling pointer issues
@@ -214,6 +208,7 @@ namespace Framework::Scripting::Builtins {
                 pendingResponse.requestId = reqId;
                 pendingResponse.response.Reset(replyIsolate, response);
                 pendingResponse.isError = false;
+                pendingResponse.isolate = replyIsolate;
                 _responseQueue.push_back(std::move(pendingResponse));
             }
         };
@@ -221,16 +216,13 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::BigInt> requestIdData = v8::BigInt::NewFromUnsigned(isolate, requestId);
         v8::Local<v8::Function> replyFn     = v8::Function::New(context, replyCallback, requestIdData).ToLocalChecked();
 
-        // Call the handler with (payload, reply)
-        v8::Local<v8::Function> handlerFn = handler.Get(isolate);
-        v8::Local<v8::Value> argv[2]      = {payload, replyFn};
-
         // Save current resource context and set to target resource
         std::string previousContext = manager->GetCurrentResourceContext();
         manager->SetCurrentResourceContext(targetResource);
 
+        // Call the handler with (payload, reply)
         v8::TryCatch tryCatch(isolate);
-        v8::MaybeLocal<v8::Value> result = handlerFn->Call(context, context->Global(), 2, argv);
+        v8::MaybeLocal<v8::Value> result = CallHandler(isolate, context, manager, handler, payload, replyFn);
 
         if (tryCatch.HasCaught()) {
             v8::String::Utf8Value error(isolate, tryCatch.Exception());
@@ -279,7 +271,7 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Value> payload = args.Length() > 2 ? args[2] : v8::Undefined(isolate).As<v8::Value>();
 
         // Find handler
-        v8::Global<v8::Function> handler;
+        Handler handler;
         {
             std::scoped_lock lock(_handlersMutex);
             auto resourceIt = _handlers.find(targetResource);
@@ -292,23 +284,13 @@ namespace Framework::Scripting::Builtins {
                 return; // Silently ignore
             }
 
-            // Cross-isolate handler: Getting its Global<Function> from this isolate would
-            // crash. Skip delivery (send is fire-and-forget) and warn (mirrors Exports.get).
-            if (handlerIt->second.isolate != isolate) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Messages.send to '{}' skipped: handler '{}' lives in a different isolate", targetResource, messageType);
-                return;
-            }
-
-            handler.Reset(isolate, handlerIt->second.function.Get(isolate));
+            handler.isolate = handlerIt->second.isolate;
+            handler.function.Reset(handler.isolate, handlerIt->second.function);
         }
 
         // Create no-op reply function
         auto noOpReply                  = [](const v8::FunctionCallbackInfo<v8::Value> &) {};
         v8::Local<v8::Function> replyFn = v8::Function::New(context, noOpReply).ToLocalChecked();
-
-        // Call the handler with (payload, reply)
-        v8::Local<v8::Function> handlerFn = handler.Get(isolate);
-        v8::Local<v8::Value> argv[2]      = {payload, replyFn};
 
         // Save current resource context and set to target resource
         std::string previousContext = manager ? manager->GetCurrentResourceContext() : "";
@@ -316,8 +298,9 @@ namespace Framework::Scripting::Builtins {
             manager->SetCurrentResourceContext(targetResource);
         }
 
+        // Call the handler with (payload, reply)
         v8::TryCatch tryCatch(isolate);
-        handlerFn->Call(context, context->Global(), 2, argv);
+        (void)CallHandler(isolate, context, manager, handler, payload, replyFn);
 
         if (tryCatch.HasCaught()) {
             v8::String::Utf8Value error(isolate, tryCatch.Exception());
@@ -345,15 +328,17 @@ namespace Framework::Scripting::Builtins {
                 continue;
             }
 
-            v8::Local<v8::Promise::Resolver> resolver = it->second.resolver.Get(isolate);
-            v8::Local<v8::Value> responseValue        = response.response.Get(isolate);
-
-            if (response.isError) {
-                resolver->Reject(context, responseValue).Check();
-            }
-            else {
-                resolver->Resolve(context, responseValue).Check();
-            }
+            // reply() ran in the requester's runtime (from another one it arrives through a reference), so the
+            // response lives where the Promise does.
+            Settle(it->second, [&](v8::Isolate *owner, v8::Local<v8::Context> ownerContext, v8::Local<v8::Promise::Resolver> resolver) {
+                v8::Local<v8::Value> responseValue = response.response.Get(owner);
+                if (response.isError) {
+                    resolver->Reject(ownerContext, responseValue).Check();
+                }
+                else {
+                    resolver->Resolve(ownerContext, responseValue).Check();
+                }
+            });
 
             _pendingRequests.erase(it);
         }
@@ -381,7 +366,9 @@ namespace Framework::Scripting::Builtins {
                     // settles and erases atomically under this same mutex — so rejecting always
                     // moves the awaiting Promise out of pending (and V8 ignores a reject on an
                     // already-settled promise anyway). After erasing, a late reply() finds nothing.
-                    req.resolver.Get(isolate)->Reject(context, v8pp::to_v8(isolate, "Messages.request: resource '" + resourceName + "' stopped before reply")).Check();
+                    Settle(req, [&](v8::Isolate *owner, v8::Local<v8::Context> ownerContext, v8::Local<v8::Promise::Resolver> resolver) {
+                        resolver->Reject(ownerContext, v8pp::to_v8(owner, "Messages.request: resource '" + resourceName + "' stopped before reply")).Check();
+                    });
                     it = _pendingRequests.erase(it);
                 }
                 else {
@@ -389,6 +376,48 @@ namespace Framework::Scripting::Builtins {
                 }
             }
         }
+    }
+
+    void Messages::ForgetIsolate(v8::Isolate *isolate) {
+        {
+            std::scoped_lock lock(_handlersMutex);
+            for (auto &[resourceName, handlers] : _handlers) {
+                std::erase_if(handlers, [&](const auto &entry) { return entry.second.isolate == isolate; });
+            }
+        }
+        {
+            std::scoped_lock lock(_pendingRequestsMutex);
+            std::erase_if(_pendingRequests, [&](const auto &entry) { return entry.second.isolate == isolate; });
+        }
+        {
+            std::scoped_lock lock(_responseQueueMutex);
+            std::erase_if(_responseQueue, [&](const PendingResponse &response) { return response.isolate == isolate; });
+        }
+    }
+
+    v8::MaybeLocal<v8::Value> Messages::CallHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *manager, const Handler &handler, v8::Local<v8::Value> payload, v8::Local<v8::Function> reply) {
+        if (handler.isolate == isolate) {
+            v8::Local<v8::Value> argv[2] = {payload, reply};
+            return handler.function.Get(isolate)->Call(context, context->Global(), 2, argv);
+        }
+
+        // Only a throw matters to the caller; the answer goes through reply(), so the return value is never copied.
+        FunctionReferences *references = manager != nullptr ? manager->GetFunctionReferences() : nullptr;
+        if (references == nullptr) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Messages: the handler's resource is not reachable from here")));
+            return {};
+        }
+        return references->Call(isolate, handler.isolate, handler.function, std::vector<v8::Local<v8::Value>> {payload, reply}, FunctionReferences::Returned::Outcome);
+    }
+
+    void Messages::Settle(PendingRequest &request, fu2::function_view<void(v8::Isolate *, v8::Local<v8::Context>, v8::Local<v8::Promise::Resolver>)> settle) {
+        v8::Isolate *isolate = request.isolate;
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = request.context.Get(isolate);
+        v8::Context::Scope contextScope(context);
+        settle(isolate, context, request.resolver.Get(isolate));
     }
 
     void Messages::Shutdown() {
