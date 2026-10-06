@@ -112,21 +112,10 @@ namespace Framework::External::Discord {
         PublishLayers();
     }
 
-    void Wrapper::ClearBaseActivity() {
-        std::scoped_lock lock(_layersMutex);
-        _baseActivity.reset();
-        PublishLayers();
-    }
-
     void Wrapper::SetScriptFields(uint32_t fields) {
         std::scoped_lock lock(_layersMutex);
         _scriptFields = fields & PresenceField::All;
         PublishLayers();
-    }
-
-    uint32_t Wrapper::GetScriptFields() const {
-        std::scoped_lock lock(_layersMutex);
-        return _scriptFields;
     }
 
     void Wrapper::SetScriptActivity(const discord::Activity &activity, uint32_t written) {
@@ -157,7 +146,7 @@ namespace Framework::External::Discord {
             return;
         }
 
-        discord::Activity composed = _baseActivity.value_or(discord::Activity {});
+        discord::Activity composed      = _baseActivity.value_or(discord::Activity {});
         const discord::Activity &script = _scriptActivity;
         if (overrides & PresenceField::Type) {
             composed.SetType(script.GetType());
@@ -195,8 +184,7 @@ namespace Framework::External::Discord {
             composed.SetSupportedPlatforms(script.GetSupportedPlatforms());
         }
 
-        // discord::Activity is one C struct of fixed arrays and scalars, every copy of it starting
-        // from a value-initialised one, so byte equality is equality.
+        // Skip unchanged updates; they count against Discord's rate limit. Activity is a POD.
         if (_publishedActivity && std::memcmp(&*_publishedActivity, &composed, sizeof(composed)) == 0) {
             return;
         }

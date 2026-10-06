@@ -17,9 +17,8 @@ namespace Framework::Scripting {
 namespace Framework::Integrations::Client::Scripting::Builtins {
 
     // Client-side Discord rich presence API (global Discord); see types/framework/discord.d.ts.
-    // Setters stage onto a pending activity; update()/setPresence() publish it as the script layer,
-    // which the wrapper composes over the mod's own activity, keeping only the fields the mod opens
-    // to scripts (see Wrapper::SetScriptFields).
+    // Setters stage onto a pending activity; update()/setPresence() publish it as the script layer
+    // over the mod's own activity (see Wrapper::SetScriptFields).
     class Discord final {
       public:
         static void Register(v8::Isolate *isolate,
@@ -27,7 +26,6 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                              v8::Local<v8::Object> target,
                              Framework::Scripting::ResourceManager *resourceManager);
 
-        // Drops the staged activity and the script layer it published; scripting is going down.
         static void Shutdown();
 
       private:
@@ -50,7 +48,6 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         static void GetUserIdCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void IsAvailableCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void GetScriptFieldsCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
     };
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins

@@ -23,13 +23,12 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
-#include <utility>
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
     namespace {
         // Staged activity mutated by the setters, published on update()/setPresence().
         discord::Activity _activity;
-        // The PresenceField bits staged since the last reset; the mod's own layer keeps the rest.
+        // PresenceField bits staged since the last reset.
         std::uint32_t _written = 0;
         std::mutex _mutex;
 
@@ -145,10 +144,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         bool Publish() {
             auto *presence = ResolvePresence();
-            if (!presence) {
-                return false;
-            }
-            if (!presence->IsInitialized()) {
+            if (!presence || !presence->IsInitialized()) {
                 return false;
             }
             discord::Activity snapshot {};
@@ -158,7 +154,6 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 snapshot = _activity;
                 written  = _written;
             }
-            // The wrapper composes this over the mod's own activity, dropping the fields the mod keeps.
             presence->SetScriptActivity(snapshot, written);
             return true;
         }
@@ -420,7 +415,6 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             args.GetReturnValue().Set(false);
             return;
         }
-        // Only the script layer goes; whatever the mod shows itself comes back.
         presence->ClearScriptActivity();
         args.GetReturnValue().Set(true);
     }
@@ -431,30 +425,12 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         _written  = 0;
     }
 
-    void Discord::GetScriptFieldsCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        auto *presence                 = ResolvePresence();
-        const std::uint32_t allowed    = presence ? presence->GetScriptFields() : 0;
-        const std::pair<std::uint32_t, const char *> fields[] = {{External::Discord::PresenceField::Type, "type"}, {External::Discord::PresenceField::Name, "name"}, {External::Discord::PresenceField::Details, "details"}, {External::Discord::PresenceField::State, "state"}, {External::Discord::PresenceField::Timestamps, "timestamps"}, {External::Discord::PresenceField::LargeImage, "largeImage"}, {External::Discord::PresenceField::SmallImage, "smallImage"}, {External::Discord::PresenceField::Party, "party"}, {External::Discord::PresenceField::Secrets, "secrets"}, {External::Discord::PresenceField::Instance, "instance"}, {External::Discord::PresenceField::Platforms, "supportedPlatforms"}};
-        v8::Local<v8::Array> names = v8::Array::New(isolate);
-        std::uint32_t index        = 0;
-        for (const auto &[bit, name] : fields) {
-            if (allowed & bit) {
-                names->Set(context, index++, v8pp::to_v8(isolate, name)).Check();
-            }
-        }
-        args.GetReturnValue().Set(names);
-    }
-
     void Discord::Shutdown() {
         {
             std::scoped_lock lock(_mutex);
             _activity = discord::Activity {};
             _written  = 0;
         }
-        // A session's scripts leave with it, and so does what they wrote.
         if (auto *presence = ResolvePresence()) {
             presence->ClearScriptActivity();
         }
@@ -523,7 +499,6 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // Query
         attach("getUserId", &Discord::GetUserIdCallback);
         attach("isAvailable", &Discord::IsAvailableCallback);
-        attach("getScriptFields", &Discord::GetScriptFieldsCallback);
 
         target->Set(context, v8pp::to_v8(isolate, "Discord"), discordObj).Check();
 
@@ -559,12 +534,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             v8pp::metadata::docs("void", {v8pp::metadata::param("secrets", "{ match?: string; join?: string; spectate?: string }", false, "Opaque secrets to merge into the staged activity.")}, "Stages multiple Discord activity secrets at once.")));
         metadata.record(
             v8pp::metadata::function_of<v8::FunctionCallback>("setPresence", v8pp::metadata::docs("boolean", {v8pp::metadata::param("options", "Record<string, unknown>", false, "Batch of supported activity, timestamp, asset, party, secret, instance, and platform fields.")},
-                                                                                 "Merges a complete option batch into the staged activity and publishes it immediately, over the game's own presence.", "True when the update was dispatched; false when Discord is unavailable.")));
+                                                                                 "Merges a complete option batch into the staged activity and publishes it immediately.", "True when the update was dispatched; false when Discord is unavailable.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("update", v8pp::metadata::docs("boolean", {}, "Publishes the currently staged activity as one rate-limited Discord update.", "True when dispatched; false when Discord is unavailable.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("clear", v8pp::metadata::docs("boolean", {}, "Drops everything scripts published and resets staged state; the game's own presence stays.", "True when dispatched; false when Discord is unavailable.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("clear", v8pp::metadata::docs("boolean", {}, "Clears what scripts published and resets staged state.", "True when dispatched; false when Discord is unavailable.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("reset", v8pp::metadata::docs("void", {}, "Resets staged activity fields without publishing a Discord update.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getUserId", v8pp::metadata::docs("string", {}, "Returns the signed-in Discord user's snowflake.", "User ID string, or an empty string until available.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getScriptFields", v8pp::metadata::docs("string[]", {}, "Lists the presence fields the game lets scripts override; staged writes to any other field are dropped when published.", "Field names such as \"state\" or \"smallImage\".")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isAvailable", v8pp::metadata::docs("boolean", {}, "Checks whether Discord is connected and can publish presence.", "True when rich presence is initialized.")));
     }
 

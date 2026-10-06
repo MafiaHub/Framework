@@ -56,12 +56,8 @@ interface DiscordPresenceOptions {
  * calls no-op (setters silently, commits return `false`) when Discord presence
  * is disabled or unavailable.
  *
- * What a script publishes is layered over the game's own presence, the way
- * FiveM and MTA:SA keep the server name and session facts to themselves and
- * let a server write its own status. A game opens only some fields to
- * scripts; writes to the others are dropped when published.
- * {@link Discord.getScriptFields} lists the open ones, and with no game
- * presence set every field is open.
+ * A game may keep its own presence and open only some fields to scripts;
+ * writes to the other fields are ignored.
  *
  * @example
  * // Batch form — apply several fields and publish in one call:
@@ -142,8 +138,7 @@ declare const Discord: {
     update(): boolean;
 
     /**
-     * Drop everything scripts published and reset the staged state. The
-     * game's own presence, if it shows one, comes back.
+     * Clear what scripts published and reset the staged state.
      * @returns `true` if dispatched, `false` if unavailable.
      */
     clear(): boolean;
@@ -153,9 +148,6 @@ declare const Discord: {
 
     /** Snowflake of the signed-in Discord user, or `""` until known. */
     getUserId(): string;
-
-    /** The fields this game lets scripts override, e.g. `["state", "smallImage"]`. */
-    getScriptFields(): string[];
 
     /** Whether the Discord client is connected and presence can be published. */
     isAvailable(): boolean;
