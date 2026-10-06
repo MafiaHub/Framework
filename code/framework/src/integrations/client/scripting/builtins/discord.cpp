@@ -23,11 +23,14 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <utility>
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
     namespace {
         // Staged activity mutated by the setters, published on update()/setPresence().
         discord::Activity _activity;
+        // The PresenceField bits staged since the last reset; the mod's own layer keeps the rest.
+        std::uint32_t _written = 0;
         std::mutex _mutex;
 
         enum class StringField {
@@ -95,9 +98,27 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return discord::ActivityPartyPrivacy::Private;
         }
 
+        std::uint32_t StringFieldBit(StringField field) {
+            switch (field) {
+            case StringField::Name: return External::Discord::PresenceField::Name;
+            case StringField::Details: return External::Discord::PresenceField::Details;
+            case StringField::State: return External::Discord::PresenceField::State;
+            case StringField::LargeImage:
+            case StringField::LargeText: return External::Discord::PresenceField::LargeImage;
+            case StringField::SmallImage:
+            case StringField::SmallText: return External::Discord::PresenceField::SmallImage;
+            case StringField::PartyId: return External::Discord::PresenceField::Party;
+            case StringField::MatchSecret:
+            case StringField::JoinSecret:
+            case StringField::SpectateSecret: return External::Discord::PresenceField::Secrets;
+            }
+            return 0;
+        }
+
         // Apply*/Read* require the caller to hold _mutex.
         void ApplyString(StringField field, const std::string &value) {
             const char *c = value.c_str();
+            _written |= StringFieldBit(field);
             switch (field) {
             case StringField::Name: _activity.SetName(c); break;
             case StringField::Details: _activity.SetDetails(c); break;
@@ -114,6 +135,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         void ApplyNumber(NumberField field, std::int64_t value) {
+            _written |= field == NumberField::SupportedPlatforms ? External::Discord::PresenceField::Platforms : External::Discord::PresenceField::Timestamps;
             switch (field) {
             case NumberField::StartTimestamp: _activity.GetTimestamps().SetStart(static_cast<discord::Timestamp>(value)); break;
             case NumberField::EndTimestamp: _activity.GetTimestamps().SetEnd(static_cast<discord::Timestamp>(value)); break;
@@ -126,12 +148,19 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             if (!presence) {
                 return false;
             }
-            discord::Activity snapshot;
+            if (!presence->IsInitialized()) {
+                return false;
+            }
+            discord::Activity snapshot {};
+            std::uint32_t written = 0;
             {
                 std::scoped_lock lock(_mutex);
                 snapshot = _activity;
+                written  = _written;
             }
-            return presence->UpdateActivity(snapshot).IsOk();
+            // The wrapper composes this over the mod's own activity, dropping the fields the mod keeps.
+            presence->SetScriptActivity(snapshot, written);
+            return true;
         }
 
         bool ReadString(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> opts, const char *key, StringField field) {
@@ -189,6 +218,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         const discord::ActivityType type = MapActivityType(isolate, context, args[0]);
         std::scoped_lock lock(_mutex);
         _activity.SetType(type);
+        _written |= External::Discord::PresenceField::Type;
     }
 
     void Discord::SetPartySizeCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -204,6 +234,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         std::scoped_lock lock(_mutex);
         _activity.GetParty().GetSize().SetCurrentSize(current);
         _activity.GetParty().GetSize().SetMaxSize(max);
+        _written |= External::Discord::PresenceField::Party;
     }
 
     void Discord::SetPartyPrivacyCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -217,6 +248,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         const discord::ActivityPartyPrivacy privacy = MapPrivacy(isolate, context, args[0]);
         std::scoped_lock lock(_mutex);
         _activity.GetParty().SetPrivacy(privacy);
+        _written |= External::Discord::PresenceField::Party;
     }
 
     void Discord::SetInstanceCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -229,6 +261,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         const bool instance = args[0]->BooleanValue(isolate);
         std::scoped_lock lock(_mutex);
         _activity.SetInstance(instance);
+        _written |= External::Discord::PresenceField::Instance;
     }
 
     void Discord::SetAssetsCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -269,6 +302,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 if (arr->Get(context, 0).ToLocal(&cur) && arr->Get(context, 1).ToLocal(&max)) {
                     _activity.GetParty().GetSize().SetCurrentSize(cur->Int32Value(context).FromMaybe(0));
                     _activity.GetParty().GetSize().SetMaxSize(max->Int32Value(context).FromMaybe(0));
+                    _written |= External::Discord::PresenceField::Party;
                 }
             }
         }
@@ -276,6 +310,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         v8::Local<v8::Value> privacyVal;
         if (opts->Get(context, v8pp::to_v8(isolate, "privacy")).ToLocal(&privacyVal) && !privacyVal->IsUndefined()) {
             _activity.GetParty().SetPrivacy(MapPrivacy(isolate, context, privacyVal));
+            _written |= External::Discord::PresenceField::Party;
         }
     }
 
@@ -310,6 +345,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             v8::Local<v8::Value> typeVal;
             if (opts->Get(context, v8pp::to_v8(isolate, "type")).ToLocal(&typeVal) && !typeVal->IsUndefined()) {
                 _activity.SetType(MapActivityType(isolate, context, typeVal));
+                _written |= External::Discord::PresenceField::Type;
             }
 
             ReadString(isolate, context, opts, "name", StringField::Name);
@@ -328,6 +364,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             v8::Local<v8::Value> instanceVal;
             if (opts->Get(context, v8pp::to_v8(isolate, "instance")).ToLocal(&instanceVal) && instanceVal->IsBoolean()) {
                 _activity.SetInstance(instanceVal->BooleanValue(isolate));
+                _written |= External::Discord::PresenceField::Instance;
             }
 
             // Nested party: { id?, size?: [current, max], privacy? }
@@ -344,12 +381,14 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                         if (arr->Get(context, 0).ToLocal(&cur) && arr->Get(context, 1).ToLocal(&max)) {
                             _activity.GetParty().GetSize().SetCurrentSize(cur->Int32Value(context).FromMaybe(0));
                             _activity.GetParty().GetSize().SetMaxSize(max->Int32Value(context).FromMaybe(0));
+                            _written |= External::Discord::PresenceField::Party;
                         }
                     }
                 }
                 v8::Local<v8::Value> privacyVal;
                 if (party->Get(context, v8pp::to_v8(isolate, "privacy")).ToLocal(&privacyVal) && !privacyVal->IsUndefined()) {
                     _activity.GetParty().SetPrivacy(MapPrivacy(isolate, context, privacyVal));
+                    _written |= External::Discord::PresenceField::Party;
                 }
             }
 
@@ -374,14 +413,51 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         {
             std::scoped_lock lock(_mutex);
             _activity = discord::Activity {};
+            _written  = 0;
         }
         auto *presence = ResolvePresence();
-        args.GetReturnValue().Set(presence ? presence->ClearActivity().IsOk() : false);
+        if (!presence || !presence->IsInitialized()) {
+            args.GetReturnValue().Set(false);
+            return;
+        }
+        // Only the script layer goes; whatever the mod shows itself comes back.
+        presence->ClearScriptActivity();
+        args.GetReturnValue().Set(true);
     }
 
     void Discord::ResetCallback(const v8::FunctionCallbackInfo<v8::Value> &) {
         std::scoped_lock lock(_mutex);
         _activity = discord::Activity {};
+        _written  = 0;
+    }
+
+    void Discord::GetScriptFieldsCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        auto *presence                 = ResolvePresence();
+        const std::uint32_t allowed    = presence ? presence->GetScriptFields() : 0;
+        const std::pair<std::uint32_t, const char *> fields[] = {{External::Discord::PresenceField::Type, "type"}, {External::Discord::PresenceField::Name, "name"}, {External::Discord::PresenceField::Details, "details"}, {External::Discord::PresenceField::State, "state"}, {External::Discord::PresenceField::Timestamps, "timestamps"}, {External::Discord::PresenceField::LargeImage, "largeImage"}, {External::Discord::PresenceField::SmallImage, "smallImage"}, {External::Discord::PresenceField::Party, "party"}, {External::Discord::PresenceField::Secrets, "secrets"}, {External::Discord::PresenceField::Instance, "instance"}, {External::Discord::PresenceField::Platforms, "supportedPlatforms"}};
+        v8::Local<v8::Array> names = v8::Array::New(isolate);
+        std::uint32_t index        = 0;
+        for (const auto &[bit, name] : fields) {
+            if (allowed & bit) {
+                names->Set(context, index++, v8pp::to_v8(isolate, name)).Check();
+            }
+        }
+        args.GetReturnValue().Set(names);
+    }
+
+    void Discord::Shutdown() {
+        {
+            std::scoped_lock lock(_mutex);
+            _activity = discord::Activity {};
+            _written  = 0;
+        }
+        // A session's scripts leave with it, and so does what they wrote.
+        if (auto *presence = ResolvePresence()) {
+            presence->ClearScriptActivity();
+        }
     }
 
     void Discord::GetUserIdCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -447,6 +523,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // Query
         attach("getUserId", &Discord::GetUserIdCallback);
         attach("isAvailable", &Discord::IsAvailableCallback);
+        attach("getScriptFields", &Discord::GetScriptFieldsCallback);
 
         target->Set(context, v8pp::to_v8(isolate, "Discord"), discordObj).Check();
 
@@ -482,11 +559,12 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             v8pp::metadata::docs("void", {v8pp::metadata::param("secrets", "{ match?: string; join?: string; spectate?: string }", false, "Opaque secrets to merge into the staged activity.")}, "Stages multiple Discord activity secrets at once.")));
         metadata.record(
             v8pp::metadata::function_of<v8::FunctionCallback>("setPresence", v8pp::metadata::docs("boolean", {v8pp::metadata::param("options", "Record<string, unknown>", false, "Batch of supported activity, timestamp, asset, party, secret, instance, and platform fields.")},
-                                                                                 "Merges a complete option batch into the staged activity and publishes it immediately.", "True when the update was dispatched; false when Discord is unavailable.")));
+                                                                                 "Merges a complete option batch into the staged activity and publishes it immediately, over the game's own presence.", "True when the update was dispatched; false when Discord is unavailable.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("update", v8pp::metadata::docs("boolean", {}, "Publishes the currently staged activity as one rate-limited Discord update.", "True when dispatched; false when Discord is unavailable.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("clear", v8pp::metadata::docs("boolean", {}, "Clears the published Discord activity and resets staged state.", "True when dispatched; false when Discord is unavailable.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("clear", v8pp::metadata::docs("boolean", {}, "Drops everything scripts published and resets staged state; the game's own presence stays.", "True when dispatched; false when Discord is unavailable.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("reset", v8pp::metadata::docs("void", {}, "Resets staged activity fields without publishing a Discord update.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getUserId", v8pp::metadata::docs("string", {}, "Returns the signed-in Discord user's snowflake.", "User ID string, or an empty string until available.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getScriptFields", v8pp::metadata::docs("string[]", {}, "Lists the presence fields the game lets scripts override; staged writes to any other field are dropped when published.", "Field names such as \"state\" or \"smallImage\".")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isAvailable", v8pp::metadata::docs("boolean", {}, "Checks whether Discord is connected and can publish presence.", "True when rich presence is initialized.")));
     }
 

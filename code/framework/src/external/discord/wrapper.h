@@ -16,13 +16,47 @@
 
 #include <discord.h>
 #include <function2/function2.hpp>
+
+#include <cstdint>
+#include <mutex>
+#include <optional>
 #include <string>
 
 namespace Framework::External::Discord {
+    // The parts of an activity, as bits: which ones a script layer wrote, and which ones the
+    // mod lets it write. An image bit carries its tooltip with it.
+    namespace PresenceField {
+        constexpr uint32_t Type       = 1u << 0;
+        constexpr uint32_t Name       = 1u << 1;
+        constexpr uint32_t Details    = 1u << 2;
+        constexpr uint32_t State      = 1u << 3;
+        constexpr uint32_t Timestamps = 1u << 4;
+        constexpr uint32_t LargeImage = 1u << 5;
+        constexpr uint32_t SmallImage = 1u << 6;
+        constexpr uint32_t Party      = 1u << 7;
+        constexpr uint32_t Secrets    = 1u << 8;
+        constexpr uint32_t Instance   = 1u << 9;
+        constexpr uint32_t Platforms  = 1u << 10;
+        constexpr uint32_t All        = (1u << 11) - 1;
+    } // namespace PresenceField
+
     class Wrapper final : public Framework::Lifecycle {
       private:
         discord::User _user {};
         discord::Core *_instance {};
+
+        // The published activity is two layers: the mod's own, and what client scripts wrote on
+        // top of it, filtered by _scriptFields. Guarded by _layersMutex; scripts and the mod may
+        // write from different threads.
+        mutable std::mutex _layersMutex;
+        std::optional<discord::Activity> _baseActivity;
+        discord::Activity _scriptActivity {};
+        uint32_t _scriptWritten = 0;
+        uint32_t _scriptFields  = PresenceField::All;
+        // The last composition sent, so an unchanged one costs none of Discord's rate limit.
+        std::optional<discord::Activity> _publishedActivity;
+
+        void PublishLayers();
 
       public:
         using DiscordLoginProc = fu2::function<void(const std::string &token) const>;
@@ -39,6 +73,18 @@ namespace Framework::External::Discord {
         Utils::Result<void, Framework::Error> UpdateActivity(const discord::Activity &activity) const;
         // Clear the local player's activity entirely.
         Utils::Result<void, Framework::Error> ClearActivity() const;
+
+        // Layered presence: the mod owns a base activity and decides which fields client scripts
+        // may override on top of it, the way FiveM and MTA keep the server name and session facts
+        // theirs while a server writes its own status line. With no base set and every field
+        // allowed -- the default -- the script layer is the whole activity.
+        void SetBaseActivity(const discord::Activity &activity);
+        void ClearBaseActivity();
+        void SetScriptFields(uint32_t fields);
+        uint32_t GetScriptFields() const;
+        // `written` is the PresenceField set the script actually staged; the rest stay the base's.
+        void SetScriptActivity(const discord::Activity &activity, uint32_t written);
+        void ClearScriptActivity();
 
         void SignInWithDiscord(const DiscordLoginProc &proc) const;
 
