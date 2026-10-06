@@ -121,11 +121,18 @@ namespace Framework::Scripting {
             return;
         }
 
-        // Resources have normally stopped by now; any runtime left goes before the engine's own.
-        FlushRetiredRuntimes();
-        while (!_resourceRuntimes.empty()) {
-            auto node = _resourceRuntimes.extract(_resourceRuntimes.begin());
-            TeardownResourceRuntime(std::move(node.mapped()));
+        // Resources have normally stopped by now; any runtime left goes before the engine's own, including any that a
+        // teardown retires along the way.
+        _pendingExits.clear();
+        while (!_resourceRuntimes.empty() || !_retiredRuntimes.empty()) {
+            if (!_resourceRuntimes.empty()) {
+                auto node = _resourceRuntimes.extract(_resourceRuntimes.begin());
+                TeardownResourceRuntime(std::move(node.mapped()));
+                continue;
+            }
+            std::unique_ptr<ResourceRuntime> runtime = std::move(_retiredRuntimes.back());
+            _retiredRuntimes.pop_back();
+            TeardownResourceRuntime(std::move(runtime));
         }
 
         v8::Isolate *isolate = _runtime->GetIsolate();
@@ -308,24 +315,57 @@ namespace Framework::Scripting {
     }
 
     void NodeEngine::StopExitedResources() {
-        while (!_pendingExits.empty()) {
-            std::vector<PendingExit> exits;
-            exits.swap(_pendingExits);
-            for (const auto &exit : exits) {
-                // A runtime the resource has since been restarted in did not exit.
-                const auto it = _resourceRuntimes.find(exit.resourceName);
-                if (it == _resourceRuntimes.end() || it->second->serial != exit.serial) {
-                    continue;
-                }
+        std::vector<PendingExit> exits;
+        exits.swap(_pendingExits);
+        std::vector<PendingExit> later;
+        for (const auto &exit : exits) {
+            // A runtime the resource has since been restarted in did not exit.
+            const auto it = _resourceRuntimes.find(exit.resourceName);
+            if (it == _resourceRuntimes.end() || it->second->serial != exit.serial) {
+                continue;
+            }
+            ResourceRuntime &entry = *it->second;
+
+            // Still unwinding from the exit further up the stack: wait for a tick that starts outside it.
+            if (entry.runtime->GetIsolate()->IsInUse()) {
+                later.push_back(exit);
+                continue;
+            }
+
+            // Cut it off first: its script is over, so calls into it throw, what it owed other resources is rejected
+            // and its handlers are dropped, so a stop or start waiting on it is not left waiting on a runtime that no
+            // longer runs.
+            if (!entry.closed) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' called process.exit({}); stopping the resource", exit.resourceName, exit.code);
-                if (_resourceManager != nullptr && _resourceManager->IsResourceRunning(exit.resourceName)) {
-                    _resourceManager->StopResource(exit.resourceName);
-                }
-                else {
-                    DestroyResourceRuntime(exit.resourceName);
-                }
+                CloseExitedRuntime(entry);
+            }
+
+            if (_resourceManager == nullptr) {
+                DestroyResourceRuntime(exit.resourceName);
+                continue;
+            }
+            // The manager frees the runtime: through StopResource when it runs, or itself when it is starting or
+            // stopping it, which the exit lets finish; then a resource that came up running is stopped here.
+            switch (_resourceManager->GetResourceState(exit.resourceName)) {
+            case ResourceState::Running: _resourceManager->StopResource(exit.resourceName); break;
+            case ResourceState::Loading:
+            case ResourceState::Stopping: later.push_back(exit); break;
+            default: break;
             }
         }
+        _pendingExits.insert(_pendingExits.end(), later.begin(), later.end());
+    }
+
+    void NodeEngine::CloseExitedRuntime(ResourceRuntime &runtime) {
+        v8::Isolate *isolate = runtime.runtime->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        _references->RemoveRuntime(runtime.reference);
+        if (_resourceManager != nullptr) {
+            _resourceManager->OnRuntimeDisposing(isolate);
+        }
+        runtime.closed = true;
     }
 
     bool NodeEngine::ExecuteFile(std::string_view filepath) {
@@ -457,13 +497,6 @@ namespace Framework::Scripting {
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
 
-            // process.on('exit') handlers run while the bindings are still there, as Node runs them before it frees an
-            // environment. One that called process.exit() has emitted 'exit' already.
-            if (!runtime->exited) {
-                v8::Context::Scope contextScope(runtime->runtime->GetContext());
-                (void)node::EmitProcessExit(runtime->runtime->GetEnvironment()).FromMaybe(0);
-            }
-
             _references->RemoveRuntime(runtime->reference);
 
             // Handles the builtins keep in this isolate (an emission still waiting, a queued reply) go while it lives.
@@ -487,14 +520,16 @@ namespace Framework::Scripting {
     }
 
     void NodeEngine::FlushRetiredRuntimes() {
-        for (auto it = _retiredRuntimes.begin(); it != _retiredRuntimes.end();) {
-            if (!CanTeardownNow(**it)) {
-                ++it;
-                continue;
+        // Taken out first: a teardown runs listeners that can stop, and so retire, further runtimes.
+        std::vector<std::unique_ptr<ResourceRuntime>> retired;
+        retired.swap(_retiredRuntimes);
+        for (auto &runtime : retired) {
+            if (CanTeardownNow(*runtime)) {
+                TeardownResourceRuntime(std::move(runtime));
             }
-            std::unique_ptr<ResourceRuntime> runtime = std::move(*it);
-            it                                       = _retiredRuntimes.erase(it);
-            TeardownResourceRuntime(std::move(runtime));
+            else {
+                _retiredRuntimes.push_back(std::move(runtime));
+            }
         }
     }
 

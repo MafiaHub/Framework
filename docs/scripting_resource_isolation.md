@@ -55,13 +55,15 @@ a worker thread; what changes is that the worker now dies with its resource.
   resource stopping itself, one it is waiting on, or one stopped by another
   resource's event handler) is destroyed at the next tick instead, once no
   script is running at all: native code further up the stack may still hold
-  handles into it. Before it goes, its
-  `process.on('exit')` handlers run, as Node runs them before it frees an
-  environment.
+  handles into it.
 - `process.exit()` stops the resource that calls it, not the server. Node's
   default exit handler would end the process; each resource's environment gets
-  one that stops its JavaScript at once and stops the resource at the next
-  tick. A resource that exits while it loads fails to start.
+  one that stops its JavaScript at once. From the next tick the runtime is cut
+  off (calls into it throw, what it owed other resources is rejected, its
+  handlers are dropped) and the resource is stopped, once any start or stop
+  already under way has finished. A resource that exits while it loads fails to
+  start. Node's `process.on('exit')` handlers run only when the resource calls
+  `process.exit()` itself, not when it is stopped; use `resourceStop`.
 - The engine keeps its own runtime too, the host. Native code that runs outside
   any resource builds its values there, and they are copied into each resource
   that receives them.

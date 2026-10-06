@@ -436,27 +436,6 @@ MODULE(resource_isolation, {
         TestManagerHelper::Cleanup();
     });
 
-    IT("runs a resource's process 'exit' handlers when it stops", {
-        TestManagerHelper::Cleanup();
-        ResourceIsolationTest::WriteResource("farewell", "process.on('exit', (code) => __record('exitCode', code + 1));");
-
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
-        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
-        ResourceManager manager(&engine, config);
-        TestManagerHelper::RegisterEvents(engine, manager);
-        EQUALS(manager.DiscoverResources(), 1u);
-        EQUALS((bool)manager.StartResource("farewell"), true);
-        EQUALS(TestManagerHelper::RecordedValue("exitCode"), -1);
-
-        EQUALS((bool)manager.StopResource("farewell"), true);
-        EQUALS(TestManagerHelper::RecordedValue("exitCode"), 1);
-
-        engine.Shutdown();
-        TestManagerHelper::Cleanup();
-    });
-
     IT("closes the files a resource opened when it stops", {
         TestManagerHelper::Cleanup();
         ResourceIsolationTest::WriteResource("opener", "__record('fd', require('node:fs').openSync(__filename, 'r'));");
@@ -585,6 +564,72 @@ MODULE(resource_isolation, {
         EQUALS((bool)manager.StopResource("hanger"), true);
         EQUALS(Builtins::Events::GetWaitingEmissionCount(), before);
 
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+    IT("finishes stopping a resource that calls process.exit() from its own resourceStop handler", {
+        TestManagerHelper::Cleanup();
+        // The second handler's promise can only settle in the runtime that just exited: the stop must not wait on it.
+        ResourceIsolationTest::WriteResource("stop-quitter", R"(
+            Events.on('resourceStop', async (name) => { if (name === 'stop-quitter') { await null; process.exit(0); } });
+            Events.on('resourceStop', async (name) => { if (name === 'stop-quitter') await new Promise((resolve) => setTimeout(resolve, 50)); });
+        )");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("stop-quitter"), true);
+
+        const auto began = std::chrono::steady_clock::now();
+        manager.StopResource("stop-quitter");
+        const auto took = std::chrono::steady_clock::now() - began;
+        EQUALS(took < std::chrono::milliseconds(config.resourceStopTimeoutMs / 2), true);
+        engine.Tick();
+        EQUALS(manager.IsResourceRunning("stop-quitter"), false);
+        EQUALS(engine.GetResourceRuntime("stop-quitter") == nullptr, true);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("stops a resource that calls process.exit() while its resourceStart is settling", {
+        TestManagerHelper::Cleanup();
+        // It holds an export in its runtime: freeing the runtime under the start would leave the resource holding a
+        // handle into a disposed isolate.
+        ResourceIsolationTest::WriteResource("start-quitter", "Exports.register('api', { ready: true }); Events.on('resourceStart', async (name) => { if (name === 'start-quitter') { await null; process.exit(0); } });", "\"api\"");
+        ResourceIsolationTest::WriteResource("bystander", "let beats = 0; setInterval(() => __record('beats', ++beats), 1);");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 2u);
+        EQUALS((bool)manager.StartResource("bystander"), true);
+        manager.StartResource("start-quitter");
+
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while ((manager.IsResourceRunning("start-quitter") || engine.GetResourceRuntime("start-quitter") != nullptr) && std::chrono::steady_clock::now() < deadline) {
+            engine.Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(manager.IsResourceRunning("start-quitter"), false);
+        EQUALS(engine.GetResourceRuntime("start-quitter") == nullptr, true);
+
+        // The rest of the server carries on, and the resource can start again.
+        const int32_t beats = TestManagerHelper::RecordedValue("beats");
+        for (int i = 0; i < 20 && TestManagerHelper::RecordedValue("beats") == beats; ++i) {
+            engine.Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        EQUALS(TestManagerHelper::RecordedValue("beats") > beats, true);
+
+        manager.StopAll();
         engine.Shutdown();
         TestManagerHelper::Cleanup();
     });

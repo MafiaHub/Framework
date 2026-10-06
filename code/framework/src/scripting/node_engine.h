@@ -194,6 +194,7 @@ namespace Framework::Scripting {
             uint64_t serial    = 0;       // Tells this runtime from a later one of the same resource.
             NodeEngine *engine = nullptr; // What the runtime's error sink reports to.
             bool exited        = false;   // It called process.exit(): stopped, and no longer ticked.
+            bool closed        = false;   // Since then cut off from other runtimes and from the builtins.
         };
 
         // A resource that called process.exit(), to be stopped at the next tick.
@@ -215,6 +216,10 @@ namespace Framework::Scripting {
 
         // Stop the resources that called process.exit() since the last tick.
         void StopExitedResources();
+
+        // Cut a runtime that called process.exit() off from the others and from the builtins' tables, ahead of its
+        // teardown. The runtime must not be executing.
+        void CloseExitedRuntime(ResourceRuntime &runtime);
 
         // Tick every resource runtime that is not executing further up the stack.
         void TickResourceRuntimes();
