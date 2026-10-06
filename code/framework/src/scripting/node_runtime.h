@@ -58,13 +58,11 @@ namespace Framework::Scripting {
             return _env;
         }
 
-        uv_loop_t *GetEventLoop() const;
-
         // The caller owns the Locker / Isolate::Scope / HandleScope before calling this.
         v8::Local<v8::Context> GetContext() const;
 
         /**
-         * Run microtasks, ready libuv callbacks and platform tasks without blocking.
+         * Run microtasks, ready libuv callbacks and this isolate's platform tasks without blocking.
          * Enters the isolate itself.
          */
         void Tick();

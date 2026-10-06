@@ -29,7 +29,8 @@ class of leak.
 With one environment per resource, stopping the resource frees its
 environment. `node::FreeEnvironment` stops and joins the environment's
 workers and closes its handles, so a resource cannot leak what it started, and
-the shims above are no longer needed.
+the shims above are no longer needed. Resource environments are created with
+`kTrackUnmanagedFds`, so files opened with `fs.open()` are closed with them too.
 
 It also gives every resource a heap of its own, which makes per-resource
 memory figures and limits possible, and lets permissions such as worker
@@ -47,11 +48,18 @@ a worker thread; what changes is that the worker now dies with its resource.
 - The engine's first environment is created with the default flags and owns
   the inspector and the process state (working directory, title, signals).
   Every further environment is created with `kNoCreateInspector`: Node allows
-  one inspector agent per process and asserts on a second.
+  one inspector agent per process and asserts on a second. A sandboxed engine
+  applies its sandbox to every resource's environment, not only its own.
 - A resource's runtime is created when the resource starts and destroyed after
   its `resourceStop` handlers settle. A runtime stopped from inside itself (a
   resource stopping itself, or one it is waiting on) is destroyed at the next
-  tick instead, once nothing is executing in it.
+  tick instead, once nothing is executing in it. Before it goes, its
+  `process.on('exit')` handlers run, as Node runs them before it frees an
+  environment.
+- `process.exit()` stops the resource that calls it, not the server. Node's
+  default exit handler would end the process; each resource's environment gets
+  one that stops its JavaScript at once and stops the resource at the next
+  tick. A resource that exits while it loads fails to start.
 - The engine keeps its own runtime too, the host. Native code that runs outside
   any resource builds its values there, and they are copied into each resource
   that receives them.
@@ -81,11 +89,22 @@ is copied out of one isolate and rebuilt in the other:
 | functions | a callable reference into the owning resource |
 | instances of a resource's own classes | plain objects; the prototype does not cross |
 | symbols, promises, cycles, weak collections | refused, with the path to the value |
+| more than about a million values, or 256 MB of strings and binary data | refused |
 | `SharedArrayBuffer` and views on one | refused (see below) |
+
+An object reached twice is copied twice; the bound above is what stops a few
+nested references from expanding into a copy without end.
 
 A function reference calls back into the resource that owns the function, with
 its arguments and its result copied the same way. A reference whose owner has
-stopped throws when called.
+stopped throws when called. A resource that receives the same function twice
+gets the same reference both times.
+
+An event or message handler in another resource is called for its outcome
+only: what it returns is never copied back, so returning an object that cannot
+cross (a timer, a socket) is not an error. A returned `false` still vetoes a
+cancellable event, a returned promise is still waited on, and a throw or
+rejection still reaches the emitter.
 
 Shared memory cannot be shared between resources. Each environment frees its
 array buffers through its own allocator, which dies with the resource, so a
@@ -105,6 +124,8 @@ threads is unaffected.
 - Only the first environment owns process state, so calls such as
   `process.chdir()` throw `ERR_WORKER_UNSUPPORTED_OPERATION` inside a
   resource.
+- `process.exit()` inside a resource stops that resource instead of ending
+  the server process.
 
 Resources that pass plain data through events and exports, and call exported
 functions with it, are not affected.
@@ -172,8 +193,10 @@ rules.
   about 15 ms to start a resource, 6.4 MB of resident memory each, 0.2 ms to
   stop one, and 0.015 ms to tick all 30 when idle. A server with 200 resources
   would spend about 3 s starting them and 1.3 GB holding them. Starting from a
-  Node snapshot could cut the bootstrap; the embedder API to do it is not
-  public yet. Still to measure on Windows and Linux servers.
+  Node snapshot could cut the bootstrap: node.h has the embedder API for it
+  (`CommonEnvironmentSetup::CreateFromSnapshot`, `EmbedderSnapshotData`),
+  marked experimental, and it is not measured yet. Still to measure on Windows
+  and Linux servers.
 - **Worker permission.** FiveM refuses workers unless the operator names the
   resource. Whether to do the same is a security decision; adding it later
   breaks servers that already rely on workers.

@@ -13,6 +13,8 @@
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
 
+#include "node_test_helpers.h"
+
 #include <v8pp/class.hpp>
 
 #include <chrono>
@@ -21,6 +23,10 @@
 #include <memory>
 #include <string>
 #include <thread>
+
+#ifndef _WIN32
+#include <fcntl.h>
+#endif
 
 namespace ResourceIsolationTest {
     static void WriteResource(const std::string &name, const std::string &script, const std::string &exports = "") {
@@ -360,5 +366,151 @@ MODULE(resource_isolation, {
         manager.StopAll();
         engine.Shutdown();
         TestManagerHelper::Cleanup();
+    });
+    IT("stops only the resource that calls process.exit(), not the server", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("quitter", "setTimeout(() => { process.exit(3); __record('afterExit', 1); }, 1);");
+        ResourceIsolationTest::WriteResource("bystander", "let beats = 0; setInterval(() => __record('beats', ++beats), 1);");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 2u);
+        EQUALS((bool)manager.StartResource("quitter"), true);
+        EQUALS((bool)manager.StartResource("bystander"), true);
+
+        // With Node's default handler, process.exit() would end this test process here.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (manager.IsResourceRunning("quitter") && std::chrono::steady_clock::now() < deadline) {
+            engine.Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(manager.IsResourceRunning("quitter"), false);
+        EQUALS(engine.GetResourceRuntime("quitter") == nullptr, true);
+        EQUALS(TestManagerHelper::RecordedValue("afterExit"), -1);
+
+        const int32_t beats = TestManagerHelper::RecordedValue("beats");
+        const auto beatDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (TestManagerHelper::RecordedValue("beats") == beats && std::chrono::steady_clock::now() < beatDeadline) {
+            engine.Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(TestManagerHelper::RecordedValue("beats") > beats, true);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("fails to start a resource that calls process.exit() while it loads, and leaves no runtime behind", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("early-quitter", "process.exit(0); __record('afterExit', 1);");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("early-quitter"), false);
+        engine.Tick();
+        EQUALS(manager.IsResourceRunning("early-quitter"), false);
+        EQUALS(engine.GetResourceRuntime("early-quitter") == nullptr, true);
+        EQUALS(TestManagerHelper::RecordedValue("afterExit"), -1);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("runs a resource's process 'exit' handlers when it stops", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("farewell", "process.on('exit', (code) => __record('exitCode', code + 1));");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("farewell"), true);
+        EQUALS(TestManagerHelper::RecordedValue("exitCode"), -1);
+
+        EQUALS((bool)manager.StopResource("farewell"), true);
+        EQUALS(TestManagerHelper::RecordedValue("exitCode"), 1);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+#ifndef _WIN32
+    IT("closes the files a resource opened when it stops", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("opener", "__record('fd', require('node:fs').openSync(__filename, 'r'));");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("opener"), true);
+        const int fd = TestManagerHelper::RecordedValue("fd");
+        EQUALS(fd > 2, true);
+        EQUALS(fcntl(fd, F_GETFD) != -1, true);
+
+        EQUALS((bool)manager.StopResource("opener"), true);
+        EQUALS(fcntl(fd, F_GETFD), -1);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+#endif
+
+    IT("does not copy back what a handler in another resource returns", {
+        TestManagerHelper::Cleanup();
+        // A Node timer links back to itself, so it cannot be copied; the emitter never needed it.
+        ResourceIsolationTest::WriteResource("scheduler", "Events.on('schedule', () => setTimeout(() => __record('fired', 1), 1));");
+        ResourceIsolationTest::WriteResource("planner", R"(
+            Events.on('resourceStart', (name) => {
+                if (name !== 'planner') return;
+                Events.emit('schedule').then(() => __record('scheduled', 1), () => __record('scheduled', 0));
+            });
+        )");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 2u);
+        EQUALS((bool)manager.StartResource("scheduler"), true);
+        EQUALS((bool)manager.StartResource("planner"), true);
+
+        EQUALS(ResourceIsolationTest::TickUntilRecorded(engine, "scheduled"), true);
+        EQUALS(TestManagerHelper::RecordedValue("scheduled"), 1);
+        EQUALS(ResourceIsolationTest::TickUntilRecorded(engine, "fired"), true);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("sandboxes every resource's runtime when the engine is sandboxed", {
+        NodeEngineOptions options;
+        options.sandboxed = true;
+        NodeEngine engine(options);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.CreateResourceRuntime("boxed"), true);
+        STREQUALS(NodeTest::Eval(*engine.GetResourceRuntime("boxed"), "try { require('node:fs'); 'loaded' } catch (e) { e.message }").c_str(), "Module 'node:fs' is not available in sandbox mode");
+
+        engine.DestroyResourceRuntime("boxed");
+        engine.Shutdown();
     });
 });

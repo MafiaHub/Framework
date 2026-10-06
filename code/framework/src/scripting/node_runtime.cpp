@@ -55,10 +55,6 @@ namespace Framework::Scripting {
         _setup.reset();
     }
 
-    uv_loop_t *NodeRuntime::GetEventLoop() const {
-        return _setup->event_loop();
-    }
-
     v8::Local<v8::Context> NodeRuntime::GetContext() const {
         return _setup->context();
     }
@@ -75,8 +71,9 @@ namespace Framework::Scripting {
         // Run pending libuv events (non-blocking)
         uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
 
-        // Drain V8 platform tasks (background compile, etc.)
-        _platform->DrainTasks(_isolate);
+        // Run this isolate's foreground platform tasks. Not DrainTasks(): it first waits for every background task in
+        // the process, so with a runtime per resource each tick would block on all their GC and compile work.
+        _platform->FlushForegroundTasks(_isolate);
 
         // Process any microtasks that were queued by I/O callbacks or platform tasks
         _isolate->PerformMicrotaskCheckpoint();

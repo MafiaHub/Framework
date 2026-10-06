@@ -201,8 +201,10 @@ namespace Framework::Scripting {
             error = "Node.js platform not initialized";
             return nullptr;
         }
-        // The engine's own environment holds the inspector and the process state.
-        return NodeRuntime::Create(_platform.get(), _initResult->args(), _initResult->exec_args(), node::EnvironmentFlags::kNoCreateInspector, kRuntimeBootstrap, error);
+        // The engine's own environment holds the inspector and the process state. File descriptors opened through
+        // fs.open() are tracked so freeing the environment closes them, as it does every other handle.
+        const auto flags = static_cast<node::EnvironmentFlags::Flags>(node::EnvironmentFlags::kNoCreateInspector | node::EnvironmentFlags::kTrackUnmanagedFds);
+        return NodeRuntime::Create(_platform.get(), _initResult->args(), _initResult->exec_args(), flags, kRuntimeBootstrap, error);
     }
 
     bool NodeEngine::CreateEnvironment() {
@@ -221,7 +223,7 @@ namespace Framework::Scripting {
         _hostReference = _references->AddRuntime(isolate, _runtime->GetContext(), "server");
 
         // Apply sandbox restrictions if enabled
-        if (_options.sandboxed && !ApplySandbox()) {
+        if (_options.sandboxed && !ApplySandbox(_runtime->GetContext())) {
             _lastError = "Failed to apply sandbox: " + _lastError;
             return false;
         }
@@ -272,7 +274,9 @@ namespace Framework::Scripting {
         }
 #endif
 
+        StopExitedResources();
         FlushRetiredRuntimes();
+        _references->ReleaseCollected();
 
         // A runtime that is executing further up this thread's stack is not ticked from inside itself: uv_run does
         // not nest.
@@ -280,20 +284,48 @@ namespace Framework::Scripting {
             _runtime->Tick();
         }
 
-        // A tick can stop resources, so walk the names rather than the map.
-        std::vector<std::string> names;
-        names.reserve(_resourceRuntimes.size());
-        for (const auto &[name, runtime] : _resourceRuntimes) {
-            names.push_back(name);
+        TickResourceRuntimes();
+
+        StopExitedResources();
+        FlushRetiredRuntimes();
+    }
+
+    void NodeEngine::TickResourceRuntimes() {
+        for (auto it = _resourceRuntimes.begin(); it != _resourceRuntimes.end();) {
+            ResourceRuntime &entry = *it->second;
+            const uint64_t generation = _runtimesGeneration;
+            if (!entry.exited && !entry.runtime->GetIsolate()->IsInUse()) {
+                entry.runtime->Tick();
+            }
+            if (generation == _runtimesGeneration) {
+                ++it;
+                continue;
+            }
+            // The tick started or stopped resources, which may have moved the map under the iterator. This entry was
+            // executing, so it was at most retired, not freed: its name still says where to carry on.
+            it = _resourceRuntimes.upper_bound(entry.resourceName);
         }
-        for (const auto &name : names) {
-            const auto it = _resourceRuntimes.find(name);
-            if (it != _resourceRuntimes.end() && !it->second->runtime->GetIsolate()->IsInUse()) {
-                it->second->runtime->Tick();
+    }
+
+    void NodeEngine::StopExitedResources() {
+        while (!_pendingExits.empty()) {
+            std::vector<PendingExit> exits;
+            exits.swap(_pendingExits);
+            for (const auto &exit : exits) {
+                // A runtime the resource has since been restarted in did not exit.
+                const auto it = _resourceRuntimes.find(exit.resourceName);
+                if (it == _resourceRuntimes.end() || it->second->serial != exit.serial) {
+                    continue;
+                }
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' called process.exit({}); stopping the resource", exit.resourceName, exit.code);
+                if (_resourceManager != nullptr && _resourceManager->IsResourceRunning(exit.resourceName)) {
+                    _resourceManager->StopResource(exit.resourceName);
+                }
+                else {
+                    DestroyResourceRuntime(exit.resourceName);
+                }
             }
         }
-
-        FlushRetiredRuntimes();
     }
 
     bool NodeEngine::ExecuteFile(std::string_view filepath) {
@@ -351,6 +383,7 @@ namespace Framework::Scripting {
         auto entry          = std::make_unique<ResourceRuntime>();
         entry->resourceName = resourceName;
         entry->engine       = this;
+        entry->serial       = _nextRuntimeSerial++;
         entry->runtime      = CreateRuntime(_lastError);
         if (!entry->runtime) {
             return false;
@@ -358,14 +391,31 @@ namespace Framework::Scripting {
 
         ResourceRuntime *runtime = entry.get();
         v8::Isolate *isolate     = runtime->runtime->GetIsolate();
-        _runtimeByIsolate[isolate]      = runtime;
-        _resourceRuntimes[resourceName] = std::move(entry);
-
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
         v8::HandleScope handleScope(isolate);
         v8::Local<v8::Context> context = runtime->runtime->GetContext();
         v8::Context::Scope contextScope(context);
+
+        // A sandboxed engine runs resources sandboxed: their runtimes are where their code runs.
+        if (_options.sandboxed && !ApplySandbox(context)) {
+            _lastError = "Failed to apply sandbox: " + _lastError;
+            return false;
+        }
+
+        // process.exit() ends the resource, not the server. Node's default handler would exit the process; this stops
+        // the resource's JavaScript at once and leaves stopping the resource to the next tick.
+        node::SetProcessExitHandler(runtime->runtime->GetEnvironment(), [this, runtime](node::Environment *env, int code) {
+            if (!runtime->exited) {
+                runtime->exited = true;
+                _pendingExits.push_back({runtime->resourceName, runtime->serial, code});
+            }
+            node::Stop(env);
+        });
+
+        _runtimeByIsolate[isolate]      = runtime;
+        _resourceRuntimes[resourceName] = std::move(entry);
+        ++_runtimesGeneration;
 
         // Uncaught errors in this runtime can only be this resource's; no stack to read.
         v8::Local<v8::Function> sink = v8::FunctionTemplate::New(isolate, OnResourceUncaughtError, v8::External::New(isolate, runtime))->GetFunction(context).ToLocalChecked();
@@ -387,6 +437,7 @@ namespace Framework::Scripting {
         }
         std::unique_ptr<ResourceRuntime> runtime = std::move(it->second);
         _resourceRuntimes.erase(it);
+        ++_runtimesGeneration;
 
         // Stopped from inside itself (or from a call it is waiting on): freeing it now would pull the isolate out
         // from under the code that is running. The name is free at once, so a restart can create its next runtime.
@@ -403,6 +454,14 @@ namespace Framework::Scripting {
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
+
+            // process.on('exit') handlers run while the bindings are still there, as Node runs them before it frees an
+            // environment. One that called process.exit() has emitted 'exit' already.
+            if (!runtime->exited) {
+                v8::Context::Scope contextScope(runtime->runtime->GetContext());
+                (void)node::EmitProcessExit(runtime->runtime->GetEnvironment()).FromMaybe(0);
+            }
+
             _references->RemoveRuntime(runtime->reference);
 
             // Handles the builtins keep in this isolate (an emission still waiting, a queued reply) go while it lives.
@@ -475,10 +534,8 @@ namespace Framework::Scripting {
         context->Global()->Set(context, key, fn).Check();
     }
 
-    void NodeEngine::OnResourceUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info) {
+    std::string NodeEngine::ReadUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info) {
         v8::Isolate *isolate = info.GetIsolate();
-        auto *runtime        = static_cast<ResourceRuntime *>(info.Data().As<v8::External>()->Value());
-
         std::string errorMsg = "Unknown error";
         std::string origin   = "uncaughtException";
         if (info.Length() > 0) {
@@ -493,34 +550,27 @@ namespace Framework::Scripting {
                 origin = *orig;
             }
         }
+        return "[" + origin + "] " + errorMsg;
+    }
+
+    void NodeEngine::OnResourceUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        auto *runtime = static_cast<ResourceRuntime *>(info.Data().As<v8::External>()->Value());
 
         // Queued for Tick()'s caller, like the engine's own errors.
-        runtime->engine->_pendingErrors.push_back({runtime->resourceName, "[" + origin + "] " + errorMsg});
+        runtime->engine->_pendingErrors.push_back({runtime->resourceName, ReadUncaughtError(info)});
     }
 
     void NodeEngine::OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate = info.GetIsolate();
         auto *engine = static_cast<NodeEngine *>(
             v8::Local<v8::External>::Cast(info.Data())->Value());
-
-        std::string errorMsg = "Unknown error";
-        std::string origin = "uncaughtException";
-
-        if (info.Length() > 0) {
-            v8::String::Utf8Value msg(isolate, info[0]);
-            if (*msg) errorMsg = *msg;
-        }
-        if (info.Length() > 1) {
-            v8::String::Utf8Value orig(isolate, info[1]);
-            if (*orig) origin = *orig;
-        }
+        const std::string error = ReadUncaughtError(info);
 
         // Try to extract resource name from the error stack trace by matching
         // file paths against the configured resources directory
         std::string resourceName;
         if (!engine->_resourcesPath.empty()) {
             // Normalize path separators for cross-platform matching
-            std::string normalizedError = errorMsg;
+            std::string normalizedError = error;
             std::string normalizedResPath = engine->_resourcesPath;
             std::replace(normalizedError.begin(), normalizedError.end(), '\\', '/');
             std::replace(normalizedResPath.begin(), normalizedResPath.end(), '\\', '/');
@@ -540,10 +590,7 @@ namespace Framework::Scripting {
         }
 
         // Queue for processing outside of Tick()
-        engine->_pendingErrors.push_back({
-            resourceName.empty() ? "unknown" : resourceName,
-            "[" + origin + "] " + errorMsg
-        });
+        engine->_pendingErrors.push_back({resourceName.empty() ? "unknown" : resourceName, error});
     }
 
     std::vector<NodeEngine::PendingUncaughtError> NodeEngine::DrainPendingErrors() {
@@ -552,7 +599,7 @@ namespace Framework::Scripting {
         return errors;
     }
 
-    bool NodeEngine::ApplySandbox() {
+    bool NodeEngine::ApplySandbox(v8::Local<v8::Context> context) {
         // This function disables dangerous Node.js APIs for client-side sandboxing.
         // We override require() to block dangerous modules and remove dangerous
         // properties from the global scope and process object.
@@ -703,27 +750,27 @@ namespace Framework::Scripting {
 })();
 )JS";
 
-        v8::Local<v8::Context> context = _runtime->GetContext();
+        v8::Isolate *isolate = context->GetIsolate();
 
         // Set inspector flag before sandbox code runs so it can conditionally
         // allow the inspector module for debugging
         if (_options.enableInspector) {
             v8::Local<v8::String> key =
-                v8::String::NewFromUtf8(GetIsolate(), "__INSPECTOR_ENABLED__").ToLocalChecked();
-            context->Global()->Set(context, key, v8::Boolean::New(GetIsolate(), true)).Check();
+                v8::String::NewFromUtf8(isolate, "__INSPECTOR_ENABLED__").ToLocalChecked();
+            context->Global()->Set(context, key, v8::Boolean::New(isolate, true)).Check();
         }
 
-        v8::TryCatch tryCatch(GetIsolate());
+        v8::TryCatch tryCatch(isolate);
 
         v8::Local<v8::String> source =
-            v8::String::NewFromUtf8(GetIsolate(), sandboxCode).ToLocalChecked();
+            v8::String::NewFromUtf8(isolate, sandboxCode).ToLocalChecked();
         v8::ScriptOrigin origin(
-            v8::String::NewFromUtf8(GetIsolate(), "<sandbox-init>").ToLocalChecked());
+            v8::String::NewFromUtf8(isolate, "<sandbox-init>").ToLocalChecked());
 
         v8::Local<v8::Script> script;
         if (!v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
             if (tryCatch.HasCaught()) {
-                _lastError = FormatV8Exception(GetIsolate(), tryCatch, "Sandbox script compilation error");
+                _lastError = FormatV8Exception(isolate, tryCatch, "Sandbox script compilation error");
             } else {
                 _lastError = "Failed to compile sandbox script";
             }
@@ -733,7 +780,7 @@ namespace Framework::Scripting {
         v8::Local<v8::Value> result;
         if (!script->Run(context).ToLocal(&result)) {
             if (tryCatch.HasCaught()) {
-                _lastError = FormatV8Exception(GetIsolate(), tryCatch, "Sandbox script execution error");
+                _lastError = FormatV8Exception(isolate, tryCatch, "Sandbox script execution error");
             } else {
                 _lastError = "Failed to execute sandbox script";
             }

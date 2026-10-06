@@ -173,15 +173,14 @@ namespace Framework::Scripting {
         // The runtime a running resource executes in, or null. For diagnostics and tests.
         NodeRuntime *GetResourceRuntime(const std::string &resourceName) const;
 
-        // The engine's own runtime: where native code builds values outside any resource.
-        NodeRuntime *GetHostRuntime() const {
-            return _runtime.get();
-        }
-
       private:
         bool InitializeNode();
         bool CreateEnvironment();
-        bool ApplySandbox();
+        // Locks down the runtime `context` belongs to. The caller holds its scopes.
+        bool ApplySandbox(v8::Local<v8::Context> context);
+
+        // An uncaught error's text, as the bootstrap's handlers pass it: "[origin] message".
+        static std::string ReadUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info);
 
         static void OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info);
 
@@ -192,7 +191,16 @@ namespace Framework::Scripting {
             std::string resourceName;
             std::unique_ptr<NodeRuntime> runtime;
             uint32_t reference = 0;
+            uint64_t serial    = 0;       // Tells this runtime from a later one of the same resource.
             NodeEngine *engine = nullptr; // What the runtime's error sink reports to.
+            bool exited        = false;   // It called process.exit(): stopped, and no longer ticked.
+        };
+
+        // A resource that called process.exit(), to be stopped at the next tick.
+        struct PendingExit {
+            std::string resourceName;
+            uint64_t serial = 0;
+            int code        = 0;
         };
 
         // Leave the references and free the environment. The runtime must not be executing.
@@ -201,6 +209,11 @@ namespace Framework::Scripting {
         // Destroy the runtimes whose destruction was deferred because they were executing.
         void FlushRetiredRuntimes();
 
+        // Stop the resources that called process.exit() since the last tick.
+        void StopExitedResources();
+
+        // Tick every resource runtime that is not executing further up the stack.
+        void TickResourceRuntimes();
 
         NodeEngineOptions _options;
 
@@ -220,6 +233,12 @@ namespace Framework::Scripting {
 
         // Runtimes stopped while they were executing; destroyed at the next tick.
         std::vector<std::unique_ptr<ResourceRuntime>> _retiredRuntimes;
+
+        std::vector<PendingExit> _pendingExits;
+        uint64_t _nextRuntimeSerial = 1;
+
+        // Bumped whenever a resource runtime is created or destroyed, so a walk over them sees the change.
+        uint64_t _runtimesGeneration = 0;
 
         // Cached JS function that calls setImmediate(()=>{}) each tick.
         // This serves two purposes for inspector CDP message processing:
