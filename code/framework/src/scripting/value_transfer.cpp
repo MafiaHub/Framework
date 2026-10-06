@@ -132,6 +132,11 @@ namespace Framework::Scripting {
                     return CopyBigInt(value.As<v8::BigInt>(), out, where);
                 }
                 if (value->IsString()) {
+                    // Every character takes at least a byte in UTF-8: one that cannot fit is refused before it is
+                    // converted, so the bound also caps what the conversion allocates.
+                    if (static_cast<size_t>(value.As<v8::String>()->Length()) > _bytesLeft) {
+                        return Fail(where, "it is too large to copy");
+                    }
                     out.kind = TransferredValue::Kind::String;
                     out.text = ToUtf8(_isolate, value);
                     return Spend(where, out.text.size());
