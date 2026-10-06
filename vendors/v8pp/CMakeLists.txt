@@ -3,14 +3,14 @@ include(FetchContent)
 FetchContent_Declare(
     v8pp
     GIT_REPOSITORY https://github.com/MafiaHub/v8pp.git
-    GIT_TAG 50ac3138a3d4a89251ef61b57514a9100a2df715  # MafiaHub v8pp: registry check in unwrap_object, bound data freed by cleanup()
+    GIT_TAG 424215272ebec0004465ba2baa34e2d5ea37280f  # MafiaHub v8pp: wrappers identified before their fields are read, bound data freed by cleanup()
     GIT_SHALLOW FALSE
     SOURCE_SUBDIR nonexistent  # Prevent v8pp's own CMakeLists from being processed
 )
 
 FetchContent_MakeAvailable(v8pp)
 
-message(STATUS "v8pp: MafiaHub metadata-enabled header-only binding library (50ac313)")
+message(STATUS "v8pp: MafiaHub metadata-enabled header-only binding library (4242152)")
 
 # Configure v8pp config.hpp
 set(V8PP_ISOLATE_DATA_SLOT 3 CACHE STRING "v8::Isolate data slot number (slot 3 to avoid conflict with Node.js)")
