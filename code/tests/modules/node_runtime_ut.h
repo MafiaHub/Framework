@@ -11,6 +11,8 @@
 #include "scripting/node_engine.h"
 #include "scripting/node_runtime.h"
 
+#include "node_test_helpers.h"
+
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -18,25 +20,6 @@
 #include <thread>
 
 namespace NodeRuntimeTest {
-    // Runs `source` in the runtime and returns the result as a string ("<error>" if it threw).
-    static std::string Eval(Framework::Scripting::NodeRuntime &runtime, const std::string &source) {
-        v8::Isolate *isolate = runtime.GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = runtime.GetContext();
-        v8::Context::Scope contextScope(context);
-        v8::TryCatch tryCatch(isolate);
-
-        v8::Local<v8::Script> script;
-        v8::Local<v8::Value> result;
-        if (!v8::Script::Compile(context, v8::String::NewFromUtf8(isolate, source.c_str()).ToLocalChecked()).ToLocal(&script) || !script->Run(context).ToLocal(&result)) {
-            return "<error>";
-        }
-        v8::String::Utf8Value text(isolate, result);
-        return *text ? *text : "";
-    }
-
     // Ticks the runtime until `condition` holds or `timeoutMs` passes.
     template <typename Condition>
     static bool TickUntil(Framework::Scripting::NodeRuntime &runtime, Condition &&condition, int timeoutMs = 5000) {
@@ -61,7 +44,7 @@ namespace NodeRuntimeTest {
     static void EvalInOther(const v8::FunctionCallbackInfo<v8::Value> &info) {
         auto *other = static_cast<Framework::Scripting::NodeRuntime *>(info.Data().As<v8::External>()->Value());
         v8::String::Utf8Value source(info.GetIsolate(), info[0]);
-        const std::string result = Eval(*other, *source);
+        const std::string result = NodeTest::Eval(*other, *source);
         info.GetReturnValue().Set(v8::String::NewFromUtf8(info.GetIsolate(), result.c_str()).ToLocalChecked());
     }
 } // namespace NodeRuntimeTest
@@ -80,9 +63,9 @@ MODULE(node_runtime, {
         NEQUALS(second.get(), nullptr);
         NEQUALS(first->GetIsolate(), second->GetIsolate());
 
-        STREQUALS(NodeRuntimeTest::Eval(*first, "globalThis.owner = 'first'; owner").c_str(), "first");
-        STREQUALS(NodeRuntimeTest::Eval(*second, "typeof globalThis.owner").c_str(), "undefined");
-        STREQUALS(NodeRuntimeTest::Eval(*second, "typeof require('node:worker_threads').Worker").c_str(), "function");
+        STREQUALS(NodeTest::Eval(*first, "globalThis.owner = 'first'; owner").c_str(), "first");
+        STREQUALS(NodeTest::Eval(*second, "typeof globalThis.owner").c_str(), "undefined");
+        STREQUALS(NodeTest::Eval(*second, "typeof require('node:worker_threads').Worker").c_str(), "function");
 
         first.reset();
         second.reset();
@@ -97,7 +80,7 @@ MODULE(node_runtime, {
         auto runtime = engine.CreateRuntime(error);
         NEQUALS(runtime.get(), nullptr);
 
-        STREQUALS(NodeRuntimeTest::Eval(*runtime, "try { process.chdir(process.cwd()); 'changed' } catch (e) { e.code }").c_str(), "ERR_WORKER_UNSUPPORTED_OPERATION");
+        STREQUALS(NodeTest::Eval(*runtime, "try { process.chdir(process.cwd()); 'changed' } catch (e) { e.code }").c_str(), "ERR_WORKER_UNSUPPORTED_OPERATION");
 
         runtime.reset();
         engine.Shutdown();
@@ -113,7 +96,7 @@ MODULE(node_runtime, {
         NEQUALS(caller.get(), nullptr);
         NEQUALS(callee.get(), nullptr);
 
-        NodeRuntimeTest::Eval(*callee, "globalThis.base = 40");
+        NodeTest::Eval(*callee, "globalThis.base = 40");
         {
             v8::Isolate *isolate = caller->GetIsolate();
             v8::Locker locker(isolate);
@@ -125,7 +108,7 @@ MODULE(node_runtime, {
             context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "evalInOther"), fn).Check();
         }
 
-        STREQUALS(NodeRuntimeTest::Eval(*caller, "evalInOther('base + 2') + ':' + typeof globalThis.base").c_str(), "42:undefined");
+        STREQUALS(NodeTest::Eval(*caller, "evalInOther('base + 2') + ':' + typeof globalThis.base").c_str(), "42:undefined");
 
         caller.reset();
         callee.reset();
@@ -145,7 +128,7 @@ MODULE(node_runtime, {
 
         // The worker appends to the file every few milliseconds for as long as its thread lives.
         const std::string path = heartbeat.generic_string();
-        NodeRuntimeTest::Eval(*runtime, "const { Worker } = require('node:worker_threads');"
+        NodeTest::Eval(*runtime, "const { Worker } = require('node:worker_threads');"
                                         "globalThis.worker = new Worker(\"const fs = require('node:fs'); setInterval(() => fs.appendFileSync('" + path + "', '.'), 5);\", { eval: true });");
 
         EQUALS(NodeRuntimeTest::TickUntil(*runtime, [&] { return NodeRuntimeTest::FileSize(heartbeat) > 5; }), true);

@@ -7,13 +7,16 @@
  */
 
 #include "value_transfer.h"
+#include "engine_helpers.h"
+
+#include <v8pp/convert.hpp>
 
 #include <cstring>
 
 namespace Framework::Scripting {
     namespace {
         // Deep enough for any real payload, shallow enough that the copy cannot exhaust the native stack.
-        constexpr int kMaxDepth = 128;
+        constexpr size_t kMaxDepth = 128;
 
         struct HostType {
             std::string name;
@@ -29,81 +32,83 @@ namespace Framework::Scripting {
 
         const std::vector<HostType> kNoHostTypes;
 
-        std::string ToUtf8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
-            v8::String::Utf8Value text(isolate, value);
-            return *text ? std::string(*text, text.length()) : std::string();
+        template <typename T>
+        v8::Local<v8::ArrayBufferView> MakeView(v8::Local<v8::ArrayBuffer> buffer, size_t length) {
+            return T::New(buffer, 0, length);
         }
 
-        v8::Local<v8::String> FromUtf8(v8::Isolate *isolate, const std::string &text) {
-            return v8::String::NewFromUtf8(isolate, text.data(), v8::NewStringType::kNormal, static_cast<int>(text.size())).ToLocalChecked();
-        }
-
-        // Typed array constructors by name, with their element size. DataView counts in bytes.
+        // Every view type that crosses, by name, with its element size. DataView counts in bytes.
         struct ViewType {
             const char *name;
             size_t elementSize;
+            bool (v8::Value::*is)() const;
+            v8::Local<v8::ArrayBufferView> (*make)(v8::Local<v8::ArrayBuffer>, size_t);
         };
 
-        constexpr ViewType kViewTypes[] = {
-            {"Int8Array", 1},
-            {"Uint8Array", 1},
-            {"Uint8ClampedArray", 1},
-            {"Int16Array", 2},
-            {"Uint16Array", 2},
-            {"Int32Array", 4},
-            {"Uint32Array", 4},
-            {"Float32Array", 4},
-            {"Float64Array", 8},
-            {"BigInt64Array", 8},
-            {"BigUint64Array", 8},
-            {"DataView", 1},
+        const ViewType kViewTypes[] = {
+            {"Int8Array", 1, &v8::Value::IsInt8Array, &MakeView<v8::Int8Array>},
+            {"Uint8Array", 1, &v8::Value::IsUint8Array, &MakeView<v8::Uint8Array>},
+            {"Uint8ClampedArray", 1, &v8::Value::IsUint8ClampedArray, &MakeView<v8::Uint8ClampedArray>},
+            {"Int16Array", 2, &v8::Value::IsInt16Array, &MakeView<v8::Int16Array>},
+            {"Uint16Array", 2, &v8::Value::IsUint16Array, &MakeView<v8::Uint16Array>},
+            {"Int32Array", 4, &v8::Value::IsInt32Array, &MakeView<v8::Int32Array>},
+            {"Uint32Array", 4, &v8::Value::IsUint32Array, &MakeView<v8::Uint32Array>},
+            {"Float32Array", 4, &v8::Value::IsFloat32Array, &MakeView<v8::Float32Array>},
+            {"Float64Array", 8, &v8::Value::IsFloat64Array, &MakeView<v8::Float64Array>},
+            {"BigInt64Array", 8, &v8::Value::IsBigInt64Array, &MakeView<v8::BigInt64Array>},
+            {"BigUint64Array", 8, &v8::Value::IsBigUint64Array, &MakeView<v8::BigUint64Array>},
+            {"DataView", 1, &v8::Value::IsDataView, &MakeView<v8::DataView>},
         };
 
-        const char *ViewTypeName(v8::Local<v8::ArrayBufferView> view) {
-            if (view->IsInt8Array()) {
-                return "Int8Array";
+        // Where the copy is inside the value, as a chain up to the root. Spelled out only when the copy fails, so a
+        // successful copy builds no strings for it.
+        struct Path {
+            enum class Step : uint8_t { Root, Index, Property, MapKey, MapValue, Member };
+
+            const Path *parent      = nullptr;
+            Step step               = Step::Root;
+            uint32_t index          = 0;
+            const std::string *name = nullptr;
+
+            Path At(Step next, uint32_t at) const {
+                return {this, next, at, nullptr};
             }
-            if (view->IsUint8Array()) {
-                return "Uint8Array";
+
+            Path Property(const std::string &property) const {
+                return {this, Step::Property, 0, &property};
             }
-            if (view->IsUint8ClampedArray()) {
-                return "Uint8ClampedArray";
+
+            std::string ToString() const {
+                std::vector<const Path *> chain;
+                for (const Path *step = this; step != nullptr; step = step->parent) {
+                    chain.push_back(step);
+                }
+                std::string out;
+                for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+                    const Path &step = **it;
+                    switch (step.step) {
+                    case Step::Root: out += "value"; break;
+                    case Step::Index: out += "[" + std::to_string(step.index) + "]"; break;
+                    case Step::Property: out += "." + *step.name; break;
+                    case Step::MapKey: out += ".<key " + std::to_string(step.index) + ">"; break;
+                    case Step::MapValue: out += ".<value " + std::to_string(step.index) + ">"; break;
+                    case Step::Member: out += ".<member " + std::to_string(step.index) + ">"; break;
+                    }
+                }
+                return out;
             }
-            if (view->IsInt16Array()) {
-                return "Int16Array";
-            }
-            if (view->IsUint16Array()) {
-                return "Uint16Array";
-            }
-            if (view->IsInt32Array()) {
-                return "Int32Array";
-            }
-            if (view->IsUint32Array()) {
-                return "Uint32Array";
-            }
-            if (view->IsFloat32Array()) {
-                return "Float32Array";
-            }
-            if (view->IsFloat64Array()) {
-                return "Float64Array";
-            }
-            if (view->IsBigInt64Array()) {
-                return "BigInt64Array";
-            }
-            if (view->IsBigUint64Array()) {
-                return "BigUint64Array";
-            }
-            if (view->IsDataView()) {
-                return "DataView";
-            }
-            return nullptr;
-        }
+        };
 
         class Copier final {
           public:
             Copier(v8::Isolate *isolate, v8::Local<v8::Context> context, const TransferFunctions &functions): _isolate(isolate), _context(context), _functions(functions) {}
 
-            bool Copy(v8::Local<v8::Value> value, TransferredValue &out, const std::string &where) {
+            bool Copy(v8::Local<v8::Value> value, TransferredValue &out, const Path &where) {
+                if (_valuesLeft == 0) {
+                    return Fail(where, "it is too large to copy");
+                }
+                --_valuesLeft;
+
                 if (value->IsUndefined()) {
                     out.kind = TransferredValue::Kind::Undefined;
                     return true;
@@ -123,14 +128,12 @@ namespace Framework::Scripting {
                     return true;
                 }
                 if (value->IsBigInt()) {
-                    out.kind = TransferredValue::Kind::BigInt;
-                    out.text = ToUtf8(_isolate, value);
-                    return true;
+                    return CopyBigInt(value.As<v8::BigInt>(), out, where);
                 }
                 if (value->IsString()) {
                     out.kind = TransferredValue::Kind::String;
                     out.text = ToUtf8(_isolate, value);
-                    return true;
+                    return Spend(where, out.text.size());
                 }
                 if (value->IsSymbol()) {
                     return Fail(where, "a symbol cannot be copied");
@@ -165,7 +168,24 @@ namespace Framework::Scripting {
             }
 
           private:
-            bool CopyObject(v8::Local<v8::Object> object, TransferredValue &out, const std::string &where) {
+            bool CopyBigInt(v8::Local<v8::BigInt> value, TransferredValue &out, const Path &where) {
+                int count = value->WordCount();
+                if (!Spend(where, static_cast<size_t>(count) * sizeof(uint64_t))) {
+                    return false;
+                }
+                std::vector<uint64_t> words(static_cast<size_t>(count));
+                int negative = 0;
+                value->ToWordsArray(&negative, &count, words.data());
+                out.kind    = TransferredValue::Kind::BigInt;
+                out.boolean = negative != 0;
+                out.bytes.resize(static_cast<size_t>(count) * sizeof(uint64_t));
+                if (!out.bytes.empty()) {
+                    std::memcpy(out.bytes.data(), words.data(), out.bytes.size());
+                }
+                return true;
+            }
+
+            bool CopyObject(v8::Local<v8::Object> object, TransferredValue &out, const Path &where) {
                 if (object->IsPromise()) {
                     return Fail(where, "a promise cannot be copied");
                 }
@@ -178,12 +198,17 @@ namespace Framework::Scripting {
                     return CopyProperties(object, out, where, true);
                 }
                 if (object->IsArray()) {
-                    auto array = object.As<v8::Array>();
-                    out.kind   = TransferredValue::Kind::Array;
-                    out.items.resize(array->Length());
-                    for (uint32_t i = 0; i < array->Length(); ++i) {
+                    // Read once: an element's getter can grow or shrink the array while it is being copied.
+                    auto array            = object.As<v8::Array>();
+                    const uint32_t length = array->Length();
+                    if (length > _valuesLeft) {
+                        return Fail(where, "it is too large to copy");
+                    }
+                    out.kind = TransferredValue::Kind::Array;
+                    out.items.resize(length);
+                    for (uint32_t i = 0; i < length; ++i) {
                         v8::Local<v8::Value> element;
-                        if (!array->Get(_context, i).ToLocal(&element) || !Copy(element, out.items[i], where + "[" + std::to_string(i) + "]")) {
+                        if (!array->Get(_context, i).ToLocal(&element) || !Copy(element, out.items[i], where.At(Path::Step::Index, i))) {
                             return Fail(where, "an element could not be read");
                         }
                     }
@@ -199,16 +224,20 @@ namespace Framework::Scripting {
                     out.kind    = TransferredValue::Kind::RegExp;
                     out.text    = ToUtf8(_isolate, regexp->GetSource());
                     out.number  = static_cast<double>(regexp->GetFlags());
-                    return true;
+                    return Spend(where, out.text.size());
                 }
                 if (object->IsMap() || object->IsSet()) {
-                    const bool isMap        = object->IsMap();
+                    const bool isMap          = object->IsMap();
                     v8::Local<v8::Array> flat = isMap ? object.As<v8::Map>()->AsArray() : object.As<v8::Set>()->AsArray();
-                    out.kind                = isMap ? TransferredValue::Kind::Map : TransferredValue::Kind::Set;
-                    out.items.resize(flat->Length());
-                    for (uint32_t i = 0; i < flat->Length(); ++i) {
+                    const uint32_t length     = flat->Length();
+                    if (length > _valuesLeft) {
+                        return Fail(where, "it is too large to copy");
+                    }
+                    out.kind = isMap ? TransferredValue::Kind::Map : TransferredValue::Kind::Set;
+                    out.items.resize(length);
+                    for (uint32_t i = 0; i < length; ++i) {
                         v8::Local<v8::Value> entry;
-                        const std::string at = where + (isMap ? (i % 2 == 0 ? ".<key " : ".<value ") : ".<member ") + std::to_string(isMap ? i / 2 : i) + ">";
+                        const Path at = isMap ? where.At(i % 2 == 0 ? Path::Step::MapKey : Path::Step::MapValue, i / 2) : where.At(Path::Step::Member, i);
                         if (!flat->Get(_context, i).ToLocal(&entry) || !Copy(entry, out.items[i], at)) {
                             return Fail(where, "an entry could not be read");
                         }
@@ -222,7 +251,10 @@ namespace Framework::Scripting {
                 }
                 if (object->IsArrayBuffer()) {
                     auto buffer = object.As<v8::ArrayBuffer>();
-                    out.kind    = TransferredValue::Kind::ArrayBuffer;
+                    if (!Spend(where, buffer->ByteLength())) {
+                        return false;
+                    }
+                    out.kind = TransferredValue::Kind::ArrayBuffer;
                     out.bytes.resize(buffer->ByteLength());
                     if (!out.bytes.empty()) {
                         std::memcpy(out.bytes.data(), buffer->GetBackingStore()->Data(), out.bytes.size());
@@ -231,13 +263,22 @@ namespace Framework::Scripting {
                 }
                 if (object->IsArrayBufferView()) {
                     auto view            = object.As<v8::ArrayBufferView>();
-                    const char *typeName = ViewTypeName(view);
-                    if (typeName == nullptr) {
+                    const ViewType *type = nullptr;
+                    for (const auto &candidate : kViewTypes) {
+                        if (((*view)->*candidate.is)()) {
+                            type = &candidate;
+                            break;
+                        }
+                    }
+                    if (type == nullptr) {
                         return Fail(where, "this kind of view cannot be copied");
+                    }
+                    if (!Spend(where, view->ByteLength())) {
+                        return false;
                     }
                     out.kind = TransferredValue::Kind::TypedArray;
                     // Node's Buffer is a Uint8Array subclass; keep it a Buffer on the other side.
-                    out.text = ToUtf8(_isolate, object->GetConstructorName()) == "Buffer" ? "Buffer" : typeName;
+                    out.text = ToUtf8(_isolate, object->GetConstructorName()) == "Buffer" ? "Buffer" : type->name;
                     out.bytes.resize(view->ByteLength());
                     if (!out.bytes.empty()) {
                         view->CopyContents(out.bytes.data(), out.bytes.size());
@@ -252,7 +293,7 @@ namespace Framework::Scripting {
                     if (it->copy(_isolate, object, out.bytes)) {
                         out.kind = TransferredValue::Kind::HostObject;
                         out.text = it->name;
-                        return true;
+                        return Spend(where, out.bytes.size());
                     }
                 }
 
@@ -261,14 +302,17 @@ namespace Framework::Scripting {
             }
 
             // An error's name, message and stack are not enumerable, so they are read by name.
-            bool CopyProperties(v8::Local<v8::Object> object, TransferredValue &out, const std::string &where, bool isError) {
+            bool CopyProperties(v8::Local<v8::Object> object, TransferredValue &out, const Path &where, bool isError) {
                 if (isError) {
                     for (const char *key : {"name", "message", "stack"}) {
                         v8::Local<v8::Value> field;
-                        if (object->Get(_context, v8::String::NewFromUtf8(_isolate, key).ToLocalChecked()).ToLocal(&field) && field->IsString()) {
+                        if (object->Get(_context, v8pp::to_v8(_isolate, key)).ToLocal(&field) && field->IsString()) {
                             TransferredValue text;
                             text.kind = TransferredValue::Kind::String;
                             text.text = ToUtf8(_isolate, field);
+                            if (!Spend(where, text.text.size())) {
+                                return false;
+                            }
                             out.properties.emplace_back(key, std::move(text));
                         }
                     }
@@ -278,7 +322,8 @@ namespace Framework::Scripting {
                 if (!object->GetOwnPropertyNames(_context, static_cast<v8::PropertyFilter>(v8::ONLY_ENUMERABLE | v8::SKIP_SYMBOLS), v8::KeyConversionMode::kConvertToString).ToLocal(&keys)) {
                     return Fail(where, "its properties could not be listed");
                 }
-                for (uint32_t i = 0; i < keys->Length(); ++i) {
+                const uint32_t count = keys->Length();
+                for (uint32_t i = 0; i < count; ++i) {
                     v8::Local<v8::Value> key;
                     v8::Local<v8::Value> field;
                     if (!keys->Get(_context, i).ToLocal(&key) || !object->Get(_context, key).ToLocal(&field)) {
@@ -288,8 +333,11 @@ namespace Framework::Scripting {
                     if (isError && (name == "name" || name == "message" || name == "stack")) {
                         continue;
                     }
+                    if (!Spend(where, name.size())) {
+                        return false;
+                    }
                     TransferredValue copied;
-                    if (!Copy(field, copied, where + "." + name)) {
+                    if (!Copy(field, copied, where.Property(name))) {
                         return false;
                     }
                     out.properties.emplace_back(std::move(name), std::move(copied));
@@ -297,10 +345,19 @@ namespace Framework::Scripting {
                 return true;
             }
 
+            // Counts `bytes` of strings or binary data against the copy's bound.
+            bool Spend(const Path &where, size_t bytes) {
+                if (bytes > _bytesLeft) {
+                    return Fail(where, "it is too large to copy");
+                }
+                _bytesLeft -= bytes;
+                return true;
+            }
+
             // Keeps the innermost reason: an outer level only adds its own when nothing deeper said why.
-            bool Fail(const std::string &where, const char *why) {
+            bool Fail(const Path &where, const char *why) {
                 if (_error.empty()) {
-                    _error = "Cannot copy " + where + ": " + why;
+                    _error = "Cannot copy " + where.ToString() + ": " + why;
                 }
                 return false;
             }
@@ -309,6 +366,8 @@ namespace Framework::Scripting {
             v8::Local<v8::Context> _context;
             const TransferFunctions &_functions;
             std::vector<v8::Local<v8::Object>> _ancestors;
+            size_t _valuesLeft = ValueTransfer::kMaxValues;
+            size_t _bytesLeft  = ValueTransfer::kMaxBytes;
             std::string _error;
         };
 
@@ -322,12 +381,12 @@ namespace Framework::Scripting {
                 case TransferredValue::Kind::Null: return v8::Null(_isolate);
                 case TransferredValue::Kind::Boolean: return v8::Boolean::New(_isolate, value.boolean);
                 case TransferredValue::Kind::Number: return v8::Number::New(_isolate, value.number);
-                case TransferredValue::Kind::String: return FromUtf8(_isolate, value.text);
-                case TransferredValue::Kind::BigInt: return BuildBigInt(value.text);
+                case TransferredValue::Kind::String: return v8pp::to_v8(_isolate, value.text);
+                case TransferredValue::Kind::BigInt: return BuildBigInt(value);
                 case TransferredValue::Kind::Date: return v8::Date::New(_context, value.number);
-                case TransferredValue::Kind::RegExp: return v8::RegExp::New(_context, FromUtf8(_isolate, value.text), static_cast<v8::RegExp::Flags>(static_cast<int>(value.number)));
+                case TransferredValue::Kind::RegExp: return v8::RegExp::New(_context, v8pp::to_v8(_isolate, value.text), static_cast<v8::RegExp::Flags>(static_cast<int>(value.number)));
                 case TransferredValue::Kind::Array: return BuildArray(value);
-                case TransferredValue::Kind::Object: return BuildObject(v8::Object::New(_isolate), value);
+                case TransferredValue::Kind::Object: return BuildProperties(v8::Object::New(_isolate), value, nullptr);
                 case TransferredValue::Kind::Map: return BuildMap(value);
                 case TransferredValue::Kind::Set: return BuildSet(value);
                 case TransferredValue::Kind::ArrayBuffer: return BuildArrayBuffer(value.bytes);
@@ -341,18 +400,20 @@ namespace Framework::Scripting {
 
           private:
             v8::MaybeLocal<v8::Value> Throw(const std::string &message) {
-                _isolate->ThrowException(v8::Exception::Error(FromUtf8(_isolate, message)));
+                _isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(_isolate, message)));
                 return {};
             }
 
-            // V8 has no BigInt-from-decimal constructor; the script one does exactly that.
-            v8::MaybeLocal<v8::Value> BuildBigInt(const std::string &decimal) {
-                v8::Local<v8::Value> constructor;
-                if (!_context->Global()->Get(_context, v8::String::NewFromUtf8Literal(_isolate, "BigInt")).ToLocal(&constructor) || !constructor->IsFunction()) {
-                    return Throw("BigInt is unavailable");
+            v8::MaybeLocal<v8::Value> BuildBigInt(const TransferredValue &value) {
+                std::vector<uint64_t> words(value.bytes.size() / sizeof(uint64_t));
+                if (!words.empty()) {
+                    std::memcpy(words.data(), value.bytes.data(), words.size() * sizeof(uint64_t));
                 }
-                v8::Local<v8::Value> argument = FromUtf8(_isolate, decimal);
-                return constructor.As<v8::Function>()->Call(_context, v8::Undefined(_isolate), 1, &argument);
+                v8::Local<v8::BigInt> built;
+                if (!v8::BigInt::NewFromWords(_context, value.boolean ? 1 : 0, static_cast<int>(words.size()), words.data()).ToLocal(&built)) {
+                    return {};
+                }
+                return built;
             }
 
             v8::MaybeLocal<v8::Value> BuildArray(const TransferredValue &value) {
@@ -366,10 +427,14 @@ namespace Framework::Scripting {
                 return array;
             }
 
-            v8::MaybeLocal<v8::Value> BuildObject(v8::Local<v8::Object> object, const TransferredValue &value) {
+            // Writes the copied properties onto `object`, leaving out the one named `skip`.
+            v8::MaybeLocal<v8::Value> BuildProperties(v8::Local<v8::Object> object, const TransferredValue &value, const char *skip) {
                 for (const auto &[name, field] : value.properties) {
+                    if (skip != nullptr && name == skip) {
+                        continue;
+                    }
                     v8::Local<v8::Value> built;
-                    if (!Build(field).ToLocal(&built) || object->Set(_context, FromUtf8(_isolate, name), built).IsNothing()) {
+                    if (!Build(field).ToLocal(&built) || object->Set(_context, v8pp::to_v8(_isolate, name), built).IsNothing()) {
                         return {};
                     }
                 }
@@ -422,51 +487,12 @@ namespace Framework::Scripting {
                     return v8::Uint8Array::New(buffer, 0, size);
                 }
 
-                size_t elementSize = 0;
                 for (const auto &type : kViewTypes) {
                     if (value.text == type.name) {
-                        elementSize = type.elementSize;
+                        return type.make(buffer, size / type.elementSize);
                     }
                 }
-                if (elementSize == 0) {
-                    return Throw("Unknown view type " + value.text);
-                }
-
-                const size_t length = size / elementSize;
-                if (value.text == "Int8Array") {
-                    return v8::Int8Array::New(buffer, 0, length);
-                }
-                if (value.text == "Uint8Array") {
-                    return v8::Uint8Array::New(buffer, 0, length);
-                }
-                if (value.text == "Uint8ClampedArray") {
-                    return v8::Uint8ClampedArray::New(buffer, 0, length);
-                }
-                if (value.text == "Int16Array") {
-                    return v8::Int16Array::New(buffer, 0, length);
-                }
-                if (value.text == "Uint16Array") {
-                    return v8::Uint16Array::New(buffer, 0, length);
-                }
-                if (value.text == "Int32Array") {
-                    return v8::Int32Array::New(buffer, 0, length);
-                }
-                if (value.text == "Uint32Array") {
-                    return v8::Uint32Array::New(buffer, 0, length);
-                }
-                if (value.text == "Float32Array") {
-                    return v8::Float32Array::New(buffer, 0, length);
-                }
-                if (value.text == "Float64Array") {
-                    return v8::Float64Array::New(buffer, 0, length);
-                }
-                if (value.text == "BigInt64Array") {
-                    return v8::BigInt64Array::New(buffer, 0, length);
-                }
-                if (value.text == "BigUint64Array") {
-                    return v8::BigUint64Array::New(buffer, 0, length);
-                }
-                return v8::DataView::New(buffer, 0, length);
+                return Throw("Unknown view type " + value.text);
             }
 
             v8::MaybeLocal<v8::Value> BuildError(const TransferredValue &value) {
@@ -476,11 +502,9 @@ namespace Framework::Scripting {
                         message = field.text;
                     }
                 }
-                v8::Local<v8::Value> error = v8::Exception::Error(FromUtf8(_isolate, message));
-                // message is already set; the rest (name, stack, own fields) is written over the fresh error's.
-                TransferredValue rest = value;
-                std::erase_if(rest.properties, [](const auto &property) { return property.first == "message"; });
-                return BuildObject(error.As<v8::Object>(), rest);
+                // The message is the constructor's; the rest (name, stack, own fields) is written over the fresh error's.
+                v8::Local<v8::Value> error = v8::Exception::Error(v8pp::to_v8(_isolate, message));
+                return BuildProperties(error.As<v8::Object>(), value, "message");
             }
 
             v8::MaybeLocal<v8::Value> BuildHostObject(const TransferredValue &value) {
@@ -521,9 +545,9 @@ namespace Framework::Scripting {
         v8::TryCatch tryCatch(isolate);
         Copier copier(isolate, context, functions);
         TransferredValue out;
-        if (!copier.Copy(value, out, "value")) {
+        if (!copier.Copy(value, out, Path {})) {
             std::string error = copier.GetError();
-            if (tryCatch.HasCaught()) {
+            if (tryCatch.HasCaught() && !tryCatch.HasTerminated()) {
                 error += " (" + ToUtf8(isolate, tryCatch.Exception()) + ")";
             }
             return Utils::Result<TransferredValue, std::string>::Err(error.empty() ? std::string("Cannot copy value") : error);

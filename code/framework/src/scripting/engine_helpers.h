@@ -60,4 +60,10 @@ namespace Framework::Scripting {
         return result;
     }
 
+    // Any value as UTF-8 text, the way String(value) would read; empty when even that throws.
+    inline std::string ToUtf8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+        v8::String::Utf8Value text(isolate, value);
+        return *text ? std::string(*text, text.length()) : std::string();
+    }
+
 } // namespace Framework::Scripting

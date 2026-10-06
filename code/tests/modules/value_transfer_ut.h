@@ -13,6 +13,8 @@
 #include "scripting/node_runtime.h"
 #include "scripting/value_transfer.h"
 
+#include "node_test_helpers.h"
+
 #include <memory>
 #include <string>
 
@@ -50,25 +52,6 @@ namespace ValueTransferTest {
             engine.Shutdown();
         }
     };
-
-    static std::string Eval(Framework::Scripting::NodeRuntime &runtime, const std::string &source) {
-        v8::Isolate *isolate = runtime.GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = runtime.GetContext();
-        v8::Context::Scope contextScope(context);
-        v8::TryCatch tryCatch(isolate);
-
-        v8::Local<v8::Script> script;
-        v8::Local<v8::Value> result;
-        if (!v8::Script::Compile(context, v8::String::NewFromUtf8(isolate, source.c_str()).ToLocalChecked()).ToLocal(&script) || !script->Run(context).ToLocal(&result)) {
-            v8::String::Utf8Value text(isolate, tryCatch.Exception());
-            return std::string("<threw> ") + (*text ? *text : "");
-        }
-        v8::String::Utf8Value text(isolate, result);
-        return *text ? *text : "";
-    }
 
     // Copies `expression` out of the source runtime and stores what arrives as globalThis.received in the target.
     // Returns the copy's error, or "" when it crossed.
@@ -114,53 +97,53 @@ MODULE(value_transfer, {
     IT("copies primitives, arrays and plain objects", {
         ValueTransferTest::Pair pair;
         STREQUALS(ValueTransferTest::Send(pair, "{ n: 1.5, s: 'text', b: true, z: null, u: undefined, big: 10n ** 20n, list: [1, [2, 'three']] }").c_str(), "");
-        STREQUALS(ValueTransferTest::Eval(*pair.target, "JSON.stringify({ ...received, big: String(received.big) })").c_str(), "{\"n\":1.5,\"s\":\"text\",\"b\":true,\"z\":null,\"big\":\"100000000000000000000\",\"list\":[1,[2,\"three\"]]}");
-        STREQUALS(ValueTransferTest::Eval(*pair.target, "'u' in received && received.u === undefined && typeof received.big").c_str(), "bigint");
+        STREQUALS(NodeTest::Eval(*pair.target, "JSON.stringify({ ...received, big: String(received.big) })").c_str(), "{\"n\":1.5,\"s\":\"text\",\"b\":true,\"z\":null,\"big\":\"100000000000000000000\",\"list\":[1,[2,\"three\"]]}");
+        STREQUALS(NodeTest::Eval(*pair.target, "'u' in received && received.u === undefined && typeof received.big").c_str(), "bigint");
     });
 
     IT("copies dates, regular expressions, maps and sets", {
         ValueTransferTest::Pair pair;
         STREQUALS(ValueTransferTest::Send(pair, "{ when: new Date(86400000), re: /ab+c/gi, map: new Map([['k', { v: 1 }]]), set: new Set([1, 'two']) }").c_str(), "");
-        STREQUALS(ValueTransferTest::Eval(*pair.target, "[received.when instanceof Date, received.when.getTime(), received.re.source, received.re.flags, received.map.get('k').v, [...received.set].join()].join('|')").c_str(), "true|86400000|ab+c|gi|1|1,two");
+        STREQUALS(NodeTest::Eval(*pair.target, "[received.when instanceof Date, received.when.getTime(), received.re.source, received.re.flags, received.map.get('k').v, [...received.set].join()].join('|')").c_str(), "true|86400000|ab+c|gi|1|1,two");
     });
 
     IT("copies binary data and keeps a Buffer a Buffer", {
         ValueTransferTest::Pair pair;
         STREQUALS(ValueTransferTest::Send(pair, "{ raw: new Uint8Array([1, 2, 3]).buffer, floats: new Float64Array([0.5, 2]), view: new Uint8Array([9, 8, 7]).subarray(1), buf: Buffer.from('hi') }").c_str(), "");
-        STREQUALS(ValueTransferTest::Eval(*pair.target, "[received.raw.byteLength, received.floats instanceof Float64Array, received.floats[1], [...received.view].join(), Buffer.isBuffer(received.buf), received.buf.toString()].join('|')").c_str(), "3|true|2|8,7|true|hi");
+        STREQUALS(NodeTest::Eval(*pair.target, "[received.raw.byteLength, received.floats instanceof Float64Array, received.floats[1], [...received.view].join(), Buffer.isBuffer(received.buf), received.buf.toString()].join('|')").c_str(), "3|true|2|8,7|true|hi");
     });
 
     IT("copies an error with its name, message, stack and own fields", {
         ValueTransferTest::Pair pair;
         STREQUALS(ValueTransferTest::Send(pair, "Object.assign(new TypeError('bad input'), { code: 'E_BAD' })").c_str(), "");
-        STREQUALS(ValueTransferTest::Eval(*pair.target, "[received instanceof Error, received.name, received.message, received.code, received.stack.includes('bad input')].join('|')").c_str(), "true|TypeError|bad input|E_BAD|true");
+        STREQUALS(NodeTest::Eval(*pair.target, "[received instanceof Error, received.name, received.message, received.code, received.stack.includes('bad input')].join('|')").c_str(), "true|TypeError|bad input|E_BAD|true");
     });
 
     IT("rebuilds framework value types as themselves", {
         ValueTransferTest::Pair pair;
         STREQUALS(ValueTransferTest::Send(pair, "{ at: new Vector3(1, 2, 3), turn: new Quaternion(1, 0, 0, 0) }").c_str(), "");
-        STREQUALS(ValueTransferTest::Eval(*pair.target, "[received.at instanceof Vector3, received.at.x, received.at.y, received.at.z, received.turn instanceof Quaternion].join('|')").c_str(), "true|1|2|3|true");
+        STREQUALS(NodeTest::Eval(*pair.target, "[received.at instanceof Vector3, received.at.x, received.at.y, received.at.z, received.turn instanceof Quaternion].join('|')").c_str(), "true|1|2|3|true");
     });
 
     IT("does not mistake Node's own native objects for framework handles", {
         ValueTransferTest::Pair pair;
         // A MessagePort is a Node BaseObject: two internal fields, like a v8pp object, but neither is v8pp's.
         STREQUALS(ValueTransferTest::Send(pair, "{ port: new (require('node:worker_threads').MessageChannel)().port1 }").c_str(), "");
-        STREQUALS(ValueTransferTest::Eval(*pair.target, "typeof received.port").c_str(), "object");
+        STREQUALS(NodeTest::Eval(*pair.target, "typeof received.port").c_str(), "object");
     });
 
     IT("turns a class instance into a plain object", {
         ValueTransferTest::Pair pair;
         STREQUALS(ValueTransferTest::Send(pair, "new (class Account { constructor() { this.balance = 10; } deposit() {} })()").c_str(), "");
-        STREQUALS(ValueTransferTest::Eval(*pair.target, "[Object.getPrototypeOf(received) === Object.prototype, received.balance, typeof received.deposit].join('|')").c_str(), "true|10|undefined");
+        STREQUALS(NodeTest::Eval(*pair.target, "[Object.getPrototypeOf(received) === Object.prototype, received.balance, typeof received.deposit].join('|')").c_str(), "true|10|undefined");
     });
 
     IT("sends a copy, not the object", {
         ValueTransferTest::Pair pair;
-        ValueTransferTest::Eval(*pair.source, "globalThis.state = { count: 1 }");
+        NodeTest::Eval(*pair.source, "globalThis.state = { count: 1 }");
         STREQUALS(ValueTransferTest::Send(pair, "state").c_str(), "");
-        ValueTransferTest::Eval(*pair.target, "received.count = 99");
-        STREQUALS(ValueTransferTest::Eval(*pair.source, "state.count").c_str(), "1");
+        NodeTest::Eval(*pair.target, "received.count = 99");
+        STREQUALS(NodeTest::Eval(*pair.source, "state.count").c_str(), "1");
     });
 
     IT("refuses what cannot cross and says where", {
@@ -172,6 +155,29 @@ MODULE(value_transfer, {
         STREQUALS(ValueTransferTest::Send(pair, "{ counters: new Int32Array(new SharedArrayBuffer(4)) }").c_str(), "Cannot copy value.counters: shared memory cannot cross between resources");
     });
 
+    IT("copies an array as long as it was when the copy began, whatever its getters do", {
+        ValueTransferTest::Pair pair;
+        // The first element's getter grows the array while it is being copied; the copy must not follow it.
+        STREQUALS(ValueTransferTest::Send(pair, "(() => { const list = [0, 2]; Object.defineProperty(list, 0, { enumerable: true, get() { for (let i = 0; i < 1000; ++i) list.push(i); return 1; } }); return list; })()").c_str(), "");
+        STREQUALS(NodeTest::Eval(*pair.target, "received.length + '|' + received.join()").c_str(), "2|1,2");
+    });
+
+    IT("refuses a value too large to copy instead of expanding it", {
+        ValueTransferTest::Pair pair;
+        // 40 levels of an array holding the same child twice: a few hundred bytes that would copy as 2^40 values.
+        const std::string doubled = ValueTransferTest::Send(pair, "(() => { let tree = [1]; for (let i = 0; i < 40; ++i) tree = [tree, tree]; return tree; })()");
+        EQUALS(doubled.rfind("Cannot copy value[", 0) == 0, true);
+        EQUALS(doubled.find("it is too large to copy") != std::string::npos, true);
+        STREQUALS(ValueTransferTest::Send(pair, "new Array(1e9)").c_str(), "Cannot copy value: it is too large to copy");
+    });
+
+    IT("copies bigints of any sign and size", {
+        ValueTransferTest::Pair pair;
+        STREQUALS(ValueTransferTest::Send(pair, "{ zero: 0n, small: -5n, large: -(2n ** 130n) - 7n, positive: 2n ** 64n + 1n }").c_str(), "");
+        STREQUALS(NodeTest::Eval(*pair.target, "[received.zero, received.small, received.large, received.positive].map(String).join('|')").c_str(), "0|-5|-1361129467683753853853498429727072845831|18446744073709551617");
+        STREQUALS(NodeTest::Eval(*pair.target, "typeof received.large").c_str(), "bigint");
+    });
+
     IT("hands functions to the export and import hooks", {
         ValueTransferTest::Pair pair;
         TransferFunctions functions;
@@ -180,6 +186,6 @@ MODULE(value_transfer, {
             return v8::Function::New(context, [](const v8::FunctionCallbackInfo<v8::Value> &info) { info.GetReturnValue().Set(info.Data()); }, v8::Number::New(isolate, static_cast<double>(reference)));
         };
         STREQUALS(ValueTransferTest::Send(pair, "{ callback() {} }", functions).c_str(), "");
-        STREQUALS(ValueTransferTest::Eval(*pair.target, "received.callback()").c_str(), "7");
+        STREQUALS(NodeTest::Eval(*pair.target, "received.callback()").c_str(), "7");
     });
 });

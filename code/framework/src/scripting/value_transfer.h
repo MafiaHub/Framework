@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include <cerrno>
-
 #include <v8.h>
 
 #include <function2/function2.hpp>
@@ -54,16 +52,19 @@ namespace Framework::Scripting {
         };
 
         Kind kind = Kind::Undefined;
+
+        // Boolean; whether a BigInt is negative.
         bool boolean = false;
 
         // Number; Date as milliseconds since the epoch; RegExp flags.
         double number = 0;
 
-        // String; BigInt in decimal; RegExp source; the view type of a TypedArray; the registered name of a HostObject; the
-        // message of an Error.
+        // String; RegExp source; the view type of a TypedArray; the registered name of a HostObject; the message of an
+        // Error.
         std::string text;
 
-        // ArrayBuffer and TypedArray contents; a HostObject's payload.
+        // ArrayBuffer and TypedArray contents; a HostObject's payload; a BigInt's magnitude as 64-bit words, least
+        // significant first.
         std::vector<uint8_t> bytes;
 
         // Array elements; Map keys and values interleaved; Set members.
@@ -106,10 +107,15 @@ namespace Framework::Scripting {
          */
         static void RegisterHostType(std::string name, HostCopy copy, HostRebuild rebuild);
 
+        // A copy holds at most this many values and this many bytes of strings and binary data. An object reached twice
+        // is copied twice, so without a bound a few kilobytes of nested references would expand without end.
+        static constexpr size_t kMaxValues = 1u << 20;
+        static constexpr size_t kMaxBytes  = 256u << 20;
+
         /**
          * Copy a value out of its isolate. The caller holds the isolate's scopes and the context. Fails, naming where in
          * the value it gave up, on a symbol, a cycle, a promise, a SharedArrayBuffer or another object that cannot be
-         * copied, and on a function unless `functions` exports it.
+         * copied, on a value larger than the bounds above, and on a function unless `functions` exports it.
          */
         static Utils::Result<TransferredValue, std::string> Copy(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> value, const TransferFunctions &functions = {});
 
