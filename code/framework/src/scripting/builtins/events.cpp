@@ -533,8 +533,9 @@ namespace Framework::Scripting::Builtins {
 
         std::scoped_lock lock(_pendingCallbacksMutex);
         for (auto it = _pendingCallbacks.begin(); it != _pendingCallbacks.end(); ++it) {
+            // Emissions from every resource's runtime wait here; only this isolate's resolvers can be read in it.
             const auto &data = *it;
-            if (data->resolver.IsEmpty()) {
+            if (data->resolver.IsEmpty() || data->isolate != isolate) {
                 continue;
             }
 
