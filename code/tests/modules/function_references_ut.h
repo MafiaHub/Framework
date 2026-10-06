@@ -311,4 +311,12 @@ MODULE(function_references, {
         NodeTest::Eval(*pair.caller, "api.balance = 999");
         STREQUALS(NodeTest::Eval(*pair.caller, "api.getBalance()").c_str(), "10");
     });
+
+    IT("calls one method shared by two objects on whichever object it came with", {
+        FunctionReferencesTest::Pair pair;
+        NodeTest::Eval(*pair.owner, "globalThis.shared = function () { 'use strict'; return this.v; }");
+        STREQUALS(FunctionReferencesTest::Export(pair, "{ get: shared, v: 1 }").c_str(), "");
+        STREQUALS(FunctionReferencesTest::Send(pair, *pair.owner, pair.ownerId, *pair.caller, pair.callerId, "{ get: shared, v: 2 }", "other").c_str(), "");
+        STREQUALS(NodeTest::Eval(*pair.caller, "api.get() + '|' + other.get()").c_str(), "1|2");
+    });
 });

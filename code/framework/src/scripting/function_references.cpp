@@ -24,6 +24,7 @@ namespace Framework::Scripting {
             v8::Isolate *isolate = nullptr;
             v8::Global<v8::Context> context;
             std::string name;
+            std::shared_ptr<const TransferFunctions> hooks; // Built once: every call copies through them.
         };
 
         // A function kept alive for other runtimes to call. `holds` counts the copies and stand-ins that refer to it.
@@ -123,7 +124,16 @@ namespace Framework::Scripting {
             return it != runtimeByIsolate.end() ? it->second : 0;
         }
 
-        TransferFunctions Hooks(uint32_t runtime) {
+        // The runtime's hooks, shared: a caller keeps them even if the runtime leaves during the copy they serve.
+        std::shared_ptr<const TransferFunctions> Hooks(uint32_t runtime) {
+            const auto it = runtimes.find(runtime);
+            if (it != runtimes.end() && it->second.hooks) {
+                return it->second.hooks;
+            }
+            return std::make_shared<const TransferFunctions>(MakeHooks(runtime));
+        }
+
+        TransferFunctions MakeHooks(uint32_t runtime) {
             TransferFunctions functions;
             std::weak_ptr<State> weak = weak_from_this();
             functions.exportFunction  = [weak, runtime](v8::Isolate *isolate, v8::Local<v8::Function> function, v8::Local<v8::Object> holder, TransferredValue &out) {
@@ -145,36 +155,75 @@ namespace Framework::Scripting {
             v8::Local<v8::Context> context = isolate->GetCurrentContext();
             v8::Local<v8::Private> key     = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.functionReference"));
 
-            // A function exported before carries its id: exporting it again reuses the entry, so a handler sent on
-            // every event costs one, and a stand-in carries the id of the export it forwards to, so sending one on
-            // refers to the original instead of stacking a stand-in on a stand-in.
+            // A stand-in carries the id of the export it forwards to: sending it on refers to the original instead of
+            // stacking a stand-in on a stand-in.
             uint64_t id = 0;
             v8::Local<v8::Value> previous;
             if (function->GetPrivate(context, key).ToLocal(&previous) && previous->IsNumber()) {
                 const auto existing = static_cast<uint64_t>(previous.As<v8::Number>()->Value());
-                if (exports.contains(existing)) {
+                const auto exported = exports.find(existing);
+                if (exported != exports.end() && (exported->second.runtime != runtime || holder.IsEmpty())) {
                     id = existing;
                 }
             }
-            if (id == 0) {
-                id                   = nextExport++;
-                Export &entry        = exports[id];
-                entry.runtime        = runtime;
-                entry.function.Reset(isolate, function);
-                function->SetPrivate(context, key, v8::Number::New(isolate, static_cast<double>(id))).Check();
+
+            // A method is exported once per object it is a method of, so each copy calls it on its own object. Sent
+            // again, the same pair reuses its entry, so a handler sent on every event costs one.
+            v8::Local<v8::Map> methods;
+            if (id == 0 && !holder.IsEmpty()) {
+                methods  = MethodsOf(isolate, context, holder);
+                id       = MethodExport(context, methods, function);
             }
 
-            Export &exported = exports[id];
-            if (exported.receiver.IsEmpty() && !holder.IsEmpty() && exported.runtime == runtime) {
-                exported.receiver.Reset(isolate, holder);
+            if (id == 0) {
+                id            = nextExport++;
+                Export &entry = exports[id];
+                entry.runtime = runtime;
+                entry.function.Reset(isolate, function);
+                v8::Local<v8::Value> idValue = v8::Number::New(isolate, static_cast<double>(id));
+                if (!methods.IsEmpty()) {
+                    // Weak: the method needs its object only while the owner keeps it.
+                    entry.receiver.Reset(isolate, holder);
+                    entry.receiver.SetWeak();
+                    (void)methods->Set(context, function, idValue);
+                }
+                else {
+                    function->SetPrivate(context, key, idValue).Check();
+                }
             }
-            ++exported.holds;
+
+            ++exports[id].holds;
             // Built in place: a temporary Hold would release the export as it went out of scope.
             auto hold     = std::make_shared<Hold>();
             hold->state   = weak_from_this();
             hold->id      = id;
             out.reference = id;
             out.retainer  = std::move(hold);
+        }
+
+        // The table of methods an object has had exported, function to export id, kept on the object itself. Empty
+        // when the object takes no private properties.
+        static v8::Local<v8::Map> MethodsOf(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> holder) {
+            v8::Local<v8::Private> key = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.methodReferences"));
+            v8::Local<v8::Value> existing;
+            if (holder->GetPrivate(context, key).ToLocal(&existing) && existing->IsMap()) {
+                return existing.As<v8::Map>();
+            }
+            v8::Local<v8::Map> methods = v8::Map::New(isolate);
+            if (!holder->SetPrivate(context, key, methods).FromMaybe(false)) {
+                return {};
+            }
+            return methods;
+        }
+
+        // The live export for `function` as a method in `methods`, or 0.
+        uint64_t MethodExport(v8::Local<v8::Context> context, v8::Local<v8::Map> methods, v8::Local<v8::Function> function) const {
+            v8::Local<v8::Value> existing;
+            if (methods.IsEmpty() || !methods->Get(context, function).ToLocal(&existing) || !existing->IsNumber()) {
+                return 0;
+            }
+            const auto id = static_cast<uint64_t>(existing.As<v8::Number>()->Value());
+            return exports.contains(id) ? id : 0;
         }
 
         void Release(uint64_t id) {
@@ -311,10 +360,10 @@ namespace Framework::Scripting {
 
         // Copies arguments out of the caller. On failure an exception is pending there, naming the argument.
         bool CopyArguments(uint32_t caller, v8::Isolate *isolate, v8::Local<v8::Context> context, const std::vector<v8::Local<v8::Value>> &arguments, std::vector<TransferredValue> &out) {
-            const TransferFunctions hooks = Hooks(caller);
+            const auto hooks = Hooks(caller);
             out.resize(arguments.size());
             for (size_t i = 0; i < arguments.size(); ++i) {
-                auto copied = ValueTransfer::Copy(isolate, context, arguments[i], hooks);
+                auto copied = ValueTransfer::Copy(isolate, context, arguments[i], *hooks);
                 if (!copied) {
                     Throw(isolate, "Argument " + std::to_string(i) + ": " + copied.GetError());
                     return false;
@@ -341,13 +390,13 @@ namespace Framework::Scripting {
             {
                 Entered entered(owner);
                 v8::TryCatch tryCatch(owner.isolate);
-                const TransferFunctions ownerHooks = Hooks(ownerId);
+                const auto ownerHooks = Hooks(ownerId);
 
                 std::vector<v8::Local<v8::Value>> argv;
                 argv.reserve(arguments.size());
                 for (const auto &argument : arguments) {
                     v8::Local<v8::Value> rebuilt;
-                    if (!ValueTransfer::Rebuild(owner.isolate, entered.context, argument, ownerHooks).ToLocal(&rebuilt)) {
+                    if (!ValueTransfer::Rebuild(owner.isolate, entered.context, argument, *ownerHooks).ToLocal(&rebuilt)) {
                         break;
                     }
                     argv.push_back(rebuilt);
@@ -358,7 +407,7 @@ namespace Framework::Scripting {
                 const bool called = argv.size() == arguments.size() && function.Get(owner.isolate)->Call(entered.context, self, static_cast<int>(argv.size()), argv.data()).ToLocal(&value);
                 if (!called) {
                     // Terminated (the owner called process.exit(), say): there is no exception value to copy.
-                    thrown = tryCatch.HasTerminated() ? ErrorValue(owner.name + " stopped during the call") : CopyOut(owner.isolate, entered.context, tryCatch.HasCaught() ? tryCatch.Exception() : v8::Local<v8::Value>(), ownerHooks, "The call failed");
+                    thrown = tryCatch.HasTerminated() ? ErrorValue(owner.name + " stopped during the call") : CopyOut(owner.isolate, entered.context, tryCatch.HasCaught() ? tryCatch.Exception() : v8::Local<v8::Value>(), *ownerHooks, "The call failed");
                 }
                 else if (value->IsPromise()) {
                     settlement = Await(ownerId, callerId, entered.context, value.As<v8::Promise>(), returned == Returned::Value);
@@ -367,7 +416,7 @@ namespace Framework::Scripting {
                     result.emplace(); // Undefined: only a boolean (a veto) is an outcome, so nothing else is copied.
                 }
                 else {
-                    auto copied = ValueTransfer::Copy(owner.isolate, entered.context, value, ownerHooks);
+                    auto copied = ValueTransfer::Copy(owner.isolate, entered.context, value, *ownerHooks);
                     if (copied) {
                         result = std::move(copied).GetValue();
                     }
@@ -377,18 +426,23 @@ namespace Framework::Scripting {
                 }
             }
 
-            const TransferFunctions hooks = Hooks(callerId);
+            const auto hooks = Hooks(callerId);
             if (thrown) {
                 v8::Local<v8::Value> error;
-                if (ValueTransfer::Rebuild(isolate, context, *thrown, hooks).ToLocal(&error)) {
+                if (ValueTransfer::Rebuild(isolate, context, *thrown, *hooks).ToLocal(&error)) {
                     isolate->ThrowException(error);
                 }
                 return {};
             }
             if (settlement != 0) {
                 const auto waiting = settlements.find(settlement);
+                if (waiting == settlements.end()) {
+                    Throw(isolate, "The call failed");
+                    return {};
+                }
                 v8::Local<v8::Promise::Resolver> resolver;
-                if (waiting == settlements.end() || !v8::Promise::Resolver::New(context).ToLocal(&resolver)) {
+                if (!v8::Promise::Resolver::New(context).ToLocal(&resolver)) {
+                    settlements.erase(waiting); // Nothing could be settled; an exception is pending already.
                     return {};
                 }
                 waiting->second->resolver.Reset(isolate, resolver);
@@ -398,7 +452,7 @@ namespace Framework::Scripting {
                 Throw(isolate, "The call failed");
                 return {};
             }
-            return ValueTransfer::Rebuild(isolate, context, *result, hooks);
+            return ValueTransfer::Rebuild(isolate, context, *result, *hooks);
         }
 
         static TransferredValue ErrorValue(const std::string &message) {
@@ -472,7 +526,7 @@ namespace Framework::Scripting {
             v8::Local<v8::Value> value = info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>();
             TransferredValue copied;
             if (fulfilled && owned->keepValue) {
-                auto result = ValueTransfer::Copy(isolate, isolate->GetCurrentContext(), value, state.Hooks(owned->owner));
+                auto result = ValueTransfer::Copy(isolate, isolate->GetCurrentContext(), value, *state.Hooks(owned->owner));
                 if (result) {
                     copied = std::move(result).GetValue();
                 }
@@ -482,14 +536,14 @@ namespace Framework::Scripting {
                 }
             }
             else if (!fulfilled) {
-                copied = state.CopyOut(isolate, isolate->GetCurrentContext(), value, state.Hooks(owned->owner), "The promise was rejected");
+                copied = state.CopyOut(isolate, isolate->GetCurrentContext(), value, *state.Hooks(owned->owner), "The promise was rejected");
             }
 
             Entered entered(caller->second);
             v8::Local<v8::Promise::Resolver> resolver = owned->resolver.Get(caller->second.isolate);
             v8::TryCatch tryCatch(caller->second.isolate);
             v8::Local<v8::Value> rebuilt;
-            if (!ValueTransfer::Rebuild(caller->second.isolate, entered.context, copied, state.Hooks(owned->caller)).ToLocal(&rebuilt)) {
+            if (!ValueTransfer::Rebuild(caller->second.isolate, entered.context, copied, *state.Hooks(owned->caller)).ToLocal(&rebuilt)) {
                 rebuilt   = tryCatch.Exception();
                 fulfilled = false;
             }
@@ -524,6 +578,7 @@ namespace Framework::Scripting {
         entry.isolate          = isolate;
         entry.context.Reset(isolate, context);
         entry.name = std::move(name);
+        entry.hooks = std::make_shared<const TransferFunctions>(_state->MakeHooks(id));
         _state->runtimeByIsolate[isolate] = id;
         return id;
     }
@@ -580,7 +635,7 @@ namespace Framework::Scripting {
     }
 
     TransferFunctions FunctionReferences::For(uint32_t runtime) const {
-        return _state->Hooks(runtime);
+        return *_state->Hooks(runtime);
     }
 
     uint32_t FunctionReferences::FindRuntime(v8::Isolate *isolate) const {
@@ -644,7 +699,7 @@ namespace Framework::Scripting {
                 }
             }
             else {
-                auto result = ValueTransfer::Copy(owner, entered.context, value, state.Hooks(ownerId));
+                auto result = ValueTransfer::Copy(owner, entered.context, value, *state.Hooks(ownerId));
                 if (result) {
                     copied = std::move(result).GetValue();
                 }
@@ -657,7 +712,7 @@ namespace Framework::Scripting {
             State::Throw(caller, error);
             return {};
         }
-        return ValueTransfer::Rebuild(caller, context, copied, state.Hooks(callerId));
+        return ValueTransfer::Rebuild(caller, context, copied, *state.Hooks(callerId));
     }
 
     void FunctionReferences::ReleaseCollected() {
