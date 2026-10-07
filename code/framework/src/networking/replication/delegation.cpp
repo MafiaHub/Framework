@@ -33,6 +33,21 @@ namespace Framework::Networking::Replication {
         _capacityOverrides.erase(guid);
     }
 
+    void DelegationManager::Suspend(MafiaNet::PeerGuid guid) {
+        if (guid == MafiaNet::UNASSIGNED_PEER_GUID) {
+            return;
+        }
+        _suspended.insert(guid);
+    }
+
+    void DelegationManager::Resume(MafiaNet::PeerGuid guid) {
+        _suspended.erase(guid);
+    }
+
+    bool DelegationManager::IsSuspended(MafiaNet::PeerGuid guid) const {
+        return _suspended.contains(guid);
+    }
+
     void DelegationManager::Pin(NetworkEntity *entity, MafiaNet::PeerGuid guid) {
         if (!entity || !_isServer) {
             return;
@@ -75,6 +90,7 @@ namespace Framework::Networking::Replication {
         if (!_isServer || !_manager) {
             return;
         }
+        _suspended.erase(guid);
         // The dropped peer is still the owner of everything it was simulating, and an owner that is
         // gone can never report again. Hand those entities back to the server here, so they are
         // dormant rather than owned-by-nobody until the next pass, and drop any pin naming that
@@ -203,7 +219,7 @@ namespace Framework::Networking::Replication {
     void DelegationManager::CollectCandidates() {
         _candidates.clear();
         _manager->ForEachViewer([&](MafiaNet::PeerGuid guid, NetworkEntity *viewer) {
-            if (guid == MafiaNet::UNASSIGNED_PEER_GUID || viewer == nullptr) {
+            if (guid == MafiaNet::UNASSIGNED_PEER_GUID || viewer == nullptr || _suspended.contains(guid)) {
                 return;
             }
             DelegationCandidate candidate;

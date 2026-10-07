@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace Framework::Networking::Replication {
@@ -157,6 +158,13 @@ namespace Framework::Networking::Replication {
         void SetClientCapacity(MafiaNet::PeerGuid guid, uint32_t maxWeight);
         void ClearClientCapacity(MafiaNet::PeerGuid guid);
 
+        // Take a client out of the election while it cannot simulate anything -- dead and reloading,
+        // say. It keeps nothing: what it carries goes to the next nearest client on the next pass,
+        // or dormant. Cleared by Resume or when the client disconnects.
+        void Suspend(MafiaNet::PeerGuid guid);
+        void Resume(MafiaNet::PeerGuid guid);
+        bool IsSuspended(MafiaNet::PeerGuid guid) const;
+
         // Force this entity onto one client and keep it there, whatever the ranges say. What MTA's
         // persistent syncer is for: a scripted scene whose actor must be run by the player it is
         // being played to. Passing UNASSIGNED pins it to the server, i.e. keeps it dormant.
@@ -248,6 +256,7 @@ namespace Framework::Networking::Replication {
 
         std::vector<DelegationCandidate> _candidates;
         std::unordered_map<MafiaNet::PeerGuid, uint32_t> _capacityOverrides;
+        std::unordered_set<MafiaNet::PeerGuid> _suspended;
         std::unordered_map<uint64_t, Entry> _entries;
         // Rebuilt per pass; the entities a pass has to look at.
         std::vector<NetworkEntity *> _scan;
