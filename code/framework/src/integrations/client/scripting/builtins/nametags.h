@@ -29,6 +29,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static void IsVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void SetHealthVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void IsHealthVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void SetSelfVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void IsSelfVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void SetLabelCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void ClearLabelCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void ClearLabelsCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
