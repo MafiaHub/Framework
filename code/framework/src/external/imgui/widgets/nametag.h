@@ -24,9 +24,11 @@ namespace Framework::External::ImGUI::Widgets {
     };
 
     // The viewer's own switches over every tag they see, driven by the client Nametags builtin.
+    // showSelf is read by the mod's draw pass, which owns the choice of which avatars get a tag.
     struct NameTagView {
         inline static bool showTags   = true;
         inline static bool showHealth = true;
+        inline static bool showSelf   = false;
     };
 
     // Distance behaviour of a world-anchored tag.

@@ -67,6 +67,20 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         args.GetReturnValue().Set(Framework::External::ImGUI::Widgets::NameTagView::showHealth);
     }
 
+    void Nametags::SetSelfVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+        if (args.Length() < 1) {
+            ThrowError(isolate, "Nametags.setSelfVisible: expected (visible)");
+            return;
+        }
+        Framework::External::ImGUI::Widgets::NameTagView::showSelf = args[0]->BooleanValue(isolate);
+    }
+
+    void Nametags::IsSelfVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        args.GetReturnValue().Set(Framework::External::ImGUI::Widgets::NameTagView::showSelf);
+    }
+
     void Nametags::SetLabelCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope hs(isolate);
@@ -112,18 +126,23 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         attach(nametagsObj, "isVisible", &Nametags::IsVisibleCallback);
         attach(nametagsObj, "setHealthVisible", &Nametags::SetHealthVisibleCallback);
         attach(nametagsObj, "isHealthVisible", &Nametags::IsHealthVisibleCallback);
+        attach(nametagsObj, "setSelfVisible", &Nametags::SetSelfVisibleCallback);
+        attach(nametagsObj, "isSelfVisible", &Nametags::IsSelfVisibleCallback);
         attach(nametagsObj, "setLabel", &Nametags::SetLabelCallback);
         attach(nametagsObj, "clearLabel", &Nametags::ClearLabelCallback);
         attach(nametagsObj, "clearLabels", &Nametags::ClearLabelsCallback);
         target->Set(context, v8pp::to_v8(isolate, "Nametags"), nametagsObj).Check();
 
-        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Nametags", "The local player's view of the nametags above other players: whether they draw at all, and whether they carry a health bar.");
+        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Nametags", "The local player's view of the nametags above players: whether they draw at all, whether they carry a health bar, and whether their own is shown.");
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setVisible",
             v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "True to draw nametags, false to hide every one of them.")}, "Shows or hides all nametags for this player only. A player hidden with Player.setNametagVisible stays hidden either way.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isVisible", v8pp::metadata::docs("boolean", {}, "Checks whether this player draws nametags.", "True unless they were hidden locally.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setHealthVisible",
             v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "True to draw the health bar under each name, false to hide it.")}, "Shows or hides the health bar on all nametags for this player only, leaving the names alone.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isHealthVisible", v8pp::metadata::docs("boolean", {}, "Checks whether this player draws health bars on nametags.", "True unless they were hidden locally.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setSelfVisible",
+            v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "True to draw this player's own nametag, false (default) to leave it off.")}, "Shows or hides this player's own nametag, drawn as others see it, with any label set on their own id.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isSelfVisible", v8pp::metadata::docs("boolean", {}, "Checks whether this player draws their own nametag.", "False unless it was turned on locally.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setLabel",
             v8pp::metadata::docs("void",
                 {v8pp::metadata::param("entityId", "number", false, "Network id of the entity to label (server-side `player.id`)."), v8pp::metadata::param("text", "string", false, "Label text; '\\n' splits lines. Empty clears the label."),
