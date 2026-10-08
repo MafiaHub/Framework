@@ -261,10 +261,35 @@ BOOL WINAPI GetModuleHandleExA_Hook(DWORD dwFlags, LPSTR lpModuleName, HMODULE *
 }
 
 namespace Framework::Launcher {
+    namespace {
+        // Empty when Windows will not name our own image; each caller says what it falls back to.
+        std::wstring LauncherExecutablePath() {
+            std::wstring path(32768, L'\0');
+            const DWORD length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+            if (length == 0 || length >= path.size()) {
+                return {};
+            }
+
+            path.resize(length);
+            return path;
+        }
+    } // namespace
+
     Project::Project(ProjectConfiguration &cfg): _config(cfg), _configuredPlatform(cfg.platform) {
         gConfig = &_config;
-        // Fetch the current working directory
-        GetCurrentDirectoryW(32768, gProjectDllPath);
+
+        // The project root is the launcher's own directory, not the process working directory: the
+        // client DLL, the logs, the cache and the DLL search paths all hang off it, and a
+        // "<scheme>://" launch arrives with whatever directory the shell happened to be in. Keep the
+        // working directory on it too, for the code further down that still reads it.
+        const std::wstring executablePath = LauncherExecutablePath();
+        if (!executablePath.empty()) {
+            wcsncpy_s(gProjectDllPath, std::filesystem::path(executablePath).parent_path().c_str(), _TRUNCATE);
+            SetCurrentDirectoryW(gProjectDllPath);
+        }
+        else {
+            GetCurrentDirectoryW(32768, gProjectDllPath);
+        }
 
         Logging::GetInstance()->SetLogName(_config.name);
 
