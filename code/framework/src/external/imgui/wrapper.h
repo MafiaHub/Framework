@@ -65,7 +65,7 @@ namespace Framework::External::ImGUI {
         HWND windowHandle            = nullptr;
     };
 
-    class Wrapper final : public Framework::Lifecycle {
+    class Wrapper final: public Framework::Lifecycle {
       public:
         using RenderProc = fu2::function<void() const>;
 
@@ -89,6 +89,7 @@ namespace Framework::External::ImGUI {
 
         int _dx12RtvFormat = 0;
         Graphics::D3D12UICompositor _dx12Compositor;
+        std::atomic<float> _hdrUIBrightnessScale {1.0f};
         void InitDX12Backend();
         void SyncDX12RtvFormat();
 
@@ -102,6 +103,12 @@ namespace Framework::External::ImGUI {
 
         void Update() override;
         Utils::Result<void, Framework::Error> Render();
+
+        // Scale linear RGB for the DX12 scRGB overlay (ImGui and CEF), leaving
+        // alpha and SDR rendering unchanged. 1.0 maps UI white to 80 nits;
+        // use desiredWhiteNits / 80.0f. May be updated from another thread.
+        // Negative and non-finite values are ignored; zero produces black UI.
+        void SetHDRUIBrightnessScale(float scale);
 
         // Release/recreate backend device objects around a graphics device reset
         // (e.g. D3D9 lost device on alt-tab). Must bracket the host's device Reset.
