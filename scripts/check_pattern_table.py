@@ -55,7 +55,7 @@ def main() -> int:
                         args.msstore_family, args.msstore_relative) if args.regenerate else []
     if reason is None and exes:
         known = {(b.image_base, b.size_of_image, b.file_size, b.file_crc) for b in read_blocks(args.table)}
-        for exe in exes:
+        for exe, _ in exes:
             if image_identity(exe) not in known:
                 reason = "%s has no block for %s." % (args.table, exe)
                 break
@@ -64,7 +64,7 @@ def main() -> int:
         return 0
 
     if exes:
-        print("%s Regenerating from %s" % (reason, ", ".join(str(exe) for exe in exes)))
+        print("%s Regenerating from %s" % (reason, ", ".join(str(exe) for exe, _ in exes)))
         return build_table(exes, args.patterns, args.table, args.style, args.jobs, require_unique=args.require_unique)
 
     print(reason, file=sys.stderr)

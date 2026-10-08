@@ -69,7 +69,8 @@ MASK64 = (1 << 64) - 1
 # check_pattern_table.py reads -- and reserved space, then imageCount blocks. Each block is
 # the identity the client matches the running image against (preferred base, SizeOfImage,
 # file size), its entry count, a CRC32 of its entries, a CRC32 of the source executable so a
-# rebuild can tell the block was built from the very same file, and the entries.
+# rebuild can tell the block was built from the very same file, a CRC32 of the storefront it
+# came from (see source_tag), and the entries. The client reads only the identity and entries.
 HEADER_FMT = "<8sIIQ24s"
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
 BLOCK_FMT = "<QIIIIII"
@@ -81,7 +82,15 @@ assert HEADER_SIZE == 48 and BLOCK_SIZE == 32 and ENTRY_SIZE == 16
 
 # One image's addresses: identity is (image_base, size_of_image, file_size), entries a list
 # of (hash, rva) pairs.
-Block = namedtuple("Block", "image_base size_of_image file_size file_crc entries")
+Block = namedtuple("Block", "image_base size_of_image file_size file_crc source entries")
+
+
+def source_tag(source: str) -> int:
+    """The storefront an executable came from ("steam:<app>", "msstore:<family>", or
+    "file:<name>" for one named directly), as stored in its block. A rebuild replaces a
+    storefront's block -- a patched build supersedes the one before it -- instead of
+    accumulating one per patch."""
+    return zlib.crc32(source.lower().encode("utf-8")) & 0xFFFFFFFF
 
 # One pattern, reduced to what a scan needs: the longest wildcard-free run to search for,
 # where that run sits inside the pattern, the concrete bytes outside it to verify, and
@@ -282,14 +291,14 @@ def read_blocks(path: Path):
     for _ in range(count):
         if off + BLOCK_SIZE > len(raw):
             return []
-        base, size, fsize, n, entries_crc, file_crc, _ = struct.unpack_from(BLOCK_FMT, raw, off)
+        base, size, fsize, n, entries_crc, file_crc, source = struct.unpack_from(BLOCK_FMT, raw, off)
         off += BLOCK_SIZE
         blob = raw[off:off + n * ENTRY_SIZE]
         off += n * ENTRY_SIZE
         if len(blob) != n * ENTRY_SIZE or zlib.crc32(blob) & 0xFFFFFFFF != entries_crc:
             return []
         entries = [struct.unpack_from(ENTRY_FMT, blob, i * ENTRY_SIZE)[:2] for i in range(n)]
-        blocks.append(Block(base, size, fsize, file_crc, entries))
+        blocks.append(Block(base, size, fsize, file_crc, source, entries))
     return blocks if off == len(raw) else []
 
 
@@ -378,23 +387,25 @@ def locate_msstore_game(family: str, relative: str):
 
 
 def resolve_exes(exes=(), exe_env=None, steam_app=None, steam_relative=None, msstore_family=None, msstore_relative=None):
-    """Every executable this machine has to build the table from: the explicit paths, the
-    environment, a Steam install and a Microsoft Store install, de-duplicated."""
-    found = [Path(exe) for exe in exes or () if exe]
-    if exe_env:
-        value = os.environ.get(exe_env)
-        if value and Path(value).is_file():
-            found.append(Path(value))
+    """Every executable this machine has to build the table from, as (path, storefront)
+    pairs: a Steam install, a Microsoft Store install, the environment and the explicit
+    paths, de-duplicated. A store install comes first so a path also named directly keeps
+    the store's tag."""
+    found = []
     if steam_app and steam_relative:
-        found.append(locate_steam_game(steam_app, steam_relative))
+        found.append((locate_steam_game(steam_app, steam_relative), "steam:%s" % steam_app))
     if msstore_family and msstore_relative:
-        found.append(locate_msstore_game(msstore_family, msstore_relative))
+        found.append((locate_msstore_game(msstore_family, msstore_relative), "msstore:%s" % msstore_family))
+    named = [Path(exe) for exe in exes or () if exe]
+    if exe_env and os.environ.get(exe_env):
+        named.append(Path(os.environ[exe_env]))
+    found.extend((exe, "file:%s" % exe.name) for exe in named)
 
     out, seen = [], set()
-    for exe in found:
+    for exe, source in found:
         if exe is not None and exe.is_file() and exe.resolve() not in seen:
             seen.add(exe.resolve())
-            out.append(exe)
+            out.append((exe, source))
     return out
 
 
@@ -402,7 +413,7 @@ def default_jobs():
     return max(1, min(os.cpu_count() or 1, 8))
 
 
-def build_block(exe: Path, literals, preps, known, jobs: int, require_unique: bool):
+def build_block(exe: Path, source: str, literals, preps, known, jobs: int, require_unique: bool):
     """One executable's block, or None when a pattern does not resolve in it."""
     image, image_base, size_of_image, file_size, file_crc = map_image(exe)
     print("%s: %d bytes mapped to 0x%X..0x%X" % (exe, file_size, image_base, image_base + size_of_image))
@@ -452,7 +463,7 @@ def build_block(exe: Path, literals, preps, known, jobs: int, require_unique: bo
     # Ascending rva within a hash: std::multimap preserves insertion order for equal keys,
     # and a scan yields matches in ascending address order, so this keeps get(0) identical.
     entries.sort()
-    return Block(image_base, size_of_image, file_size, file_crc, entries)
+    return Block(image_base, size_of_image, file_size, file_crc, source_tag(source), entries)
 
 
 def build_table(exes, patterns: Path, out: Path, style: str = "call", jobs: int = 0, force: bool = False, require_unique: bool = False) -> int:
@@ -474,8 +485,8 @@ def build_table(exes, patterns: Path, out: Path, style: str = "call", jobs: int 
     known = read_blocks(out)
 
     blocks, failed = [], 0
-    for exe in exes:
-        block = build_block(exe, literals, preps, [] if force else known, jobs, require_unique)
+    for exe, source in exes:
+        block = build_block(exe, source, literals, preps, [] if force else known, jobs, require_unique)
         if block is None:
             failed += 1
         else:
@@ -484,21 +495,25 @@ def build_table(exes, patterns: Path, out: Path, style: str = "call", jobs: int 
         print("refusing to write a table: the patterns do not resolve in %d executable(s)" % failed, file=sys.stderr)
         return 1
 
-    # A storefront's executable this machine does not have keeps its block from the existing
-    # table. Its patterns were not checked against the current set, so any it lacks are left
-    # to the client's scan.
-    built = {(b.image_base, b.size_of_image, b.file_size) for b in blocks}
+    # A storefront this machine has no executable for keeps its block from the existing table.
+    # Its patterns were not checked against the current set, so any it lacks are left to the
+    # client's scan. A storefront built here replaces its old block: a patched build supersedes
+    # the one before it. An untagged block cannot be told apart, so it is dropped.
+    built = {b.source for b in blocks}
     for block in known:
-        if (block.image_base, block.size_of_image, block.file_size) not in built:
-            print("kept the block for an executable not on this machine (file size %d): its patterns were not re-checked"
-                  % block.file_size, file=sys.stderr)
+        identity = "base 0x%X size 0x%X file %d" % (block.image_base, block.size_of_image, block.file_size)
+        if block.source and block.source not in built:
+            print("kept the block for a storefront not on this machine (%s): its patterns were not re-checked"
+                  % identity, file=sys.stderr)
             blocks.append(block)
+        elif not any((b.image_base, b.size_of_image, b.file_size) == (block.image_base, block.size_of_image, block.file_size) for b in blocks):
+            print("dropped the superseded block (%s)" % identity)
 
     payload = b""
     for block in blocks:
         blob = b"".join(struct.pack(ENTRY_FMT, h, rva, 0) for h, rva in block.entries)
         payload += struct.pack(BLOCK_FMT, block.image_base, block.size_of_image, block.file_size,
-                               len(block.entries), zlib.crc32(blob) & 0xFFFFFFFF, block.file_crc, 0) + blob
+                               len(block.entries), zlib.crc32(blob) & 0xFFFFFFFF, block.file_crc, block.source) + blob
     header = struct.pack(HEADER_FMT, MAGIC, FORMAT_VERSION, len(blocks), pattern_set_hash(literals), b"")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(header + payload)

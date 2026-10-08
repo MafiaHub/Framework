@@ -76,8 +76,8 @@ namespace hook {
             uint32_t fileSize;
             uint32_t entryCount;
             uint32_t entriesCrc;
-            uint32_t sourceCrc; // the generator's, to reuse a block built from the same file
-            uint32_t reserved;
+            uint32_t sourceCrc;  // the generator's, to reuse a block built from the same file
+            uint32_t storefront; // the generator's, so a patched build replaces its storefront's block
         };
 
         struct TableEntry {
