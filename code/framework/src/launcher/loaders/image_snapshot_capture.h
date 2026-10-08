@@ -21,7 +21,7 @@ namespace Framework::Launcher::Loaders {
      *
      * The only launcher code that enumerates, opens, reads and terminates another process, kept in
      * a unit of its own: a launcher links it only by naming it in
-     * ProjectConfiguration::captureImageSnapshot, so every other launcher ships without those
+     * Platforms::Rockstar::Options::captureImage, so every other launcher ships without those
      * imports and the malware-like profile they add.
      */
     bool CaptureImageSnapshot(ImageSnapshot &snapshot, const std::wstring &gamePath, const std::wstring &executableName, const std::vector<uint8_t> &sourceImage);

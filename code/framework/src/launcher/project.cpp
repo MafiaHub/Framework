@@ -8,14 +8,10 @@
 
 #include "project.h"
 
-#include "external/epic/manifest.h"
-#include "external/rockstar/library.h"
 #include "gpu_preference.h"
 #include "loaders/exe_ldr.h"
 #include "loaders/process_identity.h"
 #include "logging/logger.h"
-#include "rgl_bypass.h"
-#include "sfd.h"
 #include "utils/hashing.h"
 #include "utils/string_utils.h"
 #include "utils/url_protocol.h"
@@ -275,7 +271,7 @@ namespace Framework::Launcher {
         }
     } // namespace
 
-    Project::Project(ProjectConfiguration &cfg): _config(cfg), _configuredPlatform(cfg.platform) {
+    Project::Project(ProjectConfiguration &cfg): _config(cfg) {
         gConfig = &_config;
 
         // The project root is the launcher's own directory, not the process working directory: the
@@ -291,13 +287,14 @@ namespace Framework::Launcher {
             GetCurrentDirectoryW(32768, gProjectDllPath);
         }
 
+        _projectPath = gProjectDllPath;
+
         Logging::GetInstance()->SetLogName(_config.name);
 
         auto projectPath = Utils::StringUtils::WideToNormal(gProjectDllPath);
         std::replace(projectPath.begin(), projectPath.end(), '/', '\\');
         Logging::GetInstance()->SetLogFolder(projectPath + "/logs");
 
-        _steamWrapper = std::make_unique<External::Steam::Wrapper>();
         _minidump     = std::make_unique<Utils::MiniDump>();
         _fileConfig   = std::make_unique<Utils::Config>();
 
@@ -324,8 +321,10 @@ namespace Framework::Launcher {
         }
 
         // Run platform-dependent platform checks and init steps
-        if (!RunPlatformChecks()) {
-            return false;
+        switch (RunPlatformChecks()) {
+        case PlatformCheckStatus::OK: break;
+        case PlatformCheckStatus::HANDED_OFF: return true;
+        default: return false;
         }
 
         // Load the destination DLL
@@ -377,20 +376,9 @@ namespace Framework::Launcher {
             return false;
         }
 
-        // Load the steam runtime only if required
-        if (_config.platform == ProjectPlatform::STEAM) {
-            HMODULE steamDll {};
-
-#ifdef _M_IX86
-            steamDll = LoadLibraryW(L"fw_steam_api.dll");
-#else
-            steamDll = LoadLibraryW(L"fw_steam_api64.dll");
-#endif
-
-            if (!steamDll) {
-                MessageBox(nullptr, "Failed to inject the steam runtime DLL in the running process", _config.name.c_str(), MB_ICONERROR);
-                return false;
-            }
+        // Load the platform's runtime, such as Steam's
+        if (!_platform->PrepareLaunch(*this)) {
+            return false;
         }
 
         // Use real scaling
@@ -449,206 +437,75 @@ namespace Framework::Launcher {
         }
     }
 
-    bool Project::RunPlatformChecks() {
-        if (_config.platform == ProjectPlatform::CLASSIC) {
-            return RunInnerClassicChecks();
-        }
+    PlatformCheckStatus Project::RunPlatformChecks() {
+        const auto logger = Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER);
 
-        const bool canFallBack = _config.allowManualGamePathFallback;
-
-        // a remembered manual pick wins over the store
-        if (canFallBack && _manualGamePath && GameExecutableExistsIn(_config.classicGamePath)) {
-            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Using the manually selected game path from the launcher config");
-            _config.platform = ProjectPlatform::CLASSIC;
-            return RunInnerClassicChecks();
-        }
-
-        const auto status = [&]() -> PlatformCheckStatus {
-            switch (_config.platform) {
-            case ProjectPlatform::STEAM: return RunInnerSteamChecks(!canFallBack);
-            case ProjectPlatform::EPIC: return RunInnerEpicChecks(!canFallBack);
-            case ProjectPlatform::ROCKSTAR: return RunInnerRockstarChecks(!canFallBack);
-            default: return PlatformCheckStatus::UNAVAILABLE;
+        auto resolve = [&](const std::shared_ptr<Platform> &platform, bool reportErrors) {
+            PlatformResolution resolution;
+            const auto status = platform->Resolve(*this, resolution, reportErrors);
+            if (status != PlatformCheckStatus::OK) {
+                return status;
             }
-        }();
-        if (status == PlatformCheckStatus::OK) {
-            _manualGamePath = false;
-            return true;
+
+            _platform = platform;
+
+            // a copy the player picked may still be one of the stores' own
+            if (resolution.manual || platform->IsManualSelection()) {
+                for (const auto &other : _config.platforms) {
+                    if (other != platform && other->AdoptManualCopy(*this, resolution)) {
+                        logger->info("The selected game folder is started as the {} copy", other->GetName());
+                        _platform = other;
+                        break;
+                    }
+                }
+            }
+
+            _gamePath               = resolution.gameRoot;
+            _manualGamePath         = resolution.manual || (_manualGamePath && platform->IsManualSelection());
+            _config.classicGamePath = _gamePath; // stashed so it lands in the persisted JSON config
+            return status;
+        };
+
+        // a remembered manual pick wins over every store
+        if (_manualGamePath && GameExecutableExistsIn(_config.classicGamePath)) {
+            for (const auto &platform : _config.platforms) {
+                if (platform->IsManualSelection()) {
+                    logger->info("Using the manually selected game path from the launcher config");
+                    return resolve(platform, true);
+                }
+            }
         }
 
-        if (status == PlatformCheckStatus::ABORT || !canFallBack) {
-            return false;
-        }
+        for (size_t i = 0; i < _config.platforms.size(); ++i) {
+            const auto &platform = _config.platforms[i];
+            const auto status    = resolve(platform, i + 1 == _config.platforms.size());
+            if (status != PlatformCheckStatus::UNAVAILABLE) {
+                return status;
+            }
 
-        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Store lookup did not resolve the game, falling back to the manual game path");
-        _config.platform         = ProjectPlatform::CLASSIC;
-        _config.promptForGameExe = true;
-        _config.preferSteam      = false;
-        return RunInnerClassicChecks();
+            logger->info("{} did not resolve the game", platform->GetName());
+        }
+        return PlatformCheckStatus::ABORT;
     }
 
-    PlatformCheckStatus Project::ReportStoreUnavailable(const char *store, const std::string &reason, bool reportErrors) const {
-        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->warn("{} lookup failed: {}", store, reason);
+    PlatformCheckStatus Project::ReportUnavailable(const char *platform, const std::string &reason, bool reportErrors) const {
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->warn("{} lookup failed: {}", platform, reason);
         if (reportErrors) {
-            MessageBox(nullptr, reason.c_str(), _config.name.c_str(), MB_ICONERROR);
+            ReportError(reason);
         }
         return PlatformCheckStatus::UNAVAILABLE;
     }
 
-    PlatformCheckStatus Project::RunInnerSteamChecks(bool reportErrors) {
-        // are we a steam child ?
-        const auto child_part    = L"-steamchild:";
-        const wchar_t *cmd_match = wcsstr(GetCommandLineW(), child_part);
-
-        if (cmd_match) {
-            const int master_pid = _wtoi(&cmd_match[wcslen(child_part)]);
-
-            // open a handle to the parent process with SYNCHRONIZE rights
-            const auto handle = OpenProcess(SYNCHRONIZE, FALSE, master_pid);
-
-            // if we opened the process...
-            if (handle != INVALID_HANDLE_VALUE) {
-                // ... wait for it to exit and close the handle afterwards
-                WaitForSingleObject(handle, INFINITE);
-
-                CloseHandle(handle);
-            }
-
-            return PlatformCheckStatus::ABORT;
-        }
-
-        const auto unavailable = [&](const std::string &reason) {
-            return ReportStoreUnavailable("Steam", reason, reportErrors);
-        };
-
-        // Make sure we have our required files
-        const std::vector<std::string> requiredFiles = {"fw_steam_api64.dll", "fw_steam_api.dll"};
-        if (!EnsureAtLeastOneFileExists(requiredFiles)) {
-            return unavailable("The Steam runtime bridge is missing from the launcher directory");
-        }
-
-        PrepareSteamAppIdentity();
-
-        // Initialize the steam wrapper
-        const auto initResult = _steamWrapper->Init();
-        if (!initResult) {
-            return unavailable(fmt::format("Failed to init the bridge with steam, are you sure the Steam Client is running? {}", initResult.GetError().message));
-        }
-
-        // Make sure steam has the game inside the library
-        if (!_steamWrapper->IsAppInstalled(_config.steamAppId)) {
-            _steamWrapper->Shutdown();
-            return unavailable("The destination game is not installed in your Steam library");
-        }
-
-        // Ask the game path from steam
-        const auto installDir = _steamWrapper->GetAppInstallDir(_config.steamAppId);
-        if (installDir.empty()) {
-            _steamWrapper->Shutdown();
-            return unavailable("Steam returned an empty install directory for the destination game");
-        }
-
-        auto installPath = Utils::StringUtils::NormalToWide(installDir);
-        std::replace(installPath.begin(), installPath.end(), '\\', '/');
-
-        if (!GameExecutableExistsIn(installPath)) {
-            _steamWrapper->Shutdown();
-            return unavailable(fmt::format("Steam points at {}, but the game executable is not there", Utils::StringUtils::WideToNormal(installPath)));
-        }
-
-        _gamePath = installPath;
-
-        // Set classic game path to the one found by Steam just for sake of having that information stored in the config
-        // file.
-        _config.classicGamePath = _gamePath;
-
-        // Hand the account id to the in-process client (ClientIdentity); the wrapper is gone by then.
-        const auto steamId = _steamWrapper->GetSteamID().ConvertToUint64();
-        if (steamId != 0) {
-            SetProcessEnvironmentVariable(L"MafiaHubSteamId", std::to_wstring(steamId));
-        }
-
-        // Now we have everything we want, just say goodbye
-        _steamWrapper->Shutdown();
-        return PlatformCheckStatus::OK;
+    void Project::ReportError(const std::string &message) const {
+        MessageBoxA(nullptr, message.c_str(), _config.name.c_str(), MB_ICONERROR);
     }
 
-    PlatformCheckStatus Project::RunInnerEpicChecks(bool reportErrors) {
-        const auto unavailable = [&](const std::string &reason) {
-            return ReportStoreUnavailable("Epic", reason, reportErrors);
-        };
-
-        // Locate the game via the Epic launcher's plaintext manifests - no SDK or running client
-        // needed, just Epic having installed it once. Matched by AppName, else by exe file name.
-        const auto exeName = Utils::StringUtils::WideToNormal(_config.executableName);
-        const auto appName = Utils::StringUtils::WideToNormal(_config.epicAppName);
-
-        const auto app = External::Epic::FindInstalledApp(exeName, appName);
-        if (!app.IsValid()) {
-            return unavailable("The destination game is not installed through the Epic Games Launcher");
-        }
-
-        auto installPath = Utils::StringUtils::NormalToWide(app.installLocation);
-        std::ranges::replace(installPath, L'\\', L'/');
-
-        if (!GameExecutableExistsIn(installPath)) {
-            return unavailable(fmt::format("Epic points at {}, but the game executable is not there", Utils::StringUtils::WideToNormal(installPath)));
-        }
-
-        _gamePath = installPath;
-
-        // Mirror the Steam path: the launch code appends executableName to this root, and we
-        // stash it in classicGamePath purely so it lands in the persisted JSON config.
-        _config.classicGamePath = _gamePath;
-
-        // Unlike Steam there's no runtime DLL to inject or app-id file to drop; any Epic launch
-        // args go through ProjectConfiguration::additionalLaunchArguments.
-        return PlatformCheckStatus::OK;
+    std::wstring Project::GetLauncherExecutablePath() const {
+        return LauncherExecutablePath();
     }
 
-    PlatformCheckStatus Project::RunInnerRockstarChecks(bool reportErrors) {
-        const auto unavailable = [&](const std::string &reason) {
-            return ReportStoreUnavailable("Rockstar Games Launcher", reason, reportErrors);
-        };
-
-        // Read from the registry, so the launcher itself does not need to be running
-        const auto exeName  = Utils::StringUtils::WideToNormal(_config.executableName);
-        const auto titleKey = Utils::StringUtils::WideToNormal(_config.rockstarTitleKey);
-
-        const auto title = External::Rockstar::FindInstalledTitle(exeName, titleKey);
-        if (!title.IsValid()) {
-            return unavailable("The destination game is not installed through the Rockstar Games Launcher");
-        }
-
-        auto installPath = Utils::StringUtils::NormalToWide(title.installFolder);
-        std::ranges::replace(installPath, L'\\', L'/');
-
-        if (!GameExecutableExistsIn(installPath)) {
-            return unavailable(fmt::format("The Rockstar Games Launcher points at {}, but the game executable is not there", title.installFolder));
-        }
-
-        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Rockstar Games Launcher title '{}' (build {}) resolved to {}", title.titleKey, title.version, title.installFolder);
-
-        _gamePath = installPath;
-
-        // As with Steam and Epic, stashed here purely so it lands in the persisted JSON config
-        _config.classicGamePath = _gamePath;
-        return PlatformCheckStatus::OK;
-    }
-
-    bool Project::EnsureImageSnapshot(Loaders::ImageSnapshot &snapshot, const std::vector<uint8_t> &sourceImage) {
-        const auto logger = Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER);
-        if (snapshot.IsAvailable()) {
-            return true;
-        }
-
-        if (!_config.captureImageSnapshot) {
-            logger->error("No cached image snapshot for this build of the game, and this launcher sets no captureImageSnapshot to take one");
-            return false;
-        }
-
-        logger->info("No cached image snapshot for this build of the game, running it once so its decrypted code can be captured");
-        return _config.captureImageSnapshot(snapshot, _gamePath, std::filesystem::path(_config.executableName).filename().wstring(), sourceImage);
+    void Project::SetProcessVariable(const wchar_t *name, const std::wstring &value) const {
+        SetProcessEnvironmentVariable(name, value);
     }
 
     std::vector<std::wstring> Project::GetAlternativeWorkDirCandidates() const {
@@ -674,14 +531,17 @@ namespace Framework::Launcher {
             return gameRoot;
         }
 
-        // the first layout that holds the executable, else the primary one so errors name it
+        // the first layout that holds the executable, then the root itself (a store that ships the
+        // executable at the top), else the primary one so errors name it
+        std::error_code ec;
         for (const auto &candidate : candidates) {
             const auto workDir = std::filesystem::path(gameRoot) / candidate;
-
-            std::error_code ec;
             if (std::filesystem::is_regular_file(workDir / _config.executableName, ec)) {
                 return workDir.wstring();
             }
+        }
+        if (std::filesystem::is_regular_file(std::filesystem::path(gameRoot) / _config.executableName, ec)) {
+            return gameRoot;
         }
         return (std::filesystem::path(gameRoot) / candidates.front()).wstring();
     }
@@ -693,130 +553,6 @@ namespace Framework::Launcher {
 
         std::error_code ec;
         return std::filesystem::is_regular_file(std::filesystem::path(GetGameWorkDir(gameRoot)) / _config.executableName, ec);
-    }
-
-    bool Project::ResolveGamePathFromPrompt() {
-        const auto startPath = Utils::StringUtils::WideToNormal(gProjectDllPath);
-
-        sfd_Options sfd = {};
-        sfd.path        = startPath.c_str();
-        sfd.extension   = _config.promptExtension.c_str();
-        sfd.filter_name = _config.promptFilterName.c_str();
-        sfd.filter      = _config.promptFilter.c_str();
-        sfd.title       = _config.promptTitle.c_str();
-
-        const char *picked = sfd_open_dialog(&sfd);
-
-        // the dialog leaves the working directory wherever the player browsed to
-        SetCurrentDirectoryW(gProjectDllPath);
-
-        if (!picked) {
-            return false;
-        }
-
-        const std::filesystem::path exePath(Utils::StringUtils::NormalToWide(picked));
-
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(exePath, ec)) {
-            MessageBoxA(nullptr, ("Cannot find a game executable by given path:\n" + std::string(picked) + "\n\n Please check your path and try again!").c_str(), _config.name.c_str(), MB_ICONERROR);
-            return false;
-        }
-
-        const auto expectedName = Utils::StringUtils::WideToNormal(_config.executableName);
-        if (_wcsicmp(exePath.filename().c_str(), _config.executableName.c_str()) != 0) {
-            MessageBoxA(nullptr, ("Please select " + expectedName + ", not " + Utils::StringUtils::WideToNormal(exePath.filename().wstring()) + ".").c_str(), _config.name.c_str(), MB_ICONERROR);
-            return false;
-        }
-
-        // stores hand back the game root, so strip the work dir off the picked executable's folder
-        auto gameRoot = exePath.parent_path();
-        for (const auto &candidate : GetAlternativeWorkDirCandidates()) {
-            std::vector<std::wstring> parts;
-            for (const auto &part : std::filesystem::path(candidate)) {
-                if (!part.empty()) {
-                    parts.push_back(part.wstring());
-                }
-            }
-
-            auto stripped = gameRoot;
-            bool matched  = !parts.empty();
-            for (auto it = parts.rbegin(); matched && it != parts.rend(); ++it) {
-                if (_wcsicmp(stripped.filename().c_str(), it->c_str()) != 0) {
-                    matched = false;
-                    break;
-                }
-
-                stripped = stripped.parent_path();
-            }
-
-            if (matched) {
-                gameRoot = stripped;
-                break;
-            }
-        }
-
-        auto gamePath = gameRoot.wstring();
-        std::replace(gamePath.begin(), gamePath.end(), L'\\', L'/');
-
-        if (_config.promptSelectionFunctor) {
-            gamePath = _config.promptSelectionFunctor(gamePath);
-        }
-
-        if (!GameExecutableExistsIn(gamePath)) {
-            MessageBoxA(nullptr, ("Cannot find " + expectedName + " inside the selected game directory:\n" + Utils::StringUtils::WideToNormal(gamePath)).c_str(), _config.name.c_str(), MB_ICONERROR);
-            return false;
-        }
-
-        _config.classicGamePath = gamePath;
-        _manualGamePath         = true;
-        return true;
-    }
-
-    void Project::PrepareSteamAppIdentity() const {
-        cppfs::FileHandle appIdFile = cppfs::fs::open("steam_appid.txt");
-        appIdFile.writeFile(std::to_string(_config.steamAppId) + "\n");
-        SetProcessEnvironmentVariable(L"SteamAppId", std::to_wstring(_config.steamAppId));
-    }
-
-    bool Project::RunInnerClassicChecks() {
-        if (_configuredPlatform == ProjectPlatform::STEAM) {
-            PrepareSteamAppIdentity();
-        }
-
-        if (GameExecutableExistsIn(_config.classicGamePath)) {
-            _gamePath = _config.classicGamePath;
-            return true;
-        }
-
-        if (!_config.promptForGameExe) {
-            MessageBoxA(nullptr, "Please specify game path", _config.name.c_str(), MB_ICONERROR);
-            return false;
-        }
-
-        if (!ResolveGamePathFromPrompt()) {
-            return false;
-        }
-
-        if (_config.preferSteam) {
-#ifdef _M_IX86
-            const auto steamDllName = L"steam_api.dll";
-#else
-            const auto steamDllName = L"steam_api64.dll";
-#endif
-            std::error_code ec;
-            if (std::filesystem::is_regular_file(std::filesystem::path(GetGameWorkDir(_config.classicGamePath)) / steamDllName, ec)) {
-                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Steam dll found in the game directory, switching to steam platform");
-                _config.platform = ProjectPlatform::STEAM;
-                if (RunInnerSteamChecks(false) == PlatformCheckStatus::OK) {
-                    return true;
-                }
-
-                _config.platform = ProjectPlatform::CLASSIC;
-            }
-        }
-
-        _gamePath = _config.classicGamePath;
-        return true;
     }
 
     void Project::RegisterUrlProtocolScheme() const {
@@ -1041,14 +777,11 @@ namespace Framework::Launcher {
             return false;
         }
 
-        // A wrapped title cannot be mapped from the file alone; its code comes from the cache
-        Loaders::ImageSnapshot snapshot(std::filesystem::path(gProjectDllPath) / "cache" / fmt::format("{}_image_snapshot.bin", _config.name), Utils::Hashing::CalculateCRC32(reinterpret_cast<const char *>(data), fileSize));
-
-        if (_config.useRockstarImageSnapshot && !EnsureImageSnapshot(snapshot, std::vector<uint8_t>(data, data + fileSize))) {
+        // A wrapped title cannot be mapped from the file alone; its platform supplies the rest
+        if (!_platform->PrepareImage(*this, _gamePath, std::span<const uint8_t>(data, fileSize))) {
             UnmapViewOfFile(data);
             CloseHandle(hMapping);
             CloseHandle(hFile);
-            MessageBoxA(nullptr, "The game's decrypted code could not be prepared.\n\nMake sure the Rockstar Games Launcher is installed and signed in, then try again.", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
@@ -1125,9 +858,7 @@ namespace Framework::Launcher {
         });
 
         loader.SetSectionsMappedCallback([&](HMODULE module) {
-            if (_config.useRockstarImageSnapshot) {
-                snapshot.Apply(module);
-            }
+            _platform->OnSectionsMapped(module);
         });
 
         loader.SetTLSInitializer([&](void **base, uint32_t *index) {
@@ -1154,18 +885,8 @@ namespace Framework::Launcher {
             // Acquire the entry point reference
             entry_point = static_cast<void (*)()>(loader.GetEntryPoint());
 
-            // With the code in place the stub has nothing left to do but spin, so enter past it
-            if (_config.useRockstarImageSnapshot) {
-                const auto stub = RGL::ResolveEntryStub(reinterpret_cast<uintptr_t>(base), reinterpret_cast<uintptr_t>(entry_point));
-                switch (stub.status) {
-                case RGL::EntryStubStatus::RESOLVED:
-                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Skipping the Rockstar Games Launcher entry stub at {:#x}, entering the game at {:#x}", reinterpret_cast<uintptr_t>(entry_point), stub.entryPoint);
-                    entry_point = reinterpret_cast<void (*)()>(stub.entryPoint);
-                    break;
-                case RGL::EntryStubStatus::NOT_PRESENT: Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("The game executable carries no Rockstar Games Launcher entry stub, entering it at {:#x}", reinterpret_cast<uintptr_t>(entry_point)); break;
-                case RGL::EntryStubStatus::UNSUPPORTED: throw std::runtime_error("The Rockstar Games Launcher entry stub could not be decoded, this game build is not supported yet");
-                }
-            }
+            // A wrapped title may not start at its own entry point
+            entry_point = reinterpret_cast<void (*)()>(_platform->ResolveEntryPoint(reinterpret_cast<uintptr_t>(base), reinterpret_cast<uintptr_t>(entry_point)));
 
             hook::set_base(reinterpret_cast<uintptr_t>(base));
 
@@ -1282,7 +1003,6 @@ namespace Framework::Launcher {
             Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loading launcher settings from JSON config file...");
             _config.classicGamePath    = _fileConfig->GetDefault<std::wstring>("game_path", _config.classicGamePath);
             _manualGamePath            = _fileConfig->GetDefault<bool>("game_path_manual", _manualGamePath);
-            _config.steamAppId         = _fileConfig->GetDefault<AppId_t>("steam_app_id", _config.steamAppId);
             _config.executableName     = _fileConfig->GetDefault<std::wstring>("game_executable_name", _config.executableName);
             _config.destinationDllName = _fileConfig->GetDefault<std::wstring>("mod_dll_name", _config.destinationDllName);
 
@@ -1300,7 +1020,6 @@ namespace Framework::Launcher {
         // Retrieve fields from ProjectConfiguration and store data into a persistent config file
         _fileConfig->Set<std::wstring>("game_path", _config.classicGamePath);
         _fileConfig->Set<bool>("game_path_manual", _manualGamePath);
-        _fileConfig->Set<AppId_t>("steam_app_id", _config.steamAppId);
         _fileConfig->Set<std::wstring>("game_executable_name", _config.executableName);
         _fileConfig->Set<std::wstring>("mod_dll_name", _config.destinationDllName);
 

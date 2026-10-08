@@ -189,6 +189,7 @@ if(WIN32)
         src/utils/hashing.cpp
         src/launcher/gpu_preference.cpp
         src/launcher/project.cpp
+        src/launcher/platforms/platforms.cpp
         src/launcher/rgl_bypass.cpp
         src/utils/minidump.cpp
         src/launcher/loaders/exe_ldr.cpp
@@ -197,6 +198,7 @@ if(WIN32)
         src/launcher/loaders/image_snapshot_capture.cpp
         src/external/steam/wrapper.cpp
         src/external/epic/manifest.cpp
+        src/external/microsoft_store/package.cpp
         src/external/rockstar/library.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
