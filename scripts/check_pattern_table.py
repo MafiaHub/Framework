@@ -9,6 +9,10 @@ With --regenerate, and a game executable it can find, a stale table is simply re
 which reuses every entry the new pattern set shares with the old one, so the usual "I
 added a pattern" rebuild costs one scan. Without the game, the failure is the old one: a
 clear message naming the command to run on a machine that has it.
+
+A table also goes stale when this machine has a storefront's executable the table holds no
+block for -- a store patched its build, or a storefront was added -- and is rebuilt the
+same way.
 """
 
 import argparse
@@ -17,8 +21,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_pattern_table import (MAGIC, add_exe_arguments, build_table, pattern_set_hash,
-                                 read_literals, resolve_exe)
+from build_pattern_table import (MAGIC, add_exe_arguments, build_table, image_identity, pattern_set_hash,
+                                 read_blocks, read_literals, resolve_exes)
 
 
 def main() -> int:
@@ -47,13 +51,21 @@ def main() -> int:
         if struct.unpack_from("<Q", raw, 16)[0] != current:
             reason = "%s is stale: it was built from a different set of patterns." % args.table
 
+    exes = resolve_exes(args.exe, args.exe_env, args.steam_app, args.steam_relative,
+                        args.msstore_family, args.msstore_relative) if args.regenerate else []
+    if reason is None and exes:
+        known = {(b.image_base, b.size_of_image, b.file_size, b.file_crc) for b in read_blocks(args.table)}
+        for exe in exes:
+            if image_identity(exe) not in known:
+                reason = "%s has no block for %s." % (args.table, exe)
+                break
+
     if reason is None:
         return 0
 
-    exe = resolve_exe(args.exe, args.exe_env, args.steam_app, args.steam_relative) if args.regenerate else None
-    if exe is not None and exe.is_file():
-        print("%s Regenerating from %s" % (reason, exe))
-        return build_table(exe, args.patterns, args.table, args.style, args.jobs)
+    if exes:
+        print("%s Regenerating from %s" % (reason, ", ".join(str(exe) for exe in exes)))
+        return build_table(exes, args.patterns, args.table, args.style, args.jobs, require_unique=args.require_unique)
 
     print(reason, file=sys.stderr)
     print("Re-run on a machine with the game: python scripts/build_pattern_table.py <game.exe> %s -o %s --style %s"

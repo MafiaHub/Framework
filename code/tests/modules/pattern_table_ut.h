@@ -58,11 +58,32 @@ namespace FwPatternTableUT {
         uint32_t rva;
         uint32_t reserved;
     };
+
+    // v3: one block of entries per game image, so a table serves every storefront
+    struct HeaderV3 {
+        char magic[8];
+        uint32_t version;
+        uint32_t imageCount;
+        uint64_t patternSetHash;
+        uint8_t reserved[24];
+    };
+
+    struct ImageBlock {
+        uint64_t imageBase;
+        uint32_t sizeOfImage;
+        uint32_t fileSize;
+        uint32_t entryCount;
+        uint32_t entriesCrc;
+        uint32_t sourceCrc;
+        uint32_t reserved;
+    };
 #pragma pack(pop)
 
     static_assert(sizeof(Header) == 48, "v2 header must stay 48 bytes");
     static_assert(sizeof(HeaderV1) == 48, "v1 header must stay 48 bytes");
     static_assert(sizeof(Entry) == 16, "entry must stay 16 bytes");
+    static_assert(sizeof(HeaderV3) == 48, "v3 header must stay 48 bytes");
+    static_assert(sizeof(ImageBlock) == 32, "image block must stay 32 bytes");
 
     inline uint32_t Crc32(const uint8_t *data, size_t size) {
         uint32_t crc = 0xFFFFFFFFu;
@@ -198,6 +219,57 @@ MODULE(pattern_table, {
 
     IT("rejects an unknown format version", {
         writeTable(99, selfBase, selfSize, oneEntry, 1, selfFileSize);
+        UEQUALS(hook::load_pattern_table(tempPath), size_t {0});
+    });
+
+    // A block per storefront: {imageBase, sizeOfImage, fileSize} and the entries it carries
+    struct BlockSpec {
+        uint64_t imageBase;
+        uint32_t sizeOfImage;
+        uint32_t fileSize;
+        std::vector<Entry> entries;
+        bool corrupt = false;
+    };
+    const auto writeV3 = [&](const std::vector<BlockSpec> &blocks) {
+        HeaderV3 header {};
+        memcpy(header.magic, "FWPATTBL", 8);
+        header.version    = 3;
+        header.imageCount = static_cast<uint32_t>(blocks.size());
+
+        std::ofstream out(tempPath, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char *>(&header), sizeof(header));
+        for (const auto &spec : blocks) {
+            ImageBlock block {};
+            block.imageBase   = spec.imageBase;
+            block.sizeOfImage = spec.sizeOfImage;
+            block.fileSize    = spec.fileSize;
+            block.entryCount  = static_cast<uint32_t>(spec.entries.size());
+            block.entriesCrc  = entryBytes(spec.entries) ^ (spec.corrupt ? 1u : 0u);
+            out.write(reinterpret_cast<const char *>(&block), sizeof(block));
+            out.write(reinterpret_cast<const char *>(spec.entries.data()), spec.entries.size() * sizeof(Entry));
+        }
+    };
+    const std::vector<Entry> twoEntries = {{0x1111111111111111ull, 0x1000, 0}, {0x2222222222222222ull, 0x1010, 0}};
+
+    IT("seeds from the v3 block built for the running image, wherever it sits", {
+        // the other storefront's build first: same base, its own layout and file size
+        writeV3({{selfBase, selfSize + 0x1000, selfFileSize + 4096, oneEntry}, {selfBase, selfSize, selfFileSize, twoEntries}});
+        UEQUALS(hook::load_pattern_table(tempPath), size_t {2});
+    });
+
+    IT("seeds nothing from a v3 table with no block for the running image", {
+        writeV3({{selfBase, selfSize + 0x1000, selfFileSize, oneEntry}, {selfBase, selfSize, selfFileSize + 1, twoEntries}});
+        UEQUALS(hook::load_pattern_table(tempPath), size_t {0});
+    });
+
+    IT("rejects the running image's v3 block when its entries were altered", {
+        writeV3({{selfBase, selfSize, selfFileSize, twoEntries, true}});
+        UEQUALS(hook::load_pattern_table(tempPath), size_t {0});
+    });
+
+    IT("rejects a v3 table cut short inside a block", {
+        writeV3({{selfBase, selfSize + 0x1000, selfFileSize, oneEntry}, {selfBase, selfSize, selfFileSize, twoEntries}});
+        std::filesystem::resize_file(tempPath, std::filesystem::file_size(tempPath) - sizeof(Entry));
         UEQUALS(hook::load_pattern_table(tempPath), size_t {0});
     });
 
