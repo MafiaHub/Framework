@@ -47,6 +47,15 @@ namespace Framework::Utils::StreamedAssets {
         /** Whether an entry is stored rather than deflated. */
         virtual bool PrefersStore(std::string_view normalized) const = 0;
 
+        /**
+         * Server side, when a lane is built: whether a well-formed entry is shipped at all. A project
+         * checks the content here (a file that would break clients); a refused entry is left out with
+         * `reason` logged while the rest of the lane ships. Defaults to shipping everything.
+         */
+        virtual bool ShouldShip(std::string_view /*lane*/, std::string_view /*resource*/, std::string_view /*normalized*/, const std::string & /*sourceFile*/, std::string & /*reason*/) const {
+            return true;
+        }
+
         bool HasLane(std::string_view lane) const;
     };
 
