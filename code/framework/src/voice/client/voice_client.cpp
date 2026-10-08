@@ -530,6 +530,13 @@ namespace Framework::Voice {
         _preRollNext  = 0;
     }
 
+    void VoiceClient::CutPushToTalk() {
+        _ptt.Cut();
+        if (_transmitMode == TransmitMode::PushToTalk) {
+            _gateWasOpen = false;
+        }
+    }
+
     void VoiceClient::SetPushToTalk(bool held) {
         _ptt.SetHeld(held, Utils::Time::GetTime());
     }
@@ -537,7 +544,14 @@ namespace Framework::Voice {
     void VoiceClient::SetInputSuppressed(bool suppressed) {
         _inputSuppressed = suppressed;
         if (suppressed) {
-            CutGates();
+            CutPushToTalk();
+        }
+    }
+
+    void VoiceClient::SetPushToTalkBlocked(bool blocked) {
+        _pttBlocked = blocked;
+        if (blocked) {
+            CutPushToTalk();
         }
     }
 
@@ -589,8 +603,8 @@ namespace Framework::Voice {
         }
 
         const int64_t nowMs = Utils::Time::GetTime();
-        const bool allowed  = _sessionOpen && !_inputSuppressed && !_transmitBlocked;
         const bool activity = _transmitMode == TransmitMode::VoiceActivity;
+        const bool allowed  = _sessionOpen && !_transmitBlocked && (activity || (!_inputSuppressed && !_pttBlocked));
 
         // Drained whether or not we transmit: left alone the ring fills, and the next
         // push-to-talk press would send all of it before anything the player just said.

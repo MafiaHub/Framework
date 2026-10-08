@@ -235,7 +235,7 @@ namespace Framework::Voice {
         void SetCaptureDevice(const std::string &name);
         std::string GetCaptureDevice() const;
 
-        // The raw key state. Gating conditions belong in SetTransmitBlocked: folded in here they
+        // The raw key state. Gating conditions belong in SetPushToTalkBlocked: folded in here they
         // would extend the release delay rather than cut it. Ignored under voice activation.
         void SetPushToTalk(bool held);
 
@@ -333,12 +333,16 @@ namespace Framework::Voice {
         void SetSpeakerRange(uint64_t speaker, float range, VoiceTier tier);
         void RemoveSpeaker(uint64_t speaker);
 
-        // Blocks transmission regardless of push-to-talk, cutting the release delay short. Set by
-        // the client Instance while its chat box has the caret or a web view holds focus.
+        // Ignores the push-to-talk key, cutting the release delay short. Set by the client Instance
+        // while its chat box has the caret or a web view holds focus. Voice activation is unaffected:
+        // a UI taking the keyboard is no reason to stop hearing the player.
         void SetInputSuppressed(bool suppressed);
 
-        // The mod-owned half of the same block: window focus, a game menu, locked controls. Ored
+        // The mod-owned half of the same key block: window focus, a game menu, locked controls. Ored
         // with the framework's, so neither side clears the other's.
+        void SetPushToTalkBlocked(bool blocked);
+
+        // Blocks transmission in every mode: no local player, or a gamemode muting the player.
         void SetTransmitBlocked(bool blocked);
 
         // --- output ---
@@ -429,6 +433,7 @@ namespace Framework::Voice {
         void PumpCapture();
         // Whichever gate the mode uses, closed at once.
         void CutGates();
+        void CutPushToTalk();
         void KeepPreRoll(const int16_t *frame);
         void SendPreRoll();
         void PumpSpeakers();
@@ -450,6 +455,7 @@ namespace Framework::Voice {
         bool _sessionOpen     = false;
         bool _enabled         = true;
         bool _inputSuppressed = false;
+        bool _pttBlocked      = false;
         bool _transmitBlocked = false;
         bool _transmitting    = false;
         bool _preferenceSent  = false;
