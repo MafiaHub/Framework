@@ -99,6 +99,10 @@ namespace Framework::Integrations::Server {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("'{}' {}: {}: {}; the lane is not shipped", resource, lane, relative, reason);
                 return false;
             }
+            if (!_policy->ShouldShip(lane, resource, normalized, entry.path().string(), reason)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("'{}' {}: {} is not shipped: {}", resource, lane, relative, reason);
+                continue;
+            }
             entries.push_back({normalized, entry.path().string()});
         }
         if (code || entries.empty()) {

@@ -240,7 +240,16 @@ namespace Framework::Scripting {
                 }
 
                 if (target) {
+                    // The live catalog is merged into once per runtime, and v8pp only de-duplicates the
+                    // base under its registered name, so the rename would otherwise stack one copy each.
                     std::replace(target->bases.begin(), target->bases.end(), registered, documented);
+                    std::vector<std::string> unique;
+                    for (const std::string &base : target->bases) {
+                        if (std::find(unique.begin(), unique.end(), base) == unique.end()) {
+                            unique.push_back(base);
+                        }
+                    }
+                    target->bases = std::move(unique);
                 }
             }
         }
