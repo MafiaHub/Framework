@@ -10,11 +10,12 @@
 
 #include "graphics/renderer.h"
 
+#include <cmath>
 #include <logging/logger.h>
 
 #include <imgui_impl_dx11.h>
 #ifdef FW_IMGUI_DX12
-    #include <imgui_impl_dx12.h>
+#include <imgui_impl_dx12.h>
 #endif
 #include <imgui_impl_dx9.h>
 #include <imgui_impl_win32.h>
@@ -272,6 +273,12 @@ namespace Framework::External::ImGUI {
         }
     }
 
+    void Wrapper::SetHDRUIBrightnessScale(float scale) {
+        if (std::isfinite(scale) && scale >= 0.0f) {
+            _hdrUIBrightnessScale.store(scale, std::memory_order_relaxed);
+        }
+    }
+
     Utils::Result<void, Framework::Error> Wrapper::Render() {
         std::scoped_lock _lock(_renderMtx);
 
@@ -320,7 +327,7 @@ namespace Framework::External::ImGUI {
             }
             ImGui_ImplDX12_RenderDrawData(drawData, commands);
             if (linearOutput) {
-                _dx12Compositor.Composite(commands, renderBackend->GetCurrentRenderTarget());
+                _dx12Compositor.Composite(commands, renderBackend->GetCurrentRenderTarget(), _hdrUIBrightnessScale.load(std::memory_order_relaxed));
                 auto *heap = renderBackend->GetSRVHeap();
                 commands->SetDescriptorHeaps(1, &heap);
             }

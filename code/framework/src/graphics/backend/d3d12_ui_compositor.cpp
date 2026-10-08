@@ -16,6 +16,9 @@ namespace Framework::Graphics {
     namespace {
         constexpr char kShader[] = R"(
             Texture2D overlay : register(t0);
+            cbuffer Settings : register(b0) {
+                float brightnessScale;
+            };
 
             float4 VS(uint vertex : SV_VertexID) : SV_Position {
                 float2 uv = float2((vertex << 1) & 2, vertex & 2);
@@ -35,7 +38,7 @@ namespace Framework::Graphics {
                 // and then premultiply again for ONE / INV_SRC_ALPHA blending.
                 if (color.a == 0)
                     return 0;
-                return float4(ToLinear(saturate(color.rgb / color.a)) * color.a, color.a);
+                return float4(ToLinear(saturate(color.rgb / color.a)) * color.a * brightnessScale, color.a);
             }
         )";
 
@@ -67,14 +70,17 @@ namespace Framework::Graphics {
             D3D12_DESCRIPTOR_RANGE range {};
             range.RangeType      = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             range.NumDescriptors = 1;
-            D3D12_ROOT_PARAMETER parameter {};
-            parameter.ParameterType                       = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-            parameter.ShaderVisibility                    = D3D12_SHADER_VISIBILITY_PIXEL;
-            parameter.DescriptorTable.NumDescriptorRanges = 1;
-            parameter.DescriptorTable.pDescriptorRanges   = &range;
+            D3D12_ROOT_PARAMETER parameters[2] {};
+            parameters[0].ParameterType                       = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            parameters[0].ShaderVisibility                    = D3D12_SHADER_VISIBILITY_PIXEL;
+            parameters[0].DescriptorTable.NumDescriptorRanges = 1;
+            parameters[0].DescriptorTable.pDescriptorRanges   = &range;
+            parameters[1].ParameterType                       = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+            parameters[1].ShaderVisibility                    = D3D12_SHADER_VISIBILITY_PIXEL;
+            parameters[1].Constants.Num32BitValues            = 1;
             D3D12_ROOT_SIGNATURE_DESC rootDesc {};
-            rootDesc.NumParameters = 1;
-            rootDesc.pParameters   = &parameter;
+            rootDesc.NumParameters = 2;
+            rootDesc.pParameters   = parameters;
 
             Microsoft::WRL::ComPtr<ID3DBlob> root, vs, ps;
             if (FAILED(result = D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &root, nullptr)) || FAILED(result = device->CreateRootSignature(0, root->GetBufferPointer(), root->GetBufferSize(), IID_PPV_ARGS(&replacement._rootSignature)))
@@ -163,7 +169,7 @@ namespace Framework::Graphics {
         commands->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
     }
 
-    void D3D12UICompositor::Composite(ID3D12GraphicsCommandList *commands, D3D12_CPU_DESCRIPTOR_HANDLE target) {
+    void D3D12UICompositor::Composite(ID3D12GraphicsCommandList *commands, D3D12_CPU_DESCRIPTOR_HANDLE target, float brightnessScale) {
         Transition(commands, _surface.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         commands->OMSetRenderTargets(1, &target, FALSE, nullptr);
         auto *heap = _srvHeap.Get();
@@ -171,6 +177,7 @@ namespace Framework::Graphics {
         commands->SetGraphicsRootSignature(_rootSignature.Get());
         commands->SetPipelineState(_pipeline.Get());
         commands->SetGraphicsRootDescriptorTable(0, _srvHeap->GetGPUDescriptorHandleForHeapStart());
+        commands->SetGraphicsRoot32BitConstants(1, 1, &brightnessScale, 0);
         const D3D12_VIEWPORT viewport {0, 0, static_cast<float>(_width), static_cast<float>(_height), 0, 1};
         const D3D12_RECT scissor {0, 0, static_cast<LONG>(_width), static_cast<LONG>(_height)};
         commands->RSSetViewports(1, &viewport);

@@ -39,6 +39,6 @@ namespace Framework::Graphics {
         HRESULT Resize(ID3D12Device *device, UINT width, UINT height);
         void Reset();
         void Begin(ID3D12GraphicsCommandList *commands);
-        void Composite(ID3D12GraphicsCommandList *commands, D3D12_CPU_DESCRIPTOR_HANDLE target);
+        void Composite(ID3D12GraphicsCommandList *commands, D3D12_CPU_DESCRIPTOR_HANDLE target, float brightnessScale);
     };
 } // namespace Framework::Graphics

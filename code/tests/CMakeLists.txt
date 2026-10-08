@@ -17,13 +17,15 @@ add_executable(FrameworkTests
         ../framework/src/networking/network_client.cpp)
 
 # The pattern table and the base-relocation helpers live in FrameworkClient/FrameworkLoader,
-# neither of which the tests link. They depend on nothing but <windows.h>, so they compile
-# straight in — same reasoning as the GUI resource units above.
+# neither of which the tests link. Compile them and the standalone D3D12 compositor
+# directly; the compositor regression uses WARP without a game or browser.
 if(WIN32)
     target_sources(FrameworkTests PRIVATE
         ../framework/src/utils/hooking/pattern_table.cpp
         ../framework/src/utils/hooking/hooking_patterns.cpp
-        ../framework/src/utils/hooking/hooking.cpp)
+        ../framework/src/utils/hooking/hooking.cpp
+        ../framework/src/graphics/backend/d3d12_ui_compositor.cpp)
+    target_link_libraries(FrameworkTests d3d12 dxgi d3dcompiler)
 endif()
 
 target_include_directories(FrameworkTests PRIVATE . ../framework/src)

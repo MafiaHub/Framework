@@ -47,6 +47,7 @@
 #include "modules/voice_router_ut.h"
 
 #ifdef _WIN32
+#include "modules/d3d12_ui_compositor_ut.h"
 // The hooking layer, and so the pattern table, is Windows-only.
 #include "modules/pattern_hints_ut.h"
 #include "modules/pattern_table_ut.h"
@@ -103,6 +104,7 @@ int main() {
     UNIT_MODULE(resource_package);
     UNIT_MODULE(streamed_assets);
 #ifdef _WIN32
+    UNIT_MODULE(d3d12_ui_compositor);
     UNIT_MODULE(pattern_hints);
     UNIT_MODULE(pattern_table);
     UNIT_MODULE(physical_keys);
