@@ -288,10 +288,18 @@ namespace Framework::Launcher::Platforms {
 
         // The package's executable is licence-protected (unreadable outside the package) and its
         // runtime is tied to the package identity, so the game can only be mapped from a process
-        // that carries it. Start this launcher again with it and let that copy do the launch.
+        // that carries it. Start this launcher again with it and let that copy do the launch. The
+        // copy is marked, so one Windows started without the identity reports it rather than
+        // starting another.
         if (!External::MicrosoftStore::IsRunningInPackage(_options.packageFamily)) {
+            constexpr auto relaunchMarker = L"-fw-package-relaunch";
+            if (wcsstr(GetCommandLineW(), relaunchMarker)) {
+                return unavailable(fmt::format("The launcher was started inside the {} package but does not run with its identity", packageName));
+            }
+
             HRESULT error {};
-            const HANDLE child = External::MicrosoftStore::StartInPackage(_options.packageFamily, _options.appId, host.GetLauncherExecutablePath(), PathGetArgsW(GetCommandLineW()), error);
+            const std::wstring arguments = std::wstring(PathGetArgsW(GetCommandLineW())) + L" " + relaunchMarker;
+            const HANDLE child           = External::MicrosoftStore::StartInPackage(_options.packageFamily, _options.appId, host.GetLauncherExecutablePath(), arguments, error);
             if (!child) {
                 return unavailable(fmt::format("Windows could not start the launcher inside the {} package (0x{:08X})", packageName, static_cast<uint32_t>(error)));
             }
