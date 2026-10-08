@@ -87,25 +87,36 @@ If you encounter crashes related to TLS (often manifesting as NULL pointer acces
 
 ## Game Path Resolution
 
-The launcher resolves the game directory from the configured `platform`:
+The launcher resolves the game directory from `platforms`, a list of `Framework::Launcher::Platform` objects (`launcher/platforms/platforms.h`) tried in the order they are declared until one resolves the game. Each carries its own settings:
 
-- `STEAM` - the Steam client is asked for the app's install directory (`steamAppId`).
-- `EPIC` - the Epic launcher's manifests are matched by `epicAppName`, else by `executableName`.
-- `CLASSIC` - the stored `classicGamePath` is used, or the player is prompted for the game executable when `promptForGameExe` is set.
-- `ROCKSTAR` - the Rockstar Games Launcher's registry entries are matched by `rockstarTitleKey`, else by the title holding `executableName`.
+- `Platforms::Steam` - the Steam client is asked for the install directory of `appId`. With `adoptManualCopies`, a folder the player picked that holds `steam_api` is started as the Steam copy.
+- `Platforms::Epic` - the Epic launcher's manifests are matched by `appName`, else by `executableName`.
+- `Platforms::Rockstar` - the Rockstar Games Launcher's registry entries are matched by `titleKey`, else by the title holding `executableName`.
+- `Platforms::MicrosoftStore` - the Microsoft Store / Xbox app (PC Game Pass) package of `packageFamily` installed for the current user.
+- `Platforms::Classic` - the game path stored in the launcher's JSON config, or one the player selects when `prompt` is set (the default).
 
-Store lookups fail for players who own the game outside that store (or simply do not have the client running). Set `allowManualGamePathFallback` to keep the store as the primary path and drop to the manual prompt instead of aborting:
+A store that cannot resolve the game - the player owns it elsewhere, or its client is not running - hands over to the next entry. Only the last entry reports its failure to the player, so a launcher that ends on `Classic` never shows a store error:
 
 ```cpp
-config.platform                    = Framework::Launcher::ProjectPlatform::STEAM;
-config.steamAppId                  = 50130;
-config.allowManualGamePathFallback = true;
-config.promptTitle                 = "Select your game executable";
-config.promptFilter                = "game.exe";
-config.promptFilterName            = "game.exe";
+using namespace Framework::Launcher;
+config.platforms = {
+    std::make_shared<Platforms::Steam>(Platforms::Steam::Options {.appId = 50130}),
+    std::make_shared<Platforms::MicrosoftStore>(Platforms::MicrosoftStore::Options {.packageFamily = L"Publisher.Game_hash"}),
+    std::make_shared<Platforms::Classic>(Platforms::Classic::Options {
+        .title      = "Select your game executable",
+        .filter     = "game.exe",
+        .filterName = "game.exe",
+    }),
+};
 ```
 
-The picked file must be named `executableName`, and when `useAlternativeWorkDir` is set the work dir is stripped back off so the resulting path is the game root - the same thing Steam and Epic hand back. A manual pick is remembered in the launcher's JSON config (`game_path` plus `game_path_manual`) and takes priority over the store on later runs, so the prompt only appears once.
+A new store is a class deriving from `Platform`: `Resolve` finds the game root, and the optional hooks prepare the process (`PrepareLaunch`), adopt a copy the player picked (`AdoptManualCopy`), or take part in PE loading (`PrepareImage`, `OnSectionsMapped`, `ResolveEntryPoint`).
+
+### Microsoft Store packages
+
+A Store or Game Pass copy keeps its executable licence-protected: only a process running with the package's identity can read it, and the title's runtime (licensing, saves, sign-in) is tied to that identity too. So when `Platforms::MicrosoftStore` finds the package and the launcher is not already inside it, it starts itself again inside the package - the same activation `Invoke-CommandInDesktopPackage` uses, with the Application Id `appId` (`App` by default) - passes its arguments on, and exits. That second launcher resolves the package root as the game root and PE-loads the executable as usual. The executable may sit at the package root rather than under `alternativeWorkDir`; the root is tried after the configured layouts.
+
+The picked file must be named `executableName`, and when `useAlternativeWorkDir` is set the work dir is stripped back off so the resulting path is the game root - the same thing Steam and Epic hand back. A manual pick is remembered in the launcher's JSON config (`game_path` plus `game_path_manual`) and takes priority over every store on later runs, so the prompt only appears once.
 
 ## Rockstar Games Launcher Titles
 
@@ -126,20 +137,21 @@ either: it only authorises a process the launcher itself started, and when it se
 recognise it hands the launch back to the launcher, which starts its own copy of the game while the
 mapped one exits.
 
-So the decrypted code has to come from a run the launcher did authorise. `useRockstarImageSnapshot`
+So the decrypted code has to come from a run the launcher did authorise. `useImageSnapshot`
 does exactly that, following the executable snapshot FiveM uses for the same class of wrapper:
 
 ```cpp
-config.platform                 = Framework::Launcher::ProjectPlatform::ROCKSTAR;
-config.rockstarTitleKey         = L"GTA: San Andreas";
-config.useRockstarImageSnapshot = true;
-config.captureImageSnapshot     = &Framework::Launcher::Loaders::CaptureImageSnapshot; // <launcher/loaders/image_snapshot_capture.h>
+config.platforms = {std::make_shared<Platforms::Rockstar>(Platforms::Rockstar::Options {
+    .titleKey         = L"GTA: San Andreas",
+    .useImageSnapshot = true,
+    .captureImage     = &Framework::Launcher::Loaders::CaptureImageSnapshot, // <launcher/loaders/image_snapshot_capture.h>
+})};
 ```
 
-`captureImageSnapshot` is what links the capture into the launcher. It is the only launcher code that
+`captureImage` is what links the capture into the launcher. It is the only launcher code that
 enumerates, opens, reads and terminates another process, and a launcher that does not name it ships
 without those imports - which, next to a PE loader, are what antivirus heuristics read as a
-memory-scraping trojan. A launcher that sets `useRockstarImageSnapshot` without it can still replay an
+memory-scraping trojan. A launcher that sets `useImageSnapshot` without it can still replay an
 existing cache, but refuses with a logged error when a new build needs capturing.
 
 On the first run for a given build the launcher starts the game once - which the wrapper hands to
@@ -240,4 +252,4 @@ asking for it fails to compile.
 - `data/tls.cpp` - TLS buffer for allocated slot approach (in FrameworkLoaderData.dll)
 - `rgl_bypass.cpp` / `rgl_bypass.h` - Rockstar Games Launcher entry-stub decoding and signature-check bypasses; `ProcessMonitor` only with `FW_DLL_INJECTION`
 - `loaders/image_snapshot.cpp` / `image_snapshot.h` - capture and replay of the code a store wrapper decrypts at runtime
-- `loaders/image_snapshot_capture.cpp` / `image_snapshot_capture.h` - the authorised run the snapshot is captured from, linked only through `captureImageSnapshot`
+- `loaders/image_snapshot_capture.cpp` / `image_snapshot_capture.h` - the authorised run the snapshot is captured from, linked only through `Platforms::Rockstar::Options::captureImage`

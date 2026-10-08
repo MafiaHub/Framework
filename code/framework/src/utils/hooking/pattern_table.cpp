@@ -28,8 +28,14 @@ namespace hook {
         // wrote the high dword (1) and the base check below rejected every table. v2 widens
         // the field and the generator parses PE32+ properly. v1 is still accepted so 32-bit
         // projects keep loading their committed tables unchanged.
+        //
+        // v3 holds a block of addresses per game image, so one table serves every storefront a
+        // game ships on: the same build sold on Steam and on the Microsoft Store is two
+        // executables with the same code at different addresses. The block whose identity
+        // matches the running image is the one seeded.
         constexpr uint32_t kFormatVersionLegacy = 1;
-        constexpr uint32_t kFormatVersion       = 2;
+        constexpr uint32_t kFormatVersionSingle = 2;
+        constexpr uint32_t kFormatVersion       = 3;
 
 #pragma pack(push, 1)
         struct TableHeaderV1 {
@@ -56,6 +62,24 @@ namespace hook {
             uint32_t reserved;
         };
 
+        struct TableHeaderV3 {
+            char magic[8];
+            uint32_t version;
+            uint32_t imageCount;
+            uint64_t patternSetHash;
+            uint8_t reserved[24];
+        };
+
+        struct ImageBlock {
+            uint64_t imageBase;
+            uint32_t sizeOfImage;
+            uint32_t fileSize;
+            uint32_t entryCount;
+            uint32_t entriesCrc;
+            uint32_t sourceCrc;  // the generator's, to reuse a block built from the same file
+            uint32_t storefront; // the generator's, so a patched build replaces its storefront's block
+        };
+
         struct TableEntry {
             uint64_t hash;
             uint32_t rva;
@@ -65,6 +89,8 @@ namespace hook {
 
         static_assert(sizeof(TableHeaderV1) == 48, "pattern table v1 header layout changed");
         static_assert(sizeof(TableHeader) == 48, "pattern table header layout changed");
+        static_assert(sizeof(TableHeaderV3) == 48, "pattern table v3 header layout changed");
+        static_assert(sizeof(ImageBlock) == 32, "pattern table image block layout changed");
         static_assert(sizeof(TableEntry) == 16, "pattern table entry layout changed");
 
         // Both header versions are 48 bytes and agree up to patternSetHash, so one reader
@@ -145,39 +171,77 @@ namespace hook {
             return 0;
         }
 
-        TableIdentity identity {};
-        if (header->version == kFormatVersion) {
-            identity = {header->entryCount, header->targetImageBase, header->targetSizeOfImage, header->targetFileSize};
-        }
-        else if (header->version == kFormatVersionLegacy) {
-            const auto *v1 = reinterpret_cast<const TableHeaderV1 *>(blob.data());
-            identity       = {v1->entryCount, v1->targetImageBase, v1->targetSizeOfImage, v1->targetFileSize};
-        }
-        else {
-            log->warn("Pattern table {} is format v{}, not v{} or v{}; every pattern will be resolved by scanning", path, header->version, kFormatVersionLegacy, kFormatVersion);
-            return 0;
-        }
-
-        if (size != sizeof(TableHeader) + static_cast<size_t>(identity.entryCount) * sizeof(TableEntry)) {
-            log->warn("Pattern table {} does not hold the {} entries it declares, every pattern will be resolved by scanning", path, identity.entryCount);
-            return 0;
-        }
-
-        const auto *entries = reinterpret_cast<const TableEntry *>(blob.data() + sizeof(TableHeader));
-        if (Crc32(reinterpret_cast<const uint8_t *>(entries), size - sizeof(TableHeader)) != header->entriesCrc) {
-            log->warn("Pattern table {} is corrupt, every pattern will be resolved by scanning", path);
-            return 0;
-        }
-
         auto *base = reinterpret_cast<const uint8_t *>(getRVA<void>(0));
         TableIdentity loaded {};
         if (!ReadImageIdentity(base, loaded)) {
             log->warn("Pattern table {} cannot be checked against the game image on disk, every pattern will be resolved by scanning", path);
             return 0;
         }
-        if (loaded.imageBase != identity.imageBase || loaded.sizeOfImage != identity.sizeOfImage || loaded.fileSize != identity.fileSize) {
-            log->warn("Pattern table {} was built for a different game image (table base 0x{:X} size 0x{:X} file {}, game base 0x{:X} size 0x{:X} file {}), every pattern will be resolved by scanning", path, identity.imageBase, identity.sizeOfImage, identity.fileSize, loaded.imageBase, loaded.sizeOfImage, loaded.fileSize);
-            return 0;
+
+        TableIdentity identity {};
+        const TableEntry *entries = nullptr;
+        if (header->version == kFormatVersion) {
+            // the block built from the running image, if the table has one
+            const auto imageCount = reinterpret_cast<const TableHeaderV3 *>(blob.data())->imageCount;
+            size_t offset         = sizeof(TableHeaderV3);
+            for (uint32_t i = 0; i < imageCount; ++i) {
+                if (offset + sizeof(ImageBlock) > size) {
+                    log->warn("Pattern table {} is truncated, every pattern will be resolved by scanning", path);
+                    return 0;
+                }
+                const auto *block    = reinterpret_cast<const ImageBlock *>(blob.data() + offset);
+                const auto blockSize = static_cast<size_t>(block->entryCount) * sizeof(TableEntry);
+                offset += sizeof(ImageBlock);
+                if (offset + blockSize > size) {
+                    log->warn("Pattern table {} does not hold the {} entries a block declares, every pattern will be resolved by scanning", path, block->entryCount);
+                    return 0;
+                }
+
+                if (block->imageBase == loaded.imageBase && block->sizeOfImage == loaded.sizeOfImage && block->fileSize == loaded.fileSize) {
+                    if (Crc32(blob.data() + offset, blockSize) != block->entriesCrc) {
+                        log->warn("Pattern table {} is corrupt, every pattern will be resolved by scanning", path);
+                        return 0;
+                    }
+                    identity = {block->entryCount, block->imageBase, block->sizeOfImage, block->fileSize};
+                    entries  = reinterpret_cast<const TableEntry *>(blob.data() + offset);
+                    break;
+                }
+                offset += blockSize;
+            }
+
+            if (!entries) {
+                log->warn("Pattern table {} has no block for this game image (base 0x{:X} size 0x{:X} file {}) among its {}, every pattern will be resolved by scanning", path, loaded.imageBase, loaded.sizeOfImage, loaded.fileSize, imageCount);
+                return 0;
+            }
+        }
+        else {
+            if (header->version == kFormatVersionSingle) {
+                identity = {header->entryCount, header->targetImageBase, header->targetSizeOfImage, header->targetFileSize};
+            }
+            else if (header->version == kFormatVersionLegacy) {
+                const auto *v1 = reinterpret_cast<const TableHeaderV1 *>(blob.data());
+                identity       = {v1->entryCount, v1->targetImageBase, v1->targetSizeOfImage, v1->targetFileSize};
+            }
+            else {
+                log->warn("Pattern table {} is format v{}, not v{} to v{}; every pattern will be resolved by scanning", path, header->version, kFormatVersionLegacy, kFormatVersion);
+                return 0;
+            }
+
+            if (size != sizeof(TableHeader) + static_cast<size_t>(identity.entryCount) * sizeof(TableEntry)) {
+                log->warn("Pattern table {} does not hold the {} entries it declares, every pattern will be resolved by scanning", path, identity.entryCount);
+                return 0;
+            }
+
+            entries = reinterpret_cast<const TableEntry *>(blob.data() + sizeof(TableHeader));
+            if (Crc32(reinterpret_cast<const uint8_t *>(entries), size - sizeof(TableHeader)) != header->entriesCrc) {
+                log->warn("Pattern table {} is corrupt, every pattern will be resolved by scanning", path);
+                return 0;
+            }
+
+            if (loaded.imageBase != identity.imageBase || loaded.sizeOfImage != identity.sizeOfImage || loaded.fileSize != identity.fileSize) {
+                log->warn("Pattern table {} was built for a different game image (table base 0x{:X} size 0x{:X} file {}, game base 0x{:X} size 0x{:X} file {}), every pattern will be resolved by scanning", path, identity.imageBase, identity.sizeOfImage, identity.fileSize, loaded.imageBase, loaded.sizeOfImage, loaded.fileSize);
+                return 0;
+            }
         }
 
         // Store hints in the same convention the scan-time cache uses — get_unadjusted() of the

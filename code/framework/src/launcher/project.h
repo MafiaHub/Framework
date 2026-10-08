@@ -8,10 +8,9 @@
 
 #pragma once
 
-#include "loaders/image_snapshot.h"
+#include "platforms/platforms.h"
 #include "utils/config.h"
 #include "utils/minidump.h"
-#include <external/steam/wrapper.h>
 
 #include <Windows.h>
 
@@ -21,12 +20,6 @@
 #include <vector>
 
 namespace Framework::Launcher {
-    enum class ProjectPlatform {
-        CLASSIC,
-        STEAM,
-        EPIC,
-        ROCKSTAR
-    };
     enum class ProjectLaunchType {
         PE_LOADING,
 #ifdef FW_DLL_INJECTION
@@ -50,51 +43,25 @@ namespace Framework::Launcher {
     };
 #endif
 
-    // UNAVAILABLE: the store could not resolve the game, the manual prompt can still recover
-    enum class PlatformCheckStatus {
-        OK,
-        ABORT,
-        UNAVAILABLE
-    };
-
     struct ProjectConfiguration {
-        using DialogPromptSelectorProc = fu2::function<std::wstring(std::wstring gameExePath) const>;
-
         std::wstring executableName;
         std::wstring destinationDllName;
         std::wstring classicGamePath;
         std::string name;
-        ProjectPlatform platform;
+
+        // Where the game may come from (Platforms::Steam, Epic, Rockstar, MicrosoftStore, Classic),
+        // tried in this order until one resolves it. A store that cannot (the game is not in that
+        // library, its client is not running) hands over to the next entry; only the last one
+        // reports its failure to the player. Put a Classic last to let the player select the game
+        // themselves when no store has it: that pick is remembered in the launcher's JSON config and
+        // wins over every store on later runs.
+        std::vector<std::shared_ptr<Platform>> platforms = {std::make_shared<Platforms::Classic>()};
+
         ProjectLaunchType launchType = ProjectLaunchType::PE_LOADING;
-        AppId_t steamAppId           = 430;
         uintptr_t loadLimit          = SIZE_MAX;
 
         // allows us to load client ourselves, otherwise stick to Framework's standard loading routine
         bool loadClientManually = false;
-
-        // if promptForGameExe is true, and steam dll is found in the game's library, switch to steam platform
-        bool preferSteam = false;
-
-        // STEAM/EPIC: fall back to the manual game exe prompt when the store cannot resolve the game
-        bool allowManualGamePathFallback = false;
-
-        // EPIC platform: Epic catalog id ("AppName") of the destination game. Optional — when
-        // empty the Epic manifest is matched by the launch executable's file name instead.
-        std::wstring epicAppName;
-
-        // ROCKSTAR platform: the title's registry sub-key, e.g. L"GTA: San Andreas". Optional —
-        // when empty the title holding `executableName` is used instead.
-        std::wstring rockstarTitleKey;
-
-        // ROCKSTAR platform, PE loading: capture the code the title's wrapper decrypts from a
-        // launcher-authorised run and replay it, so the mapped image can be entered past the stub.
-        bool useRockstarImageSnapshot = false;
-
-        // Captures the snapshot on the first run of a build. A launcher that can set
-        // useRockstarImageSnapshot sets this to Loaders::CaptureImageSnapshot: naming it is what links
-        // the process-reading code into that launcher and no other.
-        using ImageSnapshotCaptureProc = bool (*)(Loaders::ImageSnapshot &snapshot, const std::wstring &gamePath, const std::wstring &executableName, const std::vector<uint8_t> &sourceImage);
-        ImageSnapshotCaptureProc captureImageSnapshot = nullptr;
 
         // game exe integrity checks (uses CRC32 checksum)
         bool verifyGameIntegrity = false;
@@ -117,14 +84,6 @@ namespace Framework::Launcher {
         // other layouts the same game ships under, such as another store's build. A game root
         // resolves to the first of alternativeWorkDir and these that holds the executable.
         std::vector<std::wstring> alternativeWorkDirFallbacks;
-
-        // prompt for game exe (CLASSIC platform, or the store fallback above)
-        bool promptForGameExe        = false;
-        std::string promptTitle      = "Select your game's executable";
-        std::string promptFilter     = "Game.exe";
-        std::string promptFilterName = "Your Game.exe";
-        std::string promptExtension  = "*.exe";
-        DialogPromptSelectorProc promptSelectionFunctor;
 
         // JSON config project settings
         bool disablePersistentConfig = false;
@@ -156,7 +115,7 @@ namespace Framework::Launcher {
         std::wstring urlProtocolScheme; // e.g. L"mafiamp" (no "://")
     };
 
-    class Project final {
+    class Project final: private PlatformHost {
       public:
         using FunctionResolverProc = fu2::function<LPVOID(HMODULE, const char *) const>;
         using LibraryLoaderProc    = fu2::function<HMODULE(const char *) const>;
@@ -167,8 +126,8 @@ namespace Framework::Launcher {
         std::unique_ptr<Utils::Config> _fileConfig;
         std::wstring _gamePath;
         bool _manualGamePath = false;
-        ProjectPlatform _configuredPlatform = ProjectPlatform::CLASSIC;
-        std::unique_ptr<External::Steam::Wrapper> _steamWrapper;
+        std::shared_ptr<Platform> _platform; // the one that resolved the game
+        std::filesystem::path _projectPath;
         std::unique_ptr<Utils::MiniDump> _minidump;
 
         LibraryLoaderProc _libraryLoader;
@@ -205,20 +164,22 @@ namespace Framework::Launcher {
         bool EnsureGameExecutableIsCompatible(uint32_t);
         uint32_t GetGameVersion() const;
 
-        bool RunPlatformChecks();
-        PlatformCheckStatus ReportStoreUnavailable(const char *store, const std::string &reason, bool reportErrors) const;
-        PlatformCheckStatus RunInnerSteamChecks(bool reportErrors);
-        PlatformCheckStatus RunInnerEpicChecks(bool reportErrors);
-        PlatformCheckStatus RunInnerRockstarChecks(bool reportErrors);
+        PlatformCheckStatus RunPlatformChecks();
 
-        bool EnsureImageSnapshot(Loaders::ImageSnapshot &snapshot, const std::vector<uint8_t> &sourceImage);
-        bool RunInnerClassicChecks();
-        bool ResolveGamePathFromPrompt();
-        void PrepareSteamAppIdentity() const;
-
-        std::vector<std::wstring> GetAlternativeWorkDirCandidates() const;
-        std::wstring GetGameWorkDir(const std::wstring &gameRoot) const;
-        bool GameExecutableExistsIn(const std::wstring &gameRoot) const;
+        // PlatformHost
+        const ProjectConfiguration &GetConfig() const override {
+            return _config;
+        }
+        const std::filesystem::path &GetProjectPath() const override {
+            return _projectPath;
+        }
+        std::wstring GetLauncherExecutablePath() const override;
+        bool GameExecutableExistsIn(const std::wstring &gameRoot) const override;
+        std::wstring GetGameWorkDir(const std::wstring &gameRoot) const override;
+        std::vector<std::wstring> GetAlternativeWorkDirCandidates() const override;
+        void SetProcessVariable(const wchar_t *name, const std::wstring &value) const override;
+        PlatformCheckStatus ReportUnavailable(const char *platform, const std::string &reason, bool reportErrors) const override;
+        void ReportError(const std::string &message) const override;
 
         // Claims urlProtocolScheme for the current user and points it at this launcher.
         void RegisterUrlProtocolScheme() const;
