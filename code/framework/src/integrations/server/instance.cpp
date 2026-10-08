@@ -1112,7 +1112,7 @@ namespace Framework::Integrations::Server {
             "quit", {},
             [this](cxxopts::ParseResult &) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopping server...");
-                Shutdown();
+                _stopRequested = true;
             },
             "Stop the server");
 
@@ -1123,7 +1123,7 @@ namespace Framework::Integrations::Server {
                 const auto &args = result.unmatched();
                 if (args.empty()) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopping server...");
-                    Shutdown();
+                    _stopRequested = true;
                     return;
                 }
                 auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
@@ -1495,7 +1495,7 @@ namespace Framework::Integrations::Server {
         }
 
         if (_stopRequested) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Received shutdown signal, shutting down");
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Shutdown requested, shutting down");
         }
     }
 
