@@ -144,9 +144,15 @@ namespace Framework::Launcher {
         // Suppress the mapped game's second registration when that would abort startup.
         bool suppressThreadLocalExeAtexitCallback = false;
 
-        // Custom URL scheme deep link. When set, the launcher extracts a <urlProtocolScheme>://
-        // argument from its command line and passes it to Instance::OnProtocolLaunch. Registering the
-        // scheme with the OS is the mod's responsibility.
+        // Custom URL scheme deep link, so a Join button on a server's website reaches the game. When
+        // set, every launch claims the scheme for the current user under
+        // HKCU\Software\Classes\<urlProtocolScheme> and points it at this launcher - no elevation,
+        // nothing written for any other account - then extracts a <urlProtocolScheme>:// argument
+        // from its own command line and hands it to Instance::OnProtocolLaunch.
+        //
+        // That claim is the only state the framework keeps outside its own folder. A mod that would
+        // rather ask the player first leaves this empty and calls Utils::UrlProtocol::Register /
+        // Unregister itself; extraction still works for a link passed on the command line.
         std::wstring urlProtocolScheme; // e.g. L"mafiamp" (no "://")
     };
 
@@ -213,6 +219,9 @@ namespace Framework::Launcher {
         std::vector<std::wstring> GetAlternativeWorkDirCandidates() const;
         std::wstring GetGameWorkDir(const std::wstring &gameRoot) const;
         bool GameExecutableExistsIn(const std::wstring &gameRoot) const;
+
+        // Claims urlProtocolScheme for the current user and points it at this launcher.
+        void RegisterUrlProtocolScheme() const;
 
         // Extracts a launch URL from the command line into the environment for the client.
         void HandleUrlProtocolLaunch();

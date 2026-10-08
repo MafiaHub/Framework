@@ -308,6 +308,7 @@ namespace Framework::Launcher {
         ForceHighPerformanceGPU();
 
         if (!_config.urlProtocolScheme.empty()) {
+            RegisterUrlProtocolScheme();
             HandleUrlProtocolLaunch();
         }
 
@@ -816,6 +817,21 @@ namespace Framework::Launcher {
 
         _gamePath = _config.classicGamePath;
         return true;
+    }
+
+    void Project::RegisterUrlProtocolScheme() const {
+        const std::wstring executablePath = LauncherExecutablePath();
+        if (executablePath.empty()) {
+            return;
+        }
+
+        // Re-asserted on every start rather than once at install time: this is the only place that
+        // knows where the launcher currently lives, and an update or a moved game folder would
+        // otherwise leave the scheme pointing at a path that no longer runs.
+        const std::wstring description = L"URL:" + Utils::StringUtils::NormalToWide(_config.name) + L" link";
+        if (!Utils::UrlProtocol::Register(_config.urlProtocolScheme, description, executablePath)) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->warn("Could not claim the {}:// scheme for this user; links from a browser will not open the game", Utils::StringUtils::WideToNormal(_config.urlProtocolScheme));
+        }
     }
 
     void Project::HandleUrlProtocolLaunch() {
