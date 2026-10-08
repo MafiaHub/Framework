@@ -645,36 +645,41 @@ namespace Framework::Launcher {
 
         // A sign-in UI persists a refresh token that we then use like a stored one. Without the
         // sign-in window shipped beside the launcher, fall back to the browser + clipboard flow.
-        const auto signIn = [&]() -> std::optional<External::Epic::Tokens> {
-            if (auto tokens = External::Epic::TryRefreshStoredAuth()) {
-                return tokens;
+        const auto signIn = [&]() -> External::Epic::AuthResult {
+            auto stored = External::Epic::TryRefreshStoredAuth();
+            if (stored || !External::Epic::NeedsSignIn(stored.GetError())) {
+                return stored;
             }
             if (_config.epicSignIn) {
-                return _config.epicSignIn() ? External::Epic::TryRefreshStoredAuth() : std::nullopt;
+                return _config.epicSignIn() ? External::Epic::TryRefreshStoredAuth() : stored;
             }
             switch (RunEpicSignInWindow()) {
             case EpicSignInWindow::SignedIn: return External::Epic::TryRefreshStoredAuth();
-            case EpicSignInWindow::Failed: return std::nullopt;
+            case EpicSignInWindow::Failed: return stored;
             case EpicSignInWindow::Missing: break;
             }
             return External::Epic::EnsureAuthenticated(Utils::StringUtils::Utf8ToWide(_config.name));
         };
-        const auto tokens = signIn();
-        if (!tokens) {
+        const auto auth = signIn();
+        if (!auth) {
+            if (auth.GetError() == External::Epic::AuthError::Unreachable) {
+                return abort("Could not reach Epic Games to sign in, please check your connection and try again");
+            }
             return abort("Epic sign-in is required to play the Epic version of the game");
         }
+        const auto &tokens = auth.GetValue();
 
-        const auto exchangeCode = External::Epic::GetExchangeCode(*tokens);
+        // The refresh above just succeeded, so a failure here says nothing against the stored sign-in.
+        const auto exchangeCode = External::Epic::GetExchangeCode(tokens);
         if (!exchangeCode) {
-            External::Epic::ClearStoredAuth(); // the next launch signs in afresh
             return abort("Could not obtain an Epic launch code, please try again");
         }
 
         // Hand the account id to the in-process client (ClientIdentity), as Steam does above.
-        if (!tokens->accountId.empty()) {
-            SetProcessEnvironmentVariable(L"MafiaHubEpicId", Utils::StringUtils::Utf8ToWide(tokens->accountId));
+        if (!tokens.accountId.empty()) {
+            SetProcessEnvironmentVariable(L"MafiaHubEpicId", Utils::StringUtils::Utf8ToWide(tokens.accountId));
         }
-        _config.additionalLaunchArguments += External::Epic::BuildLaunchArgs(*tokens, *exchangeCode, app.appName, app.catalogNamespace, app.catalogItemId, app.installLocation);
+        _config.additionalLaunchArguments += External::Epic::BuildLaunchArgs(tokens, *exchangeCode, app.appName, app.catalogNamespace, app.catalogItemId, app.installLocation);
         return PlatformCheckStatus::OK;
     }
 
