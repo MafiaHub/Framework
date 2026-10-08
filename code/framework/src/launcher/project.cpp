@@ -220,6 +220,35 @@ namespace {
     bool ShouldReportMappedImage(HMODULE module) {
         return gImagePath && (!module || module == GetModuleHandle(nullptr));
     }
+
+    enum class EpicSignInWindow {
+        Missing,
+        SignedIn,
+        Failed
+    };
+
+    // The Framework's epic_sign_in.exe, shipped beside the launcher. It persists the refresh token
+    // itself; Missing also covers a helper that would not start, so the caller can still fall back.
+    EpicSignInWindow RunEpicSignInWindow() {
+        const std::filesystem::path helper = std::filesystem::path(gProjectDllPath) / L"epic_sign_in.exe";
+        std::error_code ec;
+        if (!std::filesystem::exists(helper, ec)) {
+            return EpicSignInWindow::Missing;
+        }
+        std::wstring commandLine = L"\"" + helper.wstring() + L"\"";
+        STARTUPINFOW startupInfo {};
+        startupInfo.cb = sizeof(startupInfo);
+        PROCESS_INFORMATION processInfo {};
+        if (!CreateProcessW(helper.c_str(), commandLine.data(), nullptr, nullptr, FALSE, 0, nullptr, gProjectDllPath, &startupInfo, &processInfo)) {
+            return EpicSignInWindow::Missing;
+        }
+        CloseHandle(processInfo.hThread);
+        WaitForSingleObject(processInfo.hProcess, INFINITE);
+        DWORD exitCode = 1;
+        GetExitCodeProcess(processInfo.hProcess, &exitCode);
+        CloseHandle(processInfo.hProcess);
+        return exitCode == 0 ? EpicSignInWindow::SignedIn : EpicSignInWindow::Failed;
+    }
 } // namespace
 
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
@@ -614,15 +643,21 @@ namespace Framework::Launcher {
             return PlatformCheckStatus::ABORT;
         };
 
-        // The project's own sign-in UI persists a refresh token that we then use like a stored one.
+        // A sign-in UI persists a refresh token that we then use like a stored one. Without the
+        // sign-in window shipped beside the launcher, fall back to the browser + clipboard flow.
         const auto signIn = [&]() -> std::optional<External::Epic::Tokens> {
-            if (!_config.epicSignIn) {
-                return External::Epic::EnsureAuthenticated(Utils::StringUtils::Utf8ToWide(_config.name));
-            }
             if (auto tokens = External::Epic::TryRefreshStoredAuth()) {
                 return tokens;
             }
-            return _config.epicSignIn() ? External::Epic::TryRefreshStoredAuth() : std::nullopt;
+            if (_config.epicSignIn) {
+                return _config.epicSignIn() ? External::Epic::TryRefreshStoredAuth() : std::nullopt;
+            }
+            switch (RunEpicSignInWindow()) {
+            case EpicSignInWindow::SignedIn: return External::Epic::TryRefreshStoredAuth();
+            case EpicSignInWindow::Failed: return std::nullopt;
+            case EpicSignInWindow::Missing: break;
+            }
+            return External::Epic::EnsureAuthenticated(Utils::StringUtils::Utf8ToWide(_config.name));
         };
         const auto tokens = signIn();
         if (!tokens) {

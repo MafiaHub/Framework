@@ -83,7 +83,8 @@ namespace Framework::Launcher {
         std::wstring epicAppName;
 
         // EPIC platform: signs the player in when no stored Epic sign-in refreshes, persisting it
-        // through External::Epic::SignInWithAuthorizationCode. Unset: browser + clipboard sign-in.
+        // through External::Epic::SignInWithAuthorizationCode. Unset: the Framework's epic_sign_in.exe
+        // window beside the launcher, else a browser + clipboard sign-in.
         using EpicSignInProc = fu2::function<bool() const>;
         EpicSignInProc epicSignIn;
 
