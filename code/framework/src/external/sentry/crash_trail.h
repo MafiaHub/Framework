@@ -23,6 +23,12 @@ namespace Framework::External::Sentry {
      * on unchanged. Crashpad reads the log attachment when it processes the
      * dump, so the trail rides along with the report.
      *
+     * The same trail also goes onto the Sentry scope as the `crash_trail`
+     * context, a field per frame. The log line it writes becomes a breadcrumb
+     * as well, but a breadcrumb message is cut far short of a whole trail --
+     * the headline survives and the stack does not -- so the context is what
+     * carries the callers into a report whose attachment never arrives.
+     *
      * Windows only; elsewhere this does nothing.
      */
     class CrashTrail final {

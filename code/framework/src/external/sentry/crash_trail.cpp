@@ -9,6 +9,8 @@
 #include "crash_trail.h"
 
 #ifdef _WIN32
+#include "wrapper.h"
+
 #include <utils/safe_win32.h>
 
 #include <logging/logger.h>
@@ -184,28 +186,50 @@ namespace Framework::External::Sentry {
             ULONG_PTR stackHigh = 0;
             GetCurrentThreadStackLimits(&stackLow, &stackHigh);
 
+            // The same facts twice: as the text that goes in the log, and as
+            // one field per frame for the event. A breadcrumb message is cut
+            // at well under the length of a trail, so the log's copy is the
+            // only one on the crashing machine and the context's is the only
+            // one that reaches the report.
+            ContextFields fields;
+
+            fields.emplace("exception", fmt::format("0x{:08X}", record->ExceptionCode));
+            fields.emplace("address", Describe(reinterpret_cast<std::uint64_t>(record->ExceptionAddress)));
+            fields.emplace("thread", fmt::format("{} '{}'", GetCurrentThreadId(), ThreadName()));
+
             std::string text = fmt::format("Unhandled exception 0x{:08X} at {} on thread {} '{}'\n", record->ExceptionCode, Describe(reinterpret_cast<std::uint64_t>(record->ExceptionAddress)), GetCurrentThreadId(), ThreadName());
             if ((record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION || record->ExceptionCode == EXCEPTION_IN_PAGE_ERROR) && record->NumberParameters >= 2) {
                 text += fmt::format("Faulting {} of 0x{:X}\n", AccessKind(record->ExceptionInformation[0]), record->ExceptionInformation[1]);
+                fields.emplace("faulting", fmt::format("{} of 0x{:X}", AccessKind(record->ExceptionInformation[0]), record->ExceptionInformation[1]));
             }
 
 #if defined(_M_X64)
-            text += fmt::format("RIP {:016X} RSP {:016X} RBP {:016X}\n", context->Rip, context->Rsp, context->Rbp);
-            text += fmt::format("RAX {:016X} RBX {:016X} RCX {:016X} RDX {:016X}\n", context->Rax, context->Rbx, context->Rcx, context->Rdx);
-            text += fmt::format("RSI {:016X} RDI {:016X} R8  {:016X} R9  {:016X}\n", context->Rsi, context->Rdi, context->R8, context->R9);
-            text += fmt::format("R10 {:016X} R11 {:016X} R12 {:016X} R13 {:016X}\n", context->R10, context->R11, context->R12, context->R13);
-            text += fmt::format("R14 {:016X} R15 {:016X}\n", context->R14, context->R15);
+            const std::string registers = fmt::format(
+                "RIP {:016X} RSP {:016X} RBP {:016X}\n"
+                "RAX {:016X} RBX {:016X} RCX {:016X} RDX {:016X}\n"
+                "RSI {:016X} RDI {:016X} R8  {:016X} R9  {:016X}\n"
+                "R10 {:016X} R11 {:016X} R12 {:016X} R13 {:016X}\n"
+                "R14 {:016X} R15 {:016X}\n",
+                context->Rip, context->Rsp, context->Rbp, context->Rax, context->Rbx, context->Rcx, context->Rdx, context->Rsi, context->Rdi, context->R8, context->R9, context->R10, context->R11, context->R12, context->R13, context->R14, context->R15);
 #else
-            text += fmt::format("EIP {:08X} ESP {:08X} EBP {:08X}\n", context->Eip, context->Esp, context->Ebp);
-            text += fmt::format("EAX {:08X} EBX {:08X} ECX {:08X} EDX {:08X}\n", context->Eax, context->Ebx, context->Ecx, context->Edx);
-            text += fmt::format("ESI {:08X} EDI {:08X}\n", context->Esi, context->Edi);
+            const std::string registers = fmt::format(
+                "EIP {:08X} ESP {:08X} EBP {:08X}\n"
+                "EAX {:08X} EBX {:08X} ECX {:08X} EDX {:08X}\n"
+                "ESI {:08X} EDI {:08X}\n",
+                context->Eip, context->Esp, context->Ebp, context->Eax, context->Ebx, context->Ecx, context->Edx, context->Esi, context->Edi);
 #endif
+            text += registers;
+            fields.emplace("registers", registers);
 
             std::uint64_t frames[kMaxFrames] {};
             const int frameCount = Walk(*context, stackLow, stackHigh, frames);
             text += "Unwound stack:\n";
             for (int index = 0; index < frameCount; ++index) {
-                text += fmt::format("  #{:02} {}\n", index, Describe(frames[index]));
+                const std::string frame = Describe(frames[index]);
+                text += fmt::format("  #{:02} {}\n", index, frame);
+                // Zero-padded so the fields sort into call order; the context
+                // is a flat object and the report shows it in key order.
+                fields.emplace(fmt::format("frame.{:02}", index), frame);
             }
 
             // Code with no unwind data -- a manually mapped image, generated
@@ -222,9 +246,20 @@ namespace Framework::External::Sentry {
                     const std::uint64_t value = *reinterpret_cast<const ULONG_PTR *>(static_cast<ULONG_PTR>(slot));
                     if (IsCode(value)) {
                         text += fmt::format("  [SP+0x{:X}] {}\n", word * sizeof(ULONG_PTR), Describe(value));
+                        fields.emplace(fmt::format("scanned.{:02}", hits), fmt::format("[SP+0x{:X}] {}", word * sizeof(ULONG_PTR), Describe(value)));
                         ++hits;
                     }
                 }
+            }
+
+            // Onto the scope first: crashpad reads the scope file it leaves
+            // behind, so the trail has to be in it before the process is
+            // suspended, and this is the only copy of the stack the report
+            // gets. Set as one context rather than a breadcrumb apiece, so a
+            // 48-frame walk cannot push the breadcrumbs that say what the
+            // game was doing out of the ring.
+            if (IsCrashReporterReady()) {
+                GetCrashReporter().SetContext("crash_trail", fields);
             }
 
             // Synchronous, so the trail is on disk before crashpad suspends the
