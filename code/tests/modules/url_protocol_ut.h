@@ -10,6 +10,7 @@
 
 #include "utils/url_protocol.h"
 
+#include <filesystem>
 #include <string>
 
 MODULE(url_protocol, {
@@ -101,5 +102,34 @@ MODULE(url_protocol, {
         EQUALS(parsed.has_value(), true);
         EQUALS(parsed->Query("nick").has_value(), true);
         EQUALS(parsed->Query("nick")->empty(), true);
+    });
+
+    IT("accepts a scheme the shell can key on", {
+        EQUALS(Framework::Utils::UrlProtocol::IsValidScheme(L"m2o"), true);
+        EQUALS(Framework::Utils::UrlProtocol::IsValidScheme(L"mafia-mp"), true);
+        EQUALS(Framework::Utils::UrlProtocol::IsValidScheme(L"m2o+v2.1"), true);
+    });
+
+    IT("refuses a scheme that would reach outside its own registry key", {
+        EQUALS(Framework::Utils::UrlProtocol::IsValidScheme(L""), false);
+        EQUALS(Framework::Utils::UrlProtocol::IsValidScheme(L"2mp"), false);
+        EQUALS(Framework::Utils::UrlProtocol::IsValidScheme(L"m2o\\shell\\open\\command"), false);
+        EQUALS(Framework::Utils::UrlProtocol::IsValidScheme(L"m2o/open"), false);
+        EQUALS(Framework::Utils::UrlProtocol::IsValidScheme(L"m2o://"), false);
+        EQUALS(Framework::Utils::UrlProtocol::IsValidScheme(L"m2 o"), false);
+    });
+
+    // The registered command and the extractor are one contract: what the shell runs has to be
+    // something ExtractLaunchUrl can read the URL back out of.
+    IT("builds an open command the launcher can read its URL back from", {
+        const std::wstring command = Framework::Utils::UrlProtocol::BuildOpenCommand(std::filesystem::path(L"C:\\Games\\M2O\\M2OLauncher.exe"));
+        EQUALS(command == L"\"C:\\Games\\M2O\\M2OLauncher.exe\" \"%1\"", true);
+
+        std::wstring invoked = command;
+        invoked.replace(invoked.find(L"%1"), 2, L"m2o://127.0.0.1:27015?nick=Fernando");
+
+        const auto url = Framework::Utils::UrlProtocol::ExtractLaunchUrl(L"m2o", invoked);
+        EQUALS(url.has_value(), true);
+        EQUALS(*url == L"m2o://127.0.0.1:27015?nick=Fernando", true);
     });
 });

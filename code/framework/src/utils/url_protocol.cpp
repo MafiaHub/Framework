@@ -14,6 +14,10 @@
 #include <cwctype>
 #include <system_error>
 
+#ifdef _WIN32
+#include "safe_win32.h"
+#endif
+
 namespace Framework::Utils::UrlProtocol {
     std::optional<std::wstring> ExtractLaunchUrl(const std::wstring &scheme, const std::wstring &commandLine, size_t maxLength) {
         if (scheme.empty()) {
@@ -67,6 +71,14 @@ namespace Framework::Utils::UrlProtocol {
     namespace {
         bool IsAcceptable(char value) {
             return static_cast<unsigned char>(value) >= 0x20 && value != '"' && value != '\\';
+        }
+
+        bool IsAsciiLetter(wchar_t value) {
+            return (value >= L'a' && value <= L'z') || (value >= L'A' && value <= L'Z');
+        }
+
+        std::wstring Quoted(const std::filesystem::path &path) {
+            return L'"' + path.wstring() + L'"';
         }
 
         std::optional<std::string> DecodeComponent(std::string_view value) {
@@ -175,4 +187,84 @@ namespace Framework::Utils::UrlProtocol {
 
         return parsed;
     }
+
+    bool IsValidScheme(std::wstring_view scheme) {
+        if (scheme.empty() || !IsAsciiLetter(scheme.front())) {
+            return false;
+        }
+
+        return std::all_of(scheme.begin(), scheme.end(), [](wchar_t value) {
+            return IsAsciiLetter(value) || (value >= L'0' && value <= L'9') || value == L'+' || value == L'-' || value == L'.';
+        });
+    }
+
+    std::wstring BuildOpenCommand(const std::filesystem::path &executablePath) {
+        return Quoted(executablePath) + L" \"%1\"";
+    }
+
+#ifdef _WIN32
+    namespace {
+        constexpr const wchar_t *kClassesRoot = L"Software\\Classes\\";
+
+        // nullopt when the value is absent or is not a string. A name of nullptr reads the key's own
+        // default value, which is where the shell keeps three of the four we write.
+        std::optional<std::wstring> ReadString(const std::wstring &subKey, const wchar_t *name) {
+            DWORD bytes = 0;
+            if (RegGetValueW(HKEY_CURRENT_USER, subKey.c_str(), name, RRF_RT_REG_SZ, nullptr, nullptr, &bytes) != ERROR_SUCCESS) {
+                return std::nullopt;
+            }
+
+            // RRF_RT_REG_SZ makes the reported size cover the terminator, so this is the whole value.
+            std::wstring value(bytes / sizeof(wchar_t), L'\0');
+            if (RegGetValueW(HKEY_CURRENT_USER, subKey.c_str(), name, RRF_RT_REG_SZ, nullptr, value.data(), &bytes) != ERROR_SUCCESS) {
+                return std::nullopt;
+            }
+
+            value.resize(wcslen(value.c_str()));
+            return value;
+        }
+
+        // A value that already reads back as what we want is left alone, so the ordinary call - a
+        // launcher re-registering itself on every start - creates no key and writes nothing.
+        bool WriteString(const std::wstring &subKey, const wchar_t *name, const std::wstring &value) {
+            if (ReadString(subKey, name) == value) {
+                return true;
+            }
+
+            HKEY key = nullptr;
+            if (RegCreateKeyExW(HKEY_CURRENT_USER, subKey.c_str(), 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS) {
+                return false;
+            }
+
+            const auto bytes  = static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t));
+            const auto status = RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE *>(value.c_str()), bytes);
+            RegCloseKey(key);
+            return status == ERROR_SUCCESS;
+        }
+    } // namespace
+
+    bool Register(std::wstring_view scheme, const std::wstring &description, const std::filesystem::path &executablePath) {
+        if (!IsValidScheme(scheme) || executablePath.empty()) {
+            return false;
+        }
+
+        const std::wstring root = kClassesRoot + std::wstring(scheme);
+
+        // "URL Protocol" is the marker ShellExecute looks for: the name is what matters and the value
+        // is empty by convention. The icon is the launcher's own, so a browser's "open with" prompt
+        // shows the mod rather than a blank sheet.
+        return WriteString(root, nullptr, description) && WriteString(root, L"URL Protocol", L"") && WriteString(root + L"\\DefaultIcon", nullptr, Quoted(executablePath) + L",0")
+            && WriteString(root + L"\\shell\\open\\command", nullptr, BuildOpenCommand(executablePath));
+    }
+
+    bool Unregister(std::wstring_view scheme) {
+        if (!IsValidScheme(scheme)) {
+            return false;
+        }
+
+        const std::wstring root = kClassesRoot + std::wstring(scheme);
+        const auto status       = RegDeleteTreeW(HKEY_CURRENT_USER, root.c_str());
+        return status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND;
+    }
+#endif
 } // namespace Framework::Utils::UrlProtocol
