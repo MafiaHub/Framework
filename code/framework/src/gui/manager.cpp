@@ -79,6 +79,19 @@ namespace Framework::GUI {
             }
         }
 
+        // CefShutdown is as unreliable as the pump on these exit paths, and it
+        // faults inside Chromium's own teardown where nothing we own is left to
+        // save. Guard it the same way: the process is leaving either way.
+        bool CefShutdownGuarded() {
+            __try {
+                CefShutdown();
+                return true;
+            }
+            __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+                return false;
+            }
+        }
+
         const char *CefResultCodeName(int code) {
             switch (code) {
             case CEF_RESULT_CODE_NORMAL_EXIT: return "NORMAL_EXIT";
@@ -235,13 +248,22 @@ namespace Framework::GUI {
                     Sleep(10);
                 }
 
-                if (pumpOk) {
-                    CefShutdown();
+                // CEF requires every browser closed before CefShutdown; calling it
+                // with one still live faults inside Chromium's teardown. The drain
+                // above is capped, so the cap can expire with browsers left.
+                const int liveBrowsers = CEF::LifeSpanHandler::GetLiveBrowserCount();
+                if (!pumpOk) {
+                    _cefPumpFailed = true;
+                    Framework::Logging::GetLogger("Web")->warn("CEF pump faulted during shutdown drain, skipping CefShutdown");
+                }
+                else if (liveBrowsers > 0) {
+                    Framework::Logging::GetLogger("Web")->warn("{} browser(s) still live after the shutdown drain, skipping CefShutdown", liveBrowsers);
+                }
+                else if (CefShutdownGuarded()) {
                     cefStopped = true;
                 }
                 else {
-                    _cefPumpFailed = true;
-                    Framework::Logging::GetLogger("Web")->warn("CEF pump faulted during shutdown drain, skipping CefShutdown");
+                    Framework::Logging::GetLogger("Web")->warn("CefShutdown faulted; leaving CEF to the process exit");
                 }
             }
             _cefInitialized = false;
