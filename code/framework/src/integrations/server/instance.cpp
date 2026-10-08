@@ -1357,6 +1357,9 @@ namespace Framework::Integrations::Server {
         }
 
         _shuttingDown = true;
+        // Run() may still be looping: end it before a tick can observe a half-torn-down
+        // instance. Lifecycle::Shutdown() below clears _initialized far too late for that.
+        _stopRequested = true;
 
         PreShutdown();
 
@@ -1457,12 +1460,15 @@ namespace Framework::Integrations::Server {
                 info.gameMode       = _opts.modName;
                 info.version        = _opts.modVersion;
                 info.maxPlayers     = _opts.maxPlayers;
-                info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
+                auto *peer          = _networkingEngine->GetNetworkServer()->GetPeer();
+                info.currentPlayers = peer ? peer->NumberOfConnections() : 0;
                 info.passworded     = !_opts.bindPassword.empty();
                 _masterlist->Ping(info);
             }
 
-            {
+            // Game services read the world through CoreModules without checking it; ticking them
+            // with no replication manager is a null dereference in whichever one looks first.
+            if (replication) {
                 FW_PROFILE_SCOPE_N("Server::PostUpdate");
                 PostUpdate();
             }
