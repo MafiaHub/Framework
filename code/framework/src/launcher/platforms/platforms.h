@@ -59,7 +59,8 @@ namespace Framework::Launcher::Platforms {
             std::wstring appName;
 
             // signs the player in when no stored Epic sign-in refreshes, persisting it through
-            // External::Epic::SignInWithAuthorizationCode; unset, a browser + clipboard sign-in
+            // External::Epic::SignInWithAuthorizationCode; unset, the Framework's epic_sign_in.exe
+            // window beside the launcher, else a browser + clipboard sign-in
             SignInProc signIn;
         };
 
