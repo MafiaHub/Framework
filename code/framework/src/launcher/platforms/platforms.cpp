@@ -8,6 +8,7 @@
 
 #include "platforms.h"
 
+#include "external/epic/auth.h"
 #include "external/epic/manifest.h"
 #include "external/microsoft_store/package.h"
 #include "external/rockstar/library.h"
@@ -37,6 +38,35 @@ namespace Framework::Launcher::Platforms {
         std::wstring ToGameRoot(std::wstring root) {
             std::ranges::replace(root, L'\\', L'/');
             return root;
+        }
+
+        enum class EpicSignInWindow {
+            Missing,
+            SignedIn,
+            Failed
+        };
+
+        // The Framework's epic_sign_in.exe, shipped beside the launcher. It persists the refresh token
+        // itself; Missing also covers a helper that would not start, so the caller can still fall back.
+        EpicSignInWindow RunEpicSignInWindow(const std::filesystem::path &projectPath) {
+            const std::filesystem::path helper = projectPath / L"epic_sign_in.exe";
+            std::error_code ec;
+            if (!std::filesystem::exists(helper, ec)) {
+                return EpicSignInWindow::Missing;
+            }
+            std::wstring commandLine = L"\"" + helper.wstring() + L"\"";
+            STARTUPINFOW startupInfo {};
+            startupInfo.cb = sizeof(startupInfo);
+            PROCESS_INFORMATION processInfo {};
+            if (!CreateProcessW(helper.c_str(), commandLine.data(), nullptr, nullptr, FALSE, 0, nullptr, projectPath.c_str(), &startupInfo, &processInfo)) {
+                return EpicSignInWindow::Missing;
+            }
+            CloseHandle(processInfo.hThread);
+            WaitForSingleObject(processInfo.hProcess, INFINITE);
+            DWORD exitCode = 1;
+            GetExitCodeProcess(processInfo.hProcess, &exitCode);
+            CloseHandle(processInfo.hProcess);
+            return exitCode == 0 ? EpicSignInWindow::SignedIn : EpicSignInWindow::Failed;
         }
     } // namespace
 
@@ -184,10 +214,56 @@ namespace Framework::Launcher::Platforms {
             return unavailable(fmt::format("Epic points at {}, but the game executable is not there", Utils::StringUtils::WideToNormal(installPath)));
         }
 
-        // Unlike Steam there's no runtime DLL to inject or app-id file to drop; any Epic launch
-        // args go through ProjectConfiguration::additionalLaunchArguments.
+        // Unlike Steam there's no runtime DLL to inject or app-id file to drop; the launch arguments
+        // come from PrepareLaunch, once this is the platform the game starts with.
+        _app                = app;
         resolution.gameRoot = installPath;
         return PlatformCheckStatus::OK;
+    }
+
+    bool Epic::PrepareLaunch(const PlatformHost &host) {
+        // A sign-in UI persists a refresh token that we then use like a stored one. Without the
+        // sign-in window shipped beside the launcher, fall back to the browser + clipboard flow.
+        const auto signIn = [&]() -> External::Epic::AuthResult {
+            auto stored = External::Epic::TryRefreshStoredAuth();
+            if (stored || !External::Epic::NeedsSignIn(stored.GetError())) {
+                return stored;
+            }
+            if (_options.signIn) {
+                return _options.signIn() ? External::Epic::TryRefreshStoredAuth() : stored;
+            }
+            switch (RunEpicSignInWindow(host.GetProjectPath())) {
+            case EpicSignInWindow::SignedIn: return External::Epic::TryRefreshStoredAuth();
+            case EpicSignInWindow::Failed: return stored;
+            case EpicSignInWindow::Missing: break;
+            }
+            return External::Epic::EnsureAuthenticated(Utils::StringUtils::Utf8ToWide(host.GetConfig().name));
+        };
+        const auto auth = signIn();
+        if (!auth) {
+            if (auth.GetError() == External::Epic::AuthError::Unreachable) {
+                host.ReportError("Could not reach Epic Games to sign in, please check your connection and try again");
+            }
+            else {
+                host.ReportError("Epic sign-in is required to play the Epic version of the game");
+            }
+            return false;
+        }
+        const auto &tokens = auth.GetValue();
+
+        // The refresh above just succeeded, so a failure here says nothing against the stored sign-in.
+        const auto exchangeCode = External::Epic::GetExchangeCode(tokens);
+        if (!exchangeCode) {
+            host.ReportError("Could not obtain an Epic launch code, please try again");
+            return false;
+        }
+
+        // Hand the account id to the in-process client (ClientIdentity), as Steam does
+        if (!tokens.accountId.empty()) {
+            host.SetProcessVariable(L"MafiaHubEpicId", Utils::StringUtils::Utf8ToWide(tokens.accountId));
+        }
+        _launchArguments = External::Epic::BuildLaunchArgs(tokens, *exchangeCode, _app.appName, _app.catalogNamespace, _app.catalogItemId, _app.installLocation);
+        return true;
     }
 
     PlatformCheckStatus Rockstar::Resolve(const PlatformHost &host, PlatformResolution &resolution, bool reportErrors) {

@@ -12,6 +12,7 @@
 
 #include "launcher/loaders/image_snapshot.h"
 
+#include <external/epic/manifest.h>
 #include <external/steam/wrapper.h>
 #include <function2/function2.hpp>
 
@@ -48,11 +49,19 @@ namespace Framework::Launcher::Platforms {
     };
 
     // The Epic launcher's manifests, matched by `appName` (the catalog's "AppName"), else by the
-    // launch executable's file name
+    // launch executable's file name. Outside that launcher the game's EOS ownership check wants what
+    // it would pass, so the player is signed in to Epic before the game starts.
     class Epic final: public Platform {
       public:
+        using SignInProc = fu2::function<bool() const>;
+
         struct Options {
             std::wstring appName;
+
+            // signs the player in when no stored Epic sign-in refreshes, persisting it through
+            // External::Epic::SignInWithAuthorizationCode; unset, the Framework's epic_sign_in.exe
+            // window beside the launcher, else a browser + clipboard sign-in
+            SignInProc signIn;
         };
 
         explicit Epic(Options options = {}): _options(std::move(options)) {}
@@ -62,9 +71,16 @@ namespace Framework::Launcher::Platforms {
         }
 
         PlatformCheckStatus Resolve(const PlatformHost &host, PlatformResolution &resolution, bool reportErrors) override;
+        bool PrepareLaunch(const PlatformHost &host) override;
+
+        std::wstring GetLaunchArguments() const override {
+            return _launchArguments;
+        }
 
       private:
         Options _options;
+        External::Epic::InstalledApp _app;
+        std::wstring _launchArguments;
     };
 
     // The Rockstar Games Launcher's registry entries, matched by `titleKey` (e.g. L"GTA: San

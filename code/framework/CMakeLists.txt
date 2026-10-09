@@ -200,6 +200,7 @@ if(WIN32)
         src/external/epic/manifest.cpp
         src/external/microsoft_store/package.cpp
         src/external/rockstar/library.cpp
+        src/external/epic/auth.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/pattern_table.cpp
@@ -420,7 +421,8 @@ if(WIN32)
     )
 
     link_shared_deps(FrameworkLoader)
-    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} MafiaHubServices FrameworkLoaderData ntdll sfd)
+    # winhttp + crypt32: Epic account auth (external/epic/auth.cpp) — OAuth over HTTPS + DPAPI.
+    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} MafiaHubServices FrameworkLoaderData ntdll sfd winhttp crypt32)
     target_link_libraries(FrameworkLoaderData udis86 minhook::minhook)
     target_compile_definitions(FrameworkLoaderData PRIVATE _USE_MATH_DEFINES NOMINMAX)
     target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage /EXPORT:CoreSetExceptionOverride)
@@ -473,6 +475,26 @@ if(WIN32)
     endif()
     # clients need the subprocess exe at runtime; build it with every FrameworkClient consumer
     add_dependencies(FrameworkClient cef_subprocess)
+
+    # Epic sign-in window, run by a launcher only when no stored sign-in refreshes, so launchers stay
+    # CEF-free. It compiles auth.cpp itself rather than taking FrameworkLoader's PE-loader link setup.
+    add_executable(epic_sign_in
+        src/external/epic/sign_in_main.cpp
+        src/external/epic/sign_in_view.cpp
+        src/external/epic/auth.cpp
+    )
+    target_link_libraries(epic_sign_in CEF Framework winhttp crypt32)
+    target_compile_definitions(epic_sign_in PRIVATE _USE_MATH_DEFINES NOMINMAX)
+    set_target_properties(epic_sign_in PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
+    )
+    fw_set_binary_identity(epic_sign_in PRODUCT "MafiaHub Framework" VERSION ${FW_VERSION} COMPANY "MafiaHub" DESCRIPTION "MafiaHub Framework Epic Sign-in")
+    if(TARGET CEFCopyDlls)
+        add_dependencies(epic_sign_in CEFCopyDlls)
+    endif()
+    # launchers spawn it from their own directory; build it with every FrameworkLoader consumer
+    add_dependencies(FrameworkLoader epic_sign_in)
 
     # Ensure runtime DLLs are copied to bin directory for all client/server targets
     if(TARGET libnode_copy_dll)

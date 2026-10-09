@@ -84,6 +84,11 @@ namespace Framework::Launcher {
             return true;
         }
 
+        // Appended to the game's command line once PrepareLaunch succeeded, with a leading space
+        virtual std::wstring GetLaunchArguments() const {
+            return {};
+        }
+
         // PE loading: the executable's file bytes before mapping, its sections once mapped (code
         // that is not on disk can be put back there), and the entry point to enter it at
         virtual bool PrepareImage(const PlatformHost &host, const std::wstring &executablePath, std::span<const uint8_t> image) {

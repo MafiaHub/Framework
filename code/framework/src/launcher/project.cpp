@@ -119,6 +119,35 @@ LPSTR BuildGameCommandLineA() {
     return buffer;
 }
 
+// The launch arguments carry live credentials (store exchange code, account id, ownership-token
+// path). This line reaches the dev console and log files, so log the shape and never the values.
+// Markers match in any case: the game parses them that way, and additionalLaunchArguments is free text.
+std::string RedactGameCommandLine(std::string commandLine) {
+    for (const char *key : {"-auth_password=", "-epicuserid=", "-epicovt="}) {
+        const std::string marker(key);
+        std::string lowered = Framework::Utils::StringUtils::ToLower(commandLine);
+        for (size_t pos = lowered.find(marker); pos != std::string::npos; pos = lowered.find(marker, pos)) {
+            const size_t valueStart = pos + marker.size();
+            size_t valueEnd         = std::string::npos;
+            if (valueStart < commandLine.size() && commandLine[valueStart] == '"') {
+                const size_t closing = commandLine.find('"', valueStart + 1);
+                valueEnd             = (closing == std::string::npos) ? commandLine.size() : closing + 1;
+            }
+            else {
+                valueEnd = commandLine.find(' ', valueStart);
+                if (valueEnd == std::string::npos) {
+                    valueEnd = commandLine.size();
+                }
+            }
+            const std::string placeholder = "<redacted>";
+            commandLine.replace(valueStart, valueEnd - valueStart, placeholder);
+            lowered.replace(valueStart, valueEnd - valueStart, placeholder);
+            pos = valueStart + placeholder.size();
+        }
+    }
+    return commandLine;
+}
+
 bool SynchronizeUCRTCommandLine() {
     const auto ucrt = GetModuleHandleW(L"ucrtbase.dll");
     if (!ucrt) {
@@ -380,6 +409,7 @@ namespace Framework::Launcher {
         if (!_platform->PrepareLaunch(*this)) {
             return false;
         }
+        _config.additionalLaunchArguments += _platform->GetLaunchArguments();
 
         // Use real scaling
         const auto shcore = LoadLibraryW(L"shcore.dll");
@@ -895,8 +925,7 @@ namespace Framework::Launcher {
             Loaders::ApplyMappedImageIdentity(_gamePath);
 
             if (SynchronizeUCRTCommandLine()) {
-                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info(
-                    "Mapped game command line: {}", BuildGameCommandLineA());
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Mapped game command line: {}", RedactGameCommandLine(BuildGameCommandLineA()));
             }
 
             // The OS loader normally dispatches executable TLS callbacks before the entry
