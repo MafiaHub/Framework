@@ -184,18 +184,22 @@ namespace Framework::External::Epic {
             }
         }
 
-        // The body of a 200 response; anything else is logged under `what` and dropped.
-        std::optional<std::string> HttpsOk(const char *what, const wchar_t *host, const wchar_t *path, const wchar_t *method, const std::wstring &headers, const std::string &body = {}) {
+        using HttpResult = Utils::Result<std::string, AuthError>;
+
+        // The body of a 200 response. Anything else is logged under `what`: Rejected when Epic refused
+        // what was sent (HTTP 400/401), Unreachable for a transport failure or any other status.
+        HttpResult HttpsOk(const char *what, const wchar_t *host, const wchar_t *path, const wchar_t *method, const std::wstring &headers, const std::string &body = {}) {
             auto response = HttpsRequest(host, path, method, headers, body);
             if (!response) {
                 Logger()->warn("Epic {} request failed in transport", what);
-                return std::nullopt;
+                return HttpResult::Err(AuthError::Unreachable);
             }
             if (response->status != 200) {
                 Logger()->warn("Epic {} request returned HTTP {}", what, response->status);
-                return std::nullopt;
+                const bool rejected = response->status == 400 || response->status == 401;
+                return HttpResult::Err(rejected ? AuthError::Rejected : AuthError::Unreachable);
             }
-            return std::move(response->body);
+            return HttpResult::Ok(std::move(response->body));
         }
 
         std::wstring BasicAuthHeader() {
@@ -219,16 +223,20 @@ namespace Framework::External::Epic {
             }
         }
 
-        std::optional<Tokens> TokenGrant(const std::string &formBody) {
+        AuthResult TokenGrant(const std::string &formBody) {
             const auto body = HttpsOk("token", kAuthHost, kTokenPath, L"POST", BasicAuthHeader(), formBody);
-            return body ? ParseTokens(*body) : std::nullopt;
+            if (!body) {
+                return AuthResult::Err(body.GetError());
+            }
+            auto tokens = ParseTokens(body.GetValue());
+            return tokens ? AuthResult::Ok(std::move(*tokens)) : AuthResult::Err(AuthError::Unreachable);
         }
 
-        std::optional<Tokens> RefreshGrant(const std::string &refreshToken) {
+        AuthResult RefreshGrant(const std::string &refreshToken) {
             return TokenGrant("grant_type=refresh_token&token_type=eg1&refresh_token=" + FormEncode(refreshToken));
         }
 
-        std::optional<Tokens> AuthCodeGrant(const std::string &authCode) {
+        AuthResult AuthCodeGrant(const std::string &authCode) {
             return TokenGrant("grant_type=authorization_code&token_type=eg1&code=" + FormEncode(authCode));
         }
 
@@ -349,7 +357,7 @@ namespace Framework::External::Epic {
                 return std::nullopt;
             }
             Logger()->info("Epic sign-in succeeded");
-            return tokens;
+            return std::move(tokens).GetValue();
         }
 
         // Ownership-verification token the Epic launcher drops under <install>\.egstore. We take
@@ -390,14 +398,14 @@ namespace Framework::External::Epic {
             if (!token) {
                 return {};
             }
-            if (token->empty()) {
+            if (token.GetValue().empty()) {
                 Logger()->warn("Epic ownership token response was empty");
                 return {};
             }
 
             const std::filesystem::path file = DataDir() / Utils::StringUtils::Utf8ToWide(catalogNamespace + catalogItemId + ".ovt");
             std::ofstream f(file, std::ios::binary | std::ios::trunc);
-            if (!f.write(token->data(), static_cast<std::streamsize>(token->size()))) {
+            if (!f.write(token.GetValue().data(), static_cast<std::streamsize>(token.GetValue().size()))) {
                 Logger()->warn("Could not write the minted Epic ownership token");
                 return {};
             }
@@ -405,26 +413,35 @@ namespace Framework::External::Epic {
         }
     } // namespace
 
-    std::optional<Tokens> TryRefreshStoredAuth() {
+    AuthResult TryRefreshStoredAuth() {
         const auto rt = LoadRefreshToken();
-        auto tokens   = rt ? RefreshGrant(*rt) : std::nullopt;
+        if (!rt) {
+            return AuthResult::Err(AuthError::NoStoredSignIn);
+        }
+        auto tokens = RefreshGrant(*rt);
         if (!tokens) {
-            return std::nullopt;
+            if (tokens.GetError() == AuthError::Rejected) {
+                Logger()->info("Epic refused the stored sign-in; forgetting it");
+                ClearStoredAuth();
+            }
+            return tokens;
         }
         Logger()->info("Refreshed the stored Epic sign-in");
-        PersistRotatedRefreshToken(tokens->refreshToken);
+        PersistRotatedRefreshToken(tokens.GetValue().refreshToken);
         return tokens;
     }
 
-    std::optional<Tokens> EnsureAuthenticated(const std::wstring &productName) {
-        if (auto tokens = TryRefreshStoredAuth()) {
-            return tokens;
+    AuthResult EnsureAuthenticated(const std::wstring &productName) {
+        auto stored = TryRefreshStoredAuth();
+        if (stored || !NeedsSignIn(stored.GetError())) {
+            return stored;
         }
         auto tokens = InteractiveSignIn(productName);
-        if (tokens) {
-            PersistRotatedRefreshToken(tokens->refreshToken);
+        if (!tokens) {
+            return stored;
         }
-        return tokens;
+        PersistRotatedRefreshToken(tokens->refreshToken);
+        return AuthResult::Ok(std::move(*tokens));
     }
 
     std::wstring GetLoginUrl() {
@@ -443,7 +460,7 @@ namespace Framework::External::Epic {
             return false;
         }
         // The tokens are dropped here, so the stored refresh token is the only result there is.
-        if (!SaveRefreshToken(tokens->refreshToken)) {
+        if (!SaveRefreshToken(tokens.GetValue().refreshToken)) {
             Logger()->error("Epic sign-in succeeded, but the refresh token could not be persisted");
             return false;
         }
@@ -460,7 +477,7 @@ namespace Framework::External::Epic {
             return std::nullopt;
         }
         try {
-            std::string code = nlohmann::json::parse(*body).value("code", std::string {});
+            std::string code = nlohmann::json::parse(body.GetValue()).value("code", std::string {});
             return code.empty() ? std::nullopt : std::optional(std::move(code));
         }
         catch (const std::exception &) {

@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "utils/result.h"
+
 #include <optional>
 #include <string>
 
@@ -28,13 +30,28 @@ namespace Framework::External::Epic {
         }
     };
 
-    // A usable access token: the stored refresh token first, else a browser + clipboard sign-in
-    // labelled with productName. nullopt if the user cancels or auth fails. The refresh token is
-    // persisted, DPAPI-encrypted, under %LOCALAPPDATA%\MafiaHub.
-    std::optional<Tokens> EnsureAuthenticated(const std::wstring &productName = {});
+    enum class AuthError {
+        None,
+        NoStoredSignIn,
+        Rejected,    // Epic refused the stored sign-in (HTTP 400/401): signed out, expired or revoked
+        Unreachable, // no usable answer from Epic
+    };
+    using AuthResult = Utils::Result<Tokens, AuthError>;
 
-    // The silent half of EnsureAuthenticated: refresh the stored token, never show any UI.
-    std::optional<Tokens> TryRefreshStoredAuth();
+    // Only a missing or rejected sign-in calls for a new one. When Epic can't be reached a new
+    // sign-in fails the same way, and the stored one still works once it can.
+    inline bool NeedsSignIn(AuthError error) {
+        return error == AuthError::NoStoredSignIn || error == AuthError::Rejected;
+    }
+
+    // A usable access token: the stored refresh token first, else, when NeedsSignIn, a browser +
+    // clipboard sign-in labelled with productName. The refresh token is persisted, DPAPI-encrypted,
+    // under %LOCALAPPDATA%\MafiaHub.
+    AuthResult EnsureAuthenticated(const std::wstring &productName = {});
+
+    // The silent half of EnsureAuthenticated: refresh the stored token, never show any UI. A rejected
+    // stored sign-in is forgotten; one Epic could not be asked about is kept.
+    AuthResult TryRefreshStoredAuth();
 
     // Mint a fresh single-use exchange code from a valid access token (expires in ~5 min).
     std::optional<std::string> GetExchangeCode(const Tokens &tokens);
