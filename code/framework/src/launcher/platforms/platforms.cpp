@@ -8,6 +8,7 @@
 
 #include "platforms.h"
 
+#include "external/epic/auth.h"
 #include "external/epic/manifest.h"
 #include "external/microsoft_store/package.h"
 #include "external/rockstar/library.h"
@@ -184,10 +185,43 @@ namespace Framework::Launcher::Platforms {
             return unavailable(fmt::format("Epic points at {}, but the game executable is not there", Utils::StringUtils::WideToNormal(installPath)));
         }
 
-        // Unlike Steam there's no runtime DLL to inject or app-id file to drop; any Epic launch
-        // args go through ProjectConfiguration::additionalLaunchArguments.
+        // Unlike Steam there's no runtime DLL to inject or app-id file to drop; the launch arguments
+        // come from PrepareLaunch, once this is the platform the game starts with.
+        _app                = app;
         resolution.gameRoot = installPath;
         return PlatformCheckStatus::OK;
+    }
+
+    bool Epic::PrepareLaunch(const PlatformHost &host) {
+        // A sign-in UI persists a refresh token that we then use like a stored one.
+        const auto signIn = [&]() -> std::optional<External::Epic::Tokens> {
+            if (!_options.signIn) {
+                return External::Epic::EnsureAuthenticated(Utils::StringUtils::Utf8ToWide(host.GetConfig().name));
+            }
+            if (auto tokens = External::Epic::TryRefreshStoredAuth()) {
+                return tokens;
+            }
+            return _options.signIn() ? External::Epic::TryRefreshStoredAuth() : std::nullopt;
+        };
+        const auto tokens = signIn();
+        if (!tokens) {
+            host.ReportError("Epic sign-in is required to play the Epic version of the game");
+            return false;
+        }
+
+        const auto exchangeCode = External::Epic::GetExchangeCode(*tokens);
+        if (!exchangeCode) {
+            External::Epic::ClearStoredAuth(); // the next launch signs in afresh
+            host.ReportError("Could not obtain an Epic launch code, please try again");
+            return false;
+        }
+
+        // Hand the account id to the in-process client (ClientIdentity), as Steam does
+        if (!tokens->accountId.empty()) {
+            host.SetProcessVariable(L"MafiaHubEpicId", Utils::StringUtils::Utf8ToWide(tokens->accountId));
+        }
+        _launchArguments = External::Epic::BuildLaunchArgs(*tokens, *exchangeCode, _app.appName, _app.catalogNamespace, _app.catalogItemId, _app.installLocation);
+        return true;
     }
 
     PlatformCheckStatus Rockstar::Resolve(const PlatformHost &host, PlatformResolution &resolution, bool reportErrors) {
