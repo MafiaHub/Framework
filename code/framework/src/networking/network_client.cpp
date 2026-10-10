@@ -121,12 +121,15 @@ namespace Framework::Networking {
             return {};
         }
 
-        _peer->Shutdown(kShutdownBlockDurationMs, 0, MafiaNet::Priority::Immediate);
+        // Called from inside a MafiaNet callback (MafiaHub/Framework#315): Update() shuts the peer
+        // down once dispatch has unwound.
+        if (_dispatching) {
+            _shutdownPending = true;
+        }
+        else {
+            ShutdownPeer();
+        }
         Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting from the server...");
-
-        // Peer shutdown fires TwoWayAuthentication::Clear(), wiping the registered build token;
-        // drop the cache so the next Connect()'s Init() re-registers instead of no-op'ing.
-        _registeredToken.clear();
 
         if (_onPlayerDisconnectedCallback) {
             // Locally initiated: there is no inbound packet, so pass null rather than a stale _packet.
@@ -137,8 +140,17 @@ namespace Framework::Networking {
         return {};
     }
 
+    void NetworkClient::ShutdownPeer() {
+        _peer->Shutdown(kShutdownBlockDurationMs, 0, MafiaNet::Priority::Immediate);
+
+        // Peer shutdown fires TwoWayAuthentication::Clear(), wiping the registered build token;
+        // drop the cache so the next Connect()'s Init() re-registers instead of no-op'ing.
+        _registeredToken.clear();
+    }
+
     void NetworkClient::ResetConnectionState() {
-        if (_peer) {
+        // A pending shutdown closes every connection itself, after the plugins have unwound.
+        if (_peer && !_shutdownPending) {
             MafiaNet::SystemAddress systems[kMaxConnections];
             unsigned short count = kMaxConnections;
             if (_peer->GetConnectionList(systems, &count)) {
@@ -174,7 +186,14 @@ namespace Framework::Networking {
             return;
         }
 
+        _dispatching = true;
         NetworkPeer::Update();
+        _dispatching = false;
+
+        if (_shutdownPending) {
+            _shutdownPending = false;
+            ShutdownPeer();
+        }
     }
 
     bool NetworkClient::HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) {

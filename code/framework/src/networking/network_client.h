@@ -48,8 +48,15 @@ namespace Framework::Networking {
         AssetFileTransfer _fileListTransfer;
         bool _initialReplicationDownloadComplete {};
 
+        // Set while Update() dispatches: a MafiaNet plugin or RakPeer::Receive may be on the stack,
+        // and the peer shutdown frees the receivers and packets they still hold.
+        bool _dispatching {};
+        bool _shutdownPending {};
+
         // Single teardown for every terminal disconnect: drops the connection and clears the flags.
         void ResetConnectionState();
+
+        void ShutdownPeer();
 
         // Empties the peer's receive queue without dispatching.
         void DrainStalePackets();
@@ -64,6 +71,9 @@ namespace Framework::Networking {
 
         void Update() override;
         bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;
+        bool IsDispatchHalted() const override {
+            return _shutdownPending;
+        }
 
         // sessionPayload rides the connection request (MafiaNet's session handshake): it is what the
         // server's admission gate decides on before either side reports a connection.

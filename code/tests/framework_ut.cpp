@@ -15,6 +15,7 @@
 #include "modules/connection_admission_ut.h"
 #include "modules/connection_gate_ut.h"
 #include "modules/delegation_ut.h"
+#include "modules/download_disconnect_ut.h"
 #include "modules/gui_resources_ut.h"
 #include "modules/input_state_ut.h"
 #include "modules/interest_grid_ut.h"
@@ -126,6 +127,7 @@ int main() {
     UNIT_MODULE(timer_context);
     UNIT_MODULE(connection_gate);
     UNIT_MODULE(connection_admission);
+    UNIT_MODULE(download_disconnect);
     UNIT_MODULE(nametag);
 
     return UNIT_RUN();

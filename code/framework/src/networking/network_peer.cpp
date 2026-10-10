@@ -85,8 +85,8 @@ namespace Framework::Networking {
         // Receive() updates every plugin before each packet; the replication pass runs on the first
         // one only, ahead of this drain's packets, which the next pass then serializes.
         _replicationManager->BeginNetworkUpdate();
-        for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
-            if (_packet->length == 0) {
+        for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = IsDispatchHalted() ? nullptr : _peer->Receive()) {
+            if (_packet->length == 0 || IsDispatchHalted()) {
                 continue;
             }
             const int offset = ResolvePacketDataOffset(_packet->data, _packet->length);
