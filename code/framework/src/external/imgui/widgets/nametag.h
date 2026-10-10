@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 namespace Framework::External::ImGUI::Widgets {
     // Wire values are shared with Networking::Replication::NametagComponent; keep in sync.
@@ -85,6 +86,11 @@ namespace Framework::External::ImGUI::Widgets {
         ImU32 voiceColor = IM_COL32(255, 255, 255, 255);
         // How many waves the speaker has, 1 to 3: the voice tier, whisper to shout.
         int voiceWaves = 3;
+
+        // A transient line above the plate (Nametags.setLabel); null draws none. '\n' splits it
+        // into lines, each centred over the name. A zero colour draws it in textColor.
+        const char *note = nullptr;
+        ImU32 noteColor  = 0;
     };
 
     // A loudspeaker with `waves` sound waves, 1 to 3, sized to `height` and centred on `center`.
@@ -171,6 +177,23 @@ namespace Framework::External::ImGUI::Widgets {
             DrawVoiceIcon(drawList, ImVec2(textPos.x - iconWidth + textSize.y * 0.5f, textPos.y + textSize.y * 0.5f), textSize.y, style.voiceLevel, WorldTextModulateAlpha(style.voiceColor, alpha), style.voiceWaves);
         }
         drawList->AddText(font, fontSize, textPos, WorldTextModulateAlpha(style.textColor, alpha), name);
+
+        if (style.note && style.note[0]) {
+            // Stacked upwards from the plate's top edge, last line nearest the name.
+            const ImU32 noteColor = WorldTextModulateAlpha(style.noteColor != 0 ? style.noteColor : style.textColor, alpha);
+            const char *end       = style.note + std::strlen(style.note);
+            float lineBottom      = textPos.y - style.padding * 2.0f;
+            for (const char *lineEnd = end; lineEnd > style.note;) {
+                const char *lineStart = lineEnd;
+                while (lineStart > style.note && lineStart[-1] != '\n') {
+                    --lineStart;
+                }
+                const ImVec2 lineSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, lineStart, lineEnd);
+                lineBottom -= lineSize.y;
+                drawList->AddText(font, fontSize, ImVec2(screenPos.x - lineSize.x * 0.5f, lineBottom), noteColor, lineStart, lineEnd);
+                lineEnd = lineStart > style.note ? lineStart - 1 : lineStart;
+            }
+        }
 
         if (!drawHealth) {
             return;
