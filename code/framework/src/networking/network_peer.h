@@ -150,7 +150,11 @@ namespace Framework::Networking {
         // is stored for the peer's lifetime and reached through RPC4's per-slot context, so no
         // file-static handler pointers are needed.
         void RegisterRawRPC(const char *identifier, fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)> handler) {
-            auto slot     = std::make_unique<RPCSlot>(std::move(handler));
+            auto slot     = std::make_unique<RPCSlot>([this, cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) mutable {
+                if (!IsDispatchHalted()) {
+                    cb(bs, packet);
+                }
+            });
             void *context = slot.get();
             _rpcHandlers.push_back(std::move(slot));
             _rpc.RegisterSlot(identifier, &NetworkPeer::DispatchRPC, context, 0);
@@ -163,6 +167,11 @@ namespace Framework::Networking {
 
         void Update() override;
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
+
+        // True once the session is being torn down mid-dispatch: the rest of the queue belongs to it.
+        virtual bool IsDispatchHalted() const {
+            return false;
+        }
 
         // Byte offset of the packet id in a datagram, skipping an optional ID_TIMESTAMP + 8-byte
         // MafiaNet::Time prefix. Returns -1 if too short. Pure + tested so the skip width can't drift
