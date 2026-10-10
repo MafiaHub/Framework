@@ -55,3 +55,12 @@ endif()
 add_custom_target(RunFrameworkInputTests
     COMMAND $<TARGET_FILE:FrameworkInputTests>
     DEPENDS FrameworkInputTests)
+
+# Opt-in executable: building it never starts its loopback endpoint or tests.
+add_executable(FrameworkAutomationTests automation_ut.cpp)
+target_include_directories(FrameworkAutomationTests PRIVATE . ../framework/src)
+target_link_libraries(FrameworkAutomationTests PRIVATE Framework)
+add_custom_target(RunFrameworkAutomationTests
+    COMMAND $<TARGET_FILE:FrameworkAutomationTests>
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    DEPENDS FrameworkAutomationTests)

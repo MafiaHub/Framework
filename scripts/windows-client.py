@@ -34,6 +34,7 @@ def main():
     parser.add_argument("--app-id", help="Steam App ID; remembered per launcher in this checkout")
     parser.add_argument("--exe", type=Path, help="launcher executable (default: single built *Launcher.exe)")
     parser.add_argument("--dry-run", action="store_true", help="show command without launching or writing files")
+    parser.add_argument("--state-dir", type=Path, help="separate Proton state directory inside this checkout")
     parser.add_argument("args", nargs=argparse.REMAINDER, help="launcher arguments after --")
     options = parser.parse_args()
 
@@ -47,7 +48,9 @@ def main():
     if not launcher.is_file() or not launcher.is_relative_to(REPO):
         parser.error("The launcher must be a file inside this checkout.")
 
-    state = REPO / "_external/proton" / launcher.stem
+    state = options.state_dir.resolve() if options.state_dir else REPO / "_external/proton" / launcher.stem
+    if not state.is_relative_to(REPO) or state == REPO:
+        parser.error("The state directory must be strictly inside this checkout.")
     identity_file = state / "app-id"
     app_id = options.app_id
     if app_id is None and identity_file.is_file():
