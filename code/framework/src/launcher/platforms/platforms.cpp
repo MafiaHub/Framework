@@ -262,6 +262,10 @@ namespace Framework::Launcher::Platforms {
         if (!tokens.accountId.empty()) {
             host.SetProcessVariable(L"MafiaHubEpicId", Utils::StringUtils::Utf8ToWide(tokens.accountId));
         }
+        // Public catalog metadata only. The client refreshes the local sign-in for each join;
+        // passing a launch-time proof would expire while the player was in the menu or another server.
+        host.SetProcessVariable(L"MafiaHubEpicNamespace", Utils::StringUtils::Utf8ToWide(_app.catalogNamespace));
+        host.SetProcessVariable(L"MafiaHubEpicCatalogItemId", Utils::StringUtils::Utf8ToWide(_app.catalogItemId));
         _launchArguments = External::Epic::BuildLaunchArgs(tokens, *exchangeCode, _app.appName, _app.catalogNamespace, _app.catalogItemId, _app.installLocation);
         return true;
     }

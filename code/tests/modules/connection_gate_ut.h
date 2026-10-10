@@ -51,6 +51,8 @@ class ConnectionGateTestRig {
             const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
             Events.on("playerConnecting", async (connection) => {
                 globalThis.__seen = `${connection.nickname}|${connection.ticket}|${connection.ip}|${connection.steamId}`;
+                globalThis.__epicId = connection.epicId;
+                globalThis.__proofExposed = "epicProof" in connection ? 1 : 0;
                 switch (connection.nickname) {
                 case "admit": return;
                 case "refuse": connection.reject("Not on the whitelist"); return;
@@ -182,8 +184,16 @@ MODULE(connection_gate, {
             EQUALS(gate.IsPending(2), false);
         });
 
-        IT("hands the handler the identity, the ticket and the address", {
-            STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__seen").c_str(), "admit|one-time-ticket|10.0.0.2|76561198000000000");
+        IT("hands the handler the identity, the ticket and the address", { STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__seen").c_str(), "admit|one-time-ticket|10.0.0.2|76561198000000000"); });
+
+        IT("exposes the verified Epic id without exposing its proof", {
+            auto identity   = Rig::Identity("admit");
+            identity.epicId = "0123456789abcdef0123456789abcdef";
+            EQUALS(gate.Begin(Rig::Guid(20), identity, "10.0.0.20"), true);
+            const auto decisions = Rig::Settle(module, gate);
+            EQUALS(decisions.size(), 1u);
+            STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__epicId").c_str(), identity.epicId.c_str());
+            EQUALS(Rig::EvalInt(module.GetEngine(), "globalThis.__proofExposed"), 0);
         });
 
         IT("refuses with the script's reason", {

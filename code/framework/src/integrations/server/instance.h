@@ -17,6 +17,7 @@
 
 #include "asset_paks/asset_pak_builder.h"
 #include "connection_gate.h"
+#include "epic_identity_verifier.h"
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
@@ -211,6 +212,8 @@ namespace Framework::Integrations::Server {
 
         // Holds each authenticated connection until the playerConnecting handlers answer.
         ConnectionGate _connectionGate;
+        EpicIdentityVerifier _epicIdentityVerifier;
+        std::vector<EpicIdentityVerifier::Decision> _epicIdentityDecisions;
         // Reused every tick so the drain never allocates.
         std::vector<AdmissionDecision> _admissionDecisions;
 
@@ -234,6 +237,7 @@ namespace Framework::Integrations::Server {
         // A connection request arrived: hand it to the admission gate, or admit it at once when no
         // script gates connections. Refused outright when it carries no identity.
         void OnSessionRequest(MafiaNet::RakNetGUID guid, const std::optional<Framework::Networking::RPC::ClientIdentity> &identity);
+        void BeginAdmission(MafiaNet::RakNetGUID guid, const Framework::Networking::RPC::ClientIdentity &identity);
         // Let a waiting request in, if a player slot is free; the connection then becomes real on both
         // sides and the usual build check, resource list and join follow.
         void AdmitSession(MafiaNet::RakNetGUID guid);

@@ -197,7 +197,7 @@ namespace Framework::Scripting::Builtins {
                 v8pp::metadata::docs("void", {v8pp::metadata::param("color", "number", false, "Packed 0xAARRGGBB color.")},
                     "Tints the text on this player's nametag."));
             cls->property("steamId", &Player::GetSteamId, v8pp::metadata::property_docs("string", "Authenticated Steam identifier, or an empty string when unavailable."));
-            cls->property("epicId", &Player::GetEpicId, v8pp::metadata::property_docs("string", "Epic Games account identifier the client reported, not verified by the server, or an empty string when unavailable."));
+            cls->property("epicId", &Player::GetEpicId, v8pp::metadata::property_docs("string", "Epic Games account identifier verified by the server against an Epic-signed proof, or an empty string for a connection without Epic authentication."));
             cls->property("discordId", &Player::GetDiscordId, v8pp::metadata::property_docs("string", "Authenticated Discord identifier, or an empty string when unavailable."));
             cls->property("hardwareId", &Player::GetHardwareId, v8pp::metadata::property_docs("string", "Framework hardware identifier, or an empty string when unavailable."));
             cls->property("ping", &Player::GetPing, v8pp::metadata::property_docs("number", "Current round-trip latency in milliseconds, or -1 when unavailable."));

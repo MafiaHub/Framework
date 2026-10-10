@@ -107,10 +107,10 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             "handler has returned and every Promise a handler returned has settled, then it is let in if a player slot is free (otherwise it is refused as full). `connection.reject()` turns it away instead, and so does a handler "
             "that throws or rejects, or handlers that have not settled within the server's admission timeout (30 seconds by default, restarted by every `connection.update()`). With no handler at all, every request is let in at once.");
 
-        auto &type = catalog.data_type("PendingConnection", "A player asking to join, handed to `playerConnecting`. Every identifier is reported by the player's own client and is not verified by the server.");
+        auto &type = catalog.data_type("PendingConnection", "A player asking to join, handed to `playerConnecting`. epicId is verified by the server against an Epic-signed proof; other identifiers are client-reported and unverified.");
         type.add_property("nickname", "string", "The name the player asked to join under.", true);
         type.add_property("steamId", "string", "Steam identifier the client reported, or an empty string when it had none.", true);
-        type.add_property("epicId", "string", "Epic Games account identifier the client reported, or an empty string when it had none.", true);
+        type.add_property("epicId", "string", "Epic Games account identifier verified by the server before this event, or an empty string for a connection without Epic authentication.", true);
         type.add_property("discordId", "string", "Discord identifier the client reported, or an empty string when it had none.", true);
         type.add_property("hardwareId", "string", "Framework hardware identifier the client reported, or an empty string when it had none.", true);
         type.add_property("ticket", "string",

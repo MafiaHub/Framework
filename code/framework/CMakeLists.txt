@@ -27,6 +27,7 @@ set(FRAMEWORK_SRC
 
     src/external/sentry/wrapper.cpp
     src/external/sentry/crash_trail.cpp
+    src/external/epic/account_proof.cpp
 
     src/networking/network_peer.cpp
     src/networking/errors.cpp
@@ -78,6 +79,7 @@ set(FRAMEWORK_SERVER_SRC
 
     src/integrations/server/instance.cpp
     src/integrations/server/connection_gate.cpp
+    src/integrations/server/epic_identity_verifier.cpp
     src/integrations/server/asset_paks/asset_pak_builder.cpp
     src/integrations/server/networking/engine.cpp
 
@@ -406,7 +408,8 @@ if(WIN32)
     endif()
 
     set(CLIENT_SHARED_LIBS minhook::minhook SteamSDK udis86)
-    target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS})
+    target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} winhttp crypt32)
+    target_sources(FrameworkClient PRIVATE src/external/epic/auth.cpp)
 
     # Voice capture/playback. PUBLIC on the miniaudio side, so the feature-trimming defines
     # and the include directory reach anything that pulls in the voice client.

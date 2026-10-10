@@ -135,6 +135,67 @@ MODULE(connection_admission, {
     using Rig = ConnectionAdmissionRig;
     using Framework::Networking::DisconnectionReason;
 
+    IT("does not send a join until account proof preparation succeeds", {
+        Rig rig;
+        EQUALS(rig.StartServer(true), true);
+        std::promise<void> release;
+        const auto wait = release.get_future().share();
+        EQUALS(static_cast<bool>(rig.client->ConnectAsync("127.0.0.1", rig.port, "",
+                   [wait] {
+                       wait.wait();
+                       return Framework::Utils::Result<std::string, Framework::Error>::Ok(Rig::IdentityPayload("Epic", ""));
+                   })),
+            true);
+        rig.PumpFor(100);
+        EQUALS(rig.seen.requests.empty(), true);
+        release.set_value();
+        EQUALS(rig.PumpUntil([&] {
+            return !rig.seen.requests.empty();
+        }),
+            true);
+    });
+
+    IT("cancels a join while account proof preparation is still running", {
+        Rig rig;
+        EQUALS(rig.StartServer(true), true);
+        std::promise<void> release;
+        const auto wait = release.get_future().share();
+        EQUALS(static_cast<bool>(rig.client->ConnectAsync("127.0.0.1", rig.port, "",
+                   [wait] {
+                       wait.wait();
+                       return Framework::Utils::Result<std::string, Framework::Error>::Ok(Rig::IdentityPayload("Cancelled", ""));
+                   })),
+            true);
+        EQUALS(static_cast<bool>(rig.client->Disconnect()), true);
+        release.set_value();
+        rig.PumpFor(200);
+        EQUALS(rig.seen.requests.empty(), true);
+        EQUALS(rig.client->GetConnectionState() == Framework::Networking::PeerState::DISCONNECTED, true);
+        EQUALS(rig.Connect(Rig::IdentityPayload("Next", "")), true);
+        EQUALS(rig.PumpUntil([&] {
+            return !rig.seen.requests.empty();
+        }),
+            true);
+        STREQUALS(rig.seen.requests[0]->name.c_str(), "Next");
+    });
+
+    IT("reports account authentication failure without contacting the game server", {
+        Rig rig;
+        EQUALS(rig.StartServer(true), true);
+        EQUALS(static_cast<bool>(rig.client->ConnectAsync("127.0.0.1", rig.port, "",
+                   [] {
+                       return Framework::Utils::Result<std::string, Framework::Error>::Err(Framework::Error("Epic sign-in expired"));
+                   })),
+            true);
+        EQUALS(rig.PumpUntil([&] {
+            return rig.seen.clientDisconnected;
+        }),
+            true);
+        EQUALS(rig.seen.requests.empty(), true);
+        EQUALS(rig.seen.reason == DisconnectionReason::CONNECTION_REFUSED, true);
+        STREQUALS(rig.seen.customReason.c_str(), "Epic sign-in expired");
+    });
+
     IT("hands the server the identity and ticket the client connected with, before any connection", {
         Rig rig;
         EQUALS(rig.StartServer(true), true);

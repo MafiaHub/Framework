@@ -56,6 +56,10 @@ namespace Framework::External::Epic {
     // Mint a fresh single-use exchange code from a valid access token (expires in ~5 min).
     std::optional<std::string> GetExchangeCode(const Tokens &tokens);
 
+    // Silently refresh the local sign-in and mint a fresh, five-minute account proof for a join.
+    // Only the signed proof leaves the client; credentials stay local. Call off the game thread.
+    std::optional<std::string> GetAccountProof(const std::string &catalogNamespace, const std::string &catalogItemId);
+
     // Embedded-webview sign-in: navigate to GetLoginUrl(), then hand the resulting redirect-page
     // text (or a bare authorizationCode) to SignInWithAuthorizationCode to mint + persist tokens.
     // It blocks on the network, so call it off any UI thread. False when nothing was persisted.

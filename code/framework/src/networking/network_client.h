@@ -18,6 +18,8 @@
 
 #include <mafianet/types.h>
 #include <mafianet/peerinterface.h>
+#include <future>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -48,6 +50,14 @@ namespace Framework::Networking {
         AssetFileTransfer _fileListTransfer;
         bool _initialReplicationDownloadComplete {};
 
+        struct PreparedConnection {
+            std::string host;
+            int32_t port;
+            std::string password;
+        };
+        std::optional<PreparedConnection> _preparedConnection;
+        std::future<Utils::Result<std::string, Error>> _sessionPreparation;
+
         // Single teardown for every terminal disconnect: drops the connection and clears the flags.
         void ResetConnectionState();
 
@@ -68,6 +78,10 @@ namespace Framework::Networking {
         // sessionPayload rides the connection request (MafiaNet's session handshake): it is what the
         // server's admission gate decides on before either side reports a connection.
         [[nodiscard]] Utils::Result<void, Error> Connect(const std::string &host, int32_t port, const std::string &password = "", const std::string &sessionPayload = "");
+
+        // Prepares authentication off-thread, then starts the transport on Update(). Disconnect
+        // cancels the pending join. No packet is sent until preparation succeeds.
+        [[nodiscard]] Utils::Result<void, Error> ConnectAsync(const std::string &host, int32_t port, const std::string &password, fu2::function<Utils::Result<std::string, Error>()> prepare);
 
         [[nodiscard]] Utils::Result<void, Error> Disconnect();
 

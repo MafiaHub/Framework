@@ -83,6 +83,7 @@ MODULE(network_packets, {
         out.hardwareId = "hw-3";
         out.epicId     = "epic-4";
         out.ticket     = "one-time-ticket";
+        out.epicProof  = "signed-epic-proof";
 
         MafiaNet::BitStream bs;
         out.Serialize(&bs, true);
@@ -93,6 +94,7 @@ MODULE(network_packets, {
         STREQUALS(in.hardwareId.c_str(), "hw-3");
         STREQUALS(in.epicId.c_str(), "epic-4");
         STREQUALS(in.ticket.c_str(), "one-time-ticket");
+        STREQUALS(in.epicProof.c_str(), "signed-epic-proof");
     });
 
     // The identity is the MafiaNet session payload: bytes the server decodes before any connection
@@ -105,6 +107,7 @@ MODULE(network_packets, {
         out.hardwareId = "456";
         out.epicId     = "abc123def456";
         out.ticket     = "tkt-abc+123";
+        out.epicProof  = "fresh-proof-for-this-join";
 
         const auto in = RPC::ClientIdentity::Decode(out.Encode());
         EQUALS(in.has_value(), true);
@@ -114,6 +117,7 @@ MODULE(network_packets, {
         STREQUALS(in->hardwareId.c_str(), "456");
         STREQUALS(in->epicId.c_str(), "abc123def456");
         STREQUALS(in->ticket.c_str(), "tkt-abc+123");
+        STREQUALS(in->epicProof.c_str(), "fresh-proof-for-this-join");
     });
 
     IT("decodes an identity with every field empty", {

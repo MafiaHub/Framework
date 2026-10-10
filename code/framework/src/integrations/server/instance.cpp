@@ -548,6 +548,7 @@ namespace Framework::Integrations::Server {
         // A waiting request went away: the client gave up, or MafiaNet timed it out.
         net->SetOnSessionAbandonedCallback([this](MafiaNet::RakNetGUID guid) {
             _connectionGate.Drop(guid.g);
+            _epicIdentityVerifier.Drop(guid.g);
         });
 
         // Admitted and build verified -> send the resource list (carries the ReadyEvent id and tick rate).
@@ -723,14 +724,26 @@ namespace Framework::Integrations::Server {
         digits(identity.steamId, 32);
         digits(identity.discordId, 32);
         digits(identity.hardwareId, 128);
-        // The Epic account id is hex, not decimal, so it needs its own charset check.
-        if (identity.epicId.size() > 32 || identity.epicId.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
-            identity.epicId.clear();
-        }
         if (identity.ticket.size() > Framework::Networking::RPC::ClientIdentity::kMaxTicketLength) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropping a {} byte ticket from {}", identity.ticket.size(), guid.g);
             identity.ticket.clear();
         }
+        // A claimed Epic id is never trusted on its own, even if no resource gates admission.
+        // Complete verification before retaining identity or running playerConnecting.
+        if (!identity.epicId.empty() || !identity.epicProof.empty()) {
+            if (!_epicIdentityVerifier.Begin(guid, std::move(identity))) {
+                net->RejectSession(guid, "Could not verify your Epic account. Try again later.");
+            }
+            else {
+                net->SendSessionStatus(guid, "Verifying your Epic account...");
+            }
+            return;
+        }
+        BeginAdmission(guid, identity);
+    }
+
+    void Instance::BeginAdmission(MafiaNet::RakNetGUID guid, const Framework::Networking::RPC::ClientIdentity &identity) {
+        auto *net = _networkingEngine->GetNetworkServer();
         net->SetPeerIdentity(guid, identity);
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {} is connecting", identity.name, guid.g, identity.hardwareId);
@@ -752,6 +765,16 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::ApplyAdmissionDecisions() {
+        _epicIdentityDecisions.clear();
+        _epicIdentityVerifier.Collect(_epicIdentityDecisions);
+        for (const auto &decision : _epicIdentityDecisions) {
+            if (decision.verified) {
+                BeginAdmission(decision.guid, decision.identity);
+            }
+            else {
+                _networkingEngine->GetNetworkServer()->RejectSession(decision.guid, "Could not verify your Epic account. Try again later.");
+            }
+        }
         _admissionDecisions.clear();
         _connectionGate.Collect(_admissionDecisions);
         auto *net = _networkingEngine->GetNetworkServer();
@@ -1372,6 +1395,7 @@ namespace Framework::Integrations::Server {
 
         // Holds Promises of the engine torn down below.
         _connectionGate.Shutdown();
+        _epicIdentityVerifier.Shutdown();
         CoreModules::SetConnectionGate(nullptr);
 
         if (_scriptingModule) {

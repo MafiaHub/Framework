@@ -42,7 +42,7 @@ namespace Framework::Scripting::Builtins {
         // Server-only; payloadJson is JSON.parsed on the client (pass JSON text, empty = no data).
         void Emit(const std::string &eventName, const std::string &payloadJson);
 
-        // Client-announced identity (RPC::ClientIdentity). Server-only, unverified; empty when absent.
+        // Server-only identity. Epic is verified before admission; the other ids remain client-reported.
         std::string GetSteamId() const;
         std::string GetEpicId() const;
         std::string GetDiscordId() const;

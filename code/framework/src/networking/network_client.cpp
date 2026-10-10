@@ -57,6 +57,11 @@ namespace Framework::Networking {
     }
 
     void NetworkClient::Shutdown() {
+        _preparedConnection.reset();
+        if (_sessionPreparation.valid()) {
+            _sessionPreparation.wait();
+            (void)_sessionPreparation.get();
+        }
         if (!_peer) {
             return;
         }
@@ -72,6 +77,9 @@ namespace Framework::Networking {
     }
 
     Utils::Result<void, Error> NetworkClient::Connect(const std::string &host, int32_t port, const std::string &password, const std::string &sessionPayload) {
+        if (_sessionPreparation.valid()) {
+            return Error("A previous connection is still finishing authentication. Try again shortly.");
+        }
         if (_state != PeerState::DISCONNECTED) {
             return Error("Cannot connect: the client is already connected");
         }
@@ -112,7 +120,30 @@ namespace Framework::Networking {
         return {};
     }
 
+    Utils::Result<void, Error> NetworkClient::ConnectAsync(const std::string &host, int32_t port, const std::string &password, fu2::function<Utils::Result<std::string, Error>()> prepare) {
+        if (!_peer || _state != PeerState::DISCONNECTED || _sessionPreparation.valid()) {
+            return Error("Cannot connect while another connection or authentication is active");
+        }
+        try {
+            _sessionPreparation = std::async(std::launch::async, [prepare = std::move(prepare)]() mutable -> Utils::Result<std::string, Error> {
+                try {
+                    return prepare();
+                }
+                catch (const std::exception &) {
+                    return Error("Could not authenticate your account. Try again later.");
+                }
+            });
+        }
+        catch (const std::exception &) {
+            return Error("Could not start account authentication. Try again later.");
+        }
+        _preparedConnection = PreparedConnection {host, port, password};
+        _state              = PeerState::CONNECTING;
+        return {};
+    }
+
     Utils::Result<void, Error> NetworkClient::Disconnect() {
+        _preparedConnection.reset();
         if (!_peer) {
             return Error("Cannot disconnect: network peer is null");
         }
@@ -167,6 +198,22 @@ namespace Framework::Networking {
     }
 
     void NetworkClient::Update() {
+        if (_sessionPreparation.valid()) {
+            if (_sessionPreparation.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+                DrainStalePackets();
+                return;
+            }
+            auto payload = _sessionPreparation.get();
+            if (_preparedConnection) {
+                auto target = std::move(*_preparedConnection);
+                _preparedConnection.reset();
+                _state            = PeerState::DISCONNECTED;
+                const auto result = payload ? Connect(target.host, target.port, target.password, payload.GetValue()) : Utils::Result<void, Error>::Err(payload.GetError());
+                if (!result && _onPlayerDisconnectedCallback) {
+                    _onPlayerDisconnectedCallback(nullptr, DisconnectionReason::CONNECTION_REFUSED, result.GetError().message);
+                }
+            }
+        }
         if (_state != PeerState::CONNECTING && _state != PeerState::CONNECTED) {
             // The peer keeps running, so its queue still has to be emptied: anything left in it is
             // dispatched by the next Connect() and read as an event of the new session.

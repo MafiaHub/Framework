@@ -7,6 +7,7 @@
  */
 
 #include "auth.h"
+#include "account_proof.h"
 
 #include "logging/logger.h"
 #include "utils/string_utils.h"
@@ -379,22 +380,24 @@ namespace Framework::External::Epic {
             return {};
         }
 
-        // Mint a fresh ownership token, as the Epic launcher does per launch: the .egstore copy is
-        // only as fresh as the last launch from Epic, and a stale one is refused. Written to DataDir.
-        std::wstring MintOwnershipToken(const Tokens &tokens, const std::string &catalogNamespace, const std::string &catalogItemId) {
+        HttpResult RequestOwnershipToken(const Tokens &tokens, const std::string &catalogNamespace, const std::string &catalogItemId) {
             if (!tokens.Valid()) {
-                return {};
+                return HttpResult::Err(AuthError::Rejected);
             }
             if (!IsEpicId(tokens.accountId) || !IsEpicId(catalogNamespace) || !IsEpicId(catalogItemId)) {
                 Logger()->warn("Epic account or catalog ids are not alphanumeric; not minting an ownership token");
-                return {};
+                return HttpResult::Err(AuthError::Rejected);
             }
             const std::wstring path    = L"/ecommerceintegration/api/public/platforms/EPIC/identities/" + Utils::StringUtils::Utf8ToWide(tokens.accountId) + L"/ownershipToken";
             const std::wstring headers = L"Authorization: Bearer " + Utils::StringUtils::Utf8ToWide(tokens.accessToken) + L"\r\nContent-Type: application/x-www-form-urlencoded";
             const std::string body     = "nsCatalogItemId=" + FormEncode(catalogNamespace + ":" + catalogItemId);
 
-            // Opaque bytes, written as returned: the game reads them, we don't (Legendary does the same).
-            const auto token = HttpsOk("ownership token", kEcomHost, path.c_str(), L"POST", headers, body);
+            return HttpsOk("ownership token", kEcomHost, path.c_str(), L"POST", headers, body);
+        }
+
+        // The game consumes the complete ownership-token response as its .ovt file.
+        std::wstring MintOwnershipToken(const Tokens &tokens, const std::string &catalogNamespace, const std::string &catalogItemId) {
+            const auto token = RequestOwnershipToken(tokens, catalogNamespace, catalogItemId);
             if (!token) {
                 return {};
             }
@@ -481,6 +484,22 @@ namespace Framework::External::Epic {
             return code.empty() ? std::nullopt : std::optional(std::move(code));
         }
         catch (const std::exception &) {
+            return std::nullopt;
+        }
+    }
+
+    std::optional<std::string> GetAccountProof(const std::string &catalogNamespace, const std::string &catalogItemId) {
+        const auto auth = TryRefreshStoredAuth();
+        if (!auth)
+            return std::nullopt;
+        const auto response = RequestOwnershipToken(auth.GetValue(), catalogNamespace, catalogItemId);
+        if (!response)
+            return std::nullopt;
+        try {
+            const auto proof = nlohmann::json::parse(response.GetValue()).value("token", std::string {});
+            return AccountProofKeyId(proof) ? std::optional(proof) : std::nullopt;
+        }
+        catch (const nlohmann::json::exception &) {
             return std::nullopt;
         }
     }

@@ -34,13 +34,17 @@ namespace Framework::Networking::RPC {
         std::string steamId;
         std::string discordId;
         std::string hardwareId;
-        // Authenticated Epic account id; empty when the game was not launched through Epic. Ordered
-        // to match Decode(), which is strict: a payload missing any field is refused outright.
+        // Client's claimed Epic account id on the wire; server-owned and verified before it is
+        // retained or exposed to scripts. Empty for a connection without an Epic proof.
         std::string epicId;
 
         // Opaque string the client was launched with (a launcher-issued join ticket, typically).
         // The framework neither reads nor verifies it; it is handed to playerConnecting as is.
         std::string ticket;
+
+        // Short-lived Epic-signed ownership proof. Never an account access/refresh token, never
+        // exposed to scripts or retained on an admitted peer. A required field of this protocol.
+        std::string epicProof;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, name);
@@ -49,6 +53,7 @@ namespace Framework::Networking::RPC {
             bs->Serialize(write, hardwareId);
             bs->Serialize(write, epicId);
             bs->Serialize(write, ticket);
+            bs->Serialize(write, epicProof);
         }
 
         // The session payload, as MafiaNet carries it.
@@ -66,7 +71,7 @@ namespace Framework::Networking::RPC {
             }
             MafiaNet::BitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(payload.data())), static_cast<unsigned int>(payload.size()), false);
             ClientIdentity identity;
-            if (!bs.Read(identity.name) || !bs.Read(identity.steamId) || !bs.Read(identity.discordId) || !bs.Read(identity.hardwareId) || !bs.Read(identity.epicId) || !bs.Read(identity.ticket)) {
+            if (!bs.Read(identity.name) || !bs.Read(identity.steamId) || !bs.Read(identity.discordId) || !bs.Read(identity.hardwareId) || !bs.Read(identity.epicId) || !bs.Read(identity.ticket) || !bs.Read(identity.epicProof)) {
                 return std::nullopt;
             }
             return identity;

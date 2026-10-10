@@ -33,7 +33,7 @@ client                                        server
   | -- build challenge, resource list, download, ClientJoin: unchanged
 ```
 
-The identity (`RPC::ClientIdentity`: nickname, ids, ticket) is the client's
+The identity (`RPC::ClientIdentity`: nickname, ids, ticket, Epic proof) is the client's
 MafiaNet **session payload**, carried in the connection request itself. The
 server's session config (the replicated `server.json` subset) is the accept's
 payload, so a client only learns the level and the mod config once it is let
@@ -105,16 +105,46 @@ waits up to two minutes for an answer; it is always the server that decides.
 |---|---|
 | `nickname` | the name the player asked to join under |
 | `steamId`, `discordId`, `hardwareId` | as reported by the client; empty when absent |
+| `epicId` | server-verified Epic account ID; empty for a connection without Epic authentication |
 | `ticket` | the `ticket` of the client's launch link, untouched |
 | `ip` | remote address, no port |
 | `reject(reason?)` | refuse; reason up to 512 bytes |
 | `update(message)` | status line up to 256 bytes; restarts the timeout |
 | `isPending()` | false once decided or the player left |
 
-**Nothing in it is verified.** Every identifier is what the client said about
-itself; `steamId` is read from an environment variable the launcher sets and is
-not checked against Steam. A whitelist that must hold against a modified client
-should check the `ticket` with whatever issued it.
+**`epicId` is verified before this event.** The Epic launcher path passes public
+catalog metadata to the client. For each join the client silently refreshes its
+local Epic sign-in and obtains a fresh signed ownership token. The server checks
+the RS512 signature against Epic's HTTPS public-key endpoint, the account ID,
+issue time and expiry. A bare ID, invalid proof, mismatched account or verification
+failure refuses the connection even when no `playerConnecting` handler is installed.
+The same verified ID is available as `Player.epicId` after admission. It is an
+Epic account ID, not an EOS Product User ID.
+
+Proof generation and verification run off the game and server tick threads.
+Verification work is bounded; abandoning a join discards its result. A proof can
+be used only once on a server until it expires, so reconnecting obtains a new one.
+Account access and refresh tokens stay local. The proof is never exposed to
+resources or retained on the admitted peer. Like other bearer identity proofs,
+it must be kept private until it expires; it does not bind the account to a device
+or prove ownership of the server's particular game.
+
+Steam, Discord and hardware identifiers remain client-reported. For example,
+`steamId` comes from an environment variable and is not checked against Steam.
+For those connections, validate `ticket` with its issuer when authorization must
+hold against a modified client. An empty `epicId` proves no platform identity;
+a whitelist should reject it or use another independently verified identity.
+
+```js
+Events.on("playerConnecting", async (connection) => {
+    if (!connection.epicId || !await whitelist.containsEpicAccount(connection.epicId)) {
+        connection.reject("Your Epic account is not on the whitelist.");
+    }
+});
+```
+
+Epic documents the signed proof format and verification endpoint in
+[Ownership verification using Web APIs](https://dev.epicgames.com/docs/web-api-ref/ownership-verification-using-rest).
 
 ---
 
@@ -147,3 +177,8 @@ rather than cut.
 This needs MafiaNet with the pending-session extensions, and is a netcode
 change (MAJOR): the identity moved from a post-download RPC into the connection
 request, and `ClientJoin` is new.
+
+Epic authentication adds a required `epicProof` field to `ClientIdentity`, including
+an empty field on non-Epic connections. This is another wire-protocol change
+(MAJOR): update the launcher, client and server together. Older identities that
+omit the field are rejected instead of silently falling back to unverified IDs.

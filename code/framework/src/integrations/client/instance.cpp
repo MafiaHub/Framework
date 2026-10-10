@@ -8,6 +8,10 @@
 
 #include "instance.h"
 
+#ifdef _WIN32
+#include <external/epic/auth.h>
+#endif
+
 #include "integrations/shared/rpc/emit_script_event.h"
 #include "integrations/shared/scripting/state_bag_events.h"
 #include "scripting/builtins/entity.h"
@@ -852,8 +856,9 @@ namespace Framework::Integrations::Client {
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection dropped: {}", reason);
 
-            // A null packet means the disconnect was locally initiated (user quit) — no reason to surface.
-            _lastDisconnectionReason = packet ? reason : "";
+            // A local cancellation carries no reason. Authentication can fail before any packet
+            // exists, and that refusal still needs to reach the connecting screen.
+            _lastDisconnectionReason = packet || reasonId == Framework::Networking::DisconnectionReason::CONNECTION_REFUSED ? reason : "";
 
             // Reset initial asset download state
             ++_assetProcessingGeneration;
@@ -961,6 +966,26 @@ namespace Framework::Integrations::Client {
 
         _admitted = false;
         _admissionStatus.clear();
+#ifdef _WIN32
+        if (!identity.epicId.empty()) {
+            char catalogNamespace[65]  = {};
+            char catalogItemId[65]     = {};
+            const auto namespaceLength = GetEnvironmentVariableA("MafiaHubEpicNamespace", catalogNamespace, sizeof(catalogNamespace));
+            const auto itemLength      = GetEnvironmentVariableA("MafiaHubEpicCatalogItemId", catalogItemId, sizeof(catalogItemId));
+            if (!namespaceLength || namespaceLength >= sizeof(catalogNamespace) || !itemLength || itemLength >= sizeof(catalogItemId)) {
+                return Error("Your Epic launcher needs updating before it can authenticate a server connection.");
+            }
+            auto result = _networkingEngine->GetNetworkClient()->ConnectAsync(host, port, password, [identity = std::move(identity), catalogNamespace = std::string(catalogNamespace), catalogItemId = std::string(catalogItemId)]() mutable -> Utils::Result<std::string, Error> {
+                const auto proof = External::Epic::GetAccountProof(catalogNamespace, catalogItemId);
+                if (!proof)
+                    return Error("Could not verify your Epic account. Check your connection or sign in again in the launcher.");
+                identity.epicProof = *proof;
+                return Utils::Result<std::string, Error>::Ok(identity.Encode());
+            });
+            SetConnectionPhase(result ? ConnectionPhase::Connecting : ConnectionPhase::Disconnected);
+            return result;
+        }
+#endif
         auto result = _networkingEngine->Connect(host, port, password, identity.Encode());
         SetConnectionPhase(result ? ConnectionPhase::Connecting : ConnectionPhase::Disconnected);
         return result;
