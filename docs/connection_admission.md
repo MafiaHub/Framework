@@ -105,6 +105,7 @@ waits up to two minutes for an answer; it is always the server that decides.
 |---|---|
 | `nickname` | the name the player asked to join under |
 | `steamId`, `discordId`, `hardwareId` | as reported by the client; empty when absent |
+| `epicId` | Epic account ID reported by the client; empty when absent |
 | `ticket` | the `ticket` of the client's launch link, untouched |
 | `ip` | remote address, no port |
 | `reject(reason?)` | refuse; reason up to 512 bytes |
@@ -115,6 +116,22 @@ waits up to two minutes for an answer; it is always the server that decides.
 itself; `steamId` is read from an environment variable the launcher sets and is
 not checked against Steam. A whitelist that must hold against a modified client
 should check the `ticket` with whatever issued it.
+
+The Epic launcher sets `MafiaHubEpicId` from its signed-in account, and the client
+includes that ID in the existing connection handshake. The server applies a hex
+format check and exposes it as `PendingConnection.epicId` before admission and
+`Player.epicId` after joining. It is an Epic account ID, not an EOS Product User
+ID. No Epic proof or server-side account verification is performed.
+
+A whitelist using the client-reported Epic ID can check it directly:
+
+```js
+Events.on("playerConnecting", async (connection) => {
+    if (!connection.epicId || !await whitelist.containsEpicAccount(connection.epicId)) {
+        connection.reject("Your Epic account is not on the whitelist.");
+    }
+});
+```
 
 ---
 

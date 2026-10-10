@@ -64,6 +64,12 @@ class ConnectionGateTestRig {
                     globalThis.__probe = connection;
                     globalThis.__pendingDuring = connection.isPending() ? 1 : 0;
                     return;
+                case "epic-whitelist":
+                    globalThis.__epicId = connection.epicId;
+                    if (connection.epicId !== "0123456789abcdef0123456789abcdef") {
+                        connection.reject("Your Epic account is not on the whitelist.");
+                    }
+                    return;
                 }
             });
         )";
@@ -184,6 +190,27 @@ MODULE(connection_gate, {
 
         IT("hands the handler the identity, the ticket and the address", {
             STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__seen").c_str(), "admit|one-time-ticket|10.0.0.2|76561198000000000");
+        });
+
+        IT("admits an Epic whitelist entry using the client-reported ID without a ticket", {
+            auto identity = Rig::Identity("epic-whitelist");
+            identity.steamId.clear();
+            identity.ticket.clear();
+            identity.epicId = "0123456789abcdef0123456789abcdef";
+            EQUALS(gate.Begin(Rig::Guid(12), identity, "10.0.0.12"), true);
+            const auto decisions = Rig::Settle(module, gate);
+            EQUALS(decisions.size(), 1u);
+            EQUALS(decisions[0].admitted, true);
+            STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__epicId").c_str(), identity.epicId.c_str());
+        });
+
+        IT("lets an Epic whitelist refuse a connection without an Epic ID", {
+            EQUALS(gate.Begin(Rig::Guid(13), Rig::Identity("epic-whitelist"), "10.0.0.13"), true);
+            const auto decisions = Rig::Settle(module, gate);
+            EQUALS(decisions.size(), 1u);
+            EQUALS(decisions[0].admitted, false);
+            STREQUALS(decisions[0].reason.c_str(), "Your Epic account is not on the whitelist.");
+            STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__epicId").c_str(), "");
         });
 
         IT("refuses with the script's reason", {

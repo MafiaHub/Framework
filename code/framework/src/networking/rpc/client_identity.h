@@ -34,8 +34,8 @@ namespace Framework::Networking::RPC {
         std::string steamId;
         std::string discordId;
         std::string hardwareId;
-        // Authenticated Epic account id; empty when the game was not launched through Epic. Ordered
-        // to match Decode(), which is strict: a payload missing any field is refused outright.
+        // Client-reported Epic account id, not authenticated by the server; empty when absent.
+        // Ordered to match Decode(), which refuses a payload missing any field.
         std::string epicId;
 
         // Opaque string the client was launched with (a launcher-issued join ticket, typically).
