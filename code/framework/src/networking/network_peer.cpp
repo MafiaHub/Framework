@@ -100,10 +100,10 @@ namespace Framework::Networking {
                 if (IsReplicationPacket(packetID)) {
                     continue;
                 }
-                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
-                if (_onUnknownPacketCallback) {
-                    _onUnknownPacketCallback(_packet);
+                if (_onUnknownPacketCallback && _onUnknownPacketCallback(_packet)) {
+                    continue;
                 }
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
             }
         }
         _replicationManager->EndNetworkUpdate();
