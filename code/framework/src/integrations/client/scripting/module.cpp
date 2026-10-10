@@ -183,6 +183,7 @@ namespace Framework::Integrations::Client::Scripting {
         Builtins::Web::Shutdown();
         Builtins::Keybinds::Shutdown();
         Builtins::Discord::Shutdown();
+        Builtins::Nametags::Shutdown();
 
         if (_engine) {
             Framework::Scripting::ClearScriptingCatalog(_engine->GetIsolate());
@@ -204,6 +205,7 @@ namespace Framework::Integrations::Client::Scripting {
         Builtins::Web::Shutdown();
         Builtins::Keybinds::Shutdown();
         Builtins::Discord::Shutdown();
+        Builtins::Nametags::Shutdown();
 
         if (_engine && _engine->IsInitialized()) {
             if (!_engine->ResetContext()) {

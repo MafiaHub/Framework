@@ -24,6 +24,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
       public:
         static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager);
 
+        // Drops every label: they are keyed by network id, which means nothing past the session.
+        static void Shutdown();
+
       private:
         static void SetVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void IsVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args);

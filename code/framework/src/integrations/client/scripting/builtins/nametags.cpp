@@ -110,6 +110,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         Framework::Integrations::Client::UI::Nametags::Notes().ClearAll();
     }
 
+    void Nametags::Shutdown() {
+        Framework::Integrations::Client::UI::Nametags::Notes().ClearAll();
+    }
+
     void Nametags::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
         (void)resourceManager;
         if (!isolate || context.IsEmpty() || target.IsEmpty()) {
