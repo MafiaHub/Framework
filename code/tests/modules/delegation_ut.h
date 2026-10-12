@@ -183,6 +183,31 @@ MODULE(delegation, {
         EQUALS(DelegationManager::Elect(inverted, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY), alice);
     });
 
+    IT("passes over a client that declined the entity", {
+        // Alice is nearest but her world cannot hold the entity up; the next nearest takes it.
+        const std::vector<DelegationCandidate> candidates {at(alice, 20.0f), at(bob, 60.0f)};
+        const std::vector<MafiaNet::PeerGuid> declined {alice};
+        EQUALS(DelegationManager::Elect(policy, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, nobody, candidates, kGroundXY, declined), bob);
+    });
+
+    IT("takes an entity away from a simulator that declined it, however near", {
+        const std::vector<DelegationCandidate> candidates {at(alice, 10.0f)};
+        const std::vector<MafiaNet::PeerGuid> declined {alice};
+        EQUALS(DelegationManager::Elect(policy, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY, declined), nobody);
+    });
+
+    IT("hands a declined entity to another client in range rather than letting it go dormant", {
+        const std::vector<DelegationCandidate> candidates {at(alice, 10.0f), at(bob, 90.0f)};
+        const std::vector<MafiaNet::PeerGuid> declined {alice};
+        EQUALS(DelegationManager::Elect(policy, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY, declined), bob);
+    });
+
+    IT("keeps out only the clients that declined this entity", {
+        const std::vector<DelegationCandidate> candidates {at(alice, 20.0f), at(bob, 10.0f)};
+        const std::vector<MafiaNet::PeerGuid> declined {carol};
+        EQUALS(DelegationManager::Elect(policy, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, nobody, candidates, kGroundXY, declined), bob);
+    });
+
     IT("does not elect a client that is not a candidate at all", {
         // An entity whose simulator has disconnected: the guid is still on the entity, but the
         // viewer is gone, so it is not in the list and the entity goes dormant.

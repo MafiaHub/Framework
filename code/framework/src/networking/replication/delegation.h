@@ -16,6 +16,7 @@
 #include <function2/function2.hpp>
 
 #include <cstdint>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -134,8 +135,12 @@ namespace Framework::Networking::Replication {
          * the release check is kept. An incumbent is also never dropped for being over capacity -- a
          * budget lowered at runtime stops new work arriving rather than stuttering what is already
          * running.
+         *
+         * `declined` are the clients that have said they cannot run this entity (see SetDeclined).
+         * They are passed over as if they were not candidates at all, the incumbent included.
          */
-        static MafiaNet::PeerGuid Elect(const DelegationPolicy &policy, const glm::vec3 &position, MafiaNet::VirtualWorldId virtualWorld, MafiaNet::PeerGuid current, const std::vector<DelegationCandidate> &candidates, bool groundXY);
+        static MafiaNet::PeerGuid Elect(const DelegationPolicy &policy, const glm::vec3 &position, MafiaNet::VirtualWorldId virtualWorld, MafiaNet::PeerGuid current, const std::vector<DelegationCandidate> &candidates, bool groundXY,
+            std::span<const MafiaNet::PeerGuid> declined = {});
 
         // Server only; a client-side manager leaves this untouched.
         void Init(ReplicationManager *manager, bool isServer);
@@ -179,6 +184,12 @@ namespace Framework::Networking::Replication {
         void Unpin(NetworkEntity *entity);
         bool IsPinned(const NetworkEntity *entity) const;
         MafiaNet::PeerGuid PinnedTo(const NetworkEntity *entity) const;
+
+        // A client that cannot run this one entity now (its world lacks the floor under it, say: only
+        // it can see that) is passed over for it alone until it says otherwise, leaves, or the entity
+        // goes. A pin still wins. A change runs a pass at once, so a declining simulator hands over.
+        void SetDeclined(NetworkEntity *entity, MafiaNet::PeerGuid guid, bool declined);
+        bool IsDeclined(const NetworkEntity *entity, MafiaNet::PeerGuid guid) const;
 
         // One election pass, at most every interval. Driven from NetworkPeer::Update after the
         // interest rebuild, so it reads the positions this tick settled.
@@ -239,6 +250,8 @@ namespace Framework::Networking::Replication {
             bool pinned                 = false;
             // When this entity first refused a handover it is still refusing. Zero when it is not.
             MafiaNet::Time refusingSince = 0;
+            // Clients that cannot run it at the moment (SetDeclined). Almost always empty.
+            std::vector<MafiaNet::PeerGuid> declined;
         };
 
         // Snapshots the viewers once per pass, so the walk over entities does not re-resolve them
