@@ -40,6 +40,19 @@ namespace Framework::Networking::Replication {
                 bs->Serialize(write, stateEpoch);
             }
         };
+
+        // Client -> server: the sender cannot run this entity right now, or can again.
+        struct DeclineSimulationRPC {
+            static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::DeclineSimulation");
+
+            MafiaNet::NetworkID networkId;
+            bool declined = false;
+
+            void Serialize(MafiaNet::BitStream *bs, bool write) {
+                bs->SerializeCompressed(write, networkId);
+                bs->Serialize(write, declined);
+            }
+        };
     } // namespace
 
     ReplicationManager::ReplicationManager()  = default;
@@ -146,6 +159,25 @@ namespace Framework::Networking::Replication {
             });
             _clientRPCsRegistered = true;
         }
+        // Server-only: a client speaks only for itself, so the sender's guid is the one declined.
+        if (_isServer && !_serverRPCsRegistered) {
+            owner->RegisterRPC<DeclineSimulationRPC>([this](const DeclineSimulationRPC &payload, MafiaNet::Packet *packet) {
+                if (auto *entity = GetEntityByNetworkID(payload.networkId)) {
+                    _delegation.SetDeclined(entity, MafiaNet::ToPeerGuid(packet->guid), payload.declined);
+                }
+            });
+            _serverRPCsRegistered = true;
+        }
+    }
+
+    void ReplicationManager::DeclineSimulation(NetworkEntity *entity, bool declined) {
+        if (!entity || !_owner || _isServer) {
+            return;
+        }
+        DeclineSimulationRPC payload;
+        payload.networkId = entity->GetNetworkID();
+        payload.declined  = declined;
+        _owner->BroadcastRPC(payload);
     }
 
     uint32_t ReplicationManager::TransformSendIntervalMs(const SerializeRateBands &bands, float distSq) {
