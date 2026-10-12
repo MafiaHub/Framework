@@ -213,6 +213,19 @@ MODULE(connection_gate, {
             STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__epicId").c_str(), "");
         });
 
+        IT("lets an Epic whitelist refuse a nonempty ID that is not listed", {
+            auto identity = Rig::Identity("epic-whitelist");
+            identity.steamId.clear();
+            identity.ticket.clear();
+            identity.epicId = "fedcba9876543210fedcba9876543210";
+            EQUALS(gate.Begin(Rig::Guid(14), identity, "10.0.0.14"), true);
+            const auto decisions = Rig::Settle(module, gate);
+            EQUALS(decisions.size(), 1u);
+            EQUALS(decisions[0].admitted, false);
+            STREQUALS(decisions[0].reason.c_str(), "Your Epic account is not on the whitelist.");
+            STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__epicId").c_str(), identity.epicId.c_str());
+        });
+
         IT("refuses with the script's reason", {
             EQUALS(gate.Begin(Rig::Guid(3), Rig::Identity("refuse"), "10.0.0.3"), true);
             const auto decisions = Rig::Settle(module, gate);

@@ -123,7 +123,12 @@ format check and exposes it as `PendingConnection.epicId` before admission and
 `Player.epicId` after joining. It is an Epic account ID, not an EOS Product User
 ID. No Epic proof or server-side account verification is performed.
 
-A whitelist using the client-reported Epic ID can check it directly:
+For temporary, non-security filtering only, a handler can compare the
+client-reported Epic ID with a list. This does not authenticate the player: a
+modified client can submit a listed ID. For an authorization whitelist, validate
+`connection.ticket` with its issuer before admitting the player.
+
+The example below performs only the client-reported ID filter:
 
 ```js
 Events.on("playerConnecting", async (connection) => {
