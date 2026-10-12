@@ -8,9 +8,14 @@
 
 #pragma once
 
+#include "connection_admission_ut.h"
+
 #include "core_modules.h"
 #include "integrations/server/connection_gate.h"
 #include "integrations/server/scripting/module.h"
+#include "networking/replication/network_entity.h"
+#include "networking/replication/replication_manager.h"
+#include "scripting/builtins/player.h"
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
 
@@ -26,10 +31,32 @@
 
 // The admission gate against a real Node engine and a real resource: what a playerConnecting
 // handler does -- return, reject, throw, await, hang -- and what the gate decides for it. The
-// network side is left out (no NetworkServer, so update() sends nothing); the decisions are what
-// the instance acts on, and those are what is asserted.
+// decisions are what the instance acts on. A loopback admission also checks the joined player's
+// script-visible identity.
 class ConnectionGateTestRig {
   public:
+    // Register an admitted peer's avatar for the same owner-guid lookup used by server scripts.
+    struct JoinedPlayer {
+        Framework::Networking::NetworkServer &server;
+        Framework::Networking::Replication::NetworkEntity avatar;
+
+        JoinedPlayer(Framework::Networking::NetworkServer &peer, MafiaNet::RakNetGUID guid): server(peer) {
+            avatar.SetNetworkID(1);
+            avatar.ownerGUID = MafiaNet::ToPeerGuid(guid);
+            server.GetReplicationManager()->Reference(&avatar);
+            server.GetReplicationManager()->SetViewer(avatar.ownerGUID, &avatar);
+            Framework::CoreModules::SetNetworkPeer(&server);
+            Framework::CoreModules::SetReplication(server.GetReplicationManager());
+        }
+
+        ~JoinedPlayer() {
+            Framework::CoreModules::SetReplication(nullptr);
+            Framework::CoreModules::SetNetworkPeer(nullptr);
+            server.GetReplicationManager()->ClearViewer(avatar.ownerGUID);
+            server.GetReplicationManager()->Dereference(&avatar);
+        }
+    };
+
     static std::string ResourcesPath() {
 #ifdef _WIN32
         const char *temp = std::getenv("TEMP");
@@ -202,6 +229,41 @@ MODULE(connection_gate, {
             EQUALS(decisions.size(), 1u);
             EQUALS(decisions[0].admitted, true);
             STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__epicId").c_str(), identity.epicId.c_str());
+        });
+
+        IT("exposes the admitted peer's Epic ID through script-visible Player.epicId after joining", {
+            ConnectionAdmissionRig network;
+            EQUALS(network.StartServer(true), true);
+            const char *epicId = "0123456789abcdef0123456789abcdef";
+            EQUALS(network.Connect(ConnectionAdmissionRig::IdentityPayload("epic-whitelist", "", epicId)), true);
+            EQUALS(network.PumpUntil([&] { return !network.seen.requests.empty(); }), true);
+            EQUALS(network.seen.requests[0].has_value(), true);
+
+            const auto guid      = network.seen.requestGuids[0];
+            const auto &identity = *network.seen.requests[0];
+            // The instance retains the received identity before running playerConnecting.
+            network.server->SetPeerIdentity(guid, identity);
+            EQUALS(gate.Begin(guid, identity, network.server->GetAddress(guid)), true);
+            const auto decisions = Rig::Settle(module, gate);
+            EQUALS(decisions.size(), 1u);
+            EQUALS(decisions[0].guid.g, guid.g);
+            EQUALS(decisions[0].admitted, true);
+            network.server->AcceptSession(decisions[0].guid);
+            EQUALS(network.PumpUntil([&] { return network.seen.clientConnected && network.server->GetPlayerCount() == 1u; }), true);
+            EQUALS(network.seen.clientDisconnected, false);
+
+            Rig::JoinedPlayer player(*network.server, guid);
+            auto *engine        = module.GetEngine();
+            v8::Isolate *isolate = engine->GetResourceRuntime("gate")->GetIsolate();
+            {
+                v8::Locker locker(isolate);
+                v8::Isolate::Scope isolateScope(isolate);
+                v8::HandleScope handleScope(isolate);
+                v8::Local<v8::Context> context = engine->GetContext();
+                v8::Context::Scope contextScope(context);
+                Framework::Scripting::Builtins::Player::Register(isolate, context->Global());
+            }
+            STREQUALS(Rig::EvalString(engine, "new Player(1).epicId").c_str(), epicId);
         });
 
         IT("lets an Epic whitelist refuse a connection without an Epic ID", {
