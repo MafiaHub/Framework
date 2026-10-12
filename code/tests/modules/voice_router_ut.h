@@ -216,8 +216,8 @@ MODULE(voice_router, {
     IT("carries a whisper and a shout over their own tier ranges", {
         VoiceRouter router;
         router.SetPlayerPosition(1, glm::vec3(0, 0, 0));
-        router.SetPlayerPosition(2, glm::vec3(20, 0, 0));
-        router.SetPlayerPosition(3, glm::vec3(50, 0, 0));
+        router.SetPlayerPosition(2, glm::vec3(10, 0, 0));
+        router.SetPlayerPosition(3, glm::vec3(20, 0, 0));
 
         std::vector<uint64_t> out;
         router.SetPlayerTier(1, VoiceTier::Whisper);

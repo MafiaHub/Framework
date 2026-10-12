@@ -43,7 +43,7 @@ namespace Framework::Voice {
 
     // Starting proximity audibility radius, in world units. A server overrides it through
     // VoiceServer::SetProximityRange.
-    constexpr float kDefaultProximityRange = 25.0f;
+    constexpr float kDefaultProximityRange = 15.0f;
 
     // How far a player chooses to project their voice. Each tier is a radius on the server's
     // table; a script's per-player range override wins over whichever is chosen.
@@ -60,8 +60,8 @@ namespace Framework::Voice {
     // not streamed in cannot be placed, and is heard last.
     using VoiceTierRanges = std::array<float, static_cast<size_t>(VoiceTier::Count)>;
 
-    constexpr float kDefaultWhisperRange         = 8.0f;
-    constexpr float kDefaultShoutRange           = 60.0f;
+    constexpr float kDefaultWhisperRange         = 3.0f;
+    constexpr float kDefaultShoutRange           = 25.0f;
     constexpr VoiceTierRanges kDefaultTierRanges = {kDefaultWhisperRange, 0.0f, kDefaultShoutRange};
 
     // A client sends at most one tier change per interval, the latest one pressed; the server
