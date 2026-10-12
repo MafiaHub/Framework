@@ -182,6 +182,11 @@ namespace Framework::External::Sentry {
             const EXCEPTION_RECORD *record = exceptionInfo->ExceptionRecord;
             const CONTEXT *context         = exceptionInfo->ContextRecord;
 
+            // What is left of an overflowed stack can't hold the formatting below.
+            if (record->ExceptionCode == EXCEPTION_STACK_OVERFLOW) {
+                return;
+            }
+
             ULONG_PTR stackLow  = 0;
             ULONG_PTR stackHigh = 0;
             GetCurrentThreadStackLimits(&stackLow, &stackHigh);
@@ -285,7 +290,14 @@ namespace Framework::External::Sentry {
         gInstalled = true;
         gNext      = SetUnhandledExceptionFilter(Filter);
     }
+
+    void CrashTrail::Record(EXCEPTION_POINTERS *exceptionInfo) {
+        if (exceptionInfo != nullptr && !gWriting.test_and_set()) {
+            Write(exceptionInfo);
+        }
+    }
 #else
     void CrashTrail::Install() {}
+    void CrashTrail::Record(_EXCEPTION_POINTERS *) {}
 #endif
 } // namespace Framework::External::Sentry

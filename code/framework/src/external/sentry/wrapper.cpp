@@ -235,6 +235,19 @@ namespace Framework::External::Sentry {
         return {};
     }
 
+    void Wrapper::CaptureCrash(_EXCEPTION_POINTERS *exceptionInfo) const {
+#ifdef _WIN32
+        if (!_initialized || exceptionInfo == nullptr) {
+            return;
+        }
+        sentry_ucontext_t context {};
+        context.exception_ptrs = *exceptionInfo;
+        sentry_handle_exception(&context);
+#else
+        (void)exceptionInfo;
+#endif
+    }
+
     Utils::Result<void, Framework::Error> Wrapper::CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const {
         if (!_initialized) {
             return Framework::Error {"Sentry is not initialized"};
