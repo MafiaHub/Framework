@@ -191,6 +191,7 @@ if(WIN32)
         src/launcher/project.cpp
         src/launcher/platforms/platforms.cpp
         src/launcher/rgl_bypass.cpp
+        src/launcher/swap_chain_upgrade.cpp
         src/utils/minidump.cpp
         src/launcher/loaders/exe_ldr.cpp
         src/launcher/loaders/process_identity.cpp

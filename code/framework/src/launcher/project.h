@@ -103,6 +103,25 @@ namespace Framework::Launcher {
         // Suppress the mapped game's second registration when that would abort startup.
         bool suppressThreadLocalExeAtexitCallback = false;
 
+        // PE loading only. Turns the game's windowed blt-model DXGI swap chains (SwapEffect DISCARD or
+        // SEQUENTIAL) into their flip-model equivalents (FLIP_DISCARD, FLIP_SEQUENTIAL, at least two buffers).
+        //
+        // Why: Windows upgrades an older game's windowed blt swap chain to the flip model ("Optimizations
+        // for windowed games"), but decides that per executable. The unmodified game gets the upgrade; the
+        // same game mapped into the launcher runs as the launcher's process and keeps the legacy blt present,
+        // which the game was never tested on. Fallout 4 deadlocks there: its loading-screen Present never
+        // returns while precombined meshes build, so some interiors (LongneckLukowskis01) never finish loading.
+        //
+        // How: the launcher resolves the game's CreateDXGIFactory/1/2 imports to its own stubs, which hook
+        // IDXGIFactory::CreateSwapChain and rewrite the description before passing it on. Fullscreen and
+        // multisampled swap chains, which the flip model can't take as asked, pass through untouched; a
+        // refused flip-model swap chain is created again from the game's own description. The launcher log
+        // reports "Game swap chain created with the flip model" when it applies.
+        //
+        // Enable it when the unmodified game presents through the flip model (dxgi!FlipPresentToDWM on its
+        // present thread) and the mapped one through blt (PrepareWindowedBltPresent). See swap_chain_upgrade.h.
+        bool upgradeSwapChainToFlipModel = false;
+
         // Custom URL scheme deep link, so a Join button on a server's website reaches the game. When
         // set, every launch claims the scheme for the current user under
         // HKCU\Software\Classes\<urlProtocolScheme> and points it at this launcher - no elevation,

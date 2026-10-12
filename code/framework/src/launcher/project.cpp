@@ -9,6 +9,7 @@
 #include "project.h"
 
 #include "gpu_preference.h"
+#include "swap_chain_upgrade.h"
 #include "loaders/exe_ldr.h"
 #include "loaders/process_identity.h"
 #include "logging/logger.h"
@@ -883,6 +884,11 @@ namespace Framework::Launcher {
             }
             if (exportName == "GetModuleHandleExW") {
                 return reinterpret_cast<LPVOID>(GetModuleHandleExW_Hook);
+            }
+            if (_config.upgradeSwapChainToFlipModel) {
+                if (const auto stub = ResolveFlipModelFactoryExport(hmod, exportName)) {
+                    return static_cast<LPVOID>(stub);
+                }
             }
             return static_cast<LPVOID>(GetProcAddress(hmod, exportFn));
         });
