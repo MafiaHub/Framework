@@ -203,13 +203,28 @@ MODULE(replication_authority, {
         }
     };
 
-    // One entity's state channel, serialized the way its peer writes it and delivered to another.
-    const auto deliverState = [](VerdictEntity &from, VerdictEntity &to, MafiaNet::Connection_RM3 *sourceConnection) {
+    // An owner-reported value the server can override and push back with ForceState (a game's effect
+    // mask), beside one only the owner measures.
+    struct ForcedEntity final: NetworkEntity {
+        int measured = 0;
+        int forced   = 0;
+        void SerializeFields(Framework::Networking::Replication::FieldSerializer &fields) override {
+            fields.Field(measured);
+            fields.Field(forced);
+        }
+        void SerializeForcedState(Framework::Networking::Replication::FieldSerializer &fields) override {
+            fields.Field(forced);
+        }
+    };
+
+    // One entity's state channel, serialized the way its peer writes it and delivered to another. The
+    // first send to a system carries every field; later ones only what changed since the last.
+    const auto deliverState = [](auto &from, auto &to, MafiaNet::Connection_RM3 *sourceConnection, bool firstSend = true) {
         MafiaNet::SerializeParameters sp;
         for (int i = 0; i < MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS; ++i) {
             sp.lastSentBitstream[i] = nullptr;
         }
-        sp.whenLastSerialized = 0;
+        sp.whenLastSerialized = firstSend ? 0 : 1;
         sp.curTime            = 1;
         from.OnUserReplicaPreSerializeTick();
         from.Serialize(&sp);
@@ -254,6 +269,43 @@ MODULE(replication_authority, {
         deliverState(server, observer, nullptr);
         EQUALS(observer.measured, 7);
         EQUALS(observer.verdict, 2);
+    });
+
+    IT("applies a stale update's measured fields but keeps the ones the server forced", {
+        ForcedEntity simulator;
+        simulator.replicaManager = clientManager;
+        simulator.measured       = 1;
+        simulator.forced         = 1;
+
+        ForcedEntity server;
+        server.replicaManager = serverManager;
+        server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+
+        deliverState(simulator, server, ownerConn);
+        EQUALS(server.measured, 1);
+        EQUALS(server.forced, 1);
+
+        // The server overrides. Before the override reaches the owner, it sends a change of its own
+        // and its reading of the forced value, both under the old epoch. The owner sends neither
+        // again, so the measured one has to land now.
+        server.forced = 5;
+        ++server.stateEpoch;
+        simulator.measured = 2;
+        simulator.forced   = 9;
+        deliverState(simulator, server, ownerConn, false);
+        EQUALS(server.measured, 2);
+        EQUALS(server.forced, 5);
+
+        // Adopted (as the ForceState RPC does): the owner's updates land whole again.
+        simulator.stateEpoch = server.stateEpoch;
+        simulator.forced     = 5;
+        simulator.measured   = 3;
+        deliverState(simulator, server, ownerConn, false);
+        EQUALS(server.measured, 3);
+        EQUALS(server.forced, 5);
+        simulator.forced = 6;
+        deliverState(simulator, server, ownerConn, false);
+        EQUALS(server.forced, 6);
     });
 
     serverManager->DeallocConnection(ownerConn);

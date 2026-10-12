@@ -97,7 +97,7 @@ namespace Framework::Networking::Replication {
     // It is deliberately built on the ownership the replication layer already has rather than beside
     // it: the elected client becomes the entity's owner, so it inherits the whole authority model --
     // its updates travel upstream and are relayed, the server's overrides reach it through
-    // ForceState, stale updates from a revoked simulator are dropped by the state epoch, and the
+    // ForceState, updates still in flight from a revoked simulator are refused, and the
     // pose ordering is reset on the handover. A game's own code asks `IsOwner()` and nothing else.
     //
     // The entity opts in by overriding NetworkEntity::GetDelegationPolicy. Nothing else is required;

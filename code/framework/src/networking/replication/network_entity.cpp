@@ -313,17 +313,26 @@ namespace Framework::Networking::Replication {
             }
         }
 
-        // Channel 1 — state.
+        // Channel 1 — state. A stale update is still applied: the owner sends each change only once, so
+        // dropping it would lose it for good. Only the forced fields are put back afterwards.
         if (deserializeParameters->bitstreamWrittenTo[kStateChannel]) {
             uint8_t incomingEpoch = stateEpoch;
             deserializeParameters->serializationBitstream[kStateChannel].Read(incomingEpoch);
-            if (ApplyIncomingEpoch(incomingEpoch)) {
-                MafiaNet::VariableDeltaSerializer::DeserializationContext ctx;
-                _vds.BeginDeserialize(&ctx, &deserializeParameters->serializationBitstream[kStateChannel]);
-                FieldSerializer fields(&_vds, &ctx, !IsServerPeer());
-                SerializeBaseFields(fields);
-                SerializeFields(fields);
-                _vds.EndDeserialize(&ctx);
+            const bool stale = !ApplyIncomingEpoch(incomingEpoch);
+            MafiaNet::BitStream forced;
+            if (stale) {
+                FieldSerializer keep(&forced, true);
+                SerializeForcedState(keep);
+            }
+            MafiaNet::VariableDeltaSerializer::DeserializationContext ctx;
+            _vds.BeginDeserialize(&ctx, &deserializeParameters->serializationBitstream[kStateChannel]);
+            FieldSerializer fields(&_vds, &ctx, !IsServerPeer());
+            SerializeBaseFields(fields);
+            SerializeFields(fields);
+            _vds.EndDeserialize(&ctx);
+            if (stale) {
+                FieldSerializer restore(&forced, false);
+                SerializeForcedState(restore);
             }
         }
 

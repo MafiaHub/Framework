@@ -187,9 +187,9 @@ namespace Framework::Networking::Replication {
 
         // Fences server overrides against in-flight owner updates: bumped by the server on
         // ForceState, adopted by the owner from the ForceState/SetOwner RPCs and echoed back in its
-        // updates; the server drops owner state carrying a stale value (sent before the owner saw the
-        // override) instead of letting it revert the forced state. Equality-checked, so uint8 wrap is
-        // harmless. Managed by ReplicationManager — game code never touches it.
+        // updates; an owner update carrying a stale value (sent before the owner saw the override)
+        // loses its pose and its forced fields, so it cannot revert the forced state. Equality-checked,
+        // so uint8 wrap is harmless. Managed by ReplicationManager — game code never touches it.
         uint8_t stateEpoch = 0;
 
         // Local-clock send time of the last applied update (MafiaNet shifts it on receipt). Not replicated.
@@ -385,8 +385,8 @@ namespace Framework::Networking::Replication {
         void SerializeBaseFields(FieldSerializer &fields);
 
         // Apply an epoch received over the wire: clients adopt it; the server compares it and
-        // returns false when the update is stale (sent before the last ForceState) and must not be
-        // applied.
+        // returns false when the update is stale (sent before the last ForceState), so its pose and
+        // forced fields must not be applied.
         bool ApplyIncomingEpoch(uint8_t incomingEpoch);
 
         // --- State-bag plumbing, reached only by the bag itself ---
