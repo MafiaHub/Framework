@@ -204,16 +204,19 @@ MODULE(replication_authority, {
     };
 
     // An owner-reported value the server can override and push back with ForceState (a game's effect
-    // mask), beside one only the owner measures.
+    // mask), beside one only the owner measures. `trim` is forced over a coarse 2-bit wire encoding.
     struct ForcedEntity final: NetworkEntity {
         int measured = 0;
         int forced   = 0;
+        float trim   = 0.0f;
         void SerializeFields(Framework::Networking::Replication::FieldSerializer &fields) override {
             fields.Field(measured);
             fields.Field(forced);
+            fields.Field(trim);
         }
         void SerializeForcedState(Framework::Networking::Replication::FieldSerializer &fields) override {
             fields.Field(forced);
+            fields.FloatBits(trim, 0.0f, 1.0f, 2);
         }
     };
 
@@ -287,14 +290,16 @@ MODULE(replication_authority, {
 
         // The server overrides. Before the override reaches the owner, it sends a change of its own
         // and its reading of the forced value, both under the old epoch. The owner sends neither
-        // again, so the measured one has to land now.
+        // again, so the measured one has to land now; `trim` must come back exact, not as 2 bits.
         server.forced = 5;
+        server.trim   = 0.5f;
         ++server.stateEpoch;
         simulator.measured = 2;
         simulator.forced   = 9;
         deliverState(simulator, server, ownerConn, false);
         EQUALS(server.measured, 2);
         EQUALS(server.forced, 5);
+        EQUALS(server.trim, 0.5f);
 
         // Adopted (as the ForceState RPC does): the owner's updates land whole again.
         simulator.stateEpoch = server.stateEpoch;

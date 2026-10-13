@@ -321,7 +321,7 @@ namespace Framework::Networking::Replication {
             const bool stale = !ApplyIncomingEpoch(incomingEpoch);
             MafiaNet::BitStream forced;
             if (stale) {
-                FieldSerializer keep(&forced, true);
+                auto keep = FieldSerializer::Exact(&forced, true);
                 SerializeForcedState(keep);
             }
             MafiaNet::VariableDeltaSerializer::DeserializationContext ctx;
@@ -331,7 +331,7 @@ namespace Framework::Networking::Replication {
             SerializeFields(fields);
             _vds.EndDeserialize(&ctx);
             if (stale) {
-                FieldSerializer restore(&forced, false);
+                auto restore = FieldSerializer::Exact(&forced, false);
                 SerializeForcedState(restore);
             }
         }

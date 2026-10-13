@@ -35,6 +35,14 @@ namespace Framework::Networking::Replication {
         FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx, bool serverAuthored) : _vds(vds), _deserialize(ctx), _serverAuthored(serverAuthored) {}
         FieldSerializer(MafiaNet::BitStream *bs, bool write, bool serverAuthored = true) : _plain(bs), _writePlain(write), _serverAuthored(serverAuthored) {}
 
+        // A local copy rather than wire bytes: the quantized writers keep full precision, so a write
+        // followed by a read gives back exactly what was written.
+        static FieldSerializer Exact(MafiaNet::BitStream *bs, bool write) {
+            FieldSerializer fields(bs, write);
+            fields._exact = true;
+            return fields;
+        }
+
         bool Writing() const {
             return _serialize != nullptr || (_plain != nullptr && _writePlain);
         }
@@ -82,12 +90,13 @@ namespace Framework::Networking::Replication {
         }
 
         // Quantized writers — meaningful only on the plain-bitstream (transform-channel) path; on the
-        // VDS delta path they fall back to full precision so a single Serialize body can serve both.
+        // VDS delta path and in an Exact copy they fall back to full precision so a single Serialize
+        // body can serve all of them.
         void Float16(float &value, float min, float max) {
             if (!_good) {
                 return;
             }
-            if (_plain) {
+            if (_plain && !_exact) {
                 _good = _plain->SerializeFloat16(_writePlain, value, min, max);
             }
             else {
@@ -100,7 +109,7 @@ namespace Framework::Networking::Replication {
             if (!_good) {
                 return;
             }
-            if (_plain) {
+            if (_plain && !_exact) {
                 _good = _plain->SerializeBitsFromIntegerRange(_writePlain, value, min, max);
             }
             else {
@@ -108,12 +117,12 @@ namespace Framework::Networking::Replication {
             }
         }
 
-        // Fixed-point float in [min,max] over `bits` bits (plain path only; VDS keeps full precision).
+        // Fixed-point float in [min,max] over `bits` bits (plain path only; VDS and Exact keep full precision).
         void FloatBits(float &value, float min, float max, int bits) {
             if (!_good) {
                 return;
             }
-            if (!_plain) {
+            if (!_plain || _exact) {
                 Field(value);
                 return;
             }
@@ -145,6 +154,7 @@ namespace Framework::Networking::Replication {
         MafiaNet::BitStream *_plain                                             = nullptr;
         bool _writePlain                                                        = false;
         bool _serverAuthored                                                    = true;
+        bool _exact                                                             = false;
         bool _good                                                              = true;
     };
 
