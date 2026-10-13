@@ -523,6 +523,14 @@ namespace Framework::Scripting {
             }
         }
 
+        // A runtime error marks Error before StopResource can retire the
+        // runtime; its non-running guard leaves that runtime alive. Drop it
+        // before recovery so Node cannot reuse its cached entry point, timers,
+        // exports or event handlers. Engines defer disposal while JS is active.
+        if (resource->GetState() == ResourceState::Error) {
+            CleanupResourceRuntime(*resource, name);
+        }
+
         // Transition to Loading
         if (!resource->TransitionTo(ResourceState::Loading)) {
             return ResourceOperationResult("Invalid state transition for resource: " + std::string(name));
@@ -1346,14 +1354,26 @@ namespace Framework::Scripting {
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Runtime error: {}", resourceName, error);
 
+        const std::string errorBehavior = resource->GetManifest().GetMafiaHubConfig().errorBehavior;
+        v8::Isolate *failedIsolate = resource->GetIsolate();
         resource->SetError(error);
         FireOnResourceError(resourceName, error);
 
-        const auto &config = resource->GetManifest().GetMafiaHubConfig();
-        if (config.errorBehavior == "restart") {
+        // Error listeners can synchronously recover or refresh the resource.
+        // Never retire the replacement they installed, or use an old manifest
+        // reference after such a callback.
+        Resource *current = GetResourceMutable(resourceName);
+        if (current != resource || current->GetState() != ResourceState::Error || current->GetIsolate() != failedIsolate) {
+            return;
+        }
+        if (errorBehavior == "restart" || errorBehavior == "stop") {
+            // Error is already non-running, so StopResource would skip this.
+            // Drop exports, handlers and runtime-owned work after error owners
+            // have been notified. Node defers disposal while callbacks unwind.
+            CleanupResourceRuntime(*current, resourceName);
+        }
+        if (errorBehavior == "restart") {
             ScheduleAutoRestart(resourceName);
-        } else if (config.errorBehavior == "stop") {
-            StopResource(resourceName);
         }
         // "continue" behavior: do nothing, let the resource keep running
     }
