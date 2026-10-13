@@ -44,17 +44,38 @@ namespace Framework::Scripting::V8EngineCallbacks {
 
     // V8 callback: promise rejection handler
     inline void PromiseRejectCallback(v8::PromiseRejectMessage message) {
-        if (message.GetEvent() == v8::kPromiseRejectWithNoHandler) {
-            v8::Isolate *isolate = message.GetPromise()->GetIsolate();
-            v8::Local<v8::Value> value = message.GetValue();
-            if (!value.IsEmpty()) {
-                v8::String::Utf8Value str(isolate, value);
-                if (*str) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Unhandled promise rejection: {}", *str);
-                }
+        if (auto *engine = V8Engine::FromContext(message.GetPromise()->GetIsolate()->GetCurrentContext())) {
+            engine->OnPromiseReject(message);
+        }
+    }
+
+    // Keep origin on promises that outlive their creating callback.
+    inline void PromiseHook(v8::PromiseHookType type, v8::Local<v8::Promise> promise, v8::Local<v8::Value> parent) {
+        if (type != v8::PromiseHookType::kInit) return;
+        auto *isolate = promise->GetIsolate();
+        auto context = isolate->GetCurrentContext();
+        auto *engine = V8Engine::FromContext(context);
+        auto *manager = engine ? engine->GetResourceManager() : nullptr;
+        if (!manager) return;
+        auto key = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.promiseOwner"));
+        std::string owner = manager->GetResourceContextFromStack(isolate);
+        if (owner.empty()) owner = manager->GetCurrentResourceContext();
+        v8::Local<v8::Value> value;
+        if (!owner.empty()) {
+            value = v8::String::NewFromUtf8(isolate, owner.c_str()).ToLocalChecked();
+        } else if (parent->IsPromise()) {
+            if (!parent.As<v8::Promise>()->GetPrivate(context, key).ToLocal(&value)) return;
+        }
+        if (!value.IsEmpty() && value->IsString()) {
+            (void)promise->SetPrivate(context, key, value).FromMaybe(false);
+            auto generationKey = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.promiseGeneration"));
+            v8::Local<v8::Value> generation;
+            if (owner.empty() && parent->IsPromise()) {
+                if (!parent.As<v8::Promise>()->GetPrivate(context, generationKey).ToLocal(&generation)) return;
             } else {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Unhandled promise rejection (no value)");
+                generation = v8::Integer::NewFromUnsigned(isolate, engine->GetResourceGeneration(owner));
             }
+            if (!generation.IsEmpty()) (void)promise->SetPrivate(context, generationKey, generation).FromMaybe(false);
         }
     }
 

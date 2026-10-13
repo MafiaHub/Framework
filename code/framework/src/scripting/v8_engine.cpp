@@ -93,6 +93,8 @@ namespace Framework::Scripting {
         }
 
         Builtins::Messages::Shutdown();
+        _runtimeErrors.clear();
+        _resourceGenerations.clear();
         _timers.clear();
         _nextTimerId = 1;
         ClearModuleCache();
@@ -171,6 +173,8 @@ namespace Framework::Scripting {
         if (resourceName.empty()) {
             return;
         }
+        ++_resourceGenerations[resourceName];
+        std::erase_if(_runtimeErrors, [&](const RuntimeError &error) { return error.resource == resourceName; });
         for (auto &timer : _timers) {
             if (timer && timer->ownerResource == resourceName) {
                 timer->cancelled = true;
@@ -194,6 +198,8 @@ namespace Framework::Scripting {
         }
 
         // Clear all timer callbacks (prevent dangling references)
+        _runtimeErrors.clear();
+        _resourceGenerations.clear();
         _timers.clear();
 
         ClearModuleCache();
@@ -243,6 +249,7 @@ namespace Framework::Scripting {
 
         // Install promise rejection callback
         _isolate->SetPromiseRejectCallback(PromiseRejectCallback);
+        _isolate->SetPromiseHook(PromiseHook);
 
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolateScope(_isolate);
@@ -274,6 +281,9 @@ namespace Framework::Scripting {
     }
 
     void V8Engine::InstallGlobals() {
+        auto engineContext = GetContext();
+        auto engineKey = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.v8Engine"));
+        (void)engineContext->Global()->SetPrivate(engineContext, engineKey, v8::External::New(_isolate, this)).FromMaybe(false);
         v8::Local<v8::Context> context = _context.Get(_isolate);
         v8::Local<v8::Object> global = context->Global();
 
@@ -393,6 +403,8 @@ namespace Framework::Scripting {
             }
             if (!timer || timer->cancelled) continue;
 
+            const std::string owner = timer->ownerResource;
+            const auto generation = GetResourceGeneration(owner);
             v8::TryCatch tryCatch(_isolate);
 
             v8::Local<v8::Function> callback = timer->callback.Get(_isolate);
@@ -412,6 +424,7 @@ namespace Framework::Scripting {
             if (tryCatch.HasCaught()) {
                 std::string error = FormatV8Exception(_isolate, tryCatch, "Timer callback error");
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("{}", error);
+                if (!owner.empty()) _runtimeErrors.push_back({owner, std::move(error), {}, generation});
             }
 
             // Re-lookup: callback may have mutated _timers.
@@ -686,6 +699,65 @@ namespace Framework::Scripting {
         return handleScope.Escape(moduleExports);
     }
 
+    V8Engine *V8Engine::FromContext(v8::Local<v8::Context> context) {
+        if (context.IsEmpty()) return nullptr;
+        auto *isolate = context->GetIsolate();
+        auto key = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.v8Engine"));
+        v8::Local<v8::Value> value;
+        if (!context->Global()->GetPrivate(context, key).ToLocal(&value) || !value->IsExternal()) return nullptr;
+        return static_cast<V8Engine *>(value.As<v8::External>()->Value());
+    }
+
+    void V8Engine::OnPromiseReject(v8::PromiseRejectMessage message) {
+        auto promise = message.GetPromise();
+        if (message.GetEvent() == v8::kPromiseHandlerAddedAfterReject) {
+            std::erase_if(_runtimeErrors, [&](const RuntimeError &error) {
+                return !error.promise.IsEmpty() && error.promise.Get(_isolate) == promise;
+            });
+            return;
+        }
+        if (message.GetEvent() != v8::kPromiseRejectWithNoHandler) return;
+        auto context = GetContext();
+        auto key = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseOwner"));
+        v8::Local<v8::Value> value;
+        std::string owner;
+        if (promise->GetPrivate(context, key).ToLocal(&value) && value->IsString()) {
+            v8::String::Utf8Value text(_isolate, value);
+            if (*text) owner.assign(*text, text.length());
+        }
+        if (owner.empty() && _resourceManager) owner = _resourceManager->GetResourceContextFromStack(_isolate);
+        if (owner.empty() && _resourceManager) owner = _resourceManager->GetCurrentResourceContext();
+        auto generation = GetResourceGeneration(owner);
+        auto generationKey = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseGeneration"));
+        if (promise->GetPrivate(context, generationKey).ToLocal(&value) && value->IsUint32()) {
+            generation = value.As<v8::Uint32>()->Value();
+        }
+        if (generation != GetResourceGeneration(owner)) return;
+        // A rejection reason can throw from toString; contain that exception too.
+        v8::TryCatch catcher(_isolate);
+        std::string error = "Unhandled promise rejection";
+        v8::Local<v8::String> text;
+        if (!message.GetValue().IsEmpty() && message.GetValue()->ToString(context).ToLocal(&text)) {
+            v8::String::Utf8Value utf8(_isolate, text);
+            if (*utf8) error += ": " + std::string(*utf8, utf8.length());
+        }
+        _runtimeErrors.push_back({std::move(owner), std::move(error), v8::Global<v8::Promise>(_isolate, promise), generation});
+    }
+
+    void V8Engine::DispatchRuntimeErrors() {
+        // Cleanup may execute JS and enqueue another failure for the next tick.
+        auto errors = std::move(_runtimeErrors);
+        _runtimeErrors.clear();
+        std::vector<std::string> reported;
+        for (const auto &error : errors) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("{}", error.message);
+            if (!_resourceManager || error.resource.empty() || error.generation != GetResourceGeneration(error.resource) ||
+                std::find(reported.begin(), reported.end(), error.resource) != reported.end()) continue;
+            reported.push_back(error.resource);
+            _resourceManager->HandleResourceRuntimeError(error.resource, error.message);
+        }
+    }
+
     void V8Engine::Tick() {
         if (!_initialized) {
             return;
@@ -696,8 +768,11 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(_isolate);
         v8::Context::Scope contextScope(GetContext());
 
+        _isolate->PerformMicrotaskCheckpoint();
+        DispatchRuntimeErrors();
         ProcessTimers();
         _isolate->PerformMicrotaskCheckpoint();
+        DispatchRuntimeErrors();
     }
 
     bool V8Engine::ExecuteFile(std::string_view filepath) {
