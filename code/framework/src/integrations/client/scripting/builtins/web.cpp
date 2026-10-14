@@ -16,6 +16,7 @@
 #include <scripting/builtins/events.h>
 #include <scripting/engine.h>
 #include <scripting/engine_helpers.h>
+#include <scripting/engine_scope.h>
 #include <scripting/resource/resource.h>
 #include <scripting/resource/resource_manager.h>
 #include <scripting/scripting_catalog.h>
@@ -877,12 +878,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             pending.swap(_pendingViewEvents);
         }
 
-        v8::Isolate *isolate = engine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = engine->GetContext();
-        v8::Context::Scope contextScope(context);
+        Framework::Scripting::EngineScope scope(engine);
+        v8::Isolate *isolate = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
 
         auto &events = manager->GetEvents();
         for (const auto &queued : pending) {
@@ -917,12 +915,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        v8::Isolate *isolate = engine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = engine->GetContext();
-        v8::Context::Scope contextScope(context);
+        Framework::Scripting::EngineScope scope(engine);
+        v8::Isolate *isolate = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
 
         // copy out so handlers can call on/off/destroyView reentrantly
         std::vector<std::pair<v8::Local<v8::Function>, std::string>> handlers;

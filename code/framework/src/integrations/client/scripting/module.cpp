@@ -17,6 +17,7 @@
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/messages.h>
+#include <scripting/engine_scope.h>
 #include <scripting/event_metadata.h>
 #include <scripting/scripting_catalog.h>
 #include <scripting/timer_metadata.h>
@@ -134,12 +135,9 @@ namespace Framework::Integrations::Client::Scripting {
             return;
         }
 
-        v8::Isolate *isolate = _engine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = _engine->GetContext();
-        v8::Context::Scope contextScope(context);
+        Framework::Scripting::EngineScope scope(_engine);
+        v8::Isolate *isolate = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
 
         v8::Local<v8::Object> global = context->Global();
 
@@ -232,12 +230,9 @@ namespace Framework::Integrations::Client::Scripting {
             _engine->Tick();
 
             if (_resourceManager) {
-                v8::Isolate *isolate = _engine->GetIsolate();
-                v8::Locker locker(isolate);
-                v8::Isolate::Scope isolateScope(isolate);
-                v8::HandleScope handleScope(isolate);
-                v8::Local<v8::Context> context = _engine->GetContext();
-                v8::Context::Scope contextScope(context);
+                Framework::Scripting::EngineScope scope(_engine);
+                v8::Isolate *isolate = scope.Isolate();
+                v8::Local<v8::Context> context = scope.Context();
 
                 Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);
             }

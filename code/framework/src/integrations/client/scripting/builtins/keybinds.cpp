@@ -13,6 +13,7 @@
 
 #include <scripting/engine.h>
 #include <scripting/engine_helpers.h>
+#include <scripting/engine_scope.h>
 #include <scripting/resource/resource_manager.h>
 #include <scripting/scripting_catalog.h>
 
@@ -362,12 +363,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        v8::Isolate *isolate = engine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = engine->GetContext();
-        v8::Context::Scope contextScope(context);
+        Framework::Scripting::EngineScope scope(engine);
+        v8::Isolate *isolate = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
 
         struct Pending {
             v8::Local<v8::Function> fn;

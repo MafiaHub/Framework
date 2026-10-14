@@ -7,6 +7,7 @@
  */
 
 #include "entity.h"
+#include "../engine_helpers.h"
 #include "../scripting_catalog.h"
 #include "state_bag.h"
 
@@ -86,97 +87,93 @@ namespace Framework::Scripting::Builtins {
     }
 
     v8pp::class_<Entity> &Entity::GetClass(v8::Isolate *isolate) {
-        auto it = _classes.find(isolate);
-        if (it != _classes.end()) {
-            return *it->second;
-        }
+        return _classes.Get(isolate, [isolate]() {
+            auto cls = std::make_unique<v8pp::class_<Entity>>(isolate, GetScriptingCatalog(isolate), "Entity", "Base handle for a live replicated network entity.");
+            cls->auto_wrap_objects(true);
+            cls->ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a script wrapper for an existing entity with this ID; it does not spawn an entity."))
+                .function("toString", &Entity::ToString, v8pp::metadata::docs("string", {}, "Formats this entity handle for logging and debugging.", "Text containing the network entity ID."))
+                .property("id", &Entity::GetId, v8pp::metadata::property_docs("number", "Immutable network entity identifier."))
+                .property("virtualWorld", &Entity::GetVirtualWorld, v8pp::metadata::property_docs("number", "Current virtual-world identifier."))
+                .property("position", &Entity::GetPosition, &Entity::SetPosition, v8pp::metadata::property_docs("Vector3", "Authoritative world-space position; assignment forces replicated state."));
 
-        auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Entity>>(isolate, GetScriptingCatalog(isolate), "Entity", "Base handle for a live replicated network entity.");
-        cls->auto_wrap_objects(true);
-        cls->ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a script wrapper for an existing entity with this ID; it does not spawn an entity."))
-            .function("toString", &Entity::ToString, v8pp::metadata::docs("string", {}, "Formats this entity handle for logging and debugging.", "Text containing the network entity ID."))
-            .property("id", &Entity::GetId, v8pp::metadata::property_docs("number", "Immutable network entity identifier."))
-            .property("virtualWorld", &Entity::GetVirtualWorld, v8pp::metadata::property_docs("number", "Current virtual-world identifier."))
-            .property("position", &Entity::GetPosition, &Entity::SetPosition, v8pp::metadata::property_docs("Vector3", "Authoritative world-space position; assignment forces replicated state."));
+            // Property: rotation. Getter returns a Quaternion; setter accepts a Quaternion or a Vector3 (euler degrees).
+            {
+                auto rotationGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
+                    if (self) {
+                        auto &quatCls = Quaternion::GetClass(info.GetIsolate());
+                        info.GetReturnValue().Set(quatCls.import_external(info.GetIsolate(), new Quaternion(self->GetRotation())));
+                    }
+                });
+                auto rotationSetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
+                    if (!self || info.Length() < 1)
+                        return;
 
-        // Property: rotation. Getter returns a Quaternion; setter accepts a Quaternion or a Vector3 (euler degrees).
-        {
-            auto rotationGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                if (self) {
-                    auto &quatCls = Quaternion::GetClass(info.GetIsolate());
-                    info.GetReturnValue().Set(quatCls.import_external(info.GetIsolate(), new Quaternion(self->GetRotation())));
-                }
-            });
-            auto rotationSetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                if (!self || info.Length() < 1)
-                    return;
+                    auto *vec = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info[0]);
+                    if (vec) {
+                        self->SetRotationFromEuler(*vec);
+                        return;
+                    }
+                    auto *quat = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info[0]);
+                    if (quat) {
+                        self->SetRotationFromQuaternion(*quat);
+                        return;
+                    }
+                    ThrowTypeError(info.GetIsolate(), "rotation must be a Vector3 (euler degrees) or Quaternion");
+                });
+                cls->accessor_property("rotation", rotationGetter, rotationSetter, v8pp::metadata::property_docs("Quaternion | Vector3", "Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees."));
+            }
 
-                auto *vec = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info[0]);
-                if (vec) {
-                    self->SetRotationFromEuler(*vec);
-                    return;
-                }
-                auto *quat = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info[0]);
-                if (quat) {
-                    self->SetRotationFromQuaternion(*quat);
-                    return;
-                }
-                info.GetIsolate()->ThrowException(v8::Exception::TypeError(v8pp::to_v8(info.GetIsolate(), "rotation must be a Vector3 (euler degrees) or Quaternion")));
-            });
-            cls->accessor_property("rotation", rotationGetter, rotationSetter, v8pp::metadata::property_docs("Quaternion | Vector3", "Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees."));
-        }
+            // Property: state. Read-only handle onto this entity's state bag — the bag itself is mutable,
+            // the binding between entity and bag is not, so there is no setter.
+            {
+                auto stateGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
+                    if (self) {
+                        info.GetReturnValue().Set(StateBag::NewInstance(info.GetIsolate(), self->GetId()));
+                    }
+                });
+                cls->accessor_property("state", stateGetter, v8::Local<v8::FunctionTemplate>(), v8pp::metadata::property_docs("StateBag", "Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag."));
+            }
 
-        // Property: state. Read-only handle onto this entity's state bag — the bag itself is mutable,
-        // the binding between entity and bag is not, so there is no setter.
-        {
-            auto stateGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                if (self) {
-                    info.GetReturnValue().Set(StateBag::NewInstance(info.GetIsolate(), self->GetId()));
-                }
-            });
-            cls->accessor_property("state", stateGetter, v8::Local<v8::FunctionTemplate>(), v8pp::metadata::property_docs("StateBag", "Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag."));
-        }
+            // Replication placement is the server's to decide; a client writes only its own replica.
+            if (IsClientScripting(isolate)) {
+                return cls;
+            }
 
-        // Replication placement is the server's to decide; a client writes only its own replica.
-        if (IsClientScripting(isolate)) {
-            return *cls;
-        }
+            cls->function("setVirtualWorld", &Entity::SetVirtualWorld, v8pp::metadata::docs("void", {v8pp::metadata::param("world", "number", false, "Virtual-world identifier used to partition replication and visibility.")}, "Moves this entity into another virtual world."));
 
-        cls->function("setVirtualWorld", &Entity::SetVirtualWorld, v8pp::metadata::docs("void", {v8pp::metadata::param("world", "number", false, "Virtual-world identifier used to partition replication and visibility.")}, "Moves this entity into another virtual world."));
+            // setVisibleTo(player|null): restrict streaming to one player's connection.
+            cls->prototype_function(
+                "setVisibleTo",
+                [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                    auto *isolate = info.GetIsolate();
+                    auto *self    = v8pp::class_<Entity>::unwrap_object(isolate, info.This());
+                    if (!self) {
+                        return;
+                    }
+                    if (info.Length() < 1 || info[0]->IsNullOrUndefined()) {
+                        self->SetVisibleTo(nullptr);
+                        return;
+                    }
+                    auto *target = v8pp::class_<Entity>::unwrap_object(isolate, info[0]);
+                    if (!target) {
+                        ThrowTypeError(isolate, "setVisibleTo: expected a Player (or null to clear)");
+                        return;
+                    }
+                    auto *targetEntity = target->Resolve();
+                    if (!targetEntity || targetEntity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
+                        isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "setVisibleTo: target has no owning connection")));
+                        return;
+                    }
+                    self->SetVisibleTo(targetEntity);
+                },
+                v8pp::metadata::docs("void", {v8pp::metadata::param("player", "Entity | null", false, "Player-owned entity whose connection should exclusively receive this entity, or null to clear the restriction.")},
+                    "Restricts replication of this entity to one owning connection while preserving normal range and visibility checks."));
 
-        // setVisibleTo(player|null): restrict streaming to one player's connection.
-        cls->prototype_function(
-            "setVisibleTo",
-            [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                auto *isolate = info.GetIsolate();
-                auto *self    = v8pp::class_<Entity>::unwrap_object(isolate, info.This());
-                if (!self) {
-                    return;
-                }
-                if (info.Length() < 1 || info[0]->IsNullOrUndefined()) {
-                    self->SetVisibleTo(nullptr);
-                    return;
-                }
-                auto *target = v8pp::class_<Entity>::unwrap_object(isolate, info[0]);
-                if (!target) {
-                    isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "setVisibleTo: expected a Player (or null to clear)")));
-                    return;
-                }
-                auto *targetEntity = target->Resolve();
-                if (!targetEntity || targetEntity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
-                    isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "setVisibleTo: target has no owning connection")));
-                    return;
-                }
-                self->SetVisibleTo(targetEntity);
-            },
-            v8pp::metadata::docs("void", {v8pp::metadata::param("player", "Entity | null", false, "Player-owned entity whose connection should exclusively receive this entity, or null to clear the restriction.")},
-                "Restricts replication of this entity to one owning connection while preserving normal range and visibility checks."));
-
-        return *cls;
+            return cls;
+        });
     }
 
     void Entity::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
@@ -196,6 +193,6 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Entity::UnregisterIsolate(v8::Isolate *isolate) {
-        _classes.erase(isolate);
+        _classes.Unregister(isolate);
     }
 } // namespace Framework::Scripting::Builtins

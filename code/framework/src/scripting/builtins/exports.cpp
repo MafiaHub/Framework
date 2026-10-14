@@ -7,6 +7,7 @@
  */
 
 #include "exports.h"
+#include "../engine_helpers.h"
 #include "../function_references.h"
 #include "../resource/resource.h"
 #include "../resource/resource_manager.h"
@@ -52,12 +53,12 @@ namespace Framework::Scripting::Builtins {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Exports.register requires 2 arguments: name, value")));
+            ThrowTypeError(isolate, "Exports.register requires 2 arguments: name, value");
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Exports.register: name must be a string")));
+            ThrowTypeError(isolate, "Exports.register: name must be a string");
             return;
         }
 
@@ -111,12 +112,12 @@ namespace Framework::Scripting::Builtins {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Exports.get requires 2 arguments: resourceName, exportName")));
+            ThrowTypeError(isolate, "Exports.get requires 2 arguments: resourceName, exportName");
             return;
         }
 
         if (!args[0]->IsString() || !args[1]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Exports.get: resourceName and exportName must be strings")));
+            ThrowTypeError(isolate, "Exports.get: resourceName and exportName must be strings");
             return;
         }
 

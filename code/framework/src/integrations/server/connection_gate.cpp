@@ -14,6 +14,7 @@
 #include <logging/logger.h>
 #include <networking/network_server.h>
 #include <scripting/builtins/events.h>
+#include <scripting/engine_scope.h>
 #include <scripting/node_engine.h>
 #include <scripting/resource/resource_manager.h>
 
@@ -75,12 +76,9 @@ namespace Framework::Integrations::Server {
             return false;
         }
 
-        v8::Isolate *isolate = engine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = engine->GetContext();
-        v8::Context::Scope contextScope(context);
+        Framework::Scripting::EngineScope scope(engine);
+        v8::Isolate *isolate = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
 
         // In the table before any handler runs: one that calls reject() synchronously has to find it.
         Pending &pending = _pending[guid.g];
@@ -162,12 +160,9 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        v8::Isolate *isolate = engine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = engine->GetContext();
-        v8::Context::Scope contextScope(context);
+        Framework::Scripting::EngineScope scope(engine);
+        v8::Isolate *isolate = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
 
         const auto now = std::chrono::steady_clock::now();
         for (auto it = _pending.begin(); it != _pending.end();) {

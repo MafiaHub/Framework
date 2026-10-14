@@ -7,6 +7,7 @@
  */
 
 #include "text_label.h"
+#include "../engine_helpers.h"
 #include "../scripting_catalog.h"
 #include "color.h"
 
@@ -197,7 +198,7 @@ namespace Framework::Scripting::Builtins {
         v8::HandleScope hs(isolate);
 
         if (info.Length() < 4 || !info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber() || !info[3]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "TextLabel.create: expected (x, y, z, text, fontSize?, drawDistance?, virtualWorld?)")));
+            ThrowTypeError(isolate, "TextLabel.create: expected (x, y, z, text, fontSize?, drawDistance?, virtualWorld?)");
             return;
         }
 

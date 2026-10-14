@@ -8,6 +8,7 @@
 
 #include "chat.h"
 
+#include "../engine_helpers.h"
 #include "../scripting_catalog.h"
 #include "color.h"
 #include "entity.h"
@@ -104,7 +105,7 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate = info.GetIsolate();
         v8::HandleScope hs(isolate);
         if (info.Length() < 1 || !info[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Chat.sendToAll: expected (text, opts?)")));
+            ThrowTypeError(isolate, "Chat.sendToAll: expected (text, opts?)");
             return;
         }
         std::string author;
@@ -121,13 +122,13 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate = info.GetIsolate();
         v8::HandleScope hs(isolate);
         if (info.Length() < 2 || !info[1]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Chat.sendToPlayer: expected (player, text, opts?)")));
+            ThrowTypeError(isolate, "Chat.sendToPlayer: expected (player, text, opts?)");
             return;
         }
         // Bad argument (not a player) is the caller's bug — throw, mirroring Entity.setVisibleTo.
         auto *entity = v8pp::class_<Entity>::unwrap_object(isolate, info[0]);
         if (!entity) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Chat.sendToPlayer: expected a Player")));
+            ThrowTypeError(isolate, "Chat.sendToPlayer: expected a Player");
             return;
         }
         auto *handle = entity->GetHandle();

@@ -8,6 +8,7 @@
 
 #include "messages.h"
 #include "../engine.h"
+#include "../engine_helpers.h"
 #include "../function_references.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
@@ -73,17 +74,17 @@ namespace Framework::Scripting::Builtins {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.handle requires 2 arguments: messageType, handler")));
+            ThrowTypeError(isolate, "Messages.handle requires 2 arguments: messageType, handler");
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.handle: messageType must be a string")));
+            ThrowTypeError(isolate, "Messages.handle: messageType must be a string");
             return;
         }
 
         if (!args[1]->IsFunction()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.handle: handler must be a function")));
+            ThrowTypeError(isolate, "Messages.handle: handler must be a function");
             return;
         }
 
@@ -116,17 +117,17 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.request requires at least 2 arguments: resourceName, messageType")));
+            ThrowTypeError(isolate, "Messages.request requires at least 2 arguments: resourceName, messageType");
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.request: resourceName must be a string")));
+            ThrowTypeError(isolate, "Messages.request: resourceName must be a string");
             return;
         }
 
         if (!args[1]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.request: messageType must be a string")));
+            ThrowTypeError(isolate, "Messages.request: messageType must be a string");
             return;
         }
 
@@ -249,17 +250,17 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.send requires at least 2 arguments: resourceName, messageType")));
+            ThrowTypeError(isolate, "Messages.send requires at least 2 arguments: resourceName, messageType");
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.send: resourceName must be a string")));
+            ThrowTypeError(isolate, "Messages.send: resourceName must be a string");
             return;
         }
 
         if (!args[1]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Messages.send: messageType must be a string")));
+            ThrowTypeError(isolate, "Messages.send: messageType must be a string");
             return;
         }
 

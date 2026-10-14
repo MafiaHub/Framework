@@ -21,6 +21,7 @@
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/messages.h>
+#include <scripting/engine_scope.h>
 #include <scripting/event_metadata.h>
 #include <scripting/scripting_catalog.h>
 #include <scripting/timer_metadata.h>
@@ -89,12 +90,7 @@ namespace Framework::Integrations::Server::Scripting {
         // Install uncaught exception handler to prevent async errors from
         // crashing the server process and route them to the resource system
         {
-            v8::Isolate *isolate = _nodeEngine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = _nodeEngine->GetContext();
-            v8::Context::Scope contextScope(context);
+            Framework::Scripting::EngineScope scope(_nodeEngine.get());
 
             _nodeEngine->InstallUncaughtExceptionHandler(_resourcesPath);
         }
@@ -110,12 +106,9 @@ namespace Framework::Integrations::Server::Scripting {
             return;
         }
 
-        v8::Isolate *isolate = _nodeEngine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = _nodeEngine->GetContext();
-        v8::Context::Scope contextScope(context);
+        Framework::Scripting::EngineScope scope(_nodeEngine.get());
+        v8::Isolate *isolate = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
 
         v8::Local<v8::Object> global = context->Global();
         Framework::Scripting::SetScriptingCatalog(isolate, "framework-server");
@@ -190,12 +183,9 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Process pending message responses
         if (_nodeEngine && _nodeEngine->IsInitialized() && _resourceManager) {
-            v8::Isolate *isolate = _nodeEngine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = _nodeEngine->GetContext();
-            v8::Context::Scope contextScope(context);
+            Framework::Scripting::EngineScope scope(_nodeEngine.get());
+            v8::Isolate *isolate = scope.Isolate();
+            v8::Local<v8::Context> context = scope.Context();
 
             Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);
         }

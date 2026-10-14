@@ -9,6 +9,7 @@
 #pragma once
 
 #include <core_modules.h>
+#include <scripting/engine_helpers.h>
 #include <networking/replication/network_entity.h>
 #include <networking/replication/replication_manager.h>
 
@@ -186,7 +187,7 @@ namespace Framework::Scripting::Builtins {
         method("forEach", [](const v8::FunctionCallbackInfo<v8::Value> &info) {
             auto isolate = info.GetIsolate();
             if (info.Length() < 1 || !info[0]->IsFunction()) {
-                isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "forEach requires a callback function")));
+                ThrowTypeError(isolate, "forEach requires a callback function");
                 return;
             }
             CollectionType collection;
@@ -195,7 +196,7 @@ namespace Framework::Scripting::Builtins {
         method("filter", [](const v8::FunctionCallbackInfo<v8::Value> &info) {
             auto isolate = info.GetIsolate();
             if (info.Length() < 1 || !info[0]->IsFunction()) {
-                isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "filter requires a callback function")));
+                ThrowTypeError(isolate, "filter requires a callback function");
                 return;
             }
             CollectionType collection;
@@ -204,7 +205,7 @@ namespace Framework::Scripting::Builtins {
         method("find", [](const v8::FunctionCallbackInfo<v8::Value> &info) {
             auto isolate = info.GetIsolate();
             if (info.Length() < 1 || !info[0]->IsFunction()) {
-                isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "find requires a callback function")));
+                ThrowTypeError(isolate, "find requires a callback function");
                 return;
             }
             CollectionType collection;
@@ -213,7 +214,7 @@ namespace Framework::Scripting::Builtins {
         method("map", [](const v8::FunctionCallbackInfo<v8::Value> &info) {
             auto isolate = info.GetIsolate();
             if (info.Length() < 1 || !info[0]->IsFunction()) {
-                isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "map requires a callback function")));
+                ThrowTypeError(isolate, "map requires a callback function");
                 return;
             }
             CollectionType collection;
@@ -222,7 +223,7 @@ namespace Framework::Scripting::Builtins {
         method("some", [](const v8::FunctionCallbackInfo<v8::Value> &info) {
             auto isolate = info.GetIsolate();
             if (info.Length() < 1 || !info[0]->IsFunction()) {
-                isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "some requires a callback function")));
+                ThrowTypeError(isolate, "some requires a callback function");
                 return;
             }
             CollectionType collection;
@@ -231,7 +232,7 @@ namespace Framework::Scripting::Builtins {
         method("every", [](const v8::FunctionCallbackInfo<v8::Value> &info) {
             auto isolate = info.GetIsolate();
             if (info.Length() < 1 || !info[0]->IsFunction()) {
-                isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "every requires a callback function")));
+                ThrowTypeError(isolate, "every requires a callback function");
                 return;
             }
             CollectionType collection;

@@ -40,6 +40,7 @@
 
 #include "scripting/builtins/events.h"
 #include "scripting/builtins/player.h"
+#include "scripting/engine_scope.h"
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
 
@@ -793,12 +794,9 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        v8::Isolate *isolate = engine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = engine->GetContext();
-        v8::Context::Scope contextScope(context);
+        Framework::Scripting::EngineScope scope(engine);
+        v8::Isolate *isolate = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
 
         std::vector<v8::Local<v8::Value>> args;
         args.push_back(WrapScriptPlayer(isolate, senderNetworkId));
@@ -1283,12 +1281,9 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        v8::Isolate *isolate = engine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = engine->GetContext();
-        v8::Context::Scope contextScope(context);
+        Framework::Scripting::EngineScope scope(engine);
+        v8::Isolate *isolate = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
 
         v8::Local<v8::Array> argsArr = v8::Array::New(isolate, static_cast<int>(args.size()));
         for (size_t i = 0; i < args.size(); ++i) {
@@ -1334,12 +1329,9 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        v8::Isolate *isolate = engine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = engine->GetContext();
-        v8::Context::Scope contextScope(context);
+        Framework::Scripting::EngineScope scope(engine);
+        v8::Isolate *isolate = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
 
         for (const Voice::TalkingChange &change : _voiceTalkingChanges) {
             if (const std::optional<uint64_t> networkId = networkIdOf(change.guid)) {

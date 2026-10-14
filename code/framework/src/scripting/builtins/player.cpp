@@ -153,58 +153,54 @@ namespace Framework::Scripting::Builtins {
     }
 
     v8pp::class_<Player> &Player::GetClass(v8::Isolate *isolate) {
-        auto it = _classes.find(isolate);
-        if (it != _classes.end()) {
-            return *it->second;
-        }
+        return _classes.Get(isolate, [isolate]() {
+            // v8pp inherit<Entity> requires Entity registered first.
+            Entity::GetClass(isolate);
 
-        // v8pp inherit<Entity> requires Entity registered first.
-        Entity::GetClass(isolate);
+            auto cls = std::make_unique<v8pp::class_<Player>>(isolate, GetScriptingCatalog(isolate), "Player", "Framework-owned base handle for a connected player, extended by each game or mod.");
+            cls->auto_wrap_objects(true);
+            cls->inherit<Entity>()
+                .ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a wrapper for an existing connected player with this ID; it does not connect or spawn a player."))
+                .function("toString", &Player::ToString, v8pp::metadata::docs("string", {}, "Formats this player handle for logging and debugging.", "Text containing the player's network entity ID."))
+                .function("isNametagVisible", &Player::IsNametagVisible,
+                    v8pp::metadata::docs("boolean", {}, "Checks whether this player's nametag is shown to other players.", "True unless the nametag was hidden; false also when this game has no nametags."))
+                .function("isNametagHealthVisible", &Player::IsNametagHealthVisible,
+                    v8pp::metadata::docs("boolean", {}, "Checks whether the health bar under this player's nametag is shown.", "True unless the health bar was hidden; false also when this game has no nametags."))
+                .function("getNametagText", &Player::GetNametagText,
+                    v8pp::metadata::docs("string", {}, "Reads this player's nametag text override.", "The override, or an empty string when the player's own name is drawn."))
+                .function("getNametagColor", &Player::GetNametagColor,
+                    v8pp::metadata::docs("number", {}, "Reads this player's nametag color.", "Packed 0xAARRGGBB color; opaque white when untinted."));
 
-        auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Player>>(isolate, GetScriptingCatalog(isolate), "Player", "Framework-owned base handle for a connected player, extended by each game or mod.");
-        cls->auto_wrap_objects(true);
-        cls->inherit<Entity>()
-            .ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a wrapper for an existing connected player with this ID; it does not connect or spawn a player."))
-            .function("toString", &Player::ToString, v8pp::metadata::docs("string", {}, "Formats this player handle for logging and debugging.", "Text containing the player's network entity ID."))
-            .function("isNametagVisible", &Player::IsNametagVisible,
-                v8pp::metadata::docs("boolean", {}, "Checks whether this player's nametag is shown to other players.", "True unless the nametag was hidden; false also when this game has no nametags."))
-            .function("isNametagHealthVisible", &Player::IsNametagHealthVisible,
-                v8pp::metadata::docs("boolean", {}, "Checks whether the health bar under this player's nametag is shown.", "True unless the health bar was hidden; false also when this game has no nametags."))
-            .function("getNametagText", &Player::GetNametagText,
-                v8pp::metadata::docs("string", {}, "Reads this player's nametag text override.", "The override, or an empty string when the player's own name is drawn."))
-            .function("getNametagColor", &Player::GetNametagColor,
-                v8pp::metadata::docs("number", {}, "Reads this player's nametag color.", "Packed 0xAARRGGBB color; opaque white when untinted."));
+            // Connection-level surface; NetworkPeer implements it only in NetworkServer. The getters above
+            // stay on both sides, they read the replica.
+            if (!IsClientScripting(isolate)) {
+                cls->function("kick", &Player::Kick, v8pp::metadata::docs("void", {v8pp::metadata::param("reason", "string", true, "Optional reason shown to the disconnected player; omitting it uses the generic kicked reason.")}, "Disconnects this player from the server."));
+                cls->function("emit", &Player::Emit,
+                    v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Client event name."), v8pp::metadata::param("payloadJson", "string", true, "Optional JSON payload forwarded verbatim to the owning client.")},
+                        "Emits a named script event to this player's client connection."));
+                cls->function("getIP", &Player::GetAddress, v8pp::metadata::docs("string", {}, "Returns this player's current remote network address.", "Address string, or an empty string when the player or peer is unavailable."));
+                cls->function("setNametagVisible", &Player::SetNametagVisible,
+                    v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "True to show this player's nametag to everyone, false to hide it.")},
+                        "Shows or hides the name over this player's head for every other player. The health bar has its own switch, and each player can still hide all nametags locally."));
+                cls->function("setNametagHealthVisible", &Player::SetNametagHealthVisible,
+                    v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "True to show the health bar under this player's name, false to hide it.")},
+                        "Shows or hides the health bar under this player's nametag, leaving the name itself alone."));
+                cls->function("setNametagText", &Player::SetNametagText,
+                    v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", true, "Text to show instead of the player's name, cut to 64 bytes; empty or omitted restores the name.")},
+                        "Overrides the text drawn on this player's nametag."));
+                cls->function("setNametagColor", &Player::SetNametagColor,
+                    v8pp::metadata::docs("void", {v8pp::metadata::param("color", "number", false, "Packed 0xAARRGGBB color.")},
+                        "Tints the text on this player's nametag."));
+                cls->property("steamId", &Player::GetSteamId, v8pp::metadata::property_docs("string", "Authenticated Steam identifier, or an empty string when unavailable."));
+                cls->property("epicId", &Player::GetEpicId, v8pp::metadata::property_docs("string", "Epic Games account identifier the client reported, not verified by the server, or an empty string when unavailable."));
+                cls->property("discordId", &Player::GetDiscordId, v8pp::metadata::property_docs("string", "Authenticated Discord identifier, or an empty string when unavailable."));
+                cls->property("hardwareId", &Player::GetHardwareId, v8pp::metadata::property_docs("string", "Framework hardware identifier, or an empty string when unavailable."));
+                cls->property("ping", &Player::GetPing, v8pp::metadata::property_docs("number", "Current round-trip latency in milliseconds, or -1 when unavailable."));
+                cls->property("ip", &Player::GetAddress, v8pp::metadata::property_docs("string", "Current remote network address, or an empty string when unavailable."));
+            }
 
-        // Connection-level surface; NetworkPeer implements it only in NetworkServer. The getters above
-        // stay on both sides, they read the replica.
-        if (!IsClientScripting(isolate)) {
-            cls->function("kick", &Player::Kick, v8pp::metadata::docs("void", {v8pp::metadata::param("reason", "string", true, "Optional reason shown to the disconnected player; omitting it uses the generic kicked reason.")}, "Disconnects this player from the server."));
-            cls->function("emit", &Player::Emit,
-                v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Client event name."), v8pp::metadata::param("payloadJson", "string", true, "Optional JSON payload forwarded verbatim to the owning client.")},
-                    "Emits a named script event to this player's client connection."));
-            cls->function("getIP", &Player::GetAddress, v8pp::metadata::docs("string", {}, "Returns this player's current remote network address.", "Address string, or an empty string when the player or peer is unavailable."));
-            cls->function("setNametagVisible", &Player::SetNametagVisible,
-                v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "True to show this player's nametag to everyone, false to hide it.")},
-                    "Shows or hides the name over this player's head for every other player. The health bar has its own switch, and each player can still hide all nametags locally."));
-            cls->function("setNametagHealthVisible", &Player::SetNametagHealthVisible,
-                v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "True to show the health bar under this player's name, false to hide it.")},
-                    "Shows or hides the health bar under this player's nametag, leaving the name itself alone."));
-            cls->function("setNametagText", &Player::SetNametagText,
-                v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", true, "Text to show instead of the player's name, cut to 64 bytes; empty or omitted restores the name.")},
-                    "Overrides the text drawn on this player's nametag."));
-            cls->function("setNametagColor", &Player::SetNametagColor,
-                v8pp::metadata::docs("void", {v8pp::metadata::param("color", "number", false, "Packed 0xAARRGGBB color.")},
-                    "Tints the text on this player's nametag."));
-            cls->property("steamId", &Player::GetSteamId, v8pp::metadata::property_docs("string", "Authenticated Steam identifier, or an empty string when unavailable."));
-            cls->property("epicId", &Player::GetEpicId, v8pp::metadata::property_docs("string", "Epic Games account identifier the client reported, not verified by the server, or an empty string when unavailable."));
-            cls->property("discordId", &Player::GetDiscordId, v8pp::metadata::property_docs("string", "Authenticated Discord identifier, or an empty string when unavailable."));
-            cls->property("hardwareId", &Player::GetHardwareId, v8pp::metadata::property_docs("string", "Framework hardware identifier, or an empty string when unavailable."));
-            cls->property("ping", &Player::GetPing, v8pp::metadata::property_docs("number", "Current round-trip latency in milliseconds, or -1 when unavailable."));
-            cls->property("ip", &Player::GetAddress, v8pp::metadata::property_docs("string", "Current remote network address, or an empty string when unavailable."));
-        }
-
-        return *cls;
+            return cls;
+        });
     }
 
     const Networking::RPC::ClientIdentity *Player::ResolveIdentity() const {
@@ -223,6 +219,6 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Player::UnregisterIsolate(v8::Isolate *isolate) {
-        _classes.erase(isolate);
+        _classes.Unregister(isolate);
     }
 } // namespace Framework::Scripting::Builtins

@@ -22,6 +22,7 @@
 
 #include "integrations/client/scripting/builtins/keybinds.h"
 
+#include "scripting/engine_scope.h"
 #include "scripting/resource/resource_manager.h"
 #include "scripting/builtins/events.h"
 
@@ -85,12 +86,9 @@ namespace Framework::Integrations::Client {
                 return;
             }
 
-            v8::Isolate *isolate = engine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = engine->GetContext();
-            v8::Context::Scope contextScope(context);
+            Framework::Scripting::EngineScope scope(engine);
+            v8::Isolate *isolate = scope.Isolate();
+            v8::Local<v8::Context> context = scope.Context();
 
             // Parse JSON payload and emit event
             std::vector<v8::Local<v8::Value>> args;
@@ -135,12 +133,9 @@ namespace Framework::Integrations::Client {
                 return;
             }
 
-            v8::Isolate *isolate = engine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = engine->GetContext();
-            v8::Context::Scope contextScope(context);
+            Framework::Scripting::EngineScope scope(engine);
+            v8::Isolate *isolate = scope.Isolate();
+            v8::Local<v8::Context> context = scope.Context();
 
             v8::Local<v8::String> authorStr;
             v8::Local<v8::String> textStr;
@@ -172,12 +167,9 @@ namespace Framework::Integrations::Client {
                 return true;
             }
 
-            v8::Isolate *isolate = engine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = engine->GetContext();
-            v8::Context::Scope contextScope(context);
+            Framework::Scripting::EngineScope scope(engine);
+            v8::Isolate *isolate = scope.Isolate();
+            v8::Local<v8::Context> context = scope.Context();
 
             v8::Local<v8::String> textStr;
             if (!v8::String::NewFromUtf8(isolate, text.c_str()).ToLocal(&textStr)) {
@@ -625,12 +617,9 @@ namespace Framework::Integrations::Client {
             return;
         }
 
-        v8::Isolate *isolate = engine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = engine->GetContext();
-        v8::Context::Scope contextScope(context);
+        Framework::Scripting::EngineScope scope(engine);
+        v8::Isolate *isolate = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
 
         std::vector<v8::Local<v8::Value>> args;
         resourceManager->GetEvents().EmitReserved(isolate, context, talking ? "voiceStart" : "voiceStop", args);

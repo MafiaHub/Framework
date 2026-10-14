@@ -88,6 +88,6 @@ namespace Framework::Scripting::Builtins {
         void SetNametagComponent(Networking::Replication::NametagComponent component, bool enabled);
         bool HasNametagComponent(Networking::Replication::NametagComponent component) const;
 
-        inline static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Player>>> _classes;
+        inline static ClassCache<Player> _classes;
     };
 } // namespace Framework::Scripting::Builtins

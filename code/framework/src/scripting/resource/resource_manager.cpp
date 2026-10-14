@@ -11,6 +11,7 @@
 #include "../builtins/events.h"
 #include "../builtins/messages.h"
 #include "../builtins/state_bag.h"
+#include "../engine_scope.h"
 
 #include <utils/vfs.h>
 
@@ -79,12 +80,9 @@ namespace Framework::Scripting {
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(timeoutMs, 1));
             for (;;) {
                 {
-                    v8::Isolate *isolate = engine->GetIsolate();
-                    v8::Locker locker(isolate);
-                    v8::Isolate::Scope isolateScope(isolate);
-                    v8::HandleScope handleScope(isolate);
-                    v8::Local<v8::Context> context = engine->GetContext();
-                    v8::Context::Scope contextScope(context);
+                    EngineScope scope(engine);
+                    v8::Isolate *isolate = scope.Isolate();
+                    v8::Local<v8::Context> context = scope.Context();
                     auto local = promise.Get(isolate);
                     if (local.IsEmpty()) {
                         promise.Reset();
@@ -454,12 +452,9 @@ namespace Framework::Scripting {
         StopAll();
 
         if (_jsEngine && _jsEngine->IsInitialized()) {
-            v8::Isolate *isolate = _jsEngine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = _jsEngine->GetContext();
-            v8::Context::Scope contextScope(context);
+            EngineScope scope(_jsEngine);
+            v8::Isolate *isolate = scope.Isolate();
+            v8::Local<v8::Context> context = scope.Context();
 
             _events.Reset();
             for (const std::string &resourceName : resourceNames) {
@@ -554,12 +549,9 @@ namespace Framework::Scripting {
         // Emit resourceStart event (bypass running check since resource is still Loading)
         v8::Global<v8::Promise> startPromise;
         if (_jsEngine && _jsEngine->IsInitialized()) {
-            v8::Isolate *isolate = _jsEngine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = _jsEngine->GetContext();
-            v8::Context::Scope contextScope(context);
+            EngineScope scope(_jsEngine);
+            v8::Isolate *isolate = scope.Isolate();
+            v8::Local<v8::Context> context = scope.Context();
 
             std::string nameStr(name);
             std::vector<v8::Local<v8::Value>> args;
@@ -628,12 +620,9 @@ namespace Framework::Scripting {
         // Emit resourceStop event before cleanup
         v8::Global<v8::Promise> stopPromise;
         if (_jsEngine && _jsEngine->IsInitialized()) {
-            v8::Isolate *isolate = _jsEngine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = _jsEngine->GetContext();
-            v8::Context::Scope contextScope(context);
+            EngineScope scope(_jsEngine);
+            v8::Isolate *isolate = scope.Isolate();
+            v8::Local<v8::Context> context = scope.Context();
 
             std::string nameStr(name);
             std::vector<v8::Local<v8::Value>> args;
@@ -994,12 +983,9 @@ namespace Framework::Scripting {
         // Reject and drop message requests tied to this resource. Rejecting the awaiting
         // Promises needs an active isolate/context, so scope one here.
         if (_jsEngine && _jsEngine->IsInitialized()) {
-            v8::Isolate *isolate = _jsEngine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = _jsEngine->GetContext();
-            v8::Context::Scope contextScope(context);
+            EngineScope scope(_jsEngine);
+            v8::Isolate *isolate = scope.Isolate();
+            v8::Local<v8::Context> context = scope.Context();
             Builtins::Messages::CleanupResource(isolate, context, std::string(resourceName));
             Builtins::StateBag::CleanupResource(isolate, std::string(resourceName));
         }

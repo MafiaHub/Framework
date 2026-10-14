@@ -11,6 +11,7 @@
 #include "../../connection_gate.h"
 
 #include <core_modules.h>
+#include <scripting/engine_helpers.h>
 #include <scripting/scripting_catalog.h>
 
 #include <v8pp/convert.hpp>
@@ -66,7 +67,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         v8::HandleScope hs(isolate);
 
         if (info.Length() > 0 && !info[0]->IsUndefined() && !info[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "PendingConnection.reject: expected a string reason")));
+            Framework::Scripting::ThrowTypeError(isolate, "PendingConnection.reject: expected a string reason");
             return;
         }
         ConnectionGate *gate = ResolveGate(info, "PendingConnection.reject");
@@ -81,7 +82,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         v8::HandleScope hs(isolate);
 
         if (info.Length() < 1 || !info[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "PendingConnection.update: expected a string message")));
+            Framework::Scripting::ThrowTypeError(isolate, "PendingConnection.update: expected a string message");
             return;
         }
         ConnectionGate *gate = ResolveGate(info, "PendingConnection.update");

@@ -12,6 +12,7 @@
 // Separated from v8_engine.cpp to keep engine class logic readable.
 // Included only by v8_engine.cpp — not part of the public API.
 
+#include "engine_helpers.h"
 #include "v8_engine.h"
 #include "resource/resource_manager.h"
 
@@ -64,8 +65,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 1 || !args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(
-                v8::String::NewFromUtf8Literal(isolate, "require() expects a string argument")));
+            ThrowTypeError(isolate, "require() expects a string argument");
             return;
         }
 
@@ -115,8 +115,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 1 || !args[0]->IsFunction()) {
-            isolate->ThrowException(v8::Exception::TypeError(
-                v8::String::NewFromUtf8Literal(isolate, "First argument must be a function")));
+            ThrowTypeError(isolate, "First argument must be a function");
             return;
         }
 
@@ -180,8 +179,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
         v8::Isolate *isolate = args.GetIsolate();
 
         if (args.Length() < 1 || !args[0]->IsFunction()) {
-            isolate->ThrowException(v8::Exception::TypeError(
-                v8::String::NewFromUtf8Literal(isolate, "queueMicrotask() expects a function argument")));
+            ThrowTypeError(isolate, "queueMicrotask() expects a function argument");
             return;
         }
 

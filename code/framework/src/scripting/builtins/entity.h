@@ -11,6 +11,8 @@
 #include "quaternion.h"
 #include "vector3.h"
 
+#include "../class_cache.h"
+
 #include <networking/replication/network_entity.h>
 #include <networking/replication/replication_manager.h>
 
@@ -69,6 +71,6 @@ namespace Framework::Scripting::Builtins {
         Networking::Replication::NetworkEntity *Resolve() const;
 
         uint64_t _id = 0;
-        inline static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Entity>>> _classes;
+        inline static ClassCache<Entity> _classes;
     };
 } // namespace Framework::Scripting::Builtins

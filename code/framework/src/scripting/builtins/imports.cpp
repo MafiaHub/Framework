@@ -7,6 +7,7 @@
  */
 
 #include "imports.h"
+#include "../engine_helpers.h"
 #include "../function_references.h"
 #include "../resource/resource.h"
 #include "../resource/resource_manager.h"
@@ -43,12 +44,12 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 1) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Imports.get requires 1 argument: resourceName")));
+            ThrowTypeError(isolate, "Imports.get requires 1 argument: resourceName");
             return;
         }
 
         if (!args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "Imports.get: resourceName must be a string")));
+            ThrowTypeError(isolate, "Imports.get: resourceName must be a string");
             return;
         }
 

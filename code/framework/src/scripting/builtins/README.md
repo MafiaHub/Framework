@@ -22,7 +22,7 @@ happen to be in:
 
 | Situation | Idiom |
 |---|---|
-| Wrong argument count, type, or shape | `isolate->ThrowException(v8::Exception::TypeError(...))` |
+| Wrong argument count, type, or shape | `ThrowTypeError(isolate, ...)` (`scripting/engine_helpers.h`) |
 | Valid call, but the world can't satisfy it (subsystem missing, resource not running, limit reached, no handler, cross-isolate, argument's object has no live connection) | `isolate->ThrowException(v8::Exception::Error(...))` |
 | A method called on a stale **receiver** (`this` whose object is gone) | silent no-op (return without throwing) |
 
@@ -30,7 +30,7 @@ Rules:
 
 - **Never** use `isolate->ThrowError(...)`. It is equivalent to
   `ThrowException(Exception::Error(...))` but hides the Error-vs-TypeError choice
-  above. Always spell out `ThrowException(Exception::Error/TypeError(...))`.
+  above. Use `ThrowTypeError` for a TypeError and spell out `ThrowException(Exception::Error(...))` otherwise.
 - **Silent no-op is only for a stale receiver.** A method invoked on a handle
   whose entity was destroyed returns quietly (common during async teardown; don't
   crash the caller). Everything the *caller passes in* is different: a bad or

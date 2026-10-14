@@ -9,6 +9,7 @@
 #include "voice.h"
 
 #include <core_modules.h>
+#include <scripting/engine_helpers.h>
 #include <scripting/builtins/entity.h>
 #include <scripting/scripting_catalog.h>
 #include <voice/server/voice_server.h>
@@ -32,7 +33,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
 
             auto *entity = info.Length() > index ? v8pp::class_<Framework::Scripting::Builtins::Entity>::unwrap_object(isolate, info[index]) : nullptr;
             if (!entity) {
-                isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string(fn) + ": expected a Player")));
+                Framework::Scripting::ThrowTypeError(isolate, (std::string(fn) + ": expected a Player").c_str());
                 return false;
             }
 
@@ -49,7 +50,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         bool ReadNumber(const v8::FunctionCallbackInfo<v8::Value> &info, int index, const char *fn, const char *what, float &out) {
             v8::Isolate *isolate = info.GetIsolate();
             if (info.Length() <= index || !info[index]->IsNumber()) {
-                isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, std::string(fn) + ": expected a numeric " + what)));
+                Framework::Scripting::ThrowTypeError(isolate, (std::string(fn) + ": expected a numeric " + what).c_str());
                 return false;
             }
 

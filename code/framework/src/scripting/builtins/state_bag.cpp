@@ -8,6 +8,7 @@
 
 #include "state_bag.h"
 
+#include "../engine_helpers.h"
 #include "../scripting_catalog.h"
 
 #include <core_modules.h>
@@ -33,7 +34,7 @@ namespace Framework::Scripting::Builtins {
                 return true;
             }
             if (!options->IsObject()) {
-                isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "StateBag.set: options must be an object")));
+                ThrowTypeError(isolate, "StateBag.set: options must be an object");
                 return false;
             }
 
@@ -47,7 +48,7 @@ namespace Framework::Scripting::Builtins {
                 return true;
             }
             if (!scope->IsString()) {
-                isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "StateBag.set: scope must be a string")));
+                ThrowTypeError(isolate, "StateBag.set: scope must be a string");
                 return false;
             }
 
@@ -64,14 +65,14 @@ namespace Framework::Scripting::Builtins {
                 out = Networking::Replication::StateScope::Server;
                 return true;
             }
-            isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, fmt::format("StateBag.set: unknown scope '{}', expected 'broadcast', 'owner' or 'server'", name))));
+            ThrowTypeError(isolate, fmt::format("StateBag.set: unknown scope '{}', expected 'broadcast', 'owner' or 'server'", name).c_str());
             return false;
         }
 
         bool ReadKey(const v8::FunctionCallbackInfo<v8::Value> &info, const char *method, std::string &out) {
             v8::Isolate *isolate = info.GetIsolate();
             if (info.Length() < 1 || !info[0]->IsString()) {
-                isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, fmt::format("StateBag.{}: expected a string key", method))));
+                ThrowTypeError(isolate, fmt::format("StateBag.{}: expected a string key", method).c_str());
                 return false;
             }
             out = v8pp::from_v8<std::string>(isolate, info[0]);
@@ -318,14 +319,14 @@ namespace Framework::Scripting::Builtins {
                 // The key is required and nullable rather than optional: an optional leading parameter
                 // cannot be expressed as one TypeScript signature.
                 if (info.Length() < 2 || !(info[0]->IsString() || info[0]->IsNullOrUndefined())) {
-                    isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "StateBag.onChange: expected (key, handler); pass null as the key to watch every key")));
+                    ThrowTypeError(isolate, "StateBag.onChange: expected (key, handler); pass null as the key to watch every key");
                     return;
                 }
                 const std::string key = info[0]->IsString() ? v8pp::from_v8<std::string>(isolate, info[0]) : std::string();
 
                 v8::Local<v8::Value> handlerArg = info[1];
                 if (!handlerArg->IsFunction()) {
-                    isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "StateBag.onChange: handler must be a function")));
+                    ThrowTypeError(isolate, "StateBag.onChange: handler must be a function");
                     return;
                 }
 
@@ -409,7 +410,7 @@ namespace Framework::Scripting::Builtins {
                     return;
                 }
                 if (info.Length() < 2) {
-                    isolate->ThrowException(v8::Exception::TypeError(v8pp::to_v8(isolate, "StateBag.set: expected (key, value, options?)")));
+                    ThrowTypeError(isolate, "StateBag.set: expected (key, value, options?)");
                     return;
                 }
 
