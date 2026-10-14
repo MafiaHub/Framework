@@ -135,7 +135,7 @@ namespace Framework::Integrations::Client::Scripting {
             return;
         }
 
-        Framework::Scripting::EngineScope scope(_engine);
+        Framework::Scripting::EngineScope scope(_engine.get());
         v8::Isolate *isolate = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
@@ -230,7 +230,7 @@ namespace Framework::Integrations::Client::Scripting {
             _engine->Tick();
 
             if (_resourceManager) {
-                Framework::Scripting::EngineScope scope(_engine);
+                Framework::Scripting::EngineScope scope(_engine.get());
                 v8::Isolate *isolate = scope.Isolate();
                 v8::Local<v8::Context> context = scope.Context();
 
