@@ -264,6 +264,10 @@ else()
         )
     endif()
 
+    if(WIN32)
+        set(LIBNODE_IMPLIB_PATH "${LIBNODE_LIB_DIR}/${LIBNODE_LIB_NAME}" CACHE INTERNAL "libnode import library")
+    endif()
+
     # Create v8 interface target (uses V8 headers from libnode)
     # V8 headers are in the same include/ directory as Node headers
     add_library(v8 INTERFACE)
@@ -339,3 +343,37 @@ else()
     message(STATUS "libnode: Include dir: ${LIBNODE_INCLUDE_DIR}")
     message(STATUS "libnode: Library dir: ${LIBNODE_LIB_DIR}")
 endif()
+
+set(LIBNODE_EXPORTS_SCRIPT "${CMAKE_SOURCE_DIR}/cmake/NodeApiExports.cmake" CACHE INTERNAL "libnode N-API export generator")
+
+# libnode_export_node_api(<executable>)
+#
+# Lets native npm addons load in an executable that embeds libnode. node-gyp builds them against
+# node.exe and its delay-load hook resolves their N-API imports from the host executable, so the
+# host has to export them; it forwards each one to libnode.dll. See cmake/NodeApiExports.cmake. Only
+# Windows needs it: elsewhere the executable's link to libnode already puts the symbols in reach.
+function(libnode_export_node_api target)
+    if(NOT WIN32 OR NOT LIBNODE_IMPLIB_PATH)
+        return()
+    endif()
+    get_filename_component(linker_dir "${CMAKE_LINKER}" DIRECTORY)
+    find_program(LIBNODE_DUMPBIN NAMES dumpbin HINTS "${linker_dir}" REQUIRED)
+    set(def "${CMAKE_CURRENT_BINARY_DIR}/${target}_node_api.def")
+    add_custom_command(
+        OUTPUT "${def}"
+        COMMAND ${CMAKE_COMMAND}
+            "-DDUMPBIN=${LIBNODE_DUMPBIN}"
+            "-DIMPLIB=${LIBNODE_IMPLIB_PATH}"
+            "-DDLL_NAME=libnode"
+            "-DOUTPUT=${def}"
+            -P "${LIBNODE_EXPORTS_SCRIPT}"
+        DEPENDS "${LIBNODE_IMPLIB_PATH}" "${LIBNODE_EXPORTS_SCRIPT}"
+        COMMENT "Forwarding Node's C API out of ${target}"
+        VERBATIM
+    )
+    # CMake hands a .def source to the linker for DLLs only: an executable is given it by hand, and
+    # the source entry is what orders the generation before the link.
+    target_sources(${target} PRIVATE "${def}")
+    target_link_options(${target} PRIVATE "/DEF:${def}")
+    set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS "${def}")
+endfunction()
