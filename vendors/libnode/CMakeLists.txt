@@ -344,36 +344,28 @@ else()
     message(STATUS "libnode: Library dir: ${LIBNODE_LIB_DIR}")
 endif()
 
-set(LIBNODE_EXPORTS_SCRIPT "${CMAKE_SOURCE_DIR}/cmake/NodeApiExports.cmake" CACHE INTERNAL "libnode N-API export generator")
-
-# libnode_export_node_api(<executable>)
+# libnode_node_api_def: a module definition forwarding Node's C API to libnode.dll, for the
+# executables that embed it (FrameworkServer hands it to every one that links it).
 #
-# Lets native npm addons load in an executable that embeds libnode. node-gyp builds them against
-# node.exe and its delay-load hook resolves their N-API imports from the host executable, so the
-# host has to export them; it forwards each one to libnode.dll. See cmake/NodeApiExports.cmake. Only
-# Windows needs it: elsewhere the executable's link to libnode already puts the symbols in reach.
-function(libnode_export_node_api target)
-    if(NOT WIN32 OR NOT LIBNODE_IMPLIB_PATH)
-        return()
-    endif()
+# Native npm addons are built by node-gyp against node.exe, and its delay-load hook resolves their
+# N-API imports from the host executable, so the host has to export them. See
+# cmake/NodeApiExports.cmake. Only Windows needs it: elsewhere the executable's link to libnode
+# already puts the symbols in reach.
+if(WIN32 AND LIBNODE_IMPLIB_PATH)
     get_filename_component(linker_dir "${CMAKE_LINKER}" DIRECTORY)
     find_program(LIBNODE_DUMPBIN NAMES dumpbin HINTS "${linker_dir}" REQUIRED)
-    set(def "${CMAKE_CURRENT_BINARY_DIR}/${target}_node_api.def")
+    set(LIBNODE_NODE_API_DEF "${CMAKE_CURRENT_BINARY_DIR}/libnode_node_api.def" CACHE INTERNAL "libnode N-API forwarders")
     add_custom_command(
-        OUTPUT "${def}"
+        OUTPUT "${LIBNODE_NODE_API_DEF}"
         COMMAND ${CMAKE_COMMAND}
             "-DDUMPBIN=${LIBNODE_DUMPBIN}"
             "-DIMPLIB=${LIBNODE_IMPLIB_PATH}"
             "-DDLL_NAME=libnode"
-            "-DOUTPUT=${def}"
-            -P "${LIBNODE_EXPORTS_SCRIPT}"
-        DEPENDS "${LIBNODE_IMPLIB_PATH}" "${LIBNODE_EXPORTS_SCRIPT}"
-        COMMENT "Forwarding Node's C API out of ${target}"
+            "-DOUTPUT=${LIBNODE_NODE_API_DEF}"
+            -P "${CMAKE_SOURCE_DIR}/cmake/NodeApiExports.cmake"
+        DEPENDS "${LIBNODE_IMPLIB_PATH}" "${CMAKE_SOURCE_DIR}/cmake/NodeApiExports.cmake"
+        COMMENT "Forwarding Node's C API to libnode.dll"
         VERBATIM
     )
-    # CMake hands a .def source to the linker for DLLs only: an executable is given it by hand, and
-    # the source entry is what orders the generation before the link.
-    target_sources(${target} PRIVATE "${def}")
-    target_link_options(${target} PRIVATE "/DEF:${def}")
-    set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS "${def}")
-endfunction()
+    add_custom_target(libnode_node_api_def DEPENDS "${LIBNODE_NODE_API_DEF}")
+endif()

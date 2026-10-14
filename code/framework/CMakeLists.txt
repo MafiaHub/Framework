@@ -510,4 +510,14 @@ if(WIN32)
             add_dependencies(FrameworkServer OpenSSLCopyStub)
         endif()
     endif()
+
+    # Every server embeds libnode, and any resource it runs may require a native npm addon: those
+    # look for Node's C API in the host executable (see cmake/NodeApiExports.cmake). Each
+    # executable linking FrameworkServer exports it, forwarded to libnode.dll. The library builds
+    # after the definition is written, so it exists by the time a server links.
+    if(TARGET FrameworkServer AND TARGET libnode_node_api_def)
+        add_dependencies(FrameworkServer libnode_node_api_def)
+        target_link_options(FrameworkServer INTERFACE "/DEF:${LIBNODE_NODE_API_DEF}")
+        set_property(TARGET FrameworkServer APPEND PROPERTY INTERFACE_LINK_DEPENDS "${LIBNODE_NODE_API_DEF}")
+    endif()
 endif()
