@@ -306,11 +306,8 @@ namespace Framework::GUI {
             cefEvent.windows_key_code = static_cast<int>(wParam);
         } break;
         case WM_CHAR: {
+            // Enter included: Blink submits a form and breaks a line on the character, not the key down.
             cefEvent.type = KEYEVENT_CHAR;
-
-            if (wParam == VK_RETURN) {
-                return;
-            }
 
             // ANSI window: widen the codepage byte to UTF-16 for CEF.
             wchar_t wide = static_cast<wchar_t>(wParam);
