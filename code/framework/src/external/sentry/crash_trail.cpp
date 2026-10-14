@@ -182,11 +182,6 @@ namespace Framework::External::Sentry {
             const EXCEPTION_RECORD *record = exceptionInfo->ExceptionRecord;
             const CONTEXT *context         = exceptionInfo->ContextRecord;
 
-            // What is left of an overflowed stack can't hold the formatting below.
-            if (record->ExceptionCode == EXCEPTION_STACK_OVERFLOW) {
-                return;
-            }
-
             ULONG_PTR stackLow  = 0;
             ULONG_PTR stackHigh = 0;
             GetCurrentThreadStackLimits(&stackLow, &stackHigh);
@@ -275,8 +270,16 @@ namespace Framework::External::Sentry {
             Sleep(500);
         }
 
+        /**
+         * Takes the process's one trail. What is left of an overflowed stack
+         * can't hold Write's formatting, so a stack overflow never takes it.
+         */
+        bool Claim(const EXCEPTION_POINTERS *exceptionInfo) {
+            return exceptionInfo->ExceptionRecord->ExceptionCode != EXCEPTION_STACK_OVERFLOW && !gWriting.test_and_set();
+        }
+
         LONG WINAPI Filter(EXCEPTION_POINTERS *exceptionInfo) {
-            if (!gWriting.test_and_set()) {
+            if (Claim(exceptionInfo)) {
                 Write(exceptionInfo);
             }
             return gNext != nullptr ? gNext(exceptionInfo) : EXCEPTION_CONTINUE_SEARCH;
@@ -292,7 +295,7 @@ namespace Framework::External::Sentry {
     }
 
     void CrashTrail::Record(EXCEPTION_POINTERS *exceptionInfo) {
-        if (exceptionInfo != nullptr && !gWriting.test_and_set()) {
+        if (exceptionInfo != nullptr && Claim(exceptionInfo)) {
             Write(exceptionInfo);
         }
     }
