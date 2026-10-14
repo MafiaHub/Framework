@@ -45,7 +45,7 @@ namespace Framework::Networking {
         MafiaNet::RakPeerInterface *_peer = nullptr;
         MafiaNet::Packet *_packet         = nullptr;
         int _packetDataOffset          = 0; // Offset to skip timestamp prefix if present
-        PacketCallback _onUnknownPacketCallback;
+        fu2::function<bool(MafiaNet::Packet *) const> _onUnknownPacketCallback;
         mutable MafiaNet::DirectoryDeltaTransfer _assetStreamer;
 
         // RPC4 dispatches remote-procedure calls by identifier to C handlers. NetworkIDManager hands
@@ -193,7 +193,9 @@ namespace Framework::Networking {
             return "";
         }
 
-        void SetUnknownPacketHandler(PacketCallback callback) {
+        // Handles packets not claimed by the peer or replication plugin. Return true when the
+        // packet id is recognized; only packets declined by this handler are logged as unknown.
+        void SetUnknownPacketHandler(fu2::function<bool(MafiaNet::Packet *) const> callback) {
             _onUnknownPacketCallback = std::move(callback);
         }
 

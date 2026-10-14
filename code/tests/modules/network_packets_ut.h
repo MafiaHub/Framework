@@ -9,6 +9,7 @@
 #pragma once
 
 #include "networking/network_peer.h"
+#include "networking/network_server.h"
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/client_identity.h"
 #include "networking/rpc/server_resources.h"
@@ -63,6 +64,70 @@ MODULE(network_packets, {
         EQUALS(NetworkPeer::IsReplicationPacket(ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE), true);
         EQUALS(NetworkPeer::IsReplicationPacket(ID_USER_PACKET_ENUM), false);
         EQUALS(NetworkPeer::IsReplicationPacket(ID_CONNECTION_LOST), false);
+    });
+
+    IT("dispatches voice frames without unknown-packet spam and logs unclaimed packets", {
+        Framework::Networking::NetworkServer server;
+        struct Shutdown {
+            Framework::Networking::NetworkServer &server;
+            ~Shutdown() {
+                server.Shutdown();
+            }
+        } shutdown {server};
+        // An ephemeral loopback socket lets Receive() drain injected packets without a client.
+        MafiaNet::SocketDescriptor socket(0, "127.0.0.1");
+        EQUALS(server.GetPeer()->Startup(1, &socket, 1), MafiaNet::RAKNET_STARTED);
+
+        // The test runner pauses logging; capture its synchronous null logger without opening files.
+        auto logger = Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING, false);
+        auto logs = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(8);
+        logs->set_pattern("%v");
+        struct RestoreLogger {
+            std::shared_ptr<spdlog::logger> logger;
+            spdlog::level::level_enum level;
+            ~RestoreLogger() {
+                logger->sinks().pop_back();
+                logger->set_level(level);
+            }
+        } restoreLogger {logger, logger->level()};
+        logger->sinks().push_back(logs);
+        logger->set_level(spdlog::level::trace);
+
+        auto enqueue = [&](uint8_t id) {
+            auto *packet = server.GetPeer()->AllocatePacket(1);
+            packet->data[0] = id;
+            server.GetPeer()->PushBackPacket(packet, false);
+        };
+        int voiceFrames = 0;
+        int declinedPackets = 0;
+        server.SetUnknownPacketHandler([&](MafiaNet::Packet *packet) {
+            if (packet->data[server.GetPacketDataOffset()] == ID_RAKVOICE_RELAY_DATA) {
+                ++voiceFrames;
+                return true;
+            }
+            ++declinedPackets;
+            return false;
+        });
+
+        for (int i = 0; i < 100; ++i) {
+            enqueue(ID_RAKVOICE_RELAY_DATA);
+        }
+        server.Update();
+        EQUALS(voiceFrames, 100);
+        EQUALS(logs->last_raw().empty(), true);
+
+        enqueue(ID_USER_PACKET_ENUM);
+        server.Update();
+        EQUALS(declinedPackets, 1);
+        EQUALS(logs->last_raw().size(), static_cast<size_t>(1));
+        EQUALS(logs->last_formatted()[0].find("Received unknown packet " + std::to_string(ID_USER_PACKET_ENUM)), static_cast<size_t>(0));
+
+        // A known id still gets a diagnostic when no application handler claims it.
+        server.SetUnknownPacketHandler({});
+        enqueue(ID_RAKVOICE_RELAY_DATA);
+        server.Update();
+        EQUALS(logs->last_raw().size(), static_cast<size_t>(2));
+        EQUALS(logs->last_formatted()[1].find("Received unknown packet " + std::to_string(ID_RAKVOICE_RELAY_DATA)), static_cast<size_t>(0));
     });
 
     IT("round-trips a ChatMessage payload", {
