@@ -19,6 +19,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <system_error>
 
 namespace Framework::External::Sentry {
     namespace {
@@ -51,9 +52,17 @@ namespace Framework::External::Sentry {
             default: return "info";
             }
         }
+
+        void AddOptionsAttachment(sentry_options_t *options, const std::filesystem::path &path) {
+#ifdef _WIN32
+            sentry_options_add_attachmentw(options, path.c_str());
+#else
+            sentry_options_add_attachment(options, path.c_str());
+#endif
+        }
     } // namespace
 
-    Utils::Result<void, Framework::Error> Wrapper::Init(const InitOptions &options) {
+    Utils::Result<void, Framework::Error> Wrapper::Init(const InitOptions &options) try {
         // sentry_init takes ownership below; every path that bails out before that
         // has to free the payload itself, so let a guard own it until then.
         std::unique_ptr<sentry_options_t, decltype(&sentry_options_free)> opts(sentry_options_new(), sentry_options_free);
@@ -89,17 +98,25 @@ namespace Framework::External::Sentry {
             }
         }
 
-        sentry_options_set_handler_path(opts.get(), breakpadFile.path().c_str());
-        sentry_options_set_database_path(opts.get(), cacheDirectory.path().c_str());
+        // The framework accepts native filesystem strings; Sentry's narrow Windows
+        // API requires UTF-8. Preserve the native path through its wide API instead.
+        const std::filesystem::path handlerPath(breakpadFile.path());
+        const std::filesystem::path databasePath(cacheDirectory.path());
+#ifdef _WIN32
+        sentry_options_set_handler_pathw(opts.get(), handlerPath.c_str());
+        sentry_options_set_database_pathw(opts.get(), databasePath.c_str());
+#else
+        sentry_options_set_handler_path(opts.get(), handlerPath.c_str());
+        sentry_options_set_database_path(opts.get(), databasePath.c_str());
+#endif
 
         // Crashpad reads attachments lazily at crash time, so cef.log carries the CHECK/FATAL
         // line CEF writes before it fast-fails. Registered before init so the handler knows it.
-        const std::string cefLog = std::filesystem::absolute(std::filesystem::path(options.handlerPath) / "logs" / "cef.log").string();
-        sentry_options_add_attachment(opts.get(), cefLog.c_str());
+        const auto cefLog = std::filesystem::absolute(std::filesystem::path(options.handlerPath) / "logs" / "cef.log");
+        AddOptionsAttachment(opts.get(), cefLog);
 
         for (const auto &attachment : options.attachments) {
-            const std::string absolute = std::filesystem::absolute(std::filesystem::path(attachment)).string();
-            sentry_options_add_attachment(opts.get(), absolute.c_str());
+            AddOptionsAttachment(opts.get(), std::filesystem::absolute(std::filesystem::path(attachment)));
         }
 
         if (sentry_init(opts.release()) != 0) {
@@ -111,6 +128,9 @@ namespace Framework::External::Sentry {
         // leaves its location in the log the report carries.
         CrashTrail::Install();
         return {};
+    }
+    catch (const std::system_error &error) {
+        return Framework::Error("Failed to configure Sentry paths: " + std::string(error.what()), error.code().value());
     }
 
     bool Wrapper::Flush(uint32_t timeoutMs) const {
@@ -129,13 +149,20 @@ namespace Framework::External::Sentry {
         Lifecycle::Shutdown();
     }
 
-    Utils::Result<void, Framework::Error> Wrapper::AddAttachment(const std::string &path) const {
+    Utils::Result<void, Framework::Error> Wrapper::AddAttachment(const std::string &path) const try {
         if (!_initialized) {
             return Framework::Error {"Sentry is not initialized"};
         }
-        const std::string absolute = std::filesystem::absolute(std::filesystem::path(path)).string();
+        const auto absolute = std::filesystem::absolute(std::filesystem::path(path));
+#ifdef _WIN32
+        sentry_attach_filew(absolute.c_str());
+#else
         sentry_attach_file(absolute.c_str());
+#endif
         return {};
+    }
+    catch (const std::system_error &error) {
+        return Framework::Error("Failed to configure Sentry attachment path: " + std::string(error.what()), error.code().value());
     }
 
     void Wrapper::SetTag(const std::string &key, const std::string &value) const {

@@ -49,6 +49,7 @@ namespace Framework::External::Sentry {
 
     struct InitOptions {
         std::string dsn;
+        // Filesystem paths use the native narrow encoding, including the Windows code page.
         std::string handlerPath;
         std::string release;
         std::string environment;
