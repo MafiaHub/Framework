@@ -1,0 +1,25 @@
+name: KCDC QA helpers
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/*kcdc-qa*.ps1'
+      - '.github/workflows/kcdc-qa-helpers.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/*kcdc-qa*.ps1'
+      - '.github/workflows/kcdc-qa-helpers.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  powershell:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate staging and firewall audit boundaries
+        shell: powershell
+        run: ./scripts/test-kcdc-qa-slots.ps1

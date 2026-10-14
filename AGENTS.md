@@ -70,6 +70,20 @@ MafiaHub Framework is a C++ framework for building multiplayer game modification
 
 ## Build Commands
 
+### KCDC QA runtime locations
+
+Build in the canonical build tree, but stage and launch KCDC QA executables
+through `scripts/kcdc-qa-slots.ps1`. See `docs/kcdc-qa-runtime.md`. All worktrees
+share the main checkout's `builds/qa-runtime/{server,client-a,client-b,tests}`
+slots. Never launch QA binaries from per-run evidence folders or worktree build
+outputs, or choose a new runtime root to bypass an occupied slot. Reserve with
+a unique run ID, stage all clients before launch, retain separate evidence,
+register owned processes, then stop them and verify ports before releasing.
+
+Firewall maintenance is explicit: audit with `scripts/kcdc-qa-firewall.ps1`,
+review the candidate report, then apply with administrator privileges. Do not
+disable the firewall/notifications or add rules for every new build path.
+
 > **ALWAYS build from the CLI via `builds\build.bat <target> <arch>`.** This is the single
 > supported way to build any target in this repo from the command line. It loads the matching
 > `vcvars*.bat` and drives the canonical pre-configured build tree. Never invoke `cmake --build`
