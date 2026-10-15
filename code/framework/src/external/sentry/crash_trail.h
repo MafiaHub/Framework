@@ -8,6 +8,8 @@
 
 #pragma once
 
+struct _EXCEPTION_POINTERS;
+
 namespace Framework::External::Sentry {
     /**
      * Writes where a crash happened into the log before crashpad takes it.
@@ -35,5 +37,11 @@ namespace Framework::External::Sentry {
       public:
         /** Chains in front of the filter installed now. Call once crashpad is up. */
         static void Install();
+
+        /**
+         * Writes the trail for a crash the host's own handler caught. An engine
+         * that replaces the top-level filter (Unreal does) never reaches Install's.
+         */
+        static void Record(_EXCEPTION_POINTERS *exceptionInfo);
     };
 } // namespace Framework::External::Sentry

@@ -270,8 +270,16 @@ namespace Framework::External::Sentry {
             Sleep(500);
         }
 
+        /**
+         * Takes the process's one trail. What is left of an overflowed stack
+         * can't hold Write's formatting, so a stack overflow never takes it.
+         */
+        bool Claim(const EXCEPTION_POINTERS *exceptionInfo) {
+            return exceptionInfo->ExceptionRecord->ExceptionCode != EXCEPTION_STACK_OVERFLOW && !gWriting.test_and_set();
+        }
+
         LONG WINAPI Filter(EXCEPTION_POINTERS *exceptionInfo) {
-            if (!gWriting.test_and_set()) {
+            if (Claim(exceptionInfo)) {
                 Write(exceptionInfo);
             }
             return gNext != nullptr ? gNext(exceptionInfo) : EXCEPTION_CONTINUE_SEARCH;
@@ -285,7 +293,14 @@ namespace Framework::External::Sentry {
         gInstalled = true;
         gNext      = SetUnhandledExceptionFilter(Filter);
     }
+
+    void CrashTrail::Record(EXCEPTION_POINTERS *exceptionInfo) {
+        if (exceptionInfo != nullptr && Claim(exceptionInfo)) {
+            Write(exceptionInfo);
+        }
+    }
 #else
     void CrashTrail::Install() {}
+    void CrashTrail::Record(_EXCEPTION_POINTERS *) {}
 #endif
 } // namespace Framework::External::Sentry

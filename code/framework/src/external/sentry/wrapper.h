@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+struct _EXCEPTION_POINTERS;
+
 namespace Framework::External::Sentry {
     // Mirrors sentry_level_e.
     enum class Level : int32_t {
@@ -97,6 +99,10 @@ namespace Framework::External::Sentry {
 
         Utils::Result<void, Framework::Error> CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const;
         Utils::Result<void, Framework::Error> CaptureEventException(const std::string &type, const std::string &message) const;
+
+        // Hands crashpad a crash the host's own handler caught; crashpad dumps it and ends the
+        // process, so this returns only when there is no reporter to hand it to.
+        void CaptureCrash(_EXCEPTION_POINTERS *exceptionInfo) const;
 
         Utils::Result<void, Framework::Error> AddAttachment(const std::string &path) const;
 
