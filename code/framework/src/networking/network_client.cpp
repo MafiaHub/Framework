@@ -339,6 +339,8 @@ namespace Framework::Networking {
     }
 
     void AssetFileTransfer::OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) {
+        // Drops the sender's receivers; skipping it kept them alive until the peer shut down
+        MafiaNet::FileListTransfer::OnClosedConnection(systemAddress, rakNetGUID, lostConnectionReason);
         if (_cb) {
             _cb();
         }
