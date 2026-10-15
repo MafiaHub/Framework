@@ -17,6 +17,7 @@
 #include "scripting/builtins/imports.h"
 #include "scripting/builtins/messages.h"
 #include "scripting/builtins/player.h"
+#include "scripting/builtins/text_label.h"
 #include "scripting/resource/resource.h"
 #include "scripting/resource/resource_manager.h"
 #include "utils/version.h"
@@ -1011,6 +1012,51 @@ MODULE(js_features, {
         EQUALS(RunJSBool(engine, "typeof Color === 'function'"), true);
         // Player constructor published by the new Player::Register.
         EQUALS(RunJSBool(engine, "typeof Player === 'function'"), true);
+
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // TextLabel options are validated before anything is created, so a bad key throws a TypeError
+    // with no replication at all, and a good set gets as far as the replication check.
+    IT("TextLabel.create validates its options before it needs replication", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        v8::Isolate *isolate = engine.GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            v8::Local<v8::Object> target = context->Global();
+            Builtins::RegisterValueTypes(isolate, target);
+            Builtins::TextLabel::Register(isolate, target);
+        }
+
+        const char *rejected[] {
+            "{ colour: 1 }",
+            "{ fontSize: 0 }",
+            "{ color: 'red' }",
+            "{ outline: { width: 9 } }",
+            "{ shadow: 'soft' }",
+            "{ sizeMode: 'huge' }",
+            "{ style: 7 }",
+            "{ attachTo: -1 }",
+            "{ position: 'here' }",
+            "{ drawDistance: 0 }",
+            "{ virtualWorld: 1.5 }",
+        };
+        for (const char *options : rejected) {
+            STREQUALS(RunJSErrorName(engine, std::string("TextLabel.create(0, 0, 0, 'x', ") + options + ")").c_str(), "TypeError");
+        }
+
+        const std::string accepted = "TextLabel.create(0, 0, 0, 'x', { fontSize: 20, opacity: 0.5, outline: { width: 2 }, shadow: { blur: 4 }, background: true, sizeMode: 'world', "
+                                     "style: 'box', attachTo: 5, offset: [0, 0, 10], markup: true, align: 'left', anchor: 'bottom', color: new Color(1, 0, 0, 1) })";
+        STREQUALS(RunJSErrorName(engine, accepted).c_str(), "Error");
+        STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', 18, 40)").c_str(), "Error");
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();
