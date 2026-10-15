@@ -30,6 +30,11 @@ namespace Framework::Graphics {
         ID3D12GraphicsCommandList *_commandList = nullptr;
         ID3D12CommandQueue *_commandQueue       = nullptr;
 
+        // Signalled on the game's queue after each overlay list, so resources a
+        // frame reads can be held until that frame has run.
+        ID3D12Fence *_frameFence = nullptr;
+        UINT64 _frameFenceValue  = 0;
+
         UINT _srvDescriptorSize = 0;
         UINT _srvHeapSize       = 0;
         std::vector<UINT> _freeSrvSlots;
@@ -109,6 +114,15 @@ namespace Framework::Graphics {
 
         ID3D12CommandQueue *GetCommandQueue() const {
             return _commandQueue;
+        }
+
+        ID3D12Fence *GetFrameFence() const {
+            return _frameFence;
+        }
+
+        // The value End() signals once the list being recorded now has executed.
+        UINT64 GetPendingFrameFenceValue() const {
+            return _frameFenceValue + 1;
         }
 
         ID3D12GraphicsCommandList *GetGraphicsCommandList() const {

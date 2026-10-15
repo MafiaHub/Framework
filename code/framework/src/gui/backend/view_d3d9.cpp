@@ -8,6 +8,7 @@
 
 #include "view_d3d9.h"
 #include "logging/logger.h"
+#include "utils/profiler.h"
 
 #include "graphics/backend/d3d9.h"
 
@@ -63,21 +64,36 @@ namespace Framework::GUI {
         }
 
         if (recreate || renderHandler->IsPixelDataDirty()) {
+            // Only what changed: the texture keeps every other pixel. A new texture
+            // has none, and a dirty flag without a rect has nothing narrower to offer.
+            RECT area {0, 0, _width, _height};
+            const auto dirty = renderHandler->GetPixelDirtyRect();
+            if (!recreate && !dirty.IsEmpty()) {
+                area = {dirty.x, dirty.y, std::min(_width, dirty.x + dirty.width), std::min(_height, dirty.y + dirty.height)};
+            }
+            if (area.right <= area.left || area.bottom <= area.top) {
+                renderHandler->ClearPixelDataDirty();
+                return true;
+            }
+
             D3DLOCKED_RECT locked;
-            if (FAILED(_texture->LockRect(0, &locked, nullptr, 0))) {
+            if (FAILED(_texture->LockRect(0, &locked, &area, 0))) {
                 // keep the dirty flag so the copy retries next frame
                 return true;
             }
 
+            // pBits points at the rect's top-left corner
             const size_t srcPitch = static_cast<size_t>(_width) * 4;
-            const size_t rowBytes = std::min(srcPitch, static_cast<size_t>(locked.Pitch));
-            const auto *src       = pixels.data();
+            const size_t rowBytes = static_cast<size_t>(area.right - area.left) * 4;
+            const auto *src       = pixels.data() + static_cast<size_t>(area.top) * srcPitch + static_cast<size_t>(area.left) * 4;
             auto *dst             = static_cast<uint8_t *>(locked.pBits);
-            for (int y = 0; y < _height; ++y) {
+            for (int y = 0; y < area.bottom - area.top; ++y) {
                 std::memcpy(dst + static_cast<size_t>(y) * locked.Pitch, src + static_cast<size_t>(y) * srcPitch, rowBytes);
             }
             _texture->UnlockRect(0);
             renderHandler->ClearPixelDataDirty();
+
+            FW_PROFILE_PLOT("cef.upload.bytes", static_cast<int64_t>(rowBytes) * (area.bottom - area.top));
         }
 
         return true;

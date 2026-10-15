@@ -94,6 +94,11 @@ namespace Framework::Graphics {
             }
         }
 
+        if (FAILED(pD3DDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&_frameFence)))) {
+            return false;
+        }
+        _frameFenceValue = 0;
+
         _device = deviceGuard.Detach();
 
         Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("D3D12 device {}", fmt::ptr(_device));
@@ -115,6 +120,10 @@ namespace Framework::Graphics {
         if (_srvHeap) {
             _srvHeap->Release();
             _srvHeap = nullptr;
+        }
+        if (_frameFence) {
+            _frameFence->Release();
+            _frameFence = nullptr;
         }
         if (_commandList) {
             _commandList->Release();
@@ -188,6 +197,8 @@ namespace Framework::Graphics {
             // Executing a command list that failed to close is invalid.
             Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::End, command list Close failed; dropping frame");
         }
+        // Signalled even for a dropped frame, so a value handed out is always reached.
+        _commandQueue->Signal(_frameFence, ++_frameFenceValue);
 
         // Drop our per-frame reference; the swapchain still owns the buffer.
         _currentBackBuffer->Release();

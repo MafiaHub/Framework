@@ -134,6 +134,11 @@ namespace Framework::Graphics {
       public:
         TextureEntry &GetTexture(uint32_t texture_id);
 
+        // An entry for a texture made outside the backend, such as a shared one
+        TextureEntry &GetOrCreateTexture(uint32_t texture_id) {
+            return _textures[texture_id];
+        }
+
       private:
         struct Vertex_2f_4ub_2f {
             DirectX::XMFLOAT2 pos;
