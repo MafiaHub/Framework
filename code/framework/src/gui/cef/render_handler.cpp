@@ -8,6 +8,7 @@
 
 #include "render_handler.h"
 
+#include <logging/logger.h>
 #include <utils/profiler.h>
 
 #include <algorithm>
@@ -73,40 +74,208 @@ namespace Framework::GUI::CEF {
             return;
         }
 
-        if (!_device) {
+        if (!_device || !info.shared_texture_handle || _copyFailed) {
             return;
+        }
+
+        FW_PROFILE_SCOPE_N("Cef::OnAcceleratedPaint");
+        if (!_copyDevice && !CreateCopyDevice()) {
+            // Once is enough: every later frame would fail the same way
+            _copyFailed = true;
+            Framework::Logging::GetLogger("Web")->error("RenderHandler: could not create the shared texture copy device");
+            return;
+        }
+
+        CopySharedTexture(info.shared_texture_handle, type == PET_POPUP ? _sharedPopup : _sharedPage);
+    }
+
+    bool RenderHandler::CreateCopyDevice() {
+        // Same adapter as the game, or the textures never open on its device
+        Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
+        Microsoft::WRL::ComPtr<IDXGIAdapter> gameAdapter;
+        DXGI_ADAPTER_DESC gameAdapterDesc {};
+        if (FAILED(_device->QueryInterface(IID_PPV_ARGS(&dxgiDevice))) || FAILED(dxgiDevice->GetAdapter(&gameAdapter)) || FAILED(gameAdapter->GetDesc(&gameAdapterDesc))) {
+            return false;
+        }
+
+        // The game's adapter may come from a DXGI 1.0 factory, and a device made on
+        // that cannot create NT-handle shared textures (E_INVALIDARG). Find the same
+        // adapter again through a DXGI 1.1 factory.
+        Microsoft::WRL::ComPtr<IDXGIFactory1> factory;
+        Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
+        if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
+            return false;
+        }
+        for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; i++) {
+            DXGI_ADAPTER_DESC1 desc {};
+            if (SUCCEEDED(adapter->GetDesc1(&desc)) && desc.AdapterLuid.LowPart == gameAdapterDesc.AdapterLuid.LowPart && desc.AdapterLuid.HighPart == gameAdapterDesc.AdapterLuid.HighPart) {
+                break;
+            }
+            adapter.Reset();
+        }
+        if (!adapter) {
+            return false;
+        }
+
+        Microsoft::WRL::ComPtr<ID3D11Device> device;
+        if (FAILED(D3D11CreateDevice(adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION, &device, nullptr, &_copyContext))) {
+            return false;
+        }
+        if (FAILED(device.As(&_copyDevice))) {
+            return false;
+        }
+
+        D3D11_QUERY_DESC queryDesc {};
+        queryDesc.Query = D3D11_QUERY_EVENT;
+        return SUCCEEDED(_copyDevice->CreateQuery(&queryDesc, &_copyDone));
+    }
+
+    bool RenderHandler::EnsureSharedCopy(SharedCopy &copy, UINT width, UINT height) {
+        if (copy.width == width && copy.height == height) {
+            return true;
+        }
+        // The runtime keeps a texture alive for GPU work already queued on it
+        ReleaseSharedCopy(copy);
+
+        D3D11_TEXTURE2D_DESC desc {};
+        desc.Width            = width;
+        desc.Height           = height;
+        desc.MipLevels        = 1;
+        desc.ArraySize        = 1;
+        desc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage            = D3D11_USAGE_DEFAULT;
+        // Sharing is refused (E_INVALIDARG) without the render-target bind
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        // A plain legacy handle: a game device made on a DXGI 1.0 adapter opens
+        // neither NT handles nor keyed-mutex textures (E_INVALIDARG)
+        desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+
+        D3D11_QUERY_DESC queryDesc {};
+        queryDesc.Query = D3D11_QUERY_EVENT;
+
+        const auto fail = [&copy](const char *step, HRESULT result) {
+            Framework::Logging::GetLogger("Web")->error("RenderHandler: shared copy {} failed: {:#x}", step, static_cast<unsigned>(result));
+            ReleaseSharedCopy(copy);
+            return false;
+        };
+
+        for (auto &buffer : copy.buffers) {
+            Microsoft::WRL::ComPtr<IDXGIResource> resource;
+            HANDLE handle = nullptr;
+            if (const auto hr = _copyDevice->CreateTexture2D(&desc, nullptr, &buffer.owned); FAILED(hr)) {
+                return fail("CreateTexture2D", hr);
+            }
+            if (const auto hr = buffer.owned.As(&resource); FAILED(hr)) {
+                return fail("IDXGIResource", hr);
+            }
+            if (const auto hr = resource->GetSharedHandle(&handle); FAILED(hr)) {
+                return fail("GetSharedHandle", hr);
+            }
+            if (const auto hr = _device->OpenSharedResource(handle, IID_PPV_ARGS(&buffer.game)); FAILED(hr)) {
+                return fail("OpenSharedResource", hr);
+            }
+            if (const auto hr = _device->CreateQuery(&queryDesc, &buffer.read); FAILED(hr)) {
+                return fail("CreateQuery", hr);
+            }
+        }
+
+        copy.width  = width;
+        copy.height = height;
+        return true;
+    }
+
+    void RenderHandler::ReleaseSharedCopy(SharedCopy &copy) {
+        copy.buffers = {};
+        copy.latest  = -1;
+        copy.width   = 0;
+        copy.height  = 0;
+    }
+
+    void RenderHandler::CopySharedTexture(HANDLE handle, SharedCopy &copy) {
+        constexpr DWORD kCopyTimeoutMs = 1000;
+
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> source;
+        if (FAILED(_copyDevice->OpenSharedResource1(handle, IID_PPV_ARGS(&source)))) {
+            // A texture from another adapter never opens; see force-high-performance-gpu
+            Framework::Logging::GetLogger("Web")->error("RenderHandler: could not open CEF's shared texture");
+            return;
+        }
+        D3D11_TEXTURE2D_DESC sourceDesc {};
+        source->GetDesc(&sourceDesc);
+
+        // Only this thread replaces the buffers, so the texture outlives the lock
+        int slot = 0;
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> target;
+        {
+            std::lock_guard<std::mutex> lock(_textureMutex);
+            if (!EnsureSharedCopy(copy, sourceDesc.Width, sourceDesc.Height)) {
+                return;
+            }
+
+            // A buffer the game is not drawing from. Should every one still be in
+            // flight, the oldest is overwritten: a torn frame, never a lost one.
+            const int count = static_cast<int>(copy.buffers.size());
+            slot            = (copy.latest + 1) % count;
+            for (int i = 1; i < count; i++) {
+                const int candidate = (copy.latest + i) % count;
+                if (!copy.buffers[candidate].reading) {
+                    slot = candidate;
+                    break;
+                }
+            }
+            target = copy.buffers[slot].owned;
+        }
+
+        _copyContext->CopyResource(target.Get(), source.Get());
+
+        // CEF hands the source back to its pool as soon as we return, and the game
+        // device only sees the copy once it has landed
+        {
+            FW_PROFILE_SCOPE_N("Cef::OnAcceleratedPaint::Wait");
+            _copyContext->End(_copyDone.Get());
+            _copyContext->Flush();
+            const auto deadline = GetTickCount64() + kCopyTimeoutMs;
+            while (_copyContext->GetData(_copyDone.Get(), nullptr, 0, 0) == S_FALSE) {
+                if (GetTickCount64() > deadline) {
+                    Framework::Logging::GetLogger("Web")->error("RenderHandler: shared texture copy timed out");
+                    return;
+                }
+                YieldProcessor();
+            }
         }
 
         std::lock_guard<std::mutex> lock(_textureMutex);
+        copy.latest = slot;
 
-        HANDLE textureHandle = info.shared_texture_handle;
-        if (!textureHandle) {
-            return;
-        }
-
-        if (type == PET_POPUP) {
-            OpenSharedTexture(textureHandle, _popupSharedTexture, _popupSharedHandle);
-        }
-        else {
-            OpenSharedTexture(textureHandle, _sharedTexture, _sharedHandle);
+        if (!_copyLogged) {
+            _copyLogged = true;
+            Framework::Logging::GetLogger("Web")->debug("RenderHandler: accelerated paint active ({}x{})", copy.width, copy.height);
         }
     }
 
-    void RenderHandler::OpenSharedTexture(HANDLE handle, Microsoft::WRL::ComPtr<ID3D11Texture2D> &texture, HANDLE &openedHandle) {
-        // Only re-open the shared resource if the handle changed
-        if (handle == openedHandle) {
-            return;
+    ID3D11Texture2D *RenderHandler::BeginSharedRead(SharedCopy &copy) {
+        if (copy.latest < 0) {
+            return nullptr;
         }
 
-        texture.Reset();
-        openedHandle = nullptr;
-
-        Microsoft::WRL::ComPtr<ID3D11Texture2D> sharedTex;
-        HRESULT hr = _device->OpenSharedResource(handle, IID_PPV_ARGS(&sharedTex));
-        if (SUCCEEDED(hr)) {
-            texture      = sharedTex;
-            openedHandle = handle;
+        // Hand back every buffer whose last draw has run
+        Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
+        _device->GetImmediateContext(&context);
+        for (auto &buffer : copy.buffers) {
+            if (buffer.reading && context->GetData(buffer.read.Get(), nullptr, 0, D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK) {
+                buffer.reading = false;
+            }
         }
+        return copy.buffers[copy.latest].game.Get();
+    }
+
+    void RenderHandler::EndSharedRead(SharedCopy &copy) {
+        auto &buffer = copy.buffers[copy.latest];
+        Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
+        _device->GetImmediateContext(&context);
+        context->End(buffer.read.Get());
+        buffer.reading = true;
     }
 
     void RenderHandler::OnPaint(CefRefPtr<CefBrowser> browser, PaintElementType type, const RectList &dirtyRects, const void *buffer, int width, int height) {
@@ -195,8 +364,7 @@ namespace Framework::GUI::CEF {
         }
 
         std::lock_guard<std::mutex> textureLock(_textureMutex);
-        _popupSharedTexture.Reset();
-        _popupSharedHandle = nullptr;
+        ReleaseSharedCopy(_sharedPopup);
     }
 
     void RenderHandler::OnPopupSize(CefRefPtr<CefBrowser> browser, const CefRect &rect) {

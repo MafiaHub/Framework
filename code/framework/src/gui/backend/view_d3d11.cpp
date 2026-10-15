@@ -22,7 +22,7 @@ namespace Framework::GUI {
     namespace {
         // Points a backend texture at a CEF shared texture, rebuilding its SRV when the texture changes.
         void BindSharedTexture(Graphics::D3D11Backend *backend, uint32_t textureID, ID3D11Texture2D *sharedTex) {
-            auto &texEntry = backend->GetTexture(textureID);
+            auto &texEntry = backend->GetOrCreateTexture(textureID);
 
             // CEF hands us a new shared texture when the surface changes (e.g. resize).
             // Drop the SRV bound to the previous texture so it is recreated against the
@@ -133,9 +133,12 @@ namespace Framework::GUI {
         // Held for the whole read, as for the page texture
         const auto texLock = renderHandler->LockTexture();
 
-        auto *popupTex = renderHandler->GetPopupSharedTexture();
         CefRect popupRect;
-        if (!popupTex || !renderHandler->GetPopupRect(popupRect)) {
+        if (!renderHandler->GetPopupRect(popupRect)) {
+            return;
+        }
+        auto *popupTex = renderHandler->BeginPopupSharedRead();
+        if (!popupTex) {
             return;
         }
 
@@ -148,6 +151,7 @@ namespace Framework::GUI {
 
         gpuState.texture_1_id = _popupTextureID;
         backend->DrawGeometry(_popupGeometryID, 6, 0, gpuState);
+        renderHandler->EndPopupSharedRead();
     }
 
     void ViewD3D11::Render() {
@@ -184,23 +188,26 @@ namespace Framework::GUI {
             // GPU path: use shared texture from CEF
             auto *renderHandler = GetRenderHandler();
             if (renderHandler) {
-                // held for the whole read; OnAcceleratedPaint resets the
-                // shared texture when CEF hands us a new handle
+                // held for the whole read; OnAcceleratedPaint replaces the
+                // buffers on a resize
                 const auto texLock = renderHandler->LockTexture();
 
-                auto *sharedTex = renderHandler->GetSharedTexture();
-                if (sharedTex) {
-                    // Register the shared texture with the D3D11 backend if not already done
+                if (auto *sharedTex = renderHandler->BeginSharedRead()) {
                     if (_textureID == 0) {
                         _textureID = backend->NextTextureId();
                     }
-
-                    // Create a SRV from the shared texture and register with backend
                     BindSharedTexture(backend, _textureID, sharedTex);
 
                     gpuState.texture_1_id = _textureID;
+                    backend->DrawGeometry(_geometryID, 6, 0, gpuState);
+                    renderHandler->EndSharedRead();
                 }
             }
+
+            if (gpuState.texture_1_id != 0) {
+                DrawPopup(backend, gpuState);
+            }
+            return;
         }
         else {
             // CPU path: use pixel data from CEF's OnPaint
@@ -249,14 +256,9 @@ namespace Framework::GUI {
             }
         }
 
-        // Draw the geometry
+        // The software path already has the popup in its pixels
         if (gpuState.texture_1_id != 0) {
             backend->DrawGeometry(_geometryID, 6, 0, gpuState);
-
-            // The software path already has the popup in its pixels
-            if (_gpuAccelerated) {
-                DrawPopup(backend, gpuState);
-            }
         }
     }
 } // namespace Framework::GUI
