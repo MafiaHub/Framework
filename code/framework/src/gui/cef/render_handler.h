@@ -61,6 +61,8 @@ namespace Framework::GUI::CEF {
         int _pixelWidth      = 0;
         int _pixelHeight     = 0;
         bool _pixelDataDirty = false;
+        // Bounding box of what changed since the last ClearPixelDataDirty()
+        CefRect _pixelDirtyRect;
 
         // A popup widget (a <select> list, a date picker) is painted apart from the
         // page. _popupRect is where it sits, in view coordinates. Written on the CEF
@@ -143,8 +145,15 @@ namespace Framework::GUI::CEF {
             return _pixelDataDirty;
         }
 
+        // Where the pixels changed while dirty; a view uploading only this keeps the
+        // rest of its texture from before.
+        CefRect GetPixelDirtyRect() const {
+            return _pixelDirtyRect;
+        }
+
         void ClearPixelDataDirty() {
             _pixelDataDirty = false;
+            _pixelDirtyRect = CefRect();
         }
 
       private:
@@ -155,6 +164,7 @@ namespace Framework::GUI::CEF {
         ID3D11Texture2D *BeginSharedRead(SharedCopy &copy);
         void EndSharedRead(SharedCopy &copy);
         void StampPopup();
+        void MarkPixelsDirty(const CefRect &rect);
         void UnstampPopup();
 
         IMPLEMENT_REFCOUNTING(RenderHandler);

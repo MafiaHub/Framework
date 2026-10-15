@@ -323,9 +323,13 @@ namespace Framework::GUI::CEF {
             if (reshaped) {
                 std::memcpy(_pixelData.data(), src, size);
                 copied = size;
+                MarkPixelsDirty(CefRect(0, 0, width, height));
             }
             else {
                 copied = CopyDirtyRects(dirtyRects, _pixelData.data(), src, width, height);
+                for (const auto &rect : dirtyRects) {
+                    MarkPixelsDirty(rect);
+                }
             }
         }
 
@@ -414,6 +418,7 @@ namespace Framework::GUI::CEF {
         }
 
         _stampedRect = CefRect(x0, y0, x1 - x0, y1 - y0);
+        MarkPixelsDirty(_stampedRect);
         _popupUnderlay.resize(static_cast<size_t>(_stampedRect.width) * 4 * static_cast<size_t>(_stampedRect.height));
         CopyBlock(_popupUnderlay.data(), _stampedRect.width, 0, 0, _pixelData.data(), _pixelWidth, x0, y0, _stampedRect.width, _stampedRect.height);
         CopyBlock(_pixelData.data(), _pixelWidth, x0, y0, _popupPixels.data(), _popupPixelWidth, x0 - _popupRect.x, y0 - _popupRect.y, _stampedRect.width, _stampedRect.height);
@@ -425,6 +430,27 @@ namespace Framework::GUI::CEF {
         }
 
         CopyBlock(_pixelData.data(), _pixelWidth, _stampedRect.x, _stampedRect.y, _popupUnderlay.data(), _stampedRect.width, 0, 0, _stampedRect.width, _stampedRect.height);
+        MarkPixelsDirty(_stampedRect);
         _stampedRect = CefRect();
+    }
+
+    void RenderHandler::MarkPixelsDirty(const CefRect &rect) {
+        const int x0 = (std::max)(0, rect.x);
+        const int y0 = (std::max)(0, rect.y);
+        const int x1 = (std::min)(_pixelWidth, rect.x + rect.width);
+        const int y1 = (std::min)(_pixelHeight, rect.y + rect.height);
+        if (x1 <= x0 || y1 <= y0) {
+            return;
+        }
+
+        if (_pixelDirtyRect.IsEmpty()) {
+            _pixelDirtyRect = CefRect(x0, y0, x1 - x0, y1 - y0);
+            return;
+        }
+        const int left   = (std::min)(_pixelDirtyRect.x, x0);
+        const int top    = (std::min)(_pixelDirtyRect.y, y0);
+        const int right  = (std::max)(_pixelDirtyRect.x + _pixelDirtyRect.width, x1);
+        const int bottom = (std::max)(_pixelDirtyRect.y + _pixelDirtyRect.height, y1);
+        _pixelDirtyRect  = CefRect(left, top, right - left, bottom - top);
     }
 } // namespace Framework::GUI::CEF
