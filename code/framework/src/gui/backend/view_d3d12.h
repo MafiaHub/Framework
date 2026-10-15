@@ -81,6 +81,7 @@ namespace Framework::GUI {
         std::mutex _sharedMutex;
         int _sharedLatest = -1;
         bool _sharedDirty = false;
+        bool _sharedLogged = false;
 
       public:
         ViewD3D12(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);

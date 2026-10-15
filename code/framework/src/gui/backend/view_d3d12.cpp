@@ -282,6 +282,11 @@ namespace Framework::GUI {
             }
         }
 
+        if (!_sharedLogged) {
+            _sharedLogged = true;
+            Framework::Logging::GetLogger("Web")->debug("ViewD3D12: accelerated paint active ({}x{})", staging.width, staging.height);
+        }
+
         std::scoped_lock lock(_sharedMutex);
         _sharedLatest = slot;
         _sharedDirty  = true;
