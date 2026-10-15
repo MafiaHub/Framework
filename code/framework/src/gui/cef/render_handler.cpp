@@ -66,6 +66,13 @@ namespace Framework::GUI::CEF {
     }
 
     void RenderHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser, PaintElementType type, const RectList &dirtyRects, const CefAcceleratedPaintInfo &info) {
+        if (_acceleratedPaintCallback) {
+            if (info.shared_texture_handle) {
+                _acceleratedPaintCallback(type, info.shared_texture_handle);
+            }
+            return;
+        }
+
         if (!_device) {
             return;
         }

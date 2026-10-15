@@ -18,9 +18,13 @@
 #include "graphics/renderer.h"
 #include "gui/view.h"
 
+#include "include/cef_render_handler.h"
+
 namespace Framework::GUI {
-    // CPU-path D3D12 view: uploads CEF's OnPaint buffer to a texture on the render
-    // thread and blits it via the ImGui background draw list on the game thread.
+    // D3D12 view. CPU path: uploads CEF's OnPaint buffer to a texture on the render
+    // thread. GPU path: copies CEF's shared texture out on the pump thread, then
+    // into the same texture on the render thread. Either way it is blitted via the
+    // ImGui background draw list.
     class ViewD3D12 final: public View {
       private:
         Microsoft::WRL::ComPtr<ID3D12Resource> _texture;
@@ -43,6 +47,41 @@ namespace Framework::GUI {
         // Set once the texture holds at least one full frame of pixels
         bool _textureReady = false;
 
+        // GPU path. CEF's texture goes back to its pool when OnAcceleratedPaint
+        // returns, so the pump thread copies it on its own queue and waits for that
+        // copy. The page and popup are kept apart and composed into a staging ring;
+        // the render thread copies the newest staging texture on the game's list.
+        struct SharedCopy {
+            Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue;
+            Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
+            Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> list;
+            Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+            UINT64 fenceValue = 0;
+            HANDLE event      = nullptr;
+        };
+        SharedCopy _sharedCopy;
+
+        struct SharedTexture {
+            Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+            UINT width  = 0;
+            UINT height = 0;
+        };
+        SharedTexture _sharedPage;
+        SharedTexture _sharedPopup;
+
+        // A staging texture is free again once the game frame that copied from
+        // it has run, i.e. the backend's frame fence reached readFence.
+        struct StagingTexture {
+            SharedTexture texture;
+            UINT64 readFence = 0;
+        };
+        std::vector<StagingTexture> _staging;
+
+        // Guards _sharedLatest, _sharedDirty and every readFence
+        std::mutex _sharedMutex;
+        int _sharedLatest = -1;
+        bool _sharedDirty = false;
+
       public:
         ViewD3D12(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);
         ~ViewD3D12() override;
@@ -53,10 +92,15 @@ namespace Framework::GUI {
         void SubmitImGuiDraw() override;
 
       private:
-        bool CreateResources();
+        bool CreateResources(bool uploadBuffers);
         void ReleaseResources();
         // Copies pixels into the texture. Returns false (a no-op) when the command list or resources
         // aren't ready, so the caller keeps the dirty flag set and retries on a later frame.
         bool UploadPixels(const std::vector<uint8_t> &pixels);
+
+        bool CreateSharedCopy(ID3D12Device *device);
+        void ReleaseSharedCopy();
+        void CopySharedFrame(CefRenderHandler::PaintElementType type, HANDLE handle);
+        void RenderShared(Graphics::D3D12Backend *backend);
     };
 } // namespace Framework::GUI

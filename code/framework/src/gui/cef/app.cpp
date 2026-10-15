@@ -43,11 +43,11 @@ namespace Framework::GUI::CEF {
     }
 
     void App::OnBeforeCommandLineProcessing(const CefString &processType, CefRefPtr<CefCommandLine> commandLine) {
-        commandLine->AppendSwitch("disable-gpu-compositing");
         if (!_gpuAccelerated) {
             // CPU OSR path never touches the driver; a crashing GPU process otherwise
             // takes the whole browser down ("GPU process isn't usable")
             commandLine->AppendSwitch("disable-gpu");
+            commandLine->AppendSwitch("disable-gpu-compositing");
         }
         else {
             // The GPU process is its own process, so the launcher's forcing does not

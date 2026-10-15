@@ -11,6 +11,7 @@
 #include <utils/safe_win32.h>
 
 #include <d3d11.h>
+#include <functional>
 #include <mutex>
 #include <vector>
 #include <wrl/client.h>
@@ -19,6 +20,11 @@
 
 namespace Framework::GUI::CEF {
     class RenderHandler final: public CefRenderHandler {
+      public:
+        // Takes the accelerated paint in place of the D3D11 device. The handle is
+        // only valid for the duration of the call.
+        using AcceleratedPaintCallback = std::function<void(PaintElementType, HANDLE)>;
+
       private:
         int _width  = 0;
         int _height = 0;
@@ -57,6 +63,7 @@ namespace Framework::GUI::CEF {
         HANDLE _popupSharedHandle = nullptr;
 
         ID3D11Device *_device = nullptr;
+        AcceleratedPaintCallback _acceleratedPaintCallback;
 
       public:
         void SetDimensions(int width, int height) {
@@ -66,6 +73,10 @@ namespace Framework::GUI::CEF {
 
         void SetD3D11Device(ID3D11Device *device) {
             _device = device;
+        }
+
+        void SetAcceleratedPaintCallback(AcceleratedPaintCallback callback) {
+            _acceleratedPaintCallback = std::move(callback);
         }
 
         void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect &rect) override;
