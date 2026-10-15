@@ -46,9 +46,11 @@
 #include "modules/voice_positions_ut.h"
 #include "modules/voice_ptt_gate_ut.h"
 #include "modules/voice_router_ut.h"
+#include "modules/world_text_ut.h"
 
 #ifdef _WIN32
 #include "modules/d3d12_ui_compositor_ut.h"
+#include "modules/world_text_layout_ut.h"
 // The hooking layer, and so the pattern table, is Windows-only.
 #include "modules/pattern_hints_ut.h"
 #include "modules/pattern_table_ut.h"
@@ -75,6 +77,7 @@ int main() {
 
     UNIT_MODULE(bitops);
     UNIT_MODULE(string_utils);
+    UNIT_MODULE(world_text);
     UNIT_MODULE(interpolator);
     UNIT_MODULE(result);
     UNIT_MODULE(network_packets);
@@ -107,6 +110,7 @@ int main() {
     UNIT_MODULE(streamed_assets);
 #ifdef _WIN32
     UNIT_MODULE(d3d12_ui_compositor);
+    UNIT_MODULE(world_text_layout);
     UNIT_MODULE(pattern_hints);
     UNIT_MODULE(pattern_table);
     UNIT_MODULE(physical_keys);

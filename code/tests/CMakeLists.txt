@@ -25,7 +25,7 @@ if(WIN32)
         ../framework/src/utils/hooking/hooking_patterns.cpp
         ../framework/src/utils/hooking/hooking.cpp
         ../framework/src/graphics/backend/d3d12_ui_compositor.cpp)
-    target_link_libraries(FrameworkTests d3d12 dxgi d3dcompiler)
+    target_link_libraries(FrameworkTests d3d12 dxgi d3dcompiler imgui::imgui)
 
     add_executable(FrameworkSentryTests sentry_ut.cpp)
     target_include_directories(FrameworkSentryTests PRIVATE ../framework/src)
