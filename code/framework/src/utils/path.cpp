@@ -7,6 +7,7 @@
  */
 
 #include "path.h"
+#include <automation/session.h>
 #include "safe_win32.h"
 
 #ifdef WIN32
@@ -120,6 +121,8 @@ namespace Framework::Utils {
     }
 
     std::wstring GetAppDataPathW() {
+        const auto qa = Framework::Automation::Options::FromEnvironment();
+        if (qa.enabled) return (qa.directory / "profile" / "AppData" / "Roaming").wstring();
 #ifdef WIN32
         wchar_t path[MAX_PATH];
         if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, path))) {
@@ -133,6 +136,8 @@ namespace Framework::Utils {
     }
 
     std::string GetAppDataPathA() {
+        const auto qa = Framework::Automation::Options::FromEnvironment();
+        if (qa.enabled) return (qa.directory / "profile" / "AppData" / "Roaming").string();
 #ifdef WIN32
         char path[MAX_PATH];
         if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, path))) {

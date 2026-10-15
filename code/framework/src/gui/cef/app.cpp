@@ -7,6 +7,7 @@
  */
 
 #include "app.h"
+#include <cstdlib>
 
 #include "gui/resources/scheme.h"
 
@@ -43,6 +44,8 @@ namespace Framework::GUI::CEF {
     }
 
     void App::OnBeforeCommandLineProcessing(const CefString &processType, CefRefPtr<CefCommandLine> commandLine) {
+        const char *qaDirectory = std::getenv("FW_QA_DIR");
+        if (qaDirectory != nullptr && *qaDirectory != '\0') commandLine->AppendSwitch("mute-audio");
         commandLine->AppendSwitch("disable-gpu-compositing");
         if (!_gpuAccelerated) {
             // CPU OSR path never touches the driver; a crashing GPU process otherwise
