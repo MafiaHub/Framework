@@ -10,36 +10,41 @@
 #include "logging/logger.h"
 
 #include "graphics/backend/d3d11.h"
+#include "gui/cef/render_handler.h"
 
 namespace Framework::GUI {
     ViewD3D11::ViewD3D11(int id, Graphics::Renderer *graphicsRenderer, Manager *manager): View(id, graphicsRenderer, manager) {
     }
 
+    ViewD3D11::~ViewD3D11() {
+        // The entries hold the shared textures and SRVs; nothing else frees them
+        if (auto *backend = _graphicsRenderer ? _graphicsRenderer->GetD3D11Backend() : nullptr) {
+            for (const auto textureID : {_textureID, _popupTextureID, _cpuTextureID}) {
+                if (textureID != 0) {
+                    backend->DestroyTexture(textureID);
+                }
+            }
+        }
+    }
+
     Utils::Result<void, Framework::Error> ViewD3D11::Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated) {
+        // With a deferred context the draw runs at ExecuteCommandList, after the read
+        // query recorded on the immediate context: a buffer would be handed back to
+        // the copy while still waiting to be sampled
+        auto *backend = _graphicsRenderer ? _graphicsRenderer->GetD3D11Backend() : nullptr;
+        if (gpuAccelerated && backend && backend->GetDeferredContext()) {
+            Framework::Logging::GetLogger("Web")->warn("ViewD3D11: accelerated paint does not support a deferred context, using the CPU path");
+            gpuAccelerated = false;
+        }
         return View::Init(url, width, height, offsetX, offsetY, gpuAccelerated);
     }
 
     namespace {
-        // Points a backend texture at a CEF shared texture, rebuilding its SRV when the texture changes.
-        void BindSharedTexture(Graphics::D3D11Backend *backend, uint32_t textureID, ID3D11Texture2D *sharedTex) {
-            auto &texEntry = backend->GetOrCreateTexture(textureID);
-
-            // CEF hands us a new shared texture when the surface changes (e.g. resize).
-            // Drop the SRV bound to the previous texture so it is recreated against the
-            // new one; otherwise the view keeps sampling the stale surface.
-            if (texEntry.texture.Get() != sharedTex) {
-                texEntry.texture = sharedTex;
-                texEntry.texture_srv.Reset();
-            }
-
-            if (!texEntry.texture_srv) {
-                D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc {};
-                srvDesc.Format                    = DXGI_FORMAT_B8G8R8A8_UNORM;
-                srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
-                srvDesc.Texture2D.MipLevels       = 1;
-                srvDesc.Texture2D.MostDetailedMip = 0;
-                backend->GetDevice()->CreateShaderResourceView(sharedTex, &srvDesc, &texEntry.texture_srv);
-            }
+        // Points a backend texture entry at a shared copy and its view
+        void BindSharedTexture(Graphics::D3D11Backend *backend, uint32_t textureID, const CEF::RenderHandler::SharedRead &read) {
+            auto &texEntry       = backend->GetOrCreateTexture(textureID);
+            texEntry.texture     = read.texture;
+            texEntry.texture_srv = read.view;
         }
     } // namespace
 
@@ -137,15 +142,15 @@ namespace Framework::GUI {
         if (!renderHandler->GetPopupRect(popupRect)) {
             return;
         }
-        auto *popupTex = renderHandler->BeginPopupSharedRead();
-        if (!popupTex) {
+        const auto popupRead = renderHandler->BeginPopupSharedRead();
+        if (!popupRead.texture) {
             return;
         }
 
         if (_popupTextureID == 0) {
             _popupTextureID = backend->NextTextureId();
         }
-        BindSharedTexture(backend, _popupTextureID, popupTex);
+        BindSharedTexture(backend, _popupTextureID, popupRead);
 
         CreateOrUpdateGeometry(_popupGeometryID, _popupGeometryCreated, _x + popupRect.x, _y + popupRect.y, popupRect.width, popupRect.height);
 
@@ -192,11 +197,11 @@ namespace Framework::GUI {
                 // buffers on a resize
                 const auto texLock = renderHandler->LockTexture();
 
-                if (auto *sharedTex = renderHandler->BeginSharedRead()) {
+                if (const auto read = renderHandler->BeginSharedRead(); read.texture) {
                     if (_textureID == 0) {
                         _textureID = backend->NextTextureId();
                     }
-                    BindSharedTexture(backend, _textureID, sharedTex);
+                    BindSharedTexture(backend, _textureID, read);
 
                     gpuState.texture_1_id = _textureID;
                     backend->DrawGeometry(_geometryID, 6, 0, gpuState);
