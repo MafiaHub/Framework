@@ -7,6 +7,7 @@
  */
 
 #include "d3d12_ui_compositor.h"
+#include "d3d12_barrier.h"
 
 #include <cstring>
 #include <d3dcompiler.h>
@@ -42,15 +43,6 @@ namespace Framework::Graphics {
             }
         )";
 
-        void Transition(ID3D12GraphicsCommandList *commands, ID3D12Resource *resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
-            D3D12_RESOURCE_BARRIER barrier {};
-            barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            barrier.Transition.pResource   = resource;
-            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            barrier.Transition.StateBefore = before;
-            barrier.Transition.StateAfter  = after;
-            commands->ResourceBarrier(1, &barrier);
-        }
     } // namespace
 
     HRESULT D3D12UICompositor::Resize(ID3D12Device *device, UINT width, UINT height) {
@@ -162,7 +154,7 @@ namespace Framework::Graphics {
     }
 
     void D3D12UICompositor::Begin(ID3D12GraphicsCommandList *commands) {
-        Transition(commands, _surface.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        TransitionResource(commands, _surface.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
         const auto rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
         const float clear[4] {};
         commands->ClearRenderTargetView(rtv, clear, 0, nullptr);
@@ -170,7 +162,7 @@ namespace Framework::Graphics {
     }
 
     void D3D12UICompositor::Composite(ID3D12GraphicsCommandList *commands, D3D12_CPU_DESCRIPTOR_HANDLE target, float brightnessScale) {
-        Transition(commands, _surface.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        TransitionResource(commands, _surface.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         commands->OMSetRenderTargets(1, &target, FALSE, nullptr);
         auto *heap = _srvHeap.Get();
         commands->SetDescriptorHeaps(1, &heap);

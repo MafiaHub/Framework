@@ -40,6 +40,7 @@ namespace Framework::GUI::CEF {
         struct SharedBuffer {
             Microsoft::WRL::ComPtr<ID3D11Texture2D> owned;
             Microsoft::WRL::ComPtr<ID3D11Texture2D> game;
+            Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> view;
             Microsoft::WRL::ComPtr<ID3D11Query> read;
             bool reading = false;
         };
@@ -94,6 +95,11 @@ namespace Framework::GUI::CEF {
         AcceleratedPaintCallback _acceleratedPaintCallback;
 
       public:
+        struct SharedRead {
+            ID3D11Texture2D *texture        = nullptr;
+            ID3D11ShaderResourceView *view = nullptr;
+        };
+
         void SetDimensions(int width, int height) {
             _width  = width;
             _height = height;
@@ -125,15 +131,16 @@ namespace Framework::GUI::CEF {
             return std::lock_guard<std::mutex>(_pixelMutex);
         }
 
-        // Render thread, under LockTexture(): the newest copy, or null. A non-null
-        // read is closed with the matching End call once its draws are recorded.
-        ID3D11Texture2D *BeginSharedRead() {
+        // Render thread, under LockTexture(): the newest copy, or an empty read. A
+        // non-empty read is closed with the matching End call once its draws are
+        // recorded.
+        SharedRead BeginSharedRead() {
             return BeginSharedRead(_sharedPage);
         }
         void EndSharedRead() {
             EndSharedRead(_sharedPage);
         }
-        ID3D11Texture2D *BeginPopupSharedRead() {
+        SharedRead BeginPopupSharedRead() {
             return BeginSharedRead(_sharedPopup);
         }
         void EndPopupSharedRead() {
@@ -164,10 +171,11 @@ namespace Framework::GUI::CEF {
         bool EnsureSharedCopy(SharedCopy &copy, UINT width, UINT height);
         static void ReleaseSharedCopy(SharedCopy &copy);
         void CopySharedTexture(HANDLE handle, SharedCopy &copy);
-        ID3D11Texture2D *BeginSharedRead(SharedCopy &copy);
+        SharedRead BeginSharedRead(SharedCopy &copy);
         void EndSharedRead(SharedCopy &copy);
         void StampPopup();
         void MarkPixelsDirty(const CefRect &rect);
+        void RecomposeAcceleratedPage(CefRefPtr<CefBrowser> browser);
         void UnstampPopup();
 
         IMPLEMENT_REFCOUNTING(RenderHandler);

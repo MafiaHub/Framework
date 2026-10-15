@@ -60,6 +60,10 @@ namespace Framework::GUI {
             HANDLE event      = nullptr;
         };
         SharedCopy _sharedCopy;
+        // CEF's texture from a copy that timed out, held until that copy lands
+        Microsoft::WRL::ComPtr<ID3D12Resource> _pendingSource;
+        // Set once CEF's texture cannot be opened at all; later paints are dropped
+        bool _sharedFailed = false;
 
         struct SharedTexture {
             Microsoft::WRL::ComPtr<ID3D12Resource> resource;

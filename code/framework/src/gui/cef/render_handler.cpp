@@ -185,6 +185,14 @@ namespace Framework::GUI::CEF {
                 _copyFailed = true;
                 return fail("CreateQuery", hr);
             }
+            // One view per buffer, so a draw binds without creating one
+            D3D11_SHADER_RESOURCE_VIEW_DESC viewDesc {};
+            viewDesc.Format              = DXGI_FORMAT_B8G8R8A8_UNORM;
+            viewDesc.ViewDimension       = D3D11_SRV_DIMENSION_TEXTURE2D;
+            viewDesc.Texture2D.MipLevels = 1;
+            if (const auto hr = _device->CreateShaderResourceView(buffer.game.Get(), &viewDesc, &buffer.view); FAILED(hr)) {
+                return fail("CreateShaderResourceView", hr);
+            }
         }
 
         copy.width  = width;
@@ -204,8 +212,10 @@ namespace Framework::GUI::CEF {
 
         Microsoft::WRL::ComPtr<ID3D11Texture2D> source;
         if (FAILED(_copyDevice->OpenSharedResource1(handle, IID_PPV_ARGS(&source)))) {
-            // A texture from another adapter never opens; see force-high-performance-gpu
-            Framework::Logging::GetLogger("Web")->error("RenderHandler: could not open CEF's shared texture");
+            // A texture from another adapter never opens (see force-high-performance-gpu),
+            // and will not on any later paint either
+            _copyFailed = true;
+            Framework::Logging::GetLogger("Web")->error("RenderHandler: could not open CEF's shared texture; the view stays blank");
             return;
         }
         D3D11_TEXTURE2D_DESC sourceDesc {};
@@ -261,9 +271,9 @@ namespace Framework::GUI::CEF {
         }
     }
 
-    ID3D11Texture2D *RenderHandler::BeginSharedRead(SharedCopy &copy) {
+    RenderHandler::SharedRead RenderHandler::BeginSharedRead(SharedCopy &copy) {
         if (copy.latest < 0) {
-            return nullptr;
+            return {};
         }
 
         // Hand back every buffer whose last draw has run
@@ -274,7 +284,8 @@ namespace Framework::GUI::CEF {
                 buffer.reading = false;
             }
         }
-        return copy.buffers[copy.latest].game.Get();
+        const auto &latest = copy.buffers[copy.latest];
+        return {latest.game.Get(), latest.view.Get()};
     }
 
     void RenderHandler::EndSharedRead(SharedCopy &copy) {
@@ -374,8 +385,11 @@ namespace Framework::GUI::CEF {
             _pixelDataDirty   = true;
         }
 
-        std::lock_guard<std::mutex> textureLock(_textureMutex);
-        ReleaseSharedCopy(_sharedPopup);
+        {
+            std::lock_guard<std::mutex> textureLock(_textureMutex);
+            ReleaseSharedCopy(_sharedPopup);
+        }
+        RecomposeAcceleratedPage(browser);
     }
 
     void RenderHandler::OnPopupSize(CefRefPtr<CefBrowser> browser, const CefRect &rect) {
@@ -399,6 +413,21 @@ namespace Framework::GUI::CEF {
             _popupPixelHeight = 0;
         }
         _pixelDataDirty = true;
+        RecomposeAcceleratedPage(browser);
+    }
+
+    void RenderHandler::RecomposeAcceleratedPage(CefRefPtr<CefBrowser> browser) {
+        // A view taking accelerated paints composes the popup into the page only when
+        // a paint arrives, and CEF does not repaint the page when a popup closes or
+        // moves. The other paths draw the popup from its rect every frame.
+        bool accelerated = false;
+        {
+            std::lock_guard<std::mutex> lock(_acceleratedPaintMutex);
+            accelerated = static_cast<bool>(_acceleratedPaintCallback);
+        }
+        if (accelerated && browser) {
+            browser->GetHost()->Invalidate(PET_VIEW);
+        }
     }
 
     bool RenderHandler::GetPopupRect(CefRect &rect) {

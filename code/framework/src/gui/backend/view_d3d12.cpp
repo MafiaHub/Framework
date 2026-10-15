@@ -12,6 +12,7 @@
 #include "utils/profiler.h"
 
 #include "graphics/backend/d3d12.h"
+#include "graphics/backend/d3d12_barrier.h"
 #include "graphics/backend/d3d12_ui_compositor.h"
 
 #include <algorithm>
@@ -51,22 +52,20 @@ namespace Framework::GUI {
 
         constexpr DWORD kSharedCopyTimeoutMs = 1000;
 
-        // False when the fence did not reach the value in time
+        // False when the fence did not reach the value in time. The fence decides,
+        // not the event: a wait that timed out leaves its registration armed, and the
+        // auto-reset event it sets later would otherwise end the next wait early.
         bool WaitForFence(ID3D12Fence *fence, UINT64 value, HANDLE event) {
-            if (fence->GetCompletedValue() >= value) {
-                return true;
+            const auto deadline = GetTickCount64() + kSharedCopyTimeoutMs;
+            for (auto completed = fence->GetCompletedValue(); completed < value; completed = fence->GetCompletedValue()) {
+                const auto now = GetTickCount64();
+                if (now >= deadline || FAILED(fence->SetEventOnCompletion(value, event))) {
+                    return false;
+                }
+                WaitForSingleObject(event, static_cast<DWORD>(deadline - now));
             }
-            return SUCCEEDED(fence->SetEventOnCompletion(value, event)) && WaitForSingleObject(event, kSharedCopyTimeoutMs) == WAIT_OBJECT_0;
-        }
-
-        void Transition(ID3D12GraphicsCommandList *list, ID3D12Resource *resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
-            D3D12_RESOURCE_BARRIER barrier {};
-            barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            barrier.Transition.pResource   = resource;
-            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            barrier.Transition.StateBefore = before;
-            barrier.Transition.StateAfter  = after;
-            list->ResourceBarrier(1, &barrier);
+            // A removed device reports every value as reached
+            return fence->GetCompletedValue() != UINT64_MAX;
         }
 
         // Rests in COMMON between submissions, so the game's list can promote it to
@@ -153,8 +152,11 @@ namespace Framework::GUI {
     }
 
     void ViewD3D12::ReleaseSharedCopy() {
-        // Every copy is waited for before CopySharedFrame returns, so the queue is
-        // idle; staging textures may still be read by a game frame in flight.
+        // A copy that timed out may still be running on our queue, and a game frame
+        // may still be reading a staging texture
+        if (_sharedCopy.fence && !WaitForFence(_sharedCopy.fence.Get(), _sharedCopy.fenceValue, _sharedCopy.event)) {
+            Framework::Logging::GetLogger("Web")->warn("ViewD3D12: shared copy still running, freeing it anyway (teardown)");
+        }
         if (!_staging.empty()) {
             if (auto *backend = _graphicsRenderer ? _graphicsRenderer->GetD3D12Backend() : nullptr) {
                 if (!backend->WaitForGpu()) {
@@ -164,6 +166,7 @@ namespace Framework::GUI {
         }
 
         _staging.clear();
+        _pendingSource.Reset();
         _sharedPage  = {};
         _sharedPopup = {};
         _sharedCopy.list.Reset();
@@ -187,14 +190,18 @@ namespace Framework::GUI {
 
         // A copy that timed out may still be running: its allocator cannot be reset
         // and the textures it uses cannot be replaced until it is done
-        if (!WaitForFence(_sharedCopy.fence.Get(), _sharedCopy.fenceValue, _sharedCopy.event)) {
+        if (_sharedFailed || !WaitForFence(_sharedCopy.fence.Get(), _sharedCopy.fenceValue, _sharedCopy.event)) {
             return;
         }
+        // Kept from a copy that timed out; that copy has now landed
+        _pendingSource.Reset();
 
         Microsoft::WRL::ComPtr<ID3D12Resource> source;
         if (FAILED(device->OpenSharedHandle(handle, IID_PPV_ARGS(&source)))) {
-            // A texture from another adapter never opens; see force-high-performance-gpu
-            Framework::Logging::GetLogger("Web")->error("ViewD3D12: could not open CEF's shared texture");
+            // A texture from another adapter never opens (see force-high-performance-gpu),
+            // and will not on any later paint either
+            _sharedFailed = true;
+            Framework::Logging::GetLogger("Web")->error("ViewD3D12: could not open CEF's shared texture; the view stays blank");
             return;
         }
         const auto sourceDesc = source->GetDesc();
@@ -209,16 +216,27 @@ namespace Framework::GUI {
         if (_staging.empty()) {
             _staging.resize(static_cast<size_t>(std::max(1, backend->NumFramesInFlight())) + 1);
         }
+        auto *frameFence = backend->GetFrameFence();
         int slot         = 0;
         UINT64 readFence = 0;
         {
+            // Prefer a slot whose reader has already run, so the copy never queues
+            // behind a game frame still on the GPU; else the one after the latest
             std::scoped_lock lock(_sharedMutex);
-            slot      = (_sharedLatest + 1) % static_cast<int>(_staging.size());
+            const int count     = static_cast<int>(_staging.size());
+            const auto finished = frameFence->GetCompletedValue();
+            slot                = (_sharedLatest + 1) % count;
+            for (int i = 1; i < count; i++) {
+                const int candidate = (_sharedLatest + i) % count;
+                if (_staging[candidate].readFence <= finished) {
+                    slot = candidate;
+                    break;
+                }
+            }
             readFence = _staging[slot].readFence;
         }
         auto &staging = _staging[slot].texture;
 
-        auto *frameFence = backend->GetFrameFence();
         if (staging.width != _sharedPage.width || staging.height != _sharedPage.height) {
             // Freed on the CPU, so the frame reading it has to have run first
             if (!WaitForFence(frameFence, readFence, _sharedCopy.event)) {
@@ -235,21 +253,27 @@ namespace Framework::GUI {
             return;
         }
 
+        // A closed popup's pixels must not come back over the next one; the queue is
+        // idle here, so the texture can go
         CefRect popupRect;
-        const bool popup = _sharedPopup.resource && GetRenderHandler()->GetPopupRect(popupRect);
+        const bool popupOpen = GetRenderHandler()->GetPopupRect(popupRect);
+        if (!popupOpen && type != PET_POPUP) {
+            _sharedPopup = {};
+        }
+        const bool popup = popupOpen && _sharedPopup.resource;
 
-        Transition(list, target.resource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+        Graphics::TransitionResource(list, target.resource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
         list->CopyResource(target.resource.Get(), source.Get());
-        Transition(list, target.resource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        Graphics::TransitionResource(list, target.resource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
         if (type == PET_POPUP) {
-            Transition(list, _sharedPage.resource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            Graphics::TransitionResource(list, _sharedPage.resource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
         }
         else if (popup) {
-            Transition(list, _sharedPopup.resource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            Graphics::TransitionResource(list, _sharedPopup.resource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
         }
 
         // The page, then the popup over it where it sits
-        Transition(list, staging.resource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+        Graphics::TransitionResource(list, staging.resource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
         list->CopyResource(staging.resource.Get(), _sharedPage.resource.Get());
         if (popup) {
             const int x0 = std::max(0, popupRect.x);
@@ -268,10 +292,10 @@ namespace Framework::GUI {
             }
         }
 
-        Transition(list, staging.resource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
-        Transition(list, _sharedPage.resource.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+        Graphics::TransitionResource(list, staging.resource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+        Graphics::TransitionResource(list, _sharedPage.resource.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
         if (popup || type == PET_POPUP) {
-            Transition(list, _sharedPopup.resource.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+            Graphics::TransitionResource(list, _sharedPopup.resource.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
         }
 
         if (FAILED(list->Close())) {
@@ -289,6 +313,8 @@ namespace Framework::GUI {
         {
             FW_PROFILE_SCOPE_N("Cef::OnAcceleratedPaint::Wait");
             if (!WaitForFence(_sharedCopy.fence.Get(), _sharedCopy.fenceValue, _sharedCopy.event)) {
+                // The copy still reads the source: hold it until the copy lands
+                _pendingSource = source;
                 Framework::Logging::GetLogger("Web")->error("ViewD3D12: shared texture copy timed out");
                 return;
             }
@@ -328,7 +354,7 @@ namespace Framework::GUI {
 
         auto &staging = _staging[_sharedLatest];
         if (_textureState != D3D12_RESOURCE_STATE_COPY_DEST) {
-            Transition(cmdList, _texture.Get(), _textureState, D3D12_RESOURCE_STATE_COPY_DEST);
+            Graphics::TransitionResource(cmdList, _texture.Get(), _textureState, D3D12_RESOURCE_STATE_COPY_DEST);
         }
 
         // The staging texture can briefly lag the view size during a resize
@@ -341,7 +367,7 @@ namespace Framework::GUI {
         const D3D12_BOX box {0, 0, 0, std::min(staging.texture.width, static_cast<UINT>(_texWidth)), std::min(staging.texture.height, static_cast<UINT>(_texHeight)), 1};
         cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, &box);
 
-        Transition(cmdList, _texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        Graphics::TransitionResource(cmdList, _texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         _textureState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 
         staging.readFence = backend->GetPendingFrameFenceValue();
@@ -484,15 +510,8 @@ namespace Framework::GUI {
             memcpy(dst + static_cast<size_t>(y) * _uploadPitch, pixels.data() + static_cast<size_t>(y) * srcPitch, srcPitch);
         }
 
-        D3D12_RESOURCE_BARRIER barrier {};
-        barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Transition.pResource   = _texture.Get();
-        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
         if (_textureState != D3D12_RESOURCE_STATE_COPY_DEST) {
-            barrier.Transition.StateBefore = _textureState;
-            barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_DEST;
-            cmdList->ResourceBarrier(1, &barrier);
+            Graphics::TransitionResource(cmdList, _texture.Get(), _textureState, D3D12_RESOURCE_STATE_COPY_DEST);
         }
 
         D3D12_TEXTURE_COPY_LOCATION dstLoc {};
@@ -511,9 +530,7 @@ namespace Framework::GUI {
 
         cmdList->CopyTextureRegion(&dstLoc, 0, 0, 0, &srcLoc, nullptr);
 
-        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-        cmdList->ResourceBarrier(1, &barrier);
+        Graphics::TransitionResource(cmdList, _texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         _textureState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 
         _textureReady = true;
