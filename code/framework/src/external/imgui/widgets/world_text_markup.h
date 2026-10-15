@@ -39,7 +39,7 @@ namespace Framework::External::ImGUI::Widgets {
 
         // "#RRGGBB" or "#RRGGBBAA" (CSS order) to 0xAARRGGBB.
         inline std::optional<uint32_t> ParseHexColor(std::string_view tag) {
-            if (tag.size() != 7 && tag.size() != 9) {
+            if ((tag.size() != 7 && tag.size() != 9) || tag[0] != '#') {
                 return std::nullopt;
             }
             uint32_t value = 0;
@@ -136,7 +136,7 @@ namespace Framework::External::ImGUI::Widgets {
                 flush();
                 current.color.reset();
             }
-            else if (!tag.empty() && tag[0] == '#' && (color = Detail::ParseHexColor(tag))) {
+            else if ((color = Detail::ParseHexColor(tag))) {
                 flush();
                 current.color = color;
             }

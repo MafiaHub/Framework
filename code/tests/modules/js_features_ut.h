@@ -1040,6 +1040,8 @@ MODULE(js_features, {
             "{ colour: 1 }",
             "{ fontSize: 0 }",
             "{ color: 'red' }",
+            "{ color: '1234567' }",
+            "{ outline: { color: 'x00ff00' } }",
             "{ outline: { width: 9 } }",
             "{ shadow: 'soft' }",
             "{ sizeMode: 'huge' }",

@@ -54,6 +54,12 @@ MODULE(world_text, {
         EQUALS((runs[0].text == "{a} {name} {#12} {open"), true);
     });
 
+    IT("hex colours need their leading #", {
+        EQUALS((!W::Detail::ParseHexColor("1234567").has_value()), true);
+        EQUALS((!W::Detail::ParseHexColor("x00ff00").has_value()), true);
+        UEQUALS(*W::Detail::ParseHexColor("#00ff00"), 0xFF00FF00u);
+    });
+
     IT("utf8 decodes every sequence length", {
         const std::string text = "A\xC3\xAD\xE6\x97\xA5\xF0\x9F\x98\x80";
         size_t i               = 0;
