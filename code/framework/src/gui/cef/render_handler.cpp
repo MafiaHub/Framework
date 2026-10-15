@@ -175,10 +175,14 @@ namespace Framework::GUI::CEF {
             if (const auto hr = resource->GetSharedHandle(&handle); FAILED(hr)) {
                 return fail("GetSharedHandle", hr);
             }
+            // The game device refusing these will refuse them every time: stop
+            // retrying on each paint
             if (const auto hr = _device->OpenSharedResource(handle, IID_PPV_ARGS(&buffer.game)); FAILED(hr)) {
+                _copyFailed = true;
                 return fail("OpenSharedResource", hr);
             }
             if (const auto hr = _device->CreateQuery(&queryDesc, &buffer.read); FAILED(hr)) {
+                _copyFailed = true;
                 return fail("CreateQuery", hr);
             }
         }
