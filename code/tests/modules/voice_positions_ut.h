@@ -14,8 +14,8 @@
 #include "voice/server/voice_server.h"
 
 #include <glm/glm.hpp>
-#include <mafianet/BitStream.h>
-#include <mafianet/ReplicaManager3.h>
+#include <mafianet/bit_stream.h>
+#include <mafianet/replica_manager3.h>
 #include <mafianet/types.h>
 
 #include <algorithm>

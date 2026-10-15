@@ -27,7 +27,7 @@
 #include "networking/rpc/server_resources.h"
 #include "integrations/client/ui/chat_box.h"
 #include "voice/client/voice_client.h"
-#include <mafianet/FileListTransferCBInterface.h>
+#include <mafianet/file_list_transfer_cb_interface.h>
 
 #include <cstdint>
 #include <memory>

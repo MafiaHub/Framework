@@ -12,8 +12,8 @@
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
 
-#include <mafianet/BitStream.h>
-#include <mafianet/ReplicaManager3.h>
+#include <mafianet/bit_stream.h>
+#include <mafianet/replica_manager3.h>
 
 // Transform channel rate rules: distance bands, idle refresh, and per-entity ordering.
 MODULE(replication_rate, {

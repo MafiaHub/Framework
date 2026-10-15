@@ -12,8 +12,8 @@
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
 
-#include <mafianet/BitStream.h>
-#include <mafianet/ReplicaManager3.h>
+#include <mafianet/bit_stream.h>
+#include <mafianet/replica_manager3.h>
 #include <mafianet/types.h>
 
 // Server authority over entity destruction. The base ReplicaManager3 destruction dispatch resolves

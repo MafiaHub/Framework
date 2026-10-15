@@ -12,7 +12,7 @@
 
 #include <logging/logger.h>
 
-#include <mafianet/MessageIdentifiers.h>
+#include <mafianet/message_identifiers.h>
 #include <mafianet/defines.h>
 
 #include <algorithm>

@@ -14,7 +14,7 @@
 #include "networking/replication/state_bag.h"
 #include "networking/rpc/state_bag_sync.h"
 
-#include <mafianet/BitStream.h>
+#include <mafianet/bit_stream.h>
 #include <mafianet/types.h>
 
 #include <string>

@@ -9,7 +9,7 @@
 #include "interest_grid.h"
 
 #include <logging/logger.h>
-#include <mafianet/DS_List.h>
+#include <mafianet/ds_list.h>
 
 #include <algorithm>
 #include <limits>

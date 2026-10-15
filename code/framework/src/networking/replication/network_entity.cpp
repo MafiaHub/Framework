@@ -11,7 +11,7 @@
 #include "../channels.h"
 #include "replication_manager.h"
 
-#include <mafianet/GetTime.h>
+#include <mafianet/get_time.h>
 #include <utils/time.h>
 
 #include <cstring>

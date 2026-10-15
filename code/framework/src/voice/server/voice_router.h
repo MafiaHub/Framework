@@ -11,7 +11,7 @@
 #include "voice/voice_config.h"
 
 #include <glm/glm.hpp>
-#include <mafianet/VirtualWorld.h>
+#include <mafianet/virtual_world.h>
 
 #include <cstdint>
 #include <unordered_map>

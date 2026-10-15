@@ -20,7 +20,7 @@
 #include <v8pp/class.hpp>
 #include <v8pp/convert.hpp>
 
-#include <mafianet/PacketPriority.h>
+#include <mafianet/packet_priority.h>
 #include <mafianet/types.h>
 
 #include <cstdint>

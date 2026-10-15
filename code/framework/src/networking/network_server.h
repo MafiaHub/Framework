@@ -19,9 +19,9 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
-#include <mafianet/IncrementalReadInterface.h>
+#include <mafianet/incremental_read_interface.h>
 #include <mafianet/types.h>
-#include <mafianet/peerinterface.h>
+#include <mafianet/peer_interface.h>
 #include <optional>
 #include <string>
 #include <unordered_map>

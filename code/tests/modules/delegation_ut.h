@@ -11,7 +11,7 @@
 #include "networking/replication/delegation.h"
 
 #include <glm/glm.hpp>
-#include <mafianet/VirtualWorld.h>
+#include <mafianet/virtual_world.h>
 #include <mafianet/types.h>
 
 #include <vector>

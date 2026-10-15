@@ -13,10 +13,10 @@
 #include "interest_grid.h"
 #include "network_entity.h"
 
-#include <mafianet/NetworkIDManager.h>
-#include <mafianet/RPC4Plugin.h>
-#include <mafianet/ReplicaManager3.h>
-#include <mafianet/peerinterface.h>
+#include <mafianet/network_id_manager.h>
+#include <mafianet/rpc4_plugin.h>
+#include <mafianet/replica_manager3.h>
+#include <mafianet/peer_interface.h>
 
 #include <function2/function2.hpp>
 #include <glm/glm.hpp>

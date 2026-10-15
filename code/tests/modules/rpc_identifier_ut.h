@@ -17,8 +17,8 @@
 #include "networking/rpc/server_resources.h"
 #include "networking/rpc/voice_settings.h"
 
-#include <mafianet/BitStream.h>
-#include <mafianet/StringCompressor.h>
+#include <mafianet/bit_stream.h>
+#include <mafianet/string_compressor.h>
 
 #include <array>
 #include <cstdint>

@@ -10,9 +10,9 @@
 
 #include "state_bag.h"
 
-#include <mafianet/ReplicaManager3.h>
-#include <mafianet/VariableDeltaSerializer.h>
-#include <mafianet/VirtualWorldReplica3.h>
+#include <mafianet/replica_manager3.h>
+#include <mafianet/variable_delta_serializer.h>
+#include <mafianet/virtual_world_replica3.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>

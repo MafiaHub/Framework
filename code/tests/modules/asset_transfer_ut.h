@@ -10,7 +10,7 @@
 
 #include "networking/network_client.h"
 
-#include <mafianet/FileListTransferCBInterface.h>
+#include <mafianet/file_list_transfer_cb_interface.h>
 
 namespace AssetTransferTest {
     // Counts how often the transfer lets go of it.

@@ -11,7 +11,7 @@
 #include "../replication/state_bag.h"
 #include "rpc.h"
 
-#include <mafianet/NetworkIDManager.h>
+#include <mafianet/network_id_manager.h>
 
 #include <algorithm>
 #include <cstdint>

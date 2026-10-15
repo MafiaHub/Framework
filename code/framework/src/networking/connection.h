@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <mafianet/BitStream.h>
+#include <mafianet/bit_stream.h>
 #include <mafianet/types.h>
 #include <function2/function2.hpp>
 #include <string>

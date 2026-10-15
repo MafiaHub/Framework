@@ -11,7 +11,7 @@
 #include "interest_refresh.h"
 #include "transform_batch.h"
 
-#include <mafianet/ReplicaManager3.h>
+#include <mafianet/replica_manager3.h>
 
 #include <cstdint>
 #include <unordered_map>

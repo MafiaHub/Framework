@@ -10,7 +10,7 @@
 
 #include "voice_router.h"
 
-#include <mafianet/RakVoice.h>
+#include <mafianet/voice.h>
 #include <networking/rpc/voice_settings.h>
 
 #include <cstdint>
