@@ -51,6 +51,14 @@ namespace Framework::GUI {
 
         constexpr DWORD kSharedCopyTimeoutMs = 1000;
 
+        // False when the fence did not reach the value in time
+        bool WaitForFence(ID3D12Fence *fence, UINT64 value, HANDLE event) {
+            if (fence->GetCompletedValue() >= value) {
+                return true;
+            }
+            return SUCCEEDED(fence->SetEventOnCompletion(value, event)) && WaitForSingleObject(event, kSharedCopyTimeoutMs) == WAIT_OBJECT_0;
+        }
+
         void Transition(ID3D12GraphicsCommandList *list, ID3D12Resource *resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
             D3D12_RESOURCE_BARRIER barrier {};
             barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -177,6 +185,12 @@ namespace Framework::GUI {
             return;
         }
 
+        // A copy that timed out may still be running: its allocator cannot be reset
+        // and the textures it uses cannot be replaced until it is done
+        if (!WaitForFence(_sharedCopy.fence.Get(), _sharedCopy.fenceValue, _sharedCopy.event)) {
+            return;
+        }
+
         Microsoft::WRL::ComPtr<ID3D12Resource> source;
         if (FAILED(device->OpenSharedHandle(handle, IID_PPV_ARGS(&source)))) {
             // A texture from another adapter never opens; see force-high-performance-gpu
@@ -207,8 +221,8 @@ namespace Framework::GUI {
         auto *frameFence = backend->GetFrameFence();
         if (staging.width != _sharedPage.width || staging.height != _sharedPage.height) {
             // Freed on the CPU, so the frame reading it has to have run first
-            if (frameFence->GetCompletedValue() < readFence && SUCCEEDED(frameFence->SetEventOnCompletion(readFence, _sharedCopy.event))) {
-                WaitForSingleObject(_sharedCopy.event, kSharedCopyTimeoutMs);
+            if (!WaitForFence(frameFence, readFence, _sharedCopy.event)) {
+                return;
             }
             if (!EnsureTexture(device, staging, _sharedPage.width, _sharedPage.height)) {
                 return;
@@ -274,11 +288,9 @@ namespace Framework::GUI {
         // CEF hands the source back to its pool as soon as we return
         {
             FW_PROFILE_SCOPE_N("Cef::OnAcceleratedPaint::Wait");
-            if (_sharedCopy.fence->GetCompletedValue() < _sharedCopy.fenceValue) {
-                if (FAILED(_sharedCopy.fence->SetEventOnCompletion(_sharedCopy.fenceValue, _sharedCopy.event)) || WaitForSingleObject(_sharedCopy.event, kSharedCopyTimeoutMs) != WAIT_OBJECT_0) {
-                    Framework::Logging::GetLogger("Web")->error("ViewD3D12: shared texture copy timed out");
-                    return;
-                }
+            if (!WaitForFence(_sharedCopy.fence.Get(), _sharedCopy.fenceValue, _sharedCopy.event)) {
+                Framework::Logging::GetLogger("Web")->error("ViewD3D12: shared texture copy timed out");
+                return;
             }
         }
 

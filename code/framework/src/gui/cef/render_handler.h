@@ -89,6 +89,8 @@ namespace Framework::GUI::CEF {
         Microsoft::WRL::ComPtr<ID3D11Query> _copyDone;
         bool _copyFailed = false;
         bool _copyLogged = false;
+        // Held across the call, so clearing the callback waits out one in progress
+        std::mutex _acceleratedPaintMutex;
         AcceleratedPaintCallback _acceleratedPaintCallback;
 
       public:
@@ -102,6 +104,7 @@ namespace Framework::GUI::CEF {
         }
 
         void SetAcceleratedPaintCallback(AcceleratedPaintCallback callback) {
+            std::lock_guard<std::mutex> lock(_acceleratedPaintMutex);
             _acceleratedPaintCallback = std::move(callback);
         }
 
