@@ -18,7 +18,7 @@
 #include "voice/voice_config.h"
 #include "voice_activity_gate.h"
 
-#include <mafianet/RakVoice.h>
+#include <mafianet/voice.h>
 
 #include <array>
 #include <atomic>

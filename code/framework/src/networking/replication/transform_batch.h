@@ -9,8 +9,8 @@
 #pragma once
 
 #include <function2/function2.hpp>
-#include <mafianet/MessageIdentifiers.h>
-#include <mafianet/ReplicaManager3.h>
+#include <mafianet/message_identifiers.h>
+#include <mafianet/replica_manager3.h>
 
 #include <array>
 #include <cstddef>

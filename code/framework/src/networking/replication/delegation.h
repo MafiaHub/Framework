@@ -10,7 +10,7 @@
 
 #include "network_entity.h"
 
-#include <mafianet/GetTime.h>
+#include <mafianet/get_time.h>
 #include <mafianet/types.h>
 
 #include <function2/function2.hpp>

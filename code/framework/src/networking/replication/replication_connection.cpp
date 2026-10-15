@@ -12,7 +12,7 @@
 #include "network_entity.h"
 #include "replication_manager.h"
 
-#include <mafianet/GetTime.h>
+#include <mafianet/get_time.h>
 
 #include <algorithm>
 #include <cstring>

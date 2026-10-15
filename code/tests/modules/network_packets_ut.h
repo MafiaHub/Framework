@@ -14,7 +14,7 @@
 #include "networking/rpc/client_identity.h"
 #include "networking/rpc/server_resources.h"
 
-#include <mafianet/BitStream.h>
+#include <mafianet/bit_stream.h>
 
 #include <cstdint>
 #include <vector>

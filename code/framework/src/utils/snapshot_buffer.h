@@ -10,7 +10,7 @@
 
 #include <cmath>
 #include <glm/ext.hpp>
-#include <mafianet/GetTime.h>
+#include <mafianet/get_time.h>
 #include <utils/time.h>
 
 namespace Framework::Utils {

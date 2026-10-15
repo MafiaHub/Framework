@@ -12,7 +12,7 @@
 
 #include <logging/logger.h>
 
-#include <mafianet/VirtualWorld.h>
+#include <mafianet/virtual_world.h>
 
 #include <limits>
 

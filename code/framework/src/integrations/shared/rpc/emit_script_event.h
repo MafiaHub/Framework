@@ -10,7 +10,7 @@
 
 #include <networking/rpc/rpc_identifier.h>
 
-#include <mafianet/BitStream.h>
+#include <mafianet/bit_stream.h>
 #include <mafianet/string.h>
 
 #include <string>

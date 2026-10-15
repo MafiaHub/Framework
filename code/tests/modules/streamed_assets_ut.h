@@ -14,7 +14,7 @@
 #include "utils/streamed_assets/pak_archive.h"
 #include "utils/streamed_assets/policy.h"
 
-#include <mafianet/BitStream.h>
+#include <mafianet/bit_stream.h>
 
 #include <cctype>
 #include <chrono>

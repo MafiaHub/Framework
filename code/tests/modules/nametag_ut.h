@@ -15,8 +15,8 @@
 #include "networking/replication/replication_manager.h"
 #include "scripting/builtins/player.h"
 
-#include <mafianet/BitStream.h>
-#include <mafianet/ReplicaManager3.h>
+#include <mafianet/bit_stream.h>
+#include <mafianet/replica_manager3.h>
 #include <mafianet/types.h>
 
 #include <cstdint>

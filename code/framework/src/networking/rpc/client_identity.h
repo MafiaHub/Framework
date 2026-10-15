@@ -13,7 +13,7 @@
 // included -- and would land on ours while BitStream is still half-declared.
 #include "rpc.h"
 
-#include <mafianet/BitStream.h>
+#include <mafianet/bit_stream.h>
 
 #include <cstddef>
 #include <optional>

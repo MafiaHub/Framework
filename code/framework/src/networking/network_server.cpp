@@ -11,8 +11,8 @@
 #include "channels.h"
 #include "replication/replication_manager.h"
 
-#include <mafianet/BitStream.h>
-#include <mafianet/MessageIdentifiers.h>
+#include <mafianet/bit_stream.h>
+#include <mafianet/message_identifiers.h>
 #include <mafianet/defines.h>
 #include <mafianet/guid_util.h>
 #include <logging/logger.h>

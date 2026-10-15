@@ -28,10 +28,10 @@
 # tree, so bumping the pin here and reconfiguring incrementally would silently
 # keep the old release. This file is the single source of truth, and there is no
 # reason to let -D override the wire format of the protocol.
-set(MAFIANET_PIN_VERSION "0.22.1") # FileListTransfer reference push window; DirectoryDeltaTransfer compares AddFile uploads by hash and writes streamed downloads as they arrive (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
+set(MAFIANET_PIN_VERSION "0.23.0") # A Shutdown() from inside receive dispatch no longer frees the packet or transfer receiver in use; snake_case header names (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
 
-set(MAFIANET_PIN_SHA256_linux-x86_64 "fc554afe031a4c4b3b064d0beb96aa40c42b3b92337df87fcf0cbeb0f338626d")
-set(MAFIANET_PIN_SHA256_macos-arm64 "a36e7ff318e117c34b84822ef54f9d8c3cdcf971945cb7ebe34582ca2636a35b")
-set(MAFIANET_PIN_SHA256_macos-x86_64 "234cfca4c6bd4d88d2fa0a6f97dbd3ecadde6ac6eee93ced816fc9af06cef8a1")
-set(MAFIANET_PIN_SHA256_windows-x64 "14c6317d6ddb2299de8fdff3c71373bb1c25fbab2b491187d28db4e8a7356e4e")
-set(MAFIANET_PIN_SHA256_windows-x86 "b39568dabbf241d291a0f8e1ef2bde4f156edd6bad9f6cda282d4fed571e0c77")
+set(MAFIANET_PIN_SHA256_linux-x86_64 "b81fcd58707273b25e6e6ac3ce927f3b51ff6d53742bc042aac22e59a71fb953")
+set(MAFIANET_PIN_SHA256_macos-arm64 "0723adfa047ffd8cf89ce5c0b1ddb1ffc088313bbbf8f25b95a321bbd0301a2b")
+set(MAFIANET_PIN_SHA256_macos-x86_64 "cbb3ccc389a2a8444bad223db2bb0fe8d7c4818b48b3b40e56f744200c584ff5")
+set(MAFIANET_PIN_SHA256_windows-x64 "baefa6694fdd2985940f307256b1410ccbd3a7dbd21f12ebc809c80b5d813e6c")
+set(MAFIANET_PIN_SHA256_windows-x86 "75f70eafec2245994aa3130a89727f6241732831ce14f6b38dcd4edb33416c3e")

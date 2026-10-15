@@ -11,7 +11,7 @@
 #include "voice/voice_config.h"
 
 #include <logging/logger.h>
-#include <mafianet/MessageIdentifiers.h>
+#include <mafianet/message_identifiers.h>
 #include <networking/channels.h>
 #include <networking/network_server.h>
 #include <networking/replication/network_entity.h>

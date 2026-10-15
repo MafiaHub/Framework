@@ -10,8 +10,8 @@
 
 #include "network_entity.h"
 
-#include <mafianet/DS_List.h>
-#include <mafianet/GridSectorizer.h>
+#include <mafianet/ds_list.h>
+#include <mafianet/grid_sectorizer.h>
 
 #include <glm/glm.hpp>
 

@@ -12,16 +12,16 @@
 #include "connection.h"
 #include "rpc/rpc.h"
 
-#include <mafianet/MessageIdentifiers.h>
-#include <mafianet/PacketPriority.h>
-#include <mafianet/peerinterface.h>
-#include <mafianet/FileListTransfer.h>
-#include <mafianet/DirectoryDeltaTransfer.h>
-#include <mafianet/RPC4Plugin.h>
-#include <mafianet/ReadyEvent.h>
-#include <mafianet/StatisticsHistory.h>
-#include <mafianet/TwoWayAuthentication.h>
-#include <mafianet/NetworkIDManager.h>
+#include <mafianet/message_identifiers.h>
+#include <mafianet/packet_priority.h>
+#include <mafianet/peer_interface.h>
+#include <mafianet/file_list_transfer.h>
+#include <mafianet/directory_delta_transfer.h>
+#include <mafianet/rpc4_plugin.h>
+#include <mafianet/ready_event.h>
+#include <mafianet/statistics_history.h>
+#include <mafianet/two_way_authentication.h>
+#include <mafianet/network_id_manager.h>
 #include <logging/logger.h>
 #include <utils/lifecycle.h>
 #include <utils/version.h>

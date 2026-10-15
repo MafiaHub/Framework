@@ -17,7 +17,7 @@
 #include <utils/result.h>
 
 #include <mafianet/types.h>
-#include <mafianet/peerinterface.h>
+#include <mafianet/peer_interface.h>
 #include <string>
 #include <string_view>
 #include <unordered_map>
