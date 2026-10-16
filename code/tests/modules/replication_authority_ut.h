@@ -327,6 +327,32 @@ MODULE(replication_authority, {
         EQUALS(server.forced, 6);
     });
 
+    IT("resends a forced field the owner moves back to the value it sent before the override", {
+        ForcedEntity simulator;
+        simulator.replicaManager = clientManager;
+        simulator.forced         = 1;
+
+        ForcedEntity server;
+        server.replicaManager = serverManager;
+        server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+
+        deliverState(simulator, server, ownerConn);
+
+        // The owner reports 9 under the old epoch while the server forces 5, so the server keeps 5.
+        server.forced = 5;
+        ++server.stateEpoch;
+        simulator.forced = 9;
+        deliverState(simulator, server, ownerConn, false);
+        EQUALS(server.forced, 5);
+
+        // The owner adopts 5, then its game measures 9 again. It last sent 9, but the server never
+        // took it, so 9 has to go out again.
+        deliverForcedState(server, simulator);
+        simulator.forced = 9;
+        deliverState(simulator, server, ownerConn, false);
+        EQUALS(server.forced, 9);
+    });
+
     serverManager->DeallocConnection(ownerConn);
     serverManager->DeallocConnection(attackerConn);
 });

@@ -192,6 +192,12 @@ namespace Framework::Networking::Replication {
         std::vector<bool> *_overlaps                                            = nullptr;
     };
 
+    // The delta serializer, plus a way to make chosen variables count as changed on the next send.
+    class DeltaSerializer final : public MafiaNet::VariableDeltaSerializer {
+      public:
+        void MarkChanged(const std::vector<bool> &variables);
+    };
+
     // A replicated game object. Game entities derive from this and override SerializeFields (per-tick
     // delta state) and/or OnSerializeConstruction (one-shot spawn state).
     //
@@ -232,8 +238,8 @@ namespace Framework::Networking::Replication {
         // Fences server overrides against in-flight owner updates: bumped by the server on
         // ForceState, adopted by the owner from the ForceState/SetOwner RPCs and echoed back in its
         // updates; an owner update carrying a stale value (sent before the owner saw the override)
-        // loses its pose and its forced fields, so it cannot revert the forced state. Equality-checked,
-        // so uint8 wrap is harmless. Managed by ReplicationManager — game code never touches it.
+        // loses its pose and its forced fields, so it cannot revert the forced state; the owner resends
+        // those fields once it adopts the override. Equality-checked, so uint8 wrap is harmless. Managed by ReplicationManager — game code never touches it.
         uint8_t stateEpoch = 0;
 
         // Local-clock send time of the last applied update (MafiaNet shifts it on receipt). Not replicated.
@@ -456,7 +462,7 @@ namespace Framework::Networking::Replication {
 
         // Tracks the last value of each serialized variable per connection so updates carry only
         // what changed (the documented ReplicaManager3 delta path).
-        MafiaNet::VariableDeltaSerializer _vds;
+        DeltaSerializer _vds;
 
         // Sender: refresh schedule state, in serialize-tick time.
         bool _transformMoved                = false;

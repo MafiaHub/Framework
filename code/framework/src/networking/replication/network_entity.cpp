@@ -179,6 +179,9 @@ namespace Framework::Networking::Replication {
         _poseForced = poseForced;
         FieldSerializer fields(bs, false);
         SerializeForcedState(fields);
+        // The server read past what we sent of these under the old epoch, but our delta history
+        // records it as delivered: without this, moving back to that value would never be resent.
+        _vds.MarkChanged(ForcedVariables(IsServerPeer()));
         OnStateForced();
     }
 
@@ -193,6 +196,20 @@ namespace Framework::Networking::Replication {
         return variables;
     }
 
+    void DeltaSerializer::MarkChanged(const std::vector<bool> &variables) {
+        // Nothing sent yet: the first send carries every variable anyway.
+        const unsigned int history = GetRemoteSystemHistoryListIndex(MafiaNet::UNASSIGNED_RAKNET_GUID);
+        if (history == static_cast<unsigned int>(-1)) {
+            return;
+        }
+        std::vector<unsigned char> bits((variables.size() + 7) / 8, 0);
+        for (std::size_t i = 0; i < variables.size(); ++i) {
+            if (variables[i]) {
+                bits[i >> 3] |= static_cast<unsigned char>(0x80 >> (i & 7));
+            }
+        }
+        remoteSystemVariableHistoryList[history]->variableListDeltaTracker.FlagDirtyFromBitArray(bits.data());
+    }
 
     void NetworkEntity::MarkStateDirty() {
         // No manager before Reference(); a bag written that early is carried by the seed anyway.
