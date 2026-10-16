@@ -398,7 +398,10 @@ def named_storefront(exe: Path) -> str:
     for i in range(len(parts) - 3):
         if parts[i] == "steamapps" and parts[i + 1] == "common":
             for manifest in Path(*path.parts[:i + 1]).glob("appmanifest_*.acf"):
-                text = manifest.read_text(encoding="utf-8", errors="replace")
+                try:
+                    text = manifest.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
                 installdir = re.search(r'"installdir"\s*"([^"]+)"', text)
                 appid = re.search(r'"appid"\s*"(\d+)"', text)
                 if installdir and appid and installdir.group(1).lower() == parts[i + 2]:
@@ -410,9 +413,12 @@ def named_storefront(exe: Path) -> str:
         installs = json.loads(installed.read_text(encoding="utf-8-sig")).get("InstallationList", [])
     except (OSError, ValueError, AttributeError):
         installs = []
-    for install in installs:
+    # The launcher's file is outside our control: skip anything that isn't an install record.
+    for install in installs if isinstance(installs, list) else []:
+        if not isinstance(install, dict):
+            continue
         location, app = install.get("InstallLocation"), install.get("AppName")
-        if location and app and Path(location).resolve() in path.parents:
+        if isinstance(location, str) and location and app and Path(location).resolve() in path.parents:
             return "epic:%s" % app
     return "file:%s" % exe.name
 
