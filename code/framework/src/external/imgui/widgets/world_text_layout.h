@@ -252,58 +252,96 @@ namespace Framework::External::ImGUI::Widgets {
             drawList->AddRectFilled(ImVec2(origin.x - pad, origin.y - pad), ImVec2(origin.x + width + pad, origin.y + height + pad), WorldTextModulateAlpha(WorldTextArgb(look.backgroundColor), alpha), look.backgroundRadius * styleScale);
         }
 
-        drawList->PushTexture(text.spans.front().font->OwnerAtlas->TexRef);
-
         constexpr float kItalicShear = 0.2f;
         const float boldOffset       = WorldTextBoldOffset(text.bakeSize) * scale;
         const ImU32 baseColor        = WorldTextModulateAlpha(WorldTextArgb(look.color), alpha);
 
-        // One pass of every glyph. tint replaces the spans' colours (outline, shadow); colour glyphs
-        // (emoji) then have no silhouette to draw, so they only appear in the untinted pass.
-        const auto pass = [&](ImVec2 offset, std::optional<ImU32> tint) {
+        // Every glyph is looked up once, into quads relative to the origin; each outline and shadow
+        // copy below only re-emits them. Glyph UVs move when the atlas repacks, so this is per draw.
+        struct Quad {
+            ImVec2 corners[4];
+            ImVec2 uvMin;
+            ImVec2 uvMax;
+            ImU32 color;
+            bool colored; // colour glyphs (emoji) have no silhouette for an outline or shadow
+            ImFontAtlas *atlas;
+        };
+        static thread_local std::vector<Quad> quads;
+        quads.clear();
+        int spanIndex      = -1;
+        ImFontBaked *baked = nullptr;
+        ImU32 spanColor    = baseColor;
+        for (const WorldTextGlyph &g : text.glyphs) {
+            const WorldTextSpan &span = text.spans[g.span];
+            if (g.span != spanIndex) {
+                spanIndex = g.span;
+                baked     = span.font->GetFontBaked(text.bakeSize);
+                spanColor = span.color ? WorldTextModulateAlpha(WorldTextArgb(*span.color), alpha) : baseColor;
+            }
+            if (!baked) {
+                continue;
+            }
+            const ImFontGlyph *glyph = baked->FindGlyph(g.codepoint);
+            if (!glyph || !glyph->Visible) {
+                continue;
+            }
+            const float x0 = (g.x + glyph->X0) * scale;
+            const float x1 = (g.x + glyph->X1) * scale;
+            const float y0 = (g.y + glyph->Y0) * scale;
+            const float y1 = (g.y + glyph->Y1) * scale;
+            float topShear = 0.0f, bottomShear = 0.0f;
+            if (span.fauxItalic) {
+                const float baseline = (g.y + baked->Ascent) * scale;
+                topShear             = (baseline - y0) * kItalicShear;
+                bottomShear          = (baseline - y1) * kItalicShear;
+            }
+            const ImU32 color = glyph->Colored ? (spanColor | ~IM_COL32_A_MASK) : spanColor;
+            const int copies  = span.fauxBold ? 2 : 1;
+            for (int c = 0; c < copies; ++c) {
+                const float dx = c * boldOffset;
+                quads.push_back(
+                    {{ImVec2(x0 + topShear + dx, y0), ImVec2(x1 + topShear + dx, y0), ImVec2(x1 + bottomShear + dx, y1), ImVec2(x0 + bottomShear + dx, y1)}, ImVec2(glyph->U0, glyph->V0), ImVec2(glyph->U1, glyph->V1), color, glyph->Colored != 0, span.font->OwnerAtlas});
+            }
+        }
+        if (quads.empty()) {
+            return;
+        }
+
+        // One pass of every quad. tint replaces the spans' colours (outline, shadow). Fonts from
+        // different atlases draw from different textures, so each run of one atlas binds its own.
+        ImFontAtlas *bound = nullptr;
+        const auto pass    = [&](ImVec2 offset, std::optional<ImU32> tint) {
             if (tint && ((*tint >> IM_COL32_A_SHIFT) & 0xFF) == 0) {
                 return;
             }
-            int spanIndex      = -1;
-            ImFontBaked *baked = nullptr;
-            ImU32 spanColor    = baseColor;
-            for (const WorldTextGlyph &g : text.glyphs) {
-                const WorldTextSpan &span = text.spans[g.span];
-                if (g.span != spanIndex) {
-                    spanIndex = g.span;
-                    baked     = span.font->GetFontBaked(text.bakeSize);
-                    spanColor = span.color ? WorldTextModulateAlpha(WorldTextArgb(*span.color), alpha) : baseColor;
+            const ImVec2 at(origin.x + offset.x, origin.y + offset.y);
+            for (size_t begin = 0; begin < quads.size();) {
+                ImFontAtlas *atlas = quads[begin].atlas;
+                size_t end         = begin;
+                int count          = 0;
+                for (; end < quads.size() && quads[end].atlas == atlas; ++end) {
+                    count += tint && quads[end].colored ? 0 : 1;
                 }
-                if (!baked) {
-                    continue;
+                if (count > 0) {
+                    if (atlas != bound) {
+                        if (bound) {
+                            drawList->PopTexture();
+                        }
+                        drawList->PushTexture(atlas->TexRef);
+                        bound = atlas;
+                    }
+                    drawList->PrimReserve(6 * count, 4 * count);
+                    for (size_t k = begin; k < end; ++k) {
+                        const Quad &q = quads[k];
+                        if (tint && q.colored) {
+                            continue;
+                        }
+                        const ImVec2 *c = q.corners;
+                        drawList->PrimQuadUV(ImVec2(at.x + c[0].x, at.y + c[0].y), ImVec2(at.x + c[1].x, at.y + c[1].y), ImVec2(at.x + c[2].x, at.y + c[2].y), ImVec2(at.x + c[3].x, at.y + c[3].y), q.uvMin, ImVec2(q.uvMax.x, q.uvMin.y), q.uvMax, ImVec2(q.uvMin.x, q.uvMax.y),
+                            tint ? *tint : q.color);
+                    }
                 }
-                const ImFontGlyph *glyph = baked->FindGlyph(g.codepoint);
-                if (!glyph || !glyph->Visible || (tint && glyph->Colored)) {
-                    continue;
-                }
-                ImU32 color = tint ? *tint : spanColor;
-                if (glyph->Colored) {
-                    color |= ~IM_COL32_A_MASK;
-                }
-
-                const float x0 = origin.x + offset.x + (g.x + glyph->X0) * scale;
-                const float x1 = origin.x + offset.x + (g.x + glyph->X1) * scale;
-                const float y0 = origin.y + offset.y + (g.y + glyph->Y0) * scale;
-                const float y1 = origin.y + offset.y + (g.y + glyph->Y1) * scale;
-                float topShear = 0.0f, bottomShear = 0.0f;
-                if (span.fauxItalic) {
-                    const float baseline = origin.y + offset.y + (g.y + baked->Ascent) * scale;
-                    topShear             = (baseline - y0) * kItalicShear;
-                    bottomShear          = (baseline - y1) * kItalicShear;
-                }
-
-                const int copies = span.fauxBold ? 2 : 1;
-                drawList->PrimReserve(6 * copies, 4 * copies);
-                for (int c = 0; c < copies; ++c) {
-                    const float dx = c * boldOffset;
-                    drawList->PrimQuadUV(ImVec2(x0 + topShear + dx, y0), ImVec2(x1 + topShear + dx, y0), ImVec2(x1 + bottomShear + dx, y1), ImVec2(x0 + bottomShear + dx, y1), ImVec2(glyph->U0, glyph->V0), ImVec2(glyph->U1, glyph->V0), ImVec2(glyph->U1, glyph->V1),
-                        ImVec2(glyph->U0, glyph->V1), color);
-                }
+                begin = end;
             }
         };
 
@@ -341,6 +379,8 @@ namespace Framework::External::ImGUI::Widgets {
         }
 
         pass(ImVec2(0.0f, 0.0f), std::nullopt);
-        drawList->PopTexture();
+        if (bound) {
+            drawList->PopTexture();
+        }
     }
 } // namespace Framework::External::ImGUI::Widgets
