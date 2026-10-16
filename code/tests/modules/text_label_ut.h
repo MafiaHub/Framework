@@ -8,12 +8,44 @@
 
 #pragma once
 
+#include "core_modules.h"
+#include "networking/network_server.h"
 #include "networking/replication/entities/text_label_entity.h"
+#include "networking/replication/entity_registry.h"
 #include "networking/replication/network_entity.h"
+#include "networking/replication/replication_connection.h"
+#include "networking/replication/replication_manager.h"
+#include "scripting/builtins/text_label.h"
 
 #include <mafianet/bit_stream.h>
 
 #include <string>
+
+// A server replication manager on an unstarted peer, published to the scripting builtins.
+class TextLabelWorld {
+  public:
+    Framework::Networking::NetworkServer peer;
+    uint32_t targetType = 0;
+
+    TextLabelWorld() {
+        using namespace Framework::Networking::Replication;
+        Manager()->Init(&peer, true);
+        Manager()->ConfigureGrid(100, -4096, 4096);
+        Manager()->SetInterestUsesEntityRange(Entities::TextLabelEntity::kTypeName, true);
+        EntityRegistry::Get().Register<Entities::TextLabelEntity>(Entities::TextLabelEntity::kTypeName);
+        targetType = EntityRegistry::Get().Register<NetworkEntity>("Test::LabelTarget");
+        Framework::CoreModules::SetReplication(Manager());
+    }
+
+    ~TextLabelWorld() {
+        Framework::CoreModules::SetReplication(nullptr);
+        Manager()->Clear();
+    }
+
+    Framework::Networking::Replication::ReplicationManager *Manager() {
+        return peer.GetReplicationManager();
+    }
+};
 
 MODULE(text_label, {
     using namespace Framework::Networking::Replication;
@@ -29,6 +61,7 @@ MODULE(text_label, {
         sent.fadeDistance      = 1800.0f;
         sent.attachNetworkId   = 77;
         sent.attachOffset      = glm::vec3(0.0f, 0.0f, 25.0f);
+        sent.ownPosition       = glm::vec3(4.0f, 5.0f, 6.0f);
         sent.markup            = true;
         sent.sizeMode          = TextLabelSizeMode::World;
         sent.minSize           = 8.0f;
@@ -60,7 +93,8 @@ MODULE(text_label, {
         got.SerializeFields(reader);
         EQUALS(reader.Good(), true);
 
-        EQUALS((got.position == sent.position), true);
+        // Attached: the server's position follows the target; peers get the label's own.
+        EQUALS((got.position == sent.ownPosition), true);
         EQUALS((got.text == sent.text), true);
         UEQUALS(got.color, sent.color);
         EQUALS((got.fontSize == sent.fontSize), true);
@@ -126,5 +160,116 @@ MODULE(text_label, {
         TextLabelEntity label;
         EQUALS((label.style == TextLabelStyle::Shadow), true);
         EQUALS((NearestTextLabelStylePreset(label) == TextLabelStyle::Shadow), true);
+    });
+
+    IT("an attached label's transform carries its own position, not its target's", {
+        TextLabelEntity sent;
+        sent.position        = glm::vec3(900.0f, 0.0f, 0.0f);
+        sent.ownPosition     = glm::vec3(1.0f, 2.0f, 3.0f);
+        sent.attachNetworkId = 5;
+
+        MafiaNet::BitStream bs;
+        FieldSerializer writer(&bs, true);
+        sent.SerializeTransform(writer);
+        TextLabelEntity got;
+        FieldSerializer reader(&bs, false);
+        got.SerializeTransform(reader);
+        EQUALS((got.position == sent.ownPosition), true);
+
+        sent.attachNetworkId = 0;
+        MafiaNet::BitStream detached;
+        FieldSerializer again(&detached, true);
+        sent.SerializeTransform(again);
+        FieldSerializer readAgain(&detached, false);
+        got.SerializeTransform(readAgain);
+        EQUALS((got.position == sent.position), true);
+    });
+
+    IT("attaching needs another live entity; the label follows it and returns when detached", {
+        using Framework::Scripting::Builtins::TextLabel;
+        TextLabelWorld world;
+        auto *target     = world.Manager()->CreateEntity(world.targetType);
+        auto *label      = world.Manager()->CreateEntity<TextLabelEntity>();
+        target->position = glm::vec3(50.0f, 0.0f, 0.0f);
+        target->SetVirtualWorld(3);
+        label->position = glm::vec3(1.0f, 2.0f, 3.0f);
+        TextLabel handle(label->GetNetworkID());
+
+        EQUALS(handle.AttachTo(label->GetNetworkID(), glm::vec3(0.0f)), false);
+        EQUALS(handle.AttachTo(target->GetNetworkID() + 1000, glm::vec3(0.0f)), false);
+        UEQUALS(label->attachNetworkId, 0u);
+
+        EQUALS(handle.AttachTo(target->GetNetworkID(), glm::vec3(0.0f, 0.0f, 10.0f)), true);
+        EQUALS((label->position == target->position), true);
+        UEQUALS(label->GetVirtualWorld(), 3u);
+        EQUALS(label->streaming.alwaysVisible, false);
+
+        target->position = glm::vec3(60.0f, 0.0f, 0.0f);
+        target->SetVirtualWorld(4);
+        TextLabel::FollowTargets(*world.Manager());
+        EQUALS((label->position == target->position), true);
+        UEQUALS(label->GetVirtualWorld(), 4u);
+
+        handle.Detach();
+        UEQUALS(label->attachNetworkId, 0u);
+        EQUALS((label->position == glm::vec3(1.0f, 2.0f, 3.0f)), true);
+        UEQUALS(label->GetVirtualWorld(), 0u);
+    });
+
+    IT("an attached label is destroyed with its target", {
+        using Framework::Scripting::Builtins::TextLabel;
+        TextLabelWorld world;
+        auto *target       = world.Manager()->CreateEntity(world.targetType);
+        auto *label        = world.Manager()->CreateEntity<TextLabelEntity>();
+        const auto labelId = label->GetNetworkID();
+        TextLabel handle(labelId);
+        EQUALS(handle.AttachTo(target->GetNetworkID(), glm::vec3(0.0f)), true);
+
+        world.Manager()->DestroyEntity(target);
+        TextLabel::FollowTargets(*world.Manager());
+        EQUALS((world.Manager()->GetEntityByNetworkID(labelId) == nullptr), true);
+        EQUALS((handle.ResolveLabel() == nullptr), true);
+    });
+
+    IT("an attached label streams only to players near its target", {
+        using Framework::Scripting::Builtins::TextLabel;
+        TextLabelWorld world;
+        auto *manager     = world.Manager();
+        auto *nearby      = manager->CreateEntity(world.targetType);
+        auto *distant     = manager->CreateEntity(world.targetType);
+        auto *target      = manager->CreateEntity(world.targetType);
+        auto *label       = manager->CreateEntity<TextLabelEntity>();
+        distant->position = glm::vec3(2000.0f, 0.0f, 0.0f);
+        target->position  = glm::vec3(20.0f, 0.0f, 0.0f);
+        label->position   = glm::vec3(-3000.0f, 0.0f, 0.0f);
+        TextLabel handle(label->GetNetworkID());
+        handle.SetDrawDistance(100.0f);
+        EQUALS(handle.AttachTo(target->GetNetworkID(), glm::vec3(0.0f)), true);
+
+        const MafiaNet::RakNetGUID nearbyGuid(91), distantGuid(92);
+        manager->SetViewer(MafiaNet::ToPeerGuid(nearbyGuid), nearby);
+        manager->SetViewer(MafiaNet::ToPeerGuid(distantGuid), distant);
+        manager->RebuildInterest();
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, nearbyGuid));
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, distantGuid));
+        const auto sees = [&](MafiaNet::RakNetGUID guid) {
+            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guid));
+            DataStructures::List<MafiaNet::Replica3 *> create, destroy;
+            connection->QueryReplicaList(create, destroy);
+            for (unsigned int i = 0; i < create.Size(); ++i) {
+                if (create[i] == label) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        EQUALS(sees(nearbyGuid), true);
+        EQUALS(sees(distantGuid), false);
+
+        target->position = glm::vec3(2010.0f, 0.0f, 0.0f);
+        TextLabel::FollowTargets(*manager);
+        manager->RebuildInterest();
+        EQUALS(sees(distantGuid), true);
+        EQUALS(sees(nearbyGuid), false);
     });
 });

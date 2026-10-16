@@ -40,9 +40,13 @@ namespace Framework::Networking::Replication::Entities {
         Top    = 2,
     };
 
+    // Limits on a label's look: the scripting API enforces them and the client renderer assumes them.
+    inline constexpr float kTextLabelMaxOutlineWidth = 4.0f;
+    inline constexpr float kTextLabelMaxShadowBlur   = 8.0f;
+
     // A server-owned piece of world-space text, interest-streamed and drawn client-side as a screen
     // overlay. Mods register the type on both peers.
-    class TextLabelEntity: public NetworkEntity {
+    class TextLabelEntity : public NetworkEntity {
       public:
         static constexpr const char *kTypeName = "Framework::TextLabel";
 
@@ -58,6 +62,12 @@ namespace Framework::Networking::Replication::Entities {
         // Follow another entity at an offset; 0 keeps the label at its own position.
         uint64_t attachNetworkId = 0;
         glm::vec3 attachOffset   = glm::vec3(0.0f);
+
+        // Server only: the label's own position and virtual world while it is attached. The server
+        // moves it with the target, so it streams from there, but peers draw at the target and are
+        // sent ownPosition instead; detaching puts both back.
+        glm::vec3 ownPosition    = glm::vec3(0.0f);
+        uint32_t ownVirtualWorld = 0;
 
         // The full look. Colours are 0xAARRGGBB; a colour with zero alpha turns its part off.
         bool markup                = false; // {#RRGGBB[AA]} {#} {b}{/b} {i}{/i}, {{ for a brace
@@ -93,11 +103,18 @@ namespace Framework::Networking::Replication::Entities {
             ++revision;
         }
 
+        void SerializeTransform(FieldSerializer &fields) override {
+            fields.Field(Placed(fields));
+            fields.Field(velocity);
+            fields.Field(rotation);
+        }
+
         void SerializeFields(FieldSerializer &fields) override {
             // position lives in the NetworkEntity base; serialize it on the reliable channel.
-            fields.Field(position.x);
-            fields.Field(position.y);
-            fields.Field(position.z);
+            glm::vec3 &placed = Placed(fields);
+            fields.Field(placed.x);
+            fields.Field(placed.y);
+            fields.Field(placed.z);
 
             fields.Field(text);
             fields.Field(color);
@@ -142,6 +159,12 @@ namespace Framework::Networking::Replication::Entities {
                 align    = static_cast<TextLabelAlign>(alignRaw);
                 anchor   = static_cast<TextLabelAnchor>(anchorRaw);
             }
+        }
+
+      private:
+        // What peers are sent as the label's position: an attached label's own, not its target's.
+        glm::vec3 &Placed(const FieldSerializer &fields) {
+            return fields.Writing() && attachNetworkId != 0 ? ownPosition : position;
         }
     };
 

@@ -20,10 +20,15 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+
+namespace Framework::Networking::Replication {
+    class ReplicationManager;
+} // namespace Framework::Networking::Replication
 
 namespace Framework::Scripting::Builtins {
     // Server-side scripting handle for a replicated world-space text label (TextLabelEntity).
-    class TextLabel final: public Entity {
+    class TextLabel final : public Entity {
       public:
         using LabelEntity = Networking::Replication::Entities::TextLabelEntity;
         using LabelStyle  = Networking::Replication::Entities::TextLabelStyle;
@@ -64,10 +69,17 @@ namespace Framework::Scripting::Builtins {
         uint32_t GetStyle() const;
         void SetStyle(uint32_t style);
 
-        // An attached label streams to every viewer in its virtual world, since its own position no
-        // longer says where it is drawn.
-        void AttachTo(uint64_t networkId, const glm::vec3 &offset);
+        // Follows another live entity; false (and nothing changed) for a missing one or the label
+        // itself. The label then streams from where the target is and moves into its virtual world,
+        // and is destroyed with it.
+        bool AttachTo(uint64_t networkId, const glm::vec3 &offset);
+        // Back to the label's own position and virtual world.
         void Detach();
+        bool CanAttachTo(uint64_t networkId) const;
+
+        // Server tick, before the interest rebuild: moves attached labels to their targets and
+        // destroys those whose target is gone.
+        static void FollowTargets(Networking::Replication::ReplicationManager &replication);
 
         std::string ToString() const override;
 
@@ -90,5 +102,7 @@ namespace Framework::Scripting::Builtins {
 
         inline static float _unitsPerMetre = 1.0f;
         inline static ClassCache<TextLabel> _classes;
+        // Labels that may be attached; FollowTargets drops the ones that no longer are.
+        inline static std::unordered_set<uint64_t> _attached;
     };
 } // namespace Framework::Scripting::Builtins

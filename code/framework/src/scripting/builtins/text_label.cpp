@@ -21,19 +21,12 @@
 #include <optional>
 #include <sstream>
 #include <string_view>
+#include <vector>
 
 namespace Framework::Scripting::Builtins {
     namespace {
-        using Networking::Replication::Entities::TextLabelAlign;
-        using Networking::Replication::Entities::TextLabelAnchor;
-        using Networking::Replication::Entities::TextLabelEntity;
-        using Networking::Replication::Entities::TextLabelSizeMode;
-        using Networking::Replication::Entities::TextLabelStyle;
-
-        // The world text widget's own limits (world_text_layout.h), which the server can't include.
-        constexpr double kMaxOutlineWidth = 4.0;
-        constexpr double kMaxShadowBlur   = 8.0;
-        constexpr double kMaxBlockPixels  = 64.0;
+        // Background padding and corner radius, in pixels.
+        constexpr double kMaxBlockPixels = 64.0;
 
         // Everything an options object can carry, validated in full before any of it is applied, so
         // a bad key leaves the label as it was.
@@ -60,17 +53,17 @@ namespace Framework::Scripting::Builtins {
             std::optional<uint64_t> attachTo; // 0 detaches
             std::optional<glm::vec3> offset;
             std::optional<float> fontSize;
-            std::optional<TextLabelSizeMode> sizeMode;
+            std::optional<Networking::Replication::Entities::TextLabelSizeMode> sizeMode;
             std::optional<float> minSize;
             std::optional<float> maxSize;
             std::optional<uint32_t> color;
             std::optional<float> opacity;
-            std::optional<TextLabelStyle> style;
+            std::optional<Networking::Replication::Entities::TextLabelStyle> style;
             std::optional<std::optional<Outline>> outline; // set but empty = turned off
             std::optional<std::optional<Shadow>> shadow;
             std::optional<std::optional<Background>> background;
-            std::optional<TextLabelAlign> align;
-            std::optional<TextLabelAnchor> anchor;
+            std::optional<Networking::Replication::Entities::TextLabelAlign> align;
+            std::optional<Networking::Replication::Entities::TextLabelAnchor> anchor;
             std::optional<float> lineSpacing;
             std::optional<float> maxWidth;
             std::optional<float> drawDistance;
@@ -82,10 +75,13 @@ namespace Framework::Scripting::Builtins {
         constexpr std::string_view kOptionKeys[] {"text", "markup", "position", "attachTo", "offset", "fontSize", "sizeMode", "minSize", "maxSize", "color", "opacity", "style", "outline", "shadow", "background", "align", "anchor", "lineSpacing", "maxWidth", "drawDistance",
             "fadeDistance", "occlusion", "virtualWorld"};
 
-        constexpr std::pair<std::string_view, TextLabelStyle> kStyles[] {{"none", TextLabelStyle::None}, {"shadow", TextLabelStyle::Shadow}, {"outline", TextLabelStyle::Outline}, {"box", TextLabelStyle::Box}};
-        constexpr std::pair<std::string_view, TextLabelSizeMode> kSizeModes[] {{"screen", TextLabelSizeMode::Screen}, {"world", TextLabelSizeMode::World}};
-        constexpr std::pair<std::string_view, TextLabelAlign> kAligns[] {{"left", TextLabelAlign::Left}, {"center", TextLabelAlign::Center}, {"right", TextLabelAlign::Right}};
-        constexpr std::pair<std::string_view, TextLabelAnchor> kAnchors[] {{"center", TextLabelAnchor::Center}, {"bottom", TextLabelAnchor::Bottom}, {"top", TextLabelAnchor::Top}};
+        constexpr std::pair<std::string_view, Networking::Replication::Entities::TextLabelStyle> kStyles[] {{"none", Networking::Replication::Entities::TextLabelStyle::None}, {"shadow", Networking::Replication::Entities::TextLabelStyle::Shadow},
+            {"outline", Networking::Replication::Entities::TextLabelStyle::Outline}, {"box", Networking::Replication::Entities::TextLabelStyle::Box}};
+        constexpr std::pair<std::string_view, Networking::Replication::Entities::TextLabelSizeMode> kSizeModes[] {{"screen", Networking::Replication::Entities::TextLabelSizeMode::Screen}, {"world", Networking::Replication::Entities::TextLabelSizeMode::World}};
+        constexpr std::pair<std::string_view, Networking::Replication::Entities::TextLabelAlign> kAligns[] {{"left", Networking::Replication::Entities::TextLabelAlign::Left}, {"center", Networking::Replication::Entities::TextLabelAlign::Center},
+            {"right", Networking::Replication::Entities::TextLabelAlign::Right}};
+        constexpr std::pair<std::string_view, Networking::Replication::Entities::TextLabelAnchor> kAnchors[] {{"center", Networking::Replication::Entities::TextLabelAnchor::Center}, {"bottom", Networking::Replication::Entities::TextLabelAnchor::Bottom},
+            {"top", Networking::Replication::Entities::TextLabelAnchor::Top}};
 
         v8::Local<v8::String> Str(v8::Isolate *isolate, std::string_view text) {
             return v8::String::NewFromUtf8(isolate, text.data(), v8::NewStringType::kNormal, static_cast<int>(text.size())).ToLocalChecked();
@@ -321,9 +317,9 @@ namespace Framework::Scripting::Builtins {
                 else if (key == "style") {
                     if (value->IsNumber()) {
                         const double raw = value->NumberValue(context).FromMaybe(NAN);
-                        ok               = std::isfinite(raw) && raw >= 0.0 && raw <= static_cast<double>(TextLabelStyle::Box) && std::floor(raw) == raw;
+                        ok               = std::isfinite(raw) && raw >= 0.0 && raw <= static_cast<double>(Networking::Replication::Entities::TextLabelStyle::Box) && std::floor(raw) == raw;
                         if (ok) {
-                            options.style = static_cast<TextLabelStyle>(static_cast<uint8_t>(raw));
+                            options.style = static_cast<Networking::Replication::Entities::TextLabelStyle>(static_cast<uint8_t>(raw));
                         }
                         else {
                             Fail(isolate, "style must be 'none', 'shadow', 'outline', 'box' or 0-3");
@@ -342,7 +338,7 @@ namespace Framework::Scripting::Builtins {
                         ok               = BlockField(isolate, block, "color", outline.color, [&](auto v) {
                             return ColorValue(isolate, v, "outline.color");
                         }) && BlockField(isolate, block, "width", outline.width, [&](auto v) {
-                            return Number(isolate, v, "outline.width", 0.0, kMaxOutlineWidth);
+                            return Number(isolate, v, "outline.width", 0.0, Networking::Replication::Entities::kTextLabelMaxOutlineWidth);
                         });
                     }
                     if (ok) {
@@ -362,7 +358,7 @@ namespace Framework::Scripting::Builtins {
                         }) && BlockField(isolate, block, "offsetY", shadow.offsetY, [&](auto v) {
                             return Number(isolate, v, "shadow.offsetY", -32.0, 32.0);
                         }) && BlockField(isolate, block, "blur", shadow.blur, [&](auto v) {
-                            return Number(isolate, v, "shadow.blur", 0.0, kMaxShadowBlur);
+                            return Number(isolate, v, "shadow.blur", 0.0, Networking::Replication::Entities::kTextLabelMaxShadowBlur);
                         });
                     }
                     if (ok) {
@@ -425,7 +421,32 @@ namespace Framework::Scripting::Builtins {
             return true;
         }
 
-        void ApplyOptions(TextLabel &handle, TextLabelEntity &label, const Options &options) {
+        // Against the label's current limits, or a new label's when there is none yet.
+        bool CheckSizes(v8::Isolate *isolate, const Options &options, const Networking::Replication::Entities::TextLabelEntity *label) {
+            const float minSize = options.minSize.value_or(label ? label->minSize : 0.0f);
+            const float maxSize = options.maxSize.value_or(label ? label->maxSize : 0.0f);
+            return maxSize <= 0.0f || minSize <= maxSize || Fail(isolate, "minSize must not exceed maxSize");
+        }
+
+        // `handle` is null while the label is still to be created, so it cannot be its own target.
+        bool CheckTarget(v8::Isolate *isolate, const Options &options, const TextLabel *handle) {
+            if (!options.attachTo || *options.attachTo == 0) {
+                return true;
+            }
+            auto *replication     = CoreModules::GetReplication();
+            const bool attachable = handle ? handle->CanAttachTo(*options.attachTo) : replication && replication->GetEntityByNetworkID(*options.attachTo) != nullptr;
+            return attachable || Fail(isolate, "attachTo must be another live entity");
+        }
+
+        // An attached label streams from where its target is, in the target's virtual world.
+        void Follow(Networking::Replication::Entities::TextLabelEntity &label, const Networking::Replication::NetworkEntity &target) {
+            label.position = target.position;
+            if (label.GetVirtualWorld() != target.GetVirtualWorld()) {
+                label.SetVirtualWorld(target.GetVirtualWorld());
+            }
+        }
+
+        void ApplyOptions(TextLabel &handle, Networking::Replication::Entities::TextLabelEntity &label, const Options &options) {
             if (options.text) {
                 handle.SetText(*options.text);
             }
@@ -433,13 +454,14 @@ namespace Framework::Scripting::Builtins {
                 label.markup = *options.markup;
             }
             if (options.position) {
-                label.position = *options.position;
+                (label.attachNetworkId != 0 ? label.ownPosition : label.position) = *options.position;
             }
             if (options.attachTo) {
                 if (*options.attachTo == 0) {
                     handle.Detach();
                 }
                 else {
+                    // Checked by the caller before anything was applied.
                     handle.AttachTo(*options.attachTo, options.offset.value_or(label.attachOffset));
                 }
             }
@@ -513,7 +535,12 @@ namespace Framework::Scripting::Builtins {
                 label.occlusion = *options.occlusion;
             }
             if (options.virtualWorld) {
-                handle.SetVirtualWorld(*options.virtualWorld);
+                if (label.attachNetworkId != 0) {
+                    label.ownVirtualWorld = *options.virtualWorld;
+                }
+                else {
+                    handle.SetVirtualWorld(*options.virtualWorld);
+                }
             }
         }
 
@@ -528,7 +555,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         // The label as an options object: what update() takes, so one label's look can seed another's.
-        v8::Local<v8::Object> OptionsObject(v8::Isolate *isolate, const TextLabelEntity &label, uint32_t virtualWorld) {
+        v8::Local<v8::Object> OptionsObject(v8::Isolate *isolate, const Networking::Replication::Entities::TextLabelEntity &label, uint32_t virtualWorld) {
             auto context   = isolate->GetCurrentContext();
             const auto put = [&](v8::Local<v8::Object> object, std::string_view key, v8::Local<v8::Value> value) {
                 object->Set(context, Str(isolate, key), value).Check();
@@ -547,7 +574,7 @@ namespace Framework::Scripting::Builtins {
             auto out = v8::Object::New(isolate);
             set(out, "text", label.text);
             set(out, "markup", label.markup);
-            put(out, "position", vec(label.position));
+            put(out, "position", vec(label.attachNetworkId != 0 ? label.ownPosition : label.position));
             if (label.attachNetworkId != 0) {
                 set(out, "attachTo", static_cast<double>(label.attachNetworkId));
             }
@@ -699,16 +726,61 @@ namespace Framework::Scripting::Builtins {
         }
     }
 
-    void TextLabel::AttachTo(uint64_t networkId, const glm::vec3 &offset) {
-        if (auto *label = ResolveLabel()) {
-            label->attachNetworkId         = networkId;
-            label->attachOffset            = offset;
-            label->streaming.alwaysVisible = networkId != 0;
+    bool TextLabel::CanAttachTo(uint64_t networkId) const {
+        auto *replication = CoreModules::GetReplication();
+        return replication && networkId != 0 && networkId != _id && replication->GetEntityByNetworkID(networkId) != nullptr;
+    }
+
+    bool TextLabel::AttachTo(uint64_t networkId, const glm::vec3 &offset) {
+        auto *label = ResolveLabel();
+        if (!label || !CanAttachTo(networkId)) {
+            return false;
         }
+        if (label->attachNetworkId == 0) {
+            label->ownPosition     = label->position;
+            label->ownVirtualWorld = label->GetVirtualWorld();
+        }
+        label->attachNetworkId = networkId;
+        label->attachOffset    = offset;
+        _attached.insert(_id);
+        // From where the target is now, rather than from the next tick.
+        Follow(*label, *CoreModules::GetReplication()->GetEntityByNetworkID(networkId));
+        return true;
     }
 
     void TextLabel::Detach() {
-        AttachTo(0, glm::vec3(0.0f));
+        auto *label = ResolveLabel();
+        if (!label || label->attachNetworkId == 0) {
+            return;
+        }
+        label->attachNetworkId = 0;
+        label->attachOffset    = glm::vec3(0.0f);
+        label->position        = label->ownPosition;
+        label->SetVirtualWorld(label->ownVirtualWorld);
+        _attached.erase(_id);
+    }
+
+    void TextLabel::FollowTargets(Networking::Replication::ReplicationManager &replication) {
+        std::vector<Networking::Replication::NetworkEntity *> orphans;
+        for (auto it = _attached.begin(); it != _attached.end();) {
+            auto *label = dynamic_cast<LabelEntity *>(replication.GetEntityByNetworkID(*it));
+            if (!label || label->attachNetworkId == 0) {
+                it = _attached.erase(it);
+                continue;
+            }
+            auto *target = replication.GetEntityByNetworkID(label->attachNetworkId);
+            if (!target) {
+                orphans.push_back(label);
+                it = _attached.erase(it);
+                continue;
+            }
+            Follow(*label, *target);
+            ++it;
+        }
+        // A label lives as long as the entity it follows: a name tag must not outstay its player.
+        for (auto *label : orphans) {
+            replication.DestroyEntity(label);
+        }
     }
 
     std::string TextLabel::ToString() const {
@@ -786,7 +858,7 @@ namespace Framework::Scripting::Builtins {
                 v8pp::metadata::docs("void",
                     {v8pp::metadata::param("target", "Entity | number", false, "The entity to follow, or its network id."),
                         v8pp::metadata::param("offset", "Vector3 | { x: number; y: number; z: number }", true, "Where to draw relative to it; the game decides the reference point (a player's head, say).")},
-                    "Follows an entity instead of staying at the label's own position. An attached label streams to every player in its virtual world."));
+                    "Follows another live entity instead of staying at the label's own position. It streams from where the target is, moves into its virtual world and is destroyed with it."));
             cls->prototype_function("getOptions", &TextLabel::JS_GetOptions, v8pp::metadata::docs("TextLabelOptions", {}, "The label's current look and placement, in the shape update() takes."));
             return cls;
         });
@@ -799,8 +871,8 @@ namespace Framework::Scripting::Builtins {
         };
         type.add_property("text", optional("string"), "UTF-8 text, at most 1024 bytes; '\\n' breaks lines.");
         type.add_property("markup", optional("boolean"), "Parse inline tags: {#RRGGBB} / {#RRGGBBAA} colour, {#} back to `color`, {b}{/b}, {i}{/i}, {{ for a brace. Default false.");
-        type.add_property("position", optional("Vector3 | { x: number; y: number; z: number }"), "Where the label stands while it is not attached.");
-        type.add_property("attachTo", optional("Entity | number | null"), "An entity to follow, or its network id; null or 0 detaches.");
+        type.add_property("position", optional("Vector3 | { x: number; y: number; z: number }"), "Where the label stands while it is not attached, and returns to when detached.");
+        type.add_property("attachTo", optional("Entity | number | null"), "Another live entity to follow, or its network id; null or 0 detaches. The label is destroyed with it.");
         type.add_property("offset", optional("Vector3 | { x: number; y: number; z: number }"), "Relative to the attached entity; the game decides the reference point (a player's head, say).");
         type.add_property("fontSize", optional("number"), "Pixels, 1-512. Default 16.");
         type.add_property("sizeMode", optional("\"screen\" | \"world\""), "\"screen\" (default): fontSize pixels at any distance. \"world\": fontSize pixels at one metre on a 1080p view, shrinking with distance.");
@@ -819,7 +891,7 @@ namespace Framework::Scripting::Builtins {
         type.add_property("drawDistance", optional("number"), "World units; the label neither draws nor streams past it. Default 30 metres' worth.");
         type.add_property("fadeDistance", optional("number"), "World units where fading starts; 0 starts at 75% of drawDistance.");
         type.add_property("occlusion", optional("boolean"), "Hidden behind world geometry. Default true.");
-        type.add_property("virtualWorld", optional("number"), "The virtual world it lives in.");
+        type.add_property("virtualWorld", optional("number"), "The virtual world it lives in while it is not attached, and returns to when detached.");
     }
 
     void TextLabel::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
@@ -856,13 +928,17 @@ namespace Framework::Scripting::Builtins {
         // Options are checked before anything exists, so a bad one leaves nothing half-made.
         Options options;
         const bool withOptions = info.Length() >= 5 && info[4]->IsObject() && !info[4]->IsArray();
-        if (withOptions && !ParseOptions(isolate, info[4].As<v8::Object>(), _unitsPerMetre, options)) {
+        if (withOptions && (!ParseOptions(isolate, info[4].As<v8::Object>(), _unitsPerMetre, options) || !CheckSizes(isolate, options, nullptr))) {
             return;
         }
 
         auto *replication = CoreModules::GetReplication();
         if (!replication) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: replication unavailable")));
+            return;
+        }
+
+        if (!CheckTarget(isolate, options, nullptr)) {
             return;
         }
 
@@ -909,8 +985,7 @@ namespace Framework::Scripting::Builtins {
     void TextLabel::JS_Update(const v8::FunctionCallbackInfo<v8::Value> &info) {
         v8::Isolate *isolate = info.GetIsolate();
         auto *self           = v8pp::class_<TextLabel>::unwrap_object(isolate, info.This());
-        auto *label          = self ? self->ResolveLabel() : nullptr;
-        if (!label) {
+        if (!self || !self->ResolveLabel()) {
             return;
         }
         if (info.Length() < 1 || !info[0]->IsObject() || info[0]->IsArray()) {
@@ -918,7 +993,12 @@ namespace Framework::Scripting::Builtins {
             return;
         }
         Options options;
-        if (ParseOptions(isolate, info[0].As<v8::Object>(), _unitsPerMetre, options)) {
+        if (!ParseOptions(isolate, info[0].As<v8::Object>(), _unitsPerMetre, options)) {
+            return;
+        }
+        // Parsing ran the options' getters, which can destroy the label; look it up only now.
+        auto *label = self->ResolveLabel();
+        if (label && CheckTarget(isolate, options, self) && CheckSizes(isolate, options, label)) {
             ApplyOptions(*self, *label, options);
         }
     }
@@ -943,8 +1023,8 @@ namespace Framework::Scripting::Builtins {
         if (*target == 0) {
             self->Detach();
         }
-        else {
-            self->AttachTo(*target, *offset);
+        else if (!self->AttachTo(*target, *offset)) {
+            Fail(isolate, "attachTo must be another live entity");
         }
     }
 
@@ -956,7 +1036,7 @@ namespace Framework::Scripting::Builtins {
             info.GetReturnValue().SetNull();
             return;
         }
-        info.GetReturnValue().Set(OptionsObject(isolate, *label, self->GetVirtualWorld()));
+        info.GetReturnValue().Set(OptionsObject(isolate, *label, label->attachNetworkId != 0 ? label->ownVirtualWorld : self->GetVirtualWorld()));
     }
 
     void TextLabel::UnregisterIsolate(v8::Isolate *isolate) {
