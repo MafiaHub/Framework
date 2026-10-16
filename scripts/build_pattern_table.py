@@ -34,11 +34,13 @@ Usage:
 
 The executables are named by --exe (repeatable), by the environment variable named with
 --exe-env, discovered from a Steam install with --steam-app/--steam-relative, and from a
-Microsoft Store / Xbox app install with --msstore-family/--msstore-relative. A block for an
+Microsoft Store / Xbox app install with --msstore-family/--msstore-relative. A path inside a
+Steam library or an Epic Games Launcher install is tagged with that store. A block for an
 executable this machine does not have is carried over from the existing table.
 """
 
 import argparse
+import json
 import os
 import re
 import struct
@@ -86,8 +88,8 @@ Block = namedtuple("Block", "image_base size_of_image file_size file_crc source 
 
 
 def source_tag(source: str) -> int:
-    """The storefront an executable came from ("steam:<app>", "msstore:<family>", or
-    "file:<name>" for one named directly), as stored in its block. A rebuild replaces a
+    """The storefront an executable came from ("steam:<app>", "msstore:<family>", "epic:<app>",
+    or "file:<name>"; see named_storefront), as stored in its block. A rebuild replaces a
     storefront's block -- a patched build supersedes the one before it -- instead of
     accumulating one per patch."""
     return zlib.crc32(source.lower().encode("utf-8")) & 0xFFFFFFFF
@@ -386,6 +388,35 @@ def locate_msstore_game(family: str, relative: str):
     return None
 
 
+def named_storefront(exe: Path) -> str:
+    """The storefront of an executable named by path: "steam:<app>" inside a Steam library,
+    "epic:<app>" inside an Epic Games Launcher install, otherwise "file:<name>". Two stores'
+    copies of a game share a file name, and a shared tag would read one store's block as the
+    other's superseded build and drop it."""
+    path = exe.resolve()
+    parts = [part.lower() for part in path.parts]
+    for i in range(len(parts) - 3):
+        if parts[i] == "steamapps" and parts[i + 1] == "common":
+            for manifest in Path(*path.parts[:i + 1]).glob("appmanifest_*.acf"):
+                text = manifest.read_text(encoding="utf-8", errors="replace")
+                installdir = re.search(r'"installdir"\s*"([^"]+)"', text)
+                appid = re.search(r'"appid"\s*"(\d+)"', text)
+                if installdir and appid and installdir.group(1).lower() == parts[i + 2]:
+                    return "steam:%s" % appid.group(1)
+            break
+
+    installed = Path(os.environ.get("ProgramData", "C:/ProgramData")) / "Epic" / "UnrealEngineLauncher" / "LauncherInstalled.dat"
+    try:
+        installs = json.loads(installed.read_text(encoding="utf-8-sig")).get("InstallationList", [])
+    except (OSError, ValueError, AttributeError):
+        installs = []
+    for install in installs:
+        location, app = install.get("InstallLocation"), install.get("AppName")
+        if location and app and Path(location).resolve() in path.parents:
+            return "epic:%s" % app
+    return "file:%s" % exe.name
+
+
 def resolve_exes(exes=(), exe_env=None, steam_app=None, steam_relative=None, msstore_family=None, msstore_relative=None):
     """Every executable this machine has to build the table from, as (path, storefront)
     pairs: a Steam install, a Microsoft Store install, the environment and the explicit
@@ -399,7 +430,7 @@ def resolve_exes(exes=(), exe_env=None, steam_app=None, steam_relative=None, mss
     named = [Path(exe) for exe in exes or () if exe]
     if exe_env and os.environ.get(exe_env):
         named.append(Path(os.environ[exe_env]))
-    found.extend((exe, "file:%s" % exe.name) for exe in named)
+    found.extend((exe, named_storefront(exe)) for exe in named)
 
     out, seen = [], set()
     for exe, source in found:
@@ -418,17 +449,19 @@ def build_block(exe: Path, source: str, literals, preps, known, jobs: int, requi
     image, image_base, size_of_image, file_size, file_crc = map_image(exe)
     print("%s: %d bytes mapped to 0x%X..0x%X" % (exe, file_size, image_base, image_base + size_of_image))
 
+    # A set: an older table can hold two blocks for this image, and a list would record each of
+    # their matches once per block, doubling the entries on every rebuild.
     reusable = {}
     for block in known:
         if (block.image_base, block.size_of_image, block.file_size, block.file_crc) == (image_base, size_of_image, file_size, file_crc) and file_crc:
             for h, rva in block.entries:
-                reusable.setdefault(h, []).append(rva)
+                reusable.setdefault(h, set()).add(rva)
 
     hits, pending = {}, []
     for lit in literals:
         recorded = reusable.get(framework_hash(lit, False))
         if recorded is not None and all(matches_at(image, preps[lit], rva) for rva in recorded):
-            hits[lit] = recorded
+            hits[lit] = sorted(recorded)
         else:
             pending.append(lit)
     if reusable:
@@ -498,15 +531,19 @@ def build_table(exes, patterns: Path, out: Path, style: str = "call", jobs: int 
     # A storefront this machine has no executable for keeps its block from the existing table.
     # Its patterns were not checked against the current set, so any it lacks are left to the
     # client's scan. A storefront built here replaces its old block: a patched build supersedes
-    # the one before it. An untagged block cannot be told apart, so it is dropped.
+    # the one before it. An untagged block cannot be told apart, so it is dropped. A block for an
+    # image built here goes whatever its tag: the client serves only the first block per image.
     built = {b.source for b in blocks}
+    rebuilt = {(b.image_base, b.size_of_image, b.file_size) for b in blocks}
     for block in known:
+        if (block.image_base, block.size_of_image, block.file_size) in rebuilt:
+            continue
         identity = "base 0x%X size 0x%X file %d" % (block.image_base, block.size_of_image, block.file_size)
         if block.source and block.source not in built:
             print("kept the block for a storefront not on this machine (%s): its patterns were not re-checked"
                   % identity, file=sys.stderr)
             blocks.append(block)
-        elif not any((b.image_base, b.size_of_image, b.file_size) == (block.image_base, block.size_of_image, block.file_size) for b in blocks):
+        else:
             print("dropped the superseded block (%s)" % identity)
 
     payload = b""
