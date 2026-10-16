@@ -205,12 +205,17 @@ MODULE(replication_authority, {
 
     // An owner-reported value the server can override and push back with ForceState (a game's effect
     // mask), beside one only the owner measures. `trim` is forced over a coarse 2-bit wire encoding.
-    // `forcedReads` counts what a game hangs off reading a forced state, which only an owner may run.
+    // `forcedReads` counts what a game hangs off reading a forced state, which only an owner may run;
+    // `forcedHooks` counts OnStateForced.
     struct ForcedEntity final: NetworkEntity {
         int measured    = 0;
         int forced      = 0;
         float trim      = 0.0f;
         int forcedReads = 0;
+        int forcedHooks = 0;
+        void OnStateForced() override {
+            ++forcedHooks;
+        }
         void SerializeFields(Framework::Networking::Replication::FieldSerializer &fields) override {
             fields.Field(measured);
             fields.Field(forced);
@@ -351,6 +356,32 @@ MODULE(replication_authority, {
         simulator.forced = 9;
         deliverState(simulator, server, ownerConn, false);
         EQUALS(server.forced, 9);
+    });
+
+    IT("adopts nothing from a truncated forced state", {
+        ForcedEntity simulator;
+        simulator.replicaManager = clientManager;
+        simulator.stateEpoch     = 3;
+
+        MafiaNet::BitStream empty;
+        simulator.ReadForcedState(&empty);
+        EQUALS(simulator.stateEpoch, 3);
+        EQUALS(simulator.forcedHooks, 0);
+
+        // A header with no fields after it: the epoch would acknowledge an override never applied.
+        MafiaNet::BitStream headerOnly;
+        headerOnly.Write(static_cast<uint8_t>(4));
+        headerOnly.Write(true);
+        simulator.ReadForcedState(&headerOnly);
+        EQUALS(simulator.stateEpoch, 3);
+        EQUALS(simulator.forcedHooks, 0);
+
+        ForcedEntity server;
+        server.replicaManager = serverManager;
+        server.stateEpoch     = 4;
+        deliverForcedState(server, simulator);
+        EQUALS(simulator.stateEpoch, 4);
+        EQUALS(simulator.forcedHooks, 1);
     });
 
     serverManager->DeallocConnection(ownerConn);

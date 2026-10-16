@@ -171,14 +171,19 @@ namespace Framework::Networking::Replication {
     void NetworkEntity::ReadForcedState(MafiaNet::BitStream *bs) {
         // Adopting the epoch is what acknowledges the override: updates we send from here on carry
         // it, so the server stops refusing them.
-        uint8_t epoch = 0;
-        bs->Read(epoch);
+        // A truncated body adopts nothing: its epoch would acknowledge an override never applied.
+        uint8_t epoch   = 0;
         bool poseForced = true;
-        bs->Read(poseForced);
-        stateEpoch  = epoch;
-        _poseForced = poseForced;
+        if (!bs->Read(epoch) || !bs->Read(poseForced)) {
+            return;
+        }
         FieldSerializer fields(bs, false);
         SerializeForcedState(fields);
+        if (!fields.Good()) {
+            return;
+        }
+        stateEpoch  = epoch;
+        _poseForced = poseForced;
         // The server read past what we sent of these under the old epoch, but our delta history
         // records it as delivered: without this, moving back to that value would never be resent.
         _vds.MarkChanged(ForcedVariables(IsServerPeer()));
