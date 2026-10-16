@@ -205,10 +205,12 @@ MODULE(replication_authority, {
 
     // An owner-reported value the server can override and push back with ForceState (a game's effect
     // mask), beside one only the owner measures. `trim` is forced over a coarse 2-bit wire encoding.
+    // `forcedReads` counts what a game hangs off reading a forced state, which only an owner may run.
     struct ForcedEntity final: NetworkEntity {
-        int measured = 0;
-        int forced   = 0;
-        float trim   = 0.0f;
+        int measured    = 0;
+        int forced      = 0;
+        float trim      = 0.0f;
+        int forcedReads = 0;
         void SerializeFields(Framework::Networking::Replication::FieldSerializer &fields) override {
             fields.Field(measured);
             fields.Field(forced);
@@ -217,7 +219,17 @@ MODULE(replication_authority, {
         void SerializeForcedState(Framework::Networking::Replication::FieldSerializer &fields) override {
             fields.Field(forced);
             fields.FloatBits(trim, 0.0f, 1.0f, 2);
+            if (!fields.Writing()) {
+                ++forcedReads;
+            }
         }
+    };
+
+    // The ForceState RPC body, from the server's entity to its owner's, once the epoch is bumped.
+    const auto deliverForcedState = [](NetworkEntity &server, NetworkEntity &owner) {
+        MafiaNet::BitStream bs;
+        server.WriteForcedState(&bs);
+        owner.ReadForcedState(&bs);
     };
 
     // One entity's state channel, serialized the way its peer writes it and delivered to another. The
@@ -300,11 +312,13 @@ MODULE(replication_authority, {
         EQUALS(server.measured, 2);
         EQUALS(server.forced, 5);
         EQUALS(server.trim, 0.5f);
+        EQUALS(server.forcedReads, 0);
 
-        // Adopted (as the ForceState RPC does): the owner's updates land whole again.
-        simulator.stateEpoch = server.stateEpoch;
-        simulator.forced     = 5;
-        simulator.measured   = 3;
+        // Adopted: the owner's updates land whole again.
+        deliverForcedState(server, simulator);
+        EQUALS(simulator.stateEpoch, server.stateEpoch);
+        EQUALS(simulator.forced, 5);
+        simulator.measured = 3;
         deliverState(simulator, server, ownerConn, false);
         EQUALS(server.measured, 3);
         EQUALS(server.forced, 5);

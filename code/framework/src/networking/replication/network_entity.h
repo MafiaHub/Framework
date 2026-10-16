@@ -17,7 +17,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace Framework::Networking::Replication {
     class ReplicationManager;
@@ -32,19 +34,24 @@ namespace Framework::Networking::Replication {
     class FieldSerializer final {
       public:
         FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::SerializationContext *ctx, bool serverAuthored) : _vds(vds), _serialize(ctx), _serverAuthored(serverAuthored) {}
-        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx, bool serverAuthored) : _vds(vds), _deserialize(ctx), _serverAuthored(serverAuthored) {}
+        // `keep` marks, by delta variable index, the fields to read past without assigning.
+        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx, bool serverAuthored, const std::vector<bool> *keep = nullptr) : _vds(vds), _deserialize(ctx), _serverAuthored(serverAuthored), _keep(keep) {}
         FieldSerializer(MafiaNet::BitStream *bs, bool write, bool serverAuthored = true) : _plain(bs), _writePlain(write), _serverAuthored(serverAuthored) {}
 
-        // A local copy rather than wire bytes: the quantized writers keep full precision, so a write
-        // followed by a read gives back exactly what was written.
-        static FieldSerializer Exact(MafiaNet::BitStream *bs, bool write) {
-            FieldSerializer fields(bs, write);
-            fields._exact = true;
-            return fields;
-        }
+        // Where one field lives, so one field list can be found inside another without a wire.
+        struct Span {
+            const void *data;
+            std::size_t size;
+        };
+
+        // Walks without touching anything: lists every field's span, or, given `within`, records per
+        // field (in delta variable order) whether it overlaps one of them. Reads as writing so a
+        // body's read-side code does not run.
+        explicit FieldSerializer(std::vector<Span> *spans) : _spans(spans) {}
+        FieldSerializer(const std::vector<Span> *within, std::vector<bool> *overlaps, bool serverAuthored) : _serverAuthored(serverAuthored), _within(within), _overlaps(overlaps) {}
 
         bool Writing() const {
-            return _serialize != nullptr || (_plain != nullptr && _writePlain);
+            return _serialize != nullptr || (_plain != nullptr && _writePlain) || _spans != nullptr || _overlaps != nullptr;
         }
 
         // Whether the server wrote (or is writing) this stream; see the class comment.
@@ -67,13 +74,26 @@ namespace Framework::Networking::Replication {
             else if (_serialize) {
                 _vds->SerializeVariable(_serialize, value);
             }
-            else {
+            else if (_deserialize) {
                 // DeserializeVariable returns "changed", not read success.
                 bool changed = false;
                 _good = _deserialize->bitStream->Read(changed);
                 if (_good && changed) {
-                    _good = _deserialize->bitStream->Read(value);
+                    if (_keep != nullptr && _index < _keep->size() && (*_keep)[_index]) {
+                        T discarded {};
+                        _good = _deserialize->bitStream->Read(discarded);
+                    }
+                    else {
+                        _good = _deserialize->bitStream->Read(value);
+                    }
                 }
+                ++_index;
+            }
+            else if (_spans) {
+                _spans->push_back({&value, sizeof(T)});
+            }
+            else {
+                _overlaps->push_back(Overlaps(&value, sizeof(T)));
             }
         }
 
@@ -90,13 +110,12 @@ namespace Framework::Networking::Replication {
         }
 
         // Quantized writers — meaningful only on the plain-bitstream (transform-channel) path; on the
-        // VDS delta path and in an Exact copy they fall back to full precision so a single Serialize
-        // body can serve all of them.
+        // VDS delta path they fall back to full precision so a single Serialize body can serve both.
         void Float16(float &value, float min, float max) {
             if (!_good) {
                 return;
             }
-            if (_plain && !_exact) {
+            if (_plain) {
                 _good = _plain->SerializeFloat16(_writePlain, value, min, max);
             }
             else {
@@ -109,7 +128,7 @@ namespace Framework::Networking::Replication {
             if (!_good) {
                 return;
             }
-            if (_plain && !_exact) {
+            if (_plain) {
                 _good = _plain->SerializeBitsFromIntegerRange(_writePlain, value, min, max);
             }
             else {
@@ -117,12 +136,12 @@ namespace Framework::Networking::Replication {
             }
         }
 
-        // Fixed-point float in [min,max] over `bits` bits (plain path only; VDS and Exact keep full precision).
+        // Fixed-point float in [min,max] over `bits` bits (plain path only; VDS keeps full precision).
         void FloatBits(float &value, float min, float max, int bits) {
             if (!_good) {
                 return;
             }
-            if (!_plain || _exact) {
+            if (!_plain) {
                 Field(value);
                 return;
             }
@@ -148,14 +167,29 @@ namespace Framework::Networking::Replication {
         }
 
       private:
+        bool Overlaps(const void *data, std::size_t size) const {
+            const auto *begin = static_cast<const std::byte *>(data);
+            for (const Span &span : *_within) {
+                const auto *other = static_cast<const std::byte *>(span.data);
+                if (begin < other + span.size && other < begin + size) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         MafiaNet::VariableDeltaSerializer *_vds                                 = nullptr;
         MafiaNet::VariableDeltaSerializer::SerializationContext *_serialize     = nullptr;
         MafiaNet::VariableDeltaSerializer::DeserializationContext *_deserialize = nullptr;
         MafiaNet::BitStream *_plain                                             = nullptr;
         bool _writePlain                                                        = false;
         bool _serverAuthored                                                    = true;
-        bool _exact                                                             = false;
         bool _good                                                              = true;
+        const std::vector<bool> *_keep                                          = nullptr;
+        std::size_t _index                                                      = 0;
+        std::vector<Span> *_spans                                               = nullptr;
+        const std::vector<Span> *_within                                        = nullptr;
+        std::vector<bool> *_overlaps                                            = nullptr;
     };
 
     // A replicated game object. Game entities derive from this and override SerializeFields (per-tick
@@ -286,6 +320,11 @@ namespace Framework::Networking::Replication {
             return _poseForced;
         }
 
+        // The ForceState RPC body: the server writes it for the owner, which adopts it. Sent by
+        // ReplicationManager::ForceState; game code calls ForceState instead.
+        void WriteForcedState(MafiaNet::BitStream *bs);
+        void ReadForcedState(MafiaNet::BitStream *bs);
+
         // Raised for every key a construction seed delivered, after OnConstructed, so a listener
         // finds the entity fully built.
         void NotifySeededState(const std::vector<std::string> &keys);
@@ -398,6 +437,10 @@ namespace Framework::Networking::Replication {
         // returns false when the update is stale (sent before the last ForceState), so its pose and
         // forced fields must not be applied.
         bool ApplyIncomingEpoch(uint8_t incomingEpoch);
+
+        // Which state-channel variables, in delta order, hold a field SerializeForcedState carries.
+        // `serverAuthored` names the stream being walked, as for FieldSerializer.
+        std::vector<bool> ForcedVariables(bool serverAuthored);
 
         // --- State-bag plumbing, reached only by the bag itself ---
         // Registers with the manager's dirty list, so a flush walks what changed rather than

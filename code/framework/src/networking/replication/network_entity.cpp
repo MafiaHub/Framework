@@ -160,6 +160,40 @@ namespace Framework::Networking::Replication {
         fields.Field(rotation);
     }
 
+    void NetworkEntity::WriteForcedState(MafiaNet::BitStream *bs) {
+        bs->Write(stateEpoch);
+        // Whether the pose below is a move or an echo, so the owner warps only for the first.
+        bs->Write(IsPoseServerAuthored());
+        FieldSerializer fields(bs, true);
+        SerializeForcedState(fields);
+    }
+
+    void NetworkEntity::ReadForcedState(MafiaNet::BitStream *bs) {
+        // Adopting the epoch is what acknowledges the override: updates we send from here on carry
+        // it, so the server stops refusing them.
+        uint8_t epoch = 0;
+        bs->Read(epoch);
+        bool poseForced = true;
+        bs->Read(poseForced);
+        stateEpoch  = epoch;
+        _poseForced = poseForced;
+        FieldSerializer fields(bs, false);
+        SerializeForcedState(fields);
+        OnStateForced();
+    }
+
+    std::vector<bool> NetworkEntity::ForcedVariables(bool serverAuthored) {
+        std::vector<FieldSerializer::Span> spans;
+        FieldSerializer forced(&spans);
+        SerializeForcedState(forced);
+        std::vector<bool> variables;
+        FieldSerializer state(&spans, &variables, serverAuthored);
+        SerializeBaseFields(state);
+        SerializeFields(state);
+        return variables;
+    }
+
+
     void NetworkEntity::MarkStateDirty() {
         // No manager before Reference(); a bag written that early is carried by the seed anyway.
         if (auto *manager = Manager()) {
@@ -314,26 +348,20 @@ namespace Framework::Networking::Replication {
         }
 
         // Channel 1 — state. A stale update is still applied: the owner sends each change only once, so
-        // dropping it would lose it for good. Only the forced fields are put back afterwards.
+        // dropping it would lose it for good. Only its forced fields are read past.
         if (deserializeParameters->bitstreamWrittenTo[kStateChannel]) {
             uint8_t incomingEpoch = stateEpoch;
             deserializeParameters->serializationBitstream[kStateChannel].Read(incomingEpoch);
-            const bool stale = !ApplyIncomingEpoch(incomingEpoch);
-            MafiaNet::BitStream forced;
-            if (stale) {
-                auto keep = FieldSerializer::Exact(&forced, true);
-                SerializeForcedState(keep);
+            std::vector<bool> forced;
+            if (!ApplyIncomingEpoch(incomingEpoch)) {
+                forced = ForcedVariables(!IsServerPeer());
             }
             MafiaNet::VariableDeltaSerializer::DeserializationContext ctx;
             _vds.BeginDeserialize(&ctx, &deserializeParameters->serializationBitstream[kStateChannel]);
-            FieldSerializer fields(&_vds, &ctx, !IsServerPeer());
+            FieldSerializer fields(&_vds, &ctx, !IsServerPeer(), &forced);
             SerializeBaseFields(fields);
             SerializeFields(fields);
             _vds.EndDeserialize(&ctx);
-            if (stale) {
-                auto restore = FieldSerializer::Exact(&forced, false);
-                SerializeForcedState(restore);
-            }
         }
 
         // Already shifted to our local clock by RakPeer; do not subtract GetClockDifferential.
