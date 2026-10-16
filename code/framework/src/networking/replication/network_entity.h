@@ -17,7 +17,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace Framework::Networking::Replication {
     class ReplicationManager;
@@ -32,11 +34,24 @@ namespace Framework::Networking::Replication {
     class FieldSerializer final {
       public:
         FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::SerializationContext *ctx, bool serverAuthored) : _vds(vds), _serialize(ctx), _serverAuthored(serverAuthored) {}
-        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx, bool serverAuthored) : _vds(vds), _deserialize(ctx), _serverAuthored(serverAuthored) {}
+        // `keep` marks, by delta variable index, the fields to read past without assigning.
+        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx, bool serverAuthored, const std::vector<bool> *keep = nullptr) : _vds(vds), _deserialize(ctx), _serverAuthored(serverAuthored), _keep(keep) {}
         FieldSerializer(MafiaNet::BitStream *bs, bool write, bool serverAuthored = true) : _plain(bs), _writePlain(write), _serverAuthored(serverAuthored) {}
 
+        // Where one field lives, so one field list can be found inside another without a wire.
+        struct Span {
+            const void *data;
+            std::size_t size;
+        };
+
+        // Walks without touching anything: lists every field's span, or, given `within`, records per
+        // field (in delta variable order) whether it overlaps one of them. Reads as writing so a
+        // body's read-side code does not run.
+        explicit FieldSerializer(std::vector<Span> *spans) : _spans(spans) {}
+        FieldSerializer(const std::vector<Span> *within, std::vector<bool> *overlaps, bool serverAuthored) : _serverAuthored(serverAuthored), _within(within), _overlaps(overlaps) {}
+
         bool Writing() const {
-            return _serialize != nullptr || (_plain != nullptr && _writePlain);
+            return _serialize != nullptr || (_plain != nullptr && _writePlain) || _spans != nullptr || _overlaps != nullptr;
         }
 
         // Whether the server wrote (or is writing) this stream; see the class comment.
@@ -59,13 +74,26 @@ namespace Framework::Networking::Replication {
             else if (_serialize) {
                 _vds->SerializeVariable(_serialize, value);
             }
-            else {
+            else if (_deserialize) {
                 // DeserializeVariable returns "changed", not read success.
                 bool changed = false;
                 _good = _deserialize->bitStream->Read(changed);
                 if (_good && changed) {
-                    _good = _deserialize->bitStream->Read(value);
+                    if (_keep != nullptr && _index < _keep->size() && (*_keep)[_index]) {
+                        T discarded {};
+                        _good = _deserialize->bitStream->Read(discarded);
+                    }
+                    else {
+                        _good = _deserialize->bitStream->Read(value);
+                    }
                 }
+                ++_index;
+            }
+            else if (_spans) {
+                _spans->push_back({&value, sizeof(T)});
+            }
+            else {
+                _overlaps->push_back(Overlaps(&value, sizeof(T)));
             }
         }
 
@@ -139,6 +167,17 @@ namespace Framework::Networking::Replication {
         }
 
       private:
+        bool Overlaps(const void *data, std::size_t size) const {
+            const auto *begin = static_cast<const std::byte *>(data);
+            for (const Span &span : *_within) {
+                const auto *other = static_cast<const std::byte *>(span.data);
+                if (begin < other + span.size && other < begin + size) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         MafiaNet::VariableDeltaSerializer *_vds                                 = nullptr;
         MafiaNet::VariableDeltaSerializer::SerializationContext *_serialize     = nullptr;
         MafiaNet::VariableDeltaSerializer::DeserializationContext *_deserialize = nullptr;
@@ -146,6 +185,17 @@ namespace Framework::Networking::Replication {
         bool _writePlain                                                        = false;
         bool _serverAuthored                                                    = true;
         bool _good                                                              = true;
+        const std::vector<bool> *_keep                                          = nullptr;
+        std::size_t _index                                                      = 0;
+        std::vector<Span> *_spans                                               = nullptr;
+        const std::vector<Span> *_within                                        = nullptr;
+        std::vector<bool> *_overlaps                                            = nullptr;
+    };
+
+    // The delta serializer, plus a way to make chosen variables count as changed on the next send.
+    class DeltaSerializer final : public MafiaNet::VariableDeltaSerializer {
+      public:
+        void MarkChanged(const std::vector<bool> &variables);
     };
 
     // A replicated game object. Game entities derive from this and override SerializeFields (per-tick
@@ -187,9 +237,9 @@ namespace Framework::Networking::Replication {
 
         // Fences server overrides against in-flight owner updates: bumped by the server on
         // ForceState, adopted by the owner from the ForceState/SetOwner RPCs and echoed back in its
-        // updates; the server drops owner state carrying a stale value (sent before the owner saw the
-        // override) instead of letting it revert the forced state. Equality-checked, so uint8 wrap is
-        // harmless. Managed by ReplicationManager — game code never touches it.
+        // updates; an owner update carrying a stale value (sent before the owner saw the override)
+        // loses its pose and its forced fields, so it cannot revert the forced state; the owner resends
+        // those fields once it adopts the override. Equality-checked, so uint8 wrap is harmless. Managed by ReplicationManager — game code never touches it.
         uint8_t stateEpoch = 0;
 
         // Local-clock send time of the last applied update (MafiaNet shifts it on receipt). Not replicated.
@@ -275,6 +325,11 @@ namespace Framework::Networking::Replication {
         bool WasPoseForced() const {
             return _poseForced;
         }
+
+        // The ForceState RPC body: the server writes it for the owner, which adopts it. Sent by
+        // ReplicationManager::ForceState; game code calls ForceState instead.
+        void WriteForcedState(MafiaNet::BitStream *bs);
+        void ReadForcedState(MafiaNet::BitStream *bs);
 
         // Raised for every key a construction seed delivered, after OnConstructed, so a listener
         // finds the entity fully built.
@@ -385,9 +440,13 @@ namespace Framework::Networking::Replication {
         void SerializeBaseFields(FieldSerializer &fields);
 
         // Apply an epoch received over the wire: clients adopt it; the server compares it and
-        // returns false when the update is stale (sent before the last ForceState) and must not be
-        // applied.
+        // returns false when the update is stale (sent before the last ForceState), so its pose and
+        // forced fields must not be applied.
         bool ApplyIncomingEpoch(uint8_t incomingEpoch);
+
+        // Which state-channel variables, in delta order, hold a field SerializeForcedState carries.
+        // `serverAuthored` names the stream being walked, as for FieldSerializer.
+        std::vector<bool> ForcedVariables(bool serverAuthored);
 
         // --- State-bag plumbing, reached only by the bag itself ---
         // Registers with the manager's dirty list, so a flush walks what changed rather than
@@ -403,7 +462,7 @@ namespace Framework::Networking::Replication {
 
         // Tracks the last value of each serialized variable per connection so updates carry only
         // what changed (the documented ReplicaManager3 delta path).
-        MafiaNet::VariableDeltaSerializer _vds;
+        DeltaSerializer _vds;
 
         // Sender: refresh schedule state, in serialize-tick time.
         bool _transformMoved                = false;

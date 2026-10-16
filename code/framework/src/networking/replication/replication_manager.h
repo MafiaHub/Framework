@@ -109,9 +109,8 @@ namespace Framework::Networking::Replication {
 
         // Server: push the entity's forced state to its owner — the server's authoritative override
         // of an owned entity (see NetworkEntity::ForceState / OnStateForced). Bumps the entity's
-        // state epoch so owner updates sent before the override arrives are dropped instead of
-        // reverting it. No-op on clients and for unowned entities (which already replicate to
-        // everyone).
+        // state epoch so owner updates sent before the override arrives cannot revert it. No-op on
+        // clients and for unowned entities (which already replicate to everyone).
         void ForceState(NetworkEntity *entity);
 
         // Server: change an entity's owner and notify the new owner directly (see
