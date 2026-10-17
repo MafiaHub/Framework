@@ -14,6 +14,7 @@
 
 #include <mafianet/virtual_world.h>
 
+#include <algorithm>
 #include <limits>
 
 namespace Framework::Networking::Replication {
@@ -82,6 +83,29 @@ namespace Framework::Networking::Replication {
         return entry != nullptr && entry->pinned ? entry->pinnedTo : MafiaNet::UNASSIGNED_PEER_GUID;
     }
 
+    void DelegationManager::SetDeclined(NetworkEntity *entity, MafiaNet::PeerGuid guid, bool declined) {
+        if (!entity || !_isServer || guid == MafiaNet::UNASSIGNED_PEER_GUID || entity->GetDelegationPolicy() == nullptr) {
+            return;
+        }
+        auto &list       = EntryFor(entity).declined;
+        const bool known = std::ranges::find(list, guid) != list.end();
+        if (known == declined) {
+            return;
+        }
+        if (declined) {
+            list.push_back(guid);
+        }
+        else {
+            std::erase(list, guid);
+        }
+        UpdateNow();
+    }
+
+    bool DelegationManager::IsDeclined(const NetworkEntity *entity, MafiaNet::PeerGuid guid) const {
+        const Entry *entry = FindEntry(entity);
+        return entry != nullptr && std::ranges::find(entry->declined, guid) != entry->declined.end();
+    }
+
     void DelegationManager::OnEntityDestroyed(uint64_t networkId) {
         _entries.erase(networkId);
     }
@@ -91,6 +115,9 @@ namespace Framework::Networking::Replication {
             return;
         }
         _suspended.erase(guid);
+        for (auto &[id, entry] : _entries) {
+            std::erase(entry.declined, guid);
+        }
         // The dropped peer is still the owner of everything it was simulating, and an owner that is
         // gone can never report again. Hand those entities back to the server here, so they are
         // dormant rather than owned-by-nobody until the next pass, and drop any pin naming that
@@ -168,14 +195,18 @@ namespace Framework::Networking::Replication {
         }
     } // namespace
 
-    MafiaNet::PeerGuid DelegationManager::Elect(const DelegationPolicy &rawPolicy, const glm::vec3 &position, MafiaNet::VirtualWorldId virtualWorld, MafiaNet::PeerGuid current, const std::vector<DelegationCandidate> &candidates, bool groundXY) {
+    MafiaNet::PeerGuid DelegationManager::Elect(const DelegationPolicy &rawPolicy, const glm::vec3 &position, MafiaNet::VirtualWorldId virtualWorld, MafiaNet::PeerGuid current, const std::vector<DelegationCandidate> &candidates, bool groundXY,
+        std::span<const MafiaNet::PeerGuid> declined) {
         const DelegationPolicy policy = rawPolicy.Normalized();
         MafiaNet::PeerGuid desired    = MafiaNet::UNASSIGNED_PEER_GUID;
         float bestRank                = std::numeric_limits<float>::max();
+        const auto isDeclined         = [&](MafiaNet::PeerGuid guid) {
+            return std::ranges::find(declined, guid) != declined.end();
+        };
 
         const DelegationCandidate *incumbent = nullptr;
         for (const DelegationCandidate &candidate : candidates) {
-            if (candidate.guid != MafiaNet::UNASSIGNED_PEER_GUID && candidate.guid == current) {
+            if (candidate.guid != MafiaNet::UNASSIGNED_PEER_GUID && candidate.guid == current && !isDeclined(current)) {
                 incumbent = &candidate;
                 break;
             }
@@ -196,7 +227,7 @@ namespace Framework::Networking::Replication {
         }
 
         for (const DelegationCandidate &candidate : candidates) {
-            if (candidate.guid == MafiaNet::UNASSIGNED_PEER_GUID || candidate.guid == current) {
+            if (candidate.guid == MafiaNet::UNASSIGNED_PEER_GUID || candidate.guid == current || isDeclined(candidate.guid)) {
                 continue;
             }
             if (policy.requireSameVirtualWorld && !MafiaNet::VirtualWorldsCanSee(virtualWorld, candidate.virtualWorld)) {
@@ -322,7 +353,7 @@ namespace Framework::Networking::Replication {
                 desired = FindCandidate(entry.pinnedTo) != nullptr ? entry.pinnedTo : MafiaNet::UNASSIGNED_PEER_GUID;
             }
             else {
-                desired = Elect(policy, entity->position, entity->GetVirtualWorld(), current, _candidates, _groundXY);
+                desired = Elect(policy, entity->position, entity->GetVirtualWorld(), current, _candidates, _groundXY, entry.declined);
             }
 
             if (desired == current) {
@@ -333,8 +364,9 @@ namespace Framework::Networking::Replication {
 
             // An entity mid-action gets to say "not now". It is asked only when something is
             // actually about to change, and only while it has an owner to refuse on behalf of --
-            // an entity nobody is simulating has nothing to interrupt.
-            if (current != MafiaNet::UNASSIGNED_PEER_GUID && !entity->CanReleaseSimulation()) {
+            // an entity nobody is simulating has nothing to interrupt. A declining owner gave it up.
+            const bool declinedByCurrent = std::ranges::find(entry.declined, current) != entry.declined.end();
+            if (current != MafiaNet::UNASSIGNED_PEER_GUID && !declinedByCurrent && !entity->CanReleaseSimulation()) {
                 if (entry.refusingSince == 0) {
                     entry.refusingSince = now;
                 }
