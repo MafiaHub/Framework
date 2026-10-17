@@ -80,6 +80,64 @@ MODULE(client_scripting, {
         vfs.Unmount("restart.zip");
         vfs.Unmount("restart-other.zip");
     });
+    IT("routes thrown client timers and unhandled promises through resource cleanup", {
+        auto &vfs = Framework::Utils::Vfs::Get();
+        EQUALS(vfs.Init(nullptr), true);
+        const auto mount = [&](const std::string &name, const std::string &script) {
+            Framework::Utils::Package::Writer writer;
+            writer.Add("package.json", "{\"name\":\"" + name + "\",\"version\":\"1.0.0\",\"mafiahub\":{\"clientScripts\":[\"client.js\"]}}");
+            writer.Add("client.js", script);
+            std::string blob, zip, error;
+            if (!writer.Build(nullptr, blob) || !Framework::Utils::Package::Open(blob, nullptr, zip, error)) return false;
+            return vfs.MountMemory(std::move(zip), name + ".zip", Framework::Utils::Vfs::ResourcePath(name), error);
+        };
+        EQUALS(mount("timer-failure", "globalThis.failedTicks = 0; setInterval(() => { ++failedTicks; throw Error('timer boom'); }, 1);"), true);
+        EQUALS(mount("promise-failure", "setTimeout(async () => { await Promise.resolve(); throw Error('promise boom'); }, 0);"), true);
+        EQUALS(mount("healthy", "globalThis.healthyTicks = 0; setInterval(() => ++healthyTicks, 1); const p = Promise.reject(Error('handled')); queueMicrotask(() => p.catch(() => {}));"), true);
+        Framework::Scripting::V8Engine engine;
+        engine.SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        {
+            Framework::Scripting::ResourceManagerConfig config;
+            config.resourcesPath = Framework::Utils::Vfs::kResourceMountRoot;
+            config.isClient = true;
+            Framework::Scripting::ResourceManager manager(&engine, config);
+            std::vector<std::string> cleaned;
+            // This is the same manager notification used by native resource owners.
+            manager.AddOnResourceError([&](const std::string &name, const std::string &) {
+                cleaned.push_back(name);
+                engine.ClearResourceTimers(name);
+            });
+            EQUALS(manager.DiscoverResources(), 3u);
+            EQUALS(static_cast<bool>(manager.StartAll()), true);
+            for (int i = 0; i < 4; ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                engine.Tick();
+            }
+            EQUALS(cleaned.size(), 2u);
+            EQUALS(std::count(cleaned.begin(), cleaned.end(), "timer-failure"), 1);
+            EQUALS(std::count(cleaned.begin(), cleaned.end(), "promise-failure"), 1);
+            EQUALS(engine.Execute("if (failedTicks !== 1 || healthyTicks < 2) throw Error('cleanup or isolation failed');"), true);
+            // Pending and not-yet-rejected promises from the old incarnation
+            // must not tear down a resource started under the same name.
+            EQUALS(engine.Execute("globalThis.oldReject = null; new Promise((resolve, reject) => { oldReject = reject; }); Promise.reject(Error('queued old error'));", "/resources/healthy/client.js"), true);
+            EQUALS(static_cast<bool>(manager.StopResource("healthy")), true);
+            EQUALS(static_cast<bool>(manager.StartResource("healthy")), true);
+            EQUALS(engine.Execute("oldReject(Error('late old error'));"), true);
+            engine.Tick();
+            EQUALS(cleaned.size(), 2u);
+            EQUALS(engine.Execute("globalThis.currentTicks = healthyTicks;"), true);
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            engine.Tick();
+            EQUALS(engine.Execute("if (healthyTicks <= currentTicks) throw Error('stale rejection stopped new timer');"), true);
+            manager.StopAll();
+        }
+        engine.Shutdown();
+        vfs.Unmount("timer-failure.zip");
+        vfs.Unmount("promise-failure.zip");
+        vfs.Unmount("healthy.zip");
+    });
+
 });
 
 int main() {

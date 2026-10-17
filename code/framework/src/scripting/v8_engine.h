@@ -117,6 +117,15 @@ namespace Framework::Scripting {
         uint32_t AddTimer(std::unique_ptr<TimerEntry> entry);
         void CancelTimer(uint32_t id);
 
+        // Queue failures while JS is executing; dispatch after it unwinds.
+        void OnPromiseReject(v8::PromiseRejectMessage message);
+        static V8Engine *FromContext(v8::Local<v8::Context> context);
+
+        uint32_t GetResourceGeneration(const std::string &resource) const {
+            auto found = _resourceGenerations.find(resource);
+            return found == _resourceGenerations.end() ? 0 : found->second;
+        }
+
         // Data structs for V8 callbacks (public for anonymous-namespace callbacks)
         struct RequireData {
             V8Engine *engine;
@@ -135,6 +144,16 @@ namespace Framework::Scripting {
         void InstallTimerFunctions();
         void InstallRequireFunction();
         void ProcessTimers();
+
+        struct RuntimeError {
+            std::string resource;
+            std::string message;
+            v8::Global<v8::Promise> promise;
+            uint32_t generation = 0;
+        };
+        std::vector<RuntimeError> _runtimeErrors;
+        std::map<std::string, uint32_t> _resourceGenerations;
+        void DispatchRuntimeErrors();
 
         V8EngineOptions _options;
 
