@@ -45,8 +45,9 @@ namespace Framework::External::ImGUI::Widgets {
     }
 
     // Draw multi-line ('\n') UTF-8 text centered on screenPos (pixels). color is an ImU32 with its
-    // own alpha; `alpha` multiplies on top (distance fade).
-    inline void DrawWorldText(ImDrawList *drawList, ImVec2 screenPos, const char *text, ImU32 color, float fontSize, WorldTextStyle style, float alpha = 1.0f) {
+    // own alpha; `alpha` multiplies on top (distance fade). Only the presets: LayoutWorldText and
+    // DrawWorldTextLaidOut (world_text_layout.h) draw a label's full look.
+    [[deprecated("Use LayoutWorldText and DrawWorldTextLaidOut from world_text_layout.h")]] inline void DrawWorldText(ImDrawList *drawList, ImVec2 screenPos, const char *text, ImU32 color, float fontSize, WorldTextStyle style, float alpha = 1.0f) {
         if (!drawList || !text || !text[0] || alpha <= 0.0f) {
             return;
         }

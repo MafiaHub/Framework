@@ -17,9 +17,12 @@
 #include "scripting/builtins/imports.h"
 #include "scripting/builtins/messages.h"
 #include "scripting/builtins/player.h"
+#include "scripting/builtins/text_label.h"
 #include "scripting/resource/resource.h"
 #include "scripting/resource/resource_manager.h"
 #include "utils/version.h"
+
+#include "text_label_ut.h" // TextLabelWorld
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
@@ -1011,6 +1014,89 @@ MODULE(js_features, {
         EQUALS(RunJSBool(engine, "typeof Color === 'function'"), true);
         // Player constructor published by the new Player::Register.
         EQUALS(RunJSBool(engine, "typeof Player === 'function'"), true);
+
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // TextLabel options are validated before anything is created, so a bad key throws a TypeError
+    // with no replication at all, and a good set gets as far as the replication check.
+    IT("TextLabel.create validates its options before it needs replication", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        v8::Isolate *isolate = engine.GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            v8::Local<v8::Object> target = context->Global();
+            Builtins::RegisterValueTypes(isolate, target);
+            Builtins::TextLabel::Register(isolate, target);
+        }
+
+        const char *rejected[] {
+            "{ colour: 1 }",
+            "{ fontSize: 0 }",
+            "{ color: 'red' }",
+            "{ color: '1234567' }",
+            "{ outline: { color: 'x00ff00' } }",
+            "{ outline: { width: 9 } }",
+            "{ shadow: 'soft' }",
+            "{ sizeMode: 'huge' }",
+            "{ style: 7 }",
+            "{ attachTo: -1 }",
+            "{ position: 'here' }",
+            "{ drawDistance: 0 }",
+            "{ virtualWorld: 1.5 }",
+            "{ minSize: 20, maxSize: 10 }",
+        };
+        for (const char *options : rejected) {
+            STREQUALS(RunJSErrorName(engine, std::string("TextLabel.create(0, 0, 0, 'x', ") + options + ")").c_str(), "TypeError");
+        }
+
+        const std::string accepted = "TextLabel.create(0, 0, 0, 'x', { fontSize: 20, opacity: 0.5, outline: { width: 2 }, shadow: { blur: 4 }, background: true, sizeMode: 'world', "
+                                     "style: 'box', attachTo: 5, offset: [0, 0, 10], markup: true, align: 'left', anchor: 'bottom', color: new Color(1, 0, 0, 1) })";
+        STREQUALS(RunJSErrorName(engine, accepted).c_str(), "Error");
+        STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', 18, 40)").c_str(), "Error");
+
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    IT("TextLabel.update survives a getter that destroys the label, and checks targets and sizes", {
+        EventsTestHelper::Setup();
+        TextLabelWorld world;
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        v8::Isolate *isolate = engine.GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            v8::Local<v8::Object> target = context->Global();
+            Builtins::RegisterValueTypes(isolate, target);
+            Builtins::TextLabel::Register(isolate, target);
+        }
+
+        // The getter destroys the label and makes another, which may be given its memory: an update
+        // still holding the old pointer would then write the opacity into the new label.
+        STREQUALS(RunJSString(engine, "(() => { const l = TextLabel.create(0, 0, 0, 'x'); let fresh; l.update({ get opacity() { l.destroy(); fresh = TextLabel.create(0, 0, 0, 'z'); return 0.25; } }); "
+                                      "return fresh.getOptions().opacity + '|' + l.getOptions(); })()")
+                      .c_str(),
+            "1|null");
+
+        STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', { attachTo: 99999 })").c_str(), "TypeError");
+        STREQUALS(RunJSErrorName(engine, "const l = TextLabel.create(0, 0, 0, 'x'); l.attachTo(l.id)").c_str(), "TypeError");
+        STREQUALS(RunJSErrorName(engine, "const l = TextLabel.create(0, 0, 0, 'x'); l.update({ attachTo: l.id })").c_str(), "TypeError");
+        STREQUALS(RunJSErrorName(engine, "const l = TextLabel.create(0, 0, 0, 'x', { maxSize: 10 }); l.update({ minSize: 20 })").c_str(), "TypeError");
+        STREQUALS(RunJSErrorName(engine, "const t = TextLabel.create(0, 0, 0, 't'); TextLabel.create(0, 0, 0, 'x', { attachTo: t, minSize: 4, maxSize: 10 })").c_str(), "");
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();

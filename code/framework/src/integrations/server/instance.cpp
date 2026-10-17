@@ -27,6 +27,7 @@
 #include "core_modules.h"
 
 #include "integrations/shared/rpc/emit_script_event.h"
+#include "networking/replication/entities/text_label_entity.h"
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
 #include "networking/rpc/chat_message.h"
@@ -40,6 +41,7 @@
 
 #include "scripting/builtins/events.h"
 #include "scripting/builtins/player.h"
+#include "scripting/builtins/text_label.h"
 #include "scripting/engine_scope.h"
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
@@ -238,6 +240,9 @@ namespace Framework::Integrations::Server {
         if (replication) {
             replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
             replication->ConfigureGrid(_opts.worldConfig.streamCellSize, _opts.worldConfig.streamWorldMin, _opts.worldConfig.streamWorldMax);
+            // A text label streams exactly as far as it draws. Held to its own range, labels are
+            // filed apart and never widen what every other viewer queries.
+            replication->SetInterestUsesEntityRange(Framework::Networking::Replication::Entities::TextLabelEntity::kTypeName, true);
             // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
             // still resolvable) just before destroying and broadcasting the destruction of the avatar.
             replication->SetOnClientDisconnect([this](MafiaNet::PeerGuid guid) {
@@ -1424,6 +1429,12 @@ namespace Framework::Integrations::Server {
             if (replication) {
                 FW_PROFILE_SCOPE_N("Server::VoicePositions");
                 _voiceServer.SyncAvatars(*replication);
+            }
+
+            // Before the interest rebuild in the packet pump, so attached labels stream from where
+            // their targets are now.
+            if (replication) {
+                Framework::Scripting::Builtins::TextLabel::FollowTargets(*replication);
             }
 
             if (_networkingEngine) {
