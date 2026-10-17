@@ -98,10 +98,11 @@ class ConnectionAdmissionRig {
         return static_cast<bool>(client->Connect("127.0.0.1", port, "", sessionPayload));
     }
 
-    static std::string IdentityPayload(const char *name, const char *ticket) {
+    static std::string IdentityPayload(const char *name, const char *ticket, const char *epicId = "") {
         Framework::Networking::RPC::ClientIdentity identity;
         identity.name   = name;
         identity.ticket = ticket;
+        identity.epicId = epicId;
         return identity.Encode();
     }
 
@@ -138,12 +139,13 @@ MODULE(connection_admission, {
     IT("hands the server the identity and ticket the client connected with, before any connection", {
         Rig rig;
         EQUALS(rig.StartServer(true), true);
-        EQUALS(rig.Connect(Rig::IdentityPayload("Jan", "tkt-abc+123")), true);
+        EQUALS(rig.Connect(Rig::IdentityPayload("Jan", "tkt-abc+123", "0123456789abcdef0123456789abcdef")), true);
 
         EQUALS(rig.PumpUntil([&] { return !rig.seen.requests.empty(); }), true);
         EQUALS(rig.seen.requests[0].has_value(), true);
         STREQUALS(rig.seen.requests[0]->name.c_str(), "Jan");
         STREQUALS(rig.seen.requests[0]->ticket.c_str(), "tkt-abc+123");
+        STREQUALS(rig.seen.requests[0]->epicId.c_str(), "0123456789abcdef0123456789abcdef");
 
         // Waiting: nobody is connected on either side, and the player count says so.
         rig.PumpFor(300);
