@@ -21,9 +21,23 @@ namespace Framework::Launcher::RGL {
         constexpr DWORD kInjectionWaitMs = 10000;
 #endif
 
-        // Stub tail: add eax, <entry RVA> applied to the PEB-read image base, then the hand-off
-        constexpr uint8_t kEntryStubTail[]  = {0x05, 0x00, 0x00, 0x00, 0x00, 0x8B, 0xE5, 0x89, 0x44, 0x24, 0x20, 0x5D, 0x61, 0xFF, 0xE0};
-        constexpr char kEntryStubTailMask[] = "x????xxxxxxxxxx";
+        // Stub tail: add eax/rax, <entry RVA> applied to the PEB-read image base, then the hand-off
+        struct EntryStubTail {
+            const uint8_t *pattern;
+            const char *mask;
+            size_t size;
+            size_t rvaOffset; // of the imm32 entry RVA within the pattern
+        };
+
+        constexpr uint8_t kEntryStubTail32[] = {0x05, 0x00, 0x00, 0x00, 0x00, 0x8B, 0xE5, 0x89, 0x44, 0x24, 0x20, 0x5D, 0x61, 0xFF, 0xE0};
+
+        // add rax, imm32; add rsp, imm32; mov rsp, rbp; mov [rsp+20h], rax; pop rbx; pop rbp; jmp rax
+        constexpr uint8_t kEntryStubTail64[] = {0x48, 0x05, 0x00, 0x00, 0x00, 0x00, 0x48, 0x81, 0xC4, 0x00, 0x00, 0x00, 0x00, 0x48, 0x8B, 0xE5, 0x48, 0x89, 0x44, 0x24, 0x20, 0x5B, 0x5D, 0xFF, 0xE0};
+
+        constexpr EntryStubTail kEntryStubTails[] = {
+            {kEntryStubTail32, "x????xxxxxxxxxx", sizeof(kEntryStubTail32), 1},     // GTA: San Andreas
+            {kEntryStubTail64, "xx????xxx????xxxxxxxxxxxx", sizeof(kEntryStubTail64), 2}, // GTA: San Andreas DE
+        };
 
         // Only tells a changed stub apart from an image that never had one; the tail identifies it
         constexpr char kEntryStubSection[] = ".rkstr";
@@ -58,16 +72,24 @@ namespace Framework::Launcher::RGL {
         const auto scanEnd     = moduleBase + section->VirtualAddress + section->Misc.VirtualSize;
         const auto notResolved = stubSection ? EntryStubStatus::UNSUPPORTED : EntryStubStatus::NOT_PRESENT;
 
-        if (scanEnd < stubEntryPoint + sizeof(kEntryStubTail)) {
+        uint32_t entryPointRva = 0;
+        bool found             = false;
+        for (const auto &tail : kEntryStubTails) {
+            if (scanEnd < stubEntryPoint + tail.size) {
+                continue;
+            }
+
+            if (const auto match = Bypass::ScanPattern(stubEntryPoint, scanEnd - stubEntryPoint, tail.pattern, tail.size, tail.mask)) {
+                entryPointRva = *reinterpret_cast<const uint32_t *>(match + tail.rvaOffset);
+                found         = true;
+                break;
+            }
+        }
+
+        if (!found) {
             return {notResolved};
         }
 
-        const auto tail = Bypass::ScanPattern(stubEntryPoint, scanEnd - stubEntryPoint, kEntryStubTail, sizeof(kEntryStubTail), kEntryStubTailMask);
-        if (!tail) {
-            return {notResolved};
-        }
-
-        const auto entryPointRva = *reinterpret_cast<const uint32_t *>(tail + 1);
         if (entryPointRva == 0 || entryPointRva >= ntHeaders->OptionalHeader.SizeOfImage) {
             return {EntryStubStatus::UNSUPPORTED};
         }
