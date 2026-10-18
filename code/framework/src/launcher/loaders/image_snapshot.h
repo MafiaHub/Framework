@@ -38,8 +38,9 @@ namespace Framework::Launcher::Loaders {
         using ProcessReader = fu2::function<bool(uintptr_t address, void *buffer, size_t size) const>;
 
         // False while the wrapper has not finished decrypting, so the caller can keep polling. The
-        // reader keeps the process handle, and its APIs, in CaptureImageSnapshot.
-        bool CaptureFrom(const ProcessReader &read, const std::vector<uint8_t> &sourceImage);
+        // reader keeps the process handle, and its APIs, in CaptureImageSnapshot. `loadedBase` is
+        // where the authorised run's image sits, its relocations undone when ASLR moved it.
+        bool CaptureFrom(const ProcessReader &read, const std::vector<uint8_t> &sourceImage, uintptr_t loadedBase);
 
       private:
         struct Section {
@@ -51,6 +52,10 @@ namespace Framework::Launcher::Loaders {
         uint32_t _executableChecksum = 0;
         mutable std::vector<Section> _sections;
         mutable bool _loaded = false;
+
+        // CaptureFrom's progress across polls, to tell a finished wrapper from a working one
+        size_t _lastPendingPages = 0;
+        uint64_t _pendingSince   = 0;
 
         bool Load() const;
         bool Store() const;

@@ -39,6 +39,21 @@ namespace Framework::Launcher::Loaders {
             CloseHandle(snapshot);
             return processes;
         }
+
+        // Where the process's executable is loaded; its first module. 0 while it is still starting.
+        uintptr_t FindImageBase(DWORD processId) {
+            const auto snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, processId);
+            if (snapshot == INVALID_HANDLE_VALUE) {
+                return 0;
+            }
+
+            MODULEENTRY32W entry {};
+            entry.dwSize    = sizeof(entry);
+            const auto base = Module32FirstW(snapshot, &entry) ? reinterpret_cast<uintptr_t>(entry.modBaseAddr) : 0;
+
+            CloseHandle(snapshot);
+            return base;
+        }
     } // namespace
 
     bool CaptureImageSnapshot(ImageSnapshot &snapshot, const std::wstring &gamePath, const std::wstring &executableName, const std::vector<uint8_t> &sourceImage) {
@@ -65,6 +80,11 @@ namespace Framework::Launcher::Loaders {
         while (GetTickCount64() < deadline) {
             // The capture rejects a run the wrapper has not decrypted, so just try each in turn
             for (const auto processId : FindProcessesByName(executableName.c_str())) {
+                const auto imageBase = FindImageBase(processId);
+                if (!imageBase) {
+                    continue;
+                }
+
                 const auto process = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION | PROCESS_TERMINATE, FALSE, processId);
                 if (!process) {
                     continue;
@@ -75,7 +95,7 @@ namespace Framework::Launcher::Loaders {
                         SIZE_T read = 0;
                         return ReadProcessMemory(process, reinterpret_cast<LPCVOID>(address), buffer, size, &read) && read == size;
                     },
-                    sourceImage);
+                    sourceImage, imageBase);
                 if (captured) {
                     TerminateProcess(process, 0);
                     CloseHandle(process);

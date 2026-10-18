@@ -163,7 +163,13 @@ update changes the checksum and the capture happens again.
 
 The completeness check matters: the wrapper decrypts progressively, and a capture taken while it is
 still working bakes half-decrypted code into the cache. `ImageSnapshot::CaptureFrom` only accepts a
-capture once every page that is ciphertext on disk has changed in memory.
+capture once every page that is ciphertext on disk has changed in memory, or, once decryption has
+started, when the pages left over have held still for ten seconds: a code section can carry
+high-entropy data that was never encrypted (San Andreas DE has 38 such pages).
+
+The authorised run may be loaded anywhere ASLR puts it. The capture reads it at its real base and
+takes the file's base relocations back out of the code, so the snapshot matches a mapping at the
+preferred base, where the launcher puts the game.
 
 ## Launcher Image Layout
 

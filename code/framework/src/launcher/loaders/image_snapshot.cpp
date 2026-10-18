@@ -10,6 +10,7 @@
 
 #include "logging/logger.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -32,6 +33,9 @@ namespace Framework::Launcher::Loaders {
         };
 
         constexpr size_t kPageSize = 0x1000;
+
+        // How long the undecrypted page count must hold still before the rest counts as plaintext
+        constexpr uint64_t kDecryptionSettleMs = 10000;
 
         // Ciphertext measures 8.00 bits per byte; compiled code stays well under 7
         constexpr double kEncryptedPageEntropy = 7.7;
@@ -66,6 +70,74 @@ namespace Framework::Launcher::Loaders {
 
             const auto ntHeaders = reinterpret_cast<const IMAGE_NT_HEADERS *>(image + dosHeader->e_lfanew);
             return ntHeaders->Signature == IMAGE_NT_SIGNATURE ? ntHeaders : nullptr;
+        }
+
+        const IMAGE_SECTION_HEADER *SectionOf(const IMAGE_NT_HEADERS *ntHeaders, uint32_t rva) {
+            auto section = IMAGE_FIRST_SECTION(ntHeaders);
+            for (WORD index = 0; index < ntHeaders->FileHeader.NumberOfSections; ++index, ++section) {
+                if (rva >= section->VirtualAddress && rva < section->VirtualAddress + std::max(section->Misc.VirtualSize, section->SizeOfRawData)) {
+                    return section;
+                }
+            }
+            return nullptr;
+        }
+
+        // Takes the base relocations, read from the file, back out of `sections` (anything with a
+        // virtualAddress and a data buffer), as if the image had loaded `delta` lower
+        template <typename Sections>
+        bool UndoRelocations(Sections &sections, const std::vector<uint8_t> &sourceImage, const IMAGE_NT_HEADERS *ntHeaders, uintptr_t delta) {
+            const auto &directory = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+            const auto relocSection = SectionOf(ntHeaders, directory.VirtualAddress);
+            if (directory.Size == 0 || !relocSection) {
+                return false;
+            }
+
+            const size_t begin = relocSection->PointerToRawData + (directory.VirtualAddress - relocSection->VirtualAddress);
+            if (begin + directory.Size > sourceImage.size()) {
+                return false;
+            }
+
+            for (size_t offset = 0; offset + sizeof(IMAGE_BASE_RELOCATION) <= directory.Size;) {
+                const auto block = reinterpret_cast<const IMAGE_BASE_RELOCATION *>(sourceImage.data() + begin + offset);
+                if (block->SizeOfBlock < sizeof(IMAGE_BASE_RELOCATION) || offset + block->SizeOfBlock > directory.Size) {
+                    return false;
+                }
+
+                const auto entries = reinterpret_cast<const uint16_t *>(block + 1);
+                const auto count   = (block->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(uint16_t);
+                for (size_t index = 0; index < count; ++index) {
+                    const auto type = entries[index] >> 12;
+                    const auto rva  = block->VirtualAddress + (entries[index] & 0xfff);
+                    if (type == IMAGE_REL_BASED_ABSOLUTE) {
+                        continue;
+                    }
+
+                    for (auto &section : sections) {
+                        if (rva < section.virtualAddress || rva - section.virtualAddress >= section.data.size()) {
+                            continue;
+                        }
+
+                        const auto target    = section.data.data() + (rva - section.virtualAddress);
+                        const auto remaining = section.data.size() - (rva - section.virtualAddress);
+                        if (type == IMAGE_REL_BASED_DIR64 && remaining >= sizeof(uint64_t)) {
+                            uint64_t value;
+                            std::memcpy(&value, target, sizeof(value));
+                            value -= delta;
+                            std::memcpy(target, &value, sizeof(value));
+                        }
+                        else if (type == IMAGE_REL_BASED_HIGHLOW && remaining >= sizeof(uint32_t)) {
+                            uint32_t value;
+                            std::memcpy(&value, target, sizeof(value));
+                            value -= static_cast<uint32_t>(delta);
+                            std::memcpy(target, &value, sizeof(value));
+                        }
+                        break;
+                    }
+                }
+
+                offset += block->SizeOfBlock;
+            }
+            return true;
         }
     } // namespace
 
@@ -187,15 +259,15 @@ namespace Framework::Launcher::Loaders {
         return true;
     }
 
-    bool ImageSnapshot::CaptureFrom(const ProcessReader &read, const std::vector<uint8_t> &sourceImage) {
+    bool ImageSnapshot::CaptureFrom(const ProcessReader &read, const std::vector<uint8_t> &sourceImage, uintptr_t loadedBase) {
         const auto logger    = Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER);
         const auto ntHeaders = NtHeadersOf(sourceImage.data(), sourceImage.size());
         if (!ntHeaders) {
             return false;
         }
 
-        // These titles have their relocations stripped, so both images sit at the same base
-        const auto base    = static_cast<uintptr_t>(ntHeaders->OptionalHeader.ImageBase);
+        // The authorised run may sit wherever ASLR put it; the replay maps at the preferred base
+        const auto base    = loadedBase;
         auto section       = IMAGE_FIRST_SECTION(ntHeaders);
         const auto endOfIt = section + ntHeaders->FileHeader.NumberOfSections;
 
@@ -222,9 +294,23 @@ namespace Framework::Launcher::Loaders {
                 return false;
             }
 
+            captured.push_back(std::move(entry));
+        }
+
+        // Windows relocated the authorised image, ciphertext included, so undo that before its
+        // pages are compared with the file and cached for a mapping at the preferred base
+        const auto delta = loadedBase - static_cast<uintptr_t>(ntHeaders->OptionalHeader.ImageBase);
+        if (delta != 0 && !UndoRelocations(captured, sourceImage, ntHeaders, delta)) {
+            logger->warn("Could not undo the relocations of the authorised game loaded at {:#x}", loadedBase);
+            return false;
+        }
+
+        for (auto &entry : captured) {
+            const auto sourceSection = SectionOf(ntHeaders, entry.virtualAddress);
+
             // Decryption is progressive: capture too early and half-decrypted code is cached
             for (size_t offset = 0; offset + kPageSize <= entry.data.size(); offset += kPageSize) {
-                const auto filePage = sourceImage.data() + section->PointerToRawData + offset;
+                const auto filePage = sourceImage.data() + sourceSection->PointerToRawData + offset;
                 if (PageEntropy(filePage) < kEncryptedPageEntropy) {
                     continue;
                 }
@@ -234,17 +320,29 @@ namespace Framework::Launcher::Loaders {
                     ++pendingPages;
                 }
             }
-
-            captured.push_back(std::move(entry));
         }
 
         if (captured.empty()) {
             return false;
         }
 
+        // A high-entropy page may be data that was never encrypted, and would wait forever. The
+        // wrapper decrypts in one burst, so once it has started and the count holds still for a
+        // while, what is left is plaintext.
         if (pendingPages > 0) {
-            logger->debug("The wrapper has decrypted {} of {} pages so far, waiting for the rest", encryptedPages - pendingPages, encryptedPages);
-            return false;
+            const auto now = GetTickCount64();
+            if (pendingPages == encryptedPages || pendingPages != _lastPendingPages) {
+                _lastPendingPages = pendingPages;
+                _pendingSince     = now;
+            }
+
+            if (pendingPages == encryptedPages || now - _pendingSince < kDecryptionSettleMs) {
+                logger->debug("The wrapper has decrypted {} of {} pages so far, waiting for the rest", encryptedPages - pendingPages, encryptedPages);
+                return false;
+            }
+
+            logger->info("{} high-entropy pages stayed as they are on disk for {} ms, taking them as plaintext", pendingPages, kDecryptionSettleMs);
+            encryptedPages -= pendingPages;
         }
 
         _sections = std::move(captured);
