@@ -103,6 +103,9 @@ namespace Framework::Launcher {
         // Suppress the mapped game's second registration when that would abort startup.
         bool suppressThreadLocalExeAtexitCallback = false;
 
+        // Protected images may query their loader record before their CRT starts.
+        bool publishGameImageLayout = false;
+
         // PE loading only. Turns the game's windowed blt-model DXGI swap chains (SwapEffect DISCARD or
         // SEQUENTIAL) into their flip-model equivalents (FLIP_DISCARD, FLIP_SEQUENTIAL, at least two buffers).
         //

@@ -929,6 +929,9 @@ namespace Framework::Launcher {
             // Must run before the game does: modules it loads later resolve their own
             // install directory through the process identity.
             Loaders::ApplyMappedImageIdentity(_gamePath);
+            if (_config.publishGameImageLayout && !Loaders::ApplyMappedImageLayout()) {
+                throw std::runtime_error("Could not publish the mapped game's image layout");
+            }
 
             if (SynchronizeUCRTCommandLine()) {
                 Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Mapped game command line: {}", RedactGameCommandLine(BuildGameCommandLineA()));

@@ -90,6 +90,21 @@ namespace Framework::Launcher::Loaders {
         }
     } // namespace
 
+    bool ApplyMappedImageLayout() {
+        const auto peb   = CurrentPeb();
+        const auto entry = FindMainImageEntry(peb);
+        if (!entry) {
+            return false;
+        }
+        const auto base    = static_cast<uint8_t *>(peb->ImageBaseAddress);
+        const auto dos     = reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
+        const auto nt      = reinterpret_cast<const IMAGE_NT_HEADERS *>(base + dos->e_lfanew);
+        entry->EntryPoint  = base + nt->OptionalHeader.AddressOfEntryPoint;
+        entry->SizeOfImage = nt->OptionalHeader.SizeOfImage;
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Main image loader entry now reports the game's entry point and image size ({:#x})", entry->SizeOfImage);
+        return true;
+    }
+
     bool ApplyMappedImageIdentity(const std::wstring &imagePath) {
         const auto logger = Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER);
 

@@ -22,4 +22,5 @@ namespace Framework::Launcher::Loaders {
      * See docs/cryengine_games.md.
      */
     bool ApplyMappedImageIdentity(const std::wstring &imagePath);
+    bool ApplyMappedImageLayout();
 } // namespace Framework::Launcher::Loaders
