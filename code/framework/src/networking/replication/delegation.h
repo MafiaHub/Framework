@@ -111,6 +111,10 @@ namespace Framework::Networking::Replication {
         // two players walking past an NPC in opposite directions otherwise trade it every pass.
         static constexpr float kStickyDiscount = 0.72f;
 
+        // A decline asks for a pass at the next Update, but no sooner than this after the last one: a
+        // client flipping its answer every packet then costs at most ten passes a second.
+        static constexpr uint32_t kDeclinedPassGapMs = 100;
+
         /**
          * Who should be simulating an entity, given where it is and who is near it.
          *
@@ -179,8 +183,8 @@ namespace Framework::Networking::Replication {
         MafiaNet::PeerGuid PinnedTo(const NetworkEntity *entity) const;
 
         // A client that cannot run this one entity now (its world lacks the floor under it, say: only
-        // it can see that) is passed over for it alone until it says otherwise, leaves, or the entity
-        // goes. A pin still wins. A change runs a pass at once, so a declining simulator hands over.
+        // it can see that) is passed over for it alone until it withdraws that, leaves, or the entity
+        // goes. A pin overrides it without clearing it. A change asks for a pass (kDeclinedPassGapMs).
         void SetDeclined(NetworkEntity *entity, MafiaNet::PeerGuid guid, bool declined);
         bool IsDeclined(const NetworkEntity *entity, MafiaNet::PeerGuid guid) const;
 
@@ -266,6 +270,7 @@ namespace Framework::Networking::Replication {
         uint32_t _intervalMs         = 500;
         uint32_t _defaultCapacity    = 0;
         MafiaNet::Time _lastPass     = 0;
+        bool _passPending            = false; // a decline changed since the last pass
 
         std::vector<DelegationCandidate> _candidates;
         std::unordered_map<MafiaNet::PeerGuid, uint32_t> _capacityOverrides;
