@@ -87,7 +87,8 @@ namespace Framework::Networking::Replication {
         if (!entity || !_isServer || guid == MafiaNet::UNASSIGNED_PEER_GUID || entity->GetDelegationPolicy() == nullptr) {
             return;
         }
-        auto &list       = EntryFor(entity).declined;
+        Entry &entry     = EntryFor(entity);
+        auto &list       = entry.declined;
         const bool known = std::ranges::find(list, guid) != list.end();
         if (known == declined) {
             return;
@@ -98,7 +99,9 @@ namespace Framework::Networking::Replication {
         else {
             std::erase(list, guid);
         }
-        UpdateNow();
+        // Coalesced rather than run here, since the RPC behind this is not rate limited. A pinned
+        // entity's simulator does not depend on the answer, so it needs no pass at all.
+        _passPending = _passPending || !entry.pinned;
     }
 
     bool DelegationManager::IsDeclined(const NetworkEntity *entity, MafiaNet::PeerGuid guid) const {
@@ -144,8 +147,11 @@ namespace Framework::Networking::Replication {
         if (!_isServer || !_manager) {
             return;
         }
-        const MafiaNet::Time now = MafiaNet::GetTime();
-        if (_intervalMs != 0 && _lastPass != 0 && now - _lastPass < static_cast<MafiaNet::Time>(_intervalMs)) {
+        const MafiaNet::Time now   = MafiaNet::GetTime();
+        const MafiaNet::Time since = now - _lastPass;
+        const bool due             = _intervalMs == 0 || _lastPass == 0 || since >= static_cast<MafiaNet::Time>(_intervalMs);
+        const bool hurried         = _passPending && since >= static_cast<MafiaNet::Time>(kDeclinedPassGapMs);
+        if (!due && !hurried) {
             return;
         }
         UpdateNow();
@@ -317,6 +323,7 @@ namespace Framework::Networking::Replication {
         if (!_isServer || !_manager) {
             return;
         }
+        _passPending = false;
 
         _lastPass = MafiaNet::GetTime();
         CollectCandidates();
