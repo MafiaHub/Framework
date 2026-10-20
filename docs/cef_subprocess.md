@@ -1,8 +1,9 @@
 # The CEF subprocess
 
-Every Chromium child process a client spawns (renderer, GPU, utility,
-network) runs `cef_subprocess.exe`. It is one Framework target shared by every
-project. It ships next to the client DLL, and every launch puts a fresh copy
+Every Chromium child process a client spawns (renderer, GPU, the storage and
+audio utilities) runs `cef_subprocess.exe`. It is one Framework target shared
+by every project. The network service is the exception: it runs inside the
+game process (see below). It ships next to the client DLL, and every launch puts a fresh copy
 of it on players' machines. Antivirus engines therefore see it more than any
 other file we ship, so this page covers what it does and the rules that keep
 it from being flagged.
@@ -30,6 +31,38 @@ schemes, which is why `scheme.cpp` is compiled into both the client and the
 subprocess, and why the scheme name is framework-wide (see
 `local_resource_scheme.md`). A project cannot have its own subprocess without
 also having its own scheme set.
+
+## The network service stays in the game process
+
+`App::OnBeforeCommandLineProcessing` enables Chromium's
+`NetworkServiceInProcess2` feature, so the network service (DNS, HTTP, TLS,
+cookies, the disk cache) runs on threads of the browser process instead of in
+a `cef_subprocess.exe` of its own. Two things single that helper out when it
+is a process:
+
+- It is the one unsandboxed child Chromium assigns to a kill-on-close job
+  (`sandbox/policy/win/sandbox_win.cc`, `LaunchWithoutSandbox`, gated by
+  `UtilitySandboxedProcessLauncherDelegate::ShouldUnsandboxedRunInJob`). A
+  failed assignment terminates the child with exit code 1 before it runs a
+  line, and nothing is logged in a release build (`DPLOG`).
+- It is the one helper that opens sockets, which is what security software
+  judges an unsigned, windowless exe on.
+
+Shipped builds have shown exactly that shape: the network service exits as it
+launches and Chromium restarts it every 27 ms for the whole session
+(`Network service crashed or was terminated, restarting service.` thousands
+of times in `cef.log`), the menu stays blank, and the renderer and GPU
+helpers run fine. The trigger is environmental and was never reproduced on a
+developer machine: launching the same shipped build from a terminal, from
+Explorer with the mark of the web (inside Explorer's `BREAKAWAY_OK` job), or
+inside a synthetic job all worked. In-process there is nothing to launch,
+kill or police, so the failure mode is gone whatever triggers it. The cost is
+that a crash in the network stack now takes the game with it, which for a UI
+that serves local resources is the right trade.
+
+`Manager::Init` logs, at debug level, whether the game process runs inside a
+job and that job's limit flags, so a report of the blank menu shows the
+host's setup.
 
 ## Parent watch
 

@@ -342,6 +342,20 @@ namespace Framework::GUI {
 
         Framework::Logging::GetLogger("Web")->debug("Initializing CEF: module '{}', cache profile '{}', log '{}'", moduleDir.string(), cacheRoot.string(), cefLogPath.string());
 
+        // Explorer runs a downloaded exe inside its own job, and other hosts
+        // bring theirs; the helpers inherit it, so a log should say so
+        BOOL inJob = FALSE;
+        if (IsProcessInJob(GetCurrentProcess(), nullptr, &inJob) && inJob) {
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits {};
+            DWORD written = 0;
+            if (QueryInformationJobObject(nullptr, JobObjectExtendedLimitInformation, &limits, sizeof(limits), &written)) {
+                Framework::Logging::GetLogger("Web")->debug("Process runs inside a job (limit flags 0x{:X}); CEF helpers inherit it", limits.BasicLimitInformation.LimitFlags);
+            }
+            else {
+                Framework::Logging::GetLogger("Web")->debug("Process runs inside a job; CEF helpers inherit it");
+            }
+        }
+
         // Initialize CEF
         CefMainArgs mainArgs(GetModuleHandle(nullptr));
         if (!CefInitialize(mainArgs, settings, _cefApp, nullptr)) {

@@ -301,34 +301,6 @@ namespace Framework::Launcher {
         }
     } // namespace
 
-    bool RelaunchOutsideInheritedJob() {
-        // Started from the Explorer shell we sit in its job (BREAKAWAY_OK), and
-        // there CEF's network service dies at launch with exit code 1, is
-        // restarted, and dies again thousands of times: no page ever loads.
-        // Outside any job, as from a terminal, that never happens.
-        BOOL inJob = FALSE;
-        if (!IsProcessInJob(GetCurrentProcess(), nullptr, &inJob) || !inJob) {
-            return false;
-        }
-
-        const auto executable = LauncherExecutablePath();
-        if (executable.empty()) {
-            return false;
-        }
-
-        // A job that refuses breakaway fails this, and we carry on inside it
-        std::wstring commandLine = GetCommandLineW();
-        STARTUPINFOW startupInfo {};
-        startupInfo.cb = sizeof(startupInfo);
-        PROCESS_INFORMATION processInfo {};
-        if (!CreateProcessW(executable.c_str(), commandLine.data(), nullptr, nullptr, FALSE, CREATE_BREAKAWAY_FROM_JOB, nullptr, nullptr, &startupInfo, &processInfo)) {
-            return false;
-        }
-        CloseHandle(processInfo.hThread);
-        CloseHandle(processInfo.hProcess);
-        return true;
-    }
-
     Project::Project(ProjectConfiguration &cfg): _config(cfg) {
         gConfig = &_config;
 
@@ -360,11 +332,6 @@ namespace Framework::Launcher {
     }
 
     bool Project::Launch() {
-        // A launcher with work before Launch (a patcher) calls this first itself
-        if (RelaunchOutsideInheritedJob()) {
-            return true;
-        }
-
         ForceHighPerformanceGPU();
 
         if (!_config.urlProtocolScheme.empty()) {

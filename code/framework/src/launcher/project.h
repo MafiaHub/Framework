@@ -137,10 +137,6 @@ namespace Framework::Launcher {
         std::wstring urlProtocolScheme; // e.g. L"mafiamp" (no "://")
     };
 
-    // Restarts this launcher outside the job it was started in, if any. True
-    // when the restarted copy now runs instead and this one should exit.
-    bool RelaunchOutsideInheritedJob();
-
     class Project final: private PlatformHost {
       public:
         using FunctionResolverProc = fu2::function<LPVOID(HMODULE, const char *) const>;

@@ -18,6 +18,19 @@
 
 namespace Framework::GUI::CEF {
 
+    namespace {
+        // --enable-features and --disable-features each take one comma-separated
+        // list, and a second AppendSwitchWithValue shadows the first
+        void AppendFeatures(const CefRefPtr<CefCommandLine> &commandLine, const char *switchName, const std::string &features) {
+            std::string value = commandLine->HasSwitch(switchName) ? commandLine->GetSwitchValue(switchName).ToString() : std::string();
+            if (!value.empty()) {
+                value += ",";
+            }
+            value += features;
+            commandLine->AppendSwitchWithValue(switchName, value);
+        }
+    } // namespace
+
     CefRefPtr<CefResourceHandler> App::Create(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, const CefString &scheme_name, CefRefPtr<CefRequest> request) {
         if (!browser || !frame)
             return nullptr;
@@ -59,7 +72,15 @@ namespace Framework::GUI::CEF {
         commandLine->AppendSwitch("disable-pdf-extension");
         commandLine->AppendSwitch("disable-spell-checking");
         commandLine->AppendSwitch("disable-component-update");
-        commandLine->AppendSwitchWithValue("disable-features", "WebUSB,WebHID");
+        AppendFeatures(commandLine, "disable-features", "WebUSB,WebHID");
+        // The network service runs in this process. Out of process it is the one
+        // unsandboxed child Chromium puts in a kill-on-close job, and the one
+        // helper that opens sockets, which is what job policies and security
+        // software single out: shipped builds have had it exit as it launched
+        // and be restarted every 27 ms for the whole session, menu blank, while
+        // the renderer and GPU helpers ran fine. In-process there is nothing to
+        // launch, kill or police, and the UI's traffic is local resources anyway.
+        AppendFeatures(commandLine, "enable-features", "NetworkServiceInProcess2");
         // Allow UI audio without a user gesture: CEF views are host-driven overlays (notifications,
         // HUD, menus) that never receive a real "user activation", so the default autoplay policy
         // would silently block all sound (Web Audio / <audio>). This opts the embedded browser out.
