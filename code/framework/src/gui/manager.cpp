@@ -32,6 +32,9 @@ namespace Framework::GUI {
     namespace {
         constexpr std::size_t kMaxCefCacheProfiles = 16;
 
+        // Bounds the wait for OnContextInitialized in Init
+        constexpr ULONGLONG kContextInitializedTimeoutMs = 5000;
+
         // ImGui has no wait/help/crosshair/zoom shapes; those fall back to the arrow.
         ImGuiMouseCursor ToImGuiCursor(cef_cursor_type_t type) {
             switch (type) {
@@ -366,6 +369,23 @@ namespace Framework::GUI {
         // One factory for the whole scheme; an empty domain matches every host
         // and the registry routes them, so CEF never learns about a root.
         CefRegisterSchemeHandlerFactory(Resources::kResourceScheme, "", _resourceRegistry);
+
+        // OnContextInitialized only arrives through the pump, and a browser
+        // created before it races the global request context and profile
+        // setup, slowest on a new or migrated cache profile. Init returns
+        // ready, so callers can create views straight away.
+        {
+            const auto deadline = GetTickCount64() + kContextInitializedTimeoutMs;
+            while (!_cefApp->IsContextInitialized() && GetTickCount64() < deadline) {
+                if (!PumpCefMessageLoopGuarded()) {
+                    break;
+                }
+                Sleep(1);
+            }
+            if (!_cefApp->IsContextInitialized()) {
+                Framework::Logging::GetLogger("Web")->warn("CEF context not initialized after {} ms; views may start late", kContextInitializedTimeoutMs);
+            }
+        }
 
         _cefInitialized = true;
         _initialized    = true;
