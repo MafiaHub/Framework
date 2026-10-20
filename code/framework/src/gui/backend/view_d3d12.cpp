@@ -191,6 +191,7 @@ namespace Framework::GUI {
         // A copy that timed out may still be running: its allocator cannot be reset
         // and the textures it uses cannot be replaced until it is done
         if (_sharedFailed || !WaitForFence(_sharedCopy.fence.Get(), _sharedCopy.fenceValue, _sharedCopy.event)) {
+            Framework::Logging::GetLogger("Web")->debug("ViewD3D12: paint dropped, {}", _sharedFailed ? "shared path failed" : "previous copy still running");
             return;
         }
         // Kept from a copy that timed out; that copy has now landed
@@ -240,6 +241,7 @@ namespace Framework::GUI {
         if (staging.width != _sharedPage.width || staging.height != _sharedPage.height) {
             // Freed on the CPU, so the frame reading it has to have run first
             if (!WaitForFence(frameFence, readFence, _sharedCopy.event)) {
+                Framework::Logging::GetLogger("Web")->debug("ViewD3D12: paint dropped, frame fence {} never reached {}", frameFence->GetCompletedValue(), readFence);
                 return;
             }
             if (!EnsureTexture(device, staging, _sharedPage.width, _sharedPage.height)) {

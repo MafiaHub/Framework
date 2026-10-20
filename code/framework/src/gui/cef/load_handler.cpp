@@ -8,8 +8,13 @@
 
 #include "load_handler.h"
 
+#include <logging/logger.h>
+
 namespace Framework::GUI::CEF {
     void LoadHandler::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transitionType) {
+        if (frame && frame->IsMain()) {
+            Framework::Logging::GetLogger("Web")->debug("Load start: {}", frame->GetURL().ToString());
+        }
         if (!_onViewEvent || !frame) {
             return;
         }
@@ -22,6 +27,9 @@ namespace Framework::GUI::CEF {
     }
 
     void LoadHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) {
+        if (frame && frame->IsMain()) {
+            Framework::Logging::GetLogger("Web")->debug("Load end: {} ({})", frame->GetURL().ToString(), httpStatusCode);
+        }
         // main frame only: sub-frames finish independently of "the document is ready"
         if (!_onViewEvent || !frame || !frame->IsMain()) {
             return;
@@ -35,6 +43,7 @@ namespace Framework::GUI::CEF {
     }
 
     void LoadHandler::OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode, const CefString &errorText, const CefString &failedUrl) {
+        Framework::Logging::GetLogger("Web")->debug("Load error {}: {} ({})", static_cast<int>(errorCode), failedUrl.ToString(), errorText.ToString());
         if (!_onViewEvent) {
             return;
         }

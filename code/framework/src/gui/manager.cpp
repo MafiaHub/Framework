@@ -293,12 +293,14 @@ namespace Framework::GUI {
         settings.windowless_rendering_enabled = true;
         settings.multi_threaded_message_loop  = false;
         settings.no_sandbox                   = true;
-        // Chromium logs a failed Hyper-V CPU counter every 15 seconds on any
-        // machine running VBS (CpuHealthTracker, which no switch or feature
-        // disables), burying every real error. CEF filters by severity only,
-        // so ERROR is opt-in for when the browser itself is being debugged.
+        // ERROR by default. On a machine running VBS, Chromium also logs a failed
+        // Hyper-V CPU counter every 15 seconds (CpuHealthTracker, which no switch
+        // or feature disables), but FATAL alone hides a renderer that fails to
+        // launch or dies, and a page then stalls with an empty log.
+        // MafiaHubCefErrorLog=verbose goes all the way down, for bring-up work.
         const char *cefErrorLog = std::getenv("MafiaHubCefErrorLog");
-        settings.log_severity   = (cefErrorLog && *cefErrorLog) ? LOGSEVERITY_ERROR : LOGSEVERITY_FATAL;
+        const bool verboseLog   = cefErrorLog && std::string_view(cefErrorLog) == "verbose";
+        settings.log_severity   = verboseLog ? LOGSEVERITY_VERBOSE : LOGSEVERITY_ERROR;
 
         std::error_code logDirError;
         const std::filesystem::path logDir = std::filesystem::path(rootDir) / "logs";
