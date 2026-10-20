@@ -405,6 +405,7 @@ namespace Framework::GUI {
             int visible = 0;
             for (auto &view : _views) {
                 ReconcileSuppression(view.get());
+                view->CheckNavigationStarted();
                 view->RequestBeginFrame();
                 view->Update();
                 visible += view->IsOnScreen() ? 1 : 0;

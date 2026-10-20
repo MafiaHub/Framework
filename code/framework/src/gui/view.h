@@ -79,6 +79,14 @@ namespace Framework::GUI {
         // 0x0 views fill the viewport and track it across resizes
         bool _autoResize = false;
 
+        // A first navigation the renderer never commits is reloaded a few times
+        static constexpr unsigned long long kNavigationStartTimeoutMs = 5000;
+        static constexpr int kMaxNavigationReloads                    = 2;
+        unsigned long long _navigationIssuedAt                        = 0;
+        int _navigationReloads                                        = 0;
+        bool _navigationStarted                                       = false;
+        bool _navigationGaveUp                                        = false;
+
         std::recursive_mutex _renderMutex;
         glm::vec2 _cursorPos {};
         bool _isMouseDown = false;
@@ -96,6 +104,7 @@ namespace Framework::GUI {
         virtual void Render() = 0;
 
         void RequestBeginFrame();
+        void CheckNavigationStarted();
 
         // Submit the view's quad; called inside an ImGui frame on the game thread.
         virtual void SubmitImGuiDraw() {}

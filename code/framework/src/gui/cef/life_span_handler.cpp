@@ -9,6 +9,8 @@
 #include "life_span_handler.h"
 #include "include/cef_parser.h"
 
+#include <logging/logger.h>
+
 #include <algorithm>
 #include <cctype>
 
@@ -117,5 +119,21 @@ namespace Framework::GUI::CEF {
         const bool blocked = _onBeforeBrowse && _onBeforeBrowse(urlParts, browser, frame, request, userGesture, isRedirect);
         report(blocked, ViewBlockReason::HostFilter);
         return blocked;
+    }
+
+    void LifeSpanHandler::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser, TerminationStatus status, int errorCode, const CefString &errorString) {
+        // Without this a dead renderer is silent: the view just stops, with no
+        // load error and nothing in a FATAL-only cef.log
+        const auto logger = Framework::Logging::GetLogger("Web");
+        const auto url    = browser && browser->GetMainFrame() ? browser->GetMainFrame()->GetURL().ToString() : std::string();
+        logger->error("Render process for '{}' terminated: status {}, error {} ({})", url, static_cast<int>(status), errorCode, errorString.ToString());
+
+        // A page that kills its renderer every time must not reload forever
+        if (!browser || _renderProcessReloads >= kMaxRenderProcessReloads) {
+            logger->error("Render process for '{}' not restarted: {} reloads already", url, _renderProcessReloads);
+            return;
+        }
+        ++_renderProcessReloads;
+        browser->Reload();
     }
 } // namespace Framework::GUI::CEF

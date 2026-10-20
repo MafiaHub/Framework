@@ -121,6 +121,33 @@ namespace Framework::GUI {
         _browser->GetHost()->SendExternalBeginFrame();
     }
 
+    void View::CheckNavigationStarted() {
+        // A navigation the renderer never commits raises nothing at all: no load
+        // error, no termination. Retry it rather than leave the view blank.
+        if (!_browser || _navigationStarted || _navigationGaveUp) {
+            return;
+        }
+        const auto now = GetTickCount64();
+        if (_navigationIssuedAt == 0) {
+            _navigationIssuedAt = now;
+            return;
+        }
+        if (now - _navigationIssuedAt < kNavigationStartTimeoutMs) {
+            return;
+        }
+
+        _navigationIssuedAt = now;
+        const auto url      = _browser->GetMainFrame() ? _browser->GetMainFrame()->GetURL().ToString() : std::string();
+        if (_navigationReloads >= kMaxNavigationReloads) {
+            _navigationGaveUp = true;
+            Framework::Logging::GetLogger("Web")->error("View {}: '{}' still has not started loading after {} reloads", _id, url, _navigationReloads);
+            return;
+        }
+        ++_navigationReloads;
+        Framework::Logging::GetLogger("Web")->warn("View {}: '{}' did not start loading within {} ms, reloading", _id, url, kNavigationStartTimeoutMs);
+        _browser->Reload();
+    }
+
     bool View::IsOnScreen() const {
         if (!_shouldDisplay) {
             return false;
@@ -140,6 +167,10 @@ namespace Framework::GUI {
     void View::EmitViewEvent(const ViewEventData &data) {
         if (data.event == ViewEvent::Created) {
             _created = true;
+        }
+
+        if (data.event == ViewEvent::LoadingStart && data.isMainFrame) {
+            _navigationStarted = true;
         }
 
         // window object exists from main-frame load start; bind before anything talks to the page
