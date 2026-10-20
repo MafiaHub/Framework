@@ -29,6 +29,7 @@
 #include <fstream>
 #include <ostream>
 #include <stdexcept>
+#include <string_view>
 #include <utils/hooking/hooking.h>
 #include <utils/minidump.h>
 
@@ -216,6 +217,60 @@ namespace {
     bool ShouldReportMappedImage(HMODULE module) {
         return gImagePath && (!module || module == GetModuleHandle(nullptr));
     }
+
+    // Wine's ntdll exports wine_get_version; Windows' does not. Checked once per process.
+    bool IsRunningUnderWine() {
+        static const bool underWine = GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version") != nullptr;
+        return underWine;
+    }
+
+    // Whether an import resolves from kernel32 or kernelbase, the only modules whose LoadLibraryEx* we replace.
+    bool IsKernelModule(HMODULE module) {
+        return module == GetModuleHandleW(L"kernel32.dll") || module == GetModuleHandleW(L"kernelbase.dll");
+    }
+
+    // GetFullPathNameW for LoadLibraryExWineCompatible<wchar_t>
+    DWORD FullPathName(const wchar_t *name, DWORD size, wchar_t *buffer) {
+        return GetFullPathNameW(name, size, buffer, nullptr);
+    }
+
+    // GetFullPathNameA for LoadLibraryExWineCompatible<char>
+    DWORD FullPathName(const char *name, DWORD size, char *buffer) {
+        return GetFullPathNameA(name, size, buffer, nullptr);
+    }
+
+    // Launch() sets default DLL directories before the game runs. With those in effect, Wine's
+    // loader rejects LOAD_WITH_ALTERED_SEARCH_PATH for any name that is not an absolute path
+    // (ERROR_INVALID_PARAMETER) instead of searching, where Windows loads it. Hogwarts Legacy
+    // loads steamclient64.dll that way and stops at "Unable to load library" under Proton.
+    // Only such a refused load is retried: a name with a directory as an absolute path, which keeps
+    // the flag and so its dependencies' search from that directory; a bare name, which has no
+    // directory to search from, without the flag. Combinations Windows refuses too are left alone.
+    template <typename CharT>
+    HMODULE LoadLibraryExWineCompatible(HMODULE(WINAPI *loadLibraryEx)(const CharT *, HANDLE, DWORD), const CharT *name, HANDLE file, DWORD flags) {
+        constexpr DWORD searchFlags = LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS;
+        constexpr CharT separators[] = {CharT('\\'), CharT('/'), CharT {}};
+
+        const auto module = loadLibraryEx(name, file, flags);
+        if (module || !name || !(flags & LOAD_WITH_ALTERED_SEARCH_PATH) || (flags & searchFlags) || GetLastError() != ERROR_INVALID_PARAMETER) {
+            return module;
+        }
+
+        const std::basic_string_view<CharT> view(name);
+        const bool hasDirectory = view.find_first_of(separators) != view.npos || (view.size() > 1 && view[1] == CharT(':'));
+        if (!hasDirectory) {
+            return loadLibraryEx(name, file, flags & ~LOAD_WITH_ALTERED_SEARCH_PATH);
+        }
+
+        std::basic_string<CharT> fullPath(FullPathName(name, 0, nullptr), CharT {});
+        const auto length = FullPathName(name, static_cast<DWORD>(fullPath.size()), fullPath.data());
+        if (length == 0 || length >= fullPath.size()) {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return module;
+        }
+        fullPath.resize(length);
+        return loadLibraryEx(fullPath.c_str(), file, flags);
+    }
 } // namespace
 
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
@@ -284,6 +339,16 @@ BOOL WINAPI GetModuleHandleExA_Hook(DWORD dwFlags, LPSTR lpModuleName, HMODULE *
     }
 
     return GetModuleHandleExA(dwFlags, lpModuleName, phModule);
+}
+
+// Given to the game for kernel32/kernelbase LoadLibraryExW under Wine only
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+    return LoadLibraryExWineCompatible(LoadLibraryExW, lpLibFileName, hFile, dwFlags);
+}
+
+// Given to the game for kernel32/kernelbase LoadLibraryExA under Wine only
+HMODULE WINAPI LoadLibraryExA_Hook(LPCSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+    return LoadLibraryExWineCompatible(LoadLibraryExA, lpLibFileName, hFile, dwFlags);
 }
 
 namespace Framework::Launcher {
@@ -884,6 +949,15 @@ namespace Framework::Launcher {
             }
             if (exportName == "GetModuleHandleExW") {
                 return reinterpret_cast<LPVOID>(GetModuleHandleExW_Hook);
+            }
+            // Windows keeps the real imports; the hooks only work around Wine's loader
+            if (IsRunningUnderWine() && IsKernelModule(hmod)) {
+                if (exportName == "LoadLibraryExW") {
+                    return reinterpret_cast<LPVOID>(LoadLibraryExW_Hook);
+                }
+                if (exportName == "LoadLibraryExA") {
+                    return reinterpret_cast<LPVOID>(LoadLibraryExA_Hook);
+                }
             }
             if (_config.upgradeSwapChainToFlipModel) {
                 if (const auto stub = ResolveFlipModelFactoryExport(hmod, exportName)) {
