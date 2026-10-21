@@ -181,6 +181,11 @@ set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
 set(TRACY_STATIC ON CACHE BOOL "" FORCE)
 set(TRACY_FIBERS ON CACHE BOOL "" FORCE) # FTL job system runs on fibers
 set(TRACY_DELAYED_INIT ON CACHE BOOL "" FORCE)
+# Profiling is a local development tool. Left at Tracy's defaults, every process that enters a zone
+# listens on all interfaces and announces itself to the network, and a connected viewer can ask it for
+# files from disk. Connect the viewer to 127.0.0.1, or reach a remote host through a tunnel.
+set(TRACY_ONLY_LOCALHOST ON CACHE BOOL "" FORCE)
+set(TRACY_NO_BROADCAST ON CACHE BOOL "" FORCE)
 add_subdirectory(tracy)
 
 # Build FTL (Fiber Tasking Library) - no vcpkg port exists.
