@@ -36,6 +36,7 @@ namespace Framework::Networking {
     };
     class NetworkClient final: public NetworkPeer {
       private:
+        std::string _bindHost;
 
         PeerState _state;
 
@@ -56,6 +57,11 @@ namespace Framework::Networking {
 
       public:
         NetworkClient();
+
+        // The local address the peer binds. The default binds every interface, which reaching a server on
+        // another machine needs; one that only ever talks to a server on this machine binds "127.0.0.1" and
+        // opens nothing on the network.
+        explicit NetworkClient(std::string bindHost);
 
         ~NetworkClient();
 

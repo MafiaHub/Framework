@@ -41,7 +41,7 @@ class ConnectionAdmissionRig {
     };
 
     std::unique_ptr<Framework::Networking::NetworkServer> server = std::make_unique<Framework::Networking::NetworkServer>();
-    std::unique_ptr<Framework::Networking::NetworkClient> client = std::make_unique<Framework::Networking::NetworkClient>();
+    std::unique_ptr<Framework::Networking::NetworkClient> client = std::make_unique<Framework::Networking::NetworkClient>("127.0.0.1");
     Observed seen;
     int32_t port = 0;
 
@@ -135,6 +135,13 @@ MODULE(connection_admission, {
     using Rig = ConnectionAdmissionRig;
     using Framework::Networking::DisconnectionReason;
 
+    IT("binds the client to the address it was given, and not every interface", {
+        Rig rig;
+        EQUALS(rig.StartServer(false), true);
+        EQUALS(rig.Connect(""), true);
+        STREQUALS(rig.client->GetPeer()->GetMyBoundAddress().ToString(false), "127.0.0.1");
+    });
+
     IT("hands the server the identity and ticket the client connected with, before any connection", {
         Rig rig;
         EQUALS(rig.StartServer(true), true);
@@ -226,7 +233,7 @@ MODULE(connection_admission, {
         EQUALS(rig.PumpUntil([&] { return !rig.seen.requestGuids.empty(); }), true);
 
         // A second client from the same address, while the first still waits.
-        auto second = std::make_unique<Framework::Networking::NetworkClient>();
+        auto second = std::make_unique<Framework::Networking::NetworkClient>("127.0.0.1");
         second->SetBuildToken(Framework::Networking::NetworkPeer::kBuildVerificationDisabledToken);
         bool refused = false;
         DisconnectionReason reason = DisconnectionReason::UNKNOWN;
