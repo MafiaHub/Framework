@@ -33,12 +33,14 @@ namespace Framework::Networking {
 
     NetworkClient::NetworkClient(): NetworkPeer(), _state(PeerState::DISCONNECTED) {}
 
+    NetworkClient::NetworkClient(std::string bindHost): NetworkPeer(), _bindHost(std::move(bindHost)), _state(PeerState::DISCONNECTED) {}
+
     NetworkClient::~NetworkClient() {
         Shutdown();
     }
 
     Utils::Result<void, Error> NetworkClient::Init() {
-        MafiaNet::SocketDescriptor sd {};
+        MafiaNet::SocketDescriptor sd(0, _bindHost.empty() ? nullptr : _bindHost.c_str());
         const MafiaNet::StartupResult result = _peer->Startup(kMaxConnections, &sd, 1);
         if (result != MafiaNet::RAKNET_STARTED && result != MafiaNet::RAKNET_ALREADY_STARTED) {
             return Error(std::string("Failed to start networking peer: ") + GetStartupResultString(result));
