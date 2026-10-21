@@ -54,6 +54,8 @@ Or use Visual Studio 2022 with CMake tools installed and open the repository fol
   purpose despite having ports - physfs (the port builds every archiver), tracy (no
   `TRACY_DELAYED_INIT`), imguizmo (port predates the ImGui 1.92 `AddPolyline` change) and
   miniaudio (port ships only the header). Each carries the reason in `vendors/CMakeLists.txt`.
+  CEF is downloaded and unpacked into `vendors/cef` at configure time; set `FW_CEF_CACHE_DIR`
+  (`-D` or an environment variable) to share one copy between checkouts and worktrees.
 - `vcpkg.json` - everything else, pinned by `builtin-baseline`. vcpkg is fetched and
   bootstrapped at configure time by `cmake/VcpkgBootstrap.cmake`; override with
   `-DFW_VCPKG_ROOT=<path>` (not the `VCPKG_ROOT` env var, which `vcvars64.bat` hijacks).
