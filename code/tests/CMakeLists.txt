@@ -46,6 +46,7 @@ target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
 add_custom_target(RunFrameworkTests
         COMMAND $<TARGET_FILE:FrameworkTests>
         COMMAND $<TARGET_FILE:FrameworkClientScriptingTests>
+        COMMAND ${CMAKE_COMMAND} "-DSCRATCH=${CMAKE_CURRENT_BINARY_DIR}/download-cef-ut" -P "${CMAKE_CURRENT_SOURCE_DIR}/download_cef_ut.cmake"
         DEPENDS FrameworkTests FrameworkClientScriptingTests)
 if(WIN32)
     add_dependencies(RunFrameworkTests RunFrameworkSentryTests)
