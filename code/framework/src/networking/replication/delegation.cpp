@@ -190,6 +190,9 @@ namespace Framework::Networking::Replication {
             const bool worldOk = !policy.requireSameVirtualWorld || MafiaNet::VirtualWorldsCanSee(virtualWorld, incumbent->virtualWorld);
             const float distSq = GroundDistanceSq(position, incumbent->position, groundXY);
             if (worldOk && distSq <= policy.releaseRange * policy.releaseRange) {
+                if (!policy.proximitySteal) {
+                    return current;
+                }
                 desired  = current;
                 bestRank = distSq * kStickyDiscount;
             }
