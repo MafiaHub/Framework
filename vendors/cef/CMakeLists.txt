@@ -6,6 +6,10 @@
 # Set CEF_VERSION to pin a specific CEF release. The version string comes from
 # https://cef-builds.spotifycdn.com/index.html (pick a stable build).
 #
+# The distribution lands in this directory. Set FW_CEF_CACHE_DIR, as a -D option
+# or an environment variable, to keep it somewhere every checkout and worktree
+# shares instead, so each one does not download and unpack its own ~400 MB.
+#
 # Provides:
 #   CEF           - INTERFACE library target (link against this)
 #   CEFCopyDlls   - Custom target that copies runtime DLLs and resources to bin/
@@ -29,8 +33,18 @@ message(STATUS "CEF: Target platform is ${CEF_PLATFORM}")
 # -------------------------------------------------------------------
 # Download CEF binary distribution (configure-time, idempotent)
 # -------------------------------------------------------------------
+if(FW_CEF_CACHE_DIR)
+    set(_fw_cef_dir "${FW_CEF_CACHE_DIR}")
+elseif(NOT "$ENV{FW_CEF_CACHE_DIR}" STREQUAL "")
+    set(_fw_cef_dir "$ENV{FW_CEF_CACHE_DIR}")
+else()
+    set(_fw_cef_dir "${CMAKE_CURRENT_SOURCE_DIR}")
+endif()
+file(TO_CMAKE_PATH "${_fw_cef_dir}" _fw_cef_dir)
+get_filename_component(_fw_cef_dir "${_fw_cef_dir}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+
 include(DownloadCEF)
-DownloadCEF("${CEF_PLATFORM}" "${CEF_VERSION}" "${CMAKE_CURRENT_SOURCE_DIR}")
+DownloadCEF("${CEF_PLATFORM}" "${CEF_VERSION}" "${_fw_cef_dir}")
 
 # CEF_ROOT is now set by DownloadCEF() as a CACHE INTERNAL variable
 # pointing to the extracted distribution directory.
