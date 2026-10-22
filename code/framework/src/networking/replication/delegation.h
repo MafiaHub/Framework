@@ -16,6 +16,7 @@
 #include <function2/function2.hpp>
 
 #include <cstdint>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -110,6 +111,10 @@ namespace Framework::Networking::Replication {
         // two players walking past an NPC in opposite directions otherwise trade it every pass.
         static constexpr float kStickyDiscount = 0.72f;
 
+        // A decline asks for a pass at the next Update, but no sooner than this after the last one: a
+        // client flipping its answer every packet then costs at most ten passes a second.
+        static constexpr uint32_t kDeclinedPassGapMs = 100;
+
         /**
          * Who should be simulating an entity, given where it is and who is near it.
          *
@@ -127,8 +132,12 @@ namespace Framework::Networking::Replication {
          * `acquireRange`, and the incumbent's distance is discounted by `kStickyDiscount` before the
          * comparison. An incumbent is also never dropped for being over capacity -- a budget lowered
          * at runtime stops new work arriving rather than stuttering what is already running.
+         *
+         * `declined` are the clients that have said they cannot run this entity (see SetDeclined).
+         * They are passed over as if they were not candidates at all, the incumbent included.
          */
-        static MafiaNet::PeerGuid Elect(const DelegationPolicy &policy, const glm::vec3 &position, MafiaNet::VirtualWorldId virtualWorld, MafiaNet::PeerGuid current, const std::vector<DelegationCandidate> &candidates, bool groundXY);
+        static MafiaNet::PeerGuid Elect(const DelegationPolicy &policy, const glm::vec3 &position, MafiaNet::VirtualWorldId virtualWorld, MafiaNet::PeerGuid current, const std::vector<DelegationCandidate> &candidates, bool groundXY,
+            std::span<const MafiaNet::PeerGuid> declined = {});
 
         // Server only; a client-side manager leaves this untouched.
         void Init(ReplicationManager *manager, bool isServer);
@@ -172,6 +181,12 @@ namespace Framework::Networking::Replication {
         void Unpin(NetworkEntity *entity);
         bool IsPinned(const NetworkEntity *entity) const;
         MafiaNet::PeerGuid PinnedTo(const NetworkEntity *entity) const;
+
+        // A client that cannot run this one entity now (its world lacks the floor under it, say: only
+        // it can see that) is passed over for it alone until it withdraws that, leaves, or the entity
+        // goes. A pin overrides it without clearing it. A change asks for a pass (kDeclinedPassGapMs).
+        void SetDeclined(NetworkEntity *entity, MafiaNet::PeerGuid guid, bool declined);
+        bool IsDeclined(const NetworkEntity *entity, MafiaNet::PeerGuid guid) const;
 
         // One election pass, at most every interval. Driven from NetworkPeer::Update after the
         // interest rebuild, so it reads the positions this tick settled.
@@ -232,6 +247,8 @@ namespace Framework::Networking::Replication {
             bool pinned                 = false;
             // When this entity first refused a handover it is still refusing. Zero when it is not.
             MafiaNet::Time refusingSince = 0;
+            // Clients that cannot run it at the moment (SetDeclined). Almost always empty.
+            std::vector<MafiaNet::PeerGuid> declined;
         };
 
         // Snapshots the viewers once per pass, so the walk over entities does not re-resolve them
@@ -253,6 +270,7 @@ namespace Framework::Networking::Replication {
         uint32_t _intervalMs         = 500;
         uint32_t _defaultCapacity    = 0;
         MafiaNet::Time _lastPass     = 0;
+        bool _passPending            = false; // a decline changed since the last pass
 
         std::vector<DelegationCandidate> _candidates;
         std::unordered_map<MafiaNet::PeerGuid, uint32_t> _capacityOverrides;
