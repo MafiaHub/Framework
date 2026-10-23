@@ -60,6 +60,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             const auto *input = CoreModules::GetInput();
             return input && input->IsKeyDown(key);
         }
+
+        uint32_t GetLastWheelNotch() {
+            const auto *input = CoreModules::GetInput();
+            return input ? input->GetLastWheelNotch() : 0;
+        }
     } // anonymous namespace
 
     std::map<std::string, Keybinds::Bucket> Keybinds::_buckets;
@@ -67,6 +72,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     std::function<bool()> Keybinds::_activeCallback;
     Framework::Scripting::ResourceManager *Keybinds::_resourceManager = nullptr;
     bool Keybinds::_sourceWasUnavailable                              = false;
+    uint32_t Keybinds::_wheelCursor                                   = 0;
+    std::optional<uint32_t> Keybinds::_dispatchNotch;
 
     void Keybinds::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
         {
@@ -74,6 +81,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             _buckets.clear();
         }
         _sourceWasUnavailable = false;
+        _wheelCursor          = GetLastWheelNotch();
         _resourceManager      = resourceManager;
 
         v8::Local<v8::Object> keyObj = v8::Object::New(isolate);
@@ -95,14 +103,14 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             v8pp::metadata::docs("string", {v8pp::metadata::param("key", "string", false, "Case-insensitive physical key name, using the same names as bind.")},
                 "Returns the current layout's label for a physical key, even while UI owns input. Query again when refreshing prompts. Throws for unknown keys or non-string arguments.",
                 "Uppercase printable text, or an English name such as Enter or Mouse 1. Falls back to the uppercase canonical key name when translation is unavailable.")));
-        metadata.record(
-            v8pp::metadata::function_of<v8::FunctionCallback>("bind", v8pp::metadata::docs("boolean",
-                                                                          {
-                                                                              v8pp::metadata::param("key", "string", false, "Case-insensitive supported keyboard or mouse key name."),
-                                                                              v8pp::metadata::param("stateOrHandler", "\"down\" | \"up\" | \"both\" | KeyHandler", false, "Trigger state, or the handler itself to use the default down state."),
-                                                                              v8pp::metadata::param("handler", "KeyHandler", true, "Handler required when an explicit trigger state is provided."),
-                                                                          },
-                                                                          "Binds a resource-owned handler that fires while the game has foreground input and no UI is capturing it.", "True after the binding is installed; invalid keys or states throw.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("bind",
+            v8pp::metadata::docs("boolean",
+                {
+                    v8pp::metadata::param("key", "string", false, "Case-insensitive supported keyboard or mouse key name."),
+                    v8pp::metadata::param("stateOrHandler", "\"down\" | \"up\" | \"both\" | KeyHandler", false, "Trigger state, or the handler itself to use the default down state."),
+                    v8pp::metadata::param("handler", "KeyHandler", true, "Handler required when an explicit trigger state is provided."),
+                },
+                "Binds a resource-owned handler that fires while the game has foreground input and no UI is capturing it. Each wheelup/wheeldown notch fires down, then up.", "True after the binding is installed; invalid keys or states throw.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("unbind", v8pp::metadata::docs("boolean",
                                                                                         {
                                                                                             v8pp::metadata::param("key", "string", false, "Case-insensitive supported key name."),
@@ -110,12 +118,12 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                                                                                             v8pp::metadata::param("handler", "KeyHandler", true, "Optional exact handler filter."),
                                                                                         },
                                                                                         "Removes matching bindings owned by the calling resource; omitting filters removes every binding for the key.", "True when at least one binding was removed.")));
-        metadata.record(
-            v8pp::metadata::function_of<v8::FunctionCallback>("isDown", v8pp::metadata::docs("boolean",
-                                                                            {
-                                                                                v8pp::metadata::param("key", "string", false, "Case-insensitive supported key name."),
-                                                                            },
-                                                                            "Queries live physical key state using the same foreground and UI-input gate as binding dispatch.", "False when the key is up, the game is backgrounded, UI owns input, or the key name is invalid.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isDown",
+            v8pp::metadata::docs("boolean",
+                {
+                    v8pp::metadata::param("key", "string", false, "Case-insensitive supported key name."),
+                },
+                "Queries live physical key state using the same foreground and UI-input gate as binding dispatch.", "False when the key is up, the game is backgrounded, UI owns input, or the key name is invalid. Always false for the wheel, which is never held.")));
     }
 
     void Keybinds::GetLabelCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -216,6 +224,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             entry.callback.Reset(isolate, handler);
             entry.resourceName = resourceName;
             entry.state        = state;
+            entry.boundNotch   = _dispatchNotch ? *_dispatchNotch : GetLastWheelNotch();
             bucket.handlers.push_back(std::move(entry));
         }
 
@@ -318,10 +327,15 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         const bool resync     = _sourceWasUnavailable;
         _sourceWasUnavailable = false;
 
+        const uint32_t lastNotch  = input->GetLastWheelNotch();
+        const uint32_t newNotches = resync ? 0 : std::min(lastNotch - _wheelCursor, Framework::Input::IInput::kWheelNotchHistory);
+        _wheelCursor              = lastNotch;
+
         // Phase 1: edge-detect without touching V8.
         struct Edge {
             std::string keyName;
             bool down;
+            uint32_t notch; // 0 for keys
         };
         std::vector<Edge> edges;
         {
@@ -349,7 +363,18 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 bucket.prevDown = down;
                 // Suppressed: advance prevDown but don't dispatch.
                 if (allowed) {
-                    edges.push_back({keyName, down});
+                    edges.push_back({keyName, down, 0});
+                }
+            }
+            // Each wheel notch is a press and its release, in the order the notches arrived.
+            for (uint32_t age = newNotches; allowed && age > 0; --age) {
+                const uint32_t notch = lastNotch - age + 1;
+                const int key        = input->GetWheelNotch(notch);
+                for (const auto &[keyName, bucket] : _buckets) {
+                    if (key != 0 && bucket.vk == key) {
+                        edges.push_back({keyName, true, notch});
+                        edges.push_back({keyName, false, notch});
+                    }
                 }
             }
         }
@@ -370,39 +395,45 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         struct Pending {
             v8::Local<v8::Function> fn;
             std::string resourceName;
-            std::string keyName;
-            const char *stateStr;
         };
-        std::vector<Pending> pending;
-        {
-            std::scoped_lock lock(_mutex);
-            for (const auto &edge : edges) {
+        // Gate and handlers are resolved per edge, so a handler that unbinds or opens a UI holds back
+        // the rest of this tick's edges.
+        _dispatchNotch = lastNotch - newNotches;
+        for (const auto &edge : edges) {
+            v8::HandleScope edgeScope(isolate);
+            if (edge.notch != 0) {
+                _dispatchNotch = edge.notch;
+            }
+            const State edgeState = edge.down ? State::Down : State::Up;
+            const char *stateStr  = edge.down ? "down" : "up";
+            std::vector<Pending> pending;
+            {
+                std::scoped_lock lock(_mutex);
                 auto it = _buckets.find(edge.keyName);
-                if (it == _buckets.end()) {
+                if (it == _buckets.end() || !GateAllowed()) {
                     continue;
                 }
-                const State edgeState = edge.down ? State::Down : State::Up;
-                const char *stateStr  = edge.down ? "down" : "up";
                 for (const auto &h : it->second.handlers) {
-                    if (h.state == edgeState || h.state == State::Both) {
-                        pending.push_back({h.callback.Get(isolate), h.resourceName, edge.keyName, stateStr});
+                    if ((h.state == edgeState || h.state == State::Both) && (edge.notch == 0 || edge.notch > h.boundNotch)) {
+                        pending.push_back({h.callback.Get(isolate), h.resourceName});
                     }
                 }
             }
-        }
 
-        for (const auto &p : pending) {
-            v8::TryCatch tryCatch(isolate);
-            v8::Local<v8::Value> argv[] = {
-                v8pp::to_v8(isolate, p.keyName),
-                v8pp::to_v8(isolate, p.stateStr),
-            };
-            (void)p.fn->Call(context, context->Global(), 2, argv);
-            if (tryCatch.HasCaught()) {
-                const std::string error = Framework::Scripting::FormatV8Exception(isolate, tryCatch, "Unknown error in key bind handler");
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Key '{}' ({}) handler error: {}", p.resourceName, p.keyName, p.stateStr, error);
+            for (const auto &p : pending) {
+                v8::TryCatch tryCatch(isolate);
+                v8::Local<v8::Value> argv[] = {
+                    v8pp::to_v8(isolate, edge.keyName),
+                    v8pp::to_v8(isolate, stateStr),
+                };
+                (void)p.fn->Call(context, context->Global(), 2, argv);
+                if (tryCatch.HasCaught()) {
+                    const std::string error = Framework::Scripting::FormatV8Exception(isolate, tryCatch, "Unknown error in key bind handler");
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Key '{}' ({}) handler error: {}", p.resourceName, edge.keyName, stateStr, error);
+                }
             }
         }
+        _dispatchNotch.reset();
     }
 
     void Keybinds::CleanupResource(const std::string &resourceName) {

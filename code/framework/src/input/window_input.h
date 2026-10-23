@@ -12,6 +12,9 @@
 #include "physical_keys.h"
 #include "win32_input.h"
 
+#include <array>
+#include <cstdint>
+
 namespace Framework::Input {
     // State acquisition only. Cursor presentation and native control locking
     // remain on the game's adapter. This does not process WM_CHAR or IME.
@@ -38,6 +41,17 @@ namespace Framework::Input {
         }
         bool IsMouseButtonReleased(int button) const override {
             return _buttons.IsReleased(button);
+        }
+        uint32_t GetLastWheelNotch() const override {
+            return _wheelLast;
+        }
+        int GetWheelNotch(uint32_t number) const override {
+            // Unsigned ages stay correct across wraparound; an unarrived number reads as very old.
+            const uint32_t age = _wheelLast - number;
+            if (age >= kWheelNotchHistory || age >= _wheelLast - _wheelDiscarded) {
+                return 0;
+            }
+            return _wheelHistory[number % kWheelNotchHistory];
         }
 
         void ProcessEvent(HWND, UINT message, WPARAM key, LPARAM flags) {
@@ -85,6 +99,16 @@ namespace Framework::Input {
                 SetButton(first ? 3 : 4, first ? FW_KEY_XBUTTON1 : FW_KEY_XBUTTON2, message == WM_XBUTTONDOWN);
                 break;
             }
+            case WM_MOUSEWHEEL:
+                // High-resolution wheels send fractions of a notch; carry the rest to the next message.
+                _wheelRest += GET_WHEEL_DELTA_WPARAM(key);
+                for (; _wheelRest >= WHEEL_DELTA; _wheelRest -= WHEEL_DELTA) {
+                    Notch(FW_KEY_WHEELUP);
+                }
+                for (; _wheelRest <= -WHEEL_DELTA; _wheelRest += WHEEL_DELTA) {
+                    Notch(FW_KEY_WHEELDOWN);
+                }
+                break;
             case WM_MOUSEMOVE:
                 _mouseX = static_cast<short>(LOWORD(flags));
                 _mouseY = static_cast<short>(HIWORD(flags));
@@ -104,6 +128,8 @@ namespace Framework::Input {
                 Update();
                 _keys.ReleaseAll();
                 _buttons.ReleaseAll();
+                _wheelRest      = 0;
+                _wheelDiscarded = _wheelLast;
                 break;
             default: break;
             }
@@ -114,9 +140,18 @@ namespace Framework::Input {
             _buttons.Set(index, down);
             _keys.Set(key, down);
         }
+        void Notch(int key) {
+            _keys.Set(key, true);
+            _keys.Set(key, false);
+            _wheelHistory[++_wheelLast % kWheelNotchHistory] = static_cast<uint8_t>(key);
+        }
         ButtonState<256> _keys;
         ButtonState<5> _buttons;
-        int _mouseX = 0;
-        int _mouseY = 0;
+        int _mouseX              = 0;
+        int _mouseY              = 0;
+        int _wheelRest           = 0;
+        uint32_t _wheelLast      = 0;
+        uint32_t _wheelDiscarded = 0;
+        std::array<uint8_t, kWheelNotchHistory> _wheelHistory {};
     };
 } // namespace Framework::Input

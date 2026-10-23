@@ -30,6 +30,8 @@ namespace Framework::Utils::KeyNames {
             case FW_KEY_MBUTTON: return "Mouse 3";
             case FW_KEY_XBUTTON1: return "Mouse 4";
             case FW_KEY_XBUTTON2: return "Mouse 5";
+            case FW_KEY_WHEELUP: return "Wheel Up";
+            case FW_KEY_WHEELDOWN: return "Wheel Down";
             case FW_KEY_BACK: return "Backspace";
             case FW_KEY_TAB: return "Tab";
             case FW_KEY_RETURN: return "Enter";
@@ -167,6 +169,8 @@ namespace Framework::Utils::KeyNames {
                 t.emplace_back("mouse3", FW_KEY_MBUTTON);
                 t.emplace_back("mouse4", FW_KEY_XBUTTON1);
                 t.emplace_back("mouse5", FW_KEY_XBUTTON2);
+                t.emplace_back("wheelup", FW_KEY_WHEELUP);
+                t.emplace_back("wheeldown", FW_KEY_WHEELDOWN);
                 return t;
             }();
             return table;

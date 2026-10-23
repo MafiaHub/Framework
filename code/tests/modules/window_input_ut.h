@@ -39,6 +39,10 @@ namespace InputTests {
             return false;
         }
     };
+
+    inline WPARAM Wheel(int delta) {
+        return static_cast<WPARAM>(static_cast<uint16_t>(delta)) << 16;
+    }
 } // namespace InputTests
 MODULE(window_input, {
     IT("normalizes down and up even when the layout changes mid-hold", {
@@ -111,6 +115,56 @@ MODULE(window_input, {
         EQUALS(input.IsMouseButtonDown(1), false);
         EQUALS(input.IsMouseButtonPressed(1), false);
         EQUALS(input.IsMouseButtonReleased(1), true);
+    });
+    IT("wheel notches are presses that are never held, carrying partial deltas", {
+        InputTests::WindowAdapter input;
+        input.ProcessEvent(nullptr, WM_MOUSEWHEEL, InputTests::Wheel(2 * WHEEL_DELTA), 0);
+        EQUALS(input.GetLastWheelNotch(), 2u);
+        EQUALS(input.GetWheelNotch(1), FW_KEY_WHEELUP);
+        EQUALS(input.GetWheelNotch(2), FW_KEY_WHEELUP);
+        EQUALS(input.IsKeyPressed(FW_KEY_WHEELUP), true);
+        EQUALS(input.IsKeyReleased(FW_KEY_WHEELUP), true);
+        EQUALS(input.IsKeyDown(FW_KEY_WHEELUP), false);
+        input.Update();
+        EQUALS(input.IsKeyPressed(FW_KEY_WHEELUP), false);
+        EQUALS(input.GetWheelNotch(2), FW_KEY_WHEELUP);
+        input.ProcessEvent(nullptr, WM_MOUSEWHEEL, InputTests::Wheel(-WHEEL_DELTA / 2), 0);
+        EQUALS(input.GetLastWheelNotch(), 2u);
+        input.ProcessEvent(nullptr, WM_MOUSEWHEEL, InputTests::Wheel(-WHEEL_DELTA / 2), 0);
+        EQUALS(input.GetLastWheelNotch(), 3u);
+        EQUALS(input.GetWheelNotch(3), FW_KEY_WHEELDOWN);
+        EQUALS(input.IsKeyPressed(FW_KEY_WHEELDOWN), true);
+    });
+    IT("wheel notches keep their arrival order across directions", {
+        InputTests::WindowAdapter input;
+        input.ProcessEvent(nullptr, WM_MOUSEWHEEL, InputTests::Wheel(WHEEL_DELTA), 0);
+        input.ProcessEvent(nullptr, WM_MOUSEWHEEL, InputTests::Wheel(-WHEEL_DELTA), 0);
+        input.ProcessEvent(nullptr, WM_MOUSEWHEEL, InputTests::Wheel(WHEEL_DELTA), 0);
+        EQUALS(input.GetLastWheelNotch(), 3u);
+        EQUALS(input.GetWheelNotch(1), FW_KEY_WHEELUP);
+        EQUALS(input.GetWheelNotch(2), FW_KEY_WHEELDOWN);
+        EQUALS(input.GetWheelNotch(3), FW_KEY_WHEELUP);
+        EQUALS(input.GetWheelNotch(0), 0);
+        EQUALS(input.GetWheelNotch(4), 0);
+    });
+    IT("focus loss discards unread wheel notches and old ones leave the history", {
+        InputTests::WindowAdapter input;
+        input.ProcessEvent(nullptr, WM_MOUSEWHEEL, InputTests::Wheel(WHEEL_DELTA + WHEEL_DELTA / 2), 0);
+        input.ProcessEvent(nullptr, WM_KILLFOCUS, 0, 0);
+        input.ProcessEvent(nullptr, WM_SETFOCUS, 0, 0);
+        EQUALS(input.GetLastWheelNotch(), 1u);
+        EQUALS(input.GetWheelNotch(1), 0);
+        input.ProcessEvent(nullptr, WM_MOUSEWHEEL, InputTests::Wheel(WHEEL_DELTA / 2), 0);
+        EQUALS(input.GetLastWheelNotch(), 1u);
+        input.ProcessEvent(nullptr, WM_MOUSEWHEEL, InputTests::Wheel(WHEEL_DELTA / 2), 0);
+        EQUALS(input.GetWheelNotch(2), FW_KEY_WHEELUP);
+        const uint32_t history = Framework::Input::IInput::kWheelNotchHistory;
+        for (uint32_t i = 0; i < history; ++i) {
+            input.ProcessEvent(nullptr, WM_MOUSEWHEEL, InputTests::Wheel(WHEEL_DELTA), 0);
+        }
+        EQUALS(input.GetLastWheelNotch(), history + 2);
+        EQUALS(input.GetWheelNotch(2), 0);
+        EQUALS(input.GetWheelNotch(3), FW_KEY_WHEELUP);
     });
     IT("client coordinates retain negative positions", {
         InputTests::WindowAdapter input;
