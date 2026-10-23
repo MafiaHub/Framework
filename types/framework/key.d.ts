@@ -16,6 +16,9 @@
  *   `insert` `delete` `home` `end` `pageup` `pagedown` `capslock`
  * - Numpad `numpad0`–`numpad9` (aliases `num0`–`num9`)
  * - Mouse `mouse1` (left) `mouse2` (right) `mouse3` (middle) `mouse4` `mouse5`
+ * - Wheel `wheelup` `wheeldown`: each notch fires `"down"` then `"up"`, and
+ *   the game still receives it. Never held, so `isDown` is always `false`.
+ *   Needs a game input adapter that reports the wheel (the framework's does).
  *
  * Letters and digits identify physical positions on a US keyboard. Use
  * `getLabel` to show the corresponding label in the player's current layout.

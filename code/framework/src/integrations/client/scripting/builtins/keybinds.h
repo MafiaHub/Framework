@@ -14,6 +14,7 @@
 #include <functional>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -51,6 +52,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             v8::Global<v8::Function> callback;
             std::string resourceName;
             State state;
+            uint32_t boundNotch = 0; // wheel notches up to this one predate the bind
         };
 
         struct Bucket {
@@ -73,6 +75,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         // Update() only.
         static bool _sourceWasUnavailable;
+        static uint32_t _wheelCursor; // last wheel notch read
+        // While dispatching, the last notch handed out, so a handler bound mid-tick gets the rest.
+        static std::optional<uint32_t> _dispatchNotch;
 
         static std::function<bool()> _activeCallback;
 
