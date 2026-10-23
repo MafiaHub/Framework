@@ -10,7 +10,13 @@
 
 #include "input_keymap.h"
 
+#include <cstdint>
+
 namespace Framework::Input {
+    inline bool IsWheelKey(int key) {
+        return key == FW_KEY_WHEELUP || key == FW_KEY_WHEELDOWN;
+    }
+
     class IInput {
       public:
         virtual ~IInput()     = default;
@@ -39,5 +45,17 @@ namespace Framework::Input {
         virtual bool IsMouseButtonUp(int button) const       = 0;
         virtual bool IsMouseButtonPressed(int button) const  = 0;
         virtual bool IsMouseButtonReleased(int button) const = 0;
+
+        // Wheel notches are numbered in arrival order and never renumbered. A notch has no held state,
+        // so a consumer keeps the last number it handled and reads the ones after it.
+        static constexpr uint32_t kWheelNotchHistory = 64;
+        virtual uint32_t GetLastWheelNotch() const {
+            return 0;
+        }
+        // FW_KEY_WHEELUP or FW_KEY_WHEELDOWN; 0 once the notch is discarded by focus loss or is older
+        // than the last kWheelNotchHistory. An adapter that hides keys from IsKeyDown should hide these too.
+        virtual int GetWheelNotch(uint32_t /*number*/) const {
+            return 0;
+        }
     };
 } // namespace Framework::Input
