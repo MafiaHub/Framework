@@ -109,6 +109,7 @@ namespace Framework::Launcher::Platforms {
         // Initialize the steam wrapper
         External::Steam::Wrapper steam;
         const auto initResult = steam.Init();
+        _initFailed           = !initResult;
         if (!initResult) {
             return unavailable(fmt::format("Failed to init the bridge with steam, are you sure the Steam Client is running? {}", initResult.GetError().message));
         }

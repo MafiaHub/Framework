@@ -110,6 +110,8 @@ config.platforms = {
 };
 ```
 
+An earlier entry can still add a line to that report through `GetUnavailableHint`: Steam asks the player to start and sign in to its client when it could not reach it.
+
 A new store is a class deriving from `Platform`: `Resolve` finds the game root, and the optional hooks prepare the process (`PrepareLaunch`), adopt a copy the player picked (`AdoptManualCopy`), or take part in PE loading (`PrepareImage`, `OnSectionsMapped`, `ResolveEntryPoint`).
 
 ### Microsoft Store packages

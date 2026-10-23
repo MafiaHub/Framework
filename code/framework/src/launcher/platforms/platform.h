@@ -68,6 +68,11 @@ namespace Framework::Launcher {
         // Finds the game. Only the last platform in the list reports its failure to the player.
         virtual PlatformCheckStatus Resolve(const PlatformHost &host, PlatformResolution &resolution, bool reportErrors) = 0;
 
+        // Added to the failure a later platform reports, once this one could not resolve the game
+        virtual std::string GetUnavailableHint() const {
+            return {};
+        }
+
         // The game root the player picked may still be this platform's copy; returning true makes this
         // the platform the game starts with (it may point `resolution` at its own copy).
         virtual bool AdoptManualCopy(const PlatformHost &host, PlatformResolution &resolution) {

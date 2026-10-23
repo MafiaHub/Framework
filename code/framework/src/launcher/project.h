@@ -148,7 +148,8 @@ namespace Framework::Launcher {
         std::unique_ptr<Utils::Config> _fileConfig;
         std::wstring _gamePath;
         bool _manualGamePath = false;
-        std::shared_ptr<Platform> _platform; // the one that resolved the game
+        std::shared_ptr<Platform> _platform;        // the one that resolved the game
+        std::vector<std::string> _unavailableHints; // from the platforms tried before the one that reports
         std::filesystem::path _projectPath;
         std::unique_ptr<Utils::MiniDump> _minidump;
 

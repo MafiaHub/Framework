@@ -582,6 +582,9 @@ namespace Framework::Launcher {
             }
 
             logger->info("{} did not resolve the game", platform->GetName());
+            if (auto hint = platform->GetUnavailableHint(); !hint.empty()) {
+                _unavailableHints.push_back(std::move(hint));
+            }
         }
         return PlatformCheckStatus::ABORT;
     }
@@ -589,7 +592,11 @@ namespace Framework::Launcher {
     PlatformCheckStatus Project::ReportUnavailable(const char *platform, const std::string &reason, bool reportErrors) const {
         Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->warn("{} lookup failed: {}", platform, reason);
         if (reportErrors) {
-            ReportError(reason);
+            std::string message = reason;
+            for (const auto &hint : _unavailableHints) {
+                message += "\n\n" + hint;
+            }
+            ReportError(message);
         }
         return PlatformCheckStatus::UNAVAILABLE;
     }
