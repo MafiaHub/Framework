@@ -1,6 +1,6 @@
 {
     "name": "@mafiahub/types",
-    "version": "0.1.11",
+    "version": "0.1.12",
     "description": "TypeScript type definitions for the MafiaHub Framework scripting API",
     "types": "index.d.ts",
     "files": [
