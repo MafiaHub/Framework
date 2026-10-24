@@ -2,3 +2,5 @@
 cef_binary_*/
 *.tar.bz2
 *.tar.bz2.sha1
+*.tar.bz2.part
+cef_binary_*.lock
