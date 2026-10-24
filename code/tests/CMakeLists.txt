@@ -56,6 +56,12 @@ endif()
 # the client runtime in its own process.
 add_executable(FrameworkClientScriptingTests client_scripting_ut.cpp)
 target_include_directories(FrameworkClientScriptingTests PRIVATE . ../framework/src)
+if(WIN32)
+    # Key.bind dispatch, without linking the rest of FrameworkClient.
+    target_sources(FrameworkClientScriptingTests PRIVATE
+        ../framework/src/integrations/client/scripting/builtins/keybinds.cpp
+        ../framework/src/utils/key_names.cpp)
+endif()
 target_link_libraries(FrameworkClientScriptingTests Framework FrameworkServer libnode)
 
 # Native input primitives can be tested without building or launching clients.

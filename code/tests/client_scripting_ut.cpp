@@ -16,6 +16,10 @@
 #include <chrono>
 #include <thread>
 
+#ifdef _WIN32
+#include "modules/keybinds_ut.h"
+#endif
+
 MODULE(client_scripting, {
     IT("restarts packaged client scripts and timers without restarting other resources", {
         auto &vfs = Framework::Utils::Vfs::Get();
@@ -144,5 +148,8 @@ int main() {
     UNIT_CREATE("FrameworkClientScriptingTests");
     Framework::Logging::GetInstance()->PauseLogging(true);
     UNIT_MODULE(client_scripting);
+#ifdef _WIN32
+    UNIT_MODULE(keybinds);
+#endif
     return UNIT_RUN();
 }

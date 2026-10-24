@@ -80,9 +80,24 @@ Text typed into chat or web views still follows the active layout.
 | Editing    | `space` `enter`/`return` `escape`/`esc` `tab` `backspace` `insert` `delete` `home` `end` `pageup` `pagedown` `capslock` |
 | Numpad     | `numpad0`–`numpad9` (aliases `num0`–`num9`) |
 | Mouse      | `mouse1` (left) `mouse2` (right) `mouse3` (middle) `mouse4` `mouse5` |
+| Wheel      | `wheelup` `wheeldown` |
 
 Binding an unrecognised name throws, so a typo fails loudly rather than
 silently never firing.
+
+### Mouse wheel
+
+Each notch of the wheel fires its key's `"down"` and then `"up"`, once per
+notch and in the order the wheel turned, so a fast scroll calls the handler
+several times in one frame. The game still receives the wheel. The wheel is
+never held, so `Key.isDown("wheelup")` is always `false` and
+`Voice.setPushToTalkKey` rejects it. Wheel binds fire only when the game's
+input adapter reports the wheel, which the framework's window adapter does.
+
+```js
+Key.bind("wheelup", () => menu.select(-1));
+Key.bind("wheeldown", () => menu.select(+1));
+```
 
 ## Showing key prompts
 

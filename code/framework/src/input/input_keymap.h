@@ -18,6 +18,8 @@
 #define FW_KEY_XBUTTON2                        0x06 /* NOT contiguous with L & RBUTTON */
 #define FW_KEY_BACK                            0x08
 #define FW_KEY_TAB                             0x09
+#define FW_KEY_WHEELUP                         0x0A /* Not a Windows key (reserved there): one press per wheel notch, never held */
+#define FW_KEY_WHEELDOWN                       0x0B /* Not a Windows key (reserved there): one press per wheel notch, never held */
 #define FW_KEY_CLEAR                           0x0C
 #define FW_KEY_RETURN                          0x0D
 #define FW_KEY_SHIFT                           0x10

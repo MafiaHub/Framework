@@ -10,6 +10,7 @@
 
 #include "core_modules.h"
 
+#include <input/input.h>
 #include <scripting/scripting_catalog.h>
 #include <utils/key_names.h>
 #include <voice/client/voice_client.h>
@@ -121,6 +122,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         const int vk           = Utils::KeyNames::ToVirtualKey(name);
         if (vk < 0) {
             ThrowError(isolate, "Voice.setPushToTalkKey: unknown key name '" + name + "'");
+            return;
+        }
+        if (Framework::Input::IsWheelKey(vk)) {
+            ThrowError(isolate, "Voice.setPushToTalkKey: '" + name + "' is never held, so it cannot be push-to-talk");
             return;
         }
 
@@ -323,8 +328,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 "Switches how far this player's voice carries. A request: the server paces it, decides the radius, and may move the player itself.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getTier", v8pp::metadata::docs("number", {}, "Reads the voice tier this player is on.", "0 whisper, 1 normal, 2 shout.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPushToTalkKey",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("key", "string", false, "Case-insensitive key name, using the same names as Key.bind.")},
-                "Rebinds push-to-talk. Unknown key names throw.")));
+            v8pp::metadata::docs("void", {v8pp::metadata::param("key", "string", false, "Case-insensitive key name, using the same names as Key.bind.")}, "Rebinds push-to-talk. Unknown key names and the wheel, which is never held, throw.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPushToTalkKey", v8pp::metadata::docs("string", {}, "Reads the push-to-talk binding.", "Canonical key name, e.g. \"v\".")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPushToTalkReleaseDelay",
             v8pp::metadata::docs("void", {v8pp::metadata::param("milliseconds", "number", false, "How long to keep transmitting after the key goes up. Clamped to 0..2000.")},
