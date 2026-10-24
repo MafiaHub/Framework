@@ -537,6 +537,7 @@ namespace Framework::Launcher {
 
     PlatformCheckStatus Project::RunPlatformChecks() {
         const auto logger = Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER);
+        _unavailableHints.clear();
 
         auto resolve = [&](const std::shared_ptr<Platform> &platform, bool reportErrors) {
             PlatformResolution resolution;
