@@ -41,11 +41,17 @@ namespace Framework::Launcher::Platforms {
         bool AdoptManualCopy(const PlatformHost &host, PlatformResolution &resolution) override;
         bool PrepareLaunch(const PlatformHost &host) override;
 
+        // A Steam copy goes unseen while the client is closed or signed out, so a later store's failure says so
+        std::string GetUnavailableHint() const override {
+            return _initFailed ? "If you have a Steam installation, make sure that Steam is also running and signed in" : std::string {};
+        }
+
       private:
         void PrepareAppIdentity(const PlatformHost &host) const;
 
         Options _options;
-        bool _tried = false;
+        bool _tried      = false;
+        bool _initFailed = false;
     };
 
     // The Epic launcher's manifests, matched by `appName` (the catalog's "AppName"), else by the
