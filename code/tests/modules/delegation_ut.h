@@ -85,16 +85,9 @@ MODULE(delegation, {
     });
 
     IT("hands an entity to a challenger that is clearly nearer", {
+        EQUALS(DelegationPolicy {}.proximitySteal, true);
         const std::vector<DelegationCandidate> candidates {at(alice, 50.0f), at(bob, 20.0f)};
         EQUALS(DelegationManager::Elect(policy, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY), bob);
-    });
-
-    IT("lets a clearly nearer challenger steal by default", {
-        EQUALS(DelegationPolicy {}.proximitySteal, true);
-        DelegationPolicy stealing = policy;
-        stealing.proximitySteal   = true;
-        const std::vector<DelegationCandidate> candidates {at(alice, 50.0f), at(bob, 20.0f)};
-        EQUALS(DelegationManager::Elect(stealing, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY), bob);
     });
 
     IT("keeps an entity with its simulator against any challenger without proximity steal", {
