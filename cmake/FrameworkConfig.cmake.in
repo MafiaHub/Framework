@@ -56,9 +56,14 @@ if(WIN32)
 endif()
 
 # The bundled half: MafiaNet and Tracy through their own packages, everything else re-created below.
-find_dependency(MafiaNet @MAFIANET_PIN_VERSION_FOR_CONFIG@ CONFIG PATHS "${PACKAGE_PREFIX_DIR}/mafianet/@FW_SDK_ARCH@" NO_DEFAULT_PATH)
-find_dependency(Tracy CONFIG PATHS "${PACKAGE_PREFIX_DIR}/@FW_SDK_LIB_DIR@/cmake/Tracy" NO_DEFAULT_PATH)
+# PACKAGE_PREFIX_DIR is an ordinary variable that every package config built with
+# configure_package_config_file() overwrites, and the find_dependency() calls above load several;
+# only Framework_SDK_ROOT, captured before them, still names this prefix.
+find_dependency(MafiaNet @MAFIANET_PIN_VERSION_FOR_CONFIG@ CONFIG PATHS "${Framework_SDK_ROOT}/mafianet/@FW_SDK_ARCH@" NO_DEFAULT_PATH)
+find_dependency(Tracy CONFIG PATHS "${Framework_SDK_ROOT}/@FW_SDK_LIB_DIR@/cmake/Tracy" NO_DEFAULT_PATH)
 
+# The imported-target snippets are written against PACKAGE_PREFIX_DIR.
+set(PACKAGE_PREFIX_DIR "${Framework_SDK_ROOT}")
 include("${CMAKE_CURRENT_LIST_DIR}/FrameworkImported.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/FrameworkTargets.cmake")
 
@@ -89,10 +94,10 @@ endforeach()
 
 # Files the exported link options point at (see code/framework/CMakeLists.txt).
 if(TARGET Framework::Loader)
-    set_property(TARGET Framework::Loader PROPERTY FW_LAUNCHER_DEFAULT_MANIFEST "${PACKAGE_PREFIX_DIR}/@FW_SDK_SHARE_ARCH_DIR@/launcher.manifest")
+    set_property(TARGET Framework::Loader PROPERTY FW_LAUNCHER_DEFAULT_MANIFEST "${Framework_SDK_ROOT}/@FW_SDK_SHARE_ARCH_DIR@/launcher.manifest")
 endif()
 if(TARGET Framework::Server AND WIN32)
-    set_property(TARGET Framework::Server PROPERTY FW_NODE_API_DEF "${PACKAGE_PREFIX_DIR}/@FW_SDK_SHARE_ARCH_DIR@/libnode_node_api.def")
+    set_property(TARGET Framework::Server PROPERTY FW_NODE_API_DEF "${Framework_SDK_ROOT}/@FW_SDK_SHARE_ARCH_DIR@/libnode_node_api.def")
 endif()
 
 # Plain names, so a project moving off the source tree changes paths, not link lines.
