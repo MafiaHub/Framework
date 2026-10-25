@@ -45,6 +45,11 @@ major_paths=(
     # positional, so moving MafiaNet can shift every id and break every peer built
     # against the old header.
     "cmake/MafiaNetPin.cmake"
+    # The exported CMake surface of the prebuilt SDK: target names, interface definitions,
+    # the archive layout. A change there breaks every consumer's configure the way a wire
+    # change breaks every peer.
+    "cmake/FrameworkConfig.cmake.in"
+    "cmake/FrameworkInstall.cmake"
 )
 minor_paths=(
     "code/framework/src/scripting/builtins"
