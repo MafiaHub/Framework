@@ -1,24 +1,34 @@
 name: Version Release
 
+# Bumps VERSION from the paths a change touched (.github/bump_version.sh), tags and releases it, and
+# builds the SDK archives for the tag (release_sdk.yml, called in-process: a workflow can only be
+# dispatched from the default branch, and this one must also run for `next`).
+#
+# develop is bumped nightly; next on every push (the bump commit carries [skip ci]). A release cut
+# from any branch but develop is a prerelease. Pass sdk_tag to rebuild the archives of an existing
+# release without bumping anything.
+
 on:
   schedule:
-    - cron: '0 4 * * *'  # Runs at 04:00 UTC every day
-  workflow_dispatch:      # Allows manual triggering
+    - cron: '0 4 * * *'  # Runs at 04:00 UTC every day, on the default branch
+  push:
+    branches: [next]
+  workflow_dispatch:
+    inputs:
+      sdk_tag:
+        description: "Only build and attach the SDK archives for this existing release tag"
+        required: false
+        default: ""
 
-# Runs on every release branch. Each branch carries its own VERSION lineage and is compared against
-# the last tag reachable from its own head, so the two never fight over a tag.
 jobs:
   bump-semver:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        branch: [develop, next]
+    if: github.event.inputs.sdk_tag == ''
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
         with:
-          ref: ${{ matrix.branch }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0  # Ensure full history for diff comparisons
 
       - name: Test version selection
@@ -35,22 +45,20 @@ jobs:
           git config user.email "${{ secrets.MHCI_MAIL }}"
           git add VERSION || true
           git diff-index --quiet HEAD || git commit -m "ci: bump version to $(cat VERSION) [skip ci]" || true
-          git push origin HEAD:${{ matrix.branch }} --follow-tags || true
+          git push origin HEAD:${{ github.ref_name }} --follow-tags || true
 
   evaluate-release:
     runs-on: ubuntu-latest
     needs: bump-semver
-    strategy:
-      fail-fast: false
-      matrix:
-        branch: [develop, next]
+    if: github.event.inputs.sdk_tag == ''
     outputs:
       released: ${{ steps.version-check.outputs.released }}
+      tag: ${{ steps.version-check.outputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
         with:
-          ref: ${{ matrix.branch }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0  # Get full history for tag comparison
 
       - name: Read raw version
@@ -73,32 +81,41 @@ jobs:
         run: |
           NEW_VERSION=${{ steps.version.outputs.raw_version }}
           PREV_VERSION=${{ steps.previous-tag.outputs.prev_version }}
-          
+
           if [ "$NEW_VERSION" = "$PREV_VERSION" ]; then
             echo "No new version detected, skipping build"
+            echo "released=false" >> $GITHUB_OUTPUT
           else
             echo "RELEASE_NEEDED=true" >> $GITHUB_ENV
             echo "new_tag=v${NEW_VERSION}" >> $GITHUB_ENV
             echo "released=true" >> $GITHUB_OUTPUT
+            echo "tag=v${NEW_VERSION}" >> $GITHUB_OUTPUT
           fi
 
-      # A `next` release is a prerelease: mods opt into it through their pin.
       - name: Create semver tag and release
         if: env.RELEASE_NEEDED == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.new_tag }}
           name: ${{ env.new_tag }}
-          target_commitish: ${{ matrix.branch }}
+          target_commitish: ${{ github.ref_name }}
           draft: false
-          prerelease: ${{ matrix.branch != 'develop' }}
+          prerelease: ${{ github.ref_name != 'develop' }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Events raised with GITHUB_TOKEN start no workflow, so the SDK build is dispatched by hand.
-      - name: Build the SDK for the release
-        if: env.RELEASE_NEEDED == 'true'
-        run: gh workflow run release_sdk.yml --ref ${{ matrix.branch }} -f tag=${{ env.new_tag }}
-        env:
-          GH_TOKEN: ${{ secrets.MHCI_PAT || secrets.GITHUB_TOKEN }}
+  build-sdk:
+    needs: evaluate-release
+    if: needs.evaluate-release.outputs.released == 'true'
+    uses: ./.github/workflows/release_sdk.yml
+    with:
+      tag: ${{ needs.evaluate-release.outputs.tag }}
+    secrets: inherit
+
+  rebuild-sdk:
+    if: github.event.inputs.sdk_tag != ''
+    uses: ./.github/workflows/release_sdk.yml
+    with:
+      tag: ${{ github.event.inputs.sdk_tag }}
+    secrets: inherit

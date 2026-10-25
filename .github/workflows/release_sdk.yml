@@ -5,10 +5,16 @@ name: Release SDK
 # libraries under lib/<arch>, runtime/<arch> and mafianet/<arch> with the headers shared. Projects
 # pin a release by version and archive hash in their FrameworkPin.cmake.
 #
-# Dispatched by `Version Release` right after it tags (events raised with GITHUB_TOKEN start no
-# workflow of their own), or by hand for any existing tag.
+# Called by `Version Release` right after it tags (from whichever branch that ran on), or
+# dispatched by hand for any existing tag.
 
 on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to build the SDK for (v<major>.<minor>.<patch>)"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
@@ -29,7 +35,7 @@ jobs:
         id: tag
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.inputs.tag }}
+          TAG: ${{ inputs.tag }}
         run: |
           if ! gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "::error::No release ${TAG} to attach the SDK to."
