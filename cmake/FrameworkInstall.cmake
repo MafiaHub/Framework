@@ -268,5 +268,8 @@ include(\"\${_fw_sdk_arch_config}\")
         "${Framework_SOURCE_DIR}/scripts/build_pattern_table.py"
         "${Framework_SOURCE_DIR}/scripts/ninja_utf8.cmd"
         DESTINATION "${FW_SDK_SHARE_DIR}/scripts")
+    # The scripting contract and types-package tooling projects wrap (scripts/build_scripting_contract.mjs
+    # and friends in each project).
+    install(DIRECTORY "${Framework_SOURCE_DIR}/scripts/scripting-api" DESTINATION "${FW_SDK_SHARE_DIR}/scripts")
     install(FILES "${Framework_SOURCE_DIR}/code/tests/unit.h" DESTINATION "${FW_SDK_INCLUDE_DIR}/framework-tests")
 endfunction()
