@@ -69,17 +69,44 @@ else()
 
         set(_fw_name "Framework-${FRAMEWORK_PIN_VERSION}-${_fw_platform}")
         set(_fw_sdk_root "${_fw_cache}/${_fw_name}")
-        if(NOT EXISTS "${_fw_sdk_root}/lib/cmake/Framework/FrameworkConfig.cmake")
+        # The stamp carries the archive hash: an extraction is trusted only once it finished, and
+        # only for the archive the pin names now.
+        set(_fw_stamp "${_fw_sdk_root}/.fw-extracted")
+        set(_fw_expected "${FRAMEWORK_PIN_SHA256_${_fw_platform}}")
+
+        # Several builds may share the cache (the 32- and 64-bit trees, concurrent CI jobs on one
+        # runner). The lock covers the extraction below and the vcpkg checkout VcpkgBootstrap makes
+        # in the same directory; it is released when this file finishes.
+        file(MAKE_DIRECTORY "${_fw_cache}")
+        file(LOCK "${_fw_cache}/.fw-sdk.lock" GUARD FILE RESULT_VARIABLE _fw_lock TIMEOUT 3600)
+        if(NOT _fw_lock EQUAL 0)
+            message(FATAL_ERROR "Could not lock the Framework SDK cache ${_fw_cache}: ${_fw_lock}")
+        endif()
+
+        set(_fw_have "")
+        if(EXISTS "${_fw_stamp}")
+            file(READ "${_fw_stamp}" _fw_have)
+            string(STRIP "${_fw_have}" _fw_have)
+        endif()
+        if(NOT _fw_have STREQUAL _fw_expected)
             set(_fw_archive "${_fw_cache}/${_fw_name}.${_fw_ext}")
             message(STATUS "Downloading Framework SDK ${FRAMEWORK_PIN_VERSION} (${_fw_platform})")
             # EXPECTED_HASH makes a failed download, a repointed tag or a tampered archive fatal here.
             file(DOWNLOAD
                 "https://github.com/MafiaHub/Framework/releases/download/v${FRAMEWORK_PIN_VERSION}/${_fw_name}.${_fw_ext}"
                 "${_fw_archive}"
-                EXPECTED_HASH SHA256=${FRAMEWORK_PIN_SHA256_${_fw_platform}}
+                EXPECTED_HASH SHA256=${_fw_expected}
                 SHOW_PROGRESS)
-            file(ARCHIVE_EXTRACT INPUT "${_fw_archive}" DESTINATION "${_fw_cache}")
+            # Unpacked beside its final name and moved into place whole, so an interrupted configure
+            # never leaves a half tree that looks complete.
+            set(_fw_partial "${_fw_cache}/${_fw_name}.partial")
+            file(REMOVE_RECURSE "${_fw_partial}" "${_fw_sdk_root}")
+            file(ARCHIVE_EXTRACT INPUT "${_fw_archive}" DESTINATION "${_fw_partial}")
+            file(RENAME "${_fw_partial}/${_fw_name}" "${_fw_sdk_root}")
+            file(REMOVE_RECURSE "${_fw_partial}")
             file(REMOVE "${_fw_archive}")
+            file(WRITE "${_fw_stamp}" "${_fw_expected}
+")
         endif()
     endif()
 
