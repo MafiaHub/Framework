@@ -4,8 +4,9 @@
 # workflows check the Framework out with `submodules: false`. A pinned shallow fetch keeps a cold
 # configure self-contained on Windows and on the Linux server runners alike.
 #
-# Set VCPKG_ROOT to use an existing checkout instead; the baseline in vcpkg.json still decides the
-# port versions, so a different checkout does not change what gets built.
+# Set FW_VCPKG_ROOT to use an existing checkout instead; the baseline in vcpkg.json still decides the
+# port versions, so a different checkout does not change what gets built. FW_VCPKG_CHECKOUT_DIR picks
+# where the fetched checkout lives (a project building against the SDK keeps it beside the SDK).
 
 set(FW_VCPKG_PIN "5f96cd15fd745122cf27e0524606d6c1efc5fd07" CACHE STRING "vcpkg commit backing the vcpkg.json baseline")
 
@@ -14,7 +15,11 @@ set(FW_VCPKG_PIN "5f96cd15fd745122cf27e0524606d6c1efc5fd07" CACHE STRING "vcpkg 
 if(FW_VCPKG_ROOT AND EXISTS "${FW_VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
     set(_fw_vcpkg_root "${FW_VCPKG_ROOT}")
 else()
-    set(_fw_vcpkg_root "${CMAKE_CURRENT_LIST_DIR}/../vendors/vcpkg")
+    if(DEFINED FW_VCPKG_CHECKOUT_DIR)
+        set(_fw_vcpkg_root "${FW_VCPKG_CHECKOUT_DIR}")
+    else()
+        set(_fw_vcpkg_root "${CMAKE_CURRENT_LIST_DIR}/../vendors/vcpkg")
+    endif()
 
     if(NOT EXISTS "${_fw_vcpkg_root}/scripts/buildsystems/vcpkg.cmake")
         find_package(Git REQUIRED)
@@ -69,5 +74,7 @@ if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/vcpkg-ports")
     set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_LIST_DIR}/vcpkg-ports" CACHE STRING "")
 endif()
 set(CMAKE_TOOLCHAIN_FILE "${_fw_vcpkg_root}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+get_filename_component(_fw_vcpkg_root "${_fw_vcpkg_root}" ABSOLUTE)
+set(FW_VCPKG_ROOT_RESOLVED "${_fw_vcpkg_root}" CACHE INTERNAL "vcpkg checkout this build uses")
 
 message(STATUS "vcpkg: ${_fw_vcpkg_root} (${VCPKG_TARGET_TRIPLET})")

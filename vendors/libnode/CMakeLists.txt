@@ -108,8 +108,9 @@ if(LIBNODE_V8_ONLY)
 
     # v8 interface target
     add_library(v8 INTERFACE)
-    target_include_directories(v8 SYSTEM INTERFACE "${V8_STANDALONE_INCLUDE_DIR}")
+    target_include_directories(v8 SYSTEM INTERFACE "$<BUILD_INTERFACE:${V8_STANDALONE_INCLUDE_DIR}>" "$<INSTALL_INTERFACE:${FW_SDK_INCLUDE_DIR}/v8>")
     target_compile_features(v8 INTERFACE cxx_std_17)
+    install(DIRECTORY "${V8_STANDALONE_INCLUDE_DIR}/" DESTINATION "${FW_SDK_INCLUDE_DIR}/v8")
 
     # v8_monolith contains all V8 symbols in a single static library
     if(WIN32)
@@ -123,6 +124,10 @@ if(LIBNODE_V8_ONLY)
         IMPORTED_LOCATION "${V8_STANDALONE_LIB_DIR}/${V8_MONOLITH_NAME}"
     )
     target_link_libraries(v8 INTERFACE v8_monolith)
+    install(FILES "${V8_STANDALONE_LIB_DIR}/${V8_MONOLITH_NAME}" DESTINATION "${FW_SDK_LIB_DIR}")
+    fw_sdk_imported_snippet(
+        "add_library(v8_monolith STATIC IMPORTED)"
+        "set_target_properties(v8_monolith PROPERTIES IMPORTED_LOCATION \"\${PACKAGE_PREFIX_DIR}/${FW_SDK_LIB_DIR}/${V8_MONOLITH_NAME}\")")
 
     if(WIN32)
         target_link_libraries(v8 INTERFACE winmm dbghelp shlwapi)
@@ -130,6 +135,8 @@ if(LIBNODE_V8_ONLY)
 
     set(LIBNODE_AVAILABLE FALSE CACHE BOOL "Whether full libnode is available" FORCE)
     set(V8_INCLUDE_DIRS "${V8_STANDALONE_INCLUDE_DIR}" CACHE PATH "V8 include directories" FORCE)
+    fw_sdk_manifest(LIBNODE_VERSION "${LIBNODE_VERSION}")
+    fw_sdk_manifest(LIBNODE_V8_ONLY "ON")
 
     message(STATUS "v8: Include dir: ${V8_STANDALONE_INCLUDE_DIR}")
     message(STATUS "v8: Library dir: ${V8_STANDALONE_LIB_DIR}")
@@ -224,6 +231,9 @@ else()
     target_include_directories(libnode SYSTEM INTERFACE
         "${LIBNODE_INCLUDE_DIR}"
     )
+    install(DIRECTORY "${LIBNODE_INCLUDE_DIR}/" DESTINATION "${FW_SDK_INCLUDE_DIR}/libnode")
+    fw_sdk_manifest(LIBNODE_VERSION "${LIBNODE_VERSION}")
+    fw_sdk_manifest(LIBNODE_V8_ONLY "OFF")
 
     # libuv headers are only needed by code that directly uses libuv APIs.
     # Adding them to INTERFACE causes Windows SDK errno conflicts (EINVAL/ERANGE undefined)
@@ -273,7 +283,8 @@ else()
     add_library(v8 INTERFACE)
 
     target_include_directories(v8 SYSTEM INTERFACE
-        "${LIBNODE_INCLUDE_DIR}"
+        "$<BUILD_INTERFACE:${LIBNODE_INCLUDE_DIR}>"
+        "$<INSTALL_INTERFACE:${FW_SDK_INCLUDE_DIR}/libnode>"
     )
 
     target_compile_features(v8 INTERFACE cxx_std_17)
@@ -321,6 +332,50 @@ else()
         message(STATUS "v8: V8 platform libraries not found, using libnode only")
     endif()
 
+    # SDK: libnode and the V8 platform archives are imported targets, re-created by the package Config
+    # from this description; the shared library lands in both runtime trees.
+    if(WIN32)
+        set(_libnode_sdk_location "${FW_SDK_RUNTIME_DIR}/server/${LIBNODE_DLL_NAME}")
+        set(_libnode_sdk_link "winmm;dbghelp;shlwapi;ws2_32;iphlpapi;psapi;userenv")
+        install(FILES "${LIBNODE_LIB_DIR}/${LIBNODE_LIB_NAME}" DESTINATION "${FW_SDK_LIB_DIR}")
+        fw_sdk_runtime(COMMON "${LIBNODE_DLL_LOCATION}")
+        set(_libnode_sdk_implib "    IMPORTED_IMPLIB \"\${PACKAGE_PREFIX_DIR}/${FW_SDK_LIB_DIR}/${LIBNODE_LIB_NAME}\"")
+    else()
+        set(_libnode_sdk_location "${FW_SDK_RUNTIME_DIR}/server/${LIBNODE_LIB_NAME}")
+        if(APPLE)
+            set(_libnode_sdk_link "-framework CoreFoundation;-framework CoreServices")
+        else()
+            set(_libnode_sdk_link "pthread;dl")
+        endif()
+        fw_sdk_runtime(SERVER "${LIBNODE_LIB_DIR}/${LIBNODE_LIB_NAME}")
+        set(_libnode_sdk_implib "")
+    endif()
+    fw_sdk_imported_snippet(
+        "add_library(libnode SHARED IMPORTED)"
+        "set_target_properties(libnode PROPERTIES"
+        "    IMPORTED_LOCATION \"\${PACKAGE_PREFIX_DIR}/${_libnode_sdk_location}\""
+        "${_libnode_sdk_implib}"
+        "    INTERFACE_INCLUDE_DIRECTORIES \"\${PACKAGE_PREFIX_DIR}/${FW_SDK_INCLUDE_DIR}/libnode\""
+        "    INTERFACE_SYSTEM_INCLUDE_DIRECTORIES \"\${PACKAGE_PREFIX_DIR}/${FW_SDK_INCLUDE_DIR}/libnode\""
+        "    INTERFACE_COMPILE_DEFINITIONS \"NAPI_CPP_EXCEPTIONS=1\""
+        "    INTERFACE_COMPILE_FEATURES \"cxx_std_17\""
+        "    INTERFACE_LINK_LIBRARIES \"${_libnode_sdk_link}\")")
+    foreach(_v8_lib v8_libplatform v8_libbase v8_abseil)
+        if(TARGET ${_v8_lib})
+            get_target_property(_v8_lib_path ${_v8_lib} IMPORTED_LOCATION)
+            get_filename_component(_v8_lib_name "${_v8_lib_path}" NAME)
+            install(FILES "${_v8_lib_path}" DESTINATION "${FW_SDK_LIB_DIR}")
+            set(_v8_lib_link "")
+            if(_v8_lib STREQUAL "v8_libbase" AND TARGET v8_abseil)
+                set(_v8_lib_link "set_target_properties(v8_libbase PROPERTIES INTERFACE_LINK_LIBRARIES v8_abseil)")
+            endif()
+            fw_sdk_imported_snippet(
+                "add_library(${_v8_lib} STATIC IMPORTED)"
+                "set_target_properties(${_v8_lib} PROPERTIES IMPORTED_LOCATION \"\${PACKAGE_PREFIX_DIR}/${FW_SDK_LIB_DIR}/${_v8_lib_name}\")"
+                "${_v8_lib_link}")
+        endif()
+    endforeach()
+
     # Export paths for other modules
     set(LIBNODE_INCLUDE_DIRS "${LIBNODE_INCLUDE_DIR}" CACHE PATH "libnode include directories" FORCE)
     set(LIBNODE_LIBRARY_DIR "${LIBNODE_LIB_DIR}" CACHE PATH "libnode library directory" FORCE)
@@ -362,8 +417,8 @@ if(WIN32 AND LIBNODE_IMPLIB_PATH)
             "-DIMPLIB=${LIBNODE_IMPLIB_PATH}"
             "-DDLL_NAME=libnode"
             "-DOUTPUT=${LIBNODE_NODE_API_DEF}"
-            -P "${CMAKE_SOURCE_DIR}/cmake/NodeApiExports.cmake"
-        DEPENDS "${LIBNODE_IMPLIB_PATH}" "${CMAKE_SOURCE_DIR}/cmake/NodeApiExports.cmake"
+            -P "${Framework_SOURCE_DIR}/cmake/NodeApiExports.cmake"
+        DEPENDS "${LIBNODE_IMPLIB_PATH}" "${Framework_SOURCE_DIR}/cmake/NodeApiExports.cmake"
         COMMENT "Forwarding Node's C API to libnode.dll"
         VERBATIM
     )

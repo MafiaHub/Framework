@@ -31,6 +31,13 @@ cmake --build build --target RunFrameworkTests  # Run tests
 builds\build.bat <target> 64
 ```
 
+The Framework ships to projects as a prebuilt SDK (`cmake --install` of this tree; see
+`docs/research/prebuilt_framework.md` and `cmake/FrameworkInstall.cmake`). `builds\build.bat FrameworkSdkSmoke 64`
+installs it to `builds\build-64\sdk` and builds `code/tests/sdk-consumer` against that prefix alone.
+Projects consume it through `cmake/FrameworkBootstrap.cmake` (`FW_SDK_ROOT`, `FW_SOURCE_DIR` or a
+`FrameworkPin.cmake`); the targets are `Framework::Framework`, `Framework::Client`, `Framework::Server`,
+`Framework::Loader`.
+
 For HogwartsMP, build the debug client and server with:
 ```bat
 builds\build.bat HogwartsMPClient 64

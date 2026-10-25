@@ -64,6 +64,39 @@ if(WIN32)
 endif()
 target_link_libraries(FrameworkClientScriptingTests Framework FrameworkServer libnode)
 
+# The SDK smoke test: install this build into a prefix, then configure and build a consumer project
+# against that prefix alone (code/tests/sdk-consumer), the way a mod does through
+# cmake/FrameworkBootstrap.cmake. The vcpkg checkout is shared so the consumer's manifest install
+# comes out of the same binary cache.
+set(_fw_sdk_prefix "${CMAKE_BINARY_DIR}/sdk")
+set(_fw_sdk_consumer "${CMAKE_BINARY_DIR}/sdk-consumer")
+set(_fw_sdk_consumer_args
+    -G "${CMAKE_GENERATOR}"
+    "-DCMAKE_BUILD_TYPE=$<CONFIG>"
+    "-DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+    "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
+    "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+    "-DFW_SDK_ROOT=${_fw_sdk_prefix}"
+    "-DFW_VCPKG_ROOT=${FW_VCPKG_ROOT_RESOLVED}")
+if(CMAKE_PROJECT_INCLUDE_BEFORE)
+    list(APPEND _fw_sdk_consumer_args "-DCMAKE_PROJECT_INCLUDE_BEFORE=${CMAKE_PROJECT_INCLUDE_BEFORE}")
+endif()
+add_custom_target(FrameworkSdkSmoke
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${_fw_sdk_prefix}"
+    COMMAND ${CMAKE_COMMAND} --install "${CMAKE_BINARY_DIR}" --prefix "${_fw_sdk_prefix}" --config $<CONFIG>
+    COMMAND ${CMAKE_COMMAND} -S "${CMAKE_CURRENT_SOURCE_DIR}/sdk-consumer" -B "${_fw_sdk_consumer}" ${_fw_sdk_consumer_args}
+    COMMAND ${CMAKE_COMMAND} --build "${_fw_sdk_consumer}" --config $<CONFIG>
+    COMMENT "Installing the SDK to ${_fw_sdk_prefix} and building code/tests/sdk-consumer against it"
+    VERBATIM USES_TERMINAL)
+# Every exported target must exist before the install runs, including vendors nothing on this
+# platform links (libsig without a server, for instance).
+get_property(_fw_sdk_smoke_deps GLOBAL PROPERTY FW_SDK_EXPORTED_TARGETS)
+list(APPEND _fw_sdk_smoke_deps TracyClient)
+if(TARGET libnode_node_api_def)
+    list(APPEND _fw_sdk_smoke_deps libnode_node_api_def)
+endif()
+add_dependencies(FrameworkSdkSmoke ${_fw_sdk_smoke_deps})
+
 # Native input primitives can be tested without building or launching clients.
 add_executable(FrameworkInputTests input_ut.cpp)
 target_include_directories(FrameworkInputTests PRIVATE . ../framework/src)

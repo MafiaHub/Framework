@@ -41,7 +41,7 @@ else()
     set(_fw_cef_dir "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 file(TO_CMAKE_PATH "${_fw_cef_dir}" _fw_cef_dir)
-get_filename_component(_fw_cef_dir "${_fw_cef_dir}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+get_filename_component(_fw_cef_dir "${_fw_cef_dir}" ABSOLUTE BASE_DIR "${Framework_SOURCE_DIR}")
 
 include(DownloadCEF)
 DownloadCEF("${CEF_PLATFORM}" "${CEF_VERSION}" "${_fw_cef_dir}")
@@ -54,7 +54,8 @@ DownloadCEF("${CEF_PLATFORM}" "${CEF_VERSION}" "${_fw_cef_dir}")
 # -------------------------------------------------------------------
 file(GLOB_RECURSE CEF_WRAPPER_SOURCES "${CEF_ROOT}/libcef_dll/*.cc")
 add_library(libcef_dll_wrapper STATIC ${CEF_WRAPPER_SOURCES})
-target_include_directories(libcef_dll_wrapper PUBLIC "${CEF_ROOT}")
+target_include_directories(libcef_dll_wrapper PRIVATE "${CEF_ROOT}")
+fw_sdk_export_includes(libcef_dll_wrapper cef "${CEF_ROOT}")
 target_compile_definitions(libcef_dll_wrapper PRIVATE
     WRAPPING_CEF_SHARED
     NOMINMAX
@@ -67,12 +68,20 @@ target_compile_options(libcef_dll_wrapper PRIVATE /W0)
 # CEF interface target
 # -------------------------------------------------------------------
 add_library(CEF INTERFACE)
-target_include_directories(CEF INTERFACE "${CEF_ROOT}")
+fw_sdk_export_includes(CEF cef "${CEF_ROOT}")
 
 # Link the import library from the Release directory
-target_link_directories(CEF INTERFACE "${CEF_ROOT}/Release")
+fw_sdk_export_link_directories(CEF "${CEF_ROOT}/Release")
 target_link_libraries(CEF INTERFACE libcef_dll_wrapper libcef)
 target_compile_definitions(CEF INTERFACE NOMINMAX)
+
+# SDK: headers, the import library and the runtime files a client stages next to itself.
+install(DIRECTORY "${CEF_ROOT}/include" DESTINATION "${FW_SDK_INCLUDE_DIR}/cef")
+install(FILES "${CEF_ROOT}/Release/libcef.lib" DESTINATION "${FW_SDK_LIB_DIR}")
+install(DIRECTORY "${CEF_ROOT}/Release/" DESTINATION "${FW_SDK_RUNTIME_DIR}/client"
+    FILES_MATCHING PATTERN "*.dll" PATTERN "*.bin" PATTERN "*.json")
+install(DIRECTORY "${CEF_ROOT}/Resources/" DESTINATION "${FW_SDK_RUNTIME_DIR}/client")
+fw_sdk_manifest(CEF_VERSION "${CEF_VERSION}")
 
 # -------------------------------------------------------------------
 # Copy runtime DLLs and resources to the bin directory

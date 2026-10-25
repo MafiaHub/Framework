@@ -36,9 +36,13 @@ configure_file(
 
 # v8pp is header-only, create interface target
 add_library(v8pp INTERFACE)
-target_include_directories(v8pp INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/include ${v8pp_SOURCE_DIR})
+fw_sdk_export_includes(v8pp v8pp "${CMAKE_CURRENT_BINARY_DIR}/include" "${v8pp_SOURCE_DIR}")
 target_link_libraries(v8pp INTERFACE v8)
 
 # Metadata descriptors and exporters do not require linking the V8 runtime.
 add_library(v8pp_metadata INTERFACE)
-target_include_directories(v8pp_metadata INTERFACE ${v8pp_SOURCE_DIR})
+fw_sdk_export_includes(v8pp_metadata v8pp "${v8pp_SOURCE_DIR}")
+
+# SDK: the headers and the generated config.hpp under include/v8pp/v8pp
+fw_sdk_install_headers(v8pp/v8pp "${v8pp_SOURCE_DIR}/v8pp")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/include/v8pp/config.hpp" DESTINATION "${FW_SDK_INCLUDE_DIR}/v8pp/v8pp")

@@ -42,6 +42,7 @@ find_package(sentry CONFIG REQUIRED)
 set(_sentry_crashpad "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/tools/sentry-native/crashpad_handler${CMAKE_EXECUTABLE_SUFFIX}")
 if(EXISTS "${_sentry_crashpad}")
     file(COPY "${_sentry_crashpad}" DESTINATION "${CMAKE_BINARY_DIR}/bin")
+    fw_sdk_runtime(COMMON "${_sentry_crashpad}")
 else()
     message(WARNING "sentry-native crashpad_handler not found at ${_sentry_crashpad}; crash reports will not be captured")
 endif()
@@ -148,6 +149,10 @@ foreach(_mafianet_target MafiaNet::MafiaNetStatic MafiaNet::MafiaNet MafiaNet::o
     endif()
 endforeach()
 
+# SDK: the archive ships whole under mafianet/ and is found through its own package there.
+install(DIRECTORY "${_mafianet_root}/include" "${_mafianet_root}/lib" "${_mafianet_root}/bin" DESTINATION "mafianet/${FW_SDK_ARCH}")
+fw_sdk_manifest(MAFIANET_VERSION "${MAFIANET_PIN_VERSION}")
+
 # Build HTTPLib
 #
 # Not taken from vcpkg: that port hardcodes HTTPLIB_COMPILE=OFF, so it is header-only. The
@@ -156,16 +161,26 @@ endforeach()
 set(OPENSSL_USE_STATIC_LIBS ON)
 set(HTTPLIB_REQUIRE_OPENSSL ON)
 set(HTTPLIB_COMPILE ON)
+set(HTTPLIB_INSTALL OFF CACHE BOOL "" FORCE) # exported with the Framework targets below instead
 add_subdirectory(httplib)
+set_property(TARGET httplib PROPERTY INTERFACE_SOURCES "")
+fw_sdk_export_includes(httplib httplib "${CMAKE_CURRENT_BINARY_DIR}/httplib/out")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/httplib/out/httplib.h" DESTINATION "${FW_SDK_INCLUDE_DIR}/httplib")
 
 # Build semver
 add_subdirectory(semver)
+fw_sdk_export_includes(semver semver "${CMAKE_CURRENT_SOURCE_DIR}/semver")
+fw_sdk_install_headers(semver "${CMAKE_CURRENT_SOURCE_DIR}/semver")
 
 # Build Hash
 add_subdirectory(hash)
+fw_sdk_export_includes(Hash hash "${CMAKE_CURRENT_SOURCE_DIR}/hash")
+fw_sdk_install_headers(hash "${CMAKE_CURRENT_SOURCE_DIR}/hash")
 
 # Build libsig
 add_subdirectory(libsig)
+fw_sdk_export_includes(libsig libsig "${CMAKE_CURRENT_SOURCE_DIR}/libsig")
+fw_sdk_install_headers(libsig "${CMAKE_CURRENT_SOURCE_DIR}/libsig")
 
 # Build sfd
 add_subdirectory(sfd)
@@ -187,6 +202,7 @@ set(TRACY_DELAYED_INIT ON CACHE BOOL "" FORCE)
 set(TRACY_ONLY_LOCALHOST ON CACHE BOOL "" FORCE)
 set(TRACY_NO_BROADCAST ON CACHE BOOL "" FORCE)
 add_subdirectory(tracy)
+# Tracy installs its own package (lib/cmake/Tracy); the SDK's Config finds it there.
 
 # Build FTL (Fiber Tasking Library) - no vcpkg port exists.
 set(FTL_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -194,6 +210,10 @@ set(FTL_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(FTL_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(FTL_CPP_17 ON CACHE BOOL "" FORCE)
 add_subdirectory(ftl)
+fw_sdk_export_includes(ftl ftl "${CMAKE_CURRENT_SOURCE_DIR}/ftl/include")
+fw_sdk_install_headers(ftl "${CMAKE_CURRENT_SOURCE_DIR}/ftl/include")
+fw_sdk_export_includes(boost_context boost_context "${CMAKE_CURRENT_SOURCE_DIR}/ftl/third_party/boost_context/include")
+fw_sdk_install_headers(boost_context "${CMAKE_CURRENT_SOURCE_DIR}/ftl/third_party/boost_context/include")
 
 # Build libnode (Node.js as library) - provides both libnode and v8 targets
 add_subdirectory(libnode)
@@ -227,6 +247,8 @@ set(PHYSFS_BUILD_TEST OFF CACHE BOOL "" FORCE)
 set(PHYSFS_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(PHYSFS_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
 add_subdirectory(physfs)
+fw_sdk_export_includes(physfs-static physfs "${CMAKE_CURRENT_SOURCE_DIR}/physfs/src")
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/physfs/src/physfs.h" DESTINATION "${FW_SDK_INCLUDE_DIR}/physfs")
 # physfs FORCEs CMAKE_SKIP_RPATH ON into the cache under GCC/Clang. That leaks out of the
 # subdirectory and disables rpath for every target in the build, including M2OServer's
 # $ORIGIN - without which libnode.so shipped next to the binary no longer resolves.
@@ -240,12 +262,28 @@ if (WIN32)
     # implementation TU and the PUBLIC feature-trimming defines below it would stay hand-written
     # here either way, and splitting them from the header only invites version skew.
     add_subdirectory(miniaudio)
+    fw_sdk_export_includes(miniaudio miniaudio "${CMAKE_CURRENT_SOURCE_DIR}/miniaudio")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/miniaudio/miniaudio.h" DESTINATION "${FW_SDK_INCLUDE_DIR}/miniaudio")
     add_subdirectory(steamworks)
     add_subdirectory(udis86)
     add_subdirectory(ntdll)
     # Not taken from vcpkg: the port is ImGuizmo 1.10, which predates Dear ImGui's ImDrawFlags
     # change to AddPolyline - the very break the vendored copy is patched for.
     add_subdirectory(imguizmo)
+    fw_sdk_export_includes(ImGuizmo imguizmo "${CMAKE_CURRENT_SOURCE_DIR}/imguizmo")
+    fw_sdk_install_headers(imguizmo "${CMAKE_CURRENT_SOURCE_DIR}/imguizmo")
     add_subdirectory(discord)
     add_subdirectory(cef)
 endif ()
+
+# ---------------------------------------------------------------------------
+# SDK export of the vendored targets the Framework targets link (cmake/FrameworkInstall.cmake).
+# Tracy keeps its own package; MafiaNet, libnode, CEF's import library and the services adapter are
+# imported targets and are re-created by FrameworkConfig.cmake from the snippets their directories
+# register.
+# ---------------------------------------------------------------------------
+set(_fw_vendor_targets httplib semver Hash libsig sfd ftl boost_context physfs-static v8 v8pp v8pp_metadata)
+if(WIN32)
+    list(APPEND _fw_vendor_targets miniaudio SteamSDK udis86 ntdll ImGuizmo DiscordSDK libcef_dll_wrapper CEF)
+endif()
+fw_sdk_install_targets(${_fw_vendor_targets})

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.24)
 cmake_policy(SET CMP0091 NEW)
 
 # Must precede project(): the toolchain file is read as part of it.
@@ -8,16 +8,25 @@ project(Framework CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(FW_STANDALONE true)
+# Top level: this tree drives the build and picks up code/projects. As a subdirectory (a project
+# built with -DFW_SOURCE_DIR, see cmake/FrameworkBootstrap.cmake) the project owns the flags and
+# the Framework contributes its targets only.
+set(FW_STANDALONE ${PROJECT_IS_TOP_LEVEL})
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
 
 # fw_set_binary_identity(): version info, icon and manifest identity for shipped binaries
 include(FrameworkBinaryIdentity)
+# fw_stage_runtime(): runtime files next to a client or server
+include(FrameworkRuntime)
+# install()/export rules producing the prebuilt SDK
+include(FrameworkInstall)
 
 if(FW_STANDALONE)
     include(FrameworkSetup)
 endif()
+# Scripts a project runs from its own build (pattern table checks); the SDK ships the same ones.
+set(Framework_SCRIPTS_DIR "${PROJECT_SOURCE_DIR}/scripts" CACHE INTERNAL "Framework helper scripts")
 
 # Profiling (Tracy): instrumentation compiles out entirely when OFF.
 # ON by default with on-demand mode - zero overhead until a profiler connects.
@@ -28,15 +37,6 @@ option(FW_PROFILING "Enable Tracy profiler instrumentation" ON)
 # launcher flagged as a trojan by Windows Defender.
 option(FW_DLL_INJECTION "Build the launcher's DLL injection launch path" OFF)
 
-if (WIN32)
-    if (MSVC)
-        add_compile_options(
-            $<$<COMPILE_LANGUAGE:C,CXX>:/bigobj>
-            $<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>
-        )
-    endif()
-endif()
-
 add_subdirectory(${PROJECT_SOURCE_DIR}/vendors)
 
 # Include directories are now managed per-target in code/framework/CMakeLists.txt
@@ -44,3 +44,5 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/vendors)
 
 # Include all Framework dependencies
 add_subdirectory(${PROJECT_SOURCE_DIR}/code)
+
+fw_sdk_finalize()
