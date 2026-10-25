@@ -16,7 +16,7 @@ namespace Framework::Networking::RPC {
     // checked here because it cannot be missing: a connection only exists once the server accepted
     // its session request (ClientIdentity), so a refused peer has nothing to send this over.
     struct ClientJoin {
-        static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::ClientJoin");
+        static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Framework::ClientJoin");
 
         void Serialize(MafiaNet::BitStream *, bool) {}
     };

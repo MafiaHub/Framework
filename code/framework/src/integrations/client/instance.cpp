@@ -648,9 +648,10 @@ namespace Framework::Integrations::Client {
 
     void Instance::InitNetworkingMessages() {
         const auto net = _networkingEngine->GetNetworkClient();
+        net->SetIdentifierSalt(_opts.rpcIdentifierSalt);
         // Build gate: NetworkClient challenges automatically on connect; a mismatch drops us.
         if (_opts.verifyBuildToken) {
-            net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
+            net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion, _opts.rpcIdentifierSalt));
         }
         else {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Build token verification DISABLED; connecting to any server version");

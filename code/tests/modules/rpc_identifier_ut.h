@@ -9,6 +9,7 @@
 #pragma once
 
 #include "integrations/shared/rpc/emit_script_event.h"
+#include "networking/network_peer.h"
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/client_identity.h"
 #include "networking/rpc/client_join.h"
@@ -26,19 +27,19 @@
 #include <string>
 #include <string_view>
 
-// RPC identifiers are derived at compile time from a keyed hash of the readable name (see
-// rpc_identifier.h): the wire and the binary carry only an opaque token, never "Framework::ChatMessage".
-// These tests pin the properties the RPC layer depends on -- a correct keyed hash, opacity,
-// distinctness, determinism, non-recoverability of the salt, and that the token never costs more on
-// the wire than the name it replaced.
+// RPC identifiers are digested at compile time from the readable name and keyed at runtime under the
+// deployment salt (see rpc_identifier.h): the binary carries only the digest, the wire only the salted
+// token, never "Framework::ChatMessage". These tests pin the properties the RPC layer depends on -- a
+// correct keyed hash, opacity, distinctness, determinism, non-recoverability of the salt, and that the
+// token never costs more on the wire than the name it replaced.
 MODULE(rpc_identifier, {
     namespace RPC = Framework::Networking::RPC;
 
-    // Every readable name converted to FW_RPC_IDENTIFIER, paired with the token that ships instead.
+    // Every readable name converted to FW_RPC_IDENTIFIER, paired with the digest that ships instead.
     // Kept in sync by hand: a new framework RPC belongs here so the sweeps below cover it.
     struct Identifier {
         const char *name;
-        const char *token;
+        RPC::Identifier digest;
     };
     static const Identifier kIdentifiers[] = {
         {"Framework::ClientJoin", RPC::ClientJoin::kIdentifier},
@@ -54,6 +55,7 @@ MODULE(rpc_identifier, {
         {"Framework::SetOwner", FW_RPC_IDENTIFIER("Framework::SetOwner")},
     };
     static constexpr size_t kIdentifierCount = sizeof(kIdentifiers) / sizeof(kIdentifiers[0]);
+    static constexpr uint64_t kSalt          = RPC::kDefaultIdentifierSalt;
 
     // Bits WriteCompressed spends on a C string, i.e. exactly what RPC4::Signal pays to name the slot.
     const auto encodedBits = [](const char *value) {
@@ -80,10 +82,11 @@ MODULE(rpc_identifier, {
 
     IT("renders an opaque 16-character token that does not embed the readable name", {
         for (const auto &entry : kIdentifiers) {
-            EQUALS(strlen(entry.token), static_cast<size_t>(16));
-            EQUALS(strspn(entry.token, RPC::kIdentifierAlphabet), static_cast<size_t>(16));
-            EQUALS(strstr(entry.token, "Framework") == nullptr, true);
-            EQUALS(strstr(entry.name, entry.token) == nullptr, true);
+            const RPC::Token token = RPC::TokenFor(kSalt, entry.digest);
+            EQUALS(strlen(token.c_str()), static_cast<size_t>(16));
+            EQUALS(strspn(token.c_str(), RPC::kIdentifierAlphabet), static_cast<size_t>(16));
+            EQUALS(strstr(token.c_str(), "Framework") == nullptr, true);
+            EQUALS(strstr(entry.name, token.c_str()) == nullptr, true);
         }
     });
 
@@ -98,36 +101,39 @@ MODULE(rpc_identifier, {
     IT("assigns a distinct identifier to every framework RPC", {
         // A collision would make two payloads share an RPC4 slot, silently misrouting one of them.
         for (size_t i = 0; i < kIdentifierCount; ++i) {
-            for (size_t j = i + 1; j < kIdentifierCount; ++j) { STRNEQUALS(kIdentifiers[i].token, kIdentifiers[j].token); }
+            for (size_t j = i + 1; j < kIdentifierCount; ++j) {
+                NEQUALS(kIdentifiers[i].digest.digest, kIdentifiers[j].digest.digest);
+                STRNEQUALS(RPC::TokenFor(kSalt, kIdentifiers[i].digest).c_str(), RPC::TokenFor(kSalt, kIdentifiers[j].digest).c_str());
+            }
         }
     });
 
-    IT("derives the token as the alphabet rendering of the name's hash", {
+    IT("derives the token as the alphabet rendering of the salted digest", {
         // Ties the on-wire token to the hash, so an independent implementation can reproduce it.
         for (const auto &entry : kIdentifiers) {
             char expected[17];
-            uint64_t value = RPC::HashIdentifier(entry.name);
+            uint64_t value = RPC::HashIdentifierWith(kSalt, RPC::DigestName(entry.name));
             for (int i = 15; i >= 0; --i) {
                 expected[i] = RPC::kIdentifierAlphabet[value & 0xFULL];
                 value >>= 4;
             }
             expected[16] = '\0';
-            STREQUALS(entry.token, expected);
+            STREQUALS(RPC::TokenFor(kSalt, entry.digest).c_str(), expected);
         }
     });
 
     IT("derives the same identifier for a given name every time", {
         // Both peers must agree, so the mapping has to be a pure function of name + salt.
-        UEQUALS(RPC::HashIdentifier("Framework::ChatMessage"), RPC::HashIdentifier("Framework::ChatMessage"));
-        UEQUALS(RPC::HashIdentifierWith(1234ULL, "Framework::ChatMessage"), RPC::HashIdentifierWith(1234ULL, "Framework::ChatMessage"));
-        NEQUALS(RPC::HashIdentifier("Framework::ChatMessage"), RPC::HashIdentifier("Framework::ClientIdentity"));
+        UEQUALS(RPC::DigestName("Framework::ChatMessage").digest, RPC::DigestName("Framework::ChatMessage").digest);
+        UEQUALS(RPC::HashIdentifierWith(1234ULL, RPC::DigestName("Framework::ChatMessage")), RPC::HashIdentifierWith(1234ULL, RPC::DigestName("Framework::ChatMessage")));
+        NEQUALS(RPC::DigestName("Framework::ChatMessage").digest, RPC::DigestName("Framework::ClientIdentity").digest);
     });
 
-    IT("rotates every identifier when the build salt changes", {
-        // The point of the salt: a table lifted from one build must not map onto the next.
+    IT("rotates every identifier when the salt changes", {
+        // The point of the salt: a table lifted from one deployment must not map onto the next.
         for (const auto &entry : kIdentifiers) {
-            const uint64_t a = RPC::HashIdentifierWith(0x0123456789ABCDEFULL, entry.name);
-            const uint64_t b = RPC::HashIdentifierWith(0x0123456789ABCDF0ULL, entry.name);
+            const uint64_t a = RPC::HashIdentifierWith(0x0123456789ABCDEFULL, entry.digest);
+            const uint64_t b = RPC::HashIdentifierWith(0x0123456789ABCDF0ULL, entry.digest);
             NEQUALS(a, b);
             // A near-identical salt must still scatter the output, not nudge it.
             uint64_t differing = 0;
@@ -136,28 +142,29 @@ MODULE(rpc_identifier, {
         }
     });
 
-    IT("scatters the hash when a single character of the name changes", {
-        const uint64_t a = RPC::HashIdentifier("Framework::ChatMessage");
-        const uint64_t b = RPC::HashIdentifier("Framework::ChatMessagf");
+    IT("scatters the digest when a single character of the name changes", {
+        const uint64_t a = RPC::DigestName("Framework::ChatMessage").digest;
+        const uint64_t b = RPC::DigestName("Framework::ChatMessagf").digest;
         uint64_t differing = 0;
         for (uint64_t bit = a ^ b; bit; bit >>= 1) { differing += bit & 1ULL; }
         GREATER(differing, static_cast<uint64_t>(16));
     });
 
-    IT("does not leak the build salt to anyone holding a token and its public name", {
-        // Regression guard. A salted FNV-1a token is invertible: multiply by the prime's modular
-        // inverse and unwind the name backwards to recover the seed, hence the salt. Every framework
-        // name is public, so that alone would have undone the rotation above. Run exactly that attack
-        // against the current construction and require it to fail.
-        const uint64_t salt         = 0xDEADBEEFCAFEF00DULL;
-        const uint64_t fnvBasis     = 14695981039346656037ULL;
-        const uint64_t fnvInvPrime  = 0xCE965057AFF6957BULL; // modular inverse of the FNV prime mod 2^64
-        const std::string_view name = "Framework::ChatMessage";
+    IT("does not leak the salt to anyone holding a token and its public digest", {
+        // Regression guard. A salted FNV-1a over the digest bytes is invertible: multiply by the
+        // prime's modular inverse and unwind the bytes backwards to recover the seed, hence the salt.
+        // Every framework digest is public (the names are in this repository), so that alone would
+        // have undone the rotation above. Run exactly that attack against the current construction
+        // and require it to fail.
+        const uint64_t salt          = 0xDEADBEEFCAFEF00DULL;
+        const uint64_t fnvBasis      = 14695981039346656037ULL;
+        const uint64_t fnvInvPrime   = 0xCE965057AFF6957BULL; // modular inverse of the FNV prime mod 2^64
+        const RPC::Identifier digest = RPC::DigestName("Framework::ChatMessage");
 
-        uint64_t state = RPC::HashIdentifierWith(salt, name);
-        for (size_t i = name.size(); i-- > 0;) {
+        uint64_t state = RPC::HashIdentifierWith(salt, digest);
+        for (size_t i = 8; i-- > 0;) {
             state *= fnvInvPrime;
-            state ^= static_cast<uint8_t>(name[i]);
+            state ^= static_cast<uint8_t>(digest.digest >> (8 * i));
         }
         const uint64_t recovered = state ^ fnvBasis;
         NEQUALS(recovered, salt);
@@ -168,16 +175,27 @@ MODULE(rpc_identifier, {
         // fixed English table. Hex tokens cost ~151 bits there, above most of these names; the
         // alphabet in rpc_identifier.h is chosen to stay under every one of them.
         MafiaNet::StringCompressor::AddReference();
-        for (const auto &entry : kIdentifiers) { LESSER(encodedBits(entry.token), encodedBits(entry.name)); }
+        for (const auto &entry : kIdentifiers) { LESSER(encodedBits(RPC::TokenFor(kSalt, entry.digest).c_str()), encodedBits(entry.name)); }
         MafiaNet::StringCompressor::RemoveReference();
     });
 
-    IT("resolves identifiers entirely at compile time", {
+    IT("folds the salt into the build token so mismatched peers fail the gate", {
+        // RPC4 Signal to an unregistered slot is a no-op, so without this two peers on different
+        // salts would connect and then silently exchange nothing.
+        const std::string a = Framework::Networking::NetworkPeer::BuildToken("Game", "1.0", "37.0.0", "1.6.1", 0x1111ULL);
+        const std::string b = Framework::Networking::NetworkPeer::BuildToken("Game", "1.0", "37.0.0", "1.6.1", 0x2222ULL);
+        const std::string c = Framework::Networking::NetworkPeer::BuildToken("Game", "1.0", "37.0.0", "1.6.1", 0x1111ULL);
+        NEQUALS(a, b);
+        EQUALS(a, c);
+        EQUALS(strstr(a.c_str(), RPC::IdentifierSaltTag(0x1111ULL).c_str()) != nullptr, true);
+    });
+
+    IT("digests names entirely at compile time", {
         // The readable name must never reach the binary, which only holds while it stays inside a
         // constant expression.
-        static_assert(RPC::HashIdentifier("Framework::ChatMessage") == RPC::HashIdentifierWith(RPC::kIdentifierSalt, "Framework::ChatMessage"));
-        static_assert(RPC::HashIdentifier("Framework::ChatMessage") != RPC::HashIdentifier("Framework::ClientIdentity"));
-        static_assert(RPC::IdentifierToken<RPC::HashIdentifier("Framework::ChatMessage")>::value[16] == '\0');
+        static_assert(FW_RPC_IDENTIFIER("Framework::ChatMessage") == RPC::DigestName("Framework::ChatMessage"));
+        static_assert(RPC::DigestName("Framework::ChatMessage") != RPC::DigestName("Framework::ClientIdentity"));
+        static_assert(RPC::TokenFor(RPC::kDefaultIdentifierSalt, FW_RPC_IDENTIFIER("Framework::ChatMessage")).value[16] == '\0');
         static_assert(RPC::detail::SipHash24(0x0706050403020100ULL, 0x0f0e0d0c0b0a0908ULL, std::string_view("", 0)) == 0x726fdb47dd0e0e31ULL);
         EQUALS(true, true);
     });

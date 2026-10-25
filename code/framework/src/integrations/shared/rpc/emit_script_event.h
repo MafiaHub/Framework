@@ -19,7 +19,7 @@ namespace Framework::Integrations::Shared::RPC {
     // RPC payload forwarding a named scripting event (with a JSON payload) to the other peer's
     // resource layer. See networking/rpc/rpc.h for the dispatch model.
     struct EmitScriptEvent {
-        static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::EmitScriptEvent");
+        static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Framework::EmitScriptEvent");
 
         MafiaNet::RakString eventName;
         MafiaNet::RakString payload;

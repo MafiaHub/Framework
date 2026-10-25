@@ -13,19 +13,16 @@
 #include <cstdint>
 #include <string_view>
 
-// Per-build key for every RPC identifier. Both peers derive the token they key RPC4 slots on from it,
-// so a mismatch means no RPC ever dispatches -- NetworkPeer::BuildToken folds IdentifierSaltTag() into
-// the TwoWayAuthentication challenge so that fails the connection gate instead of hanging silently.
-// Changing it is netcode-breaking (MAJOR). Release CI overrides it per shipped build with
-// `cmake -DFW_RPC_IDENTIFIER_SALT=<uint64>`, which code/framework/CMakeLists.txt turns into this
-// define (a bare cache variable would never reach the preprocessor); the default keeps local dev
-// builds deterministic and interoperable.
-#ifndef FW_RPC_IDENTIFIER_SALT
-#define FW_RPC_IDENTIFIER_SALT 0x9E3779B97F4A7C15ULL
-#endif
-
+// RPC identifiers are built in two stages so that a prebuilt Framework and a mod can still agree on
+// every slot key. At compile time the readable name is digested under a fixed key (FW_RPC_IDENTIFIER),
+// so the name itself never reaches the binary. At runtime NetworkPeer mixes that digest with the
+// per-deployment salt it was handed (InstanceOptions::rpcIdentifierSalt) and renders the token RPC4
+// keys its slots on. Both peers must hold the same salt or no RPC ever dispatches; NetworkPeer::
+// BuildToken folds IdentifierSaltTag(salt) into the TwoWayAuthentication challenge so a mismatch fails
+// the connection gate instead of hanging silently. Changing any of this is netcode-breaking (MAJOR).
 namespace Framework::Networking::RPC {
-    inline constexpr std::uint64_t kIdentifierSalt = FW_RPC_IDENTIFIER_SALT;
+    // The salt every peer uses unless the mod sets one; keeps local development builds interoperable.
+    inline constexpr std::uint64_t kDefaultIdentifierSalt = 0x9E3779B97F4A7C15ULL;
 
     // Token alphabet, in ascending RakNet StringCompressor cost. RPC4 writes the identifier with
     // WriteCompressed, i.e. Huffman-coded against RakNet's fixed English table, where digits cost
@@ -85,45 +82,69 @@ namespace Framework::Networking::RPC {
             s.Round();
             return s.v0 ^ s.v1 ^ s.v2 ^ s.v3;
         }
+
+        // Fixed key for the compile-time stage. It hides nothing (the names are public in this
+        // repository anyway); it only keeps the names out of the binary.
+        inline constexpr std::uint64_t kNameKey0 = 0x4D6166696148756CULL;
+        inline constexpr std::uint64_t kNameKey1 = 0x4672616D65776F72ULL;
     } // namespace detail
 
-    // SipHash-2-4 of the readable name under a key derived from the build salt. Deliberately not a
-    // salted FNV-1a: that is invertible (multiply by the prime's modular inverse and unwind the name
-    // backwards), so one token plus its name -- and every framework name is public in this repo --
-    // recovers the salt and with it the whole table, which would leave the per-build rotation above
-    // worthless. A keyed PRF has no such shortcut.
-    constexpr std::uint64_t HashIdentifierWith(std::uint64_t salt, std::string_view name) { return detail::SipHash24(SplitMix64(salt), SplitMix64(SplitMix64(salt)), name); }
+    // Compile-time digest of a readable RPC name. What a payload's kIdentifier holds.
+    struct Identifier {
+        std::uint64_t digest = 0;
+
+        constexpr bool operator==(const Identifier &) const = default;
+    };
+
+    constexpr Identifier DigestName(std::string_view name) { return Identifier {detail::SipHash24(detail::kNameKey0, detail::kNameKey1, name)}; }
+
+    // Keyed PRF of the digest under the deployment salt. Deliberately not a salted FNV-1a: that is
+    // invertible (multiply by the prime's modular inverse and unwind backwards), so one token plus its
+    // digest would recover the salt and with it the whole table, which would leave the per-deployment
+    // rotation worthless. A keyed PRF has no such shortcut.
+    constexpr std::uint64_t HashIdentifierWith(std::uint64_t salt, Identifier identifier) {
+        char bytes[8] = {};
+        for (std::size_t i = 0; i < 8; ++i) { bytes[i] = static_cast<char>(static_cast<std::uint8_t>(identifier.digest >> (8 * i))); }
+        return detail::SipHash24(SplitMix64(salt), SplitMix64(SplitMix64(salt)), std::string_view(bytes, 8));
+    }
+
+    // Stable, NUL-terminated 16-character rendering of a hashed identifier (4 bits per character).
+    // RPC4 keys its slots by, and transmits, identifiers as C strings, so this drops in wherever a
+    // readable name used to sit.
+    struct Token {
+        std::array<char, 17> value {};
+
+        constexpr const char *c_str() const { return value.data(); }
+    };
+
+    constexpr Token RenderToken(std::uint64_t hash) {
+        Token out {};
+        for (int i = 15; i >= 0; --i) {
+            out.value[static_cast<std::size_t>(i)] = kIdentifierAlphabet[hash & 0xFULL];
+            hash >>= 4;
+        }
+        out.value[16] = '\0';
+        return out;
+    }
+
+    constexpr Token TokenFor(std::uint64_t salt, Identifier identifier) { return RenderToken(HashIdentifierWith(salt, identifier)); }
 
     // The name reaches this exclusively through FW_RPC_IDENTIFIER's template argument (mandatory
     // constant evaluation), so it is never referenced at runtime and does not ship in the binary --
-    // only the token below does. 64 bits keeps collisions across the identifier set negligible.
-    constexpr std::uint64_t HashIdentifier(std::string_view name) { return HashIdentifierWith(kIdentifierSalt, name); }
-
-    // Stable, NUL-terminated 16-character rendering of a hashed identifier (4 bits per character),
-    // held in static storage so it can back a plain const char*. RPC4 keys its slots by, and
-    // transmits, identifiers as C strings, so this drops in wherever a readable name used to sit.
-    template <std::uint64_t Hash>
-    struct IdentifierToken {
-        static constexpr std::array<char, 17> Render() {
-            std::array<char, 17> out {};
-            std::uint64_t value = Hash;
-            for (int i = 15; i >= 0; --i) {
-                out[static_cast<std::size_t>(i)] = kIdentifierAlphabet[value & 0xFULL];
-                value >>= 4;
-            }
-            out[16] = '\0';
-            return out;
-        }
-        static constexpr std::array<char, 17> value = Render();
+    // only the digest does. 64 bits keeps collisions across the identifier set negligible.
+    template <std::uint64_t Digest>
+    struct IdentifierOf {
+        static constexpr Identifier value {Digest};
     };
 
-    // Fingerprint of the build salt, folded into NetworkPeer::BuildToken. A salt mismatch otherwise
-    // has no error path: RPC4 Signal to an unregistered slot is a no-op, so the peers would connect
-    // and then silently dispatch nothing.
-    inline constexpr const char *IdentifierSaltTag() { return IdentifierToken<HashIdentifier("Framework::IdentifierSalt")>::value.data(); }
+    // Fingerprint of the salt, folded into NetworkPeer::BuildToken. A salt mismatch otherwise has no
+    // error path: RPC4 Signal to an unregistered slot is a no-op, so the peers would connect and then
+    // silently dispatch nothing.
+    constexpr Token IdentifierSaltTag(std::uint64_t salt) { return TokenFor(salt, IdentifierOf<DigestName("Framework::IdentifierSalt").digest>::value); }
 } // namespace Framework::Networking::RPC
 
-// Turn a readable RPC name into an opaque, per-build wire identifier. Use in place of a string
-// literal, e.g. `static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::ChatMessage");`.
-// The readable name stays here for developers; only the token reaches the binary and the wire.
-#define FW_RPC_IDENTIFIER(name) (::Framework::Networking::RPC::IdentifierToken<::Framework::Networking::RPC::HashIdentifier(name)>::value.data())
+// Turn a readable RPC name into its compile-time digest. Use in place of a string literal, e.g.
+// `static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Framework::ChatMessage");`. The readable
+// name stays here for developers; only the digest reaches the binary, and only the salted token
+// reaches the wire.
+#define FW_RPC_IDENTIFIER(name) (::Framework::Networking::RPC::IdentifierOf<::Framework::Networking::RPC::DigestName(name).digest>::value)

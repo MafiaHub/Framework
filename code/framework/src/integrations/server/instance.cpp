@@ -535,10 +535,11 @@ namespace Framework::Integrations::Server {
 
     void Instance::InitNetworkingMessages() {
         const auto net = _networkingEngine->GetNetworkServer();
+        net->SetIdentifierSalt(_opts.rpcIdentifierSalt);
         // Build gate: a mismatched token fails the challenge inside NetworkServer; the peer never
         // reaches the asset phase.
         if (_opts.verifyBuildToken) {
-            net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
+            net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion, _opts.rpcIdentifierSalt));
         }
         else {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Build token verification DISABLED; accepting any client version");
