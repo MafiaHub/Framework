@@ -20,6 +20,12 @@ on:
         required: false
         default: ""
 
+# One run per branch at a time: a push and a dispatch on the same branch would otherwise both bump
+# VERSION and both build the SDK. Queued, never cancelled, so a release is not cut half-way.
+concurrency:
+  group: version-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   bump-semver:
     runs-on: ubuntu-latest

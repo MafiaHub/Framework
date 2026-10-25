@@ -54,10 +54,10 @@ jobs:
         include:
           - platform: windows-x64
             os: windows-latest
-            arch: amd64
+            arch: x64
           - platform: windows-x86
             os: windows-latest
-            arch: amd64_x86
+            arch: x86
           - platform: linux-x86_64
             os: ubuntu-24.04
     steps:

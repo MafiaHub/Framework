@@ -150,7 +150,12 @@ foreach(_mafianet_target MafiaNet::MafiaNetStatic MafiaNet::MafiaNet MafiaNet::o
 endforeach()
 
 # SDK: the archive ships whole under mafianet/ and is found through its own package there.
-install(DIRECTORY "${_mafianet_root}/include" "${_mafianet_root}/lib" "${_mafianet_root}/bin" DESTINATION "mafianet/${FW_SDK_ARCH}")
+# bin/ exists only in the Windows archives (the DLL its package also declares).
+set(_mafianet_install_dirs "${_mafianet_root}/include" "${_mafianet_root}/lib")
+if(EXISTS "${_mafianet_root}/bin")
+    list(APPEND _mafianet_install_dirs "${_mafianet_root}/bin")
+endif()
+install(DIRECTORY ${_mafianet_install_dirs} DESTINATION "mafianet/${FW_SDK_ARCH}")
 fw_sdk_manifest(MAFIANET_VERSION "${MAFIANET_PIN_VERSION}")
 
 # Build HTTPLib
