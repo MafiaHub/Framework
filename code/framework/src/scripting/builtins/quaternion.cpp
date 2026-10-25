@@ -83,88 +83,14 @@ namespace Framework::Scripting::Builtins {
             .function("clone", &Quaternion::clone, v8pp::metadata::docs("Quaternion", {}, "Creates an independent copy of this quaternion.", "New quaternion with the same components."))
             .function("toString", &Quaternion::toString, v8pp::metadata::docs("string", {}, "Formats this quaternion for logging and debugging.", "Text in Quaternion(w, x, y, z) form."));
 
-        // Add properties manually using v8's SetNativeDataProperty with correct signature
         auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
 
-        // Property: w
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "w").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getW());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setW(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("w", v8pp::metadata::property_docs("number", "Mutable scalar component."));
-
-        // Property: x
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "x").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getX());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setX(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("x", v8pp::metadata::property_docs("number", "Mutable X imaginary component."));
-
-        // Property: y
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "y").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getY());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setY(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("y", v8pp::metadata::property_docs("number", "Mutable Y imaginary component."));
-
-        // Property: z
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "z").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getZ());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setZ(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("z", v8pp::metadata::property_docs("number", "Mutable Z imaginary component."));
-
-        // Read-only property: length (magnitude / norm)
-        protoTemplate->SetNativeDataProperty(v8pp::to_v8(isolate, "length").As<v8::Name>(), [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-            auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
-            if (self)
-                info.GetReturnValue().Set(self->getLength());
-        });
-        cls->document_property("length", {"Read-only magnitude (norm) of this quaternion; 1 for a unit rotation.", "number", true, false});
-
-        // Read-only property: lengthSquared
-        protoTemplate->SetNativeDataProperty(v8pp::to_v8(isolate, "lengthSquared").As<v8::Name>(), [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-            auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
-            if (self)
-                info.GetReturnValue().Set(self->getLengthSquared());
-        });
-        cls->document_property("lengthSquared", {"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
+        cls->property("w", &Quaternion::getW, &Quaternion::setW, v8pp::metadata::property_docs("number", "Mutable scalar component."));
+        cls->property("x", &Quaternion::getX, &Quaternion::setX, v8pp::metadata::property_docs("number", "Mutable X imaginary component."));
+        cls->property("y", &Quaternion::getY, &Quaternion::setY, v8pp::metadata::property_docs("number", "Mutable Y imaginary component."));
+        cls->property("z", &Quaternion::getZ, &Quaternion::setZ, v8pp::metadata::property_docs("number", "Mutable Z imaginary component."));
+        cls->property("length", &Quaternion::getLength, v8pp::metadata::property_options{"Read-only magnitude (norm) of this quaternion; 1 for a unit rotation.", "number", true, false});
+        cls->property("lengthSquared", &Quaternion::getLengthSquared, v8pp::metadata::property_options{"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
 
         // toJSON method for JSON.stringify support - returns plain JS object
         protoTemplate->Set(v8pp::to_v8(isolate, "toJSON"), v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {

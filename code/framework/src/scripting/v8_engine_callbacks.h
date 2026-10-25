@@ -45,7 +45,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
 
     // V8 callback: promise rejection handler
     inline void PromiseRejectCallback(v8::PromiseRejectMessage message) {
-        if (auto *engine = V8Engine::FromContext(message.GetPromise()->GetIsolate()->GetCurrentContext())) {
+        if (auto *engine = V8Engine::FromContext(v8::Isolate::GetCurrent()->GetCurrentContext())) {
             engine->OnPromiseReject(message);
         }
     }
@@ -53,7 +53,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
     // Keep origin on promises that outlive their creating callback.
     inline void PromiseHook(v8::PromiseHookType type, v8::Local<v8::Promise> promise, v8::Local<v8::Value> parent) {
         if (type != v8::PromiseHookType::kInit) return;
-        auto *isolate = promise->GetIsolate();
+        auto *isolate = v8::Isolate::GetCurrent();
         auto context = isolate->GetCurrentContext();
         auto *engine = V8Engine::FromContext(context);
         auto *manager = engine ? engine->GetResourceManager() : nullptr;

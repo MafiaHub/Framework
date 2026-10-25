@@ -3,7 +3,7 @@ include(FetchContent)
 FetchContent_Declare(
     v8pp
     GIT_REPOSITORY https://github.com/MafiaHub/v8pp.git
-    GIT_TAG 0317a9bde3d7988196ccfb9660fff01b3ac49deb  # MafiaHub v8pp: safe unwrapping and cleanup across isolates (MafiaHub/v8pp#2)
+    GIT_TAG 7c1d8c352d5470d481996cf3f63c5f3dfe88f9b6  # MafiaHub v8pp: V8 14.6 (Node 26) accessor and internal-field changes
     GIT_SHALLOW FALSE
     SOURCE_SUBDIR nonexistent  # Prevent v8pp's own CMakeLists from being processed
 )

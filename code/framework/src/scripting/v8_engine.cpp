@@ -701,7 +701,7 @@ namespace Framework::Scripting {
 
     V8Engine *V8Engine::FromContext(v8::Local<v8::Context> context) {
         if (context.IsEmpty()) return nullptr;
-        auto *isolate = context->GetIsolate();
+        auto *isolate = v8::Isolate::GetCurrent();
         auto key = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.v8Engine"));
         v8::Local<v8::Value> value;
         if (!context->Global()->GetPrivate(context, key).ToLocal(&value) || !value->IsExternal()) return nullptr;

@@ -72,88 +72,14 @@ namespace Framework::Scripting::Builtins {
             .function("clone", &Vector4::clone, v8pp::metadata::docs("Vector4", {}, "Creates an independent copy of this vector.", "New vector with the same components."))
             .function("toString", &Vector4::toString, v8pp::metadata::docs("string", {}, "Formats this vector for logging and debugging.", "Text in Vector4(x, y, z, w) form."));
 
-        // Add properties manually using v8's SetNativeDataProperty with correct signature
         auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
 
-        // Property: x
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "x").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getX());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setX(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("x", v8pp::metadata::property_docs("number", "Mutable X component."));
-
-        // Property: y
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "y").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getY());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setY(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("y", v8pp::metadata::property_docs("number", "Mutable Y component."));
-
-        // Property: z
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "z").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getZ());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setZ(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("z", v8pp::metadata::property_docs("number", "Mutable Z component."));
-
-        // Property: w
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "w").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getW());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setW(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("w", v8pp::metadata::property_docs("number", "Mutable W component."));
-
-        // Read-only property: length
-        protoTemplate->SetNativeDataProperty(v8pp::to_v8(isolate, "length").As<v8::Name>(), [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-            auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
-            if (self)
-                info.GetReturnValue().Set(self->getLength());
-        });
-        cls->document_property("length", {"Read-only Euclidean magnitude of this vector.", "number", true, false});
-
-        // Read-only property: lengthSquared
-        protoTemplate->SetNativeDataProperty(v8pp::to_v8(isolate, "lengthSquared").As<v8::Name>(), [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-            auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
-            if (self)
-                info.GetReturnValue().Set(self->getLengthSquared());
-        });
-        cls->document_property("lengthSquared", {"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
+        cls->property("x", &Vector4::getX, &Vector4::setX, v8pp::metadata::property_docs("number", "Mutable X component."));
+        cls->property("y", &Vector4::getY, &Vector4::setY, v8pp::metadata::property_docs("number", "Mutable Y component."));
+        cls->property("z", &Vector4::getZ, &Vector4::setZ, v8pp::metadata::property_docs("number", "Mutable Z component."));
+        cls->property("w", &Vector4::getW, &Vector4::setW, v8pp::metadata::property_docs("number", "Mutable W component."));
+        cls->property("length", &Vector4::getLength, v8pp::metadata::property_options{"Read-only Euclidean magnitude of this vector.", "number", true, false});
+        cls->property("lengthSquared", &Vector4::getLengthSquared, v8pp::metadata::property_options{"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
 
         // toJSON method for JSON.stringify support - returns plain JS object
         protoTemplate->Set(v8pp::to_v8(isolate, "toJSON"), v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {

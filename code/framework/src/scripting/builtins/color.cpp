@@ -133,72 +133,12 @@ namespace Framework::Scripting::Builtins {
                 v8pp::metadata::docs("string", {v8pp::metadata::param("includeAlpha", "boolean", true, "Whether to append the alpha byte; defaults to false.")}, "Converts normalized components to a hexadecimal CSS-style string.", "Lowercase #rrggbb or #rrggbbaa string."))
             .function("toString", &Color::toString, v8pp::metadata::docs("string", {}, "Formats this color for logging and debugging.", "Text in Color(r, g, b, a) form."));
 
-        // Add properties manually using v8's SetNativeDataProperty with correct signature
         auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
 
-        // Property: r
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "r").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getR());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setR(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("r", v8pp::metadata::property_docs("number", "Mutable normalized red component."));
-
-        // Property: g
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "g").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getG());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setG(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("g", v8pp::metadata::property_docs("number", "Mutable normalized green component."));
-
-        // Property: b
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "b").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getB());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setB(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("b", v8pp::metadata::property_docs("number", "Mutable normalized blue component."));
-
-        // Property: a
-        protoTemplate->SetNativeDataProperty(
-            v8pp::to_v8(isolate, "a").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
-                if (self)
-                    info.GetReturnValue().Set(self->getA());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
-                if (self && value->IsNumber()) {
-                    self->setA(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
-                }
-            });
-        cls->document_property("a", v8pp::metadata::property_docs("number", "Mutable normalized alpha component."));
+        cls->property("r", &Color::getR, &Color::setR, v8pp::metadata::property_docs("number", "Mutable normalized red component."));
+        cls->property("g", &Color::getG, &Color::setG, v8pp::metadata::property_docs("number", "Mutable normalized green component."));
+        cls->property("b", &Color::getB, &Color::setB, v8pp::metadata::property_docs("number", "Mutable normalized blue component."));
+        cls->property("a", &Color::getA, &Color::setA, v8pp::metadata::property_docs("number", "Mutable normalized alpha component."));
 
         // toJSON method for JSON.stringify support - returns plain JS object
         protoTemplate->Set(v8pp::to_v8(isolate, "toJSON"), v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {

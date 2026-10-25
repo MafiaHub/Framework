@@ -36,7 +36,7 @@ function(download_with_retry what url destination)
     message(FATAL_ERROR "${what}: Failed to download after 3 attempts: ${reason}")
 endfunction()
 
-set(LIBNODE_VERSION "25.6.1" CACHE STRING "libnode version")
+set(LIBNODE_VERSION "26.12.1" CACHE STRING "libnode version")
 set(LIBNODE_GITHUB_REPO "MafiaHub/MafiaNode")
 set(LIBNODE_DOWNLOAD_DIR "${CMAKE_CURRENT_BINARY_DIR}/libnode-${LIBNODE_VERSION}")
 
@@ -142,9 +142,9 @@ else()
         set(LIBNODE_LIB_NAME "libnode.lib")
         set(LIBNODE_DLL_NAME "libnode.dll")
     elseif(APPLE)
-        set(LIBNODE_LIB_NAME "libnode.141.dylib")
+        set(LIBNODE_LIB_NAME "libnode.147.dylib")
     elseif(UNIX)
-        set(LIBNODE_LIB_NAME "libnode.so.141")
+        set(LIBNODE_LIB_NAME "libnode.so.147")
     endif()
 
     set(LIBNODE_ARCHIVE_NAME "libnode-v${LIBNODE_VERSION}-${LIBNODE_PLATFORM}.${LIBNODE_ARCHIVE_EXT}")
@@ -199,7 +199,7 @@ else()
             IMPORTED_LOCATION "${LIBNODE_LIB_DIR}/${LIBNODE_LIB_NAME}"
         )
 
-        # Create symlink for linker (libnode.dylib -> libnode.141.dylib)
+        # Create symlink for linker (libnode.dylib -> libnode.147.dylib)
         if(APPLE)
             if(NOT EXISTS "${LIBNODE_LIB_DIR}/libnode.dylib")
                 file(CREATE_LINK

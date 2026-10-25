@@ -480,7 +480,7 @@ namespace Framework::Scripting {
         // Called inside the owner: react to its promise, and settle the caller's when it does. Returns the
         // settlement's key, or 0 when the reaction could not be attached.
         uint64_t Await(uint32_t owner, uint32_t caller, v8::Local<v8::Context> context, v8::Local<v8::Promise> promise, bool keepValue) {
-            v8::Isolate *isolate  = context->GetIsolate();
+            v8::Isolate *isolate  = v8::Isolate::GetCurrent();
             auto settlement       = std::make_unique<Settlement>();
             settlement->key       = nextSettlement++;
             settlement->owner     = owner;

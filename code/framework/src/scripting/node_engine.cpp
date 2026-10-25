@@ -791,7 +791,7 @@ namespace Framework::Scripting {
 })();
 )JS";
 
-        v8::Isolate *isolate = context->GetIsolate();
+        v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
         // Set inspector flag before sandbox code runs so it can conditionally
         // allow the inspector module for debugging
