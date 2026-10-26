@@ -202,6 +202,14 @@ MODULE(delegation, {
         EQUALS(DelegationManager::Elect(policy, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY, declined), bob);
     });
 
+    IT("takes a declined entity from its simulator without proximity steal", {
+        DelegationPolicy keeping = policy;
+        keeping.proximitySteal   = false;
+        const std::vector<DelegationCandidate> candidates {at(alice, 10.0f), at(bob, 40.0f)};
+        const std::vector<MafiaNet::PeerGuid> declined {alice};
+        EQUALS(DelegationManager::Elect(keeping, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY, declined), bob);
+    });
+
     IT("keeps out only the clients that declined this entity", {
         const std::vector<DelegationCandidate> candidates {at(alice, 20.0f), at(bob, 10.0f)};
         const std::vector<MafiaNet::PeerGuid> declined {carol};
