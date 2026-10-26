@@ -205,6 +205,9 @@ namespace Framework::Networking::Replication {
         const DelegationManager &Delegation() const {
             return _delegation;
         }
+        // Client: tell the server this client cannot run `entity` right now, or can again. The
+        // server passes it over for that entity alone (DelegationManager::SetDeclined).
+        void DeclineSimulation(NetworkEntity *entity, bool declined);
 
         // --- Interest management ---
         // Configure the spatial index extent (see InterestGrid::Configure). Call before the first
@@ -330,6 +333,7 @@ namespace Framework::Networking::Replication {
         uint64_t _nextNetworkId    = 0;
         NetworkPeer *_owner        = nullptr;
         bool _clientRPCsRegistered = false;
+        bool _serverRPCsRegistered = false;
         InterestGrid _interest;
         DelegationManager _delegation;
         SerializeRateBands _rateBands;
