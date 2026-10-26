@@ -1,5 +1,5 @@
 # Install and export rules that turn a Framework build tree into the prebuilt SDK a project links
-# against (docs/research/prebuilt_framework.md). `cmake --install <build> --prefix <dir>` lays out:
+# against. `cmake --install <build> --prefix <dir>` lays out:
 #
 #   include/<name>/            headers, shared by every architecture: framework/, libnode/ (x64) or
 #                              v8/ (x86), v8pp/, cef/, the vendors
