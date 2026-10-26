@@ -185,8 +185,8 @@ MODULE(rpc_identifier, {
         const std::string a = Framework::Networking::NetworkPeer::BuildToken("Game", "1.0", "37.0.0", "1.6.1", 0x1111ULL);
         const std::string b = Framework::Networking::NetworkPeer::BuildToken("Game", "1.0", "37.0.0", "1.6.1", 0x2222ULL);
         const std::string c = Framework::Networking::NetworkPeer::BuildToken("Game", "1.0", "37.0.0", "1.6.1", 0x1111ULL);
-        NEQUALS(a, b);
-        EQUALS(a, c);
+        STRNEQUALS(a.c_str(), b.c_str());
+        STREQUALS(a.c_str(), c.c_str());
         EQUALS(strstr(a.c_str(), RPC::IdentifierSaltTag(0x1111ULL).c_str()) != nullptr, true);
     });
 
