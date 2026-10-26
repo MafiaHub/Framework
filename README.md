@@ -87,32 +87,15 @@ Please ensure you have the cmake tools installed in your copy of Visual Studio f
 Open your newly cloned Framework repository folder in Visual Studio, and it will automatically set up everything for you!
 
 Things to note:
-- `code/projects` folder is hidden by default as it's ignored by Git, in Solution Explorer, enable **Show All Files** option to see your project files.
 - Changes in your project's cmake will not be auto-detected; cmake will only reload config on the build. Otherwise, you can do it yourself in the Projects section in the main menu.
 
 #### CLion support
 
 The guide on how to set up the project files for CLion is available [here](.github/CLION_GUIDE.md).
 
-## Add a multi-player project to the framework
+## Build a multi-player project on the framework
 
-Multi-player modifications are cloned into the `code/projects` directory and are automatically picked up by the framework. We use this approach to efficiently manage the projects and their dependencies and perform mass changes and general maintenance during development.
-
-```sh
-# Create and navigate to the folder
-mkdir -p code/projects
-cd code/projects
-
-# Clone an MP repo that uses the framework
-git clone git@github.com:<your-awesome-username>/<your-amazing-project>.git
-
-# e.g.
-git clone https://github.com/MafiaHub/MafiaMP.git
-```
-
-Now, you can access your targets and build them within the framework.
-
-To exclude a project from compilation, create an empty file called `IGNORE` in the project's root.
+Projects live in their own repositories and link the Framework as a prebuilt SDK attached to each release. A project carries `cmake/FrameworkBootstrap.cmake` and `cmake/FrameworkPin.cmake`, which name the release archive and its hashes; the first configure downloads it. Set `FW_SOURCE_DIR` to a Framework checkout to build the Framework from source alongside the project, or `FW_SDK_ROOT` to a locally installed SDK (`cmake --install` of a Framework build).
 
 ## License
 

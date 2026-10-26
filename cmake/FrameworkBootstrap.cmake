@@ -10,9 +10,6 @@
 #                                          FW_SDK_CACHE_DIR (-D or environment; default
 #                                          ${CMAKE_BINARY_DIR}/framework-sdk) and hash-checked.
 #                                          One archive per OS: the Windows one carries x86 and x64.
-#
-# A project still nested under the Framework's code/projects/ is detected and left alone, so the same
-# CMakeLists works through the transition.
 
 cmake_minimum_required(VERSION 3.24)
 
@@ -20,9 +17,7 @@ if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/FrameworkPin.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/FrameworkPin.cmake")
 endif()
 
-if(TARGET Framework AND NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    set(FW_BOOTSTRAP_MODE "nested")
-elseif(FW_SOURCE_DIR)
+if(FW_SOURCE_DIR)
     get_filename_component(FW_SOURCE_DIR "${FW_SOURCE_DIR}" ABSOLUTE)
     if(NOT EXISTS "${FW_SOURCE_DIR}/cmake/VcpkgBootstrap.cmake")
         message(FATAL_ERROR "FW_SOURCE_DIR '${FW_SOURCE_DIR}' is not a Framework checkout")

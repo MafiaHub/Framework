@@ -8,10 +8,6 @@ project(Framework CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# Top level: this tree drives the build and picks up code/projects. As a subdirectory (a project
-# built with -DFW_SOURCE_DIR, see cmake/FrameworkBootstrap.cmake) the project owns the flags and
-# the Framework contributes its targets only.
-set(FW_STANDALONE ${PROJECT_IS_TOP_LEVEL})
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
 
@@ -22,7 +18,9 @@ include(FrameworkRuntime)
 # install()/export rules producing the prebuilt SDK
 include(FrameworkInstall)
 
-if(FW_STANDALONE)
+# As a subdirectory (a project built with -DFW_SOURCE_DIR, see cmake/FrameworkBootstrap.cmake) the
+# project owns the flags and the Framework contributes its targets only.
+if(PROJECT_IS_TOP_LEVEL)
     include(FrameworkSetup)
 endif()
 # Scripts a project runs from its own build (pattern table checks); the SDK ships the same ones.

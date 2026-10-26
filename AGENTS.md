@@ -104,7 +104,6 @@ Or use Visual Studio 2022 with CMake tools installed and open the repository fol
   - `Framework` - Shared utilities and core systems
   - `FrameworkClient` - Client-specific features (rendering, Discord presence, asset downloading)
   - `FrameworkServer` - Server-specific features (HTTP endpoints, command processing, masterlist)
-- `code/projects/` - Multiplayer projects (auto-discovered, create `IGNORE` file to exclude)
   - Structure and coding rules for these are normative in `docs/project_architecture.md`
   - Bringing up a new one: `docs/starting_a_new_project.md`
 - `code/tests/` - Framework tests

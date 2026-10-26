@@ -2,8 +2,7 @@
 #
 # Puts the Framework runtime files a target needs next to it: the CEF distribution, libnode, the
 # crash handler, the helper executables. Built against the SDK those come from the archive's
-# runtime/<role>/ tree. Built from source (the Framework tree is a subdirectory, or the project is
-# nested in it) the Framework's own copy targets already fill ${CMAKE_BINARY_DIR}/bin, so only the
+# runtime/<role>/ tree. Built from source (the Framework tree is a subdirectory) the Framework's own copy targets already fill ${CMAKE_BINARY_DIR}/bin, so only the
 # dependencies on them and the Linux RPATH are set.
 function(fw_stage_runtime target role)
     if(NOT role MATCHES "^(CLIENT|SERVER)$")
