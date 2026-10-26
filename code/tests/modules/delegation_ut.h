@@ -85,8 +85,45 @@ MODULE(delegation, {
     });
 
     IT("hands an entity to a challenger that is clearly nearer", {
+        EQUALS(DelegationPolicy {}.proximitySteal, true);
         const std::vector<DelegationCandidate> candidates {at(alice, 50.0f), at(bob, 20.0f)};
         EQUALS(DelegationManager::Elect(policy, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY), bob);
+    });
+
+    IT("keeps an entity with its simulator against any challenger without proximity steal", {
+        DelegationPolicy keeping = policy;
+        keeping.proximitySteal   = false;
+        const std::vector<DelegationCandidate> candidates {at(alice, 130.0f), at(bob, 5.0f)};
+        EQUALS(DelegationManager::Elect(keeping, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY), alice);
+    });
+
+    IT("still elects the nearest client for a dormant entity without proximity steal", {
+        DelegationPolicy keeping = policy;
+        keeping.proximitySteal   = false;
+        const std::vector<DelegationCandidate> candidates {at(alice, 90.0f), at(bob, 30.0f)};
+        EQUALS(DelegationManager::Elect(keeping, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, nobody, candidates, kGroundXY), bob);
+    });
+
+    IT("still releases past the release range without proximity steal", {
+        DelegationPolicy keeping = policy;
+        keeping.proximitySteal   = false;
+        EQUALS(DelegationManager::Elect(keeping, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, {at(alice, 160.0f), at(bob, 40.0f)}, kGroundXY), bob);
+        EQUALS(DelegationManager::Elect(keeping, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, {at(alice, 160.0f)}, kGroundXY), nobody);
+    });
+
+    IT("still releases from a simulator in a world that cannot see the entity without proximity steal", {
+        DelegationPolicy keeping = policy;
+        keeping.proximitySteal   = false;
+        const std::vector<DelegationCandidate> candidates {at(alice, 10.0f, 0, 0, 7), at(bob, 40.0f, 0, 0, 9)};
+        EQUALS(DelegationManager::Elect(keeping, entityAt, 9, alice, candidates, kGroundXY), bob);
+    });
+
+    IT("still releases from a suspended simulator without proximity steal", {
+        // A suspended client is left out of the candidates, exactly like a disconnected one.
+        DelegationPolicy keeping = policy;
+        keeping.proximitySteal   = false;
+        const std::vector<DelegationCandidate> candidates {at(bob, 40.0f)};
+        EQUALS(DelegationManager::Elect(keeping, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY), bob);
     });
 
     IT("skips a client that is already at its simulation budget", {

@@ -63,6 +63,11 @@ namespace Framework::Networking::Replication {
         // deliberately cross-world; the default is the safe answer.
         bool requireSameVirtualWorld = true;
 
+        // Off: the incumbent keeps it while a candidate (connected, not suspended), in releaseRange
+        // and, with requireSameVirtualWorld, in a world that can see it. For a moving entity whose
+        // state lives only on its simulator, which a handover to a ~15% nearer client restarts.
+        bool proximitySteal = true;
+
         // Clamped copy: release can never be nearer than acquire, and neither can be negative.
         DelegationPolicy Normalized() const {
             DelegationPolicy out = *this;
@@ -125,8 +130,10 @@ namespace Framework::Networking::Replication {
          * Two asymmetries are deliberate and are what stop an entity being traded back and forth:
          * the incumbent is measured against `releaseRange` while a challenger has to be inside
          * `acquireRange`, and the incumbent's distance is discounted by `kStickyDiscount` before the
-         * comparison. An incumbent is also never dropped for being over capacity -- a budget lowered
-         * at runtime stops new work arriving rather than stuttering what is already running.
+         * comparison. With `proximitySteal` off there is no comparison: an incumbent that passes
+         * the release check is kept. An incumbent is also never dropped for being over capacity -- a
+         * budget lowered at runtime stops new work arriving rather than stuttering what is already
+         * running.
          */
         static MafiaNet::PeerGuid Elect(const DelegationPolicy &policy, const glm::vec3 &position, MafiaNet::VirtualWorldId virtualWorld, MafiaNet::PeerGuid current, const std::vector<DelegationCandidate> &candidates, bool groundXY);
 
