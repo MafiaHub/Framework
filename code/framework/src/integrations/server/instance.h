@@ -9,6 +9,7 @@
 #pragma once
 
 #include <networking/replication/replication_manager.h>
+#include <networking/rpc/rpc_identifier.h>
 
 #include <utils/safe_win32.h>
 
@@ -89,6 +90,10 @@ namespace Framework::Integrations::Server {
         std::string gameVersion;
 
         bool verifyBuildToken = true; // false bypasses the build/version mismatch challenge
+
+        // Deployment salt keying every RPC identifier (see networking/rpc/rpc_identifier.h). Must be
+        // the same on client and server; a release build sets it from its own secret.
+        uint64_t rpcIdentifierSalt = Framework::Networking::RPC::kDefaultIdentifierSalt;
 
         // Crash reporting (Sentry). Empty DSN leaves it disabled; the value is project-specific.
         std::string sentryDSN;

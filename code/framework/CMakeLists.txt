@@ -220,10 +220,14 @@ if(WIN32)
     set(FW_MANIFEST_ARCH "amd64")
     set(FW_MANIFEST_DESCRIPTION "MafiaHub Framework Launcher")
     configure_file(src/launcher/launcher.manifest.in "${CMAKE_CURRENT_BINARY_DIR}/launcher.manifest" @ONLY)
-    target_link_options(FrameworkLoader PUBLIC "/MANIFESTINPUT:$<IF:$<BOOL:$<TARGET_PROPERTY:FW_LAUNCHER_MANIFEST>>,$<TARGET_PROPERTY:FW_LAUNCHER_MANIFEST>,${CMAKE_CURRENT_BINARY_DIR}/launcher.manifest>")
+    # The fallback manifest is read off a property so the exported SDK can point it at its own copy.
+    set_property(TARGET FrameworkLoader PROPERTY FW_LAUNCHER_DEFAULT_MANIFEST "${CMAKE_CURRENT_BINARY_DIR}/launcher.manifest")
+    target_link_options(FrameworkLoader PUBLIC "/MANIFESTINPUT:$<IF:$<BOOL:$<TARGET_PROPERTY:FW_LAUNCHER_MANIFEST>>,$<TARGET_PROPERTY:FW_LAUNCHER_MANIFEST>,$<TARGET_PROPERTY:FrameworkLoader,FW_LAUNCHER_DEFAULT_MANIFEST>>")
 
     # The game reservation is compiled into each launcher, sized by its FW_LAUNCHER_GAME_RESERVE
-    target_sources(FrameworkLoader INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/game_reserve.cpp)
+    target_sources(FrameworkLoader INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/game_reserve.cpp>
+        $<INSTALL_INTERFACE:${FW_SDK_SHARE_DIR}/game_reserve.cpp>)
 
     if(CMAKE_CL_64)
         target_link_options(FrameworkLoader PUBLIC /BASE:0x140000000)
@@ -247,15 +251,10 @@ endif()
 # Custom defines
 target_compile_definitions(Framework PUBLIC MG_ENABLE_LOG=0)
 
-# Per-build key for RPC identifiers (see networking/rpc/rpc_identifier.h). A cache variable alone
-# never reaches the preprocessor, so release CI passing -DFW_RPC_IDENTIFIER_SALT=<uint64> would
-# silently keep the default; turn it into a define here. PUBLIC because every peer -- framework,
-# server, client and downstream projects -- must derive the same identifiers.
-set(FW_RPC_IDENTIFIER_SALT "" CACHE STRING "64-bit salt keying every RPC identifier; must match on client and server")
-if(NOT FW_RPC_IDENTIFIER_SALT STREQUAL "")
-    # Accept the value with or without an integer suffix; the header needs it unsigned 64-bit.
-    string(REGEX REPLACE "[uUlL]+$" "" FW_RPC_IDENTIFIER_SALT_VALUE "${FW_RPC_IDENTIFIER_SALT}")
-    target_compile_definitions(Framework PUBLIC FW_RPC_IDENTIFIER_SALT=${FW_RPC_IDENTIFIER_SALT_VALUE}ULL)
+# The RPC identifier salt is a runtime value since the Framework ships prebuilt: a project hands it
+# to InstanceOptions::rpcIdentifierSalt from its own define (see networking/rpc/rpc_identifier.h).
+if(DEFINED FW_RPC_IDENTIFIER_SALT AND NOT FW_RPC_IDENTIFIER_SALT STREQUAL "")
+    message(STATUS "FW_RPC_IDENTIFIER_SALT is no longer compiled into the Framework; apply it to the project's own targets and InstanceOptions::rpcIdentifierSalt")
 endif()
 
 # External libraries & other stuff
@@ -265,13 +264,15 @@ macro(link_shared_deps target_name)
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/services>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<INSTALL_INTERFACE:${FW_SDK_INCLUDE_DIR}/framework>
+        $<INSTALL_INTERFACE:${FW_SDK_INCLUDE_DIR}/framework/services>
     )
 
     # Headers for the still-vendored trees. Everything from vcpkg arrives on its imported target.
     target_include_directories(${target_name} PRIVATE
-        ${CMAKE_SOURCE_DIR}/vendors/physfs/src
-        ${CMAKE_SOURCE_DIR}/vendors/semver
-        ${CMAKE_SOURCE_DIR}/vendors/ftl/include
+        ${Framework_SOURCE_DIR}/vendors/physfs/src
+        ${Framework_SOURCE_DIR}/vendors/semver
+        ${Framework_SOURCE_DIR}/vendors/ftl/include
     )
 
     # Required libraries for apple systems
@@ -390,7 +391,7 @@ if(LIBNODE_AVAILABLE)
 
     # FrameworkServer-specific includes
     target_include_directories(FrameworkServer PRIVATE
-        ${CMAKE_SOURCE_DIR}/vendors/libsig
+        ${Framework_SOURCE_DIR}/vendors/libsig
     )
 endif()
 
@@ -415,10 +416,10 @@ if(WIN32)
 
     # FrameworkClient-specific includes (Windows graphics, hooking, external services)
     target_include_directories(FrameworkClient PRIVATE
-        ${CMAKE_SOURCE_DIR}/vendors/imguizmo
-        ${CMAKE_SOURCE_DIR}/vendors/steamworks/include
-        ${CMAKE_SOURCE_DIR}/vendors/udis86
-        ${CMAKE_SOURCE_DIR}/vendors/discord/src
+        ${Framework_SOURCE_DIR}/vendors/imguizmo
+        ${Framework_SOURCE_DIR}/vendors/steamworks/include
+        ${Framework_SOURCE_DIR}/vendors/udis86
+        ${Framework_SOURCE_DIR}/vendors/discord/src
     )
 
     link_shared_deps(FrameworkLoader)
@@ -430,15 +431,15 @@ if(WIN32)
 
     # FrameworkLoader-specific includes
     target_include_directories(FrameworkLoader PRIVATE
-        ${CMAKE_SOURCE_DIR}/vendors/ntdll
-        ${CMAKE_SOURCE_DIR}/vendors/sfd
-        ${CMAKE_SOURCE_DIR}/vendors/steamworks/include
-        ${CMAKE_SOURCE_DIR}/vendors/udis86
+        ${Framework_SOURCE_DIR}/vendors/ntdll
+        ${Framework_SOURCE_DIR}/vendors/sfd
+        ${Framework_SOURCE_DIR}/vendors/steamworks/include
+        ${Framework_SOURCE_DIR}/vendors/udis86
     )
 
     # FrameworkLoaderData includes
     target_include_directories(FrameworkLoaderData PRIVATE
-        ${CMAKE_SOURCE_DIR}/vendors/udis86
+        ${Framework_SOURCE_DIR}/vendors/udis86
     )
 
     if(NOT CMAKE_CL_64)
@@ -517,7 +518,46 @@ if(WIN32)
     # after the definition is written, so it exists by the time a server links.
     if(TARGET FrameworkServer AND TARGET libnode_node_api_def)
         add_dependencies(FrameworkServer libnode_node_api_def)
-        target_link_options(FrameworkServer INTERFACE "/DEF:${LIBNODE_NODE_API_DEF}")
-        set_property(TARGET FrameworkServer APPEND PROPERTY INTERFACE_LINK_DEPENDS "${LIBNODE_NODE_API_DEF}")
+        # Read off a property so the exported SDK can point it at its installed copy.
+        set_property(TARGET FrameworkServer PROPERTY FW_NODE_API_DEF "${LIBNODE_NODE_API_DEF}")
+        target_link_options(FrameworkServer INTERFACE "/DEF:$<TARGET_PROPERTY:FrameworkServer,FW_NODE_API_DEF>")
+        set_property(TARGET FrameworkServer APPEND PROPERTY INTERFACE_LINK_DEPENDS "$<BUILD_INTERFACE:${LIBNODE_NODE_API_DEF}>")
+        install(FILES "${LIBNODE_NODE_API_DEF}" DESTINATION "${FW_SDK_SHARE_ARCH_DIR}")
     endif()
+endif()
+
+# ---------------------------------------------------------------------------
+# Namespaced names, identical to the ones the installed SDK exports, so a project links
+# Framework::Server whether the Framework is a subdirectory or a prebuilt archive.
+# ---------------------------------------------------------------------------
+set(_fw_sdk_targets Framework)
+set_target_properties(Framework PROPERTIES EXPORT_NAME Framework)
+add_library(Framework::Framework ALIAS Framework)
+if(TARGET FrameworkServer)
+    set_target_properties(FrameworkServer PROPERTIES EXPORT_NAME Server)
+    add_library(Framework::Server ALIAS FrameworkServer)
+    list(APPEND _fw_sdk_targets FrameworkServer)
+endif()
+if(TARGET FrameworkClient)
+    set_target_properties(FrameworkClient PROPERTIES EXPORT_NAME Client)
+    add_library(Framework::Client ALIAS FrameworkClient)
+    set_target_properties(FrameworkLoader PROPERTIES EXPORT_NAME Loader)
+    add_library(Framework::Loader ALIAS FrameworkLoader)
+    set_target_properties(FrameworkLoaderData PROPERTIES EXPORT_NAME LoaderData)
+    add_library(Framework::LoaderData ALIAS FrameworkLoaderData)
+    list(APPEND _fw_sdk_targets FrameworkClient FrameworkLoader FrameworkLoaderData cef_subprocess epic_sign_in)
+endif()
+
+# ---------------------------------------------------------------------------
+# SDK install rules (cmake/FrameworkInstall.cmake)
+# ---------------------------------------------------------------------------
+fw_sdk_install_targets(${_fw_sdk_targets})
+# Headers keep their layout under include/framework; the services adapter's private sources and the
+# download cache beside them are not headers a consumer sees.
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/" DESTINATION "${FW_SDK_INCLUDE_DIR}/framework"
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.inl" PATTERN "*.ipp"
+    PATTERN "services/src" EXCLUDE PATTERN "services/cache" EXCLUDE PATTERN "services/lib" EXCLUDE PATTERN "services/bin" EXCLUDE)
+if(WIN32)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/launcher.manifest" DESTINATION "${FW_SDK_SHARE_ARCH_DIR}")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/game_reserve.cpp" DESTINATION "${FW_SDK_SHARE_DIR}")
 endif()

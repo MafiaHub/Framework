@@ -23,7 +23,7 @@ We separate and bump versions based on these criteria:
 * MINOR when a change is made in the scripting layer
 * MAJOR when a change is made to the netcode, shared ecs modules or sync flow between peers (requires both client and the server side to be updated)
 
-Our PR workflow automates version bumping for you based on files that have been modified. This way we ensure each PR properly communicates potential dependency changes.
+Versions are raised by hand: a release commit sets `VERSION` by these criteria, and pushing the matching `v<version>` tag releases it and builds the SDK archives (`.github/workflows/release_tag.yml`).
 
 ## Code submission policy
 

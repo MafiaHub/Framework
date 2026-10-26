@@ -1,0 +1,191 @@
+name: Release SDK
+
+# Builds the prebuilt Framework SDK for a tagged version and
+# attaches it to that release: one archive per OS, the Windows one carrying both the x86 and the x64
+# libraries under lib/<arch>, runtime/<arch> and mafianet/<arch> with the headers shared. Projects
+# pin a release by version and archive hash in their FrameworkPin.cmake.
+#
+# Called by `Release` (release_tag.yml) when a version tag is pushed, or dispatched by hand to rebuild the
+# archives of any existing release.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to build the SDK for (v<major>.<minor>.<patch>)"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build the SDK for (v<major>.<minor>.<patch>)"
+        required: true
+
+env:
+  VCPKG_BINARY_SOURCES: ${{ vars.VCPKG_BINARY_SOURCES || 'clear;x-gha,readwrite' }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - name: Resolve the release
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "::error::No release ${TAG} to attach the SDK to."
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: SDK ${{ matrix.platform }}
+    needs: plan
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            os: windows-latest
+            arch: x64
+          - platform: windows-x86
+            os: windows-latest
+            arch: x86
+          - platform: linux-x86_64
+            os: ubuntu-24.04
+    steps:
+      - name: Checkout the tagged Framework
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.plan.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Install tools on Ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build build-essential g++ libcurl4-openssl-dev autoconf autoconf-archive automake libtool
+          g++ --version
+
+      - name: Set up CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.31.0"
+
+      - name: Set up the Visual Studio shell
+        if: runner.os == 'Windows'
+        uses: egor-tensin/vs-shell@v2
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Export the Actions cache tokens for vcpkg
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      # /Z7 keeps the debug information inside the archives, so a project's final link still writes a
+      # full PDB with no separate symbol files to carry. No /GL: whole-program objects bind to the exact
+      # toolset and would break the "equal or newer MSVC" rule FrameworkAbi.cmake enforces.
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: >
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFW_BUILD_TESTS=OFF
+          -DCMAKE_POLICY_DEFAULT_CMP0141=NEW
+          -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
+          -DCMAKE_C_FLAGS_RELEASE="/O2 /Ob2 /DNDEBUG"
+          -DCMAKE_CXX_FLAGS_RELEASE="/O2 /Ob2 /DNDEBUG"
+
+      - name: Configure (Linux)
+        if: runner.os == 'Linux'
+        run: >
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFW_BUILD_TESTS=OFF
+          -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+          -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG -g"
+          -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG -g"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Install
+        run: cmake --install build --prefix "${{ github.workspace }}/stage/sdk"
+
+      # The consumer smoke test, against the install tree that ships.
+      - name: Smoke-test the install tree
+        shell: bash
+        run: |
+          cmake -S "${GITHUB_WORKSPACE}/code/tests/sdk-consumer" -B stage/consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            "-DFW_SDK_ROOT=${GITHUB_WORKSPACE}/stage/sdk" "-DFW_VCPKG_ROOT=${GITHUB_WORKSPACE}/vendors/vcpkg"
+          cmake --build stage/consumer
+
+      - name: Upload the install tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-tree-${{ matrix.platform }}
+          path: stage/sdk
+          if-no-files-found: error
+          compression-level: 1
+
+  publish:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    steps:
+      # The two Windows trees overlay into one archive: their architectures live in disjoint
+      # subtrees and the shared files (headers, scripts, the entry Config) are identical.
+      - name: Download the Windows trees
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sdk-tree-windows-*
+          merge-multiple: true
+          path: Framework-${{ needs.plan.outputs.version }}-windows
+
+      - name: Download the Linux tree
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-tree-linux-x86_64
+          path: Framework-${{ needs.plan.outputs.version }}-linux
+
+      - name: Archive
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          # Artifacts drop the executable bit; the runtime helpers and scripts need it back.
+          chmod +x Framework-${VERSION}-linux/runtime/*/*/* Framework-${VERSION}-linux/share/framework/scripts/* || true
+          zip -q -r -5 "Framework-${VERSION}-windows.zip" "Framework-${VERSION}-windows"
+          tar -czf "Framework-${VERSION}-linux.tar.gz" "Framework-${VERSION}-linux"
+          sha256sum Framework-${VERSION}-windows.zip Framework-${VERSION}-linux.tar.gz | tee SHA256SUMS
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          gh release upload "${TAG}" --repo "${GITHUB_REPOSITORY}" --clobber "Framework-${VERSION}-windows.zip" "Framework-${VERSION}-linux.tar.gz" SHA256SUMS
+          {
+            echo ""
+            echo "### SDK archives"
+            echo ""
+            echo "Pin in \`cmake/FrameworkPin.cmake\`:"
+            echo ""
+            echo '```cmake'
+            echo "set(FRAMEWORK_PIN_VERSION \"${VERSION}\")"
+            while read -r HASH FILE; do
+              PLATFORM="${FILE#Framework-${VERSION}-}"
+              PLATFORM="${PLATFORM%%.*}"
+              echo "set(FRAMEWORK_PIN_SHA256_${PLATFORM} \"${HASH}\")"
+            done < SHA256SUMS
+            echo '```'
+          } > notes.md
+          # A re-dispatch replaces the previous block (heading to its closing fence) instead of stacking another.
+          gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json body --jq .body | sed '/^### SDK archives$/,/^```$/d' > body.md
+          cat notes.md >> body.md
+          gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --notes-file body.md

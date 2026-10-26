@@ -1,0 +1,123 @@
+@PACKAGE_INIT@
+
+# MafiaHub Framework SDK. The install tree of a Framework build (cmake/FrameworkInstall.cmake), found
+# by a project through cmake/FrameworkBootstrap.cmake, which also puts vcpkg on the manifest this
+# archive was built from. Exposes Framework::Framework, Framework::Client, Framework::Server,
+# Framework::Loader, Framework::LoaderData and the bundled third-party targets, plus their plain
+# names as aliases unless FW_SDK_NO_ALIASES is set.
+
+if(TARGET Framework::Framework)
+    return()
+endif()
+
+set(Framework_SDK_ROOT "${PACKAGE_PREFIX_DIR}")
+set(Framework_SDK_ARCH "@FW_SDK_ARCH@")
+set(Framework_SHARE_DIR "${PACKAGE_PREFIX_DIR}/share/framework")
+set(Framework_SCRIPTS_DIR "${PACKAGE_PREFIX_DIR}/share/framework/scripts")
+set(Framework_RUNTIME_DIR "${PACKAGE_PREFIX_DIR}/@FW_SDK_RUNTIME_DIR@")
+
+# The architecture-independent modules live with the entry point under lib/cmake/Framework.
+set(Framework_MODULE_DIR "${PACKAGE_PREFIX_DIR}/@FW_SDK_ENTRY_CMAKE_DIR@")
+
+include("${CMAKE_CURRENT_LIST_DIR}/FrameworkManifest.cmake")
+include("${Framework_MODULE_DIR}/FrameworkAbi.cmake")
+fw_sdk_check_abi()
+
+set(Framework_HAS_SERVER ${FW_SDK_HAS_SERVER})
+set(Framework_HAS_CLIENT ${FW_SDK_HAS_CLIENT})
+
+list(APPEND CMAKE_MODULE_PATH "${Framework_MODULE_DIR}")
+
+# The vcpkg half of the dependency closure is resolved by the consumer's vcpkg, on the manifest and
+# triplet shipped in share/framework (the ABI check above refuses a different triplet).
+include(CMakeFindDependencyMacro)
+find_dependency(Threads)
+find_dependency(OpenSSL)
+find_dependency(CURL CONFIG)
+find_dependency(glm CONFIG)
+find_dependency(nlohmann_json CONFIG)
+find_dependency(fmt CONFIG)
+find_dependency(spdlog CONFIG)
+find_dependency(cppfs CONFIG)
+find_dependency(miniz CONFIG)
+find_dependency(cxxopts CONFIG)
+find_dependency(function2 CONFIG)
+find_dependency(sentry CONFIG)
+if(WIN32)
+    find_dependency(imgui CONFIG)
+    find_dependency(directxtk CONFIG)
+    find_dependency(minhook CONFIG)
+    find_dependency(stackwalker CONFIG)
+    # The DX backends import from these system libs and the port does not declare them.
+    get_property(_fw_imgui_linked TARGET imgui::imgui PROPERTY INTERFACE_LINK_LIBRARIES)
+    if(NOT "d3d12" IN_LIST _fw_imgui_linked)
+        set_property(TARGET imgui::imgui APPEND PROPERTY INTERFACE_LINK_LIBRARIES d3d9 d3d11 d3d12 dxgi)
+    endif()
+endif()
+
+# The bundled half: MafiaNet and Tracy through their own packages, everything else re-created below.
+# PACKAGE_PREFIX_DIR is an ordinary variable that every package config built with
+# configure_package_config_file() overwrites, and the find_dependency() calls above load several;
+# only Framework_SDK_ROOT, captured before them, still names this prefix.
+find_dependency(MafiaNet @MAFIANET_PIN_VERSION_FOR_CONFIG@ CONFIG PATHS "${Framework_SDK_ROOT}/mafianet/@FW_SDK_ARCH@" NO_DEFAULT_PATH)
+find_dependency(Tracy CONFIG PATHS "${Framework_SDK_ROOT}/@FW_SDK_LIB_DIR@/cmake/Tracy" NO_DEFAULT_PATH)
+
+# The imported-target snippets are written against PACKAGE_PREFIX_DIR.
+set(PACKAGE_PREFIX_DIR "${Framework_SDK_ROOT}")
+include("${CMAKE_CURRENT_LIST_DIR}/FrameworkImported.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/FrameworkTargets.cmake")
+
+# The archive carries one configuration (built with the /MD runtime and without _DEBUG, see
+# FrameworkSetup.cmake), so every consumer configuration maps onto it, as for MafiaNet.
+get_target_property(_fw_configs Framework::Framework IMPORTED_CONFIGURATIONS)
+list(GET _fw_configs 0 _fw_config)
+set(_fw_mapped_targets MafiaNet::MafiaNetStatic MafiaNet::MafiaNet MafiaNet::opus MafiaNet::rnnoise Tracy::TracyClient)
+foreach(_fw_alias IN LISTS FW_SDK_TARGET_ALIASES)
+    string(REPLACE "=" ";" _fw_pair "${_fw_alias}")
+    list(GET _fw_pair 1 _fw_exported)
+    list(APPEND _fw_mapped_targets "${_fw_exported}")
+endforeach()
+foreach(_fw_target IN LISTS _fw_mapped_targets)
+    if(TARGET ${_fw_target})
+        get_target_property(_fw_type ${_fw_target} TYPE)
+        if(NOT _fw_type STREQUAL "INTERFACE_LIBRARY")
+            get_target_property(_fw_target_configs ${_fw_target} IMPORTED_CONFIGURATIONS)
+            list(GET _fw_target_configs 0 _fw_target_config)
+            set_target_properties(${_fw_target} PROPERTIES
+                MAP_IMPORTED_CONFIG_DEBUG "${_fw_target_config}"
+                MAP_IMPORTED_CONFIG_RELEASE "${_fw_target_config}"
+                MAP_IMPORTED_CONFIG_RELWITHDEBINFO "${_fw_target_config}"
+                MAP_IMPORTED_CONFIG_MINSIZEREL "${_fw_target_config}")
+        endif()
+    endif()
+endforeach()
+
+# Files the exported link options point at (see code/framework/CMakeLists.txt).
+if(TARGET Framework::Loader)
+    set_property(TARGET Framework::Loader PROPERTY FW_LAUNCHER_DEFAULT_MANIFEST "${Framework_SDK_ROOT}/@FW_SDK_SHARE_ARCH_DIR@/launcher.manifest")
+endif()
+if(TARGET Framework::Server AND WIN32)
+    set_property(TARGET Framework::Server PROPERTY FW_NODE_API_DEF "${Framework_SDK_ROOT}/@FW_SDK_SHARE_ARCH_DIR@/libnode_node_api.def")
+endif()
+
+# Plain names, so a project moving off the source tree changes paths, not link lines.
+if(NOT FW_SDK_NO_ALIASES)
+    foreach(_fw_alias IN LISTS FW_SDK_TARGET_ALIASES)
+        string(REPLACE "=" ";" _fw_pair "${_fw_alias}")
+        list(GET _fw_pair 0 _fw_plain)
+        list(GET _fw_pair 1 _fw_exported)
+        if(TARGET ${_fw_exported} AND NOT TARGET ${_fw_plain})
+            get_target_property(_fw_type ${_fw_exported} TYPE)
+            if(_fw_type STREQUAL "EXECUTABLE")
+                add_executable(${_fw_plain} ALIAS ${_fw_exported})
+            else()
+                add_library(${_fw_plain} ALIAS ${_fw_exported})
+            endif()
+        endif()
+    endforeach()
+endif()
+
+include("${Framework_MODULE_DIR}/FrameworkRuntime.cmake")
+include("${Framework_MODULE_DIR}/FrameworkBinaryIdentity.cmake")
+
+set(Framework_FOUND TRUE)

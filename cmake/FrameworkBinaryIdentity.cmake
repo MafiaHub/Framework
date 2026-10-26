@@ -10,7 +10,13 @@
 # FrameworkLoader also gets these in its manifest; one that never calls this keeps the generic
 # MafiaHub.Framework.Launcher manifest.
 
-set(FW_LAUNCHER_MANIFEST_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/../code/framework/src/launcher/launcher.manifest.in")
+# In the source tree the manifest template sits with the launcher; the installed SDK keeps a copy
+# beside this module.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/templates/launcher.manifest.in")
+    set(FW_LAUNCHER_MANIFEST_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/templates/launcher.manifest.in")
+else()
+    set(FW_LAUNCHER_MANIFEST_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/../code/framework/src/launcher/launcher.manifest.in")
+endif()
 set(FW_BINARY_IDENTITY_RC_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/templates/binary_identity.rc.in")
 
 function(fw_set_binary_identity target)

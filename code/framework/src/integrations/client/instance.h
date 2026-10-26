@@ -9,6 +9,7 @@
 #pragma once
 
 #include <networking/replication/replication_manager.h>
+#include <networking/rpc/rpc_identifier.h>
 
 #include <utils/error.h>
 #include <utils/lifecycle.h>
@@ -89,6 +90,10 @@ namespace Framework::Integrations::Client {
         std::string modVersion;
 
         bool verifyBuildToken = true; // false bypasses the build/version mismatch challenge
+
+        // Deployment salt keying every RPC identifier (see networking/rpc/rpc_identifier.h). Must be
+        // the same on client and server; a release build sets it from its own secret.
+        uint64_t rpcIdentifierSalt = Framework::Networking::RPC::kDefaultIdentifierSalt;
 
         bool initRendererManually = false;
 

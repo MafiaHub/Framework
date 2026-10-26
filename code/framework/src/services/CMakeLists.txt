@@ -152,4 +152,30 @@ else()
         set_target_properties(MafiaHubUpdater PROPERTIES
             IMPORTED_LOCATION "${MAFIA_HUB_UPDATER}")
     endif()
+
+    # SDK: the archive and, on Windows, the updater travel with the Framework; the headers go with
+    # the Framework's own (install(DIRECTORY) in code/framework/CMakeLists.txt).
+    get_filename_component(_mhs_lib_name "${MAFIA_HUB_LIB}" NAME)
+    install(FILES "${MAFIA_HUB_LIB}" DESTINATION "${FW_SDK_LIB_DIR}")
+    set(_mhs_link "Framework::Framework")
+    if(WIN32)
+        set(_mhs_link "User32;Gdi32;Comctl32;Framework::Framework")
+    endif()
+    fw_sdk_imported_snippet(
+        "add_library(MafiaHubServices STATIC IMPORTED)"
+        "set_target_properties(MafiaHubServices PROPERTIES"
+        "    IMPORTED_LOCATION \"\${PACKAGE_PREFIX_DIR}/${FW_SDK_LIB_DIR}/${_mhs_lib_name}\""
+        "    INTERFACE_INCLUDE_DIRECTORIES \"\${PACKAGE_PREFIX_DIR}/${FW_SDK_INCLUDE_DIR}/framework/services/services\""
+        "    INTERFACE_LINK_LIBRARIES \"${_mhs_link}\")")
+    if(TARGET MafiaHubUpdater)
+        fw_sdk_runtime(CLIENT "${MAFIA_HUB_UPDATER}")
+        fw_sdk_imported_snippet(
+            "add_executable(MafiaHubUpdater IMPORTED)"
+            "set_target_properties(MafiaHubUpdater PROPERTIES IMPORTED_LOCATION \"\${PACKAGE_PREFIX_DIR}/${FW_SDK_RUNTIME_DIR}/client/MafiaHubUpdater.exe\")")
+    endif()
+    if(EXISTS "${LOCAL_BUILD_TXT}")
+        file(READ "${LOCAL_BUILD_TXT}" _mhs_build)
+        string(STRIP "${_mhs_build}" _mhs_build)
+        fw_sdk_manifest(SERVICES_BUILD "${_mhs_build}")
+    endif()
 endif()

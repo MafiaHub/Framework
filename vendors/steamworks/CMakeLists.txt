@@ -1,16 +1,21 @@
 add_library(SteamSDK STATIC dummy.cpp)
-target_include_directories(SteamSDK PUBLIC "include")
+target_include_directories(SteamSDK PRIVATE "include")
+fw_sdk_export_includes(SteamSDK steamworks "${CMAKE_CURRENT_SOURCE_DIR}/include")
+fw_sdk_install_headers(steamworks "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 if (CMAKE_CL_64)
-    target_link_directories(SteamSDK PUBLIC "lib/win64")
-    add_custom_command(TARGET SteamSDK POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/lib/win64/fw_steam_api64.dll" "${CMAKE_BINARY_DIR}/bin"
-            )
-    target_link_libraries(SteamSDK PUBLIC fw_steam_api64)
+    set(_steam_lib_dir "${CMAKE_CURRENT_SOURCE_DIR}/lib/win64")
+    set(_steam_name fw_steam_api64)
 elseif (WIN32)
-    target_link_directories(SteamSDK PUBLIC "lib/win32")
+    set(_steam_lib_dir "${CMAKE_CURRENT_SOURCE_DIR}/lib/win32")
+    set(_steam_name fw_steam_api)
+endif ()
+if (WIN32)
+    fw_sdk_export_link_directories(SteamSDK "${_steam_lib_dir}")
     add_custom_command(TARGET SteamSDK POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/lib/win32/fw_steam_api.dll" "${CMAKE_BINARY_DIR}/bin"
+            COMMAND ${CMAKE_COMMAND} -E copy "${_steam_lib_dir}/${_steam_name}.dll" "${CMAKE_BINARY_DIR}/bin"
             )
-    target_link_libraries(SteamSDK PUBLIC fw_steam_api)
+    target_link_libraries(SteamSDK PUBLIC ${_steam_name})
+    install(FILES "${_steam_lib_dir}/${_steam_name}.lib" DESTINATION "${FW_SDK_LIB_DIR}")
+    fw_sdk_runtime(CLIENT "${_steam_lib_dir}/${_steam_name}.dll")
 endif ()

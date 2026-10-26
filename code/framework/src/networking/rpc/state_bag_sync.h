@@ -28,7 +28,7 @@ namespace Framework::Networking::RPC {
     // Never broadcast: ReplicationManager sends it only to connections that have the entity
     // constructed, which is what makes bags inherit interest, virtual worlds and budgets.
     struct StateBagSync {
-        static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::StateBagSync");
+        static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Framework::StateBagSync");
 
         // The sender chunks to this, and the receiver rejects anything above it.
         static constexpr uint16_t kMaxChanges = 256;

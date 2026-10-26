@@ -43,6 +43,25 @@ namespace Framework::Networking {
         }
     }
 
+    void NetworkPeer::SetIdentifierSalt(std::uint64_t salt) {
+        if (salt == _identifierSalt) {
+            return;
+        }
+        // Slots registered under the old salt would otherwise keep answering to keys no peer sends.
+        for (const auto &registered : _rpcHandlers) { _rpc.UnregisterSlot(ResolveIdentifier(registered.identifier)); }
+        _identifierSalt = salt;
+        _identifierTokens.clear();
+        for (const auto &registered : _rpcHandlers) { _rpc.RegisterSlot(ResolveIdentifier(registered.identifier), &NetworkPeer::DispatchRPC, registered.slot.get(), 0); }
+    }
+
+    const char *NetworkPeer::ResolveIdentifier(RPC::Identifier identifier) {
+        const auto it = _identifierTokens.find(identifier.digest);
+        if (it != _identifierTokens.end()) {
+            return it->second.c_str();
+        }
+        return _identifierTokens.emplace(identifier.digest, RPC::TokenFor(_identifierSalt, identifier)).first->second.c_str();
+    }
+
     bool NetworkPeer::RegisterBuildToken() {
         if (_buildToken.empty()) {
             return false;

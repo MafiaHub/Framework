@@ -25,8 +25,10 @@
 #include <logging/logger.h>
 #include <utils/lifecycle.h>
 #include <utils/version.h>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <utils/hashing.h>
 #include <vector>
@@ -69,8 +71,19 @@ namespace Framework::Networking {
 
         // Decoded RPC handlers registered via RegisterRPC<T>. Each is kept alive here for the peer's
         // lifetime; its address is the context RPC4 hands back to DispatchRPC, so handlers can capture.
+        // The identifier rides along so a salt change can re-key the slot (see SetIdentifierSalt).
         using RPCSlot = fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)>;
-        std::vector<std::unique_ptr<RPCSlot>> _rpcHandlers;
+        struct RegisteredRPC {
+            RPC::Identifier identifier;
+            std::unique_ptr<RPCSlot> slot;
+        };
+        std::vector<RegisteredRPC> _rpcHandlers;
+
+        // Deployment salt mixed into every RPC4 slot key (see rpc/rpc_identifier.h), and the tokens
+        // derived from it so a send costs a lookup, not a hash. Keyed by digest; node-stable, so the
+        // C strings handed to RPC4 stay valid for the peer's lifetime.
+        std::uint64_t _identifierSalt = RPC::kDefaultIdentifierSalt;
+        std::unordered_map<std::uint64_t, RPC::Token> _identifierTokens;
 
         static void DispatchRPC(MafiaNet::BitStream *bs, MafiaNet::Packet *packet, void *context) {
             auto *slot = static_cast<RPCSlot *>(context);
@@ -106,14 +119,25 @@ namespace Framework::Networking {
         // the game executable, not our release cadence, and a different game build shifts the
         // pattern addresses the mod is compiled against.
         //
-        // The RPC identifier salt rides along (see rpc/rpc_identifier.h): peers built with different
+        // The RPC identifier salt rides along (see rpc/rpc_identifier.h): peers running different
         // salts derive different slot keys, and a mismatch has no other error path.
-        static std::string BuildToken(const std::string &gameName, const std::string &gameVersion, const std::string &fwVersion, const std::string &modVersion) {
-            return gameName + '|' + gameVersion + '|' + Utils::Version::Major(fwVersion) + '|' + Utils::Version::Major(modVersion) + '|' + RPC::IdentifierSaltTag();
+        static std::string BuildToken(const std::string &gameName, const std::string &gameVersion, const std::string &fwVersion, const std::string &modVersion, std::uint64_t identifierSalt) {
+            return gameName + '|' + gameVersion + '|' + Utils::Version::Major(fwVersion) + '|' + Utils::Version::Major(modVersion) + '|' + RPC::IdentifierSaltTag(identifierSalt).c_str();
         }
 
         // Register the local build token (see BuildToken). Call before connecting/accepting.
         void SetBuildToken(const std::string &token);
+
+        // Set the deployment salt every RPC4 slot key is derived from. Slots already registered are
+        // re-keyed, so the order against RegisterRPC does not matter; call before any peer connects.
+        void SetIdentifierSalt(std::uint64_t salt);
+
+        std::uint64_t GetIdentifierSalt() const {
+            return _identifierSalt;
+        }
+
+        // The RPC4 slot key for an identifier under the current salt, valid for the peer's lifetime.
+        const char *ResolveIdentifier(RPC::Identifier identifier);
 
         // Register a handler for RPC payload type T (see networking/rpc/rpc.h). The handler receives
         // the already-decoded payload and the raw packet, and may capture (e.g. the owning instance).
@@ -134,7 +158,7 @@ namespace Framework::Networking {
         void BroadcastRPC(T &payload, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered, MafiaNet::RakNetGUID except = MafiaNet::UNASSIGNED_RAKNET_GUID, Channel channel = Channel::Events) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
-            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, ToOrderingChannel(channel), except, true, false);
+            _rpc.Signal(ResolveIdentifier(T::kIdentifier), &bs, priority, reliability, ToOrderingChannel(channel), except, true, false);
         }
 
         // Send an RPC payload to a single system, on the ordering channel `channel`.
@@ -142,23 +166,23 @@ namespace Framework::Networking {
         void SendRPC(T &payload, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered, Channel channel = Channel::Events) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
-            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, ToOrderingChannel(channel), guid, false, false);
+            _rpc.Signal(ResolveIdentifier(T::kIdentifier), &bs, priority, reliability, ToOrderingChannel(channel), guid, false, false);
         }
 
         // Raw variant of RegisterRPC for handlers that decode the bitstream themselves (e.g. a
         // polymorphic tail). Prefer the typed RegisterRPC<T> for fixed-shape payloads. The callable
         // is stored for the peer's lifetime and reached through RPC4's per-slot context, so no
         // file-static handler pointers are needed.
-        void RegisterRawRPC(const char *identifier, fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)> handler) {
+        void RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)> handler) {
             auto slot     = std::make_unique<RPCSlot>(std::move(handler));
             void *context = slot.get();
-            _rpcHandlers.push_back(std::move(slot));
-            _rpc.RegisterSlot(identifier, &NetworkPeer::DispatchRPC, context, 0);
+            _rpcHandlers.push_back(RegisteredRPC {identifier, std::move(slot)});
+            _rpc.RegisterSlot(ResolveIdentifier(identifier), &NetworkPeer::DispatchRPC, context, 0);
         }
 
         // Send a pre-encoded bitstream under a raw identifier (pairs with RegisterRawRPC).
-        void SendRawRPC(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
-            _rpc.Signal(identifier, &bs, priority, reliability, ToOrderingChannel(Channel::Events), guid, false, false);
+        void SendRawRPC(RPC::Identifier identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
+            _rpc.Signal(ResolveIdentifier(identifier), &bs, priority, reliability, ToOrderingChannel(Channel::Events), guid, false, false);
         }
 
         void Update() override;

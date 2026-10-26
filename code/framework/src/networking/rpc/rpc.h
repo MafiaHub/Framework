@@ -18,12 +18,12 @@ namespace Framework::Networking::RPC {
     // A well-formed RPC payload: identifier + symmetric serializer.
     template <typename T>
     concept Payload = requires(T payload, MafiaNet::BitStream *bs) {
-        { T::kIdentifier } -> std::convertible_to<const char *>;
+        { T::kIdentifier } -> std::convertible_to<Identifier>;
         payload.Serialize(bs, true);
     };
 
     // An RPC is a payload struct that provides:
-    //   static constexpr const char *kIdentifier;            // unique, identical on both peers
+    //   static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Mod::Name"); // unique on both peers
     //   void Serialize(MafiaNet::BitStream *bs, bool write); // symmetric read/write
     //
     // Register a handler with NetworkPeer::RegisterRPC<T> and send with NetworkPeer::BroadcastRPC /
