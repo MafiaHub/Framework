@@ -104,7 +104,7 @@ waits up to two minutes for an answer; it is always the server that decides.
 | Member | |
 |---|---|
 | `nickname` | the name the player asked to join under |
-| `steamId`, `discordId`, `hardwareId` | as reported by the client; empty when absent |
+| `steamId`, `discordId`, `discordName`, `hardwareId` | as reported by the client; empty when absent |
 | `ticket` | the `ticket` of the client's launch link, untouched |
 | `ip` | remote address, no port |
 | `reject(reason?)` | refuse; reason up to 512 bytes |

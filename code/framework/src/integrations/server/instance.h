@@ -175,6 +175,7 @@ namespace Framework::Integrations::Server {
         std::string steamId;
         std::string epicId;
         std::string discordId;
+        std::string discordName;
     };
 
     class Instance : public Framework::Lifecycle {

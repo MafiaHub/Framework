@@ -945,7 +945,8 @@ namespace Framework::Integrations::Client {
         identity.name       = _currentState.nickname;
         identity.steamId    = steamId;
         identity.epicId     = epicId;
-        identity.discordId  = _presence ? _presence->GetUserId() : "";
+        identity.discordId   = _presence ? _presence->GetUserId() : "";
+        identity.discordName = _presence ? _presence->GetUsername() : "";
         identity.hardwareId = Framework::Utils::GetHardwareId();
         identity.ticket     = _currentState.ticket;
 

@@ -82,6 +82,8 @@ namespace Framework::External::Discord {
 
         // Snowflake of the signed-in user once OnCurrentUserUpdate has fired, empty otherwise.
         std::string GetUserId() const;
+        // Username of the signed-in user once OnCurrentUserUpdate has fired, empty otherwise.
+        std::string GetUsername() const;
 
         // Escape hatches: the raw Discord SDK managers, for SDK features the wrapper doesn't surface.
         // Prefer SetPresence / SignInWithDiscord / GetUserId above.

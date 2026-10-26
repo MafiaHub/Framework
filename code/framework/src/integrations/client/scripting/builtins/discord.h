@@ -47,6 +47,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static void ResetCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
 
         static void GetUserIdCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void GetUsernameCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void IsAvailableCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
     };
 

@@ -63,6 +63,11 @@ namespace Framework::Scripting::Builtins {
         return identity ? identity->discordId : "";
     }
 
+    std::string Player::GetDiscordName() const {
+        const auto *identity = ResolveIdentity();
+        return identity ? identity->discordName : "";
+    }
+
     std::string Player::GetHardwareId() const {
         const auto *identity = ResolveIdentity();
         return identity ? identity->hardwareId : "";
@@ -194,6 +199,7 @@ namespace Framework::Scripting::Builtins {
                 cls->property("steamId", &Player::GetSteamId, v8pp::metadata::property_docs("string", "Authenticated Steam identifier, or an empty string when unavailable."));
                 cls->property("epicId", &Player::GetEpicId, v8pp::metadata::property_docs("string", "Epic Games account identifier the client reported, not verified by the server, or an empty string when unavailable."));
                 cls->property("discordId", &Player::GetDiscordId, v8pp::metadata::property_docs("string", "Authenticated Discord identifier, or an empty string when unavailable."));
+                cls->property("discordName", &Player::GetDiscordName, v8pp::metadata::property_docs("string", "Discord username the client reported, not verified by the server, or an empty string when unavailable."));
                 cls->property("hardwareId", &Player::GetHardwareId, v8pp::metadata::property_docs("string", "Framework hardware identifier, or an empty string when unavailable."));
                 cls->property("ping", &Player::GetPing, v8pp::metadata::property_docs("number", "Current round-trip latency in milliseconds, or -1 when unavailable."));
                 cls->property("ip", &Player::GetAddress, v8pp::metadata::property_docs("string", "Current remote network address, or an empty string when unavailable."));

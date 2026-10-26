@@ -46,6 +46,7 @@ namespace Framework::Scripting::Builtins {
         std::string GetSteamId() const;
         std::string GetEpicId() const;
         std::string GetDiscordId() const;
+        std::string GetDiscordName() const;
         std::string GetHardwareId() const;
 
         // Connection's average round-trip time in ms. Server-only; -1 when unavailable.

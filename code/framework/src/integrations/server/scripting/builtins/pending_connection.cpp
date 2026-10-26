@@ -47,6 +47,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         DefineValue(isolate, context, connection, "steamId", v8pp::to_v8(isolate, identity.steamId));
         DefineValue(isolate, context, connection, "epicId", v8pp::to_v8(isolate, identity.epicId));
         DefineValue(isolate, context, connection, "discordId", v8pp::to_v8(isolate, identity.discordId));
+        DefineValue(isolate, context, connection, "discordName", v8pp::to_v8(isolate, identity.discordName));
         DefineValue(isolate, context, connection, "hardwareId", v8pp::to_v8(isolate, identity.hardwareId));
         DefineValue(isolate, context, connection, "ticket", v8pp::to_v8(isolate, identity.ticket));
         DefineValue(isolate, context, connection, "ip", v8pp::to_v8(isolate, address));
@@ -113,6 +114,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         type.add_property("steamId", "string", "Steam identifier the client reported, or an empty string when it had none.", true);
         type.add_property("epicId", "string", "Epic Games account identifier the client reported, or an empty string when it had none.", true);
         type.add_property("discordId", "string", "Discord identifier the client reported, or an empty string when it had none.", true);
+        type.add_property("discordName", "string", "Discord username the client reported, or an empty string when it had none.", true);
         type.add_property("hardwareId", "string", "Framework hardware identifier the client reported, or an empty string when it had none.", true);
         type.add_property("ticket", "string",
             "The string the client was launched with, as the `ticket` of its launch link, or an empty string. The framework passes it through untouched; checking it -- against a one-time join ticket your own launcher or website issued, typically -- is "

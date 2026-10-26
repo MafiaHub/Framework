@@ -626,6 +626,7 @@ namespace Framework::Integrations::Server {
             data.steamId     = identity.steamId;
             data.epicId      = identity.epicId;
             data.discordId   = identity.discordId;
+            data.discordName = identity.discordName;
             OnPlayerConnect(data);
 
             // Gate opens: this connection now starts receiving the replicated world.
@@ -731,6 +732,9 @@ namespace Framework::Integrations::Server {
         };
         digits(identity.steamId, 32);
         digits(identity.discordId, 32);
+        if (identity.discordName.size() > 32) {
+            identity.discordName.clear();
+        }
         digits(identity.hardwareId, 128);
         // The Epic account id is hex, not decimal, so it needs its own charset check.
         if (identity.epicId.size() > 32 || identity.epicId.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {

@@ -33,6 +33,7 @@ namespace Framework::Networking::RPC {
         std::string name;
         std::string steamId;
         std::string discordId;
+        std::string discordName;
         std::string hardwareId;
         // Authenticated Epic account id; empty when the game was not launched through Epic. Ordered
         // to match Decode(), which is strict: a payload missing any field is refused outright.
@@ -46,6 +47,7 @@ namespace Framework::Networking::RPC {
             bs->Serialize(write, name);
             bs->Serialize(write, steamId);
             bs->Serialize(write, discordId);
+            bs->Serialize(write, discordName);
             bs->Serialize(write, hardwareId);
             bs->Serialize(write, epicId);
             bs->Serialize(write, ticket);
@@ -66,7 +68,7 @@ namespace Framework::Networking::RPC {
             }
             MafiaNet::BitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(payload.data())), static_cast<unsigned int>(payload.size()), false);
             ClientIdentity identity;
-            if (!bs.Read(identity.name) || !bs.Read(identity.steamId) || !bs.Read(identity.discordId) || !bs.Read(identity.hardwareId) || !bs.Read(identity.epicId) || !bs.Read(identity.ticket)) {
+            if (!bs.Read(identity.name) || !bs.Read(identity.steamId) || !bs.Read(identity.discordId) || !bs.Read(identity.discordName) || !bs.Read(identity.hardwareId) || !bs.Read(identity.epicId) || !bs.Read(identity.ticket)) {
                 return std::nullopt;
             }
             return identity;

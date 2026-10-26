@@ -443,6 +443,13 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         args.GetReturnValue().Set(v8pp::to_v8(isolate, presence ? presence->GetUserId() : std::string {}));
     }
 
+    void Discord::GetUsernameCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope hs(isolate);
+        auto *presence = ResolvePresence();
+        args.GetReturnValue().Set(v8pp::to_v8(isolate, presence ? presence->GetUsername() : std::string {}));
+    }
+
     void Discord::IsAvailableCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
         auto *presence = ResolvePresence();
         args.GetReturnValue().Set(presence && presence->IsInitialized());
@@ -498,6 +505,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         // Query
         attach("getUserId", &Discord::GetUserIdCallback);
+        attach("getUsername", &Discord::GetUsernameCallback);
         attach("isAvailable", &Discord::IsAvailableCallback);
 
         target->Set(context, v8pp::to_v8(isolate, "Discord"), discordObj).Check();
@@ -539,6 +547,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("clear", v8pp::metadata::docs("boolean", {}, "Clears what scripts published and resets staged state.", "True when dispatched; false when Discord is unavailable.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("reset", v8pp::metadata::docs("void", {}, "Resets staged activity fields without publishing a Discord update.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getUserId", v8pp::metadata::docs("string", {}, "Returns the signed-in Discord user's snowflake.", "User ID string, or an empty string until available.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getUsername", v8pp::metadata::docs("string", {}, "Returns the signed-in Discord user's username.", "Username string, or an empty string until available.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isAvailable", v8pp::metadata::docs("boolean", {}, "Checks whether Discord is connected and can publish presence.", "True when rich presence is initialized.")));
     }
 
