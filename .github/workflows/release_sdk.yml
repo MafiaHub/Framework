@@ -1,12 +1,12 @@
 name: Release SDK
 
-# Builds the prebuilt Framework SDK (docs/research/prebuilt_framework.md) for a tagged version and
+# Builds the prebuilt Framework SDK for a tagged version and
 # attaches it to that release: one archive per OS, the Windows one carrying both the x86 and the x64
 # libraries under lib/<arch>, runtime/<arch> and mafianet/<arch> with the headers shared. Projects
 # pin a release by version and archive hash in their FrameworkPin.cmake.
 #
-# Called by `Version Release` right after it tags (from whichever branch that ran on), or
-# dispatched by hand for any existing tag.
+# Called by `Release` (release_tag.yml) when a version tag is pushed, or dispatched by hand to rebuild the
+# archives of any existing release.
 
 on:
   workflow_call:

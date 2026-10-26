@@ -1,0 +1,52 @@
+name: Release
+
+# Releases a version tag: checks the tag against VERSION, creates the GitHub release and builds the
+# SDK archives for it (release_sdk.yml, called in-process).
+#
+# Versions are set by hand: raise VERSION in a commit (see .github/CONTRIBUTING.md for which part to
+# raise), then push the matching tag, e.g. `git tag v41.0.0 && git push origin v41.0.0`. A tag with a
+# suffix (v41.0.0-rc.1) is released as a prerelease.
+
+on:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ github.ref_name }}
+    steps:
+      - name: Checkout the tag
+        uses: actions/checkout@v5
+
+      - name: Check the tag against VERSION
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [ "${TAG%%-*}" != "v${VERSION}" ]; then
+            echo "::error::Tag ${TAG} does not match VERSION ${VERSION}; raise VERSION in the tagged commit."
+            exit 1
+          fi
+
+      - name: Create the release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-sdk:
+    needs: release
+    uses: ./.github/workflows/release_sdk.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+    secrets: inherit
