@@ -43,7 +43,7 @@ namespace Framework::Networking::Replication {
 
         // Client -> server: the sender cannot run this entity right now, or can again.
         struct DeclineSimulationRPC {
-            static constexpr const char *kIdentifier = FW_RPC_IDENTIFIER("Framework::DeclineSimulation");
+            static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Framework::DeclineSimulation");
 
             MafiaNet::NetworkID networkId;
             bool declined = false;
