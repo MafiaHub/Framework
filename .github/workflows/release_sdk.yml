@@ -185,6 +185,7 @@ jobs:
             done < SHA256SUMS
             echo '```'
           } > notes.md
-          gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json body --jq .body > body.md
+          # A re-dispatch replaces the previous block (heading to its closing fence) instead of stacking another.
+          gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json body --jq .body | sed '/^### SDK archives$/,/^```$/d' > body.md
           cat notes.md >> body.md
           gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --notes-file body.md
