@@ -357,6 +357,13 @@ namespace Framework::Networking::Replication {
             MafiaNet::PeerGuid desired        = MafiaNet::UNASSIGNED_PEER_GUID;
             DelegationChange change           = DelegationChange::Dormant;
 
+            // A client that streamed the entity out can no longer withdraw its decline, so the decline goes with the entity.
+            std::erase_if(entry.declined, [&](MafiaNet::PeerGuid guid) {
+                bool streaming = false;
+                _manager->ForEachStreamingPeer(entity, [&](MafiaNet::PeerGuid peer) { streaming = streaming || peer == guid; });
+                return !streaming;
+            });
+
             if (entry.pinned) {
                 // A pin overrides distance entirely, but not existence: a pin naming a client that
                 // is not here leaves the entity dormant until that client comes back.

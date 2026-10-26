@@ -190,7 +190,7 @@ namespace Framework::Networking::Replication {
         MafiaNet::PeerGuid PinnedTo(const NetworkEntity *entity) const;
 
         // A client that cannot run this one entity now (its world lacks the floor under it, say: only
-        // it can see that) is passed over for it alone until it withdraws that, leaves, or the entity
+        // it can see that) is passed over for it alone until it withdraws that, streams the entity out, leaves, or the entity
         // goes. A pin overrides it without clearing it. A change asks for a pass (kDeclinedPassGapMs).
         void SetDeclined(NetworkEntity *entity, MafiaNet::PeerGuid guid, bool declined);
         bool IsDeclined(const NetworkEntity *entity, MafiaNet::PeerGuid guid) const;
