@@ -335,9 +335,6 @@ namespace Framework::Voice {
         _voice.SetRelayTarget(_server);
         // One decoded stream per speaker; the mixer needs them separate to position each.
         _voice.SetPerSpeakerOutput(true);
-        // Opus runs on RakPeer's network thread, so a long game frame neither delays our own voice
-        // nor stops decoding the others. This thread only queues capture and drains decoded audio.
-        _voice.SetNetworkThreadCodec(true);
         _voice.Init(kSampleRate, kFrameBytes);
 
         // Opus picks its own rate from the sample rate unless told otherwise.
@@ -351,6 +348,11 @@ namespace Framework::Voice {
 
         // No SetNoiseFilter: RakVoice only runs RNNoise on 480-sample frames and voice runs at
         // 960. NoiseSuppressor runs it on each half instead, in PumpCapture.
+
+        // Opus runs on RakPeer's network thread, so a long game frame neither delays our own voice
+        // nor stops decoding the others. This thread only queues capture and drains decoded audio.
+        // Last, so nothing decodes there before the cap above is in place.
+        _voice.SetNetworkThreadCodec(true);
 
         _sessionOpen = true;
         StartDevices();
@@ -371,6 +373,7 @@ namespace Framework::Voice {
         CutGates();
         _denoiser.Reset();
 
+        _voice.SetNetworkThreadCodec(false);
         _voice.Deinit();
         _voice.SetRelayMode(false);
         _voice.SetRelayTarget(MafiaNet::UNASSIGNED_RAKNET_GUID);
