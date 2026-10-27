@@ -74,12 +74,9 @@ namespace Framework::Voice {
         // before that tick's packets, so its voice frames route on current worlds.
         void SyncAvatars(const Networking::Replication::ReplicationManager &replication);
 
-        // Who `talker`'s next frame is relayed to, once Update publishes it. Reused for
-        // kRecipientRefreshMs; anything that decides audibility other than distance recomputes it
-        // sooner.
-        const std::vector<MafiaNet::RakNetGUID> &RecipientsFor(uint64_t talker);
-
         // What the relay forwards `talker`'s frames to right now: the table Update last published.
+        // Rebuilt every kRecipientRefreshMs, and on the next Update after anything that decides
+        // audibility other than distance changes.
         std::vector<MafiaNet::RakNetGUID> GetRelayRecipients(uint64_t talker) const;
 
         // The relay, on RakPeer's network thread, for every ID_RAKVOICE_RELAY_DATA packet.
@@ -136,17 +133,10 @@ namespace Framework::Voice {
         void OnPlayerDisconnect(uint64_t guid);
 
       private:
-        // Recipient sets are cached per talker and refreshed on an interval rather than per
-        // frame; see kRecipientRefreshMs.
-        struct CachedRecipients {
-            std::vector<MafiaNet::RakNetGUID> guids;
-            int64_t computedAtMs = 0;
-        };
-
         // Moves what the relay heard into the talking set and the speakers the table covers.
         void TakeArrivals();
 
-        // Rebuilds the relay table when a speaker's recipients were recomputed.
+        // Rebuilds the relay table once it is due or stale.
         void PublishRelayTable();
 
         // Queues a start edge on the first frame after silence.
@@ -162,7 +152,7 @@ namespace Framework::Voice {
         // `guid`'s override and tier, as every client needs them.
         Networking::RPC::VoiceSpeakerRange BuildPlayerRange(uint64_t guid) const;
 
-        // A rule changed, so every cached set is suspect -- not just the talker's own, since
+        // A rule changed, so the whole table is suspect -- not just the talker's own set, since
         // one player's change removes them from everyone else's.
         void InvalidateRecipients();
 
@@ -170,13 +160,13 @@ namespace Framework::Voice {
         bool _attached                     = false;
         MafiaNet::RakVoice _voice;
         VoiceRouter _router;
-        std::unordered_map<uint64_t, CachedRecipients> _cache;
         std::vector<uint64_t> _scratch;
         // Every player heard this session: the relay can only forward for a talker in the table,
         // so it covers everyone who has spoken, not just who is talking now. A talker's very
         // first frame lands before they are in it and is dropped.
         std::unordered_set<uint64_t> _speakers;
-        bool _relayTableDirty = false;
+        bool _relayTableDirty        = false;
+        int64_t _relayTableBuiltAtMs = 0;
 
         // Shared with the relay on the network thread. Held only to swap a pointer or note an
         // arrival, never across a call into RakVoice.

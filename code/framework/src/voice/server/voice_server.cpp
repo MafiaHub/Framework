@@ -74,8 +74,8 @@ namespace Framework::Voice {
         }
         _arrivalsTaken.clear();
         _speakers.clear();
-        _relayTableDirty = false;
-        _cache.clear();
+        _relayTableDirty     = false;
+        _relayTableBuiltAtMs = 0;
         _talking.clear();
         _talkingChanges.clear();
         _tierAppliedAtMs.clear();
@@ -114,11 +114,6 @@ namespace Framework::Voice {
         }
 
         for (const auto &[talker, arrivedAtMs] : _arrivalsTaken) {
-            // A frame relayed while this tick handled the talker's disconnect would bring them back.
-            if (_server != nullptr && _server->GetPeer()->GetSystemAddressFromGuid(MafiaNet::ToGuid(static_cast<MafiaNet::PeerGuid>(talker))) == MafiaNet::UNASSIGNED_SYSTEM_ADDRESS) {
-                continue;
-            }
-
             MarkTalking(talker, arrivedAtMs);
             _relayTableDirty |= _speakers.insert(talker).second;
         }
@@ -141,20 +136,28 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::PublishRelayTable() {
-        // Refreshes whichever sets have expired, which is what marks the table stale.
-        for (const uint64_t speaker : _speakers) {
-            RecipientsFor(speaker);
-        }
-
-        if (!_relayTableDirty) {
+        // Rebuilt whole on one clock, so many speakers cost one rebuild per interval rather than
+        // one per tick as their individual intervals expire.
+        const int64_t nowMs = Utils::Time::GetTime();
+        if (!_relayTableDirty && (nowMs - _relayTableBuiltAtMs) < static_cast<int64_t>(kRecipientRefreshMs)) {
             return;
         }
-        _relayTableDirty = false;
+        _relayTableDirty     = false;
+        _relayTableBuiltAtMs = nowMs;
 
         auto table = std::make_shared<std::unordered_map<uint64_t, std::vector<MafiaNet::RakNetGUID>>>();
         table->reserve(_speakers.size());
         for (const uint64_t speaker : _speakers) {
-            table->emplace(speaker, _cache[speaker].guids);
+            _router.ComputeRecipients(speaker, _scratch);
+            if (_scratch.empty()) {
+                continue;
+            }
+
+            std::vector<MafiaNet::RakNetGUID> &guids = (*table)[speaker];
+            guids.reserve(_scratch.size());
+            for (const uint64_t guid : _scratch) {
+                guids.push_back(MafiaNet::ToGuid(static_cast<MafiaNet::PeerGuid>(guid)));
+            }
         }
 
         std::lock_guard<std::mutex> lock(_relayMutex);
@@ -197,7 +200,6 @@ namespace Framework::Voice {
 
     void VoiceServer::OnPlayerDisconnect(uint64_t guid) {
         _router.RemovePlayer(guid);
-        _cache.erase(guid);
         // No stop edge: the avatar is torn down in ReplicationManager::OnClosedConnection,
         // which RakNet fires before this runs, so the event could not name the player.
         {
@@ -212,9 +214,6 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::InvalidateRecipients() {
-        for (auto &entry : _cache) {
-            entry.second.computedAtMs = 0;
-        }
         _relayTableDirty = true;
     }
 
@@ -342,27 +341,6 @@ namespace Framework::Voice {
         InvalidateRecipients();
     }
 
-    const std::vector<MafiaNet::RakNetGUID> &VoiceServer::RecipientsFor(uint64_t talker) {
-        auto &entry         = _cache[talker];
-        const int64_t nowMs = Utils::Time::GetTime();
-
-        if (entry.computedAtMs != 0 && (nowMs - entry.computedAtMs) < static_cast<int64_t>(kRecipientRefreshMs)) {
-            return entry.guids;
-        }
-
-        _router.ComputeRecipients(talker, _scratch);
-
-        entry.guids.clear();
-        entry.guids.reserve(_scratch.size());
-        for (const uint64_t guid : _scratch) {
-            entry.guids.push_back(MafiaNet::ToGuid(static_cast<MafiaNet::PeerGuid>(guid)));
-        }
-        entry.computedAtMs = nowMs;
-        _relayTableDirty   = true;
-
-        return entry.guids;
-    }
-
     void VoiceServer::OnVoiceFrame(MafiaNet::Packet *packet) {
         if (packet == nullptr || packet->length == 0) {
             return;
@@ -420,7 +398,7 @@ namespace Framework::Voice {
         }
 
         const auto it = table->find(talker);
-        if (it == table->end() || it->second.empty()) {
+        if (it == table->end()) {
             return;
         }
 

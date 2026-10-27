@@ -20,8 +20,10 @@
 #include <mafianet/types.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <thread>
 #include <vector>
 
 // Where proximity voice places a speaker. Both peers key a speaker's position on the player's guid,
@@ -212,50 +214,6 @@ MODULE(voice_positions, {
         EQUALS(aliceHearsBob, false);
     });
 
-    IT("drops a listener from the relay's cached recipients the tick their world or avatar changes", {
-        // The relay reuses a talker's recipients for kRecipientRefreshMs. A world change or a lost
-        // avatar has to bypass that, or audio keeps crossing for the rest of the interval.
-        NetworkEntity aliceAvatar;
-        NetworkEntity bobAvatar;
-        serverManager->Reference(&aliceAvatar);
-        serverManager->Reference(&bobAvatar);
-        aliceAvatar.ownerGUID = alice;
-        aliceAvatar.position  = aliceAt;
-        serverManager->SetViewer(alice, &aliceAvatar);
-        bobAvatar.ownerGUID = bob;
-        bobAvatar.position  = bobAt;
-        serverManager->SetViewer(bob, &bobAvatar);
-
-        VoiceServer voice;
-        const auto relays = [&voice](MafiaNet::PeerGuid talker, MafiaNet::PeerGuid listener) {
-            const std::vector<MafiaNet::RakNetGUID> &recipients = voice.RecipientsFor(static_cast<uint64_t>(talker));
-            return std::any_of(recipients.begin(), recipients.end(), [listener](const MafiaNet::RakNetGUID &guid) {
-                return MafiaNet::ToPeerGuid(guid) == listener;
-            });
-        };
-
-        voice.SyncAvatars(*serverManager);
-        const bool relayedTogether = relays(alice, bob);
-
-        bobAvatar.SetVirtualWorld(42);
-        voice.SyncAvatars(*serverManager);
-        const bool relayedAcrossWorlds = relays(alice, bob);
-
-        bobAvatar.SetVirtualWorld(aliceAvatar.GetVirtualWorld());
-        voice.SyncAvatars(*serverManager);
-        const bool relayedOnReturn = relays(alice, bob);
-
-        serverManager->ClearViewer(bob);
-        voice.SyncAvatars(*serverManager);
-        const bool relayedWithoutAvatar = relays(alice, bob);
-
-        serverManager->ClearViewer(alice);
-        EQUALS(relayedTogether, true);
-        EQUALS(relayedAcrossWorlds, false);
-        EQUALS(relayedOnReturn, true);
-        EQUALS(relayedWithoutAvatar, false);
-    });
-
     IT("gives the server no position for a player who owns entities but has no avatar", {
         NetworkEntity ownedProp;
         serverManager->Reference(&ownedProp);
@@ -437,6 +395,31 @@ MODULE(voice_positions, {
         EQUALS(relayedAcrossWorlds, false);
         EQUALS(relayedOnReturn, true);
         EQUALS(relayedWithoutAvatar, false);
+    });
+
+    IT("drops a listener who walks out of range once the refresh interval has passed", {
+        NetworkEntity aliceAvatar;
+        NetworkEntity bobAvatar;
+        placeBoth(aliceAvatar, bobAvatar);
+
+        VoiceServer voice;
+        voice.SyncAvatars(*serverManager);
+        relay(voice, alice, alice);
+        voice.Update();
+
+        bobAvatar.position = farAway;
+        voice.SyncAvatars(*serverManager);
+        voice.Update();
+        const bool relayedWithinInterval = relayedTo(voice, alice, bob);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(Framework::Voice::kRecipientRefreshMs + 20));
+        voice.Update();
+        const bool relayedAfterInterval = relayedTo(voice, alice, bob);
+
+        serverManager->ClearViewer(alice);
+        serverManager->ClearViewer(bob);
+        EQUALS(relayedWithinInterval, true);
+        EQUALS(relayedAfterInterval, false);
     });
 
     IT("forgets a frame still waiting for the tick when its talker disconnects", {
