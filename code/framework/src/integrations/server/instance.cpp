@@ -691,22 +691,6 @@ namespace Framework::Integrations::Server {
             _voiceServer.OnTierRequest(static_cast<uint64_t>(MafiaNet::ToPeerGuid(packet->guid)), payload.tier);
         });
 
-        // Voice frames are not RPCs: RakVoice writes a raw message id, so they surface on the
-        // fallback handler (the relay host deliberately declines to consume them itself).
-        net->SetUnknownPacketHandler([this, net](MafiaNet::Packet *packet) {
-            // GetPacketDataOffset() is the offset the peer resolved for this very packet, so an
-            // ID_TIMESTAMP prefix is already skipped.
-            const int offset = net->GetPacketDataOffset();
-            if (offset < 0 || static_cast<uint32_t>(offset) >= packet->length) {
-                return false;
-            }
-            if (packet->data[offset] == ID_RAKVOICE_RELAY_DATA) {
-                _voiceServer.OnVoiceFrame(packet);
-                return true;
-            }
-            return false;
-        });
-
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
     }
 

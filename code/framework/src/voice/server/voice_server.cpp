@@ -29,16 +29,17 @@ namespace Framework::Voice {
 
         _server = server;
 
-        // Relay host only. SetRelayHost is mandatory: without it RakVoice consumes
-        // ID_RAKVOICE_RELAY_DATA inside RakPeer::Receive and the packet never reaches the
-        // application loop, so OnVoiceFrame would never fire and voice would fail silently.
+        // Relay host only. RakVoice hands every ID_RAKVOICE_RELAY_DATA packet to OnVoiceFrame on
+        // RakPeer's network thread, before Receive, so frames keep flowing through a stalled tick.
         //
         // SetRelayMode is deliberately NOT set. It is the flag a talking/listening client
         // enables: it opens a self-keyed encoder channel and makes Update() walk the relay
         // reap branch. A host neither encodes nor decodes -- RelayFrame ignores relayMode
         // entirely -- so setting it would only put the plugin in a contradictory state.
         // No Init() call either, so no codec is ever allocated here.
-        _voice.SetRelayHost(true);
+        _voice.SetRelayHost([this](MafiaNet::Packet *packet) {
+            OnVoiceFrame(packet);
+        });
         _voice.SetOrderingChannels(Framework::Networking::ToOrderingChannel(Framework::Networking::Channel::VoiceFrames), Framework::Networking::ToOrderingChannel(Framework::Networking::Channel::VoiceControl));
         server->GetPeer()->AttachPlugin(&_voice);
         _attached = true;
@@ -59,13 +60,22 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::Shutdown() {
-        // Idempotent: the explicit shutdown path and the destructor both land here.
+        // Idempotent: the explicit shutdown path and the destructor both land here. DetachPlugin
+        // waits for a relay in flight, so nothing below races one.
         if (_attached && _server != nullptr && _server->GetPeer() != nullptr) {
             _server->GetPeer()->DetachPlugin(&_voice);
         }
         _attached = false;
         _server   = nullptr;
-        _cache.clear();
+        {
+            std::lock_guard<std::mutex> lock(_relayMutex);
+            _relayTable.reset();
+            _arrivals.clear();
+        }
+        _arrivalsTaken.clear();
+        _speakers.clear();
+        _relayTableDirty     = false;
+        _relayTableBuiltAtMs = 0;
         _talking.clear();
         _talkingChanges.clear();
         _tierAppliedAtMs.clear();
@@ -74,13 +84,10 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::Update() {
-        // Recipient cache entries expire lazily in RecipientsFor(); the periodic work is the tier
-        // switches that were waiting on the floor, and retiring talkers who went quiet, since
-        // silence produces no packet to notice.
-        if (_talking.empty() && _pendingTiers.empty()) {
-            return;
-        }
+        TakeArrivals();
 
+        // The tier switches that were waiting on the floor, and retiring talkers who went quiet,
+        // since silence produces no packet to notice.
         const int64_t nowMs = Utils::Time::GetTime();
         for (auto it = _pendingTiers.begin(); it != _pendingTiers.end();) {
             it = ApplyTierRequest(it->first, it->second, nowMs) ? _pendingTiers.erase(it) : std::next(it);
@@ -96,6 +103,65 @@ namespace Framework::Voice {
             it                  = _talking.erase(it);
             _talkingChanges.push_back({guid, false});
         }
+
+        PublishRelayTable();
+    }
+
+    void VoiceServer::TakeArrivals() {
+        {
+            std::lock_guard<std::mutex> lock(_relayMutex);
+            _arrivals.swap(_arrivalsTaken);
+        }
+
+        for (const auto &[talker, arrivedAtMs] : _arrivalsTaken) {
+            MarkTalking(talker, arrivedAtMs);
+            _relayTableDirty |= _speakers.insert(talker).second;
+        }
+        _arrivalsTaken.clear();
+    }
+
+    std::vector<MafiaNet::RakNetGUID> VoiceServer::GetRelayRecipients(uint64_t talker) const {
+        std::shared_ptr<const std::unordered_map<uint64_t, std::vector<MafiaNet::RakNetGUID>>> table;
+        {
+            std::lock_guard<std::mutex> lock(_relayMutex);
+            table = _relayTable;
+        }
+
+        if (table == nullptr) {
+            return {};
+        }
+
+        const auto it = table->find(talker);
+        return it != table->end() ? it->second : std::vector<MafiaNet::RakNetGUID> {};
+    }
+
+    void VoiceServer::PublishRelayTable() {
+        // Rebuilt whole on one clock, so many speakers cost one rebuild per interval rather than
+        // one per tick as their individual intervals expire.
+        const int64_t nowMs = Utils::Time::GetTime();
+        if (!_relayTableDirty && (nowMs - _relayTableBuiltAtMs) < static_cast<int64_t>(kRecipientRefreshMs)) {
+            return;
+        }
+        _relayTableDirty     = false;
+        _relayTableBuiltAtMs = nowMs;
+
+        auto table = std::make_shared<std::unordered_map<uint64_t, std::vector<MafiaNet::RakNetGUID>>>();
+        table->reserve(_speakers.size());
+        for (const uint64_t speaker : _speakers) {
+            _router.ComputeRecipients(speaker, _scratch);
+            if (_scratch.empty()) {
+                continue;
+            }
+
+            std::vector<MafiaNet::RakNetGUID> &guids = (*table)[speaker];
+            guids.reserve(_scratch.size());
+            for (const uint64_t guid : _scratch) {
+                guids.push_back(MafiaNet::ToGuid(static_cast<MafiaNet::PeerGuid>(guid)));
+            }
+        }
+
+        std::lock_guard<std::mutex> lock(_relayMutex);
+        _relayTable = std::move(table);
     }
 
     void VoiceServer::SyncAvatars(const Networking::Replication::ReplicationManager &replication) {
@@ -134,19 +200,21 @@ namespace Framework::Voice {
 
     void VoiceServer::OnPlayerDisconnect(uint64_t guid) {
         _router.RemovePlayer(guid);
-        _cache.erase(guid);
         // No stop edge: the avatar is torn down in ReplicationManager::OnClosedConnection,
         // which RakNet fires before this runs, so the event could not name the player.
+        {
+            std::lock_guard<std::mutex> lock(_relayMutex);
+            _arrivals.erase(guid);
+        }
         _talking.erase(guid);
+        _speakers.erase(guid);
         _tierAppliedAtMs.erase(guid);
         _pendingTiers.erase(guid);
         InvalidateRecipients();
     }
 
     void VoiceServer::InvalidateRecipients() {
-        for (auto &entry : _cache) {
-            entry.second.computedAtMs = 0;
-        }
+        _relayTableDirty = true;
     }
 
     Networking::RPC::VoiceSettings VoiceServer::BuildSettings() const {
@@ -273,26 +341,6 @@ namespace Framework::Voice {
         InvalidateRecipients();
     }
 
-    const std::vector<MafiaNet::RakNetGUID> &VoiceServer::RecipientsFor(uint64_t talker) {
-        auto &entry         = _cache[talker];
-        const int64_t nowMs = Utils::Time::GetTime();
-
-        if (entry.computedAtMs != 0 && (nowMs - entry.computedAtMs) < static_cast<int64_t>(kRecipientRefreshMs)) {
-            return entry.guids;
-        }
-
-        _router.ComputeRecipients(talker, _scratch);
-
-        entry.guids.clear();
-        entry.guids.reserve(_scratch.size());
-        for (const uint64_t guid : _scratch) {
-            entry.guids.push_back(MafiaNet::ToGuid(static_cast<MafiaNet::PeerGuid>(guid)));
-        }
-        entry.computedAtMs = nowMs;
-
-        return entry.guids;
-    }
-
     void VoiceServer::OnVoiceFrame(MafiaNet::Packet *packet) {
         if (packet == nullptr || packet->length == 0) {
             return;
@@ -337,14 +385,23 @@ namespace Framework::Voice {
 
         const uint64_t talker = static_cast<uint64_t>(MafiaNet::ToPeerGuid(origin));
 
-        // Above the recipient check: a talker with nobody in earshot is still talking.
-        MarkTalking(talker, Utils::Time::GetTime());
+        // Noted whether or not anyone hears it: a talker with nobody in earshot is still talking.
+        std::shared_ptr<const std::unordered_map<uint64_t, std::vector<MafiaNet::RakNetGUID>>> table;
+        {
+            std::lock_guard<std::mutex> lock(_relayMutex);
+            _arrivals[talker] = Utils::Time::GetTime();
+            table             = _relayTable;
+        }
 
-        const auto &recipients = RecipientsFor(talker);
-        if (recipients.empty()) {
+        if (table == nullptr) {
             return;
         }
 
-        _voice.RelayFrame(packet, recipients.data(), static_cast<int>(recipients.size()));
+        const auto it = table->find(talker);
+        if (it == table->end()) {
+            return;
+        }
+
+        _voice.RelayFrame(packet, it->second.data(), static_cast<int>(it->second.size()));
     }
 } // namespace Framework::Voice

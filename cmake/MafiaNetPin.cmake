@@ -28,10 +28,10 @@
 # tree, so bumping the pin here and reconfiguring incrementally would silently
 # keep the old release. This file is the single source of truth, and there is no
 # reason to let -D override the wire format of the protocol.
-set(MAFIANET_PIN_VERSION "0.23.1") # Resizing a delta-tracked variable no longer clears the next one's dirty flag or writes past the list (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
+set(MAFIANET_PIN_VERSION "0.24.0") # Voice relays and runs its codec on the network thread; SetRelayHost takes the relay function (RAKNET_PROTOCOL_VERSION still 7, wire-compatible)
 
-set(MAFIANET_PIN_SHA256_linux-x86_64 "c4035c5ea91d231b921b111b06e10e730c7d1b51ab633bcfb291fb2e0b037092")
-set(MAFIANET_PIN_SHA256_macos-arm64 "666cffa58941299d90e66384d29934b1bff7b4063dde27a5c10049b6f5d4b9c7")
-set(MAFIANET_PIN_SHA256_macos-x86_64 "5f518eaba0fd5f305b234798bbea9c5284b6670a2fce16d76dbc25ac7649b156")
-set(MAFIANET_PIN_SHA256_windows-x64 "86026f72e81c6e257c096e03ade38fa8317375bf1d0be2aee448641808ebb605")
-set(MAFIANET_PIN_SHA256_windows-x86 "db722fbabb0d7844433bcd31d25b22e4ab7c9b01b0509191b32273409335987b")
+set(MAFIANET_PIN_SHA256_linux-x86_64 "5b3241ae7b2fd6abb43b6c1fd0003d0006f8ff5dffad927684dadda2125a3d64")
+set(MAFIANET_PIN_SHA256_macos-arm64 "6ba94b86d9deeaec90fc61101dfe3bf73d6cfc49f22dcda0ee19aafcd8e86dc1")
+set(MAFIANET_PIN_SHA256_macos-x86_64 "7bc2a2effe9eadf63e5e44107c04c9676e1c3a9999fc03cb4db29b24f345540a")
+set(MAFIANET_PIN_SHA256_windows-x64 "f9a2a1da5453241ef9c95443eb5b2ec033604cf41f002a980bf1e4c8dd14aa3c")
+set(MAFIANET_PIN_SHA256_windows-x86 "546c6f037628d7e7507d5530c7d9776f841cdc4a3e9e68c59ef0f4789f2a8482")
