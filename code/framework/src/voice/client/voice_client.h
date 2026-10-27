@@ -126,7 +126,8 @@ namespace Framework::Voice {
     };
 
     // Client half of voice: the RakVoice relay session, push-to-talk, and speaker admission.
-    // Main thread only -- RakVoice must never be touched from the audio callback.
+    // Main thread only -- RakVoice must never be touched from the audio callback. Opus itself runs
+    // on RakPeer's network thread; this side only queues capture and drains decoded audio.
     class VoiceClient final {
       public:
         VoiceClient() = default;

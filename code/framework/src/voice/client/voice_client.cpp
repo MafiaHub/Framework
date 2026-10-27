@@ -332,8 +332,12 @@ namespace Framework::Voice {
         }
 
         _voice.SetRelayMode(true);
+        _voice.SetRelayTarget(_server);
         // One decoded stream per speaker; the mixer needs them separate to position each.
         _voice.SetPerSpeakerOutput(true);
+        // Opus runs on RakPeer's network thread, so a long game frame neither delays our own voice
+        // nor stops decoding the others. This thread only queues capture and drains decoded audio.
+        _voice.SetNetworkThreadCodec(true);
         _voice.Init(kSampleRate, kFrameBytes);
 
         // Opus picks its own rate from the sample rate unless told otherwise.
@@ -341,13 +345,12 @@ namespace Framework::Voice {
         _voice.SetVAD(true);
         _voice.SetVBR(true);
 
-        // Only the codec can bound decode: relay frames are decoded in OnReceive, before any
-        // of our code sees them, so the mixer's slot array bounds mixing rather than CPU.
+        // Only the codec can bound decode: relay frames are decoded on the network thread, before
+        // any of our code sees them, so the mixer's slot array bounds mixing rather than CPU.
         _voice.SetMaxDecodedSpeakers(kMaxDecodedTalkers);
 
         // No SetNoiseFilter: RakVoice only runs RNNoise on 480-sample frames and voice runs at
         // 960. NoiseSuppressor runs it on each half instead, in PumpCapture.
-        _voice.SetRelayTarget(_server);
 
         _sessionOpen = true;
         StartDevices();
