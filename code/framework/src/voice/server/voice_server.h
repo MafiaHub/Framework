@@ -14,7 +14,10 @@
 #include <networking/rpc/voice_settings.h>
 
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace Framework::Networking {
@@ -43,6 +46,11 @@ namespace Framework::Voice {
     // Server half of voice: owns the routing rule and forwards frames. Deliberately never
     // initialises a codec — RakVoice is attached purely so its relay path can forward
     // payloads, which is what keeps voice off the server's CPU budget.
+    //
+    // Frames are relayed on RakPeer's network thread, so a stalled tick does not break anyone's
+    // voice up. The router stays on the main thread: Update publishes each speaker's recipients
+    // as one immutable table the relay reads, and the relay queues arrivals back for Update.
+    // Everything public is main thread only.
     class VoiceServer final {
       public:
         VoiceServer() = default;
@@ -58,17 +66,24 @@ namespace Framework::Voice {
         // Safe to call more than once.
         void Shutdown();
 
-        // Call once per server tick. Frame forwarding itself happens on packet arrival, not
-        // here; kept as an explicit hook for periodic bookkeeping.
+        // Call once per server tick, after SyncAvatars. Takes in the frames relayed since the last
+        // tick and republishes the recipients the relay forwards to.
         void Update();
 
         // Feeds the router each player's avatar position and virtual world. Call once per tick,
         // before that tick's packets, so its voice frames route on current worlds.
         void SyncAvatars(const Networking::Replication::ReplicationManager &replication);
 
-        // Who `talker`'s next frame is relayed to. Reused for kRecipientRefreshMs; anything that
-        // decides audibility other than distance recomputes it sooner.
+        // Who `talker`'s next frame is relayed to, once Update publishes it. Reused for
+        // kRecipientRefreshMs; anything that decides audibility other than distance recomputes it
+        // sooner.
         const std::vector<MafiaNet::RakNetGUID> &RecipientsFor(uint64_t talker);
+
+        // What the relay forwards `talker`'s frames to right now: the table Update last published.
+        std::vector<MafiaNet::RakNetGUID> GetRelayRecipients(uint64_t talker) const;
+
+        // The relay, on RakPeer's network thread, for every ID_RAKVOICE_RELAY_DATA packet.
+        void OnVoiceFrame(MafiaNet::Packet *packet);
 
         VoiceRouter &GetRouter() {
             return _router;
@@ -100,9 +115,6 @@ namespace Framework::Voice {
         // The range plus every override and tier in effect, for a freshly connected client.
         void SendSettingsTo(MafiaNet::RakNetGUID guid);
 
-        // Called by the network layer for every ID_RAKVOICE_RELAY_DATA packet.
-        void OnVoiceFrame(MafiaNet::Packet *packet);
-
         // Whether a player is emitting voice right now.
         bool IsPlayerTalking(uint64_t guid) const;
 
@@ -131,6 +143,12 @@ namespace Framework::Voice {
             int64_t computedAtMs = 0;
         };
 
+        // Moves what the relay heard into the talking set and the speakers the table covers.
+        void TakeArrivals();
+
+        // Rebuilds the relay table when a speaker's recipients were recomputed.
+        void PublishRelayTable();
+
         // Queues a start edge on the first frame after silence.
         void MarkTalking(uint64_t talker, int64_t nowMs);
 
@@ -154,6 +172,20 @@ namespace Framework::Voice {
         VoiceRouter _router;
         std::unordered_map<uint64_t, CachedRecipients> _cache;
         std::vector<uint64_t> _scratch;
+        // Every player heard this session: the relay can only forward for a talker in the table,
+        // so it covers everyone who has spoken, not just who is talking now. A talker's very
+        // first frame lands before they are in it and is dropped.
+        std::unordered_set<uint64_t> _speakers;
+        bool _relayTableDirty = false;
+
+        // Shared with the relay on the network thread. Held only to swap a pointer or note an
+        // arrival, never across a call into RakVoice.
+        mutable std::mutex _relayMutex;
+        // Speaker -> recipients, as the relay sees them. Replaced whole, never edited in place.
+        std::shared_ptr<const std::unordered_map<uint64_t, std::vector<MafiaNet::RakNetGUID>>> _relayTable;
+        // Talker -> arrival time of their latest relayed frame since the last Update.
+        std::unordered_map<uint64_t, int64_t> _arrivals;
+        std::unordered_map<uint64_t, int64_t> _arrivalsTaken;
         // Talker -> arrival time of their most recent frame. Presence is the talking flag.
         std::unordered_map<uint64_t, int64_t> _talking;
         std::vector<TalkingChange> _talkingChanges;

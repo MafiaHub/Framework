@@ -15,11 +15,13 @@
 
 #include <glm/glm.hpp>
 #include <mafianet/bit_stream.h>
+#include <mafianet/message_identifiers.h>
 #include <mafianet/replica_manager3.h>
 #include <mafianet/types.h>
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 // Where proximity voice places a speaker. Both peers key a speaker's position on the player's guid,
@@ -337,5 +339,147 @@ MODULE(voice_positions, {
         deliverState(clientNpc, serverNpc, true);
         const bool promoted = serverNpc.streaming.isViewer;
         EQUALS(promoted, false);
+    });
+
+    // A relay frame as a client's RakVoice writes it: the header, then one byte of payload.
+    const auto relayFrame = [](MafiaNet::PeerGuid origin) {
+        std::vector<unsigned char> data(MafiaNet::RAKVOICE_RELAY_HEADER_SIZE + 1, 0);
+        data[0]                                       = ID_RAKVOICE_RELAY_DATA;
+        data[MafiaNet::RAKVOICE_RELAY_OFFSET_VERSION] = MafiaNet::RAKVOICE_RELAY_FORMAT_VERSION;
+        const uint64_t raw                            = static_cast<uint64_t>(origin);
+        std::memcpy(data.data() + MafiaNet::RAKVOICE_RELAY_OFFSET_ORIGIN, &raw, sizeof(raw));
+        return data;
+    };
+    // What RakVoice hands the relay on the network thread.
+    const auto relay = [&relayFrame](VoiceServer &voice, MafiaNet::PeerGuid origin, MafiaNet::PeerGuid sender) {
+        std::vector<unsigned char> data = relayFrame(origin);
+        MafiaNet::Packet packet {};
+        packet.data   = data.data();
+        packet.length = static_cast<unsigned int>(data.size());
+        packet.guid   = MafiaNet::ToGuid(sender);
+        voice.OnVoiceFrame(&packet);
+    };
+    const auto relayedTo = [](const VoiceServer &voice, MafiaNet::PeerGuid talker, MafiaNet::PeerGuid listener) {
+        const std::vector<MafiaNet::RakNetGUID> recipients = voice.GetRelayRecipients(static_cast<uint64_t>(talker));
+        return std::any_of(recipients.begin(), recipients.end(), [listener](const MafiaNet::RakNetGUID &guid) {
+            return MafiaNet::ToPeerGuid(guid) == listener;
+        });
+    };
+    const auto placeBoth = [&](NetworkEntity &aliceAvatar, NetworkEntity &bobAvatar) {
+        serverManager->Reference(&aliceAvatar);
+        serverManager->Reference(&bobAvatar);
+        aliceAvatar.ownerGUID = alice;
+        aliceAvatar.position  = aliceAt;
+        serverManager->SetViewer(alice, &aliceAvatar);
+        bobAvatar.ownerGUID = bob;
+        bobAvatar.position  = bobAt;
+        serverManager->SetViewer(bob, &bobAvatar);
+    };
+
+    IT("relays a talker from the tick after their first frame, and reports them talking", {
+        NetworkEntity aliceAvatar;
+        NetworkEntity bobAvatar;
+        placeBoth(aliceAvatar, bobAvatar);
+
+        VoiceServer voice;
+        voice.SyncAvatars(*serverManager);
+        voice.Update();
+
+        relay(voice, alice, alice);
+        const bool relayedBeforeTick = relayedTo(voice, alice, bob);
+        const bool talkingBeforeTick = voice.IsPlayerTalking(static_cast<uint64_t>(alice));
+
+        voice.Update();
+        const bool relayedAfterTick = relayedTo(voice, alice, bob);
+        const bool talkingAfterTick = voice.IsPlayerTalking(static_cast<uint64_t>(alice));
+        std::vector<Framework::Voice::TalkingChange> changes;
+        voice.DrainTalkingChanges(changes);
+
+        serverManager->ClearViewer(alice);
+        serverManager->ClearViewer(bob);
+        EQUALS(relayedBeforeTick, false);
+        EQUALS(talkingBeforeTick, false);
+        EQUALS(relayedAfterTick, true);
+        EQUALS(talkingAfterTick, true);
+        EQUALS(changes.size(), static_cast<size_t>(1));
+        EQUALS(changes[0].guid, static_cast<uint64_t>(alice));
+        EQUALS(changes[0].talking, true);
+    });
+
+    IT("drops a listener from the relay table the tick their world or avatar changes", {
+        NetworkEntity aliceAvatar;
+        NetworkEntity bobAvatar;
+        placeBoth(aliceAvatar, bobAvatar);
+
+        VoiceServer voice;
+        voice.SyncAvatars(*serverManager);
+        relay(voice, alice, alice);
+        voice.Update();
+        const bool relayedTogether = relayedTo(voice, alice, bob);
+
+        bobAvatar.SetVirtualWorld(42);
+        voice.SyncAvatars(*serverManager);
+        voice.Update();
+        const bool relayedAcrossWorlds = relayedTo(voice, alice, bob);
+
+        bobAvatar.SetVirtualWorld(aliceAvatar.GetVirtualWorld());
+        voice.SyncAvatars(*serverManager);
+        voice.Update();
+        const bool relayedOnReturn = relayedTo(voice, alice, bob);
+
+        serverManager->ClearViewer(bob);
+        voice.SyncAvatars(*serverManager);
+        voice.Update();
+        const bool relayedWithoutAvatar = relayedTo(voice, alice, bob);
+
+        serverManager->ClearViewer(alice);
+        EQUALS(relayedTogether, true);
+        EQUALS(relayedAcrossWorlds, false);
+        EQUALS(relayedOnReturn, true);
+        EQUALS(relayedWithoutAvatar, false);
+    });
+
+    IT("forgets a frame still waiting for the tick when its talker disconnects", {
+        NetworkEntity aliceAvatar;
+        NetworkEntity bobAvatar;
+        placeBoth(aliceAvatar, bobAvatar);
+
+        VoiceServer voice;
+        voice.SyncAvatars(*serverManager);
+        relay(voice, alice, alice);
+        voice.OnPlayerDisconnect(static_cast<uint64_t>(alice));
+        voice.Update();
+
+        const bool talking = voice.IsPlayerTalking(static_cast<uint64_t>(alice));
+        const bool relayed = relayedTo(voice, alice, bob);
+        std::vector<Framework::Voice::TalkingChange> changes;
+        voice.DrainTalkingChanges(changes);
+
+        serverManager->ClearViewer(alice);
+        serverManager->ClearViewer(bob);
+        EQUALS(talking, false);
+        EQUALS(relayed, false);
+        EQUALS(changes.empty(), true);
+    });
+
+    IT("ignores a frame whose origin is not its sender", {
+        NetworkEntity aliceAvatar;
+        NetworkEntity bobAvatar;
+        placeBoth(aliceAvatar, bobAvatar);
+
+        VoiceServer voice;
+        voice.SyncAvatars(*serverManager);
+        relay(voice, alice, bob);
+        voice.Update();
+
+        const bool aliceTalking = voice.IsPlayerTalking(static_cast<uint64_t>(alice));
+        const bool bobTalking   = voice.IsPlayerTalking(static_cast<uint64_t>(bob));
+        const bool relayed      = relayedTo(voice, alice, bob);
+
+        serverManager->ClearViewer(alice);
+        serverManager->ClearViewer(bob);
+        EQUALS(aliceTalking, false);
+        EQUALS(bobTalking, false);
+        EQUALS(relayed, false);
     });
 });
