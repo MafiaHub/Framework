@@ -136,7 +136,7 @@ CompileFlags:
   directories and `~/.claude` (non-negotiable rule 2), and CMake commands aimed at anything but the
   canonical `build/` tree, or any direct `cmake --build`/`cmake -B` on Windows.
 - `format.mjs` (after an edit) runs the pinned clang-format on the lines just changed in a C/C++
-  file under `code/`. Only those lines: existing formatting drift in the file is left alone.
+  file under `code/framework/` (the scope of `scripts/format_codebase.sh`). Only those lines: existing formatting drift in the file is left alone.
 
 Other agents do not run these hooks; the rules still apply to them as written.
 

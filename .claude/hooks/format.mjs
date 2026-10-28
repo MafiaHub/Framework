@@ -1,4 +1,5 @@
-// PostToolUse hook: formats the lines an agent just changed in a C/C++ file under code/.
+// PostToolUse hook: formats the lines an agent just changed in a C/C++ file under code/framework/, the
+// scope scripts/format_codebase.sh formats.
 // Only changed lines, so an edit does not drag a whole file's existing formatting drift into the diff.
 // Uses the clang-format pinned in mise.toml; skips with a note when it is not on PATH.
 import { execFileSync } from "node:child_process";
@@ -12,7 +13,7 @@ const projectDir = path.resolve(process.env.CLAUDE_PROJECT_DIR || input.cwd);
 const file = path.resolve(input.tool_input?.file_path ?? "");
 const relative = path.relative(projectDir, file).split(path.sep).join("/");
 
-if (!SOURCE.test(file) || !relative.startsWith("code/")) {
+if (!SOURCE.test(file) || !relative.startsWith("code/framework/")) {
     process.exit(0);
 }
 
