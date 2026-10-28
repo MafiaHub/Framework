@@ -85,6 +85,11 @@ cmake --build build         # Build
 cmake --build build --target RunFrameworkTests  # Run tests
 ```
 
+Set `FW_TEST_FILTER` to run only the test modules whose name contains one of its comma-separated
+substrings (`FW_TEST_FILTER=voice,state_bag build/bin/FrameworkTests`; on Windows set it before
+`builds\build.bat RunFrameworkTests 64`). A failed assertion prints the expression, both values and
+`file:line`, and the run ends with a `> failures:` list, so the tail of the log is enough to act on.
+
 **Windows:**
 ```bash
 builds\build.bat <target> 64
@@ -131,7 +136,7 @@ CompileFlags:
   directories and `~/.claude` (non-negotiable rule 2), and CMake commands aimed at anything but the
   canonical `build/` tree, or any direct `cmake --build`/`cmake -B` on Windows.
 - `format.mjs` (after an edit) runs the pinned clang-format on the lines just changed in a C/C++
-  file under `code/`. Only those lines: existing formatting drift in the file is left alone.
+  file under `code/framework/` (the scope of `scripts/format_codebase.sh`). Only those lines: existing formatting drift in the file is left alone.
 
 Other agents do not run these hooks; the rules still apply to them as written.
 
