@@ -22,6 +22,8 @@ include(FrameworkInstall)
 # project owns the flags and the Framework contributes its targets only.
 if(PROJECT_IS_TOP_LEVEL)
     include(FrameworkSetup)
+    # compile_commands.json for clangd and the agents that query it (AGENTS.md, Code Intelligence).
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 # Scripts a project runs from its own build (pattern table checks); the SDK ships the same ones.
 set(Framework_SCRIPTS_DIR "${PROJECT_SOURCE_DIR}/scripts" CACHE INTERNAL "Framework helper scripts")

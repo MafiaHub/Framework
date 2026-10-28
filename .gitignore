@@ -82,3 +82,6 @@ vcpkg_installed/
 !/builds/
 /builds/*
 !/builds/build.bat
+
+# Per-machine clangd config (see AGENTS.md, Code Intelligence)
+.clangd
