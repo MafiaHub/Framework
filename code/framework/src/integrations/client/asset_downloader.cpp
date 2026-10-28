@@ -298,7 +298,9 @@ namespace Framework::Integrations::Client {
                 // Bytes already written stay for the retry to resume from.
                 failed.retry = status == 0 || accepted || status >= 500;
                 if (status == 503) {
-                    failed.retryAfterMs = std::atoi(retryAfter.c_str()) * 1000;
+                    // Clamped while parsing: the header is the server's, and a large value must not overflow.
+                    const long long seconds = std::strtoll(retryAfter.c_str(), nullptr, 10);
+                    failed.retryAfterMs     = static_cast<int>(std::clamp<long long>(seconds, 0, kMaxServerDelayMs / 1000) * 1000);
                 }
                 return failed;
             }
