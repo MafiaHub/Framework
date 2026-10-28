@@ -427,4 +427,54 @@ MODULE(interest_grid, {
         grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
         EQUALS(out.contains(doomed), false);
     });
+
+    IT("narrows an entity to the connections its viewer filter and exceptGUID admit", {
+        using Framework::Networking::Replication::ViewerFilter;
+        InterestGrid grid;
+        freshGrid(grid);
+
+        NetworkEntity *viewer           = make(typeA, 0.0f, 0.0f);
+        viewer->streaming.range         = 250.0f;
+        NetworkEntity *nearby           = make(typeA, 50.0f, 0.0f);
+        NetworkEntity *global           = make(typeA, 3000.0f, 0.0f);
+        global->streaming.alwaysVisible = true;
+
+        grid.BeginRebuild();
+        grid.Insert(viewer);
+        grid.Insert(nearby);
+        grid.Insert(global);
+
+        const auto sees = [&](NetworkEntity *entity) {
+            std::unordered_set<NetworkEntity *> out;
+            grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
+            return out.contains(entity);
+        };
+
+        nearby->streaming.exceptGUID = strangerGuid;
+        EQUALS(sees(nearby), true);
+        nearby->streaming.exceptGUID = viewerGuid;
+        EQUALS(sees(nearby), false);
+        nearby->streaming.exceptGUID = MafiaNet::UNASSIGNED_PEER_GUID;
+
+        nearby->streaming.viewers = std::make_unique<ViewerFilter>();
+        nearby->streaming.viewers->only.emplace();
+        EQUALS(sees(nearby), false); // an empty showTo is nobody, not everyone
+        nearby->streaming.viewers->only->insert(viewerGuid);
+        EQUALS(sees(nearby), true);
+        nearby->streaming.viewers->except.insert(viewerGuid);
+        EQUALS(sees(nearby), false);
+
+        global->streaming.viewers = std::make_unique<ViewerFilter>();
+        global->streaming.viewers->except.insert(viewerGuid);
+        EQUALS(sees(global), false);
+
+        // A closed connection leaves nothing behind: the next one to hold that guid starts clean.
+        nearby->streaming.exceptGUID = viewerGuid;
+        nearby->streaming.Forget(viewerGuid);
+        global->streaming.Forget(viewerGuid);
+        EQUALS(nearby->streaming.exceptGUID == MafiaNet::UNASSIGNED_PEER_GUID, true);
+        EQUALS(nearby->streaming.viewers->only->empty(), true);
+        EQUALS(global->streaming.viewers == nullptr, true);
+        EQUALS(sees(global), true);
+    });
 })

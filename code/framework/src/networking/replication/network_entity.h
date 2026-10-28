@@ -19,6 +19,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <optional>
+#include <unordered_set>
 #include <vector>
 
 namespace Framework::Networking::Replication {
@@ -198,6 +201,20 @@ namespace Framework::Networking::Replication {
         void MarkChanged(const std::vector<bool> &variables);
     };
 
+    // Which connections may be sent an entity, on top of its range and dimension.
+    struct ViewerFilter {
+        std::optional<std::unordered_set<MafiaNet::PeerGuid>> only; // set: just these, and empty means nobody
+        std::unordered_set<MafiaNet::PeerGuid> except;
+
+        bool Admits(MafiaNet::PeerGuid guid) const {
+            return (!only || only->contains(guid)) && !except.contains(guid);
+        }
+
+        bool Empty() const {
+            return !only && except.empty();
+        }
+    };
+
     // A replicated game object. Game entities derive from this and override SerializeFields (per-tick
     // delta state) and/or OnSerializeConstruction (one-shot spawn state).
     //
@@ -264,6 +281,15 @@ namespace Framework::Networking::Replication {
             bool isViewer      = false;  // drives a connection's interest set (the player's avatar); replicated
             float range        = 100.0f; // interest radius (world units): a viewer's reach, and an entity's own (see InterestGrid::SetUsesEntityRange)
             MafiaNet::PeerGuid targetGUID = MafiaNet::UNASSIGNED_PEER_GUID; // if set, streams only to this connection
+            MafiaNet::PeerGuid exceptGUID = MafiaNet::UNASSIGNED_PEER_GUID; // if set, never streams to this connection
+            std::unique_ptr<ViewerFilter> viewers;                          // if set, streams only to the connections it admits
+
+            bool Admits(MafiaNet::PeerGuid guid) const {
+                return (targetGUID == MafiaNet::UNASSIGNED_PEER_GUID || targetGUID == guid) && exceptGUID != guid && (!viewers || viewers->Admits(guid));
+            }
+
+            // A connection that closed: whoever reconnects is a new audience member.
+            void Forget(MafiaNet::PeerGuid guid);
         };
         Streaming streaming;
 

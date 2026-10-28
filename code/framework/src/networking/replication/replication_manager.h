@@ -262,10 +262,18 @@ namespace Framework::Networking::Replication {
         }
 
         // Bumped by a change every viewer must see before its next phase: a destroyed entity (a cached
-        // set must never hand it out) or a rebuild caused by creation or destruction.
+        // set must never hand it out), a rebuild caused by creation or destruction, or
+        // InvalidateAllInterest.
         uint32_t InterestUrgentGeneration() const {
             return _interestUrgentGeneration;
         }
+        // Server: who may see an entity changed without anything moving (a viewer filter, say), so every
+        // viewer re-queries on its next pass. Prefer InvalidateInterestOf when the change names players.
+        void InvalidateAllInterest() {
+            ++_interestUrgentGeneration;
+        }
+        // Makes the connection of this peer, if any, refresh its interest on its next query.
+        void InvalidateInterestOf(MafiaNet::PeerGuid guid);
         uint32_t InterestRefreshInterval() const {
             return _interestRebuildInterval;
         }
@@ -319,9 +327,6 @@ namespace Framework::Networking::Replication {
         void DeallocConnection(MafiaNet::Connection_RM3 *connection) const override;
 
       private:
-        // Makes the connection of this peer, if any, refresh its interest on its next query.
-        void InvalidateInterestOf(MafiaNet::PeerGuid guid);
-
         bool _isServer                 = false;
         bool _batchTransforms          = false;
         bool _networkUpdateActive      = false;
