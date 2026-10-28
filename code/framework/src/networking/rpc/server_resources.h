@@ -11,6 +11,7 @@
 #include "rpc.h"
 
 #include <logging/logger.h>
+#include <utils/streamed_assets/policy.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -26,8 +27,6 @@ namespace Framework::Networking::RPC {
      * mod's policy, checked by both ends.
      */
     struct AssetPakInfo {
-        static constexpr size_t kMaxLaneLength = 32;
-
         std::string lane;
         std::string sha256;
         uint64_t size = 0;
@@ -39,7 +38,7 @@ namespace Framework::Networking::RPC {
         }
 
         bool IsSane() const {
-            return !lane.empty() && lane.size() <= kMaxLaneLength && sha256.size() == 64 && size > 0;
+            return Utils::StreamedAssets::IsValidLaneName(lane) && sha256.size() == 64 && size > 0;
         }
     };
 

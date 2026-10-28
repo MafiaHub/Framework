@@ -894,6 +894,10 @@ namespace Framework::Integrations::Server {
             if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
                 continue;
             }
+            if (!Framework::Utils::StreamedAssets::IsValidPackageName(resourceName)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client resource '{}' cannot be served: its name is not [A-Za-z0-9._-], at most {} characters", resourceName, Framework::Utils::StreamedAssets::kMaxPackageName);
+                continue;
+            }
 
             Framework::Scripting::PackagedResource packaged;
             std::string error;

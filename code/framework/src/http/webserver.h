@@ -37,6 +37,7 @@ namespace Framework::HTTP {
     class Webserver final : public Framework::Lifecycle {
       public:
         Webserver();
+        ~Webserver();
         [[nodiscard]] WebserverError Init(const std::string &host, int32_t port);
 
         void Shutdown() override;

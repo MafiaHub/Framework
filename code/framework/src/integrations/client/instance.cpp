@@ -1045,17 +1045,14 @@ namespace Framework::Integrations::Client {
         const std::filesystem::path cacheDir = GetAssetCachePath();
         std::vector<AssetDownloader::Job> jobs;
         for (const auto &resource : resources) {
-            // Untrusted: a name or hash that could not name a cache file is not fetched; mounting
-            // or VerifyAssetPaks then refuses the resource.
-            if (!Framework::Utils::StreamedAssets::IsValidResourceName(resource.name)) {
-                continue;
-            }
-            if (Framework::Utils::StreamedAssets::IsSha256(resource.packageHash)) {
+            // Untrusted: a name, lane or hash that could not name a cache file is not fetched;
+            // mounting or VerifyAssetPaks then refuses the resource.
+            if (Framework::Utils::StreamedAssets::IsValidPackageName(resource.name) && Framework::Utils::StreamedAssets::IsSha256(resource.packageHash)) {
                 const std::string fileName = resource.name + Framework::Utils::Package::kExtension;
                 jobs.push_back({fileName, (cacheDir / fileName).string(), resource.packageHash, resource.packageSize});
             }
             for (const auto &pak : resource.assetPaks) {
-                if (!pak.IsSane() || !Framework::Utils::StreamedAssets::IsSha256(pak.sha256)) {
+                if (!Framework::Utils::StreamedAssets::IsValidResourceName(resource.name) || !pak.IsSane() || !Framework::Utils::StreamedAssets::IsSha256(pak.sha256)) {
                     continue;
                 }
                 const std::string fileName = Framework::Utils::StreamedAssets::PakFileName(resource.name, pak.lane, pak.sha256);
@@ -1072,7 +1069,7 @@ namespace Framework::Integrations::Client {
         if (!_assetDownloader.IsRunning()) {
             return;
         }
-        bool success = false;
+        bool success        = false;
         const bool finished = _assetDownloader.PollFinished(success);
 
         _downloadStatus.bytesTotal      = _assetDownloader.GetBytesTotal();

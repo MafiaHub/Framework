@@ -30,6 +30,30 @@ namespace Framework::Utils::StreamedAssets {
         return true;
     }
 
+    bool IsValidLaneName(std::string_view lane) {
+        if (lane.empty() || lane.size() > kMaxLaneName) {
+            return false;
+        }
+        for (const char c : lane) {
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool IsValidPackageName(std::string_view name) {
+        if (name.empty() || name.size() > kMaxPackageName || name == "." || name == "..") {
+            return false;
+        }
+        for (const char c : name) {
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool IsSha256(std::string_view text) {
         if (text.size() != 64) {
             return false;

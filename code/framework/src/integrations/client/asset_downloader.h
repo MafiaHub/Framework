@@ -10,10 +10,14 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <vector>
+
+namespace httplib {
+    class Client;
+} // namespace httplib
 
 namespace Framework::Integrations::Client {
     // Fetches a server's resource packages and asset paks over HTTP, off the main thread. A file is
@@ -31,42 +35,42 @@ namespace Framework::Integrations::Client {
         ~AssetDownloader();
 
         void Start(const std::string &origin, std::vector<Job> jobs);
+        // Returns at once: a request blocked on the network is abandoned to finish on its own, and
+        // nothing it does afterwards reaches the cache or this downloader.
         void Cancel();
 
         bool IsRunning() const {
-            return _worker.joinable();
+            return _transfer != nullptr && !_reported;
         }
 
-        // True once, on the first poll after the worker finished; reaps it and reports the outcome.
+        // True once, on the first poll after the transfer finished, with its outcome. Its progress stays
+        // readable until the next Start or Cancel.
         bool PollFinished(bool &success);
 
-        uint64_t GetBytesDownloaded() const {
-            return _bytes.load(std::memory_order_relaxed);
-        }
-        uint64_t GetBytesTotal() const {
-            return _total;
-        }
-        uint32_t GetFilesDone() const {
-            return _filesDone.load(std::memory_order_relaxed);
-        }
-        uint32_t GetFilesTotal() const {
-            return _filesTotal;
-        }
+        uint64_t GetBytesDownloaded() const;
+        uint64_t GetBytesTotal() const;
+        uint32_t GetFilesDone() const;
+        uint32_t GetFilesTotal() const;
         std::string GetCurrentFile() const;
 
       private:
-        void Run(std::string origin, std::vector<Job> jobs);
-        bool Fetch(const std::string &origin, const Job &job);
+        struct Transfer {
+            std::atomic<bool> cancel {};
+            std::atomic<bool> done {};
+            std::atomic<bool> success {};
+            std::atomic<uint64_t> bytes {};
+            std::atomic<uint32_t> filesDone {};
+            uint64_t total {};
+            uint32_t filesTotal {};
+            std::mutex mutex;
+            std::string current;
+            httplib::Client *client {};
+        };
 
-        std::thread _worker;
-        std::atomic<bool> _cancel {};
-        std::atomic<bool> _done {};
-        std::atomic<bool> _success {};
-        std::atomic<uint64_t> _bytes {};
-        std::atomic<uint32_t> _filesDone {};
-        uint64_t _total {};
-        uint32_t _filesTotal {};
-        mutable std::mutex _currentMutex;
-        std::string _current;
+        static void Run(std::shared_ptr<Transfer> transfer, std::string origin, std::vector<Job> jobs);
+        static bool Fetch(Transfer &transfer, const std::string &origin, const Job &job);
+
+        std::shared_ptr<Transfer> _transfer;
+        bool _reported {};
     };
 } // namespace Framework::Integrations::Client

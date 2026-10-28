@@ -13,6 +13,7 @@
 #include "integrations/server/asset_file_server.h"
 #include "networking/rpc/server_resources.h"
 #include "utils/crypto.h"
+#include "utils/streamed_assets/policy.h"
 
 #include <httplib.h>
 #include <mafianet/bit_stream.h>
@@ -36,6 +37,9 @@ namespace AssetHttpTest {
         std::filesystem::path staging;
         std::filesystem::path cache;
         int32_t port = 0;
+        uint32_t filesDone   = 0;
+        uint64_t bytesDone   = 0;
+        uint64_t bytesTotal  = 0;
 
         Fixture() {
             std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -90,6 +94,9 @@ namespace AssetHttpTest {
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
             }
+            filesDone  = downloader.GetFilesDone();
+            bytesDone  = downloader.GetBytesDownloaded();
+            bytesTotal = downloader.GetBytesTotal();
             return success;
         }
 
@@ -116,8 +123,8 @@ MODULE(asset_http, {
         EQUALS(fixture.Run(jobs), true);
         EQUALS(AssetHttpTest::Fixture::Read(fixture.cache / "map.fwpak") == "package bytes", true);
         EQUALS(AssetHttpTest::Fixture::Read(fixture.cache / "map.stream.0123456789abcdef.pak") == pak, true);
-        EQUALS(fixture.downloader.GetFilesDone(), 2u);
-        EQUALS(fixture.downloader.GetBytesDownloaded(), fixture.downloader.GetBytesTotal());
+        EQUALS(fixture.filesDone, 2u);
+        EQUALS(fixture.bytesDone, fixture.bytesTotal);
         EQUALS(fixture.NoPartialsLeft(), true);
     });
 
@@ -216,6 +223,74 @@ MODULE(asset_http, {
         bool success = true;
         EQUALS(fixture.downloader.PollFinished(success), false);
         EQUALS(fixture.downloader.IsRunning(), false);
+    });
+
+    IT("returns from cancel at once while a request is stalled", {
+        Framework::HTTP::Webserver stalling;
+        std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
+        int32_t port = 0;
+        for (int attempt = 0; attempt < 8 && port == 0; ++attempt) {
+            const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
+            if (stalling.Init("127.0.0.1", candidate) == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
+                port = candidate;
+            }
+        }
+        NEQUALS(port, 0);
+        stalling.RegisterRequest(R"(/files/([^/]+))", [](const httplib::Request &, httplib::Response &res) {
+            std::this_thread::sleep_for(std::chrono::seconds(3));
+            res.status = 404;
+        });
+
+        const auto cache = std::filesystem::temp_directory_path() / ("fw_asset_http_stall_" + std::to_string(random()));
+        std::filesystem::create_directories(cache);
+        Framework::Integrations::Client::AssetDownloader downloader;
+        downloader.Start("http://127.0.0.1:" + std::to_string(port), {{"stall.pak", (cache / "stall.pak").string(), std::string(64, 'a'), 10}});
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+        const auto started = std::chrono::steady_clock::now();
+        downloader.Cancel();
+        EQUALS(std::chrono::steady_clock::now() - started < std::chrono::seconds(2), true);
+        EQUALS(downloader.IsRunning(), false);
+
+        stalling.Shutdown();
+        std::error_code code;
+        std::filesystem::remove_all(cache, code);
+    });
+
+    IT("accepts only lanes that are one safe path and URL segment", {
+        using Framework::Utils::StreamedAssets::IsValidLaneName;
+        EQUALS(IsValidLaneName("stream"), true);
+        EQUALS(IsValidLaneName("Stream_2-hd"), true);
+        EQUALS(IsValidLaneName(""), false);
+        EQUALS(IsValidLaneName(std::string(33, 'a')), false);
+        EQUALS(IsValidLaneName("../../x"), false);
+        EQUALS(IsValidLaneName("a/b"), false);
+        EQUALS(IsValidLaneName("a\\b"), false);
+        EQUALS(IsValidLaneName("a.b"), false);
+        EQUALS(IsValidLaneName("a b"), false);
+        EQUALS(IsValidLaneName("a?b"), false);
+        EQUALS(IsValidLaneName("a#b"), false);
+        EQUALS(IsValidLaneName("a%2fb"), false);
+        EQUALS(IsValidLaneName("c:"), false);
+
+        Framework::Networking::RPC::AssetPakInfo pak {"../../x", std::string(64, 'a'), 1};
+        EQUALS(pak.IsSane(), false);
+        pak.lane = "stream";
+        EQUALS(pak.IsSane(), true);
+    });
+
+    IT("accepts any resource name that is one safe file name as a package", {
+        using Framework::Utils::StreamedAssets::IsValidPackageName;
+        EQUALS(IsValidPackageName("My.Resource"), true);
+        EQUALS(IsValidPackageName("police_station-2"), true);
+        EQUALS(IsValidPackageName(""), false);
+        EQUALS(IsValidPackageName("."), false);
+        EQUALS(IsValidPackageName(".."), false);
+        EQUALS(IsValidPackageName("a/b"), false);
+        EQUALS(IsValidPackageName("a\\b"), false);
+        EQUALS(IsValidPackageName("a%2fb"), false);
+        EQUALS(IsValidPackageName("a b"), false);
+        EQUALS(IsValidPackageName(std::string(129, 'a')), false);
     });
 
     IT("carries the package size in the resource list", {

@@ -15,11 +15,15 @@
 
 #include <filesystem>
 #include <fstream>
+#include <thread>
 
 namespace Framework::Integrations::Client {
     namespace {
         constexpr time_t kConnectTimeoutSeconds = 10;
         constexpr time_t kReadTimeoutSeconds    = 30;
+
+        // Each transfer writes its own partial files, so one abandoned by Cancel never collides with its successor.
+        std::atomic<uint64_t> gNextTransferId {};
 
         bool IsCached(const AssetDownloader::Job &job) {
             std::error_code code;
@@ -34,69 +38,90 @@ namespace Framework::Integrations::Client {
 
     void AssetDownloader::Start(const std::string &origin, std::vector<Job> jobs) {
         Cancel();
-        _cancel.store(false);
-        _done.store(false);
-        _success.store(false);
-        _bytes.store(0);
-        _filesDone.store(0);
-        _total      = 0;
-        _filesTotal = static_cast<uint32_t>(jobs.size());
+        _reported             = false;
+        _transfer             = std::make_shared<Transfer>();
+        _transfer->filesTotal = static_cast<uint32_t>(jobs.size());
         for (const auto &job : jobs) {
-            _total += job.size;
+            _transfer->total += job.size;
         }
-        _worker = std::thread(&AssetDownloader::Run, this, origin, std::move(jobs));
+        std::thread(&AssetDownloader::Run, _transfer, origin, std::move(jobs)).detach();
     }
 
     void AssetDownloader::Cancel() {
-        _cancel.store(true);
-        if (_worker.joinable()) {
-            _worker.join();
+        if (!_transfer) {
+            return;
         }
-        _done.store(false);
+        // httplib's stop() does not wake a read blocked in select() on Windows, so the worker is not
+        // joined; holding the mutex orders this against its last write into the cache.
+        {
+            std::lock_guard lock(_transfer->mutex);
+            _transfer->cancel.store(true);
+            if (_transfer->client) {
+                _transfer->client->stop();
+            }
+        }
+        _transfer.reset();
+        _reported = false;
     }
 
     bool AssetDownloader::PollFinished(bool &success) {
-        if (!_done.exchange(false)) {
+        if (!IsRunning() || !_transfer->done.load()) {
             return false;
         }
-        _worker.join();
-        success = _success.load();
+        success   = _transfer->success.load();
+        _reported = true;
         return true;
     }
 
-    std::string AssetDownloader::GetCurrentFile() const {
-        std::lock_guard lock(_currentMutex);
-        return _current;
+    uint64_t AssetDownloader::GetBytesDownloaded() const {
+        return _transfer ? _transfer->bytes.load(std::memory_order_relaxed) : 0;
     }
 
-    void AssetDownloader::Run(std::string origin, std::vector<Job> jobs) {
+    uint64_t AssetDownloader::GetBytesTotal() const {
+        return _transfer ? _transfer->total : 0;
+    }
+
+    uint32_t AssetDownloader::GetFilesDone() const {
+        return _transfer ? _transfer->filesDone.load(std::memory_order_relaxed) : 0;
+    }
+
+    uint32_t AssetDownloader::GetFilesTotal() const {
+        return _transfer ? _transfer->filesTotal : 0;
+    }
+
+    std::string AssetDownloader::GetCurrentFile() const {
+        if (!_transfer) {
+            return {};
+        }
+        std::lock_guard lock(_transfer->mutex);
+        return _transfer->current;
+    }
+
+    void AssetDownloader::Run(std::shared_ptr<Transfer> transfer, std::string origin, std::vector<Job> jobs) {
         bool success = true;
         for (const auto &job : jobs) {
-            if (_cancel.load()) {
+            if (transfer->cancel.load()) {
                 return;
             }
             {
-                std::lock_guard lock(_currentMutex);
-                _current = job.fileName;
+                std::lock_guard lock(transfer->mutex);
+                transfer->current = job.fileName;
             }
             if (IsCached(job)) {
-                _bytes.fetch_add(job.size, std::memory_order_relaxed);
+                transfer->bytes.fetch_add(job.size, std::memory_order_relaxed);
             }
-            else if (!Fetch(origin, job)) {
+            else if (!Fetch(*transfer, origin, job)) {
                 success = false;
                 break;
             }
-            _filesDone.fetch_add(1, std::memory_order_relaxed);
+            transfer->filesDone.fetch_add(1, std::memory_order_relaxed);
         }
-        if (_cancel.load()) {
-            return;
-        }
-        _success.store(success);
-        _done.store(true);
+        transfer->success.store(success);
+        transfer->done.store(true);
     }
 
-    bool AssetDownloader::Fetch(const std::string &origin, const Job &job) {
-        const std::filesystem::path partial = job.path + ".part";
+    bool AssetDownloader::Fetch(Transfer &transfer, const std::string &origin, const Job &job) {
+        const std::filesystem::path partial = job.path + "." + std::to_string(gNextTransferId.fetch_add(1)) + ".part";
         std::error_code code;
         uint64_t received = 0;
         {
@@ -109,17 +134,30 @@ namespace Framework::Integrations::Client {
             httplib::Client client(origin);
             client.set_connection_timeout(kConnectTimeoutSeconds, 0);
             client.set_read_timeout(kReadTimeoutSeconds, 0);
+            {
+                std::lock_guard lock(transfer.mutex);
+                if (transfer.cancel.load()) {
+                    output.close();
+                    std::filesystem::remove(partial, code);
+                    return false;
+                }
+                transfer.client = &client;
+            }
             const auto res = client.Get("/files/" + job.fileName, [&](const char *data, size_t length) {
                 received += length;
-                if (_cancel.load() || received > job.size) {
+                if (transfer.cancel.load() || received > job.size) {
                     return false;
                 }
                 output.write(data, static_cast<std::streamsize>(length));
-                _bytes.fetch_add(length, std::memory_order_relaxed);
+                transfer.bytes.fetch_add(length, std::memory_order_relaxed);
                 return output.good();
             });
+            {
+                std::lock_guard lock(transfer.mutex);
+                transfer.client = nullptr;
+            }
             if (!res || res->status != 200) {
-                if (!_cancel.load()) {
+                if (!transfer.cancel.load()) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Downloading '{}' from {} failed: {}", job.fileName, origin, res ? "HTTP " + std::to_string(res->status) : httplib::to_string(res.error()));
                 }
                 output.close();
@@ -130,6 +168,12 @@ namespace Framework::Integrations::Client {
 
         if (received != job.size || !Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256FileHex(partial.string()), job.sha256)) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("'{}' does not match the hash the server announced", job.fileName);
+            std::filesystem::remove(partial, code);
+            return false;
+        }
+
+        std::lock_guard lock(transfer.mutex);
+        if (transfer.cancel.load()) {
             std::filesystem::remove(partial, code);
             return false;
         }

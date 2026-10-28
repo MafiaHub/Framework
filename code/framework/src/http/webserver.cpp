@@ -16,6 +16,10 @@ namespace Framework::HTTP {
         _server = std::make_shared<httplib::Server>();
     }
 
+    Webserver::~Webserver() {
+        Shutdown();
+    }
+
     WebserverError Webserver::Init(const std::string &host, int32_t port) {
         _running = true;
 
