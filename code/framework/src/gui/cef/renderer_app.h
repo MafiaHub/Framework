@@ -31,7 +31,9 @@ namespace Framework::GUI::CEF {
         IMPLEMENT_REFCOUNTING(CallEventHandler);
     };
 
-    class RendererApp final: public CefApp, public CefRenderProcessHandler {
+    class RendererApp final
+        : public CefApp
+        , public CefRenderProcessHandler {
       private:
         // browser id -> form control focused; a renderer process can host several browsers
         std::unordered_map<int, bool> _inputFocus;

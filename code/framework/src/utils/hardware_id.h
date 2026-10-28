@@ -24,22 +24,14 @@ namespace Framework::Utils {
      */
     inline std::string GetHardwareId() {
 #ifdef _WIN32
-        char volumeName[MAX_PATH + 1] = {0};
+        char volumeName[MAX_PATH + 1]     = {0};
         char fileSystemName[MAX_PATH + 1] = {0};
-        DWORD serialNumber = 0;
-        DWORD maxComponentLen = 0;
-        DWORD fileSystemFlags = 0;
+        DWORD serialNumber                = 0;
+        DWORD maxComponentLen             = 0;
+        DWORD fileSystemFlags             = 0;
 
         // Get the serial number of the system drive (C:)
-        if (GetVolumeInformationA(
-                "C:\\",
-                volumeName,
-                sizeof(volumeName),
-                &serialNumber,
-                &maxComponentLen,
-                &fileSystemFlags,
-                fileSystemName,
-                sizeof(fileSystemName))) {
+        if (GetVolumeInformationA("C:\\", volumeName, sizeof(volumeName), &serialNumber, &maxComponentLen, &fileSystemFlags, fileSystemName, sizeof(fileSystemName))) {
             return std::to_string(serialNumber);
         }
         return "";

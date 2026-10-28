@@ -8,11 +8,11 @@
 
 #pragma once
 
+#include "color.h"
+#include "quaternion.h"
 #include "vector2.h"
 #include "vector3.h"
 #include "vector4.h"
-#include "quaternion.h"
-#include "color.h"
 
 #include "../value_transfer.h"
 

@@ -194,7 +194,7 @@ namespace Framework::GUI {
                 }
 
                 const std::filesystem::path lockPath = profileRoot / ".framework-profile.lock";
-                HANDLE profileLock = CreateFileW(lockPath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_HIDDEN, nullptr);
+                HANDLE profileLock                   = CreateFileW(lockPath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_HIDDEN, nullptr);
                 if (profileLock != INVALID_HANDLE_VALUE) {
                     return std::make_pair(profileRoot, profileLock);
                 }
@@ -570,18 +570,10 @@ namespace Framework::GUI {
         // Create the view based on the graphics backend
         std::unique_ptr<View> view;
         switch (_graphicsRenderer->GetBackendType()) {
-        case Graphics::RendererBackend::BACKEND_D3D_9:
-            view = std::make_unique<ViewD3D9>(++_id, _graphicsRenderer, this);
-            break;
-        case Graphics::RendererBackend::BACKEND_D3D_11:
-            view = std::make_unique<ViewD3D11>(++_id, _graphicsRenderer, this);
-            break;
-        case Graphics::RendererBackend::BACKEND_D3D_12:
-            view = std::make_unique<ViewD3D12>(++_id, _graphicsRenderer, this);
-            break;
-        default:
-            Framework::Logging::GetLogger("Web")->error("Failed to create view: Unsupported renderer backend");
-            return -1;
+        case Graphics::RendererBackend::BACKEND_D3D_9: view = std::make_unique<ViewD3D9>(++_id, _graphicsRenderer, this); break;
+        case Graphics::RendererBackend::BACKEND_D3D_11: view = std::make_unique<ViewD3D11>(++_id, _graphicsRenderer, this); break;
+        case Graphics::RendererBackend::BACKEND_D3D_12: view = std::make_unique<ViewD3D12>(++_id, _graphicsRenderer, this); break;
+        default: Framework::Logging::GetLogger("Web")->error("Failed to create view: Unsupported renderer backend"); return -1;
         }
         if (!view) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: failed");

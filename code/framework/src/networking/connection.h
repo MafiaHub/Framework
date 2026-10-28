@@ -8,9 +8,9 @@
 
 #pragma once
 
+#include <function2/function2.hpp>
 #include <mafianet/bit_stream.h>
 #include <mafianet/types.h>
-#include <function2/function2.hpp>
 #include <string>
 
 namespace Framework::Networking {

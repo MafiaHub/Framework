@@ -96,9 +96,12 @@ namespace Framework::Scripting::Builtins {
                 isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Imports.get: resource '" + resourceName + "' is not reachable from here")));
                 return;
             }
-            const bool fetched = references->Fetch(isolate, resourceIsolate, [&](v8::Isolate *owner, v8::Local<v8::Context> ownerContext) -> v8::MaybeLocal<v8::Value> {
-                return BuildImportsObject(owner, ownerContext, resource);
-            }).ToLocal(&exportsObj);
+            const bool fetched = references
+                                     ->Fetch(isolate, resourceIsolate,
+                                         [&](v8::Isolate *owner, v8::Local<v8::Context> ownerContext) -> v8::MaybeLocal<v8::Value> {
+                                             return BuildImportsObject(owner, ownerContext, resource);
+                                         })
+                                     .ToLocal(&exportsObj);
             if (!fetched) {
                 return;
             }

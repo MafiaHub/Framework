@@ -10,15 +10,15 @@
 #include "safe_win32.h"
 
 #ifdef WIN32
-#include <Shlwapi.h>
 #include <ShlObj.h>
+#include <Shlwapi.h>
 #else
 #include <climits>
 #include <cstdlib>
-#include <unistd.h>
 #include <libgen.h>
-#include <string.h>
 #include <limits.h>
+#include <string.h>
+#include <unistd.h>
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
 #endif
@@ -73,12 +73,12 @@ namespace Framework::Utils {
 
         if (executable_path[0] == '\0') {
             char buf[PATH_MAX];
-            
-            #if defined(__APPLE__) || defined(__linux__)
+
+#if defined(__APPLE__) || defined(__linux__)
             ssize_t count = readlink("/proc/self/exe", buf, PATH_MAX);
             if (count == -1) {
-                // On macOS, try an alternative approach
-                #if defined(__APPLE__)
+// On macOS, try an alternative approach
+#if defined(__APPLE__)
                 uint32_t bufsize = PATH_MAX;
                 if (_NSGetExecutablePath(buf, &bufsize) != 0) {
                     return "";
@@ -88,17 +88,17 @@ namespace Framework::Utils {
                 if (realpath(buf, resolvedPath) != nullptr) {
                     strcpy(buf, resolvedPath);
                 }
-                #else
+#else
                 return "";
-                #endif
+#endif
             }
             else {
                 buf[count] = '\0';
             }
-            #endif
-            
+#endif
+
             // Get directory part of the path
-            char* dir = dirname(buf);
+            char *dir = dirname(buf);
             strcpy(executable_path, dir);
             strcat(executable_path, "/");
         }
@@ -108,13 +108,13 @@ namespace Framework::Utils {
         strcpy(combined_path, executable_path);
         std::string relStr(relative);
         strcat(combined_path, relStr.c_str());
-        
+
         // Canonicalize path (resolve "..", ".", etc.)
         char final_path[PATH_MAX];
         if (realpath(combined_path, final_path) != nullptr) {
             return final_path;
         }
-        
+
         return combined_path; // If realpath fails, return the combined path
 #endif
     }
@@ -141,16 +141,16 @@ namespace Framework::Utils {
         return std::string();
 #else
         // On non-Windows platforms, typically use $HOME/.config or $XDG_CONFIG_HOME
-        const char* configDir = getenv("XDG_CONFIG_HOME");
+        const char *configDir = getenv("XDG_CONFIG_HOME");
         if (configDir) {
             return std::string(configDir);
         }
-        
-        const char* homeDir = getenv("HOME");
+
+        const char *homeDir = getenv("HOME");
         if (homeDir) {
             return std::string(homeDir) + "/.config";
         }
-        
+
         return std::string();
 #endif
     }

@@ -56,7 +56,7 @@ namespace Framework::External::Steam {
         if (!apps) {
             return {};
         }
-        char path[1024] = {0};
+        char path[1024]   = {0};
         const auto length = apps->GetAppInstallDir(appId, path, sizeof(path));
         if (length == 0 || length >= sizeof(path)) {
             return {};

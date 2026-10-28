@@ -16,7 +16,7 @@
 #include <stdexcept>
 
 namespace Framework::Utils::States {
-    class StateTransitionError : public std::runtime_error {
+    class StateTransitionError: public std::runtime_error {
         using std::runtime_error::runtime_error;
     };
 
@@ -31,8 +31,8 @@ namespace Framework::Utils::States {
       private:
         mutable std::mutex _mutex;
         std::map<int32_t, std::unique_ptr<IState>> _states;
-        IState* _currentState;
-        IState* _nextState;
+        IState *_currentState;
+        IState *_nextState;
         Context _currentContext;
         bool _isUpdating;
 
@@ -41,32 +41,32 @@ namespace Framework::Utils::States {
         ~Machine();
 
         // Prevent copying
-        Machine(const Machine&) = delete;
-        Machine& operator=(const Machine&) = delete;
+        Machine(const Machine &)            = delete;
+        Machine &operator=(const Machine &) = delete;
 
         bool RequestNextState(int32_t);
 
         template <typename T>
         void RegisterState() {
             std::scoped_lock lock(_mutex);
-            auto ptr = std::make_unique<T>();
+            auto ptr   = std::make_unique<T>();
             int32_t id = ptr->GetId();
-            
+
             if (_states.contains(id)) {
                 throw std::runtime_error("State ID already registered");
             }
-            
+
             _states.emplace(id, std::move(ptr));
         }
 
         bool Update();
 
-        const IState* GetCurrentState() const {
+        const IState *GetCurrentState() const {
             std::scoped_lock lock(_mutex);
             return _currentState;
         }
 
-        const IState* GetNextState() const {
+        const IState *GetNextState() const {
             std::scoped_lock lock(_mutex);
             return _nextState;
         }

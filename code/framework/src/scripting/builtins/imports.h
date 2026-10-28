@@ -17,17 +17,14 @@
 namespace Framework::Scripting {
     class ResourceManager;
     class Resource;
-}
+} // namespace Framework::Scripting
 
 namespace Framework::Scripting::Builtins {
 
     // Global Imports: get(resourceName) -> every export registered by another running resource.
     class Imports final {
       public:
-        static void Register(v8::Isolate *isolate,
-                            v8::Local<v8::Context> context,
-                            v8::Local<v8::Object> target,
-                            ResourceManager *resourceManager);
+        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager);
 
         /**
          * Build an object mapping every registered export name of a resource to its
@@ -38,9 +35,7 @@ namespace Framework::Scripting::Builtins {
          * @param resource Resource whose registered exports should be read
          * @return Object keyed by export name; empty object when there are no exports
          */
-        static v8::Local<v8::Object> BuildImportsObject(v8::Isolate *isolate,
-                                                        v8::Local<v8::Context> context,
-                                                        const Resource *resource);
+        static v8::Local<v8::Object> BuildImportsObject(v8::Isolate *isolate, v8::Local<v8::Context> context, const Resource *resource);
 
       private:
         // V8 callback implementations

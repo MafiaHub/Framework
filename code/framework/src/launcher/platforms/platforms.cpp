@@ -337,9 +337,7 @@ namespace Framework::Launcher::Platforms {
         const auto logger = Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER);
         const auto stub   = RGL::ResolveEntryStub(imageBase, entryPoint);
         switch (stub.status) {
-        case RGL::EntryStubStatus::RESOLVED:
-            logger->info("Skipping the Rockstar Games Launcher entry stub at {:#x}, entering the game at {:#x}", entryPoint, stub.entryPoint);
-            return stub.entryPoint;
+        case RGL::EntryStubStatus::RESOLVED: logger->info("Skipping the Rockstar Games Launcher entry stub at {:#x}, entering the game at {:#x}", entryPoint, stub.entryPoint); return stub.entryPoint;
         case RGL::EntryStubStatus::NOT_PRESENT: logger->info("The game executable carries no Rockstar Games Launcher entry stub, entering it at {:#x}", entryPoint); return entryPoint;
         default: throw std::runtime_error("The Rockstar Games Launcher entry stub could not be decoded, this game build is not supported yet");
         }

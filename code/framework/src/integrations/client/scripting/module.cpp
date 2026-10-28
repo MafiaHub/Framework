@@ -12,8 +12,8 @@
 
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/console.h>
-#include <scripting/builtins/execution_environment.h>
 #include <scripting/builtins/events.h>
+#include <scripting/builtins/execution_environment.h>
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/messages.h>
@@ -136,7 +136,7 @@ namespace Framework::Integrations::Client::Scripting {
         }
 
         Framework::Scripting::EngineScope scope(_engine.get());
-        v8::Isolate *isolate = scope.Isolate();
+        v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
         v8::Local<v8::Object> global = context->Global();
@@ -231,7 +231,7 @@ namespace Framework::Integrations::Client::Scripting {
 
             if (_resourceManager) {
                 Framework::Scripting::EngineScope scope(_engine.get());
-                v8::Isolate *isolate = scope.Isolate();
+                v8::Isolate *isolate           = scope.Isolate();
                 v8::Local<v8::Context> context = scope.Context();
 
                 Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);

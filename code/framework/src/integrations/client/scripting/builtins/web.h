@@ -49,10 +49,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     // See docs/scripting_web_events.md.
     class Web final {
       public:
-        static void Register(v8::Isolate *isolate,
-                             v8::Local<v8::Context> context,
-                             v8::Local<v8::Object> target,
-                             Framework::Scripting::ResourceManager *resourceManager);
+        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager);
 
         // Drains queued browser events into script. Once per scripting tick.
         static void Update();

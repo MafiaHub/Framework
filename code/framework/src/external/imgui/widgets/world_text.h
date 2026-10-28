@@ -77,11 +77,7 @@ namespace Framework::External::ImGUI::Widgets {
 
         if (style == WorldTextStyle::Box) {
             constexpr float kPadding = 4.0f;
-            drawList->AddRectFilled(
-                ImVec2(screenPos.x - maxWidth * 0.5f - kPadding, top - kPadding),
-                ImVec2(screenPos.x + maxWidth * 0.5f + kPadding, top + totalHeight + kPadding),
-                WorldTextModulateAlpha(IM_COL32(0, 0, 0, 153), alpha),
-                4.0f);
+            drawList->AddRectFilled(ImVec2(screenPos.x - maxWidth * 0.5f - kPadding, top - kPadding), ImVec2(screenPos.x + maxWidth * 0.5f + kPadding, top + totalHeight + kPadding), WorldTextModulateAlpha(IM_COL32(0, 0, 0, 153), alpha), 4.0f);
         }
 
         int lineIndex = 0;

@@ -28,8 +28,7 @@ namespace Framework::Jobs {
       public:
         using TaskFunc = fu2::function<void()>;
 
-        TaskNode(std::string name, TaskFunc func) : _name(std::move(name)), _func(std::move(func)) {
-        }
+        TaskNode(std::string name, TaskFunc func): _name(std::move(name)), _func(std::move(func)) {}
 
         /**
          * @brief Add a dependency - this task will wait for the dependency to complete
@@ -82,8 +81,7 @@ namespace Framework::Jobs {
     // Not thread-safe (build/Execute from one thread); can deadlock if fan-out exceeds worker threads.
     class TaskGraph final {
       public:
-        explicit TaskGraph(JobSystem *jobSystem) : _jobSystem(jobSystem) {
-        }
+        explicit TaskGraph(JobSystem *jobSystem): _jobSystem(jobSystem) {}
 
         /**
          * @brief Create a new task node
@@ -184,10 +182,14 @@ namespace Framework::Jobs {
 
                 for (auto &dep : node->_dependencies) {
                     if (!dep->_executed) {
-                        _jobSystem->Schedule(wg.get(), [this, dep, priority]() {
-                            ExecuteNode(dep, priority);
-                        }, priority);
-                    } else {
+                        _jobSystem->Schedule(
+                            wg.get(),
+                            [this, dep, priority]() {
+                                ExecuteNode(dep, priority);
+                            },
+                            priority);
+                    }
+                    else {
                         wg->Done();
                     }
                 }

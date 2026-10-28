@@ -80,7 +80,9 @@ namespace Framework::GUI::Resources {
             }
 
             std::string extension = path.substr(dot + 1);
-            std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
             return extension;
         }
     } // namespace
@@ -100,7 +102,9 @@ namespace Framework::GUI::Resources {
         // Type and subtype are case-insensitive, and a provider override is
         // whatever its caller passed, so drop parameters and normalize first.
         std::string base = mimeType.substr(0, mimeType.find(';'));
-        std::transform(base.begin(), base.end(), base.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::transform(base.begin(), base.end(), base.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
         if (base.rfind("text/", 0) == 0) {
             return true;
         }

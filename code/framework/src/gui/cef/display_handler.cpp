@@ -17,25 +17,13 @@ namespace Framework::GUI::CEF {
         const auto logger = Framework::Logging::GetLogger("Web/JS");
 
         switch (level) {
-        case LOGSEVERITY_DEBUG:
-            logger->debug("[{}:{}] {}", src, line, msg);
-            break;
+        case LOGSEVERITY_DEBUG: logger->debug("[{}:{}] {}", src, line, msg); break;
         case LOGSEVERITY_INFO:
-        case LOGSEVERITY_DEFAULT:
-            logger->info("[{}:{}] {}", src, line, msg);
-            break;
-        case LOGSEVERITY_WARNING:
-            logger->warn("[{}:{}] {}", src, line, msg);
-            break;
-        case LOGSEVERITY_ERROR:
-            logger->error("[{}:{}] {}", src, line, msg);
-            break;
-        case LOGSEVERITY_FATAL:
-            logger->critical("[{}:{}] {}", src, line, msg);
-            break;
-        default:
-            logger->info("[{}:{}] {}", src, line, msg);
-            break;
+        case LOGSEVERITY_DEFAULT: logger->info("[{}:{}] {}", src, line, msg); break;
+        case LOGSEVERITY_WARNING: logger->warn("[{}:{}] {}", src, line, msg); break;
+        case LOGSEVERITY_ERROR: logger->error("[{}:{}] {}", src, line, msg); break;
+        case LOGSEVERITY_FATAL: logger->critical("[{}:{}] {}", src, line, msg); break;
+        default: logger->info("[{}:{}] {}", src, line, msg); break;
         }
 
         if (_onViewEvent) {

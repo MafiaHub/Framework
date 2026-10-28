@@ -42,7 +42,7 @@ namespace Framework::Scripting {
             if (!resourceName.IsEmpty() && !resourceName->IsUndefined()) {
                 v8::String::Utf8Value resourceNameStr(isolate, resourceName);
                 if (*resourceNameStr) {
-                    int lineNumber = message->GetLineNumber(context).FromMaybe(-1);
+                    int lineNumber  = message->GetLineNumber(context).FromMaybe(-1);
                     int startColumn = message->GetStartColumn(context).FromMaybe(-1);
 
                     result += "\n    at ";

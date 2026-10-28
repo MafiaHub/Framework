@@ -33,14 +33,13 @@ namespace Framework::Scripting {
         }
 
         const auto schedule = [&catalog, handle](const char *name, const char *description) {
-            catalog.function_(v8pp::metadata::function_of<v8::FunctionCallback>(name,
-                v8pp::metadata::docs(handle,
-                    {
-                        v8pp::metadata::param("handler", "(...args: any[]) => void", false, "Function to call."),
-                        v8pp::metadata::param("milliseconds", "number", true, "Delay before the call."),
-                        v8pp::metadata::rest_param("args", "unknown[]", "Arguments passed to the handler."),
-                    },
-                    description, "Handle to pass to the matching clear function.")));
+            catalog.function_(v8pp::metadata::function_of<v8::FunctionCallback>(name, v8pp::metadata::docs(handle,
+                                                                                          {
+                                                                                              v8pp::metadata::param("handler", "(...args: any[]) => void", false, "Function to call."),
+                                                                                              v8pp::metadata::param("milliseconds", "number", true, "Delay before the call."),
+                                                                                              v8pp::metadata::rest_param("args", "unknown[]", "Arguments passed to the handler."),
+                                                                                          },
+                                                                                          description, "Handle to pass to the matching clear function.")));
         };
         schedule("setTimeout", "Calls a function once after a delay.");
         schedule("setInterval", "Calls a function repeatedly, waiting the delay between calls.");

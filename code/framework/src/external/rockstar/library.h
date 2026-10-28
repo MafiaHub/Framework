@@ -14,9 +14,9 @@
 namespace Framework::External::Rockstar {
     // One title the Rockstar Games Launcher installed, from its key under HKLM\SOFTWARE\Rockstar Games.
     struct InstalledTitle {
-        std::string titleKey;      // registry sub-key name, e.g. "GTA: San Andreas"
+        std::string titleKey; // registry sub-key name, e.g. "GTA: San Andreas"
         std::string installFolder;
-        std::string version;       // launcher build of the title, may be empty
+        std::string version; // launcher build of the title, may be empty
 
         bool IsValid() const {
             return !installFolder.empty();

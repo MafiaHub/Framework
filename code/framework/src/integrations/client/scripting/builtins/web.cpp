@@ -202,16 +202,12 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             set("viewId", v8pp::to_v8(isolate, viewId));
 
             switch (data.event) {
-            case Framework::GUI::ViewEvent::Created:
-                setString("url", data.url);
-                break;
+            case Framework::GUI::ViewEvent::Created: setString("url", data.url); break;
             case Framework::GUI::ViewEvent::LoadingStart:
                 setString("url", data.url);
                 set("isMainFrame", v8pp::to_v8(isolate, data.isMainFrame));
                 break;
-            case Framework::GUI::ViewEvent::DocumentReady:
-                setString("url", data.url);
-                break;
+            case Framework::GUI::ViewEvent::DocumentReady: setString("url", data.url); break;
             case Framework::GUI::ViewEvent::LoadingFailed:
                 setString("url", data.url);
                 setString("description", data.description);
@@ -231,12 +227,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 setString("cursor", CursorTypeName(data.cursorType));
                 set("cursorType", v8pp::to_v8(isolate, data.cursorType));
                 break;
-            case Framework::GUI::ViewEvent::Tooltip:
-                setString("text", data.tooltip);
-                break;
-            case Framework::GUI::ViewEvent::InputFocusChange:
-                set("focused", v8pp::to_v8(isolate, data.focused));
-                break;
+            case Framework::GUI::ViewEvent::Tooltip: setString("text", data.tooltip); break;
+            case Framework::GUI::ViewEvent::InputFocusChange: set("focused", v8pp::to_v8(isolate, data.focused)); break;
             case Framework::GUI::ViewEvent::ResourceBlocked:
                 setString("url", data.url);
                 setString("domain", data.domain);
@@ -315,8 +307,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier.")}, "Checks whether an owned view is currently visible.", "False for missing or unowned views.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setViewOffscreen",
             v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier."), v8pp::metadata::param("offscreen", "boolean", true, "Whether the page keeps painting without being drawn on screen; defaults to true.")},
-                "Keeps a hidden view painting so something else can sample it, such as a render target drawing the page onto world geometry. A view that is merely hidden stops painting and the sampled picture freezes.",
-                "True when the view exists and was updated.")));
+                "Keeps a hidden view painting so something else can sample it, such as a render target drawing the page onto world geometry. A view that is merely hidden stops painting and the sampled picture freezes.", "True when the view exists and was updated.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isViewOffscreen",
             v8pp::metadata::docs("boolean", {v8pp::metadata::param("viewId", "number", false, "Owned view identifier.")}, "Checks whether an owned view keeps painting while hidden.", "False for missing or unowned views.")));
         metadata.record(
@@ -360,22 +351,20 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             events.add_property(std::string(ViewEventName(event)), std::string("[event: ") + typeName + "]", eventDescription);
         };
 
-        describe(Framework::GUI::ViewEvent::Created, "BrowserCreatedEvent", "A web view's browser finished being created.", {{"url", "string", "URL the view was created with."}},
-            "Dispatched once per view, before any navigation, to the resource that created it.");
-        describe(Framework::GUI::ViewEvent::LoadingStart, "BrowserLoadingStartEvent", "A frame inside a web view started loading.",
-            {{"url", "string", "URL being loaded."}, {"isMainFrame", "boolean", "False for sub-frame loads."}}, "Dispatched when any frame of an owned view begins loading.");
+        describe(Framework::GUI::ViewEvent::Created, "BrowserCreatedEvent", "A web view's browser finished being created.", {{"url", "string", "URL the view was created with."}}, "Dispatched once per view, before any navigation, to the resource that created it.");
+        describe(Framework::GUI::ViewEvent::LoadingStart, "BrowserLoadingStartEvent", "A frame inside a web view started loading.", {{"url", "string", "URL being loaded."}, {"isMainFrame", "boolean", "False for sub-frame loads."}},
+            "Dispatched when any frame of an owned view begins loading.");
         describe(Framework::GUI::ViewEvent::DocumentReady, "BrowserDocumentReadyEvent", "A web view's main frame finished loading.", {{"url", "string", "URL that finished loading."}},
             "Dispatched when an owned view's main document is ready; the earliest point at which the page can receive Web.emit.");
         describe(Framework::GUI::ViewEvent::LoadingFailed, "BrowserLoadingFailedEvent", "A load inside a web view was aborted.",
             {{"url", "string", "URL that failed to load."}, {"description", "string", "CEF error text, such as ERR_CONNECTION_REFUSED."}, {"errorCode", "number", "CEF error code."}, {"isMainFrame", "boolean", "False for sub-frame failures."}},
             "Dispatched when a frame of an owned view fails to load.");
-        describe(Framework::GUI::ViewEvent::Navigate, "BrowserNavigateEvent", "A web view was asked to navigate.",
-            {{"url", "string", "Requested URL."}, {"isMainFrame", "boolean", "False for sub-frame navigation."}, {"blocked", "boolean", "Whether the request was refused."}},
+        describe(Framework::GUI::ViewEvent::Navigate, "BrowserNavigateEvent", "A web view was asked to navigate.", {{"url", "string", "Requested URL."}, {"isMainFrame", "boolean", "False for sub-frame navigation."}, {"blocked", "boolean", "Whether the request was refused."}},
             "Dispatched for every navigation an owned view is asked to perform, refused or not.");
         describe(Framework::GUI::ViewEvent::Popup, "BrowserPopupEvent", "A page tried to open a new window or tab.", {{"url", "string", "Target URL of the blocked popup."}, {"openerUrl", "string", "URL of the frame that requested it."}},
             "Dispatched when an owned view blocks a popup; windowless views cannot host one, so handle the URL yourself.");
-        describe(Framework::GUI::ViewEvent::CursorChange, "BrowserCursorChangeEvent", "The cursor shape a page is asking for.",
-            {{"cursor", "string", "CSS-style cursor name, or \"custom\" for shapes without one."}, {"cursorType", "number", "Raw CEF cursor type."}}, "Dispatched when an owned view's requested cursor shape changes.");
+        describe(Framework::GUI::ViewEvent::CursorChange, "BrowserCursorChangeEvent", "The cursor shape a page is asking for.", {{"cursor", "string", "CSS-style cursor name, or \"custom\" for shapes without one."}, {"cursorType", "number", "Raw CEF cursor type."}},
+            "Dispatched when an owned view's requested cursor shape changes.");
         describe(Framework::GUI::ViewEvent::Tooltip, "BrowserTooltipEvent", "A page wants to display a tooltip.", {{"text", "string", "Tooltip text; empty when the tooltip is dismissed."}},
             "Dispatched when an owned view requests a tooltip; windowless rendering draws none, so the script must.");
         describe(Framework::GUI::ViewEvent::InputFocusChange, "BrowserInputFocusChangeEvent", "A form control inside a page gained or lost focus.", {{"focused", "boolean", "True while the page holds keyboard input."}},
@@ -879,7 +868,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         Framework::Scripting::EngineScope scope(engine);
-        v8::Isolate *isolate = scope.Isolate();
+        v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
         auto &events = manager->GetEvents();
@@ -916,7 +905,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         Framework::Scripting::EngineScope scope(engine);
-        v8::Isolate *isolate = scope.Isolate();
+        v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
         // copy out so handlers can call on/off/destroyView reentrantly

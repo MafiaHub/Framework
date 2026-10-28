@@ -61,14 +61,14 @@ namespace Framework::GUI {
         // CPU renderer fallback
         std::vector<uint8_t> _pixelData;
 
-        bool _gpuAccelerated  = false;
-        bool _hasFocus        = false;
+        bool _gpuAccelerated = false;
+        bool _hasFocus       = false;
         int _x;
         int _y;
         int _z;
         int _width;
         int _height;
-        bool _shouldDisplay   = false;
+        bool _shouldDisplay    = false;
         bool _garbageCollected = false;
 
         bool _offscreen = false;

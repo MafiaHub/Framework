@@ -63,7 +63,14 @@ namespace Framework::Scripting {
         // Where the copy is inside the value, as a chain up to the root. Spelled out only when the copy fails, so a
         // successful copy builds no strings for it.
         struct Path {
-            enum class Step : uint8_t { Root, Index, Property, MapKey, MapValue, Member };
+            enum class Step : uint8_t {
+                Root,
+                Index,
+                Property,
+                MapKey,
+                MapValue,
+                Member
+            };
 
             const Path *parent      = nullptr;
             Step step               = Step::Root;
@@ -487,7 +494,8 @@ namespace Framework::Scripting {
                     // Buffer.from(arrayBuffer) shares the memory rather than copying it again.
                     v8::Local<v8::Value> bufferClass;
                     v8::Local<v8::Value> from;
-                    if (_context->Global()->Get(_context, v8::String::NewFromUtf8Literal(_isolate, "Buffer")).ToLocal(&bufferClass) && bufferClass->IsObject() && bufferClass.As<v8::Object>()->Get(_context, v8::String::NewFromUtf8Literal(_isolate, "from")).ToLocal(&from) && from->IsFunction()) {
+                    if (_context->Global()->Get(_context, v8::String::NewFromUtf8Literal(_isolate, "Buffer")).ToLocal(&bufferClass) && bufferClass->IsObject() && bufferClass.As<v8::Object>()->Get(_context, v8::String::NewFromUtf8Literal(_isolate, "from")).ToLocal(&from)
+                        && from->IsFunction()) {
                         v8::Local<v8::Value> argument = buffer;
                         return from.As<v8::Function>()->Call(_context, bufferClass, 1, &argument);
                     }
@@ -543,7 +551,9 @@ namespace Framework::Scripting {
     void ValueTransfer::RegisterHostType(std::string name, HostCopy copy, HostRebuild rebuild) {
         auto &types = HostTypes();
         // Registering a name again replaces it, so a project can override how a framework type crosses.
-        std::erase_if(types, [&](const HostType &type) { return type.name == name; });
+        std::erase_if(types, [&](const HostType &type) {
+            return type.name == name;
+        });
         types.push_back({std::move(name), std::move(copy), std::move(rebuild)});
     }
 

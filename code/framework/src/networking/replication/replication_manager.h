@@ -14,9 +14,9 @@
 #include "network_entity.h"
 
 #include <mafianet/network_id_manager.h>
-#include <mafianet/rpc4_plugin.h>
-#include <mafianet/replica_manager3.h>
 #include <mafianet/peer_interface.h>
+#include <mafianet/replica_manager3.h>
+#include <mafianet/rpc4_plugin.h>
 
 #include <function2/function2.hpp>
 #include <glm/glm.hpp>

@@ -9,10 +9,10 @@
 #include "project.h"
 
 #include "gpu_preference.h"
-#include "swap_chain_upgrade.h"
 #include "loaders/exe_ldr.h"
 #include "loaders/process_identity.h"
 #include "logging/logger.h"
+#include "swap_chain_upgrade.h"
 #include "utils/hashing.h"
 #include "utils/string_utils.h"
 #include "utils/url_protocol.h"
@@ -25,8 +25,8 @@
 #include <cppfs/fs.h>
 #include <cstdlib>
 #include <filesystem>
-#include <nlohmann/json.hpp>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <ostream>
 #include <stdexcept>
 #include <string_view>
@@ -73,7 +73,7 @@ static Framework::Launcher::ProjectConfiguration *gConfig = nullptr;
 static wchar_t gProjectDllPath[32768];
 
 // Default entry point for the client DLL
-using ClientEntryPoint = void (*)(const wchar_t *projectPath);
+using ClientEntryPoint    = void (*)(const wchar_t *projectPath);
 using ThreadLocalCallback = void(NTAPI *)(void *, DWORD, void *);
 
 void __cdecl RegisterThreadLocalExeAtexitCallback_Stub(ThreadLocalCallback) {
@@ -158,8 +158,8 @@ bool SynchronizeUCRTCommandLine() {
 
     using NarrowCommandLineAccessor = char **(__cdecl *)();
     using WideCommandLineAccessor   = wchar_t **(__cdecl *)();
-    const auto narrowAccessor = reinterpret_cast<NarrowCommandLineAccessor>(GetProcAddress(ucrt, "__p__acmdln"));
-    const auto wideAccessor   = reinterpret_cast<WideCommandLineAccessor>(GetProcAddress(ucrt, "__p__wcmdln"));
+    const auto narrowAccessor       = reinterpret_cast<NarrowCommandLineAccessor>(GetProcAddress(ucrt, "__p__acmdln"));
+    const auto wideAccessor         = reinterpret_cast<WideCommandLineAccessor>(GetProcAddress(ucrt, "__p__wcmdln"));
     if (!narrowAccessor || !wideAccessor) {
         return false;
     }
@@ -392,8 +392,8 @@ namespace Framework::Launcher {
         std::replace(projectPath.begin(), projectPath.end(), '/', '\\');
         Logging::GetInstance()->SetLogFolder(projectPath + "/logs");
 
-        _minidump     = std::make_unique<Utils::MiniDump>();
-        _fileConfig   = std::make_unique<Utils::Config>();
+        _minidump   = std::make_unique<Utils::MiniDump>();
+        _fileConfig = std::make_unique<Utils::Config>();
 
         _minidump->SetSymbolPath(Utils::StringUtils::WideToNormal(gProjectDllPath));
     }
@@ -799,7 +799,7 @@ namespace Framework::Launcher {
         }
 
         // Inject the client dll inside
-        const std::wstring completeDllPath           = gProjectDllPath + std::wstring(L"\\") + gDllName;
+        const std::wstring completeDllPath          = gProjectDllPath + std::wstring(L"\\") + gDllName;
         const DLLInjectionResult moduleInjectResult = InjectLibraryIntoProcess(piProcessInfo.hProcess, completeDllPath.c_str());
 
         // Was it successfull?
@@ -918,10 +918,8 @@ namespace Framework::Launcher {
 
             const auto exportName = std::string(exportFn);
 
-            if (_config.suppressThreadLocalExeAtexitCallback &&
-                exportName == "_register_thread_local_exe_atexit_callback") {
-                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info(
-                    "Suppressing duplicate mapped-EXE TLS atexit registration");
+            if (_config.suppressThreadLocalExeAtexitCallback && exportName == "_register_thread_local_exe_atexit_callback") {
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Suppressing duplicate mapped-EXE TLS atexit registration");
                 return reinterpret_cast<LPVOID>(RegisterThreadLocalExeAtexitCallback_Stub);
             }
             if (!_config.loadClientManually && exportName == "GetStartupInfoW") {

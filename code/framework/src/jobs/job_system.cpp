@@ -21,27 +21,29 @@ namespace Framework::Jobs {
         auto *wrapper = static_cast<TaskWrapper *>(arg);
         try {
             wrapper->func();
-        } catch (const std::exception &e) {
+        }
+        catch (const std::exception &e) {
             spdlog::error("Task threw exception: {}", e.what());
-        } catch (...) {
+        }
+        catch (...) {
             spdlog::error("Task threw unknown exception");
         }
         delete wrapper;
     }
 
-    JobSystem::JobSystem(const JobSystemConfig &config) : _profilingEnabled(config.enableProfiling), _config(config) {
+    JobSystem::JobSystem(const JobSystemConfig &config): _profilingEnabled(config.enableProfiling), _config(config) {
         _scheduler = std::make_unique<ftl::TaskScheduler>();
     }
 
     JobSystemError JobSystem::Init() {
         ftl::TaskSchedulerInitOptions options;
-        options.FiberPoolSize = _config.fiberPoolSize;
+        options.FiberPoolSize  = _config.fiberPoolSize;
         options.ThreadPoolSize = _config.workerThreadCount;
-        options.Behavior = _config.emptyQueueBehavior;
+        options.Behavior       = _config.emptyQueueBehavior;
 
         if (_config.enableProfiling) {
             // Profiling callbacks can be added here for Tracy/Remotery integration
-            options.Callbacks.Context = this;
+            options.Callbacks.Context         = this;
             options.Callbacks.OnFiberAttached = [](void * /*context*/, unsigned /*fiberIndex*/) {
                 // Hook for profiler: fiber attached to thread
             };
@@ -73,11 +75,11 @@ namespace Framework::Jobs {
     }
 
     void JobSystem::Schedule(fu2::function<void()> task, ftl::TaskPriority priority) {
-        auto *wrapper = new TaskWrapper{std::move(task)};
+        auto *wrapper = new TaskWrapper {std::move(task)};
 
         ftl::Task ftlTask;
         ftlTask.Function = TaskWrapperFunc;
-        ftlTask.ArgData = wrapper;
+        ftlTask.ArgData  = wrapper;
 
         _scheduler->AddTask(ftlTask, priority);
     }
@@ -89,11 +91,11 @@ namespace Framework::Jobs {
     }
 
     void JobSystem::Schedule(ftl::WaitGroup *waitGroup, fu2::function<void()> task, ftl::TaskPriority priority) {
-        auto *wrapper = new TaskWrapper{std::move(task)};
+        auto *wrapper = new TaskWrapper {std::move(task)};
 
         ftl::Task ftlTask;
         ftlTask.Function = TaskWrapperFunc;
-        ftlTask.ArgData = wrapper;
+        ftlTask.ArgData  = wrapper;
 
         _scheduler->AddTask(ftlTask, priority, waitGroup);
     }
@@ -103,7 +105,8 @@ namespace Framework::Jobs {
             std::exception_ptr exception;
             try {
                 task();
-            } catch (...) {
+            }
+            catch (...) {
                 exception = std::current_exception();
             }
 
@@ -112,16 +115,20 @@ namespace Framework::Jobs {
                     QueueCallback([onError = std::move(onError), exception]() mutable {
                         onError(exception);
                     });
-                } else {
+                }
+                else {
                     try {
                         std::rethrow_exception(exception);
-                    } catch (const std::exception &e) {
+                    }
+                    catch (const std::exception &e) {
                         spdlog::error("Task failed with unhandled exception: {}", e.what());
-                    } catch (...) {
+                    }
+                    catch (...) {
                         spdlog::error("Task failed with unknown exception");
                     }
                 }
-            } else if (onSuccess) {
+            }
+            else if (onSuccess) {
                 QueueCallback(std::move(onSuccess));
             }
         };
@@ -141,9 +148,11 @@ namespace Framework::Jobs {
             auto &cb = callbacks.front();
             try {
                 cb.callback();
-            } catch (const std::exception &e) {
+            }
+            catch (const std::exception &e) {
                 spdlog::error("Callback threw exception: {}", e.what());
-            } catch (...) {
+            }
+            catch (...) {
                 spdlog::error("Callback threw unknown exception");
             }
             callbacks.pop();
@@ -152,7 +161,7 @@ namespace Framework::Jobs {
 
     void JobSystem::QueueCallback(fu2::function<void()> callback) {
         std::scoped_lock lock(_callbackMutex);
-        _completedCallbacks.push(CompletedCallback{std::move(callback)});
+        _completedCallbacks.push(CompletedCallback {std::move(callback)});
     }
 
 } // namespace Framework::Jobs

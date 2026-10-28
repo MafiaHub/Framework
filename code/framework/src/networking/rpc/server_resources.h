@@ -80,11 +80,11 @@ namespace Framework::Networking::RPC {
     // per-connection ReadyEvent id both peers use as the spawn barrier; tickRate is the serialize
     // interval (s) the client applies once that barrier completes.
     struct ServerResources {
-        static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Framework::ServerResources");
-        static constexpr uint16_t kMaxResources  = 1000; // bound untrusted input
+        static constexpr auto kIdentifier       = FW_RPC_IDENTIFIER("Framework::ServerResources");
+        static constexpr uint16_t kMaxResources = 1000; // bound untrusted input
 
         int32_t readyEventId = 0;
-        float tickRate = 0.0f;
+        float tickRate       = 0.0f;
 
         // Hex AES-256 key for the resource packages. See
         // docs/research/client_resource_protection.md for what this does and does not protect.

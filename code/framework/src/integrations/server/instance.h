@@ -29,12 +29,12 @@
 
 #include <nlohmann/json.hpp>
 
-#include <mafianet/types.h>
 #include "services/masterlist.h"
-#include "utils/config.h"
-#include "utils/config_schema.h"
 #include "utils/command_listener.h"
 #include "utils/command_processor.h"
+#include "utils/config.h"
+#include "utils/config_schema.h"
+#include <mafianet/types.h>
 
 #include <utils/crypto.h>
 #include <utils/lifecycle.h>
@@ -65,7 +65,6 @@ namespace cxxopts {
 
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
-
         std::string modSlug;
         std::string modHelpText;
         std::string modName;
@@ -136,7 +135,7 @@ namespace Framework::Integrations::Server {
 
         // MafiaHub Services
         struct Services {
-            std::string apiUrl = "https://api.mafiahub.dev";
+            std::string apiUrl        = "https://api.mafiahub.dev";
             std::string masterlistUrl = "";
         } services;
 
@@ -161,7 +160,6 @@ namespace Framework::Integrations::Server {
         // args
         int argc;
         char **argv;
-
     };
 
     // Settings resolve lowest to highest: InstanceOptions defaults, then the config document, then
@@ -186,7 +184,7 @@ namespace Framework::Integrations::Server {
         std::string discordName;
     };
 
-    class Instance : public Framework::Lifecycle {
+    class Instance: public Framework::Lifecycle {
       private:
         std::atomic<bool> _shuttingDown;
         // Raised by signals and console commands, read by Run(). Neither may
@@ -271,7 +269,7 @@ namespace Framework::Integrations::Server {
         // options, mod keys from the schema defaults.
         nlohmann::json BuildDefaultConfigFile() const;
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
-        
+
         void HandleCommand(std::string_view command);
         void EmitConsoleCommand(const std::string &command, const std::vector<std::string> &args);
         // Runs once per tick, after the relay's own update has retired the talkers who went

@@ -21,10 +21,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     // over the mod's own activity (see Wrapper::SetScriptFields).
     class Discord final {
       public:
-        static void Register(v8::Isolate *isolate,
-                             v8::Local<v8::Context> context,
-                             v8::Local<v8::Object> target,
-                             Framework::Scripting::ResourceManager *resourceManager);
+        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager);
 
         static void Shutdown();
 

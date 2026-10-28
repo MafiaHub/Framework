@@ -466,9 +466,9 @@ namespace Framework::Voice {
         // Holds our own state across a tick that drained no capture frame.
         int64_t _localTalkingUntil = 0;
         // One step per tick, shared by every envelope.
-        int64_t _envelopeMs = 0;
-        float _envelopeStep = 0.0f;
-        int _pushToTalkKey  = kDefaultPushToTalkKey;
+        int64_t _envelopeMs        = 0;
+        float _envelopeStep        = 0.0f;
+        int _pushToTalkKey         = kDefaultPushToTalkKey;
         TransmitMode _transmitMode = TransmitMode::PushToTalk;
         PushToTalkGate _ptt {};
         VoiceActivityGate _vad {};

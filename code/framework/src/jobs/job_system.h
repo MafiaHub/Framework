@@ -10,10 +10,10 @@
 
 #include "errors.h"
 
-#include <ftl/task_scheduler.h>
-#include <ftl/wait_group.h>
 #include <ftl/fibtex.h>
 #include <ftl/parallel_for.h>
+#include <ftl/task_scheduler.h>
+#include <ftl/wait_group.h>
 
 #include <function2/function2.hpp>
 
@@ -54,11 +54,11 @@ namespace Framework::Jobs {
         bool success = true;
 
         static TaskResult Success(T val) {
-            return TaskResult{std::move(val), "", true};
+            return TaskResult {std::move(val), "", true};
         }
 
         static TaskResult Failure(std::string err) {
-            return TaskResult{T{}, std::move(err), false};
+            return TaskResult {T {}, std::move(err), false};
         }
     };
 
@@ -68,11 +68,11 @@ namespace Framework::Jobs {
         bool success = true;
 
         static TaskResult Success() {
-            return TaskResult{"", true};
+            return TaskResult {"", true};
         }
 
         static TaskResult Failure(std::string err) {
-            return TaskResult{std::move(err), false};
+            return TaskResult {std::move(err), false};
         }
     };
 
@@ -111,7 +111,7 @@ namespace Framework::Jobs {
          * @brief Construct a new JobSystem
          * @param config Configuration options
          */
-        explicit JobSystem(const JobSystemConfig &config = JobSystemConfig{});
+        explicit JobSystem(const JobSystemConfig &config = JobSystemConfig {});
 
         ~JobSystem();
 
@@ -121,10 +121,10 @@ namespace Framework::Jobs {
          */
         [[nodiscard]] JobSystemError Init();
 
-        JobSystem(const JobSystem &) = delete;
+        JobSystem(const JobSystem &)            = delete;
         JobSystem &operator=(const JobSystem &) = delete;
-        JobSystem(JobSystem &&) = delete;
-        JobSystem &operator=(JobSystem &&) = delete;
+        JobSystem(JobSystem &&)                 = delete;
+        JobSystem &operator=(JobSystem &&)      = delete;
 
         /**
          * @brief Schedule a task to run on a worker fiber
@@ -185,7 +185,7 @@ namespace Framework::Jobs {
          * FOOTGUN: detached thread, no timeout; capture owned types by value, not refs to locals.
          */
         template <typename Func, typename ReturnType = decltype(std::declval<Func>()())>
-            requires (!std::is_void_v<ReturnType>)
+            requires(!std::is_void_v<ReturnType>)
         ReturnType BlockingCall(Func &&func) {
             // For blocking I/O, we use a WaitGroup to yield the fiber
             ftl::WaitGroup wg(_scheduler.get());
@@ -198,7 +198,8 @@ namespace Framework::Jobs {
             std::thread([&]() {
                 try {
                     result = func();
-                } catch (...) {
+                }
+                catch (...) {
                     exception = std::current_exception();
                 }
                 wg.Done();
@@ -230,7 +231,8 @@ namespace Framework::Jobs {
             std::thread([&]() {
                 try {
                     func();
-                } catch (...) {
+                }
+                catch (...) {
                     exception = std::current_exception();
                 }
                 wg.Done();

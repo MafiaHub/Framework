@@ -98,7 +98,7 @@ namespace Framework::Utils {
 
             if (!field.allowed.empty() && field.type == ConfigFieldType::String) {
                 const auto value = it->get<std::string>();
-                bool permitted = false;
+                bool permitted   = false;
                 for (const auto &candidate : field.allowed) {
                     if (candidate == value) {
                         permitted = true;

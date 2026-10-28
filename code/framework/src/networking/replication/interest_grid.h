@@ -138,25 +138,25 @@ namespace Framework::Networking::Replication {
         // ~15% nearer to evict it. Ranking only; never admits what the range check rejected.
         static constexpr float kStickyDiscount = 0.72f;
 
-        bool _ready          = false;
+        bool _ready = false;
         // One-shot guard so the "queried before a rebuild" diagnostic is logged once, not per query.
-        bool _warnedNotReady = false;
-        float _cellSize      = 100.0f;
-        float _min           = -10000.0f;
-        float _max           = 10000.0f;
-        bool _groundXY       = false; // false=XZ (Y-up), true=XY (Z-up); see SetGroundPlaneXY
+        bool _warnedNotReady    = false;
+        float _cellSize         = 100.0f;
+        float _min              = -10000.0f;
+        float _max              = 10000.0f;
+        bool _groundXY          = false; // false=XZ (Y-up), true=XY (Z-up); see SetGroundPlaneXY
         float _streamOutMargin  = 0.0f;
         float _lookaheadSeconds = 0.0f;
         // Widest per-entity range in the current rebuild; the grid query must reach that far.
         float _maxEntityRange = 0.0f;
-        uint32_t _generation = 0;
+        uint32_t _generation  = 0;
         GridSectorizer _grid;
         // Entities of the types that use their own range, and the widest of those ranges; see
         // SetUsesEntityRange. Initialised and cleared only once a project files anything here.
         GridSectorizer _ownRangeGrid;
-        bool _ownRangeReady          = false;
-        size_t _ownRangeEntries      = 0;
-        float _maxOwnRange           = 0.0f;
+        bool _ownRangeReady     = false;
+        size_t _ownRangeEntries = 0;
+        float _maxOwnRange      = 0.0f;
         std::unordered_map<uint32_t, uint32_t> _budgets;
         std::unordered_set<uint32_t> _entityRangeTypes;
         std::unordered_map<MafiaNet::PeerGuid, std::unordered_set<NetworkEntity *>> _ownedByGuid;

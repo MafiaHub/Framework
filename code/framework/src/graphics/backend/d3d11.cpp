@@ -8,10 +8,10 @@
 
 #include "d3d11.h"
 
-#include <string>
-#include <sstream>
-#include <directxcolors.h>
 #include <d3dcompiler.h>
+#include <directxcolors.h>
+#include <sstream>
+#include <string>
 
 #include "graphics/shaders/hlsl/bin/fill_fxc.h"
 #include "graphics/shaders/hlsl/bin/fill_path_fxc.h"
@@ -268,8 +268,7 @@ namespace Framework::Graphics {
                 hr = _device->CreateShaderResourceView(texture_entry.resolve_texture.Get(), &srv_desc, texture_entry.resolve_texture_srv.GetAddressOf());
 
                 if (FAILED(hr))
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)
-                        ->error("D3D11Backend::CreateTexture, unable to create shader resource view for MSAA ");
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::CreateTexture, unable to create shader resource view for MSAA ");
             }
         }
 #endif
@@ -298,11 +297,11 @@ namespace Framework::Graphics {
         }
         else {
             Bitmap mapped_bitmap;
-            mapped_bitmap.width = bitmap.width;
+            mapped_bitmap.width  = bitmap.width;
             mapped_bitmap.height = bitmap.height;
             mapped_bitmap.format = bitmap.format;
             mapped_bitmap.pitch  = res.RowPitch;
-            mapped_bitmap.size  = res.RowPitch * bitmap.height;
+            mapped_bitmap.size   = res.RowPitch * bitmap.height;
             mapped_bitmap.pixels = (uint8_t *)res.pData;
 
             IntRect dest_rect = {0, 0, (int)bitmap.width, (int)bitmap.height};
@@ -318,7 +317,7 @@ namespace Framework::Graphics {
             _textures.erase(i);
     }
 
-    D3D11Backend::TextureEntry& D3D11Backend::GetTexture(uint32_t texture_id) {
+    D3D11Backend::TextureEntry &D3D11Backend::GetTexture(uint32_t texture_id) {
         auto i = _textures.find(texture_id);
         if (i == _textures.end()) {
             spdlog::error("D3D11Backend::GetTexture, texture id doesn't exist.");
@@ -329,7 +328,7 @@ namespace Framework::Graphics {
         return i->second;
     }
 
-    void D3D11Backend::CreateRenderBuffer(uint32_t render_buffer_id, const RenderBuffer& buffer) {
+    void D3D11Backend::CreateRenderBuffer(uint32_t render_buffer_id, const RenderBuffer &buffer) {
         if (render_buffer_id == 0) {
             spdlog::error("D3D11Backend::CreateRenderBuffer, render buffer ID 0 is reserved for default");
             return;
@@ -582,12 +581,8 @@ namespace Framework::Graphics {
         GetContext()->RSSetState(_rsState.Get());
     }
 
-    void D3D11Backend::BeginDrawing() {
-
-    }
-    void D3D11Backend::EndDrawing() {
-
-    }
+    void D3D11Backend::BeginDrawing() {}
+    void D3D11Backend::EndDrawing() {}
 
     bool D3D11Backend::LoadCompiledVertexShader(unsigned char *data, unsigned int len, ID3D11VertexShader **ppVertexShader, const D3D11_INPUT_ELEMENT_DESC *pInputElementDescs, UINT NumElements, ID3D11InputLayout **ppInputLayout) {
         HRESULT hr;
@@ -802,11 +797,8 @@ namespace Framework::Graphics {
         // GLM matrices are stored in column-major order, same as DirectX::XMMATRIX
         // So we can map the elements directly with proper casting
 
-        return DirectX::XMMATRIX(
-            glmMatrix[0][0], glmMatrix[0][1], glmMatrix[0][2], glmMatrix[0][3], 
-            glmMatrix[1][0], glmMatrix[1][1], glmMatrix[1][2], glmMatrix[1][3], 
-            glmMatrix[2][0], glmMatrix[2][1], glmMatrix[2][2], glmMatrix[2][3], 
-            glmMatrix[3][0], glmMatrix[3][1], glmMatrix[3][2], glmMatrix[3][3]);
+        return DirectX::XMMATRIX(glmMatrix[0][0], glmMatrix[0][1], glmMatrix[0][2], glmMatrix[0][3], glmMatrix[1][0], glmMatrix[1][1], glmMatrix[1][2], glmMatrix[1][3], glmMatrix[2][0], glmMatrix[2][1], glmMatrix[2][2], glmMatrix[2][3], glmMatrix[3][0], glmMatrix[3][1],
+            glmMatrix[3][2], glmMatrix[3][3]);
     }
 
     void D3D11Backend::UpdateConstantBuffer(const GPUState &state) {

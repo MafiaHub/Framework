@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <utils/safe_win32.h>
 #include <utils/lifecycle.h>
+#include <utils/safe_win32.h>
 
 #include <utils/error.h>
 #include <utils/result.h>
@@ -39,7 +39,7 @@ namespace Framework::External::Discord {
         constexpr uint32_t All        = (1u << 11) - 1;
     } // namespace PresenceField
 
-    class Wrapper final : public Framework::Lifecycle {
+    class Wrapper final: public Framework::Lifecycle {
       private:
         discord::User _user {};
         discord::Core *_instance {};

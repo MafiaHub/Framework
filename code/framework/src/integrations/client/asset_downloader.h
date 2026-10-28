@@ -43,9 +43,9 @@ namespace Framework::Integrations::Client {
         // How often a file is asked for before the transfer fails, and the first pause between tries;
         // each later pause doubles up to maxDelayMs. A pause the server names (Retry-After) is used instead.
         struct RetryPolicy {
-            int attempts      = 5;
-            int firstDelayMs  = 1000;
-            int maxDelayMs    = 30000;
+            int attempts     = 5;
+            int firstDelayMs = 1000;
+            int maxDelayMs   = 30000;
         };
 
         ~AssetDownloader();

@@ -13,8 +13,8 @@
 // Included only by v8_engine.cpp — not part of the public API.
 
 #include "engine_helpers.h"
-#include "v8_engine.h"
 #include "resource/resource_manager.h"
+#include "v8_engine.h"
 
 #include <logging/logger.h>
 #include <utils/vfs.h>
@@ -34,9 +34,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
             return false;
         }
         if (outContent.size() > static_cast<size_t>(kMaxModuleFileSize)) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
-                "Module file too large ({} bytes, max {}): {}",
-                outContent.size(), static_cast<long long>(kMaxModuleFileSize), filepath);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Module file too large ({} bytes, max {}): {}", outContent.size(), static_cast<long long>(kMaxModuleFileSize), filepath);
             outContent.clear();
             return false;
         }
@@ -52,31 +50,39 @@ namespace Framework::Scripting::V8EngineCallbacks {
 
     // Keep origin on promises that outlive their creating callback.
     inline void PromiseHook(v8::PromiseHookType type, v8::Local<v8::Promise> promise, v8::Local<v8::Value> parent) {
-        if (type != v8::PromiseHookType::kInit) return;
+        if (type != v8::PromiseHookType::kInit)
+            return;
         auto *isolate = v8::Isolate::GetCurrent();
-        auto context = isolate->GetCurrentContext();
-        auto *engine = V8Engine::FromContext(context);
+        auto context  = isolate->GetCurrentContext();
+        auto *engine  = V8Engine::FromContext(context);
         auto *manager = engine ? engine->GetResourceManager() : nullptr;
-        if (!manager) return;
-        auto key = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.promiseOwner"));
+        if (!manager)
+            return;
+        auto key          = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.promiseOwner"));
         std::string owner = manager->GetResourceContextFromStack(isolate);
-        if (owner.empty()) owner = manager->GetCurrentResourceContext();
+        if (owner.empty())
+            owner = manager->GetCurrentResourceContext();
         v8::Local<v8::Value> value;
         if (!owner.empty()) {
             value = v8::String::NewFromUtf8(isolate, owner.c_str()).ToLocalChecked();
-        } else if (parent->IsPromise()) {
-            if (!parent.As<v8::Promise>()->GetPrivate(context, key).ToLocal(&value)) return;
+        }
+        else if (parent->IsPromise()) {
+            if (!parent.As<v8::Promise>()->GetPrivate(context, key).ToLocal(&value))
+                return;
         }
         if (!value.IsEmpty() && value->IsString()) {
             (void)promise->SetPrivate(context, key, value).FromMaybe(false);
             auto generationKey = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.promiseGeneration"));
             v8::Local<v8::Value> generation;
             if (owner.empty() && parent->IsPromise()) {
-                if (!parent.As<v8::Promise>()->GetPrivate(context, generationKey).ToLocal(&generation)) return;
-            } else {
+                if (!parent.As<v8::Promise>()->GetPrivate(context, generationKey).ToLocal(&generation))
+                    return;
+            }
+            else {
                 generation = v8::Integer::NewFromUnsigned(isolate, engine->GetResourceGeneration(owner));
             }
-            if (!generation.IsEmpty()) (void)promise->SetPrivate(context, generationKey, generation).FromMaybe(false);
+            if (!generation.IsEmpty())
+                (void)promise->SetPrivate(context, generationKey, generation).FromMaybe(false);
         }
     }
 
@@ -92,8 +98,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
 
         v8::String::Utf8Value specifier(isolate, args[0]);
         if (!*specifier) {
-            isolate->ThrowException(v8::Exception::Error(
-                v8::String::NewFromUtf8Literal(isolate, "require() invalid specifier")));
+            isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8Literal(isolate, "require() invalid specifier")));
             return;
         }
 
@@ -105,22 +110,19 @@ namespace Framework::Scripting::V8EngineCallbacks {
         bool isRelative = requested.starts_with("./") || requested.starts_with("../");
         bool isAbsolute = !requested.empty() && requested[0] == '/';
 #ifdef _WIN32
-        if (!isAbsolute && requested.size() >= 2 &&
-            std::isalpha(static_cast<unsigned char>(requested[0])) && requested[1] == ':') {
+        if (!isAbsolute && requested.size() >= 2 && std::isalpha(static_cast<unsigned char>(requested[0])) && requested[1] == ':') {
             isAbsolute = true;
         }
 #endif
         if (!isRelative && !isAbsolute) {
-            std::string msg = "Cannot require bare specifier '" + requested +
-                "'. Only relative (./ or ../) and absolute paths are supported.";
-            isolate->ThrowException(v8::Exception::Error(
-                v8::String::NewFromUtf8(isolate, msg.c_str()).ToLocalChecked()));
+            std::string msg = "Cannot require bare specifier '" + requested + "'. Only relative (./ or ../) and absolute paths are supported.";
+            isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, msg.c_str()).ToLocalChecked()));
             return;
         }
 
         // Extract engine and currentDir from External data
         v8::Local<v8::External> external = v8::Local<v8::External>::Cast(args.Data());
-        auto *data = static_cast<V8Engine::RequireData *>(external->Value());
+        auto *data                       = static_cast<V8Engine::RequireData *>(external->Value());
 
         v8::MaybeLocal<v8::Value> result = data->engine->LoadModule(requested, data->currentDir);
         v8::Local<v8::Value> localResult;
@@ -141,21 +143,22 @@ namespace Framework::Scripting::V8EngineCallbacks {
         }
 
         v8::Local<v8::External> external = v8::Local<v8::External>::Cast(args.Data());
-        auto *data = static_cast<V8Engine::TimerCallbackData *>(external->Value());
+        auto *data                       = static_cast<V8Engine::TimerCallbackData *>(external->Value());
 
         int delayMs = 0;
         if (args.Length() >= 2 && args[1]->IsNumber()) {
             delayMs = static_cast<int>(args[1]->NumberValue(isolate->GetCurrentContext()).FromMaybe(0));
-            if (delayMs < 0) delayMs = 0;
+            if (delayMs < 0)
+                delayMs = 0;
         }
 
         v8::Local<v8::Function> callbackFn = v8::Local<v8::Function>::Cast(args[0]);
 
         auto entry = std::make_unique<V8Engine::TimerEntry>();
         entry->callback.Reset(isolate, callbackFn);
-        entry->fireTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(delayMs);
+        entry->fireTime   = std::chrono::steady_clock::now() + std::chrono::milliseconds(delayMs);
         entry->intervalMs = data->isInterval ? (delayMs > 0 ? delayMs : 1) : 0;
-        entry->cancelled = false;
+        entry->cancelled  = false;
 
         // Owner for cleanup on stop: callback script origin, then context, then stack.
         if (auto *mgr = data->engine->GetResourceManager()) {
@@ -189,7 +192,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
         }
 
         v8::Local<v8::External> external = v8::Local<v8::External>::Cast(args.Data());
-        auto *engine = static_cast<V8Engine *>(external->Value());
+        auto *engine                     = static_cast<V8Engine *>(external->Value());
 
         uint32_t timerId = args[0]->Uint32Value(isolate->GetCurrentContext()).FromMaybe(0);
         engine->CancelTimer(timerId);

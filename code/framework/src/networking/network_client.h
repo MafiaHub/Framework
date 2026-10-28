@@ -8,16 +8,16 @@
 
 #pragma once
 
-#include "errors.h"
 #include "connection.h"
+#include "errors.h"
 #include "network_peer.h"
 #include "state.h"
 
 #include <utils/error.h>
 #include <utils/result.h>
 
-#include <mafianet/types.h>
 #include <mafianet/peer_interface.h>
+#include <mafianet/types.h>
 #include <string>
 #include <string_view>
 #include <unordered_map>

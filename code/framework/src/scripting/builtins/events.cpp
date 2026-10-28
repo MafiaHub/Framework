@@ -163,7 +163,8 @@ namespace Framework::Scripting::Builtins {
             metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("emitAllClients",
                 v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Client shared-event name."), v8pp::metadata::param("payload", "unknown", true, "Optional string payload sent verbatim; other values are JSON-serialized.")},
                     "Broadcasts a named event to every connected client's shared Events handlers.")));
-            metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("onClient", handlerDocs("Unsubscribe", "Registers a persistent server handler for events originating from clients; this namespace is isolated from native events.", "Function that removes this exact subscription.")));
+            metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("onClient",
+                handlerDocs("Unsubscribe", "Registers a persistent server handler for events originating from clients; this namespace is isolated from native events.", "Function that removes this exact subscription.")));
             metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("onceClient", handlerDocs("void", "Registers a one-shot server handler for a client-originated event.")));
             metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("offClient", handlerDocs("void", "Removes a matching client-originated event handler owned by the calling resource.")));
         }
@@ -1025,12 +1026,16 @@ namespace Framework::Scripting::Builtins {
             std::scoped_lock lock(_handlersMutex);
             for (auto *table : {&_globalHandlers, &_clientHandlers}) {
                 for (auto &[eventName, handlers] : *table) {
-                    std::erase_if(handlers, [&](const EventHandler &h) { return h.isolate == isolate; });
+                    std::erase_if(handlers, [&](const EventHandler &h) {
+                        return h.isolate == isolate;
+                    });
                 }
             }
             for (auto &[resourceName, eventMap] : _localHandlers) {
                 for (auto &[eventName, handlers] : eventMap) {
-                    std::erase_if(handlers, [&](const EventHandler &h) { return h.isolate == isolate; });
+                    std::erase_if(handlers, [&](const EventHandler &h) {
+                        return h.isolate == isolate;
+                    });
                 }
             }
         }
@@ -1051,7 +1056,9 @@ namespace Framework::Scripting::Builtins {
             }
         }
         std::scoped_lock lock(_waitingEmissionsMutex);
-        std::erase_if(_waitingEmissions, [&](const auto &entry) { return entry.second->isolate == isolate; });
+        std::erase_if(_waitingEmissions, [&](const auto &entry) {
+            return entry.second->isolate == isolate;
+        });
     }
 
     void Events::Reset() {

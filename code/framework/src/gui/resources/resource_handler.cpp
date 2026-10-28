@@ -120,7 +120,9 @@ namespace Framework::GUI::Resources {
 
         // The provider is about to touch the disk; leave the IO thread.
         handleRequest = false;
-        PostToFileThread([self = CefRefPtr<ResourceHandler>(this), callback] { self->OpenOnFileThread(callback); });
+        PostToFileThread([self = CefRefPtr<ResourceHandler>(this), callback] {
+            self->OpenOnFileThread(callback);
+        });
         return true;
     }
 
@@ -195,7 +197,9 @@ namespace Framework::GUI::Resources {
         }
 
         bytesSkipped = 0;
-        PostToFileThread([self = CefRefPtr<ResourceHandler>(this), bytesToSkip, callback] { self->SkipOnFileThread(bytesToSkip, callback); });
+        PostToFileThread([self = CefRefPtr<ResourceHandler>(this), bytesToSkip, callback] {
+            self->SkipOnFileThread(bytesToSkip, callback);
+        });
         return true;
     }
 
@@ -215,7 +219,9 @@ namespace Framework::GUI::Resources {
         }
 
         bytesRead = 0;
-        PostToFileThread([self = CefRefPtr<ResourceHandler>(this), dataOut, bytesToRead, callback] { self->ReadOnFileThread(dataOut, bytesToRead, callback); });
+        PostToFileThread([self = CefRefPtr<ResourceHandler>(this), dataOut, bytesToRead, callback] {
+            self->ReadOnFileThread(dataOut, bytesToRead, callback);
+        });
         return true;
     }
 

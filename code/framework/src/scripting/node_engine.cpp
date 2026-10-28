@@ -7,9 +7,9 @@
  */
 
 #include "node_engine.h"
-#include "engine_helpers.h"
 #include "builtins/builtins.h"
 #include "builtins/messages.h"
+#include "engine_helpers.h"
 #include "resource/resource_manager.h"
 #include "scripting_catalog.h"
 
@@ -17,7 +17,6 @@
 
 #include <algorithm>
 #include <filesystem>
-
 
 namespace {
     // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
@@ -54,43 +53,41 @@ namespace {
     //
     // Both route to __fw_handleUncaughtError if installed later via
     // InstallUncaughtExceptionHandler(), otherwise log to stderr.
-    constexpr const char *kRuntimeBootstrap =
-        "const publicRequire = require('node:module').createRequire(process.cwd() + '/');"
-        "globalThis.require = publicRequire;"
-        "process.setUncaughtExceptionCaptureCallback((err) => {"
-        "  try {"
-        "    const msg = err instanceof Error ? (err.stack || err.message) : String(err);"
-        "    if (typeof globalThis.__fw_handleUncaughtError === 'function') {"
-        "      globalThis.__fw_handleUncaughtError(msg, 'uncaughtException');"
-        "    } else {"
-        "      console.error('[uncaughtException]', msg);"
-        "    }"
-        "  } catch(e) {"
-        "    console.error('Error in uncaught exception handler:', e);"
-        "  }"
-        "});"
-        "process.on('unhandledRejection', (reason) => {"
-        "  try {"
-        "    const msg = reason instanceof Error ? (reason.stack || reason.message) : String(reason);"
-        "    if (typeof globalThis.__fw_handleUncaughtError === 'function') {"
-        "      globalThis.__fw_handleUncaughtError(msg, 'unhandledRejection');"
-        "    } else {"
-        "      console.error('[unhandledRejection]', msg);"
-        "    }"
-        "  } catch(e) {"
-        "    console.error('Error in unhandled rejection handler:', e);"
-        "  }"
-        "});";
+    constexpr const char *kRuntimeBootstrap = "const publicRequire = require('node:module').createRequire(process.cwd() + '/');"
+                                              "globalThis.require = publicRequire;"
+                                              "process.setUncaughtExceptionCaptureCallback((err) => {"
+                                              "  try {"
+                                              "    const msg = err instanceof Error ? (err.stack || err.message) : String(err);"
+                                              "    if (typeof globalThis.__fw_handleUncaughtError === 'function') {"
+                                              "      globalThis.__fw_handleUncaughtError(msg, 'uncaughtException');"
+                                              "    } else {"
+                                              "      console.error('[uncaughtException]', msg);"
+                                              "    }"
+                                              "  } catch(e) {"
+                                              "    console.error('Error in uncaught exception handler:', e);"
+                                              "  }"
+                                              "});"
+                                              "process.on('unhandledRejection', (reason) => {"
+                                              "  try {"
+                                              "    const msg = reason instanceof Error ? (reason.stack || reason.message) : String(reason);"
+                                              "    if (typeof globalThis.__fw_handleUncaughtError === 'function') {"
+                                              "      globalThis.__fw_handleUncaughtError(msg, 'unhandledRejection');"
+                                              "    } else {"
+                                              "      console.error('[unhandledRejection]', msg);"
+                                              "    }"
+                                              "  } catch(e) {"
+                                              "    console.error('Error in unhandled rejection handler:', e);"
+                                              "  }"
+                                              "});";
 } // anonymous namespace
 
 namespace Framework::Scripting {
 
-    std::unique_ptr<node::MultiIsolatePlatform> NodeEngine::_platform = nullptr;
+    std::unique_ptr<node::MultiIsolatePlatform> NodeEngine::_platform   = nullptr;
     std::shared_ptr<node::InitializationResult> NodeEngine::_initResult = nullptr;
-    bool NodeEngine::_platformInitialized = false;
+    bool NodeEngine::_platformInitialized                               = false;
 
-    NodeEngine::NodeEngine(const NodeEngineOptions &options)
-        : _options(options) {}
+    NodeEngine::NodeEngine(const NodeEngineOptions &options): _options(options) {}
 
     NodeEngine::~NodeEngine() {
         Shutdown();
@@ -244,9 +241,8 @@ namespace Framework::Scripting {
         // V8 safepoint for interrupt draining) and activates CheckImmediate
         // which calls RunAndClearNativeImmediates → RunAndClearInterrupts.
         if (_options.enableInspector) {
-            v8::Local<v8::Context> ctx = _runtime->GetContext();
-            v8::Local<v8::String> source = v8::String::NewFromUtf8Literal(
-                GetIsolate(), "(function(){ setImmediate(function(){}); })");
+            v8::Local<v8::Context> ctx   = _runtime->GetContext();
+            v8::Local<v8::String> source = v8::String::NewFromUtf8Literal(GetIsolate(), "(function(){ setImmediate(function(){}); })");
             v8::Local<v8::Script> script;
             if (v8::Script::Compile(ctx, source).ToLocal(&script)) {
                 v8::Local<v8::Value> result;
@@ -299,7 +295,7 @@ namespace Framework::Scripting {
 
     void NodeEngine::TickResourceRuntimes() {
         for (auto it = _resourceRuntimes.begin(); it != _resourceRuntimes.end();) {
-            ResourceRuntime &entry = *it->second;
+            ResourceRuntime &entry    = *it->second;
             const uint64_t generation = _runtimesGeneration;
             if (!entry.exited && !entry.runtime->GetIsolate()->IsInUse()) {
                 entry.runtime->Tick();
@@ -377,12 +373,12 @@ namespace Framework::Scripting {
         // Convert to absolute path for Node.js require
         // Use generic_string() to get forward slashes on all platforms
         std::filesystem::path absPath = std::filesystem::absolute(filepath);
-        std::string absPathStr = absPath.generic_string();
+        std::string absPathStr        = absPath.generic_string();
 
         // Use Node.js require for file execution
         // Escape the path for safe embedding in JS single-quoted string
         std::string escapedPath = EscapeForSingleQuotedJSString(absPathStr);
-        std::string code = "require('" + escapedPath + "');";
+        std::string code        = "require('" + escapedPath + "');";
         return Execute(code, absPathStr);
     }
 
@@ -561,17 +557,15 @@ namespace Framework::Scripting {
         // Store canonical resources path for extracting resource names from error stacks
         std::error_code ec;
         auto canonicalPath = std::filesystem::weakly_canonical(resourcesPath, ec);
-        _resourcesPath = ec ? resourcesPath : canonicalPath.string();
+        _resourcesPath     = ec ? resourcesPath : canonicalPath.string();
 
         // Create C++ handler function accessible from JS
-        v8::Local<v8::Context> context = _runtime->GetContext();
-        v8::Local<v8::External> data = v8::External::New(GetIsolate(), this);
-        v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(
-            GetIsolate(), OnUncaughtError, data);
-        v8::Local<v8::Function> fn = tmpl->GetFunction(context).ToLocalChecked();
+        v8::Local<v8::Context> context       = _runtime->GetContext();
+        v8::Local<v8::External> data         = v8::External::New(GetIsolate(), this);
+        v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(GetIsolate(), OnUncaughtError, data);
+        v8::Local<v8::Function> fn           = tmpl->GetFunction(context).ToLocalChecked();
 
-        v8::Local<v8::String> key = v8::String::NewFromUtf8(
-            GetIsolate(), "__fw_handleUncaughtError").ToLocalChecked();
+        v8::Local<v8::String> key = v8::String::NewFromUtf8(GetIsolate(), "__fw_handleUncaughtError").ToLocalChecked();
         context->Global()->Set(context, key, fn).Check();
     }
 
@@ -602,8 +596,7 @@ namespace Framework::Scripting {
     }
 
     void NodeEngine::OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        auto *engine = static_cast<NodeEngine *>(
-            v8::Local<v8::External>::Cast(info.Data())->Value());
+        auto *engine            = static_cast<NodeEngine *>(v8::Local<v8::External>::Cast(info.Data())->Value());
         const std::string error = ReadUncaughtError(info);
 
         // Try to extract resource name from the error stack trace by matching
@@ -611,7 +604,7 @@ namespace Framework::Scripting {
         std::string resourceName;
         if (!engine->_resourcesPath.empty()) {
             // Normalize path separators for cross-platform matching
-            std::string normalizedError = error;
+            std::string normalizedError   = error;
             std::string normalizedResPath = engine->_resourcesPath;
             std::replace(normalizedError.begin(), normalizedError.end(), '\\', '/');
             std::replace(normalizedResPath.begin(), normalizedResPath.end(), '\\', '/');
@@ -623,7 +616,7 @@ namespace Framework::Scripting {
             size_t pos = normalizedError.find(normalizedResPath);
             if (pos != std::string::npos) {
                 size_t nameStart = pos + normalizedResPath.size();
-                size_t nameEnd = normalizedError.find('/', nameStart);
+                size_t nameEnd   = normalizedError.find('/', nameStart);
                 if (nameEnd != std::string::npos) {
                     resourceName = normalizedError.substr(nameStart, nameEnd - nameStart);
                 }
@@ -796,23 +789,21 @@ namespace Framework::Scripting {
         // Set inspector flag before sandbox code runs so it can conditionally
         // allow the inspector module for debugging
         if (_options.enableInspector) {
-            v8::Local<v8::String> key =
-                v8::String::NewFromUtf8(isolate, "__INSPECTOR_ENABLED__").ToLocalChecked();
+            v8::Local<v8::String> key = v8::String::NewFromUtf8(isolate, "__INSPECTOR_ENABLED__").ToLocalChecked();
             context->Global()->Set(context, key, v8::Boolean::New(isolate, true)).Check();
         }
 
         v8::TryCatch tryCatch(isolate);
 
-        v8::Local<v8::String> source =
-            v8::String::NewFromUtf8(isolate, sandboxCode).ToLocalChecked();
-        v8::ScriptOrigin origin(
-            v8::String::NewFromUtf8(isolate, "<sandbox-init>").ToLocalChecked());
+        v8::Local<v8::String> source = v8::String::NewFromUtf8(isolate, sandboxCode).ToLocalChecked();
+        v8::ScriptOrigin origin(v8::String::NewFromUtf8(isolate, "<sandbox-init>").ToLocalChecked());
 
         v8::Local<v8::Script> script;
         if (!v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
             if (tryCatch.HasCaught()) {
                 _lastError = FormatV8Exception(isolate, tryCatch, "Sandbox script compilation error");
-            } else {
+            }
+            else {
                 _lastError = "Failed to compile sandbox script";
             }
             return false;
@@ -822,7 +813,8 @@ namespace Framework::Scripting {
         if (!script->Run(context).ToLocal(&result)) {
             if (tryCatch.HasCaught()) {
                 _lastError = FormatV8Exception(isolate, tryCatch, "Sandbox script execution error");
-            } else {
+            }
+            else {
                 _lastError = "Failed to execute sandbox script";
             }
             return false;

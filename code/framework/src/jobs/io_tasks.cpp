@@ -59,7 +59,8 @@ namespace Framework::Jobs::IO {
                     if (onComplete) {
                         onComplete(std::move(data));
                     }
-                } catch (const std::exception &e) {
+                }
+                catch (const std::exception &e) {
                     spdlog::error("ReadFileAsync callback re-read failed: {}", e.what());
                 }
             },
@@ -67,14 +68,17 @@ namespace Framework::Jobs::IO {
                 std::string message;
                 try {
                     std::rethrow_exception(ex);
-                } catch (const std::exception &e) {
+                }
+                catch (const std::exception &e) {
                     message = e.what();
-                } catch (...) {
+                }
+                catch (...) {
                     message = "Unknown error reading file: " + path;
                 }
                 if (onError) {
                     onError(message);
-                } else {
+                }
+                else {
                     spdlog::error("ReadFileAsync failed ({}) with no error handler: {}", path, message);
                 }
             },
@@ -97,14 +101,17 @@ namespace Framework::Jobs::IO {
                 std::string message;
                 try {
                     std::rethrow_exception(ex);
-                } catch (const std::exception &e) {
+                }
+                catch (const std::exception &e) {
                     message = e.what();
-                } catch (...) {
+                }
+                catch (...) {
                     message = "Unknown error writing file: " + path;
                 }
                 if (onError) {
                     onError(message);
-                } else {
+                }
+                else {
                     spdlog::error("WriteFileAsync failed ({}) with no error handler: {}", path, message);
                 }
             },
@@ -117,16 +124,16 @@ namespace Framework::Jobs::IO {
             std::mutex mutex;
             std::vector<FileResult> results;
             size_t completed = 0;
-            size_t total = 0;
+            size_t total     = 0;
             fu2::function<void(std::vector<FileResult>)> callback;
             JobSystem *jobs;
         };
 
-        auto state = std::make_shared<SharedState>();
+        auto state   = std::make_shared<SharedState>();
         state->total = paths.size();
         state->results.resize(paths.size());
         state->callback = std::move(onAllComplete);
-        state->jobs = jobs;
+        state->jobs     = jobs;
 
         for (size_t i = 0; i < paths.size(); ++i) {
             const auto &path = paths[i];
@@ -136,12 +143,13 @@ namespace Framework::Jobs::IO {
                     result.path = path;
 
                     try {
-                        result.data = jobs->BlockingCall([&path]() {
+                        result.data    = jobs->BlockingCall([&path]() {
                             return ReadFileInternal(path);
                         });
                         result.success = true;
-                    } catch (const std::exception &e) {
-                        result.error = e.what();
+                    }
+                    catch (const std::exception &e) {
+                        result.error   = e.what();
                         result.success = false;
                     }
 
@@ -184,24 +192,24 @@ namespace Framework::Jobs::IO {
         wg->Add(static_cast<int32_t>(paths.size()));
 
         for (size_t i = 0; i < paths.size(); ++i) {
-            jobs->Schedule(wg.get(),
-                [jobs, &paths, &results, &resultsMutex, i]() {
-                    FileResult result;
-                    result.path = paths[i];
+            jobs->Schedule(wg.get(), [jobs, &paths, &results, &resultsMutex, i]() {
+                FileResult result;
+                result.path = paths[i];
 
-                    try {
-                        result.data = jobs->BlockingCall([&paths, i]() {
-                            return ReadFileInternal(paths[i]);
-                        });
-                        result.success = true;
-                    } catch (const std::exception &e) {
-                        result.error = e.what();
-                        result.success = false;
-                    }
+                try {
+                    result.data    = jobs->BlockingCall([&paths, i]() {
+                        return ReadFileInternal(paths[i]);
+                    });
+                    result.success = true;
+                }
+                catch (const std::exception &e) {
+                    result.error   = e.what();
+                    result.success = false;
+                }
 
-                    std::scoped_lock lock(resultsMutex);
-                    results[i] = std::move(result);
-                });
+                std::scoped_lock lock(resultsMutex);
+                results[i] = std::move(result);
+            });
         }
 
         wg->Wait();

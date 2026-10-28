@@ -81,9 +81,9 @@ namespace Framework::Scripting {
             for (;;) {
                 {
                     EngineScope scope(engine);
-                    v8::Isolate *isolate = scope.Isolate();
+                    v8::Isolate *isolate           = scope.Isolate();
                     v8::Local<v8::Context> context = scope.Context();
-                    auto local = promise.Get(isolate);
+                    auto local                     = promise.Get(isolate);
                     if (local.IsEmpty()) {
                         promise.Reset();
                         return {};
@@ -120,13 +120,12 @@ namespace Framework::Scripting {
         bool IsPathInsideRoot(const std::filesystem::path &path, const std::filesystem::path &root) {
             auto canonicalRoot = std::filesystem::weakly_canonical(root);
             auto canonicalPath = std::filesystem::weakly_canonical(path);
-            auto rootStr = canonicalRoot.string();
-            auto pathStr = canonicalPath.string();
+            auto rootStr       = canonicalRoot.string();
+            auto pathStr       = canonicalPath.string();
 
             // Path must start with root AND sit inside the directory
             // (not just sharing a prefix like /app/cache vs /app/cache-evil)
-            if (pathStr.size() < rootStr.size() ||
-                pathStr.compare(0, rootStr.size(), rootStr) != 0) {
+            if (pathStr.size() < rootStr.size() || pathStr.compare(0, rootStr.size(), rootStr) != 0) {
                 return false;
             }
             // If path is longer than root, ensure there's a separator boundary
@@ -148,8 +147,7 @@ namespace Framework::Scripting {
             }
             std::error_code ec;
             int64_t newest = 0;
-            std::filesystem::recursive_directory_iterator it(
-                path, std::filesystem::directory_options::skip_permission_denied, ec);
+            std::filesystem::recursive_directory_iterator it(path, std::filesystem::directory_options::skip_permission_denied, ec);
             const std::filesystem::recursive_directory_iterator end;
             if (ec) {
                 return newest;
@@ -182,9 +180,7 @@ namespace Framework::Scripting {
         }
     } // anonymous namespace
 
-    ResourceManager::ResourceManager(Engine *jsEngine, const ResourceManagerConfig &config)
-        : _config(config)
-        , _jsEngine(jsEngine) {
+    ResourceManager::ResourceManager(Engine *jsEngine, const ResourceManagerConfig &config): _config(config), _jsEngine(jsEngine) {
         if (_jsEngine) {
             _jsEngine->SetResourceManager(this);
         }
@@ -332,7 +328,8 @@ namespace Framework::Scripting {
 
                 if (_config.warnOnMissingDependency) {
                     Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' depends on missing resource '{}'", name, depName);
-                } else {
+                }
+                else {
                     outError = "Resource '" + name + "' depends on missing resource '" + depName + "'";
                     return false;
                 }
@@ -349,12 +346,14 @@ namespace Framework::Scripting {
         std::map<std::string, int> inDegree;
         // Dependencies bound the order; among ready resources the lower manifest priority starts first, name breaks ties.
         std::set<std::pair<int, std::string>> ready;
-        const auto priorityOf = [this](const std::string &name) { return _resources.at(name)->GetManifest().GetMafiaHubConfig().priority; };
+        const auto priorityOf = [this](const std::string &name) {
+            return _resources.at(name)->GetManifest().GetMafiaHubConfig().priority;
+        };
 
         // Initialize in-degrees (only count dependencies that exist in _resources)
         for (const auto &[name, _] : _resources) {
             int degree = 0;
-            auto it = _dependencies.find(name);
+            auto it    = _dependencies.find(name);
             if (it != _dependencies.end()) {
                 for (const auto &dep : it->second) {
                     if (_resources.contains(dep)) {
@@ -411,7 +410,8 @@ namespace Framework::Scripting {
             auto result = StartResource(name);
             if (result) {
                 started.push_back(name);
-            } else {
+            }
+            else {
                 failed.push_back(name);
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resource {}: {}", name, result.GetError());
             }
@@ -453,7 +453,7 @@ namespace Framework::Scripting {
 
         if (_jsEngine && _jsEngine->IsInitialized()) {
             EngineScope scope(_jsEngine);
-            v8::Isolate *isolate = scope.Isolate();
+            v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
 
             _events.Reset();
@@ -558,7 +558,7 @@ namespace Framework::Scripting {
         v8::Global<v8::Promise> startPromise;
         if (_jsEngine && _jsEngine->IsInitialized()) {
             EngineScope scope(_jsEngine);
-            v8::Isolate *isolate = scope.Isolate();
+            v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
 
             std::string nameStr(name);
@@ -629,7 +629,7 @@ namespace Framework::Scripting {
         v8::Global<v8::Promise> stopPromise;
         if (_jsEngine && _jsEngine->IsInitialized()) {
             EngineScope scope(_jsEngine);
-            v8::Isolate *isolate = scope.Isolate();
+            v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
 
             std::string nameStr(name);
@@ -722,8 +722,8 @@ namespace Framework::Scripting {
             if (it == _resources.end() || !it->second) {
                 return ResourceOperationResult("Resource not found: " + std::string(name));
             }
-            path        = it->second->GetPath();
-            wasRunning  = it->second->IsRunning();
+            path       = it->second->GetPath();
+            wasRunning = it->second->IsRunning();
         }
 
         // Stop first (cascades to dependents); remember what went down to
@@ -773,7 +773,7 @@ namespace Framework::Scripting {
         std::vector<std::string> affected;
         for (const auto &stoppedName : toRestart) {
             const std::string startName = (stoppedName == oldName) ? newName : stoppedName;
-            auto result = StartResource(startName);
+            auto result                 = StartResource(startName);
             if (result) {
                 const auto &a = result.GetValue();
                 affected.insert(affected.end(), a.begin(), a.end());
@@ -809,15 +809,13 @@ namespace Framework::Scripting {
             }
             auto reparsed = std::make_unique<Resource>(path);
             if (!reparsed->IsManifestValid()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
-                    ->warn("Skipping invalid package.json in {}: {}", path, reparsed->GetErrorMessage());
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Skipping invalid package.json in {}: {}", path, reparsed->GetErrorMessage());
                 continue;
             }
             std::string newName = reparsed->GetName();
             std::scoped_lock lock(_resourcesMutex);
             if (newName != name && _resources.count(newName) > 0) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
-                    ->warn("Skipping rename '{}' -> '{}': name already in use", name, newName);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Skipping rename '{}' -> '{}': name already in use", name, newName);
                 continue;
             }
             if (newName != name) {
@@ -838,9 +836,9 @@ namespace Framework::Scripting {
         // Restart exactly what was running before (following any renames).
         std::vector<std::string> affected;
         for (const auto &name : running) {
-            const auto it = renamed.find(name);
+            const auto it                = renamed.find(name);
             const std::string &startName = (it != renamed.end()) ? it->second : name;
-            auto result = StartResource(startName);
+            auto result                  = StartResource(startName);
             if (result) {
                 const auto &a = result.GetValue();
                 affected.insert(affected.end(), a.begin(), a.end());
@@ -887,8 +885,7 @@ namespace Framework::Scripting {
             }
             if (!exists && DiscoverResource(entry.path().string())) {
                 added.push_back(probe.GetName());
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
-                    ->info("Discovered new JS resource: {}", added.back());
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered new JS resource: {}", added.back());
             }
         }
         return added;
@@ -992,7 +989,7 @@ namespace Framework::Scripting {
         // Promises needs an active isolate/context, so scope one here.
         if (_jsEngine && _jsEngine->IsInitialized()) {
             EngineScope scope(_jsEngine);
-            v8::Isolate *isolate = scope.Isolate();
+            v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
             Builtins::Messages::CleanupResource(isolate, context, std::string(resourceName));
             Builtins::StateBag::CleanupResource(isolate, std::string(resourceName));
@@ -1080,14 +1077,16 @@ namespace Framework::Scripting {
     std::set<std::string> ResourceManager::GetDependents(std::string_view name) const {
         std::scoped_lock lock(_graphMutex);
         auto it = _dependents.find(name);
-        if (it == _dependents.end()) return {};
+        if (it == _dependents.end())
+            return {};
         return {it->second.begin(), it->second.end()};
     }
 
     std::set<std::string> ResourceManager::GetDependencies(std::string_view name) const {
         std::scoped_lock lock(_graphMutex);
         auto it = _dependencies.find(name);
-        if (it == _dependencies.end()) return {};
+        if (it == _dependencies.end())
+            return {};
         return {it->second.begin(), it->second.end()};
     }
 
@@ -1161,7 +1160,7 @@ namespace Framework::Scripting {
         }
 
         if (Utils::Vfs::IsVirtualPath(_config.resourcesPath)) {
-            const std::string root = Utils::Vfs::NormalizeVirtual(_config.resourcesPath) + "/";
+            const std::string root       = Utils::Vfs::NormalizeVirtual(_config.resourcesPath) + "/";
             const std::string normalised = Utils::Vfs::NormalizeVirtual(path);
             if (normalised.size() > root.size() && normalised.compare(0, root.size(), root) == 0) {
                 const size_t nameEnd = normalised.find('/', root.size());
@@ -1206,7 +1205,7 @@ namespace Framework::Scripting {
         if (resourcesPos != std::string::npos) {
             // Extract resource name (the directory immediately after the resources root)
             size_t nameStart = resourcesPos + rootStr.size();
-            size_t nameEnd = normalizedPath.find_first_of("/\\", nameStart);
+            size_t nameEnd   = normalizedPath.find_first_of("/\\", nameStart);
             if (nameEnd != std::string::npos) {
                 std::string resourceName = normalizedPath.substr(nameStart, nameEnd - nameStart);
                 // Verify this resource exists
@@ -1224,7 +1223,7 @@ namespace Framework::Scripting {
             return "";
         }
 
-        v8::ScriptOrigin origin = fn->GetScriptOrigin();
+        v8::ScriptOrigin origin           = fn->GetScriptOrigin();
         v8::Local<v8::Value> resourceName = origin.ResourceName();
         if (resourceName.IsEmpty() || !resourceName->IsString()) {
             return "";
@@ -1255,7 +1254,7 @@ namespace Framework::Scripting {
 
         // Look for the first frame with a file path in the resources directory
         for (int i = 0; i < stackTrace->GetFrameCount(); ++i) {
-            v8::Local<v8::StackFrame> frame = stackTrace->GetFrame(isolate, i);
+            v8::Local<v8::StackFrame> frame  = stackTrace->GetFrame(isolate, i);
             v8::Local<v8::String> scriptName = frame->GetScriptName();
             if (scriptName.IsEmpty()) {
                 continue;
@@ -1319,7 +1318,7 @@ namespace Framework::Scripting {
     void ResourceManager::OnEntityCreated(uint64_t networkId) {
         // The stack fallback touches V8; CreateEntity also fires for avatars outside a JS context.
         v8::Isolate *isolate = _jsEngine ? _jsEngine->GetIsolate() : nullptr;
-        Resource *resource = (isolate && isolate->InContext()) ? GetCurrentResourceWithStackFallback(isolate) : GetCurrentResource();
+        Resource *resource   = (isolate && isolate->InContext()) ? GetCurrentResourceWithStackFallback(isolate) : GetCurrentResource();
         if (resource) {
             resource->TrackEntity(networkId);
         }
@@ -1341,7 +1340,7 @@ namespace Framework::Scripting {
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Runtime error: {}", resourceName, error);
 
         const std::string errorBehavior = resource->GetManifest().GetMafiaHubConfig().errorBehavior;
-        v8::Isolate *failedIsolate = resource->GetIsolate();
+        v8::Isolate *failedIsolate      = resource->GetIsolate();
         resource->SetError(error);
         FireOnResourceError(resourceName, error);
 
@@ -1374,10 +1373,7 @@ namespace Framework::Scripting {
         int backoffMs = resource->GetRestartBackoffMs();
 
         std::scoped_lock lock(_scheduledRestartsMutex);
-        _scheduledRestarts.push_back({
-            resourceName,
-            std::chrono::system_clock::now() + std::chrono::milliseconds(backoffMs)
-        });
+        _scheduledRestarts.push_back({resourceName, std::chrono::system_clock::now() + std::chrono::milliseconds(backoffMs)});
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Scheduled restart for {} in {}ms", resourceName, backoffMs);
         return true;
@@ -1390,14 +1386,13 @@ namespace Framework::Scripting {
             std::scoped_lock lock(_scheduledRestartsMutex);
             auto now = std::chrono::system_clock::now();
 
-            auto it = std::remove_if(_scheduledRestarts.begin(), _scheduledRestarts.end(),
-                [&now, &dueRestarts](const ScheduledRestart &sr) {
-                    if (sr.scheduledTime <= now) {
-                        dueRestarts.push_back(sr);
-                        return true;
-                    }
-                    return false;
-                });
+            auto it = std::remove_if(_scheduledRestarts.begin(), _scheduledRestarts.end(), [&now, &dueRestarts](const ScheduledRestart &sr) {
+                if (sr.scheduledTime <= now) {
+                    dueRestarts.push_back(sr);
+                    return true;
+                }
+                return false;
+            });
             _scheduledRestarts.erase(it, _scheduledRestarts.end());
         }
 
@@ -1414,8 +1409,7 @@ namespace Framework::Scripting {
         // Throttle polls to the configured interval.
         const auto now = std::chrono::steady_clock::now();
         if (_lastFileWatchPoll.time_since_epoch().count() != 0) {
-            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                now - _lastFileWatchPoll).count();
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - _lastFileWatchPoll).count();
             if (elapsed < _config.fileWatchIntervalMs) {
                 return;
             }
@@ -1436,15 +1430,14 @@ namespace Framework::Scripting {
             }
 
             const int64_t current = ComputeResourceMTime(path);
-            auto snapIt = _watchSnapshots.find(name);
+            auto snapIt           = _watchSnapshots.find(name);
             if (snapIt == _watchSnapshots.end()) {
                 // First time we've seen this resource: seed, don't reload.
                 _watchSnapshots[name] = current;
                 continue;
             }
             if (current > snapIt->second) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
-                    ->info("Detected change in resource '{}', hot-reloading", name);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Detected change in resource '{}', hot-reloading", name);
                 // Update before reloading so we don't re-trigger on it.
                 snapIt->second = current;
                 RefreshResource(name);

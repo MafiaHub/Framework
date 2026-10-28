@@ -106,7 +106,7 @@ namespace Framework::External::Sentry {
                 while (count < kMaxFrames && context.Rip != 0) {
                     frames[count++] = context.Rip;
 
-                    DWORD64 imageBase              = 0;
+                    DWORD64 imageBase               = 0;
                     PRUNTIME_FUNCTION functionEntry = RtlLookupFunctionEntry(context.Rip, &imageBase, nullptr);
                     if (functionEntry == nullptr) {
                         // A leaf, or code without unwind data: the return
@@ -204,18 +204,16 @@ namespace Framework::External::Sentry {
             }
 
 #if defined(_M_X64)
-            const std::string registers = fmt::format(
-                "RIP {:016X} RSP {:016X} RBP {:016X}\n"
-                "RAX {:016X} RBX {:016X} RCX {:016X} RDX {:016X}\n"
-                "RSI {:016X} RDI {:016X} R8  {:016X} R9  {:016X}\n"
-                "R10 {:016X} R11 {:016X} R12 {:016X} R13 {:016X}\n"
-                "R14 {:016X} R15 {:016X}\n",
+            const std::string registers = fmt::format("RIP {:016X} RSP {:016X} RBP {:016X}\n"
+                                                      "RAX {:016X} RBX {:016X} RCX {:016X} RDX {:016X}\n"
+                                                      "RSI {:016X} RDI {:016X} R8  {:016X} R9  {:016X}\n"
+                                                      "R10 {:016X} R11 {:016X} R12 {:016X} R13 {:016X}\n"
+                                                      "R14 {:016X} R15 {:016X}\n",
                 context->Rip, context->Rsp, context->Rbp, context->Rax, context->Rbx, context->Rcx, context->Rdx, context->Rsi, context->Rdi, context->R8, context->R9, context->R10, context->R11, context->R12, context->R13, context->R14, context->R15);
 #else
-            const std::string registers = fmt::format(
-                "EIP {:08X} ESP {:08X} EBP {:08X}\n"
-                "EAX {:08X} EBX {:08X} ECX {:08X} EDX {:08X}\n"
-                "ESI {:08X} EDI {:08X}\n",
+            const std::string registers = fmt::format("EIP {:08X} ESP {:08X} EBP {:08X}\n"
+                                                      "EAX {:08X} EBX {:08X} ECX {:08X} EDX {:08X}\n"
+                                                      "ESI {:08X} EDI {:08X}\n",
                 context->Eip, context->Esp, context->Ebp, context->Eax, context->Ebx, context->Ecx, context->Edx, context->Esi, context->Edi);
 #endif
             text += registers;

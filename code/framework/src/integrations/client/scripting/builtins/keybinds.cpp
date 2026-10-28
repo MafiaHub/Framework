@@ -99,10 +99,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         target->Set(context, v8pp::to_v8(isolate, "Key"), keyObj).Check();
 
         auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Key", "Client-only, resource-owned physical key bindings exposed as the global Key.");
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getLabel",
-            v8pp::metadata::docs("string", {v8pp::metadata::param("key", "string", false, "Case-insensitive physical key name, using the same names as bind.")},
-                "Returns the current layout's label for a physical key, even while UI owns input. Query again when refreshing prompts. Throws for unknown keys or non-string arguments.",
-                "Uppercase printable text, or an English name such as Enter or Mouse 1. Falls back to the uppercase canonical key name when translation is unavailable.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getLabel", v8pp::metadata::docs("string", {v8pp::metadata::param("key", "string", false, "Case-insensitive physical key name, using the same names as bind.")},
+                                                                                          "Returns the current layout's label for a physical key, even while UI owns input. Query again when refreshing prompts. Throws for unknown keys or non-string arguments.",
+                                                                                          "Uppercase printable text, or an English name such as Enter or Mouse 1. Falls back to the uppercase canonical key name when translation is unavailable.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("bind",
             v8pp::metadata::docs("boolean",
                 {
@@ -389,7 +388,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         Framework::Scripting::EngineScope scope(engine);
-        v8::Isolate *isolate = scope.Isolate();
+        v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
         struct Pending {

@@ -47,9 +47,9 @@ namespace Framework::GUI {
             return;
         }
         EmptyClipboard();
-        const size_t size   = text.length() + 1;
+        const size_t size      = text.length() + 1;
         HGLOBAL hClipboardData = GlobalAlloc(GMEM_DDESHARE, size);
-        const auto pchData  = static_cast<char *>(GlobalLock(hClipboardData));
+        const auto pchData     = static_cast<char *>(GlobalLock(hClipboardData));
         memcpy(pchData, text.data(), text.length());
         pchData[text.length()] = '\0';
         GlobalUnlock(hClipboardData);

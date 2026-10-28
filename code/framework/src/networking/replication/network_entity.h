@@ -33,10 +33,10 @@ namespace Framework::Networking::Replication {
     // upstream wire entirely.
     class FieldSerializer final {
       public:
-        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::SerializationContext *ctx, bool serverAuthored) : _vds(vds), _serialize(ctx), _serverAuthored(serverAuthored) {}
+        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::SerializationContext *ctx, bool serverAuthored): _vds(vds), _serialize(ctx), _serverAuthored(serverAuthored) {}
         // `keep` marks, by delta variable index, the fields to read past without assigning.
-        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx, bool serverAuthored, const std::vector<bool> *keep = nullptr) : _vds(vds), _deserialize(ctx), _serverAuthored(serverAuthored), _keep(keep) {}
-        FieldSerializer(MafiaNet::BitStream *bs, bool write, bool serverAuthored = true) : _plain(bs), _writePlain(write), _serverAuthored(serverAuthored) {}
+        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx, bool serverAuthored, const std::vector<bool> *keep = nullptr): _vds(vds), _deserialize(ctx), _serverAuthored(serverAuthored), _keep(keep) {}
+        FieldSerializer(MafiaNet::BitStream *bs, bool write, bool serverAuthored = true): _plain(bs), _writePlain(write), _serverAuthored(serverAuthored) {}
 
         // Where one field lives, so one field list can be found inside another without a wire.
         struct Span {
@@ -47,8 +47,8 @@ namespace Framework::Networking::Replication {
         // Walks without touching anything: lists every field's span, or, given `within`, records per
         // field (in delta variable order) whether it overlaps one of them. Reads as writing so a
         // body's read-side code does not run.
-        explicit FieldSerializer(std::vector<Span> *spans) : _spans(spans) {}
-        FieldSerializer(const std::vector<Span> *within, std::vector<bool> *overlaps, bool serverAuthored) : _serverAuthored(serverAuthored), _within(within), _overlaps(overlaps) {}
+        explicit FieldSerializer(std::vector<Span> *spans): _spans(spans) {}
+        FieldSerializer(const std::vector<Span> *within, std::vector<bool> *overlaps, bool serverAuthored): _serverAuthored(serverAuthored), _within(within), _overlaps(overlaps) {}
 
         bool Writing() const {
             return _serialize != nullptr || (_plain != nullptr && _writePlain) || _spans != nullptr || _overlaps != nullptr;
@@ -77,7 +77,7 @@ namespace Framework::Networking::Replication {
             else if (_deserialize) {
                 // DeserializeVariable returns "changed", not read success.
                 bool changed = false;
-                _good = _deserialize->bitStream->Read(changed);
+                _good        = _deserialize->bitStream->Read(changed);
                 if (_good && changed) {
                     if (_keep != nullptr && _index < _keep->size() && (*_keep)[_index]) {
                         T discarded {};
@@ -155,11 +155,11 @@ namespace Framework::Networking::Replication {
                     a = 1.0f;
                 }
                 uint32_t q = static_cast<uint32_t>(a * static_cast<float>(maxQ) + 0.5f);
-                _good = _plain->SerializeBitsFromIntegerRange(true, q, 0u, maxQ);
+                _good      = _plain->SerializeBitsFromIntegerRange(true, q, 0u, maxQ);
             }
             else {
                 uint32_t q = 0;
-                _good = _plain->SerializeBitsFromIntegerRange(false, q, 0u, maxQ);
+                _good      = _plain->SerializeBitsFromIntegerRange(false, q, 0u, maxQ);
                 if (_good) {
                     value = min + (static_cast<float>(q) / static_cast<float>(maxQ)) * (max - min);
                 }
@@ -193,7 +193,7 @@ namespace Framework::Networking::Replication {
     };
 
     // The delta serializer, plus a way to make chosen variables count as changed on the next send.
-    class DeltaSerializer final : public MafiaNet::VariableDeltaSerializer {
+    class DeltaSerializer final: public MafiaNet::VariableDeltaSerializer {
       public:
         void MarkChanged(const std::vector<bool> &variables);
     };
@@ -203,7 +203,7 @@ namespace Framework::Networking::Replication {
     //
     // Authority is keyed on ownerGUID: the server serializes to everyone except the owner, the owning
     // client serializes upstream, and Deserialize accepts state only from the current owner.
-    class NetworkEntity : public MafiaNet::VirtualWorldReplica3 {
+    class NetworkEntity: public MafiaNet::VirtualWorldReplica3 {
       public:
         NetworkEntity() {
             state.Bind(this);
@@ -259,10 +259,10 @@ namespace Framework::Networking::Replication {
         // it, because a client has no other way to tell a player's avatar from an entity the player
         // merely owns (see ReplicationManager::ForEachAvatar).
         struct Streaming {
-            bool alwaysVisible = false;  // bypass range culling; dimension still applies
-            bool visible       = true;   // master visibility switch
-            bool isViewer      = false;  // drives a connection's interest set (the player's avatar); replicated
-            float range        = 100.0f; // interest radius (world units): a viewer's reach, and an entity's own (see InterestGrid::SetUsesEntityRange)
+            bool alwaysVisible            = false;                          // bypass range culling; dimension still applies
+            bool visible                  = true;                           // master visibility switch
+            bool isViewer                 = false;                          // drives a connection's interest set (the player's avatar); replicated
+            float range                   = 100.0f;                         // interest radius (world units): a viewer's reach, and an entity's own (see InterestGrid::SetUsesEntityRange)
             MafiaNet::PeerGuid targetGUID = MafiaNet::UNASSIGNED_PEER_GUID; // if set, streams only to this connection
         };
         Streaming streaming;

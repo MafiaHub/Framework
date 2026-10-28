@@ -46,13 +46,12 @@ namespace Framework::Scripting::Builtins {
         target->Set(context, v8pp::to_v8(isolate, "Messages"), messagesObj).Check();
 
         auto &metadata = GetScriptingCatalog(isolate).global_object("Messages", "Typed request and notification channel between local resources through the global Messages object.");
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("handle",
-            v8pp::metadata::docs("void",
-                {
-                    v8pp::metadata::param("messageType", "string", false, "Message type unique within the receiving resource."),
-                    v8pp::metadata::param("handler", "MessageHandler", false, "Handler invoked with the payload and a reply callback; the reply is ignored for notifications."),
-                },
-                "Registers or replaces a message handler owned by the calling resource.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("handle", v8pp::metadata::docs("void",
+                                                                                        {
+                                                                                            v8pp::metadata::param("messageType", "string", false, "Message type unique within the receiving resource."),
+                                                                                            v8pp::metadata::param("handler", "MessageHandler", false, "Handler invoked with the payload and a reply callback; the reply is ignored for notifications."),
+                                                                                        },
+                                                                                        "Registers or replaces a message handler owned by the calling resource.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("request", v8pp::metadata::docs("Promise<unknown>",
                                                                                          {
                                                                                              v8pp::metadata::param("resourceName", "string", false, "Destination running resource."),
@@ -383,16 +382,22 @@ namespace Framework::Scripting::Builtins {
         {
             std::scoped_lock lock(_handlersMutex);
             for (auto &[resourceName, handlers] : _handlers) {
-                std::erase_if(handlers, [&](const auto &entry) { return entry.second.isolate == isolate; });
+                std::erase_if(handlers, [&](const auto &entry) {
+                    return entry.second.isolate == isolate;
+                });
             }
         }
         {
             std::scoped_lock lock(_pendingRequestsMutex);
-            std::erase_if(_pendingRequests, [&](const auto &entry) { return entry.second.isolate == isolate; });
+            std::erase_if(_pendingRequests, [&](const auto &entry) {
+                return entry.second.isolate == isolate;
+            });
         }
         {
             std::scoped_lock lock(_responseQueueMutex);
-            std::erase_if(_responseQueue, [&](const PendingResponse &response) { return response.isolate == isolate; });
+            std::erase_if(_responseQueue, [&](const PendingResponse &response) {
+                return response.isolate == isolate;
+            });
         }
     }
 

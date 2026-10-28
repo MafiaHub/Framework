@@ -42,11 +42,11 @@ namespace Framework::Launcher {
 
         // The launcher's own folder, and its executable
         virtual const std::filesystem::path &GetProjectPath() const = 0;
-        virtual std::wstring GetLauncherExecutablePath() const = 0;
+        virtual std::wstring GetLauncherExecutablePath() const      = 0;
 
         // The game layouts: whether a game root holds the executable, and where it does
-        virtual bool GameExecutableExistsIn(const std::wstring &gameRoot) const = 0;
-        virtual std::wstring GetGameWorkDir(const std::wstring &gameRoot) const = 0;
+        virtual bool GameExecutableExistsIn(const std::wstring &gameRoot) const   = 0;
+        virtual std::wstring GetGameWorkDir(const std::wstring &gameRoot) const   = 0;
         virtual std::vector<std::wstring> GetAlternativeWorkDirCandidates() const = 0;
 
         // Sets a variable for this process and the game's CRT alike
@@ -54,7 +54,7 @@ namespace Framework::Launcher {
 
         // Logs why `platform` could not resolve the game, and tells the player when `reportErrors`
         virtual PlatformCheckStatus ReportUnavailable(const char *platform, const std::string &reason, bool reportErrors) const = 0;
-        virtual void ReportError(const std::string &message) const = 0;
+        virtual void ReportError(const std::string &message) const                                                              = 0;
     };
 
     // Where the game comes from: a store, or a folder the player selects. A launcher lists the ones

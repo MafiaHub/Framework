@@ -28,7 +28,7 @@ namespace Framework::Networking::Replication {
 
 namespace Framework::Scripting::Builtins {
     // Server-side scripting handle for a replicated world-space text label (TextLabelEntity).
-    class TextLabel final : public Entity {
+    class TextLabel final: public Entity {
       public:
         using LabelEntity = Networking::Replication::Entities::TextLabelEntity;
         using LabelStyle  = Networking::Replication::Entities::TextLabelStyle;

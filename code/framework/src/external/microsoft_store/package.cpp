@@ -26,7 +26,7 @@ namespace Framework::External::MicrosoftStore {
         constexpr DWORD DAXAO_NO_ERROR_UI     = 0x8;
 
         struct IDesktopAppXActivator: IUnknown {
-            virtual HRESULT STDMETHODCALLTYPE Activate(LPCWSTR applicationUserModelId, LPCWSTR packageRelativeExecutable, LPCWSTR arguments, HANDLE *processHandle) = 0;
+            virtual HRESULT STDMETHODCALLTYPE Activate(LPCWSTR applicationUserModelId, LPCWSTR packageRelativeExecutable, LPCWSTR arguments, HANDLE *processHandle)                                             = 0;
             virtual HRESULT STDMETHODCALLTYPE ActivateWithOptions(LPCWSTR applicationUserModelId, LPCWSTR executable, LPCWSTR arguments, DWORD activationOptions, DWORD parentProcessId, HANDLE *processHandle) = 0;
         };
     } // namespace
@@ -75,12 +75,12 @@ namespace Framework::External::MicrosoftStore {
         const HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
         IDesktopAppXActivator *activator = nullptr;
-        error = CoCreateInstance(CLSID_DesktopAppXActivator, nullptr, CLSCTX_INPROC_SERVER, IID_IDesktopAppXActivator, reinterpret_cast<void **>(&activator));
+        error                            = CoCreateInstance(CLSID_DesktopAppXActivator, nullptr, CLSCTX_INPROC_SERVER, IID_IDesktopAppXActivator, reinterpret_cast<void **>(&activator));
 
         HANDLE process = nullptr;
         if (SUCCEEDED(error)) {
             const std::wstring appUserModelId = packageFamilyName + L"!" + appId;
-            error = activator->ActivateWithOptions(appUserModelId.c_str(), executable.c_str(), arguments.c_str(), DAXAO_NONPACKAGED_EXE | DAXAO_NO_ERROR_UI, GetCurrentProcessId(), &process);
+            error                             = activator->ActivateWithOptions(appUserModelId.c_str(), executable.c_str(), arguments.c_str(), DAXAO_NONPACKAGED_EXE | DAXAO_NO_ERROR_UI, GetCurrentProcessId(), &process);
             activator->Release();
         }
 

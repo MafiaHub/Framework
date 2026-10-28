@@ -384,13 +384,14 @@ namespace Framework::Scripting::Builtins {
                         Unsubscribe(inner.GetIsolate(), v8pp::from_v8<uint32_t>(inner.GetIsolate(), inner.Data()));
                     },
                     v8pp::to_v8(isolate, id))
-                    .ToLocalChecked();
+                                                          .ToLocalChecked();
                 info.GetReturnValue().Set(unsubscribe);
             },
             v8pp::metadata::docs("Function",
                 {
                     v8pp::metadata::param("key", "string | null", false, "Only report this key, or null to report every key of this entity."),
-                    v8pp::metadata::param("handler", "Function", false, "Called as (key: string, value: any, previous: any) with the changed key, its new value and the value before it. `value` is undefined when the key was removed and `previous` is undefined when it held nothing."),
+                    v8pp::metadata::param("handler", "Function", false,
+                        "Called as (key: string, value: any, previous: any) with the changed key, its new value and the value before it. `value` is undefined when the key was removed and `previous` is undefined when it held nothing."),
                 },
                 "Watches this entity's state. The filter is applied before the handler runs, so a listener watching one key of one entity is not woken by unrelated changes. The subscription is dropped when the registering resource stops.",
                 "A zero-argument function that cancels this subscription."));

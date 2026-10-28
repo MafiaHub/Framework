@@ -9,8 +9,8 @@
 #include "voice.h"
 
 #include <core_modules.h>
-#include <scripting/engine_helpers.h>
 #include <scripting/builtins/entity.h>
+#include <scripting/engine_helpers.h>
 #include <scripting/scripting_catalog.h>
 #include <voice/server/voice_server.h>
 
@@ -305,17 +305,15 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         global->Set(ctx, v8pp::to_v8(isolate, "Voice"), voiceObj).Check();
 
         auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Voice", "Server-side proximity voice rules: how far voice carries, and who may talk to or hear whom.");
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setRange",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("range", "number", false, "Audibility radius in world units; values <= 0 restore the default of 25.")},
-                "Sets how far voice carries for talkers with no override of their own. Connected clients are told, so their playback fades out at the same distance.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setRange", v8pp::metadata::docs("void", {v8pp::metadata::param("range", "number", false, "Audibility radius in world units; values <= 0 restore the default of 25.")},
+                                                                                          "Sets how far voice carries for talkers with no override of their own. Connected clients are told, so their playback fades out at the same distance.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getRange", v8pp::metadata::docs("number", {}, "Reads the server-wide proximity range.", "Radius in world units.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPlayerRange",
-            v8pp::metadata::docs("void",
-                {
-                    v8pp::metadata::param("player", "Entity", false, "Player whose voice carries the given distance."),
-                    v8pp::metadata::param("range", "number", false, "Audibility radius in world units; values <= 0 return them to the radius of their voice tier."),
-                },
-                "Overrides how far one player's voice carries, whichever voice tier they chose.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPlayerRange", v8pp::metadata::docs("void",
+                                                                                                {
+                                                                                                    v8pp::metadata::param("player", "Entity", false, "Player whose voice carries the given distance."),
+                                                                                                    v8pp::metadata::param("range", "number", false, "Audibility radius in world units; values <= 0 return them to the radius of their voice tier."),
+                                                                                                },
+                                                                                                "Overrides how far one player's voice carries, whichever voice tier they chose.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPlayerRange",
             v8pp::metadata::docs("number", {v8pp::metadata::param("player", "Entity", false, "Player to query.")}, "Reads how far a player's voice carries, with the server-wide default already resolved.", "Radius in world units.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setTierRange",
@@ -327,48 +325,43 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
                 "Sets how far a voice tier carries. Players switch tier themselves; whisper starts at 3, shout at 25, and normal carries the server-wide range. Set a tier to 0 to make it carry the server-wide range, which takes it away. Connected clients are told.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getTierRange",
             v8pp::metadata::docs("number", {v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout.")}, "Reads how far a voice tier carries, with the server-wide range already resolved.", "Radius in world units.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPlayerTier",
-            v8pp::metadata::docs("void",
-                {
-                    v8pp::metadata::param("player", "Entity", false, "Player to move."),
-                    v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout."),
-                },
-                "Puts a player on a voice tier, as if they had switched to it. Their own indicator follows, and the playerVoiceTierChange event is not raised.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPlayerTier",
-            v8pp::metadata::docs("number", {v8pp::metadata::param("player", "Entity", false, "Player to query.")}, "Reads the voice tier a player is on. A player switching tier raises the playerVoiceTierChange event with the player and the new tier.", "0 whisper, 1 normal, 2 shout.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPlayerMuted",
-            v8pp::metadata::docs("void",
-                {
-                    v8pp::metadata::param("player", "Entity", false, "Player to mute or unmute."),
-                    v8pp::metadata::param("muted", "boolean", false, "True to stop their voice reaching anyone."),
-                },
-                "Server-wide mute: a muted player's voice reaches nobody.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isPlayerMuted",
-            v8pp::metadata::docs("boolean", {v8pp::metadata::param("player", "Entity", false, "Player to query.")}, "Checks the server-wide mute flag.", "True when the player's voice reaches nobody.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPlayerDeaf",
-            v8pp::metadata::docs("void",
-                {
-                    v8pp::metadata::param("player", "Entity", false, "Player to deafen or undeafen."),
-                    v8pp::metadata::param("deaf", "boolean", false, "True to stop them receiving anyone's voice."),
-                },
-                "Server-wide deafen: a deaf player receives nobody.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isPlayerDeaf",
-            v8pp::metadata::docs("boolean", {v8pp::metadata::param("player", "Entity", false, "Player to query.")}, "Checks the server-wide deafen flag.", "True when the player receives nobody's voice.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setLocalMute",
-            v8pp::metadata::docs("void",
-                {
-                    v8pp::metadata::param("listener", "Entity", false, "Player who stops hearing the target."),
-                    v8pp::metadata::param("target", "Entity", false, "Player the listener stops hearing."),
-                    v8pp::metadata::param("muted", "boolean", false, "True to mute, false to restore."),
-                },
-                "One-way mute between two players, enforced by the server rather than the client.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isLocallyMuted",
-            v8pp::metadata::docs("boolean",
-                {
-                    v8pp::metadata::param("listener", "Entity", false, "Player doing the muting."),
-                    v8pp::metadata::param("target", "Entity", false, "Player being muted."),
-                },
-                "Checks a one-way mute.", "True when the listener does not receive the target.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPlayerTier", v8pp::metadata::docs("void",
+                                                                                               {
+                                                                                                   v8pp::metadata::param("player", "Entity", false, "Player to move."),
+                                                                                                   v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout."),
+                                                                                               },
+                                                                                               "Puts a player on a voice tier, as if they had switched to it. Their own indicator follows, and the playerVoiceTierChange event is not raised.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPlayerTier", v8pp::metadata::docs("number", {v8pp::metadata::param("player", "Entity", false, "Player to query.")},
+                                                                                               "Reads the voice tier a player is on. A player switching tier raises the playerVoiceTierChange event with the player and the new tier.", "0 whisper, 1 normal, 2 shout.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPlayerMuted", v8pp::metadata::docs("void",
+                                                                                                {
+                                                                                                    v8pp::metadata::param("player", "Entity", false, "Player to mute or unmute."),
+                                                                                                    v8pp::metadata::param("muted", "boolean", false, "True to stop their voice reaching anyone."),
+                                                                                                },
+                                                                                                "Server-wide mute: a muted player's voice reaches nobody.")));
+        metadata.record(
+            v8pp::metadata::function_of<v8::FunctionCallback>("isPlayerMuted", v8pp::metadata::docs("boolean", {v8pp::metadata::param("player", "Entity", false, "Player to query.")}, "Checks the server-wide mute flag.", "True when the player's voice reaches nobody.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPlayerDeaf", v8pp::metadata::docs("void",
+                                                                                               {
+                                                                                                   v8pp::metadata::param("player", "Entity", false, "Player to deafen or undeafen."),
+                                                                                                   v8pp::metadata::param("deaf", "boolean", false, "True to stop them receiving anyone's voice."),
+                                                                                               },
+                                                                                               "Server-wide deafen: a deaf player receives nobody.")));
+        metadata.record(
+            v8pp::metadata::function_of<v8::FunctionCallback>("isPlayerDeaf", v8pp::metadata::docs("boolean", {v8pp::metadata::param("player", "Entity", false, "Player to query.")}, "Checks the server-wide deafen flag.", "True when the player receives nobody's voice.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setLocalMute", v8pp::metadata::docs("void",
+                                                                                              {
+                                                                                                  v8pp::metadata::param("listener", "Entity", false, "Player who stops hearing the target."),
+                                                                                                  v8pp::metadata::param("target", "Entity", false, "Player the listener stops hearing."),
+                                                                                                  v8pp::metadata::param("muted", "boolean", false, "True to mute, false to restore."),
+                                                                                              },
+                                                                                              "One-way mute between two players, enforced by the server rather than the client.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isLocallyMuted", v8pp::metadata::docs("boolean",
+                                                                                                {
+                                                                                                    v8pp::metadata::param("listener", "Entity", false, "Player doing the muting."),
+                                                                                                    v8pp::metadata::param("target", "Entity", false, "Player being muted."),
+                                                                                                },
+                                                                                                "Checks a one-way mute.", "True when the listener does not receive the target.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isPlayerVoiceEnabled",
             v8pp::metadata::docs("boolean", {v8pp::metadata::param("player", "Entity", false, "Player to query.")},
                 "Checks whether a player left voice chat enabled in their own client settings. A preference, not a permission: use setPlayerMuted or setPlayerDeaf to enforce anything.", "True unless the player turned voice chat off.")));

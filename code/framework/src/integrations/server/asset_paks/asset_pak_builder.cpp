@@ -80,7 +80,9 @@ namespace Framework::Integrations::Server {
                 if (built.info.lane != lane) {
                     continue;
                 }
-                const auto found = std::lower_bound(built.entries.begin(), built.entries.end(), path, [](const Utils::StreamedAssets::PakEntry &entry, std::string_view value) { return entry.path < value; });
+                const auto found = std::lower_bound(built.entries.begin(), built.entries.end(), path, [](const Utils::StreamedAssets::PakEntry &entry, std::string_view value) {
+                    return entry.path < value;
+                });
                 if (found != built.entries.end() && found->path == path) {
                     return true;
                 }
@@ -113,7 +115,9 @@ namespace Framework::Integrations::Server {
             return false;
         }
 
-        std::sort(entries.begin(), entries.end(), [](const Utils::StreamedAssets::PakSourceEntry &a, const Utils::StreamedAssets::PakSourceEntry &b) { return a.path < b.path; });
+        std::sort(entries.begin(), entries.end(), [](const Utils::StreamedAssets::PakSourceEntry &a, const Utils::StreamedAssets::PakSourceEntry &b) {
+            return a.path < b.path;
+        });
         std::string fingerprint = "format " + std::to_string(kPakFormat) + "\n";
         for (const Utils::StreamedAssets::PakSourceEntry &entry : entries) {
             const auto size     = std::filesystem::file_size(entry.sourceFile, code);

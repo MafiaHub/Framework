@@ -10,8 +10,8 @@
 
 #include <utils/safe_win32.h>
 
-#include <d3d11_1.h>
 #include <array>
+#include <d3d11_1.h>
 #include <dxgi1_2.h>
 #include <functional>
 #include <mutex>
@@ -96,7 +96,7 @@ namespace Framework::GUI::CEF {
 
       public:
         struct SharedRead {
-            ID3D11Texture2D *texture        = nullptr;
+            ID3D11Texture2D *texture       = nullptr;
             ID3D11ShaderResourceView *view = nullptr;
         };
 
