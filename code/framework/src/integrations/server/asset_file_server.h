@@ -8,20 +8,18 @@
 
 #pragma once
 
-#include <http/webserver.h>
-
 #include <filesystem>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 
 namespace Framework::Integrations::Server {
-    // Serves the client resource packages and asset paks as GET /files/<name>, so downloads stay
-    // off the game connection. Only published names are served: the staging directory beside them
-    // also holds the package key.
+    // Declares GET /files/<name> on the framework's webserver and serves the client resource packages
+    // and asset paks there, so downloads stay off the game connection. Only published names are
+    // served: the staging directory beside them also holds the package key.
     class AssetFileServer final {
       public:
-        void Register(const HTTP::Webserver &webServer);
+        bool Register();
 
         void Publish(std::unordered_map<std::string, std::filesystem::path> files);
 

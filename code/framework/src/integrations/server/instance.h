@@ -133,6 +133,7 @@ namespace Framework::Integrations::Server {
 
         int32_t maxPlayers;
         int32_t maxPlayersHardCap = 0; // compiled-in ceiling the config file cannot raise; 0 = uncapped
+        std::string httpServeDir;
 
         bool enableSignals;
 

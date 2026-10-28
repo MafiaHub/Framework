@@ -38,6 +38,10 @@ namespace Framework::Integrations::Client {
     class Instance;
 } // namespace Framework::Integrations::Client
 
+namespace Framework::HTTP {
+    class Webserver;
+} // namespace Framework::HTTP
+
 namespace Framework::Integrations::Server {
     class ConnectionGate;
 } // namespace Framework::Integrations::Server
@@ -64,6 +68,7 @@ namespace Framework {
             _input            = nullptr;
             _clientInstance   = nullptr;
             _connectionGate   = nullptr;
+            _webserver        = nullptr;
             _tickInterval     = 1.0 / 60.0;
         }
 
@@ -113,6 +118,11 @@ namespace Framework {
             _connectionGate = gate;
         }
 
+        static void SetWebserver(HTTP::Webserver *webserver) {
+            FW_ASSERT_MODULE_REGISTRATION(_webserver, webserver, "Webserver");
+            _webserver = webserver;
+        }
+
         static void SetTickInterval(double seconds) noexcept {
             _tickInterval = (seconds > 0.0) ? seconds : (1.0 / 60.0);
         }
@@ -154,6 +164,10 @@ namespace Framework {
             return _connectionGate;
         }
 
+        static HTTP::Webserver *GetWebserver() noexcept {
+            return _webserver;
+        }
+
         static double GetTickInterval() noexcept {
             return _tickInterval;
         }
@@ -168,6 +182,7 @@ namespace Framework {
         static inline Input::IInput *_input {};
         static inline Integrations::Client::Instance *_clientInstance {};
         static inline Integrations::Server::ConnectionGate *_connectionGate {};
+        static inline HTTP::Webserver *_webserver {};
         static inline double _tickInterval {1.0 / 60.0};
     };
 } // namespace Framework

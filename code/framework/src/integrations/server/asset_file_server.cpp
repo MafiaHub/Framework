@@ -8,6 +8,9 @@
 
 #include "asset_file_server.h"
 
+#include <core_modules.h>
+#include <http/webserver.h>
+
 #include <httplib.h>
 
 #include <algorithm>
@@ -15,8 +18,12 @@
 #include <memory>
 
 namespace Framework::Integrations::Server {
-    void AssetFileServer::Register(const HTTP::Webserver &webServer) {
-        webServer.RegisterRequest(R"(/files/([^/]+))", [this](const httplib::Request &req, httplib::Response &res) {
+    bool AssetFileServer::Register() {
+        const auto webServer = CoreModules::GetWebserver();
+        if (!webServer) {
+            return false;
+        }
+        webServer->RegisterRequest(R"(/files/([^/]+))", [this](const httplib::Request &req, httplib::Response &res) {
             std::filesystem::path path;
             {
                 std::lock_guard lock(_filesMutex);
@@ -42,6 +49,7 @@ namespace Framework::Integrations::Server {
                 return read > 0 && sink.write(buffer, static_cast<size_t>(read));
             });
         });
+        return true;
     }
 
     void AssetFileServer::Publish(std::unordered_map<std::string, std::filesystem::path> files) {

@@ -218,10 +218,11 @@ namespace Framework::Integrations::Server {
         }
 
         // Same port number as the game, over TCP: MafiaNet only binds it for UDP.
-        if (_webServer->Init(_opts.bindHost, _opts.bindPort) != HTTP::WebserverError::WEBSERVER_NONE) {
+        if (_webServer->Init(_opts.bindHost, _opts.bindPort, _opts.httpServeDir) != HTTP::WebserverError::WEBSERVER_NONE) {
             return Error("Failed to start the HTTP server on TCP " + _opts.bindHost + ":" + std::to_string(_opts.bindPort));
         }
-        _assetFileServer.Register(*_webServer);
+        CoreModules::SetWebserver(_webServer.get());
+        _assetFileServer.Register();
 
         CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkServer());
 
@@ -1376,6 +1377,7 @@ namespace Framework::Integrations::Server {
         sig_detach(SIGINT, sig_slot(this, &Instance::OnSignal));
         sig_detach(SIGTERM, sig_slot(this, &Instance::OnSignal));
 
+        CoreModules::SetWebserver(nullptr);
         CoreModules::SetNetworkPeer(nullptr);
         CoreModules::SetReplication(nullptr);
         CoreModules::SetVoiceServer(nullptr);

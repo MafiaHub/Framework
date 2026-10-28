@@ -38,16 +38,24 @@ namespace Framework::HTTP {
       public:
         Webserver();
         ~Webserver();
-        [[nodiscard]] WebserverError Init(const std::string &host, int32_t port);
+        [[nodiscard]] WebserverError Init(const std::string &host, int32_t port, const std::string &);
 
         void Shutdown() override;
 
         void RegisterRequest(const std::string &path, const RequestCallback &callback) const;
         void RegisterPostRequest(const std::string &path, const PostCallback &callback) const;
 
+        const std::string &GetServeDirectory() const noexcept {
+            return _serveDir;
+        }
+
+      protected:
+        void ServeDirectory(const std::string &dir);
+
       private:
         std::shared_ptr<httplib::Server> _server;
         std::atomic_bool _running;
         std::jthread _webThread;
+        std::string _serveDir;
     };
 } // namespace Framework::HTTP

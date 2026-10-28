@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "core_modules.h"
 #include "http/webserver.h"
 #include "integrations/client/asset_downloader.h"
 #include "integrations/server/asset_file_server.h"
@@ -50,16 +51,18 @@ namespace AssetHttpTest {
             std::filesystem::create_directories(cache);
             for (int attempt = 0; attempt < 8 && port == 0; ++attempt) {
                 const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
-                if (webServer.Init("127.0.0.1", candidate) == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
+                if (webServer.Init("127.0.0.1", candidate, "") == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
                     port = candidate;
                 }
             }
-            files.Register(webServer);
+            Framework::CoreModules::SetWebserver(&webServer);
+            files.Register();
         }
 
         ~Fixture() {
             downloader.Cancel();
             webServer.Shutdown();
+            Framework::CoreModules::SetWebserver(nullptr);
             std::error_code code;
             std::filesystem::remove_all(root, code);
         }
@@ -231,7 +234,7 @@ MODULE(asset_http, {
         int32_t port = 0;
         for (int attempt = 0; attempt < 8 && port == 0; ++attempt) {
             const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
-            if (stalling.Init("127.0.0.1", candidate) == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
+            if (stalling.Init("127.0.0.1", candidate, "") == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
                 port = candidate;
             }
         }
