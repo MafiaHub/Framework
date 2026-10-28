@@ -12,6 +12,8 @@ add_executable(FrameworkTests
         # Free of CEF and of Integrations::Client::Instance, so the package mounter is testable
         # without linking FrameworkClient.
         ../framework/src/integrations/client/resource_packages.cpp
+        # Plain HTTP and hashing, so the asset download is testable against the server's file route.
+        ../framework/src/integrations/client/asset_downloader.cpp
         # The transport half of the client, for the admission handshake over loopback. It needs
         # nothing of FrameworkClient beyond itself.
         ../framework/src/networking/network_client.cpp)

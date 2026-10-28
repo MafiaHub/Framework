@@ -26,8 +26,8 @@
 #include <vector>
 
 // Asset paks: a resource's lane folders built into plain ZIPs an engine mounts, staged beside its
-// .fwpak and announced in its ResourceInfo. A test policy stands in for a mod's. The transfer is the
-// resource packages' own (DirectoryDeltaTransfer), tested in MafiaNet.
+// .fwpak and announced in its ResourceInfo. A test policy stands in for a mod's. The HTTP transfer is
+// tested in asset_http_ut.h.
 namespace StreamedAssetsTest {
     class TestPolicy final: public Framework::Utils::StreamedAssets::Policy {
       public:
