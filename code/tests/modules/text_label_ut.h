@@ -272,4 +272,76 @@ MODULE(text_label, {
         EQUALS(sees(distantGuid), true);
         EQUALS(sees(nearbyGuid), false);
     });
+
+    IT("a label streams only to the players it is visible for, and hideForTarget keeps it from the one it follows", {
+        using Framework::Scripting::Builtins::TextLabel;
+        TextLabelWorld world;
+        auto *manager = world.Manager();
+        const MafiaNet::RakNetGUID guids[] {MafiaNet::RakNetGUID(81), MafiaNet::RakNetGUID(82)};
+        NetworkEntity *players[2];
+        for (int i = 0; i < 2; ++i) {
+            players[i]            = manager->CreateEntity(world.targetType);
+            players[i]->ownerGUID = MafiaNet::ToPeerGuid(guids[i]);
+            manager->SetViewer(players[i]->ownerGUID, players[i]);
+        }
+        auto *label = manager->CreateEntity<TextLabelEntity>();
+        auto *prop  = manager->CreateEntity(world.targetType);
+        TextLabel handle(label->GetNetworkID());
+        manager->RebuildInterest();
+        for (const auto &guid : guids) {
+            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+        }
+        // Routine refreshes are far off and nothing is rebuilt between changes: a filter change alone
+        // has to reach the players it concerns, and only them.
+        constexpr uint32_t kFarInterval = 1000000;
+        manager->SetInterestRebuildInterval(kFarInterval);
+        const auto sees = [&](int player, NetworkEntity *entity) {
+            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
+            DataStructures::List<MafiaNet::Replica3 *> create, destroy;
+            connection->QueryReplicaList(create, destroy);
+            for (unsigned int i = 0; i < create.Size(); ++i) {
+                if (create[i] == entity) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        EQUALS(sees(0, label), true);
+        EQUALS(sees(1, label), true);
+        EQUALS(sees(0, prop), true);
+
+        // Moved out of range without a refresh: only a player who re-queries stops seeing the prop.
+        prop->position.x = 2000.0f;
+        manager->SetInterestRebuildInterval(0);
+        manager->RebuildInterest();
+        manager->SetInterestRebuildInterval(kFarInterval);
+
+        handle.SetVisibleFor(players[1]->ownerGUID, false);
+        EQUALS(sees(1, label), false);
+        EQUALS(sees(1, prop), false);
+        EQUALS(sees(0, label), true);
+        EQUALS(sees(0, prop), true);
+        handle.SetVisibleFor(players[1]->ownerGUID, true);
+        EQUALS(sees(1, label), true);
+        EQUALS((label->streaming.viewers == nullptr), true);
+
+        EQUALS(handle.AttachTo(players[0]->GetNetworkID(), glm::vec3(0.0f)), true);
+        EQUALS(sees(0, label), true);
+        handle.SetHideForTarget(true);
+        EQUALS(sees(0, label), false);
+        EQUALS(sees(1, label), true);
+        handle.SetHideForTarget(false);
+        EQUALS(sees(0, label), true);
+        handle.SetHideForTarget(true);
+        EQUALS(handle.AttachTo(players[1]->GetNetworkID(), glm::vec3(0.0f)), true);
+        EQUALS(sees(0, label), true);
+        EQUALS(sees(1, label), false);
+        handle.Detach();
+        EQUALS(sees(1, label), true);
+
+        // A player who leaves is dropped from the filter: whoever holds that guid next starts clean.
+        handle.SetVisibleFor(players[1]->ownerGUID, false);
+        manager->OnClosedConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guids[1], MafiaNet::LCR_CONNECTION_LOST);
+        EQUALS((label->streaming.viewers == nullptr), true);
+    });
 });
