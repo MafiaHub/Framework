@@ -218,6 +218,8 @@ namespace Framework::Integrations::Server {
         }
 
         // Same port number as the game, over TCP: MafiaNet only binds it for UDP.
+        // A joining player holds a worker for the whole download, so one per slot keeps a join burst out of the queue.
+        _webServer->SetWorkerCount(static_cast<size_t>(std::clamp(_opts.maxPlayers, 8, 256)));
         if (_webServer->Init(_opts.bindHost, _opts.bindPort, _opts.httpServeDir) != HTTP::WebserverError::WEBSERVER_NONE) {
             return Error("Failed to start the HTTP server on TCP " + _opts.bindHost + ":" + std::to_string(_opts.bindPort));
         }

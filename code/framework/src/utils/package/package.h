@@ -34,6 +34,7 @@ namespace Framework::Utils::Package {
     inline constexpr size_t kHeaderSize = 48;
 
     inline constexpr uint64_t kMaxPayloadSize = 256ull * 1024 * 1024;
+    inline constexpr uint64_t kMaxFileSize    = kHeaderSize + kMaxPayloadSize;
     inline constexpr uint32_t kMaxEntries     = 8192;
     inline constexpr uint32_t kMaxEntrySize   = 64u * 1024 * 1024;
 

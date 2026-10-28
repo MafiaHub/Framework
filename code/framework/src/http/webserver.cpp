@@ -88,6 +88,12 @@ namespace Framework::HTTP {
         return WebserverError::WEBSERVER_NONE;
     }
 
+    void Webserver::SetWorkerCount(size_t count) {
+        _server->new_task_queue = [count] {
+            return new httplib::ThreadPool(count);
+        };
+    }
+
     void Webserver::Shutdown() {
         if (!_running)
             return;

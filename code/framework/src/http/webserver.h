@@ -45,6 +45,9 @@ namespace Framework::HTTP {
 
         void Shutdown() override;
 
+        // Each in-flight request holds a worker until its response is written; call before Init.
+        void SetWorkerCount(size_t count);
+
         void RegisterRequest(const std::string &path, const RequestCallback &callback) const;
         void RegisterPostRequest(const std::string &path, const PostCallback &callback) const;
 

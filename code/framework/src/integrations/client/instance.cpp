@@ -1048,7 +1048,7 @@ namespace Framework::Integrations::Client {
         for (const auto &resource : resources) {
             // Untrusted: a name, lane or hash that could not name a cache file is not fetched;
             // mounting or VerifyAssetPaks then refuses the resource.
-            if (Framework::Utils::StreamedAssets::IsValidPackageName(resource.name) && Framework::Utils::StreamedAssets::IsSha256(resource.packageHash)) {
+            if (Framework::Utils::StreamedAssets::IsValidPackageName(resource.name) && Framework::Utils::StreamedAssets::IsSha256(resource.packageHash) && resource.packageSize > 0 && resource.packageSize <= Framework::Utils::Package::kMaxFileSize) {
                 const std::string fileName = resource.name + Framework::Utils::Package::kExtension;
                 jobs.push_back({fileName, (cacheDir / fileName).string(), resource.packageHash, resource.packageSize});
             }

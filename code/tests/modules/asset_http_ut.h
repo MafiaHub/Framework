@@ -20,6 +20,7 @@
 #include <httplib.h>
 #include <mafianet/bit_stream.h>
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -311,6 +312,8 @@ MODULE(asset_http, {
         EQUALS(pak.IsSane(), false);
         pak.lane = "stream";
         EQUALS(pak.IsSane(), true);
+        pak.size = Framework::Utils::StreamedAssets::kMaxPakSize + 1;
+        EQUALS(pak.IsSane(), false);
     });
 
     IT("accepts any resource name that is one safe file name as a package", {
@@ -390,5 +393,41 @@ MODULE(asset_http, {
         fixture.files.Publish(published);
         EQUALS(fixture.Run({job}), true);
         EQUALS(AssetHttpTest::Fixture::Read(job.path) == std::string(100000, 'm'), true);
+    });
+
+    IT("answers as many concurrent requests as it has workers without queueing them", {
+        Framework::HTTP::Webserver server;
+        server.SetWorkerCount(16);
+        std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
+        int32_t port = 0;
+        for (int attempt = 0; attempt < 8 && port == 0; ++attempt) {
+            const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
+            if (server.Init("127.0.0.1", candidate, "") == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
+                port = candidate;
+            }
+        }
+        NEQUALS(port, 0);
+        server.RegisterRequest("/slow", [](const httplib::Request &, httplib::Response &res) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            res.set_content("ok", "text/plain");
+        });
+
+        std::atomic<int> answered {};
+        std::vector<std::thread> clients;
+        const auto started = std::chrono::steady_clock::now();
+        for (int i = 0; i < 12; ++i) {
+            clients.emplace_back([port, &answered] {
+                httplib::Client client("127.0.0.1", port);
+                if (const auto res = client.Get("/slow"); res && res->status == 200) {
+                    ++answered;
+                }
+            });
+        }
+        for (auto &client : clients) {
+            client.join();
+        }
+        EQUALS(answered.load(), 12);
+        EQUALS(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(950), true);
+        server.Shutdown();
     });
 })

@@ -38,7 +38,7 @@ namespace Framework::Networking::RPC {
         }
 
         bool IsSane() const {
-            return Utils::StreamedAssets::IsValidLaneName(lane) && sha256.size() == 64 && size > 0;
+            return Utils::StreamedAssets::IsValidLaneName(lane) && sha256.size() == 64 && size > 0 && size <= Utils::StreamedAssets::kMaxPakSize;
         }
     };
 
