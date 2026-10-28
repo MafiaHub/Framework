@@ -30,6 +30,27 @@ namespace Framework::HTTP {
             _server->set_mount_point("/", serveDir.c_str());
         }
 
+        _server->set_pre_routing_handler([this](const httplib::Request &req, httplib::Response &res) {
+            if (req.method != "GET" && req.method != "HEAD") {
+                return httplib::Server::HandlerResponse::Unhandled;
+            }
+            RequestCallback callback;
+            {
+                std::lock_guard lock(_getRoutesMutex);
+                for (const auto &[pattern, handler] : _getRoutes) {
+                    if (std::regex_match(req.path, const_cast<httplib::Request &>(req).matches, pattern)) {
+                        callback = handler;
+                        break;
+                    }
+                }
+            }
+            if (!callback) {
+                return httplib::Server::HandlerResponse::Unhandled;
+            }
+            callback(req, res);
+            return httplib::Server::HandlerResponse::Handled;
+        });
+
         _server->set_error_handler([](const auto &req, auto &res) {
             res.set_content("Error Status: " + std::to_string(res.status), "text/plain");
         });
@@ -82,7 +103,8 @@ namespace Framework::HTTP {
         if (!_running)
             return;
         if (!path.empty() && callback) {
-            _server->Get(path, callback);
+            std::lock_guard lock(_getRoutesMutex);
+            _getRoutes.emplace_back(std::regex(path), callback);
         }
     }
 

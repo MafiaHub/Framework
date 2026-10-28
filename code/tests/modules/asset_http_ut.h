@@ -12,6 +12,7 @@
 #include "http/webserver.h"
 #include "integrations/client/asset_downloader.h"
 #include "integrations/server/asset_file_server.h"
+#include "networking/network_server.h"
 #include "networking/rpc/server_resources.h"
 #include "utils/crypto.h"
 #include "utils/streamed_assets/policy.h"
@@ -32,6 +33,7 @@
 namespace AssetHttpTest {
     struct Fixture {
         Framework::HTTP::Webserver webServer;
+        std::unique_ptr<Framework::Networking::NetworkServer> network;
         Framework::Integrations::Server::AssetFileServer files;
         Framework::Integrations::Client::AssetDownloader downloader;
         std::filesystem::path root;
@@ -42,17 +44,31 @@ namespace AssetHttpTest {
         uint64_t bytesDone   = 0;
         uint64_t bytesTotal  = 0;
 
-        Fixture() {
+        explicit Fixture(const std::string &serveDir = "", bool shareWithNetwork = false) {
             std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
             root    = std::filesystem::temp_directory_path() / ("fw_asset_http_" + std::to_string(random()));
             staging = root / "staging";
             cache   = root / "cache";
             std::filesystem::create_directories(staging);
             std::filesystem::create_directories(cache);
+            if (!serveDir.empty()) {
+                std::filesystem::create_directories(root / serveDir / "files");
+            }
             for (int attempt = 0; attempt < 8 && port == 0; ++attempt) {
                 const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
-                if (webServer.Init("127.0.0.1", candidate, "") == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
+                if (shareWithNetwork) {
+                    network = std::make_unique<Framework::Networking::NetworkServer>();
+                    if (!network->Init("127.0.0.1", candidate, 2)) {
+                        network.reset();
+                        continue;
+                    }
+                }
+                if (webServer.Init("127.0.0.1", candidate, serveDir.empty() ? "" : (root / serveDir).string()) == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
                     port = candidate;
+                }
+                else if (network) {
+                    network->Shutdown();
+                    network.reset();
                 }
             }
             Framework::CoreModules::SetWebserver(&webServer);
@@ -63,6 +79,9 @@ namespace AssetHttpTest {
             downloader.Cancel();
             webServer.Shutdown();
             Framework::CoreModules::SetWebserver(nullptr);
+            if (network) {
+                network->Shutdown();
+            }
             std::error_code code;
             std::filesystem::remove_all(root, code);
         }
@@ -101,6 +120,18 @@ namespace AssetHttpTest {
             bytesDone  = downloader.GetBytesDownloaded();
             bytesTotal = downloader.GetBytesTotal();
             return success;
+        }
+
+        int Status(const std::string &path, std::string *body = nullptr) const {
+            httplib::Client client(Origin());
+            const auto res = client.Get(path);
+            if (!res) {
+                return 0;
+            }
+            if (body) {
+                *body = res->body;
+            }
+            return res->status;
         }
 
         bool NoPartialsLeft() const {
@@ -309,5 +340,55 @@ MODULE(asset_http, {
         received.Serialize(&bs, false);
         EQUALS(received.packageSize, sent.packageSize);
         EQUALS(received.packageHash == sent.packageHash, true);
+    });
+
+    IT("does not declare its route without a webserver component", {
+        Framework::CoreModules::SetWebserver(nullptr);
+        Framework::Integrations::Server::AssetFileServer files;
+        EQUALS(files.Register(), false);
+    });
+
+    IT("declares its route on the webserver registered in core modules", {
+        AssetHttpTest::Fixture fixture;
+        EQUALS(Framework::CoreModules::GetWebserver() == &fixture.webServer, true);
+        std::unordered_map<std::string, std::filesystem::path> published;
+        fixture.Stage("map.fwpak", "package bytes", published);
+        fixture.files.Publish(published);
+        std::string body;
+        EQUALS(fixture.Status("/files/map.fwpak", &body), 200);
+        EQUALS(body == "package bytes", true);
+    });
+
+    IT("serves the static directory beside the published files without either leaking into the other", {
+        AssetHttpTest::Fixture fixture("public");
+        NEQUALS(fixture.port, 0);
+        AssetHttpTest::Fixture::Write(fixture.root / "public" / "index.txt", "hello");
+        AssetHttpTest::Fixture::Write(fixture.root / "public" / "files" / "map.fwpak", "shadow");
+        AssetHttpTest::Fixture::Write(fixture.root / "public" / "files" / "loose.pak", "loose");
+        AssetHttpTest::Fixture::Write(fixture.staging / "package.key", "secret");
+        std::unordered_map<std::string, std::filesystem::path> published;
+        auto job = fixture.Stage("map.fwpak", "package bytes", published);
+        fixture.files.Publish(published);
+
+        std::string body;
+        EQUALS(fixture.Status("/index.txt", &body), 200);
+        EQUALS(body == "hello", true);
+        EQUALS(fixture.Status("/files/map.fwpak", &body), 200);
+        EQUALS(body == "package bytes", true);
+        EQUALS(fixture.Status("/files/loose.pak"), 404);
+        EQUALS(fixture.Status("/files/package.key"), 404);
+        EQUALS(fixture.Status("/package.key"), 404);
+        EQUALS(fixture.Run({job}), true);
+    });
+
+    IT("serves files over TCP on the port the game binds for UDP", {
+        AssetHttpTest::Fixture fixture("", true);
+        NEQUALS(fixture.port, 0);
+        EQUALS(fixture.network != nullptr, true);
+        std::unordered_map<std::string, std::filesystem::path> published;
+        auto job = fixture.Stage("map.fwpak", std::string(100000, 'm'), published);
+        fixture.files.Publish(published);
+        EQUALS(fixture.Run({job}), true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == std::string(100000, 'm'), true);
     });
 })

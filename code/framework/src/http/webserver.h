@@ -17,9 +17,12 @@
 #include <function2/function2.hpp>
 #include <memory>
 #include <mutex>
+#include <regex>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 // Keep httplib out of this header; consumers implementing request callbacks
 // include <httplib.h> themselves for the complete Request/Response types.
@@ -57,5 +60,8 @@ namespace Framework::HTTP {
         std::atomic_bool _running;
         std::jthread _webThread;
         std::string _serveDir;
+        // Dispatched before the served directory is looked at, so a declared route is never shadowed by a file.
+        mutable std::mutex _getRoutesMutex;
+        mutable std::vector<std::pair<std::regex, RequestCallback>> _getRoutes;
     };
 } // namespace Framework::HTTP
