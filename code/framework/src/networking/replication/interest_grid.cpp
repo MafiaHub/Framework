@@ -214,9 +214,9 @@ namespace Framework::Networking::Replication {
         const auto observerWorld = viewer->GetVirtualWorld();
 
         // A private entity (targetGUID set) is only ever relevant to its target connection, and for
-        // that viewer the target stands in for the dimension gate.
-        const auto targetMatch = [viewerGUID](const NetworkEntity *entity) {
-            return entity->streaming.targetGUID == MafiaNet::UNASSIGNED_PEER_GUID || entity->streaming.targetGUID == viewerGUID;
+        // that viewer the target stands in for the dimension gate. exceptGUID and viewers only narrow.
+        const auto admits = [viewerGUID](const NetworkEntity *entity) {
+            return entity->streaming.Admits(viewerGUID);
         };
         const auto targeted = [](const NetworkEntity *entity) {
             return entity->streaming.targetGUID != MafiaNet::UNASSIGNED_PEER_GUID;
@@ -257,7 +257,7 @@ namespace Framework::Networking::Replication {
             if (entity == viewer || entity->ownerGUID == viewerGUID || entity->streaming.alwaysVisible) {
                 continue;
             }
-            if (!entity->streaming.visible || !targetMatch(entity)) {
+            if (!entity->streaming.visible || !admits(entity)) {
                 continue;
             }
             if (!targeted(entity) && !MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), observerWorld)) {
@@ -299,17 +299,17 @@ namespace Framework::Networking::Replication {
 
         if (const auto *owned = OwnedBy(viewerGUID)) {
             for (NetworkEntity *entity : *owned) {
-                if (entity->streaming.visible && targetMatch(entity)) {
+                if (entity->streaming.visible && admits(entity)) {
                     out.insert(entity);
                 }
             }
         }
         for (NetworkEntity *entity : AlwaysVisible()) {
-            if (entity->streaming.visible && targetMatch(entity) && (targeted(entity) || MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), observerWorld))) {
+            if (entity->streaming.visible && admits(entity) && (targeted(entity) || MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), observerWorld))) {
                 out.insert(entity);
             }
         }
-        if (viewer->streaming.visible && targetMatch(viewer)) {
+        if (viewer->streaming.visible && admits(viewer)) {
             out.insert(viewer);
         }
 
@@ -321,7 +321,7 @@ namespace Framework::Networking::Replication {
             if (!dependency || !_live.contains(dependency)) {
                 continue;
             }
-            if (dependency->streaming.visible && targetMatch(dependency)) {
+            if (dependency->streaming.visible && admits(dependency)) {
                 out.insert(dependency);
             }
         }
