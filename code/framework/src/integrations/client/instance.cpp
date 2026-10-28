@@ -487,7 +487,6 @@ namespace Framework::Integrations::Client {
         }
 
         UpdateNetworking();
-        PollAssetDownload();
 
         if (_scriptingModule) {
             FW_PROFILE_SCOPE_N("Client::Scripting");
@@ -524,6 +523,8 @@ namespace Framework::Integrations::Client {
 
         FW_PROFILE_SCOPE_N("Client::Networking");
         _networkingEngine->Update();
+        // Hosts pump only UpdateNetworking while the game is loading, and that is when downloads finish.
+        PollAssetDownload();
 
         // After the peer pump: RakVoice decodes inbound frames from inside RakPeer::Receive,
         // so draining speakers here picks up this tick's audio rather than last tick's.
