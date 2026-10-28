@@ -42,6 +42,7 @@
 #include <logging/logger.h>
 
 #include "utils/path.h"
+#include "utils/package/package.h"
 #include "utils/streamed_assets/pak_archive.h"
 #include "utils/vfs.h"
 #include "utils/profiler.h"
@@ -189,55 +190,6 @@ namespace Framework::Integrations::Client {
         OnChatMessageReceived(msg);
     }
 
-    bool AssetDownloadFileProgress::OnFile(MafiaNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) {
-        if (onFileStruct->numberOfFilesInThisSet > 0) {
-            auto &downloadStatus           = _instance->GetAssetDownloadStatus();
-            downloadStatus.downloading     = true;
-            downloadStatus.setID           = onFileStruct->setID;
-            downloadStatus.filesTotal      = onFileStruct->numberOfFilesInThisSet;
-            downloadStatus.bytesTotal      = onFileStruct->byteLengthOfThisSet;
-            downloadStatus.bytesDownloaded = onFileStruct->bytesDownloadedForThisSet;
-            downloadStatus.currentFile     = onFileStruct->fileName;
-            downloadStatus.progress        = onFileStruct->byteLengthOfThisSet > 0 ? onFileStruct->bytesDownloadedForThisSet / float(onFileStruct->byteLengthOfThisSet) : 0.0f;
-            if (onFileStruct->bytesDownloadedForThisFile == onFileStruct->byteLengthOfThisFile) {
-                downloadStatus.filesDownloaded = onFileStruct->fileIndex + 1;
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Asset downloaded ({}/{} - {}%): {}", onFileStruct->fileIndex + 1, onFileStruct->numberOfFilesInThisSet, int(downloadStatus.progress * 100.0f), onFileStruct->fileName);
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
-            }
-            _instance->OnAssetsDownloadProgress(downloadStatus);
-        }
-        return true;
-    }
-
-    void AssetDownloadFileProgress::OnFileProgress(MafiaNet::FileListTransferCBInterface::FileProgressStruct *fps) {
-        auto *onFileStruct = fps->onFileStruct;
-        if (!onFileStruct || onFileStruct->byteLengthOfThisSet == 0) {
-            return;
-        }
-        auto &downloadStatus           = _instance->GetAssetDownloadStatus();
-        downloadStatus.downloading     = true;
-        downloadStatus.setID           = onFileStruct->setID;
-        downloadStatus.filesTotal      = onFileStruct->numberOfFilesInThisSet;
-        downloadStatus.bytesTotal      = onFileStruct->byteLengthOfThisSet;
-        downloadStatus.bytesDownloaded = onFileStruct->bytesDownloadedForThisSet;
-        downloadStatus.currentFile     = onFileStruct->fileName;
-        downloadStatus.progress        = onFileStruct->bytesDownloadedForThisSet / float(onFileStruct->byteLengthOfThisSet);
-        _instance->OnAssetsDownloadProgress(downloadStatus);
-    }
-
-    bool AssetDownloadFileProgress::OnDownloadComplete(DownloadCompleteStruct *dcs) {
-        (void)dcs;
-
-        auto &downloadStatus           = _instance->GetAssetDownloadStatus();
-        downloadStatus.progress        = 1.0f;
-        downloadStatus.downloading     = false;
-        downloadStatus.bytesDownloaded = downloadStatus.bytesTotal;
-        downloadStatus.filesDownloaded = downloadStatus.filesTotal;
-        _instance->OnAssetsDownloadProgress(downloadStatus);
-        _instance->OnAssetsDownloaded(true);
-        return false;
-    }
-
     Instance::Instance() {
         _networkingEngine = std::make_unique<Networking::Engine>();
         _presence         = std::make_unique<External::Discord::Wrapper>();
@@ -369,10 +321,6 @@ namespace Framework::Integrations::Client {
 
     void Instance::InitAssetDownloader() {
         InitCacheAssetFolders();
-
-        GetNetworkingEngine()->GetNetworkClient()->SetOnAssetsDownloadFailedCallback([this]() {
-            this->OnAssetsDownloaded(false);
-        });
     }
 
     bool Instance::IsLocalInputAvailable() const {
@@ -575,6 +523,8 @@ namespace Framework::Integrations::Client {
 
         FW_PROFILE_SCOPE_N("Client::Networking");
         _networkingEngine->Update();
+        // Hosts pump only UpdateNetworking while the game is loading, and that is when downloads finish.
+        PollAssetDownload();
 
         // After the peer pump: RakVoice decodes inbound frames from inside RakPeer::Receive,
         // so draining speakers here picks up this tick's audio rather than last tick's.
@@ -705,6 +655,8 @@ namespace Framework::Integrations::Client {
             _resumingDeferredInitialAssetProcessing    = false;
             _readyEventId   = payload.readyEventId;
             _serverTickRate = payload.tickRate;
+            _downloadToken  = payload.downloadToken;
+            _downloadUrl    = payload.downloadUrl;
 
             _pendingServerResources = payload.resources;
             _assetPaks.clear();
@@ -753,10 +705,8 @@ namespace Framework::Integrations::Client {
                 }
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Server hot-reloaded {} resource(s); re-syncing", payload.resources.size());
-            // An in-flight re-sync already covers these; it drains the full set on complete.
-            if (!_downloadStatus.downloading) {
-                SyncResourceUpdatesFromServer();
-            }
+            // Restarts any in-flight re-sync over the whole set; what it already fetched is cached.
+            SyncResourceUpdatesFromServer();
         });
 
         // Server stopped a client resource at runtime: stop it here too.
@@ -851,6 +801,7 @@ namespace Framework::Integrations::Client {
             _resumingDeferredInitialAssetProcessing    = false;
             _serverConfig                              = nlohmann::json::object();
             _initialDownloadDone                       = false;
+            _assetDownloader.Cancel();
             _downloadStatus                            = {};
             _assetPaks.clear();
             _assetPaksDownloaded = false;
@@ -974,9 +925,7 @@ namespace Framework::Integrations::Client {
             _webManager->CleanupViews();
         }
 
-        // Setup the asset downloader
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Setting up asset downloads...");
-        const auto streamer = net->GetAssetStreamer();
 
         // Compute the destination path
         const auto cacheDir = fmt::format("{}\\servers\\{}", GetCacheRoot(), _currentState.serverIDHash);
@@ -991,15 +940,12 @@ namespace Framework::Integrations::Client {
         // Pre-packaging builds left plaintext resource directories here, which discovery would
         // still pick up and run unverified. Only .fwpak containers belong in the cache.
         PurgeLegacyPlaintextCache(cacheDir);
-        streamer->SetApplicationDirectory(cacheDir.c_str());
         auto cacheDirHandle = cppfs::fs::open(cacheDir);
 
-        // Ensure we stop existing downloads since the server has pushed new changes already
-        // (also before the bail below, so a failed cache dir doesn't leave a transfer running)
-        if (_downloadStatus.downloading) {
-            net->GetFileListTransfer()->CancelReceive(_downloadStatus.setID);
-            _downloadStatus = {};
-        }
+        // The server has pushed a new list; also before the bail below, so a failed cache dir
+        // doesn't leave a transfer running.
+        _assetDownloader.Cancel();
+        _downloadStatus = {};
 
         if (!cacheDirHandle.exists()) {
             InitCacheAssetFolders();
@@ -1035,7 +981,7 @@ namespace Framework::Integrations::Client {
             return;
         }
 
-        StartAssetDownload();
+        StartAssetDownload(_pendingServerResources);
     }
 
     void Instance::GrantAssetConsent() {
@@ -1044,7 +990,7 @@ namespace Framework::Integrations::Client {
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Asset download of {} bytes accepted", _assetConsentBytes);
         _assetConsentBytes = 0;
-        StartAssetDownload();
+        StartAssetDownload(_pendingServerResources);
     }
 
     void Instance::AnnounceAssetPaks(const std::vector<Client::Scripting::ServerResourceInfo> &resources) {
@@ -1098,17 +1044,55 @@ namespace Framework::Integrations::Client {
         }
     }
 
-    void Instance::StartAssetDownload() {
-        const auto net      = GetNetworkingEngine()->GetNetworkClient();
-        const auto streamer = net->GetAssetStreamer();
-
-        if (_downloadStatus.downloading) {
-            net->GetFileListTransfer()->CancelReceive(_downloadStatus.setID);
-            _downloadStatus = {};
+    void Instance::StartAssetDownload(const std::vector<Client::Scripting::ServerResourceInfo> &resources) {
+        const std::filesystem::path cacheDir = GetAssetCachePath();
+        std::vector<AssetDownloader::Job> jobs;
+        for (const auto &resource : resources) {
+            // Untrusted: a name, lane or hash that could not name a cache file is not fetched;
+            // mounting or VerifyAssetPaks then refuses the resource.
+            if (Framework::Utils::StreamedAssets::IsValidPackageName(resource.name) && Framework::Utils::StreamedAssets::IsSha256(resource.packageHash) && resource.packageSize > 0 && resource.packageSize <= Framework::Utils::Package::kMaxFileSize) {
+                const std::string fileName = resource.name + Framework::Utils::Package::kExtension;
+                jobs.push_back({fileName, (cacheDir / fileName).string(), resource.packageHash, resource.packageSize});
+            }
+            for (const auto &pak : resource.assetPaks) {
+                if (!Framework::Utils::StreamedAssets::IsValidResourceName(resource.name) || !pak.IsSane() || !Framework::Utils::StreamedAssets::IsSha256(pak.sha256)) {
+                    continue;
+                }
+                const std::string fileName = Framework::Utils::StreamedAssets::PakFileName(resource.name, pak.lane, pak.sha256);
+                jobs.push_back({fileName, (cacheDir / fileName).string(), pak.sha256, pak.size});
+            }
         }
 
+        _downloadStatus             = {};
         _downloadStatus.downloading = true;
-        _downloadStatus.setID = streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), &_assetDownloadProgress, MafiaNet::Priority::High, Framework::Networking::ToOrderingChannel(Framework::Networking::Channel::Assets), nullptr);
+        // The server's download URL first, without the token (it is only the game port's), then the game port.
+        std::vector<AssetDownloader::Source> sources;
+        if (!_downloadUrl.empty()) {
+            sources.push_back({_downloadUrl, {}});
+        }
+        sources.push_back({fmt::format("http://{}:{}/files", _currentState.host, _currentState.port), _downloadToken});
+        _assetDownloader.Start(std::move(sources), std::move(jobs));
+    }
+
+    void Instance::PollAssetDownload() {
+        if (!_assetDownloader.IsRunning()) {
+            return;
+        }
+        bool success        = false;
+        const bool finished = _assetDownloader.PollFinished(success);
+
+        _downloadStatus.bytesTotal      = _assetDownloader.GetBytesTotal();
+        _downloadStatus.bytesDownloaded = _assetDownloader.GetBytesDownloaded();
+        _downloadStatus.filesTotal      = _assetDownloader.GetFilesTotal();
+        _downloadStatus.filesDownloaded = _assetDownloader.GetFilesDone();
+        _downloadStatus.currentFile     = _assetDownloader.GetCurrentFile();
+        _downloadStatus.progress        = _downloadStatus.bytesTotal > 0 ? _downloadStatus.bytesDownloaded / float(_downloadStatus.bytesTotal) : 1.0f;
+        _downloadStatus.downloading     = !finished;
+        OnAssetsDownloadProgress(_downloadStatus);
+
+        if (finished) {
+            OnAssetsDownloaded(success);
+        }
     }
 
     void Instance::SyncResourceUpdatesFromServer() {
@@ -1121,16 +1105,13 @@ namespace Framework::Integrations::Client {
 
         // Unlike DownloadsAssetsFromConnectedServer, does NOT stop all resources
         // or tear down web views; cache path is already set from connect.
-        const auto streamer = net->GetAssetStreamer();
-        const auto cacheDir = GetAssetCachePath();
-        if (cacheDir.empty()) {
+        if (GetAssetCachePath().empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("No asset cache path set; cannot re-sync resources");
             _pendingRefreshResources.clear();
             return;
         }
-        streamer->SetApplicationDirectory(cacheDir.c_str());
 
-        StartAssetDownload();
+        StartAssetDownload(_pendingRefreshResources);
     }
 
     void Instance::PurgeLegacyPlaintextCache(const std::string &cacheDir) {

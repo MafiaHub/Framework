@@ -21,7 +21,6 @@ namespace Framework::Networking {
     enum class Channel : char {
         Transform    = 0,
         State        = 1,
-        Assets       = 2,
         Events       = 3,
         Construction = 3,
         VoiceFrames  = 4,
@@ -36,7 +35,6 @@ namespace Framework::Networking {
     static_assert(ToOrderingChannel(Channel::Transform) != ToOrderingChannel(Channel::Events));
     static_assert(ToOrderingChannel(Channel::Construction) == ToOrderingChannel(Channel::Events));
     static_assert(ToOrderingChannel(Channel::Transform) != ToOrderingChannel(Channel::VoiceFrames));
-    static_assert(ToOrderingChannel(Channel::Transform) != ToOrderingChannel(Channel::Assets));
     static_assert(ToOrderingChannel(Channel::Presentation) != ToOrderingChannel(Channel::Events));
     static_assert(ToOrderingChannel(Channel::Presentation) != ToOrderingChannel(Channel::Transform));
 } // namespace Framework::Networking

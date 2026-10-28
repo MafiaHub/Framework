@@ -25,8 +25,6 @@ MODULE(server_config, {
         opts.modConfigFile = "server.json";
         opts.bindHost      = "0.0.0.0";
         opts.bindPort      = 27015;
-        opts.webBindHost   = "0.0.0.0";
-        opts.webBindPort   = 27016;
         opts.bindMapName   = "";
         opts.maxPlayers    = 32;
         opts.bindSecretKey = "";
@@ -58,16 +56,13 @@ MODULE(server_config, {
         const auto opts = resolve(nlohmann::json::object(), {});
         STREQUALS(opts.bindHost.c_str(), "0.0.0.0");
         EQUALS(opts.bindPort, 27015);
-        EQUALS(opts.webBindPort, 27016);
         EQUALS(opts.maxPlayers, 32);
     });
 
     IT("lets the config document override a compiled default", {
-        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}, {"apihost", "10.0.0.1"}, {"apiport", 20026}, {"map", "freeride"}, {"maxplayers", 64}, {"server-token", "secret"}}, {});
+        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}, {"map", "freeride"}, {"maxplayers", 64}, {"server-token", "secret"}}, {});
         STREQUALS(opts.bindHost.c_str(), "127.0.0.1");
         EQUALS(opts.bindPort, 20025);
-        STREQUALS(opts.webBindHost.c_str(), "10.0.0.1");
-        EQUALS(opts.webBindPort, 20026);
         STREQUALS(opts.bindMapName.c_str(), "freeride");
         EQUALS(opts.maxPlayers, 64);
         STREQUALS(opts.bindSecretKey.c_str(), "secret");
@@ -78,7 +73,6 @@ MODULE(server_config, {
         EQUALS(opts.maxPlayers, 7);
         STREQUALS(opts.bindHost.c_str(), "0.0.0.0");
         EQUALS(opts.bindPort, 27015);
-        EQUALS(opts.webBindPort, 27016);
     });
 
     IT("does not consume the mod object or unknown keys", {
@@ -88,28 +82,23 @@ MODULE(server_config, {
     });
 
     IT("lets the command line override a compiled default", {
-        const auto opts = resolve(nlohmann::json::object(), {"-p", "20050", "-h", "127.0.0.1", "-P", "20051", "-H", "127.0.0.2"});
+        const auto opts = resolve(nlohmann::json::object(), {"-p", "20050", "-h", "127.0.0.1"});
         STREQUALS(opts.bindHost.c_str(), "127.0.0.1");
         EQUALS(opts.bindPort, 20050);
-        STREQUALS(opts.webBindHost.c_str(), "127.0.0.2");
-        EQUALS(opts.webBindPort, 20051);
     });
 
     IT("lets the command line override the config document", {
-        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}, {"apiport", 20026}}, {"--port", "20050", "--apiport", "20051"});
+        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}}, {"--port", "20050"});
         EQUALS(opts.bindPort, 20050);
-        EQUALS(opts.webBindPort, 20051);
         STREQUALS(opts.bindHost.c_str(), "127.0.0.1");
     });
 
     // The regression: a flag that was never passed used to read back its default_value and overwrite
     // whatever the config document had just set.
     IT("leaves the document alone for flags that were not passed", {
-        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}, {"apihost", "10.0.0.1"}, {"apiport", 20026}}, {"-p", "20050"});
+        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}}, {"-p", "20050"});
         EQUALS(opts.bindPort, 20050);
         STREQUALS(opts.bindHost.c_str(), "127.0.0.1");
-        STREQUALS(opts.webBindHost.c_str(), "10.0.0.1");
-        EQUALS(opts.webBindPort, 20026);
     });
 
     // Passing the compiled default explicitly is still an override, so resolution must key off
@@ -168,5 +157,46 @@ MODULE(server_config, {
         EQUALS(result.count("config") > 0, true);
         STREQUALS(result["config"].as<std::string>().c_str(), "other.json");
         EQUALS(result.count("port") > 0, false);
+    });
+
+    IT("reads the download URL and package secret from the document and the command line", {
+        const auto fromDocument = resolve({{"download-url", "https://cdn.example/m2o"}, {"package-secret", "doc"}}, {});
+        STREQUALS(fromDocument.assetDownloadUrl.c_str(), "https://cdn.example/m2o");
+        STREQUALS(fromDocument.packageSecret.c_str(), "doc");
+
+        const auto fromArgs = resolve({{"package-secret", "doc"}}, {"--package-secret", "cli", "--download-url", "http://mirror/x"});
+        STREQUALS(fromArgs.packageSecret.c_str(), "cli");
+        STREQUALS(fromArgs.assetDownloadUrl.c_str(), "http://mirror/x");
+    });
+
+    IT("derives the same package key from the same slug and secret", {
+        auto opts          = compiledDefaults();
+        opts.packageSecret = "secret";
+        const auto first   = Framework::Integrations::Server::DerivePackageKey(opts);
+        EQUALS(first == Framework::Integrations::Server::DerivePackageKey(opts), true);
+
+        auto otherSecret          = opts;
+        otherSecret.packageSecret = "other";
+        EQUALS(first != Framework::Integrations::Server::DerivePackageKey(otherSecret), true);
+
+        auto otherSlug    = opts;
+        otherSlug.modSlug = "another_mod";
+        EQUALS(first != Framework::Integrations::Server::DerivePackageKey(otherSlug), true);
+
+        const Framework::Utils::Crypto::Key zero {};
+        EQUALS(first != zero, true);
+    });
+
+    IT("derives the package key from the server token when no package secret is set", {
+        auto withToken          = compiledDefaults();
+        withToken.bindSecretKey = "token";
+        auto withSecret          = compiledDefaults();
+        withSecret.packageSecret = "token";
+        EQUALS(Framework::Integrations::Server::DerivePackageKey(withToken) == Framework::Integrations::Server::DerivePackageKey(withSecret), true);
+
+        auto both          = withToken;
+        both.packageSecret = "secret";
+        EQUALS(Framework::Integrations::Server::DerivePackageKey(both) != Framework::Integrations::Server::DerivePackageKey(withToken), true);
+        EQUALS(Framework::Integrations::Server::DerivePackageKey(withToken) != Framework::Integrations::Server::DerivePackageKey(compiledDefaults()), true);
     });
 });

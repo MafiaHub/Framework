@@ -169,6 +169,9 @@ set(HTTPLIB_COMPILE ON)
 set(HTTPLIB_INSTALL OFF CACHE BOOL "" FORCE) # exported with the Framework targets below instead
 add_subdirectory(httplib)
 set_property(TARGET httplib PROPERTY INTERFACE_SOURCES "")
+# httplib listens with a backlog of 5: a burst of players connecting to download overflows it, and
+# Linux drops the extra connection attempts until they retry a second later.
+target_compile_definitions(httplib PUBLIC CPPHTTPLIB_LISTEN_BACKLOG=512)
 fw_sdk_export_includes(httplib httplib "${CMAKE_CURRENT_BINARY_DIR}/httplib/out")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/httplib/out/httplib.h" DESTINATION "${FW_SDK_INCLUDE_DIR}/httplib")
 

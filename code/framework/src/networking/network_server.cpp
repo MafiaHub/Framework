@@ -25,10 +25,6 @@ namespace Framework::Networking {
         // How long Shutdown() blocks to flush the disconnection notification to connected peers, in
         // ms. Larger than the client's because the server broadcasts to every connection.
         constexpr unsigned int kShutdownBlockDurationMs = 1000;
-
-        // Chunk the streamer reads files in; also the granularity of the client's progress.
-        constexpr unsigned int kAssetChunkSize  = 262144;
-        constexpr unsigned int kAssetPushWindow = 16;
     } // namespace
 
     Utils::Result<void, Error> NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password, const AdmissionSettings &admission) {
@@ -57,14 +53,6 @@ namespace Framework::Networking {
 
         _peer->SetMaximumIncomingConnections((uint16_t)maxPlayers);
 
-        _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
-        _assetStreamer.SetDownloadRequestIncrementalReadInterface(&_assetReader, kAssetChunkSize);
-        // Several chunks in flight rather than one per round trip, so a large download is bound by
-        // the link rather than by its latency.
-        _fileListTransfer.SetReferencePushWindow(kAssetPushWindow);
-        _assetStreamer.SetUploadSendParameters(MafiaNet::Priority::High, ToOrderingChannel(Channel::Assets));
-        _peer->AttachPlugin(&_fileListTransfer);
-        _peer->AttachPlugin(&_assetStreamer);
         RegisterBuildToken();
 
         // Run replication as the authoritative server.

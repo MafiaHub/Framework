@@ -11,6 +11,7 @@
 #include "rpc.h"
 
 #include <logging/logger.h>
+#include <utils/streamed_assets/policy.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -21,13 +22,11 @@
 namespace Framework::Networking::RPC {
     /**
      * One asset pak a resource ships for the game engine to mount: a plain ZIP built from the
-     * resource's `<lane>/` folder, staged and downloaded beside its .fwpak as
+     * resource's `<lane>/` folder, served over HTTP beside its .fwpak as
      * Utils::StreamedAssets::PakFileName(resource, lane, sha256). What a lane may carry is the
      * mod's policy, checked by both ends.
      */
     struct AssetPakInfo {
-        static constexpr size_t kMaxLaneLength = 32;
-
         std::string lane;
         std::string sha256;
         uint64_t size = 0;
@@ -39,7 +38,7 @@ namespace Framework::Networking::RPC {
         }
 
         bool IsSane() const {
-            return !lane.empty() && lane.size() <= kMaxLaneLength && sha256.size() == 64 && size > 0;
+            return Utils::StreamedAssets::IsValidLaneName(lane) && sha256.size() == 64 && size > 0 && size <= Utils::StreamedAssets::kMaxPakSize;
         }
     };
 
@@ -52,6 +51,7 @@ namespace Framework::Networking::RPC {
         // Hex SHA-256 of the resource's .fwpak container; the client refuses a mismatch. Empty
         // when the resource has no client entry point.
         std::string packageHash;
+        uint64_t packageSize = 0;
 
         // The resource's asset paks, one per lane folder it ships. A resource with paks and no
         // packageHash ships assets only: there is nothing of it to run on the client.
@@ -61,6 +61,7 @@ namespace Framework::Networking::RPC {
             bs->Serialize(write, name);
             bs->Serialize(write, version);
             bs->Serialize(write, packageHash);
+            bs->Serialize(write, packageSize);
 
             uint8_t count = static_cast<uint8_t>(std::min<size_t>(assetPaks.size(), kMaxAssetPaks));
             bs->Serialize(write, count);
@@ -89,12 +90,22 @@ namespace Framework::Networking::RPC {
         // docs/research/client_resource_protection.md for what this does and does not protect.
         std::string packageKey;
 
+        // Hex secret the client sends with every GET /files/ request (AssetFileServer::kTokenHeader);
+        // valid until this connection closes.
+        std::string downloadToken;
+
+        // Where the client fetches files before falling back to the game port: <downloadUrl>/<file>.
+        // Empty when the server serves them itself.
+        std::string downloadUrl;
+
         std::vector<ResourceInfo> resources;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, readyEventId);
             bs->Serialize(write, tickRate);
             bs->Serialize(write, packageKey);
+            bs->Serialize(write, downloadToken);
+            bs->Serialize(write, downloadUrl);
 
             if (write && resources.size() > std::numeric_limits<uint16_t>::max()) {
                 Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("ServerResources holds {} resources, exceeding the wire limit; truncating", resources.size());

@@ -16,6 +16,7 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
+#include "asset_file_server.h"
 #include "asset_paks/asset_pak_builder.h"
 #include "connection_gate.h"
 #include "http/webserver.h"
@@ -112,6 +113,15 @@ namespace Framework::Integrations::Server {
         std::string bindMapName;
         int32_t bindPort;
         std::string bindPassword;
+
+        // http(s) base URL clients fetch resource packages and asset paks from (<url>/<file>), such as a
+        // CDN the operator mirrors the staged files to. Clients fall back to the game port. Empty: the
+        // game port only.
+        std::string assetDownloadUrl;
+
+        // Secret the resource package key is derived from (with modSlug). Empty: the server token
+        // (bindSecretKey). Changing it changes every package hash, so clients download them again.
+        std::string packageSecret;
         bool bindPublicServer = true;
 
         // How long playerConnecting handlers may take to settle before the connection is turned
@@ -129,10 +139,6 @@ namespace Framework::Integrations::Server {
             std::string apiUrl = "https://api.mafiahub.dev";
             std::string masterlistUrl = "";
         } services;
-
-        bool webServerEnabled = true;
-        std::string webBindHost;
-        int32_t webBindPort;
 
         int32_t maxPlayers;
         int32_t maxPlayersHardCap = 0; // compiled-in ceiling the config file cannot raise; 0 = uncapped
@@ -160,6 +166,8 @@ namespace Framework::Integrations::Server {
 
     // Settings resolve lowest to highest: InstanceOptions defaults, then the config document, then
     // the command line. Each layer only touches the keys it actually carries.
+    // The resource package key: stable for the same mod slug and secret, so it needs no storage.
+    Framework::Utils::Crypto::Key DerivePackageKey(const InstanceOptions &opts);
     void AddCommandLineOptions(cxxopts::Options &options, const InstanceOptions &opts);
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts);
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts);
@@ -225,6 +233,8 @@ namespace Framework::Integrations::Server {
         std::string _packageKeyHex;
         bool _packageKeyReady = false;
         std::unordered_map<std::string, std::string> _packageHashes;
+        std::unordered_map<std::string, uint64_t> _packageSizes;
+        AssetFileServer _assetFileServer;
 
         // Each running resource's asset paks, staged and served beside the packages.
         AssetPakBuilder _assetPakBuilder;
@@ -245,7 +255,7 @@ namespace Framework::Integrations::Server {
         void AdmitSession(MafiaNet::RakNetGUID guid);
         // Runs once per tick, after scripting: acts on what the gate settled.
         void ApplyAdmissionDecisions();
-        void InitAssetStreamer();
+        void PublishClientAssets();
         // Directory the built .fwpak containers are staged in for the streamer to upload.
         std::string GetPackageStagingDir() const;
         // Re-sync a hot-reloaded/started client resource to connected clients.

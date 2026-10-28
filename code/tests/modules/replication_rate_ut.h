@@ -53,7 +53,6 @@ MODULE(replication_rate, {
     IT("keeps the transform stream on a channel of its own", {
         const char transform = ToOrderingChannel(Channel::Transform);
         NEQUALS(transform, ToOrderingChannel(Channel::State));
-        NEQUALS(transform, ToOrderingChannel(Channel::Assets));
         NEQUALS(transform, ToOrderingChannel(Channel::Events));
         NEQUALS(transform, ToOrderingChannel(Channel::Construction));
         NEQUALS(transform, ToOrderingChannel(Channel::VoiceFrames));

@@ -79,6 +79,7 @@ set(FRAMEWORK_SERVER_SRC
     src/integrations/server/instance.cpp
     src/integrations/server/connection_gate.cpp
     src/integrations/server/asset_paks/asset_pak_builder.cpp
+    src/integrations/server/asset_file_server.cpp
     src/integrations/server/networking/engine.cpp
 
     # JavaScript scripting (server module)
@@ -106,6 +107,7 @@ set(FRAMEWORK_CLIENT_SRC
     src/external/imgui/widgets/console.cpp
 
     src/integrations/client/instance.cpp
+    src/integrations/client/asset_downloader.cpp
     src/integrations/client/masterlist_browser.cpp
     src/integrations/client/resource_packages.cpp
     src/integrations/client/networking/engine.cpp

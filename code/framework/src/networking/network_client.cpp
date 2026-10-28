@@ -46,9 +46,6 @@ namespace Framework::Networking {
             return Error(std::string("Failed to start networking peer: ") + GetStartupResultString(result));
         }
 
-        _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
-        _peer->AttachPlugin(&_fileListTransfer);
-        _peer->AttachPlugin(&_assetStreamer);
         RegisterBuildToken();
 
         // Run replication as a client: receive constructions and serialize owned entities upstream.
@@ -338,17 +335,5 @@ namespace Framework::Networking {
         }
 
         return _peer->GetAveragePing(_peer->GetSystemAddressFromIndex(0));
-    }
-
-    void AssetFileTransfer::OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) {
-        // Drops the sender's receivers; skipping it kept them alive until the peer shut down
-        MafiaNet::FileListTransfer::OnClosedConnection(systemAddress, rakNetGUID, lostConnectionReason);
-        if (_cb) {
-            _cb();
-        }
-    }
-
-    void AssetFileTransfer::SetCallback(OnAssetsDownloadFailedCallback cb) {
-        _cb = std::move(cb);
     }
 } // namespace Framework::Networking

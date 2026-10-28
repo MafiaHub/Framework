@@ -22,6 +22,8 @@ namespace Framework::Utils::StreamedAssets {
     inline constexpr std::uint64_t kMaxEntrySize  = 512ull * 1024 * 1024;
     inline constexpr std::size_t kMaxPathLength   = 240;
     inline constexpr std::size_t kMaxResourceName = 64;
+    inline constexpr std::size_t kMaxLaneName     = 32;
+    inline constexpr std::size_t kMaxPackageName  = 128;
 
     /**
      * A project's statement of what a streamed pak may carry and how it is laid out.
@@ -61,6 +63,12 @@ namespace Framework::Utils::StreamedAssets {
 
     /** Lowercase ASCII letters, digits, `-` and `_`, 1 to 64 characters. */
     bool IsValidResourceName(std::string_view name);
+
+    /** ASCII letters, digits, `-` and `_`, 1 to 32 characters: one segment of a cache path and a URL. */
+    bool IsValidLaneName(std::string_view lane);
+
+    /** ASCII letters, digits, `.`, `-` and `_`, 1 to 128 characters, never `.` or `..`. */
+    bool IsValidPackageName(std::string_view name);
 
     /** A lowercase 64-digit hex SHA-256. */
     bool IsSha256(std::string_view text);

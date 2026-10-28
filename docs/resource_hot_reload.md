@@ -99,14 +99,13 @@ clients so they re-sync and apply it in place:
 1. Any `StartResource` after the initial boot fires
    `ResourceManager::SetOnResourceStarted`; the server `Instance` reacts (boot
    starts are skipped — clients get the full list on connect).
-2. The server rebuilds the asset streamer's upload list (`ClearUploads` +
-   `InitAssetStreamer`). This is required: MafiaNet's `DirectoryDeltaTransfer`
-   compares the file hashes captured when files were added, so without
-   rebuilding, an edited file looks up-to-date and is never re-sent.
+2. The server repackages and republishes the client files
+   (`PublishClientAssets`), so the refresh announces their new hashes.
 3. The server broadcasts a `ResourceRefresh` RPC (affected resource
    names/versions), for resources with a client entry point.
-4. The client re-runs a **targeted** delta download (only changed files
-   transfer; unlike the connect-time download it does not stop all resources),
+4. The client re-runs a **targeted** HTTP download of the flagged resources
+   (files whose cached hash still matches are skipped; unlike the connect-time
+   download it does not stop all resources),
    then for each flagged resource: reloads it if running, or — if the client
    doesn't know it yet (newly added on the server) — discovers it from the
    just-synced cache and starts it.

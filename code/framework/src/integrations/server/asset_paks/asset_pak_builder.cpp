@@ -38,6 +38,10 @@ namespace Framework::Integrations::Server {
         std::vector<BuiltLane> built;
         std::error_code code;
         for (const std::string &lane : _policy->GetLanes()) {
+            if (!Utils::StreamedAssets::IsValidLaneName(lane)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Asset lane '{}' is not [A-Za-z0-9_-], at most {} characters; skipped", lane, Utils::StreamedAssets::kMaxLaneName);
+                continue;
+            }
             const std::filesystem::path laneRoot = folder / lane;
             if (!std::filesystem::is_directory(laneRoot, code)) {
                 continue;

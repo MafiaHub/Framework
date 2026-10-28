@@ -11,7 +11,7 @@
 #include "unit.h"
 
 /* TEST CATEGORIES */
-#include "modules/asset_transfer_ut.h"
+#include "modules/asset_http_ut.h"
 #include "modules/bitops_ut.h"
 #include "modules/connection_admission_ut.h"
 #include "modules/connection_gate_ut.h"
@@ -76,6 +76,7 @@ int main() {
 
     Framework::Logging::GetInstance()->PauseLogging(true);
 
+    UNIT_MODULE(asset_http);
     UNIT_MODULE(bitops);
     UNIT_MODULE(string_utils);
     UNIT_MODULE(world_text);
@@ -84,7 +85,6 @@ int main() {
     UNIT_MODULE(result);
     UNIT_MODULE(network_packets);
     UNIT_MODULE(network_work);
-    UNIT_MODULE(asset_transfer);
     UNIT_MODULE(replication_authority);
     UNIT_MODULE(replication_rate);
     UNIT_MODULE(transform_batch);

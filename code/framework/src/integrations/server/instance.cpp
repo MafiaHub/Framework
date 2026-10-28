@@ -191,17 +191,17 @@ namespace Framework::Integrations::Server {
         if (_opts.bindPort <= 0 || _opts.bindPort > 65535) {
             return Error("bindPort must be in the range 1-65535 (got " + std::to_string(_opts.bindPort) + ")");
         }
-        if (_opts.webServerEnabled && (_opts.webBindPort <= 0 || _opts.webBindPort > 65535)) {
-            return Error("webBindPort must be in the range 1-65535 (got " + std::to_string(_opts.webBindPort) + ")");
-        }
-        if (_opts.webServerEnabled && _opts.webBindHost.empty()) {
-            return Error("webBindHost is required");
-        }
         if (_opts.maxPlayers <= 0) {
             return Error("maxPlayers must be greater than 0 (got " + std::to_string(_opts.maxPlayers) + ")");
         }
         // MafiaNet keeps 255 bytes and silently drops the rest, so a longer one would be a different
         // password from the one the operator wrote, and nobody could type the one it enforces.
+        while (!_opts.assetDownloadUrl.empty() && _opts.assetDownloadUrl.back() == '/') {
+            _opts.assetDownloadUrl.pop_back();
+        }
+        if (!_opts.assetDownloadUrl.empty() && _opts.assetDownloadUrl.rfind("http://", 0) != 0 && _opts.assetDownloadUrl.rfind("https://", 0) != 0) {
+            return Error("download-url must start with http:// or https:// (got '" + _opts.assetDownloadUrl + "')");
+        }
         if (_opts.bindPassword.size() > 255) {
             return Error("password must be at most 255 bytes (got " + std::to_string(_opts.bindPassword.size()) + ")");
         }
@@ -213,11 +213,6 @@ namespace Framework::Integrations::Server {
         // Initialize the logging instance with the mod slug name
         Logging::GetInstance()->SetLogName(_opts.modSlug);
 
-        // Initialize the web server
-        if (_opts.webServerEnabled && _webServer->Init(_opts.webBindHost, _opts.webBindPort, _opts.httpServeDir) != HTTP::WebserverError::WEBSERVER_NONE) {
-            return Error("Failed to initialize the webserver on " + _opts.webBindHost + ":" + std::to_string(_opts.webBindPort));
-        }
-
         // Initialize our networking engine
         // MafiaNet drops a request nobody answers; the gate always answers first, with a reason.
         Framework::Networking::AdmissionSettings admission;
@@ -227,6 +222,18 @@ namespace Framework::Integrations::Server {
         if (auto netResult = _networkingEngine->Init(_opts.bindHost, _opts.bindPort, _opts.maxPlayers, _opts.bindPassword, admission); !netResult) {
             return netResult;
         }
+
+        // Same port number as the game, over TCP: MafiaNet only binds it for UDP.
+        // A joining player holds a worker for the whole download, so one per slot keeps a join burst out of the queue.
+        const size_t webWorkers = static_cast<size_t>(std::clamp(_opts.maxPlayers, 8, 256));
+        _webServer->SetWorkerCount(webWorkers);
+        if (_webServer->Init(_opts.bindHost, _opts.bindPort, _opts.httpServeDir) != HTTP::WebserverError::WEBSERVER_NONE) {
+            return Error("Failed to start the HTTP server on TCP " + _opts.bindHost + ":" + std::to_string(_opts.bindPort));
+        }
+        CoreModules::SetWebserver(_webServer.get());
+        // Downloads never take the last workers: the info endpoint and the mod's routes share the pool.
+        constexpr size_t kWorkersKeptFromDownloads = 4;
+        _assetFileServer.Register(webWorkers - kWorkersKeptFromDownloads);
 
         CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkServer());
 
@@ -321,7 +328,7 @@ namespace Framework::Integrations::Server {
         _scriptingModule->GetResourceManager()->DiscoverResources();
 
         // Initialize asset streamer (needs discovered resources to know client files)
-        InitAssetStreamer();
+        PublishClientAssets();
 
         // Mirror runtime resource start/stop to clients. Gated on boot (the
         // StartAll below predates any connection) and shutdown.
@@ -346,10 +353,6 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
-        if (_opts.webServerEnabled) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Http Host:\t{}", _opts.webBindHost);
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Http Port:\t{}", _opts.webBindPort);
-        }
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Password:\t{}", _opts.bindPassword.empty() ? "none" : "required");
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
@@ -380,13 +383,22 @@ namespace Framework::Integrations::Server {
     }
 
 
+    Framework::Utils::Crypto::Key DerivePackageKey(const InstanceOptions &opts) {
+        const std::string &secret = !opts.packageSecret.empty() ? opts.packageSecret : opts.bindSecretKey;
+        const std::string digest  = Framework::Utils::Crypto::Sha256Hex(std::string("mafiahub-package-key") + '\0' + opts.modSlug + '\0' + secret);
+        Framework::Utils::Crypto::Key key {};
+        Framework::Utils::Crypto::FromHex(digest, key.data(), key.size());
+        return key;
+    }
+
     void AddCommandLineOptions(cxxopts::Options &options, const InstanceOptions &opts) {
         options.allow_unrecognised_options();
         options.add_options("MafiaHub Integrations server",
             {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)},
-                {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)}, {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.webBindPort))},
-                {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(opts.webBindHost)},
-                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+                {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)},
+                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()},
+                {"download-url", "http(s) base URL clients fetch resource files from before the game port", cxxopts::value<std::string>()},
+                {"package-secret", "Secret the resource package key is derived from; defaults to the server token", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts) {
@@ -398,12 +410,12 @@ namespace Framework::Integrations::Server {
 
         read("host", opts.bindHost);
         read("port", opts.bindPort);
-        read("apihost", opts.webBindHost);
-        read("apiport", opts.webBindPort);
         read("map", opts.bindMapName);
         read("maxplayers", opts.maxPlayers);
         read("server-token", opts.bindSecretKey);
         read("password", opts.bindPassword);
+        read("download-url", opts.assetDownloadUrl);
+        read("package-secret", opts.packageSecret);
     }
 
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts) {
@@ -417,10 +429,10 @@ namespace Framework::Integrations::Server {
 
         read("host", opts.bindHost);
         read("port", opts.bindPort);
-        read("apihost", opts.webBindHost);
-        read("apiport", opts.webBindPort);
         read("server-token", opts.bindSecretKey);
         read("password", opts.bindPassword);
+        read("download-url", opts.assetDownloadUrl);
+        read("package-secret", opts.packageSecret);
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -503,12 +515,12 @@ namespace Framework::Integrations::Server {
         nlohmann::json frameworkKeys;
         frameworkKeys["host"]         = _opts.bindHost;
         frameworkKeys["port"]         = _opts.bindPort;
-        frameworkKeys["apihost"]      = _opts.webBindHost;
-        frameworkKeys["apiport"]      = _opts.webBindPort;
         frameworkKeys["map"]          = _opts.bindMapName;
         frameworkKeys["maxplayers"]   = _opts.maxPlayers;
         frameworkKeys["server-token"] = _opts.bindSecretKey;
         frameworkKeys["password"]     = _opts.bindPassword;
+        frameworkKeys["download-url"] = _opts.assetDownloadUrl;
+        frameworkKeys["package-secret"] = _opts.packageSecret;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
 
@@ -565,6 +577,8 @@ namespace Framework::Integrations::Server {
             resources.readyEventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
             resources.tickRate     = _opts.worldConfig.tickInterval;
             resources.packageKey   = _packageKeyHex;
+            resources.downloadToken = _assetFileServer.Grant(guid.g);
+            resources.downloadUrl   = _opts.assetDownloadUrl;
             resources.resources = DescribeClientResources();
             net->SendRPC(resources, guid);
 
@@ -581,6 +595,7 @@ namespace Framework::Integrations::Server {
             // Drop voice state unconditionally: a peer that never reached the ready barrier can
             // still have been registered in the router by a position push.
             _voiceServer.OnPlayerDisconnect(guid.g);
+            _assetFileServer.Revoke(guid.g);
 
             // Player notification and avatar teardown run in ReplicationManager::OnClosedConnection,
             // which RakNet fires before this packet is delivered; here we just finalise the connection.
@@ -830,11 +845,8 @@ namespace Framework::Integrations::Server {
         return (std::filesystem::path(assetsPath).parent_path() / ".packages").string();
     }
 
-    void Instance::InitAssetStreamer() {
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Setting up asset streamer...");
-        const auto net      = GetNetworkingEngine()->GetNetworkServer();
-        const auto streamer = net->GetAssetStreamer();
-
+    void Instance::PublishClientAssets() {
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Publishing client assets...");
         const auto scripting = GetScriptingModule();
         if (!scripting) {
             return;
@@ -850,45 +862,22 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        // Persisted: the key feeds the container bytes, so a fresh one each restart would change
-        // every hash and re-download every resource. It guards the client cache, not these files.
+        // Derived, never stored: the key feeds the container bytes, so it must stay the same across restarts
+        // or every hash changes and every client downloads every resource again, and servers often run on
+        // a read-only filesystem. Every client receives the key, so it only keeps a copied cache shut to
+        // someone who never connected; the operator's secret is what makes it unguessable.
         if (!_packageKeyReady) {
-            const auto keyPath = (std::filesystem::path(stagingDir) / "package.key").string();
-
-            std::string storedHex;
-            if (std::ifstream keyFile(keyPath, std::ios::binary); keyFile.is_open()) {
-                std::getline(keyFile, storedHex);
-            }
-            while (!storedHex.empty() && (storedHex.back() == 0x0D || storedHex.back() == 0x0A)) {
-                storedHex.pop_back();
-            }
-
-            if (storedHex.size() == Framework::Utils::Crypto::kKeySize * 2 && Framework::Utils::Crypto::FromHex(storedHex, _packageKey.data(), _packageKey.size())) {
-                _packageKeyHex = storedHex;
-            }
-            else {
-                bool ok     = false;
-                _packageKey = Framework::Utils::Crypto::GenerateKey(&ok);
-                if (!ok) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not generate a resource package key; client resources will not be served");
-                    return;
-                }
-                _packageKeyHex = Framework::Utils::Crypto::ToHex(_packageKey.data(), _packageKey.size());
-
-                std::ofstream keyOut(keyPath, std::ios::binary | std::ios::trunc);
-                if (keyOut.is_open()) {
-                    keyOut << _packageKeyHex;
-                }
-                if (!keyOut.good()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Could not persist the resource package key to '{}'; clients will re-download resources after a restart", keyPath);
-                }
-            }
+            _packageKey      = DerivePackageKey(_opts);
+            _packageKeyHex   = Framework::Utils::Crypto::ToHex(_packageKey.data(), _packageKey.size());
             _packageKeyReady = true;
+            if (_opts.packageSecret.empty() && _opts.bindSecretKey.empty()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("No package-secret or server-token is set; the resource package key is derived from the mod slug alone and anyone can recompute it");
+            }
         }
 
-        // Uploads are named relative to this, so clients receive a flat "<resource>.fwpak".
-        streamer->SetApplicationDirectory(stagingDir.c_str());
         _packageHashes.clear();
+        _packageSizes.clear();
+        std::unordered_map<std::string, std::filesystem::path> served;
 
         const auto resourceManager = scripting->GetResourceManager();
         if (!resourceManager) {
@@ -913,6 +902,10 @@ namespace Framework::Integrations::Server {
             if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
                 continue;
             }
+            if (!Framework::Utils::StreamedAssets::IsValidPackageName(resourceName)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client resource '{}' cannot be served: its name is not [A-Za-z0-9._-], at most {} characters", resourceName, Framework::Utils::StreamedAssets::kMaxPackageName);
+                continue;
+            }
 
             Framework::Scripting::PackagedResource packaged;
             std::string error;
@@ -924,7 +917,6 @@ namespace Framework::Integrations::Server {
             const std::string packageName = resourceName + Framework::Utils::Package::kExtension;
             const auto packagePath        = std::filesystem::path(stagingDir) / packageName;
 
-            // An unchanged resource keeps its mtime, so the delta transfer has nothing to send.
             bool needsWrite = true;
             if (std::filesystem::exists(packagePath, ec) && !ec) {
                 const auto existing = Framework::Utils::Crypto::Sha256FileHex(packagePath.string());
@@ -944,15 +936,16 @@ namespace Framework::Integrations::Server {
                 }
             }
 
-            streamer->AddFile(packagePath.string().c_str(), packageName.c_str());
+            served[packageName]          = packagePath;
             _packageHashes[resourceName] = packaged.sha256;
+            _packageSizes[resourceName]  = packaged.blob.size();
             packagedFiles += packaged.fileCount;
 
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Packaged client resource '{}': {} files, {} bytes, sha256 {}{}", resourceName, packaged.fileCount, packaged.blob.size(), packaged.sha256.substr(0, 16), needsWrite ? "" : " (unchanged)");
         }
 
-        // Asset paks: plain ZIPs the client's engine mounts, staged beside the packages and sent by
-        // the same delta transfer. A resource stopped at runtime ships none until it starts again.
+        // Asset paks: plain ZIPs the client's engine mounts, staged beside the packages and served
+        // the same way. A resource stopped at runtime ships none until it starts again.
         _assetPaks.clear();
         if (_opts.assetPakPolicy) {
             if (!_assetPakBuilder.IsActive()) {
@@ -966,8 +959,7 @@ namespace Framework::Integrations::Server {
                 }
                 std::vector<Framework::Networking::RPC::AssetPakInfo> paks = _assetPakBuilder.Build(resourceName, resource->GetPath());
                 for (const auto &pak : paks) {
-                    const std::string pakName = Framework::Utils::StreamedAssets::PakFileName(resourceName, pak.lane, pak.sha256);
-                    streamer->AddFile(_assetPakBuilder.PathOf(resourceName, pak).string().c_str(), pakName.c_str());
+                    served[Framework::Utils::StreamedAssets::PakFileName(resourceName, pak.lane, pak.sha256)] = _assetPakBuilder.PathOf(resourceName, pak);
                 }
                 if (!paks.empty()) {
                     _assetPaks[resourceName] = std::move(paks);
@@ -975,7 +967,15 @@ namespace Framework::Integrations::Server {
             }
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset streamer ready with {} encrypted resource packages ({} files) and {} resource(s) shipping asset paks", _packageHashes.size(), packagedFiles, _assetPaks.size());
+        if (!_opts.assetDownloadUrl.empty()) {
+            std::string names;
+            for (const auto &[name, path] : served) {
+                names += (names.empty() ? "" : ", ") + name;
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Clients download from {} first; mirror these files from '{}' there: {}", _opts.assetDownloadUrl, stagingDir, names.empty() ? "(none)" : names);
+        }
+        _assetFileServer.Publish(std::move(served));
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset file server ready with {} encrypted resource packages ({} files) and {} resource(s) shipping asset paks", _packageHashes.size(), packagedFiles, _assetPaks.size());
     }
 
     Framework::Networking::RPC::ResourceInfo Instance::DescribeResource(const std::string &name, const std::string &version) const {
@@ -986,6 +986,7 @@ namespace Framework::Integrations::Server {
         // resource ships assets only.
         if (const auto hash = _packageHashes.find(name); hash != _packageHashes.end()) {
             info.packageHash = hash->second;
+            info.packageSize = _packageSizes.at(name);
         }
         if (const auto paks = _assetPaks.find(name); paks != _assetPaks.end()) {
             info.assetPaks = paks->second;
@@ -1032,12 +1033,8 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        // Rebuild the streamer's upload list so changed files get fresh hashes;
-        // the delta transfer compares stored hashes. See docs/resource_hot_reload.md.
-        if (auto *streamer = net->GetAssetStreamer()) {
-            streamer->ClearUploads();
-        }
-        InitAssetStreamer();
+        // Republish so changed files are announced with fresh hashes. See docs/resource_hot_reload.md.
+        PublishClientAssets();
 
         // Only resources with a client entry point or asset paks need a client-side refresh.
         const bool scripts = resource->GetManifest().GetMafiaHubConfig().HasClientContent();
@@ -1394,6 +1391,7 @@ namespace Framework::Integrations::Server {
         sig_detach(SIGINT, sig_slot(this, &Instance::OnSignal));
         sig_detach(SIGTERM, sig_slot(this, &Instance::OnSignal));
 
+        CoreModules::SetWebserver(nullptr);
         CoreModules::SetNetworkPeer(nullptr);
         CoreModules::SetReplication(nullptr);
         CoreModules::SetVoiceServer(nullptr);
