@@ -85,6 +85,11 @@ cmake --build build         # Build
 cmake --build build --target RunFrameworkTests  # Run tests
 ```
 
+Set `FW_TEST_FILTER` to run only the test modules whose name contains one of its comma-separated
+substrings (`FW_TEST_FILTER=voice,state_bag build/bin/FrameworkTests`; on Windows set it before
+`builds\build.bat RunFrameworkTests 64`). A failed assertion prints the expression, both values and
+`file:line`, and the run ends with a `> failures:` list, so the tail of the log is enough to act on.
+
 **Windows:**
 ```bash
 builds\build.bat <target> 64

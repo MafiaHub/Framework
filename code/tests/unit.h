@@ -14,6 +14,7 @@ GitHub:
   https://github.com/zpl-c/tester
 
 Version History:
+  MafiaHub - typed failure values, FW_TEST_FILTER, failure summary, NO_COLOR (see below)
   1.1.1 - ensure memory arena only works with zpl present
   1.1.0 - introduce memory arena for per-module allocations
   1.0.1 - Small tweaks
@@ -98,9 +99,27 @@ License:
 #endif
 
 #include <stdarg.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <ostream>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <vector>
+
+#if defined(_WIN32)
+#include <io.h>
+#define UNIT_ISATTY _isatty
+#define UNIT_FILENO _fileno
+#else
+#include <unistd.h>
+#define UNIT_ISATTY isatty
+#define UNIT_FILENO fileno
+#endif
 
 /* zpl specific */
 
@@ -126,6 +145,17 @@ License:
 #define UNIT_ZPL_RESTORE_MEMORY()
 #endif
 
+/* MafiaHub: failure output for people and agents reading a log.
+   - A failed assertion prints the expression and both values, rendered by type (unit__describe).
+   - FW_TEST_FILTER=voice,state_bag runs only the modules whose name contains one of the substrings.
+   - The run ends with a list of every failure, so the tail of a log is enough to act on.
+   - Colors only on a terminal, and never with NO_COLOR set. */
+
+#define UNIT_RED   unit__color("\x1B[31m")
+#define UNIT_GREEN unit__color("\x1B[32m")
+#define UNIT_AMBER unit__color("\x1B[33m")
+#define UNIT_RESET unit__color("\x1B[0m")
+
 #define MODULE(name, ...)                                                                                              \
     int32_t UNIT_JOIN2(module__, name)() {                                                                             \
         printf("--------------------------------------\n");                                                            \
@@ -133,16 +163,17 @@ License:
         printf("--------------------------------------\n");                                                            \
         fflush(stdout);                                                                                                \
         _g_modules++;                                                                                                  \
-        int32_t _total   = 0;                                                                                          \
-        int32_t _errors  = 0;                                                                                          \
-        int32_t _lasterr = 0;                                                                                          \
-        char *_errstr    = 0;                                                                                          \
+        const char *_module = #name;                                                                                   \
+        int32_t _total      = 0;                                                                                       \
+        int32_t _errors     = 0;                                                                                       \
+        int32_t _lasterr    = 0;                                                                                       \
+        const char *_errstr = 0;                                                                                       \
         UNIT_ZPL_INITIALIZE_MEM_ARENA();                                                                               \
         {__VA_ARGS__};                                                                                                 \
         UNIT_ZPL_DESTROY_MEM_ARENA();                                                                                  \
         fflush(stdout);                                                                                                \
-        printf("\n results: %d total, %s%d failed\x1B[0m, %s%d passed\x1B[0m\n", _total,                               \
-               _errors > 0 ? "\x1B[31m" : "", _errors, _errors == 0 ? "\x1B[32m" : "", _total - _errors);              \
+        printf("\n results: %d total, %s%d failed%s, %s%d passed%s\n", _total, _errors > 0 ? UNIT_RED : "", _errors,   \
+               UNIT_RESET, _errors == 0 ? UNIT_GREEN : "", _total - _errors, UNIT_RESET);                              \
         _g_total += _total;                                                                                            \
         _g_errors += _errors;                                                                                          \
         if (_errors)                                                                                                   \
@@ -152,7 +183,7 @@ License:
 
 #define IT(desc, ...)                                                                                                  \
     _lasterr = 0;                                                                                                      \
-    _errstr  = (char *)"";                                                                                             \
+    _errstr  = "";                                                                                                     \
     _total += 1;                                                                                                       \
     {                                                                                                                  \
         UNIT_ZPL_CAPTURE_MEMORY();                                                                                     \
@@ -161,77 +192,70 @@ License:
     }                                                                                                                  \
     if (_lasterr != UNIT_SKIP_MAGIC)                                                                                   \
         _errors += _lasterr;                                                                                           \
-    printf(" * [%s]: It %s %s\n",                                                                                      \
-           (_lasterr == UNIT_SKIP_MAGIC) ? "\x1B[33mSKIP\x1B[0m"                                                       \
-           : (_lasterr)                  ? "\x1B[31mFAIL\x1B[0m"                                                       \
-                                         : "\x1B[32mPASS\x1B[0m",                                                                       \
-           desc, _errstr);
+    printf(" * [%s%s%s]: It %s%s\n",                                                                                   \
+           (_lasterr == UNIT_SKIP_MAGIC) ? UNIT_AMBER                                                                  \
+           : (_lasterr)                  ? UNIT_RED                                                                    \
+                                         : UNIT_GREEN,                                                                 \
+           (_lasterr == UNIT_SKIP_MAGIC) ? "SKIP"                                                                      \
+           : (_lasterr)                  ? "FAIL"                                                                      \
+                                         : "PASS",                                                                     \
+           UNIT_RESET, desc, _errstr);                                                                                 \
+    if (_lasterr == 1)                                                                                                 \
+        unit__record_failure(_module, desc, _errstr);
 
 /* TEST CHECKS */
-#define FAIL(a, b)                                                                                                     \
+#define UNIT_FAIL_WITH(a, relation, b)                                                                                 \
     {                                                                                                                  \
-        _errstr  = unit__bprintf("\n\n\tassert: \x1B[31m%s:%lld %s %s:%lld\x1B[0m\n\tat %s:%d\n", #a, a,               \
-                                (a == b) ? "==" : "!=", #b, b, __FILE__, __LINE__);                                   \
+        _errstr  = unit__failure(#a, unit__describe(a), relation, #b, unit__describe(b), __FILE__, __LINE__);          \
         _lasterr = 1;                                                                                                  \
         break;                                                                                                         \
     }
-#define UFAIL(a, b)                                                                                                    \
-    {                                                                                                                  \
-        _errstr  = unit__bprintf("\n\n\tassert: \x1B[31m%s:%llu %s %s:%llu\x1B[0m\n\tat %s:%d\n", #a, a,               \
-                                (a == b) ? "==" : "!=", #b, b, __FILE__, __LINE__);                                   \
-        _lasterr = 1;                                                                                                  \
-        break;                                                                                                         \
-    }
-#define STRFAIL(a, b)                                                                                                  \
-    {                                                                                                                  \
-        _errstr  = unit__bprintf("\n\n\tassert: \x1B[31m%s:%s %s %s:%s\x1B[0m\n\tat %s:%d\n", #a, (char *)a,           \
-                                (!strcmp(a, b)) ? "==" : "!=", #b, b, __FILE__, __LINE__);                            \
-        _lasterr = 1;                                                                                                  \
-        break;                                                                                                         \
-    }
+#define FAIL(a, b)    UNIT_FAIL_WITH(a, "==", b)
+#define UFAIL(a, b)   UNIT_FAIL_WITH(a, "==", b)
+#define STRFAIL(a, b) UNIT_FAIL_WITH(a, "equals", b)
 #define EQUALS(a, b)                                                                                                   \
     if (a != b) {                                                                                                      \
-        FAIL(a, b);                                                                                                    \
+        UNIT_FAIL_WITH(a, "==", b);                                                                                    \
     }
 #define UEQUALS(a, b)                                                                                                  \
     if (a != b) {                                                                                                      \
-        UFAIL(a, b);                                                                                                   \
+        UNIT_FAIL_WITH(a, "==", b);                                                                                    \
     }
 #define STREQUALS(a, b)                                                                                                \
     if (!!strcmp(a, b)) {                                                                                              \
-        STRFAIL(a, b);                                                                                                 \
+        UNIT_FAIL_WITH(a, "equals", b);                                                                                \
     }
 #define STRCEQUALS(a, b, c)                                                                                            \
     if (!!strncmp(a, b, c)) {                                                                                          \
-        STRFAIL(a, b);                                                                                                 \
+        UNIT_FAIL_WITH(a, "starts like (first " #c " chars)", b);                                                      \
     }
 #define STRCNEQUALS(a, b, c)                                                                                           \
     if (!strncmp(a, b, c)) {                                                                                           \
-        STRFAIL(a, b);                                                                                                 \
+        UNIT_FAIL_WITH(a, "differs from (first " #c " chars)", b);                                                     \
     }
 #define STRNEQUALS(a, b)                                                                                               \
     if (!strcmp(a, b)) {                                                                                               \
-        STRFAIL(a, b);                                                                                                 \
+        UNIT_FAIL_WITH(a, "differs from", b);                                                                          \
     }
 #define NEQUALS(a, b)                                                                                                  \
     if (a == b) {                                                                                                      \
-        FAIL(a, b);                                                                                                    \
+        UNIT_FAIL_WITH(a, "!=", b);                                                                                    \
     }
 #define LESSER(a, b)                                                                                                   \
     if (a >= b) {                                                                                                      \
-        FAIL(a, b);                                                                                                    \
+        UNIT_FAIL_WITH(a, "<", b);                                                                                     \
     }
 #define GREATER(a, b)                                                                                                  \
     if (a <= b) {                                                                                                      \
-        FAIL(a, b);                                                                                                    \
+        UNIT_FAIL_WITH(a, ">", b);                                                                                     \
     }
 #define LESSEREQ(a, b)                                                                                                 \
     if (a > b) {                                                                                                       \
-        FAIL(a, b);                                                                                                    \
+        UNIT_FAIL_WITH(a, "<=", b);                                                                                    \
     }
 #define GREATEREQ(a, b)                                                                                                \
     if (a < b) {                                                                                                       \
-        FAIL(a, b);                                                                                                    \
+        UNIT_FAIL_WITH(a, ">=", b);                                                                                    \
     }
 #define SKIP()                                                                                                         \
     {                                                                                                                  \
@@ -263,13 +287,15 @@ License:
 typedef int32_t (*unit_case)();
 
 #define UNIT_CREATE(name)                                                                                              \
-    const char *unit_name                    = name;                                                                   \
-    unit_case unit_modules[UNIT_MAX_MODULES] = {0};                                                                    \
-    int32_t unit_count                       = 0;
+    const char *unit_name                               = name;                                                        \
+    unit_case unit_modules[UNIT_MAX_MODULES]            = {0};                                                         \
+    const char *unit_module_names[UNIT_MAX_MODULES]     = {0};                                                         \
+    int32_t unit_count                                  = 0;
 
-#define UNIT_MODULE(name) unit_modules[unit_count++] = UNIT_JOIN2(module__, name)
+#define UNIT_MODULE(name)                                                                                              \
+    (unit_module_names[unit_count] = #name, unit_modules[unit_count++] = UNIT_JOIN2(module__, name))
 
-#define UNIT_RUN() unit_main(unit_name, unit_modules, unit_count)
+#define UNIT_RUN() unit_main(unit_name, unit_modules, unit_module_names, unit_count)
 
 /* INTERNALS */
 
@@ -277,37 +303,117 @@ UNIT_DEF int32_t _g_modules     = 0;
 UNIT_DEF int32_t _g_modules_err = 0;
 UNIT_DEF int32_t _g_total       = 0;
 UNIT_DEF int32_t _g_errors      = 0;
+UNIT_DEF std::vector<std::string> _g_failures;
 
-UNIT_DEF int32_t unit_main(const char *name, unit_case *cases, int32_t count) {
-    int32_t err = 0, cnt = count;
+static inline const char *unit__color(const char *code) {
+    static const bool enabled = !getenv("NO_COLOR") && UNIT_ISATTY(UNIT_FILENO(stdout));
+    return enabled ? code : "";
+}
+
+// Renders an assertion operand by its type. Anything without an operator<< still fails readably.
+template <typename T>
+std::string unit__describe(const T &value) {
+    using V = std::remove_cvref_t<T>;
+    if constexpr (std::is_same_v<V, bool>) {
+        return value ? "true" : "false";
+    } else if constexpr (std::is_same_v<V, std::nullptr_t>) {
+        return "nullptr";
+    } else if constexpr (std::is_enum_v<V>) {
+        return std::to_string(static_cast<long long>(value)) + " (enum)";
+    } else if constexpr (std::is_integral_v<V> && sizeof(V) == 1) {
+        return std::to_string(static_cast<int>(value));
+    } else if constexpr (std::is_convertible_v<const T &, const char *>) {
+        const char *text = value;
+        return text ? "\"" + std::string(text) + "\"" : "nullptr";
+    } else if constexpr (std::is_convertible_v<const T &, std::string_view>) {
+        return "\"" + std::string(std::string_view(value)) + "\"";
+    } else if constexpr (requires(std::ostream &stream) { stream << value; }) {
+        std::ostringstream stream;
+        stream << std::boolalpha << value;
+        return stream.str();
+    } else {
+        return "<no operator<< for this type>";
+    }
+}
+
+static inline const char *unit__failure(const char *lhs, const std::string &lhsValue, const char *relation, const char *rhs,
+                                        const std::string &rhsValue, const char *file, int line) {
+    // An operand that is its own value, such as a literal, gets no value line.
+    const auto operand = [](const char *text, const std::string &value) {
+        return value == text ? std::string() : std::string("\n\t  ") + text + " = " + value;
+    };
+    static std::string message;
+    message = std::string("\n\texpected: ") + lhs + " " + relation + " " + rhs + operand(lhs, lhsValue) + operand(rhs, rhsValue)
+            + "\n\tat " + file + ":" + std::to_string(line) + "\n";
+    return message.c_str();
+}
+
+static inline void unit__record_failure(const char *module, const char *desc, const char *detail) {
+    std::string at = detail;
+    const auto position = at.rfind("\tat ");
+    at = position == std::string::npos ? "" : " (" + at.substr(position + 4, at.find('\n', position) - position - 4) + ")";
+    _g_failures.push_back(std::string(module) + ": It " + desc + at);
+}
+
+// FW_TEST_FILTER: comma-separated substrings; a module runs when its name contains any of them.
+static inline bool unit__selected(const char *filter, const char *module) {
+    if (!filter || !*filter) {
+        return true;
+    }
+    std::string_view rest(filter);
+    while (!rest.empty()) {
+        const auto comma = rest.find(',');
+        const auto term  = rest.substr(0, comma);
+        if (!term.empty() && std::string_view(module).find(term) != std::string_view::npos) {
+            return true;
+        }
+        rest = comma == std::string_view::npos ? std::string_view() : rest.substr(comma + 1);
+    }
+    return false;
+}
+
+UNIT_DEF int32_t unit_main(const char *name, unit_case *cases, const char **names, int32_t count) {
+    const char *filter = getenv("FW_TEST_FILTER");
+    int32_t err = 0, cnt = 0;
+    for (int32_t i = 0; i < count; ++i) { cnt += unit__selected(filter, names[i]); }
+
     printf("> testing suite:\n\n");
     printf("   *   suite: %s\n", name);
     printf("   * modules: %d\n", cnt);
+    if (filter && *filter) {
+        printf("   *  filter: %s (FW_TEST_FILTER)\n", filter);
+    }
     printf("\n");
 
-    for (int32_t i = 0; i < count; ++i) { err += cases[i](); }
+    if (cnt == 0) {
+        printf("FW_TEST_FILTER=%s matches no module. Modules:\n", filter);
+        for (int32_t i = 0; i < count; ++i) { printf("  %s\n", names[i]); }
+        return 1;
+    }
+
+    for (int32_t i = 0; i < count; ++i) {
+        if (unit__selected(filter, names[i])) {
+            err += cases[i]();
+        }
+    }
 
     fflush(stdout);
     printf("--------------------------------------\n");
     printf("> total:\n\n");
-    printf(" * modules: %d total, %s%d failed\x1B[0m, %s%d passed\x1B[0m\n", _g_modules,
-           _g_modules_err > 0 ? "\x1B[31m" : "", _g_modules_err, _g_modules_err == 0 ? "\x1B[32m" : "",
-           _g_modules - _g_modules_err);
-    printf(" * tests:   %d total, %s%d failed\x1B[0m, %s%d passed\x1B[0m\n", _g_total, _g_errors > 0 ? "\x1B[31m" : "",
-           _g_errors, _g_errors == 0 ? "\x1B[32m" : "", _g_total - _g_errors);
+    printf(" * modules: %d total, %s%d failed%s, %s%d passed%s\n", _g_modules, _g_modules_err > 0 ? UNIT_RED : "",
+           _g_modules_err, UNIT_RESET, _g_modules_err == 0 ? UNIT_GREEN : "", _g_modules - _g_modules_err, UNIT_RESET);
+    printf(" * tests:   %d total, %s%d failed%s, %s%d passed%s\n", _g_total, _g_errors > 0 ? UNIT_RED : "", _g_errors,
+           UNIT_RESET, _g_errors == 0 ? UNIT_GREEN : "", _g_total - _g_errors, UNIT_RESET);
+    if (!_g_failures.empty()) {
+        printf("\n> failures:\n\n");
+        for (const auto &failure : _g_failures) { printf(" * %s\n", failure.c_str()); }
+    }
     printf("\n");
 
     return -err;
 }
 
-// Locally persisting buffer
-static inline char *unit__bprintf(const char *fmt, ...) {
-    static char buf[1] = "";
-    (void)fmt;
-    return buf;
-}
-
-#if defined(ZPL_COMPILER_MSVC)
+#if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
 
