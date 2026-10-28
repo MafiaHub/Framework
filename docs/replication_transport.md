@@ -4,8 +4,7 @@ Framework 29 batches unreliable transforms and trims the work a busy peer does
 per received packet. Client and server must run the same Framework protocol
 major. MafiaNet 0.20.0 carries the parts that are not Framework-specific:
 ReplicaManager3 no longer sends a message for a channel group with nothing
-selected in it, TwoWayAuthentication has a configurable handshake timeout, and
-StatisticsHistoryPlugin can sample at a fixed interval.
+selected in it and TwoWayAuthentication has a configurable handshake timeout.
 
 ## Transform batches
 
@@ -56,10 +55,9 @@ the first `Update()` inside the bracket only. That pass runs before the drain's
 packets are handled; what they change is serialized by the next pass. Outside
 the bracket every `Update()` runs a pass, as in ReplicaManager3.
 
-`NetworkPeer` samples statistics history at most every 100 ms
-(`kStatisticsSampleIntervalMs`), and gives the build-verification handshake 30
-seconds (`kBuildVerificationTimeoutMs`) so a peer stalled by a load or a join
-burst is not dropped as unverified. Both ends need the longer timeout: the
+`NetworkPeer` gives the build-verification handshake 30 seconds
+(`kBuildVerificationTimeoutMs`) so a peer stalled by a load or a join burst is
+not dropped as unverified. Both ends need the longer timeout: the
 nonce the server hands out expires on the server.
 
 ## Staggered interest queries
