@@ -656,6 +656,7 @@ namespace Framework::Integrations::Client {
             _readyEventId   = payload.readyEventId;
             _serverTickRate = payload.tickRate;
             _downloadToken  = payload.downloadToken;
+            _downloadUrl    = payload.downloadUrl;
 
             _pendingServerResources = payload.resources;
             _assetPaks.clear();
@@ -1064,7 +1065,13 @@ namespace Framework::Integrations::Client {
 
         _downloadStatus             = {};
         _downloadStatus.downloading = true;
-        _assetDownloader.Start(fmt::format("http://{}:{}", _currentState.host, _currentState.port), _downloadToken, std::move(jobs));
+        // The server's download URL first, without the token (it is only the game port's), then the game port.
+        std::vector<AssetDownloader::Source> sources;
+        if (!_downloadUrl.empty()) {
+            sources.push_back({_downloadUrl, {}});
+        }
+        sources.push_back({fmt::format("http://{}:{}/files", _currentState.host, _currentState.port), _downloadToken});
+        _assetDownloader.Start(std::move(sources), std::move(jobs));
     }
 
     void Instance::PollAssetDownload() {

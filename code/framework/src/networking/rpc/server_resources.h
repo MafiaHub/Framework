@@ -94,6 +94,10 @@ namespace Framework::Networking::RPC {
         // valid until this connection closes.
         std::string downloadToken;
 
+        // Where the client fetches files before falling back to the game port: <downloadUrl>/<file>.
+        // Empty when the server serves them itself.
+        std::string downloadUrl;
+
         std::vector<ResourceInfo> resources;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
@@ -101,6 +105,7 @@ namespace Framework::Networking::RPC {
             bs->Serialize(write, tickRate);
             bs->Serialize(write, packageKey);
             bs->Serialize(write, downloadToken);
+            bs->Serialize(write, downloadUrl);
 
             if (write && resources.size() > std::numeric_limits<uint16_t>::max()) {
                 Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("ServerResources holds {} resources, exceeding the wire limit; truncating", resources.size());

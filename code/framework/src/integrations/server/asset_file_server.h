@@ -18,7 +18,7 @@
 namespace Framework::Integrations::Server {
     // Declares GET /files/<name> on the framework's webserver and serves the client resource packages
     // and asset paks there, so downloads stay off the game connection. Only published names are
-    // served: the staging directory beside them also holds the package key. A request must carry a
+    // served: the staging directory beside them holds the pak builder's indexes too. A request must carry a
     // token the server handed to a connected peer (kTokenHeader), and at most maxTransfers files are
     // sent at once so the webserver's other routes keep workers; the rest are told to retry.
     class AssetFileServer final {

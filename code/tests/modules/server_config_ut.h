@@ -158,4 +158,45 @@ MODULE(server_config, {
         STREQUALS(result["config"].as<std::string>().c_str(), "other.json");
         EQUALS(result.count("port") > 0, false);
     });
+
+    IT("reads the download URL and package secret from the document and the command line", {
+        const auto fromDocument = resolve({{"download-url", "https://cdn.example/m2o"}, {"package-secret", "doc"}}, {});
+        STREQUALS(fromDocument.assetDownloadUrl.c_str(), "https://cdn.example/m2o");
+        STREQUALS(fromDocument.packageSecret.c_str(), "doc");
+
+        const auto fromArgs = resolve({{"package-secret", "doc"}}, {"--package-secret", "cli", "--download-url", "http://mirror/x"});
+        STREQUALS(fromArgs.packageSecret.c_str(), "cli");
+        STREQUALS(fromArgs.assetDownloadUrl.c_str(), "http://mirror/x");
+    });
+
+    IT("derives the same package key from the same slug and secret", {
+        auto opts          = compiledDefaults();
+        opts.packageSecret = "secret";
+        const auto first   = Framework::Integrations::Server::DerivePackageKey(opts);
+        EQUALS(first == Framework::Integrations::Server::DerivePackageKey(opts), true);
+
+        auto otherSecret          = opts;
+        otherSecret.packageSecret = "other";
+        EQUALS(first != Framework::Integrations::Server::DerivePackageKey(otherSecret), true);
+
+        auto otherSlug    = opts;
+        otherSlug.modSlug = "another_mod";
+        EQUALS(first != Framework::Integrations::Server::DerivePackageKey(otherSlug), true);
+
+        const Framework::Utils::Crypto::Key zero {};
+        EQUALS(first != zero, true);
+    });
+
+    IT("derives the package key from the server token when no package secret is set", {
+        auto withToken          = compiledDefaults();
+        withToken.bindSecretKey = "token";
+        auto withSecret          = compiledDefaults();
+        withSecret.packageSecret = "token";
+        EQUALS(Framework::Integrations::Server::DerivePackageKey(withToken) == Framework::Integrations::Server::DerivePackageKey(withSecret), true);
+
+        auto both          = withToken;
+        both.packageSecret = "secret";
+        EQUALS(Framework::Integrations::Server::DerivePackageKey(both) != Framework::Integrations::Server::DerivePackageKey(withToken), true);
+        EQUALS(Framework::Integrations::Server::DerivePackageKey(withToken) != Framework::Integrations::Server::DerivePackageKey(compiledDefaults()), true);
+    });
 });

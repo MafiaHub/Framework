@@ -25,6 +25,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <mutex>
 #include <random>
 #include <string>
 #include <thread>
@@ -105,6 +106,10 @@ namespace AssetHttpTest {
             return "http://127.0.0.1:" + std::to_string(port);
         }
 
+        Framework::Integrations::Client::AssetDownloader::Source Files() const {
+            return {Origin() + "/files", token};
+        }
+
         static void Write(const std::filesystem::path &path, const std::string &content) {
             std::ofstream(path, std::ios::binary | std::ios::trunc) << content;
         }
@@ -122,7 +127,11 @@ namespace AssetHttpTest {
         }
 
         bool Run(std::vector<Framework::Integrations::Client::AssetDownloader::Job> jobs) {
-            downloader.Start(Origin(), token, std::move(jobs));
+            return Run({Files()}, std::move(jobs));
+        }
+
+        bool Run(std::vector<Framework::Integrations::Client::AssetDownloader::Source> sources, std::vector<Framework::Integrations::Client::AssetDownloader::Job> jobs) {
+            downloader.Start(std::move(sources), std::move(jobs));
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
             bool success        = false;
             while (!downloader.PollFinished(success)) {
@@ -166,7 +175,7 @@ namespace AssetHttpTest {
     // A /files/ route that answers each request with the next of |steps|, repeating the last; the downloader
     // under test fetches one file from it into a scratch cache.
     struct ScriptedServer {
-        using Step = std::function<void(httplib::Response &)>;
+        using Step = std::function<void(const httplib::Request &, httplib::Response &)>;
 
         Framework::HTTP::Webserver server;
         Framework::Integrations::Client::AssetDownloader downloader;
@@ -174,6 +183,9 @@ namespace AssetHttpTest {
         std::vector<Step> steps;
         std::atomic<int> requests {};
         int32_t port = 0;
+        std::mutex seenMutex;
+        std::vector<std::string> ranges; // the Range header of each request, empty when none
+        std::vector<std::string> tokens; // the token header of each request
 
         explicit ScriptedServer(std::vector<Step> script): steps(std::move(script)) {
             std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -183,9 +195,14 @@ namespace AssetHttpTest {
                     port = candidate;
                 }
             }
-            server.RegisterRequest(R"(/files/([^/]+))", [this](const httplib::Request &, httplib::Response &res) {
+            server.RegisterRequest(R"(/files/([^/]+))", [this](const httplib::Request &req, httplib::Response &res) {
+                {
+                    std::lock_guard lock(seenMutex);
+                    ranges.push_back(req.get_header_value("Range"));
+                    tokens.push_back(req.get_header_value(Framework::Integrations::Server::AssetFileServer::kTokenHeader));
+                }
                 const int index = requests++;
-                steps[std::min<size_t>(static_cast<size_t>(index), steps.size() - 1)](res);
+                steps[std::min<size_t>(static_cast<size_t>(index), steps.size() - 1)](req, res);
             });
             cache = std::filesystem::temp_directory_path() / ("fw_asset_http_scripted_" + std::to_string(random()));
             std::filesystem::create_directories(cache);
@@ -203,8 +220,12 @@ namespace AssetHttpTest {
             return {"scripted.pak", (cache / "scripted.pak").string(), Framework::Utils::Crypto::Sha256Hex(content), content.size()};
         }
 
+        Framework::Integrations::Client::AssetDownloader::Source Files(const std::string &token = "token") const {
+            return {"http://127.0.0.1:" + std::to_string(port) + "/files", token};
+        }
+
         void Start(const Framework::Integrations::Client::AssetDownloader::Job &job) {
-            downloader.Start("http://127.0.0.1:" + std::to_string(port), "token", {job});
+            downloader.Start({Files()}, {job});
         }
 
         // Waits for the outcome; false if none came within |limit|.
@@ -220,13 +241,23 @@ namespace AssetHttpTest {
         }
 
         static Step Status(int status) {
-            return [status](httplib::Response &res) {
+            return [status](const httplib::Request &, httplib::Response &res) {
                 res.status = status;
             };
         }
 
+        // A 206 exactly as given: httplib would otherwise apply the request's range to the body again.
+        static Step RawPartial(const std::string &contentRange, const std::string &body) {
+            return [contentRange, body](const httplib::Request &req, httplib::Response &res) {
+                const_cast<httplib::Request &>(req).ranges.clear();
+                res.status = 206;
+                res.set_header("Content-Range", contentRange);
+                res.set_content(body, "application/octet-stream");
+            };
+        }
+
         static Step Body(const std::string &content) {
-            return [content](httplib::Response &res) {
+            return [content](const httplib::Request &, httplib::Response &res) {
                 res.set_content(content, "application/octet-stream");
             };
         }
@@ -340,7 +371,7 @@ MODULE(asset_http, {
         const auto job = fixture.Stage("big.pak", std::string(4000000, 'z'), published);
         fixture.files.Publish(published);
 
-        fixture.downloader.Start(fixture.Origin(), fixture.token, {job});
+        fixture.downloader.Start({fixture.Files()}, {job});
         fixture.downloader.Cancel();
         bool success = true;
         EQUALS(fixture.downloader.PollFinished(success), false);
@@ -366,7 +397,7 @@ MODULE(asset_http, {
         const auto cache = std::filesystem::temp_directory_path() / ("fw_asset_http_stall_" + std::to_string(random()));
         std::filesystem::create_directories(cache);
         Framework::Integrations::Client::AssetDownloader downloader;
-        downloader.Start("http://127.0.0.1:" + std::to_string(port), "token", {{"stall.pak", (cache / "stall.pak").string(), std::string(64, 'a'), 10}});
+        downloader.Start({{"http://127.0.0.1:" + std::to_string(port) + "/files", "token"}}, {{"stall.pak", (cache / "stall.pak").string(), std::string(64, 'a'), 10}});
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
         const auto started = std::chrono::steady_clock::now();
@@ -573,7 +604,7 @@ MODULE(asset_http, {
         std::filesystem::create_directories(cache);
         Framework::Integrations::Client::AssetDownloader downloader;
         downloader.SetRetryPolicy(AssetHttpTest::FastRetries());
-        downloader.Start("http://127.0.0.1:" + std::to_string(port), "token", {{"flaky.pak", (cache / "flaky.pak").string(), Framework::Utils::Crypto::Sha256Hex(content), content.size()}});
+        downloader.Start({{"http://127.0.0.1:" + std::to_string(port) + "/files", "token"}}, {{"flaky.pak", (cache / "flaky.pak").string(), Framework::Utils::Crypto::Sha256Hex(content), content.size()}});
         bool success        = false;
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         while (!downloader.PollFinished(success) && std::chrono::steady_clock::now() < deadline) {
@@ -590,7 +621,7 @@ MODULE(asset_http, {
 
     IT("waits as long as a busy server asks before trying again", {
         AssetHttpTest::ScriptedServer scripted({
-            [](httplib::Response &res) {
+            [](const httplib::Request &, httplib::Response &res) {
                 res.status = 503;
                 res.set_header("Retry-After", "1");
             },
@@ -644,7 +675,7 @@ MODULE(asset_http, {
         downloader.SetRetryPolicy(policy);
         const auto cache = std::filesystem::temp_directory_path() / "fw_asset_http_unreachable";
         // Port 1 on loopback refuses at once.
-        downloader.Start("http://127.0.0.1:1", "token", {{"x.pak", (cache / "x.pak").string(), std::string(64, 'a'), 10}});
+        downloader.Start({{"http://127.0.0.1:1/files", "token"}}, {{"x.pak", (cache / "x.pak").string(), std::string(64, 'a'), 10}});
         bool success        = true;
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
         while (!downloader.PollFinished(success) && std::chrono::steady_clock::now() < deadline) {
@@ -697,6 +728,214 @@ MODULE(asset_http, {
         // Revoking a peer that holds nothing is harmless.
         fixture.files.Revoke(AssetHttpTest::kPeer + 99);
         EQUALS(statusWith(fixture.token), 200);
+    });
+
+    IT("serves the requested range of a published file", {
+        AssetHttpTest::Fixture fixture;
+        std::unordered_map<std::string, std::filesystem::path> published;
+        fixture.Stage("range.pak", "0123456789", published);
+        fixture.files.Publish(published);
+
+        httplib::Client client(fixture.Origin());
+        auto headers = fixture.Authorized();
+        headers.emplace("Range", "bytes=4-");
+        const auto res = client.Get("/files/range.pak", headers);
+        EQUALS(res->status, 206);
+        EQUALS(res->body == "456789", true);
+        // httplib 0.14 leaves an open range's end out ("bytes 4-/10"); the client reads only the start.
+        EQUALS(res->get_header_value("Content-Range").rfind("bytes 4-", 0) == 0, true);
+    });
+
+    IT("resumes a partial download from where it stopped", {
+        AssetHttpTest::Fixture fixture;
+        std::unordered_map<std::string, std::filesystem::path> published;
+        const std::string content(500000, 'r');
+        const auto job = fixture.Stage("resume.pak", content, published);
+        fixture.files.Publish(published);
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::PartialPath(job), content.substr(0, 200000));
+
+        EQUALS(fixture.Run({job}), true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+        EQUALS(fixture.bytesDone, fixture.bytesTotal);
+        EQUALS(fixture.NoPartialsLeft(), true);
+    });
+
+    IT("asks only for the missing bytes and appends them", {
+        const std::string content = "head|tail";
+        AssetHttpTest::ScriptedServer scripted({AssetHttpTest::ScriptedServer::RawPartial("bytes 5-8/9", content.substr(5))});
+        NEQUALS(scripted.port, 0);
+        const auto job = scripted.Job(content);
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::PartialPath(job), content.substr(0, 5));
+        scripted.Start(job);
+        bool success = false;
+        EQUALS(scripted.Finish(success), true);
+        EQUALS(success, true);
+        EQUALS(scripted.requests.load(), 1);
+        EQUALS(scripted.ranges.front() == "bytes=5-", true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+        EQUALS(scripted.downloader.GetBytesDownloaded(), static_cast<uint64_t>(content.size()));
+    });
+
+    IT("starts over when the server ignores the range", {
+        const std::string content = "whole file";
+        AssetHttpTest::ScriptedServer scripted({AssetHttpTest::ScriptedServer::Body(content)});
+        NEQUALS(scripted.port, 0);
+        const auto job = scripted.Job(content);
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::PartialPath(job), "whole");
+        scripted.Start(job);
+        bool success = false;
+        EQUALS(scripted.Finish(success), true);
+        EQUALS(success, true);
+        EQUALS(scripted.ranges.front() == "bytes=5-", true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+    });
+
+    IT("starts over when a range answers from the wrong offset", {
+        const std::string content = "0123456789";
+        AssetHttpTest::ScriptedServer scripted({AssetHttpTest::ScriptedServer::RawPartial("bytes 2-9/10", "23456789"), AssetHttpTest::ScriptedServer::Body(content)});
+        NEQUALS(scripted.port, 0);
+        const auto job = scripted.Job(content);
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::PartialPath(job), "01234");
+        scripted.Start(job);
+        bool success = false;
+        EQUALS(scripted.Finish(success), true);
+        EQUALS(success, true);
+        EQUALS(scripted.requests.load(), 2);
+        EQUALS(scripted.ranges[1].empty(), true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+    });
+
+    IT("fetches the whole file again when a resumed one does not verify", {
+        AssetHttpTest::Fixture fixture;
+        std::unordered_map<std::string, std::filesystem::path> published;
+        const std::string content(300000, 'v');
+        const auto job = fixture.Stage("poisoned.pak", content, published);
+        fixture.files.Publish(published);
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::PartialPath(job), std::string(100000, 'X'));
+
+        EQUALS(fixture.Run({job}), true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+        EQUALS(fixture.NoPartialsLeft(), true);
+    });
+
+    IT("discards a partial as long as the file instead of asking past its end", {
+        const std::string content = "exact";
+        AssetHttpTest::ScriptedServer scripted({AssetHttpTest::ScriptedServer::Body(content)});
+        NEQUALS(scripted.port, 0);
+        const auto job = scripted.Job(content);
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::PartialPath(job), "wrong");
+        scripted.Start(job);
+        bool success = false;
+        EQUALS(scripted.Finish(success), true);
+        EQUALS(success, true);
+        EQUALS(scripted.ranges.front().empty(), true);
+    });
+
+    IT("keeps the bytes of a failed attempt for the next to resume", {
+        const std::string content = "first half|second half";
+        AssetHttpTest::ScriptedServer scripted({AssetHttpTest::ScriptedServer::Status(500), AssetHttpTest::ScriptedServer::RawPartial("bytes 11-21/22", content.substr(11))});
+        NEQUALS(scripted.port, 0);
+        const auto job = scripted.Job(content);
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::PartialPath(job), content.substr(0, 11));
+        scripted.Start(job);
+        bool success = false;
+        EQUALS(scripted.Finish(success), true);
+        EQUALS(success, true);
+        EQUALS(scripted.ranges[0] == "bytes=11-", true);
+        EQUALS(scripted.ranges[1] == "bytes=11-", true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+    });
+
+    IT("names a partial by the file it expects", {
+        Framework::Integrations::Client::AssetDownloader::Job job {"map.pak", "/cache/map.pak", std::string(16, 'a') + std::string(48, 'b'), 1};
+        EQUALS(Framework::Integrations::Client::AssetDownloader::PartialPath(job) == "/cache/map.pak.aaaaaaaaaaaaaaaa.part", true);
+        job.sha256 = std::string(64, 'c');
+        EQUALS(Framework::Integrations::Client::AssetDownloader::PartialPath(job) == "/cache/map.pak.cccccccccccccccc.part", true);
+    });
+
+    IT("fetches from the download URL first and sends it no token", {
+        const std::string content = "from the mirror";
+        AssetHttpTest::ScriptedServer mirror({AssetHttpTest::ScriptedServer::Body(content)});
+        NEQUALS(mirror.port, 0);
+        const auto job = mirror.Job(content);
+        mirror.downloader.Start({mirror.Files(""), {"http://127.0.0.1:1/files", "secret"}}, {job});
+        bool success = false;
+        EQUALS(mirror.Finish(success), true);
+        EQUALS(success, true);
+        EQUALS(mirror.requests.load(), 1);
+        EQUALS(mirror.tokens.front().empty(), true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+    });
+
+    IT("falls back to the game port when the download URL fails", {
+        AssetHttpTest::Fixture fixture;
+        std::unordered_map<std::string, std::filesystem::path> published;
+        const auto job = fixture.Stage("fallback.pak", std::string(100000, 'f'), published);
+        fixture.files.Publish(published);
+        AssetHttpTest::ScriptedServer mirror({AssetHttpTest::ScriptedServer::Status(404)});
+        NEQUALS(mirror.port, 0);
+
+        EQUALS(fixture.Run({mirror.Files(""), fixture.Files()}, {job}), true);
+        EQUALS(mirror.requests.load(), 1);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == std::string(100000, 'f'), true);
+    });
+
+    IT("passes over a download URL that is not http(s)", {
+        AssetHttpTest::Fixture fixture;
+        std::unordered_map<std::string, std::filesystem::path> published;
+        const auto job = fixture.Stage("plain.fwpak", "bytes", published);
+        fixture.files.Publish(published);
+
+        EQUALS(fixture.Run({{"ftp://mirror.example/files", ""}, {"no scheme", ""}, fixture.Files()}, {job}), true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == "bytes", true);
+    });
+
+    IT("fetches from a download URL with a path and a trailing slash", {
+        const std::string content = "nested";
+        Framework::HTTP::Webserver cdn;
+        std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
+        int32_t port = 0;
+        for (int attempt = 0; attempt < 8 && port == 0; ++attempt) {
+            const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
+            if (cdn.Init("127.0.0.1", candidate, "") == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
+                port = candidate;
+            }
+        }
+        NEQUALS(port, 0);
+        std::atomic<int> hits {};
+        cdn.RegisterRequest(R"(/m2o/assets/nested\.pak)", [&content, &hits](const httplib::Request &, httplib::Response &res) {
+            ++hits;
+            res.set_content(content, "application/octet-stream");
+        });
+        const auto cache = std::filesystem::temp_directory_path() / ("fw_asset_http_cdn_" + std::to_string(random()));
+        std::filesystem::create_directories(cache);
+        Framework::Integrations::Client::AssetDownloader downloader;
+        downloader.SetRetryPolicy(AssetHttpTest::FastRetries());
+        downloader.Start({{"http://127.0.0.1:" + std::to_string(port) + "/m2o/assets/", ""}}, {{"nested.pak", (cache / "nested.pak").string(), Framework::Utils::Crypto::Sha256Hex(content), content.size()}});
+        bool success        = false;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!downloader.PollFinished(success) && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        EQUALS(success, true);
+        EQUALS(hits.load(), 1);
+        cdn.Shutdown();
+        std::error_code code;
+        std::filesystem::remove_all(cache, code);
+    });
+
+    IT("carries the download URL in the resource list", {
+        Framework::Networking::RPC::ServerResources sent;
+        sent.packageKey    = std::string(64, 'k');
+        sent.downloadToken = std::string(64, 't');
+        sent.downloadUrl   = "https://cdn.example/m2o";
+        MafiaNet::BitStream bs;
+        sent.Serialize(&bs, true);
+
+        Framework::Networking::RPC::ServerResources received;
+        received.Serialize(&bs, false);
+        EQUALS(received.downloadUrl == sent.downloadUrl, true);
+        EQUALS(received.downloadToken == sent.downloadToken, true);
     });
 
     IT("does not retry a refusal", {

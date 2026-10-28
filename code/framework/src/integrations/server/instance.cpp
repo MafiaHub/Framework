@@ -196,6 +196,12 @@ namespace Framework::Integrations::Server {
         }
         // MafiaNet keeps 255 bytes and silently drops the rest, so a longer one would be a different
         // password from the one the operator wrote, and nobody could type the one it enforces.
+        while (!_opts.assetDownloadUrl.empty() && _opts.assetDownloadUrl.back() == '/') {
+            _opts.assetDownloadUrl.pop_back();
+        }
+        if (!_opts.assetDownloadUrl.empty() && _opts.assetDownloadUrl.rfind("http://", 0) != 0 && _opts.assetDownloadUrl.rfind("https://", 0) != 0) {
+            return Error("download-url must start with http:// or https:// (got '" + _opts.assetDownloadUrl + "')");
+        }
         if (_opts.bindPassword.size() > 255) {
             return Error("password must be at most 255 bytes (got " + std::to_string(_opts.bindPassword.size()) + ")");
         }
@@ -377,12 +383,22 @@ namespace Framework::Integrations::Server {
     }
 
 
+    Framework::Utils::Crypto::Key DerivePackageKey(const InstanceOptions &opts) {
+        const std::string &secret = !opts.packageSecret.empty() ? opts.packageSecret : opts.bindSecretKey;
+        const std::string digest  = Framework::Utils::Crypto::Sha256Hex(std::string("mafiahub-package-key") + '\0' + opts.modSlug + '\0' + secret);
+        Framework::Utils::Crypto::Key key {};
+        Framework::Utils::Crypto::FromHex(digest, key.data(), key.size());
+        return key;
+    }
+
     void AddCommandLineOptions(cxxopts::Options &options, const InstanceOptions &opts) {
         options.allow_unrecognised_options();
         options.add_options("MafiaHub Integrations server",
             {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)},
                 {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)},
-                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()},
+                {"download-url", "http(s) base URL clients fetch resource files from before the game port", cxxopts::value<std::string>()},
+                {"package-secret", "Secret the resource package key is derived from; defaults to the server token", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts) {
@@ -398,6 +414,8 @@ namespace Framework::Integrations::Server {
         read("maxplayers", opts.maxPlayers);
         read("server-token", opts.bindSecretKey);
         read("password", opts.bindPassword);
+        read("download-url", opts.assetDownloadUrl);
+        read("package-secret", opts.packageSecret);
     }
 
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts) {
@@ -413,6 +431,8 @@ namespace Framework::Integrations::Server {
         read("port", opts.bindPort);
         read("server-token", opts.bindSecretKey);
         read("password", opts.bindPassword);
+        read("download-url", opts.assetDownloadUrl);
+        read("package-secret", opts.packageSecret);
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -499,6 +519,8 @@ namespace Framework::Integrations::Server {
         frameworkKeys["maxplayers"]   = _opts.maxPlayers;
         frameworkKeys["server-token"] = _opts.bindSecretKey;
         frameworkKeys["password"]     = _opts.bindPassword;
+        frameworkKeys["download-url"] = _opts.assetDownloadUrl;
+        frameworkKeys["package-secret"] = _opts.packageSecret;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
 
@@ -556,6 +578,7 @@ namespace Framework::Integrations::Server {
             resources.tickRate     = _opts.worldConfig.tickInterval;
             resources.packageKey   = _packageKeyHex;
             resources.downloadToken = _assetFileServer.Grant(guid.g);
+            resources.downloadUrl   = _opts.assetDownloadUrl;
             resources.resources = DescribeClientResources();
             net->SendRPC(resources, guid);
 
@@ -839,40 +862,17 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        // Persisted: the key feeds the container bytes, so a fresh one each restart would change
-        // every hash and re-download every resource. It guards the client cache, not these files.
+        // Derived, never stored: the key feeds the container bytes, so it must stay the same across restarts
+        // or every hash changes and every client downloads every resource again, and servers often run on
+        // a read-only filesystem. Every client receives the key, so it only keeps a copied cache shut to
+        // someone who never connected; the operator's secret is what makes it unguessable.
         if (!_packageKeyReady) {
-            const auto keyPath = (std::filesystem::path(stagingDir) / "package.key").string();
-
-            std::string storedHex;
-            if (std::ifstream keyFile(keyPath, std::ios::binary); keyFile.is_open()) {
-                std::getline(keyFile, storedHex);
-            }
-            while (!storedHex.empty() && (storedHex.back() == 0x0D || storedHex.back() == 0x0A)) {
-                storedHex.pop_back();
-            }
-
-            if (storedHex.size() == Framework::Utils::Crypto::kKeySize * 2 && Framework::Utils::Crypto::FromHex(storedHex, _packageKey.data(), _packageKey.size())) {
-                _packageKeyHex = storedHex;
-            }
-            else {
-                bool ok     = false;
-                _packageKey = Framework::Utils::Crypto::GenerateKey(&ok);
-                if (!ok) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not generate a resource package key; client resources will not be served");
-                    return;
-                }
-                _packageKeyHex = Framework::Utils::Crypto::ToHex(_packageKey.data(), _packageKey.size());
-
-                std::ofstream keyOut(keyPath, std::ios::binary | std::ios::trunc);
-                if (keyOut.is_open()) {
-                    keyOut << _packageKeyHex;
-                }
-                if (!keyOut.good()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Could not persist the resource package key to '{}'; clients will re-download resources after a restart", keyPath);
-                }
-            }
+            _packageKey      = DerivePackageKey(_opts);
+            _packageKeyHex   = Framework::Utils::Crypto::ToHex(_packageKey.data(), _packageKey.size());
             _packageKeyReady = true;
+            if (_opts.packageSecret.empty() && _opts.bindSecretKey.empty()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("No package-secret or server-token is set; the resource package key is derived from the mod slug alone and anyone can recompute it");
+            }
         }
 
         _packageHashes.clear();
@@ -967,6 +967,13 @@ namespace Framework::Integrations::Server {
             }
         }
 
+        if (!_opts.assetDownloadUrl.empty()) {
+            std::string names;
+            for (const auto &[name, path] : served) {
+                names += (names.empty() ? "" : ", ") + name;
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Clients download from {} first; mirror these files from '{}' there: {}", _opts.assetDownloadUrl, stagingDir, names.empty() ? "(none)" : names);
+        }
         _assetFileServer.Publish(std::move(served));
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset file server ready with {} encrypted resource packages ({} files) and {} resource(s) shipping asset paks", _packageHashes.size(), packagedFiles, _assetPaks.size());
     }

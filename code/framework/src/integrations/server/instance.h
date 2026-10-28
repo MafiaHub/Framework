@@ -113,6 +113,15 @@ namespace Framework::Integrations::Server {
         std::string bindMapName;
         int32_t bindPort;
         std::string bindPassword;
+
+        // http(s) base URL clients fetch resource packages and asset paks from (<url>/<file>), such as a
+        // CDN the operator mirrors the staged files to. Clients fall back to the game port. Empty: the
+        // game port only.
+        std::string assetDownloadUrl;
+
+        // Secret the resource package key is derived from (with modSlug). Empty: the server token
+        // (bindSecretKey). Changing it changes every package hash, so clients download them again.
+        std::string packageSecret;
         bool bindPublicServer = true;
 
         // How long playerConnecting handlers may take to settle before the connection is turned
@@ -157,6 +166,8 @@ namespace Framework::Integrations::Server {
 
     // Settings resolve lowest to highest: InstanceOptions defaults, then the config document, then
     // the command line. Each layer only touches the keys it actually carries.
+    // The resource package key: stable for the same mod slug and secret, so it needs no storage.
+    Framework::Utils::Crypto::Key DerivePackageKey(const InstanceOptions &opts);
     void AddCommandLineOptions(cxxopts::Options &options, const InstanceOptions &opts);
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts);
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts);
