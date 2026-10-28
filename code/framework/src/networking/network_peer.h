@@ -17,7 +17,6 @@
 #include <mafianet/peer_interface.h>
 #include <mafianet/rpc4_plugin.h>
 #include <mafianet/ready_event.h>
-#include <mafianet/statistics_history.h>
 #include <mafianet/two_way_authentication.h>
 #include <mafianet/network_id_manager.h>
 #include <logging/logger.h>
@@ -48,11 +47,9 @@ namespace Framework::Networking {
         fu2::function<bool(MafiaNet::Packet *) const> _onUnknownPacketCallback;
 
         // RPC4 dispatches remote-procedure calls by identifier to C handlers. NetworkIDManager hands
-        // out the cross-network object handles used by replicas. StatisticsHistoryPlugin tracks
-        // per-connection bandwidth/RTT/loss.
+        // out the cross-network object handles used by replicas.
         MafiaNet::RPC4 _rpc;
         MafiaNet::NetworkIDManager _networkIDManager;
-        MafiaNet::StatisticsHistoryPlugin _statisticsHistory;
 
         // Connection gate: TwoWayAuthentication proves an identical build token without sending it;
         // ReadyEvent is the per-connection spawn barrier. Flow in network_{server,client}.cpp.
@@ -100,9 +97,6 @@ namespace Framework::Networking {
 
         // How long the build challenge and the nonce it answers stay valid (TwoWayAuthentication::SetTimeout).
         static constexpr MafiaNet::Time kBuildVerificationTimeoutMs = 30000;
-
-        // Minimum time between two statistics-history samples.
-        static constexpr MafiaNet::Time kStatisticsSampleIntervalMs = 100;
 
         NetworkPeer();
         ~NetworkPeer();
@@ -245,10 +239,6 @@ namespace Framework::Networking {
 
         MafiaNet::NetworkIDManager *GetNetworkIDManager() noexcept {
             return &_networkIDManager;
-        }
-
-        MafiaNet::StatisticsHistoryPlugin *GetStatisticsHistory() noexcept {
-            return &_statisticsHistory;
         }
 
         MafiaNet::TwoWayAuthentication *GetTwoWayAuth() noexcept {

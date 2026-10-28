@@ -17,16 +17,11 @@ namespace Framework::Networking {
     NetworkPeer::NetworkPeer() {
         _peer = MafiaNet::RakPeerInterface::GetInstance();
 
-        // RPC4 and StatisticsHistory can be attached before Startup(); the ReplicationManager is
-        // attached by the concrete peer's Init() once its connection factory exists.
+        // RPC4 can be attached before Startup(); the ReplicationManager is attached by the concrete
+        // peer's Init() once its connection factory exists.
         _peer->AttachPlugin(&_rpc);
-        _peer->AttachPlugin(&_statisticsHistory);
         _peer->AttachPlugin(&_twoWayAuth);
         _peer->AttachPlugin(&_readyEvent);
-        _statisticsHistory.SetTrackConnections(true, 0, true);
-        // RakPeer updates every plugin once per received packet; a busy drain would otherwise sample
-        // every connection's statistics per packet.
-        _statisticsHistory.SetSampleInterval(kStatisticsSampleIntervalMs);
         // A peer stalled past MafiaNet's default handshake window (a client loading, a server under a
         // join burst) would otherwise be dropped with a build verification timeout. Both ends need it.
         _twoWayAuth.SetTimeout(kBuildVerificationTimeoutMs);
