@@ -167,6 +167,7 @@ namespace Framework::Integrations::Client {
         // assets
         AssetDownloadStatus _downloadStatus {};
         AssetDownloader _assetDownloader;
+        std::string _downloadToken;
         ConnectionPhase _connectionPhase = ConnectionPhase::Disconnected;
         std::string _assetCachePath;
         bool _initialDownloadDone {};

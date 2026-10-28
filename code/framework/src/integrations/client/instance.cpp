@@ -655,6 +655,7 @@ namespace Framework::Integrations::Client {
             _resumingDeferredInitialAssetProcessing    = false;
             _readyEventId   = payload.readyEventId;
             _serverTickRate = payload.tickRate;
+            _downloadToken  = payload.downloadToken;
 
             _pendingServerResources = payload.resources;
             _assetPaks.clear();
@@ -1063,7 +1064,7 @@ namespace Framework::Integrations::Client {
 
         _downloadStatus             = {};
         _downloadStatus.downloading = true;
-        _assetDownloader.Start(fmt::format("http://{}:{}", _currentState.host, _currentState.port), std::move(jobs));
+        _assetDownloader.Start(fmt::format("http://{}:{}", _currentState.host, _currentState.port), _downloadToken, std::move(jobs));
     }
 
     void Instance::PollAssetDownload() {

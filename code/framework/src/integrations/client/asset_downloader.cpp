@@ -13,6 +13,9 @@
 
 #include <httplib.h>
 
+#include <algorithm>
+#include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <thread>
@@ -21,14 +24,35 @@ namespace Framework::Integrations::Client {
     namespace {
         constexpr time_t kConnectTimeoutSeconds = 10;
         constexpr time_t kReadTimeoutSeconds    = 30;
+        constexpr const char *kTokenHeader      = "X-Download-Token";
+        constexpr int kMaxServerDelayMs         = 30000;
 
         // Each transfer writes its own partial files, so one abandoned by Cancel never collides with its successor.
         std::atomic<uint64_t> gNextTransferId {};
 
         bool IsCached(const AssetDownloader::Job &job) {
             std::error_code code;
+            if (!std::filesystem::exists(job.path, code)) {
+                return false;
+            }
             const auto size = std::filesystem::file_size(job.path, code);
-            return !code && size == job.size && Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256FileHex(job.path), job.sha256);
+            if (!code && size == job.size && Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256FileHex(job.path), job.sha256)) {
+                return true;
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Cached '{}' does not match the server's copy; downloading it again", job.fileName);
+            return false;
+        }
+
+        // Sleeps in short steps so a cancelled transfer does not linger.
+        bool WaitUnlessCancelled(const std::atomic<bool> &cancel, int milliseconds) {
+            const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(milliseconds);
+            while (std::chrono::steady_clock::now() < until) {
+                if (cancel.load()) {
+                    return false;
+                }
+                std::this_thread::sleep_for(std::min(std::chrono::milliseconds(100), std::chrono::duration_cast<std::chrono::milliseconds>(until - std::chrono::steady_clock::now()) + std::chrono::milliseconds(1)));
+            }
+            return !cancel.load();
         }
     } // namespace
 
@@ -36,15 +60,16 @@ namespace Framework::Integrations::Client {
         Cancel();
     }
 
-    void AssetDownloader::Start(const std::string &origin, std::vector<Job> jobs) {
+    void AssetDownloader::Start(const std::string &origin, const std::string &token, std::vector<Job> jobs) {
         Cancel();
         _reported             = false;
         _transfer             = std::make_shared<Transfer>();
         _transfer->filesTotal = static_cast<uint32_t>(jobs.size());
+        _transfer->retry      = _retryPolicy;
         for (const auto &job : jobs) {
             _transfer->total += job.size;
         }
-        std::thread(&AssetDownloader::Run, _transfer, origin, std::move(jobs)).detach();
+        std::thread(&AssetDownloader::Run, _transfer, origin, token, std::move(jobs)).detach();
     }
 
     void AssetDownloader::Cancel() {
@@ -97,7 +122,7 @@ namespace Framework::Integrations::Client {
         return _transfer->current;
     }
 
-    void AssetDownloader::Run(std::shared_ptr<Transfer> transfer, std::string origin, std::vector<Job> jobs) {
+    void AssetDownloader::Run(std::shared_ptr<Transfer> transfer, std::string origin, std::string token, std::vector<Job> jobs) {
         bool success = true;
         for (const auto &job : jobs) {
             if (transfer->cancel.load()) {
@@ -110,7 +135,7 @@ namespace Framework::Integrations::Client {
             if (IsCached(job)) {
                 transfer->bytes.fetch_add(job.size, std::memory_order_relaxed);
             }
-            else if (!Fetch(*transfer, origin, job)) {
+            else if (!FetchWithRetries(*transfer, origin, token, job)) {
                 success = false;
                 break;
             }
@@ -120,7 +145,32 @@ namespace Framework::Integrations::Client {
         transfer->done.store(true);
     }
 
-    bool AssetDownloader::Fetch(Transfer &transfer, const std::string &origin, const Job &job) {
+    bool AssetDownloader::FetchWithRetries(Transfer &transfer, const std::string &origin, const std::string &token, const Job &job) {
+        const auto started = std::chrono::steady_clock::now();
+        for (int attempt = 1;; ++attempt) {
+            const uint64_t before = transfer.bytes.load(std::memory_order_relaxed);
+            const Attempt result  = Fetch(transfer, origin, token, job);
+            if (result.done) {
+                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Downloaded '{}' ({} bytes) in {} ms", job.fileName, job.size, elapsed);
+                return true;
+            }
+            // The failed attempt's bytes come off the progress, so it never runs past the total.
+            transfer.bytes.fetch_sub(transfer.bytes.load(std::memory_order_relaxed) - before, std::memory_order_relaxed);
+            const RetryPolicy &policy = transfer.retry;
+            if (!result.retry || attempt >= policy.attempts || transfer.cancel.load()) {
+                return false;
+            }
+            // A wait the server names is its own, bounded only so a hostile server cannot park the client.
+            const int delay = result.retryAfterMs > 0 ? std::min(result.retryAfterMs, kMaxServerDelayMs) : std::min(policy.firstDelayMs << std::min(attempt - 1, 16), policy.maxDelayMs);
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Retrying '{}' in {} ms (attempt {} of {})", job.fileName, delay, attempt + 1, policy.attempts);
+            if (!WaitUnlessCancelled(transfer.cancel, delay)) {
+                return false;
+            }
+        }
+    }
+
+    AssetDownloader::Attempt AssetDownloader::Fetch(Transfer &transfer, const std::string &origin, const std::string &token, const Job &job) {
         const std::filesystem::path partial = job.path + "." + std::to_string(gNextTransferId.fetch_add(1)) + ".part";
         std::error_code code;
         uint64_t received = 0;
@@ -128,61 +178,83 @@ namespace Framework::Integrations::Client {
             std::ofstream output(partial, std::ios::binary | std::ios::trunc);
             if (!output.is_open()) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not open '{}' for writing", partial.string());
-                return false;
+                return {};
             }
 
             httplib::Client client(origin);
             client.set_connection_timeout(kConnectTimeoutSeconds, 0);
             client.set_read_timeout(kReadTimeoutSeconds, 0);
+            client.set_default_headers({{kTokenHeader, token}});
             {
                 std::lock_guard lock(transfer.mutex);
                 if (transfer.cancel.load()) {
                     output.close();
                     std::filesystem::remove(partial, code);
-                    return false;
+                    return {};
                 }
                 transfer.client = &client;
             }
-            const auto res = client.Get("/files/" + job.fileName, [&](const char *data, size_t length) {
-                received += length;
-                if (transfer.cancel.load() || received > job.size) {
-                    return false;
-                }
-                output.write(data, static_cast<std::streamsize>(length));
-                transfer.bytes.fetch_add(length, std::memory_order_relaxed);
-                return output.good();
-            });
+            // The status is judged before any body is read: an error page must not reach the partial file or
+            // the progress, nor end the request early and lose the status with it.
+            int status = 0;
+            std::string retryAfter;
+            const auto res = client.Get(
+                "/files/" + job.fileName,
+                [&](const httplib::Response &response) {
+                    status     = response.status;
+                    retryAfter = response.get_header_value("Retry-After");
+                    return status == 200;
+                },
+                [&](const char *data, size_t length) {
+                    received += length;
+                    if (transfer.cancel.load() || received > job.size) {
+                        return false;
+                    }
+                    output.write(data, static_cast<std::streamsize>(length));
+                    transfer.bytes.fetch_add(length, std::memory_order_relaxed);
+                    return output.good();
+                });
             {
                 std::lock_guard lock(transfer.mutex);
                 transfer.client = nullptr;
             }
-            if (!res || res->status != 200) {
+            if (!res || status != 200) {
                 if (!transfer.cancel.load()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Downloading '{}' from {} failed: {}", job.fileName, origin, res ? "HTTP " + std::to_string(res->status) : httplib::to_string(res.error()));
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Downloading '{}' from {} failed: {}", job.fileName, origin, status != 0 && status != 200 ? "HTTP " + std::to_string(status) : httplib::to_string(res.error()));
                 }
                 output.close();
                 std::filesystem::remove(partial, code);
-                return false;
+                // A refusal (403, 404) will not change by asking again; the network or a busy server may.
+                Attempt failed;
+                failed.retry = status == 0 || status >= 500;
+                if (status == 503) {
+                    failed.retryAfterMs = std::atoi(retryAfter.c_str()) * 1000;
+                }
+                return failed;
             }
         }
 
         if (received != job.size || !Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256FileHex(partial.string()), job.sha256)) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("'{}' does not match the hash the server announced", job.fileName);
             std::filesystem::remove(partial, code);
-            return false;
+            Attempt corrupted;
+            corrupted.retry = true;
+            return corrupted;
         }
 
         std::lock_guard lock(transfer.mutex);
         if (transfer.cancel.load()) {
             std::filesystem::remove(partial, code);
-            return false;
+            return {};
         }
         std::filesystem::rename(partial, job.path, code);
         if (code) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not move '{}' into the cache: {}", job.fileName, code.message());
             std::filesystem::remove(partial, code);
-            return false;
+            return {};
         }
-        return true;
+        Attempt done;
+        done.done = true;
+        return done;
     }
 } // namespace Framework::Integrations::Client

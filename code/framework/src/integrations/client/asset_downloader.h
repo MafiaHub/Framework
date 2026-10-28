@@ -22,7 +22,8 @@ namespace httplib {
 namespace Framework::Integrations::Client {
     // Fetches a server's resource packages and asset paks over HTTP, off the main thread. A file is
     // only written into the cache once its SHA-256 matches the one the server announced; one already
-    // there and matching is not fetched again.
+    // there and matching is not fetched again. A failed request is retried with growing pauses before
+    // the transfer gives up.
     class AssetDownloader final {
       public:
         struct Job {
@@ -32,9 +33,22 @@ namespace Framework::Integrations::Client {
             uint64_t size = 0;
         };
 
+        // How often a file is asked for before the transfer fails, and the first pause between tries;
+        // each later pause doubles up to maxDelayMs. A pause the server names (Retry-After) is used instead.
+        struct RetryPolicy {
+            int attempts      = 5;
+            int firstDelayMs  = 1000;
+            int maxDelayMs    = 30000;
+        };
+
         ~AssetDownloader();
 
-        void Start(const std::string &origin, std::vector<Job> jobs);
+        void Start(const std::string &origin, const std::string &token, std::vector<Job> jobs);
+
+        // Applies from the next Start.
+        void SetRetryPolicy(const RetryPolicy &policy) {
+            _retryPolicy = policy;
+        }
         // Returns at once: a request blocked on the network is abandoned to finish on its own, and
         // nothing it does afterwards reaches the cache or this downloader.
         void Cancel();
@@ -62,15 +76,25 @@ namespace Framework::Integrations::Client {
             std::atomic<uint32_t> filesDone {};
             uint64_t total {};
             uint32_t filesTotal {};
+            RetryPolicy retry;
             std::mutex mutex;
             std::string current;
             httplib::Client *client {};
         };
 
-        static void Run(std::shared_ptr<Transfer> transfer, std::string origin, std::vector<Job> jobs);
-        static bool Fetch(Transfer &transfer, const std::string &origin, const Job &job);
+        // Whether a request succeeded, and if not, whether asking again could help and after how long.
+        struct Attempt {
+            bool done {};
+            bool retry {};
+            int retryAfterMs {};
+        };
+
+        static void Run(std::shared_ptr<Transfer> transfer, std::string origin, std::string token, std::vector<Job> jobs);
+        static bool FetchWithRetries(Transfer &transfer, const std::string &origin, const std::string &token, const Job &job);
+        static Attempt Fetch(Transfer &transfer, const std::string &origin, const std::string &token, const Job &job);
 
         std::shared_ptr<Transfer> _transfer;
+        RetryPolicy _retryPolicy;
         bool _reported {};
     };
 } // namespace Framework::Integrations::Client

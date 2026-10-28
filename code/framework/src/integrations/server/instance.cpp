@@ -219,12 +219,15 @@ namespace Framework::Integrations::Server {
 
         // Same port number as the game, over TCP: MafiaNet only binds it for UDP.
         // A joining player holds a worker for the whole download, so one per slot keeps a join burst out of the queue.
-        _webServer->SetWorkerCount(static_cast<size_t>(std::clamp(_opts.maxPlayers, 8, 256)));
+        const size_t webWorkers = static_cast<size_t>(std::clamp(_opts.maxPlayers, 8, 256));
+        _webServer->SetWorkerCount(webWorkers);
         if (_webServer->Init(_opts.bindHost, _opts.bindPort, _opts.httpServeDir) != HTTP::WebserverError::WEBSERVER_NONE) {
             return Error("Failed to start the HTTP server on TCP " + _opts.bindHost + ":" + std::to_string(_opts.bindPort));
         }
         CoreModules::SetWebserver(_webServer.get());
-        _assetFileServer.Register();
+        // Downloads never take the last workers: the info endpoint and the mod's routes share the pool.
+        constexpr size_t kWorkersKeptFromDownloads = 4;
+        _assetFileServer.Register(webWorkers - kWorkersKeptFromDownloads);
 
         CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkServer());
 
@@ -552,6 +555,7 @@ namespace Framework::Integrations::Server {
             resources.readyEventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
             resources.tickRate     = _opts.worldConfig.tickInterval;
             resources.packageKey   = _packageKeyHex;
+            resources.downloadToken = _assetFileServer.Grant(guid.g);
             resources.resources = DescribeClientResources();
             net->SendRPC(resources, guid);
 
@@ -568,6 +572,7 @@ namespace Framework::Integrations::Server {
             // Drop voice state unconditionally: a peer that never reached the ready barrier can
             // still have been registered in the router by a position push.
             _voiceServer.OnPlayerDisconnect(guid.g);
+            _assetFileServer.Revoke(guid.g);
 
             // Player notification and avatar teardown run in ReplicationManager::OnClosedConnection,
             // which RakNet fires before this packet is delivered; here we just finalise the connection.

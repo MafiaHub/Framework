@@ -90,12 +90,17 @@ namespace Framework::Networking::RPC {
         // docs/research/client_resource_protection.md for what this does and does not protect.
         std::string packageKey;
 
+        // Hex secret the client sends with every GET /files/ request (AssetFileServer::kTokenHeader);
+        // valid until this connection closes.
+        std::string downloadToken;
+
         std::vector<ResourceInfo> resources;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, readyEventId);
             bs->Serialize(write, tickRate);
             bs->Serialize(write, packageKey);
+            bs->Serialize(write, downloadToken);
 
             if (write && resources.size() > std::numeric_limits<uint16_t>::max()) {
                 Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("ServerResources holds {} resources, exceeding the wire limit; truncating", resources.size());
