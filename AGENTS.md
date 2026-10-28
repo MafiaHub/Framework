@@ -1,6 +1,8 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Codex, Claude Code, Cursor and others) when working
+with code in this repository. It is the only instructions file: `CLAUDE.md` imports it, so edit this
+one.
 
 ## Non-negotiable rules
 
@@ -98,6 +100,28 @@ builds\build.bat HogwartsMPServer 64
 
 Or use Visual Studio 2022 with CMake tools installed and open the repository folder for automatic setup.
 
+The Framework ships to projects as a prebuilt SDK (`cmake --install` of this tree; see
+`cmake/FrameworkInstall.cmake`). `builds\build.bat FrameworkSdkSmoke 64`
+installs it to `builds\build-64\sdk` and builds `code/tests/sdk-consumer` against that prefix alone.
+Projects consume it through `cmake/FrameworkBootstrap.cmake` (`FW_SDK_ROOT`, `FW_SOURCE_DIR` or a
+`FrameworkPin.cmake`); the targets are `Framework::Framework`, `Framework::Client`, `Framework::Server`,
+`Framework::Loader`.
+
+## Code Intelligence
+
+Configuring the tree writes `compile_commands.json` into the build directory. Use clangd (pinned in
+`mise.toml`) for definitions, references and call hierarchies instead of grepping: it resolves the
+`FW_*` macros, templates such as `RegisterRPC<T>` and overloads that text search cannot. Claude Code
+gets it through the `clangd-lsp` plugin that `.claude/settings.json` enables.
+
+clangd finds `build/compile_commands.json` on its own. On Windows the canonical tree is
+`builds\build-64`, so add a `.clangd` (gitignored) at the repository root containing:
+
+```yaml
+CompileFlags:
+  CompilationDatabase: builds/build-64
+```
+
 ## Project Structure
 
 - `code/framework/` - Core framework source code split into three libraries:
@@ -129,6 +153,7 @@ Or use Visual Studio 2022 with CMake tools installed and open the repository fol
 4. **Scripting** (`scripting/`) - JavaScript/TypeScript scripting for game logic (Server: libnode, Client: V8)
 5. **GUI Manager** (`gui/manager.h`) - UI using CEF and Dear ImGui
 6. **Job System** (`jobs/job_system.h`) - Opt-in fiber-based task scheduling using FTL
+7. **Voice** (`voice/`) - Proximity voice chat; the server relays opaque Opus frames (RakVoice) without decoding, routed by `VoiceRouter`
 
 ### Integration Layer
 
