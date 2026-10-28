@@ -502,6 +502,27 @@ MODULE(asset_http, {
         EQUALS(fixture.Run({job}), true);
     });
 
+    IT("keeps every path under /files/ away from the static directory", {
+        AssetHttpTest::Fixture fixture("public");
+        NEQUALS(fixture.port, 0);
+        std::filesystem::create_directories(fixture.root / "public" / "files" / "private");
+        AssetHttpTest::Fixture::Write(fixture.root / "public" / "files" / "private" / "key.txt", "secret");
+        AssetHttpTest::Fixture::Write(fixture.root / "public" / "files" / "index.html", "listing");
+        std::unordered_map<std::string, std::filesystem::path> published;
+        fixture.Stage("map.fwpak", "package bytes", published);
+        fixture.files.Publish(published);
+
+        httplib::Client anonymous(fixture.Origin());
+        EQUALS(anonymous.Get("/files/private/key.txt")->status, 404);
+        EQUALS(fixture.Status("/files/private/key.txt"), 404);
+        EQUALS(fixture.Status("/files/map.fwpak/extra"), 404);
+        EQUALS(fixture.Status("/files/"), 404);
+        EQUALS(fixture.Status("/files"), 404);
+        std::string body;
+        EQUALS(fixture.Status("/files/map.fwpak", &body), 200);
+        EQUALS(body == "package bytes", true);
+    });
+
     IT("serves files over TCP on the port the game binds for UDP", {
         AssetHttpTest::Fixture fixture("", true);
         NEQUALS(fixture.port, 0);

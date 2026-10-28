@@ -77,6 +77,11 @@ namespace Framework::Integrations::Server {
                     _transfers.fetch_sub(1);
                 });
         });
+        // Declared after the file route, which wins for a published name: every other path under /files/
+        // ends here, so the static directory never answers for it.
+        webServer->RegisterRequest(R"(/files(/.*)?)", [](const httplib::Request &, httplib::Response &res) {
+            res.status = 404;
+        });
         return true;
     }
 
