@@ -24,16 +24,6 @@
 #include <utility>
 
 namespace Framework::Networking {
-    using OnAssetsDownloadFailedCallback = fu2::function<void() const>;
-    
-    class AssetFileTransfer final: public MafiaNet::FileListTransfer {
-      private:
-        OnAssetsDownloadFailedCallback _cb {};
-
-      public:
-        void SetCallback(OnAssetsDownloadFailedCallback cb);
-        void OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) override;
-    };
     class NetworkClient final: public NetworkPeer {
       private:
         std::string _bindHost;
@@ -42,11 +32,9 @@ namespace Framework::Networking {
 
         PacketCallback _onPlayerConnectedCallback;
         DisconnectPacketCallback _onPlayerDisconnectedCallback;
-        OnAssetsDownloadFailedCallback _onAssetsDownloadFailedCallback;
         fu2::function<void(int eventId) const> _onConnectionReadyCallback;
         fu2::function<void() const> _onInitialReplicationDownloadedCallback;
         fu2::function<void(const std::string &status) const> _onSessionStatusCallback;
-        AssetFileTransfer _fileListTransfer;
         bool _initialReplicationDownloadComplete {};
 
         // Single teardown for every terminal disconnect: drops the connection and clears the flags.
@@ -91,20 +79,12 @@ namespace Framework::Networking {
             return _initialReplicationDownloadComplete;
         }
 
-        AssetFileTransfer *GetFileListTransfer() {
-            return &_fileListTransfer;
-        }
-
         void SetOnPlayerConnectedCallback(PacketCallback callback) {
             _onPlayerConnectedCallback = std::move(callback);
         }
 
         void SetOnPlayerDisconnectedCallback(DisconnectPacketCallback callback) {
             _onPlayerDisconnectedCallback = std::move(callback);
-        }
-
-        void SetOnAssetsDownloadFailedCallback(OnAssetsDownloadFailedCallback callback) {
-            _onAssetsDownloadFailedCallback = std::move(callback);
         }
 
         // Fired when the spawn barrier completes — the client activates replication and finalizes.

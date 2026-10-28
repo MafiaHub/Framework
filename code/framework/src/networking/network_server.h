@@ -19,7 +19,6 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
-#include <mafianet/incremental_read_interface.h>
 #include <mafianet/types.h>
 #include <mafianet/peer_interface.h>
 #include <optional>
@@ -57,10 +56,6 @@ namespace Framework::Networking {
         DisconnectPacketCallback _onPlayerDisconnectCallback;
         ClientGuidCallback _onClientAuthenticatedCallback;
         ConnectionReadyCallback _onConnectionReadyCallback;
-        MafiaNet::FileListTransfer _fileListTransfer;
-
-        // Without this the streamer pushes whole files and the client only gets OnFile at completion.
-        MafiaNet::IncrementalReadInterface _assetReader;
 
         SessionRequestCallback _onSessionRequestCallback;
         ClientGuidCallback _onSessionAbandonedCallback;

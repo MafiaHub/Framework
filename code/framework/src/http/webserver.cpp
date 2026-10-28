@@ -16,15 +16,10 @@ namespace Framework::HTTP {
         _server = std::make_shared<httplib::Server>();
     }
 
-    WebserverError Webserver::Init(const std::string &host, int32_t port, const std::string &serveDir) {
-        _running  = true;
-        _serveDir = serveDir;
+    WebserverError Webserver::Init(const std::string &host, int32_t port) {
+        _running = true;
 
         const auto address = (host.empty() ? "0.0.0.0" : host);
-
-        if (!serveDir.empty()) {
-            _server->set_mount_point("/", serveDir.c_str());
-        }
 
         _server->set_error_handler([](const auto &req, auto &res) {
             res.set_content("Error Status: " + std::to_string(res.status), "text/plain");
@@ -88,15 +83,5 @@ namespace Framework::HTTP {
         if (!path.empty() && callback) {
             _server->Post(path, callback);
         }
-    }
-
-    void Webserver::ServeDirectory(const std::string &dir) {
-        if (!_running)
-            return;
-        _serveDir = dir;
-        if (!dir.empty())
-            _server->set_mount_point("/", dir.c_str());
-        else
-            _server->remove_mount_point("/");
     }
 } // namespace Framework::HTTP

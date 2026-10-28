@@ -16,6 +16,7 @@
 #include <utils/result.h>
 #include <external/discord/wrapper.h>
 #include <external/imgui/wrapper.h>
+#include "asset_downloader.h"
 #include "resource_packages.h"
 
 #include <external/sentry/wrapper.h>
@@ -28,7 +29,6 @@
 #include "networking/rpc/server_resources.h"
 #include "integrations/client/ui/chat_box.h"
 #include "voice/client/voice_client.h"
-#include <mafianet/file_list_transfer_cb_interface.h>
 
 #include <cstdint>
 #include <memory>
@@ -46,20 +46,6 @@
 
 namespace Framework::Integrations::Client {
     class Instance;
-
-    class AssetDownloadFileProgress final: public MafiaNet::FileListTransferCBInterface {
-      private:
-        Instance *_instance = nullptr;
-
-      public:
-        AssetDownloadFileProgress(Instance *instance): _instance(instance) {}
-
-        bool OnFile(MafiaNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) override;
-
-        void OnFileProgress(MafiaNet::FileListTransferCBInterface::FileProgressStruct *fps) override;
-
-        bool OnDownloadComplete(DownloadCompleteStruct *dcs) override;
-    };
 
     /** One asset pak a resource ships, at its place in this server's cache once downloaded. */
     struct ResourceAssetPak {
@@ -139,7 +125,6 @@ namespace Framework::Integrations::Client {
         uint32_t filesDownloaded = 0;
         uint32_t filesTotal      = 0;
         std::string currentFile;
-        uint16_t setID           = 0;
     };
 
     // Observable stages of the connect handshake, for a mod's loading UI.
@@ -181,9 +166,7 @@ namespace Framework::Integrations::Client {
 
         // assets
         AssetDownloadStatus _downloadStatus {};
-        // Shared file-transfer callback handed to MafiaNet; MafiaNet does not
-        // take ownership of it, so it must outlive any active download.
-        AssetDownloadFileProgress _assetDownloadProgress {this};
+        AssetDownloader _assetDownloader;
         ConnectionPhase _connectionPhase = ConnectionPhase::Disconnected;
         std::string _assetCachePath;
         bool _initialDownloadDone {};
@@ -208,9 +191,7 @@ namespace Framework::Integrations::Client {
 
         // Replaces the asset paks of every resource in `resources` with what it announces.
         void AnnounceAssetPaks(const std::vector<Client::Scripting::ServerResourceInfo> &resources);
-        // Every announced asset pak is on disk at its announced size. The delta transfer only
-        // completes once each file matches the server's, so this catches what it cannot: a file
-        // it could not write.
+        // Every announced asset pak is on disk at its announced size.
         bool VerifyAssetPaks() const;
         // Removes cached paks the server no longer announces; one still mounted stays until the next session.
         void PruneAssetPaks(const std::string &cacheDir) const;
@@ -269,7 +250,7 @@ namespace Framework::Integrations::Client {
         // Registers the origin once, and re-points it at the current asset cache
         // on every call.
         void RegisterResourceSchemeHandler();
-        // Targeted delta re-sync for a hot-reload (does not stop all resources).
+        // Targeted re-sync for a hot-reload (does not stop all resources).
         void SyncResourceUpdatesFromServer();
         void InitCacheAssetFolders();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
@@ -364,9 +345,11 @@ namespace Framework::Integrations::Client {
         bool CompleteDeferredInitialAssetProcessing(uint64_t generation, bool success);
 
       private:
-        // Cancel any in-flight transfer and kick off a fresh asset download from the connected
-        // server. The single call site for MafiaNet's DownloadFromSubdirectory.
-        void StartAssetDownload();
+        // Cancel any in-flight transfer and fetch the packages and asset paks of |resources| over
+        // HTTP from the connected server's game port.
+        void StartAssetDownload(const std::vector<Client::Scripting::ServerResourceInfo> &resources);
+        // Main thread: mirrors the download's progress and completes it.
+        void PollAssetDownload();
 
       public:
         // Server-published config for the current connection. Empty object when disconnected, when
@@ -522,7 +505,5 @@ namespace Framework::Integrations::Client {
             return _scriptingModule.get();
         }
 
-        friend class AssetDownloadFileProgress;
-        friend class AssetFileTransfer;
     };
 } // namespace Framework::Integrations::Client

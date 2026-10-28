@@ -16,6 +16,7 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
+#include "asset_file_server.h"
 #include "asset_paks/asset_pak_builder.h"
 #include "connection_gate.h"
 #include "http/webserver.h"
@@ -130,13 +131,8 @@ namespace Framework::Integrations::Server {
             std::string masterlistUrl = "";
         } services;
 
-        bool webServerEnabled = true;
-        std::string webBindHost;
-        int32_t webBindPort;
-
         int32_t maxPlayers;
         int32_t maxPlayersHardCap = 0; // compiled-in ceiling the config file cannot raise; 0 = uncapped
-        std::string httpServeDir;
 
         bool enableSignals;
 
@@ -225,6 +221,8 @@ namespace Framework::Integrations::Server {
         std::string _packageKeyHex;
         bool _packageKeyReady = false;
         std::unordered_map<std::string, std::string> _packageHashes;
+        std::unordered_map<std::string, uint64_t> _packageSizes;
+        AssetFileServer _assetFileServer;
 
         // Each running resource's asset paks, staged and served beside the packages.
         AssetPakBuilder _assetPakBuilder;
@@ -245,7 +243,7 @@ namespace Framework::Integrations::Server {
         void AdmitSession(MafiaNet::RakNetGUID guid);
         // Runs once per tick, after scripting: acts on what the gate settled.
         void ApplyAdmissionDecisions();
-        void InitAssetStreamer();
+        void PublishClientAssets();
         // Directory the built .fwpak containers are staged in for the streamer to upload.
         std::string GetPackageStagingDir() const;
         // Re-sync a hot-reloaded/started client resource to connected clients.

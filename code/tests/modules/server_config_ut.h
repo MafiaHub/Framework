@@ -25,8 +25,6 @@ MODULE(server_config, {
         opts.modConfigFile = "server.json";
         opts.bindHost      = "0.0.0.0";
         opts.bindPort      = 27015;
-        opts.webBindHost   = "0.0.0.0";
-        opts.webBindPort   = 27016;
         opts.bindMapName   = "";
         opts.maxPlayers    = 32;
         opts.bindSecretKey = "";
@@ -58,16 +56,13 @@ MODULE(server_config, {
         const auto opts = resolve(nlohmann::json::object(), {});
         STREQUALS(opts.bindHost.c_str(), "0.0.0.0");
         EQUALS(opts.bindPort, 27015);
-        EQUALS(opts.webBindPort, 27016);
         EQUALS(opts.maxPlayers, 32);
     });
 
     IT("lets the config document override a compiled default", {
-        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}, {"apihost", "10.0.0.1"}, {"apiport", 20026}, {"map", "freeride"}, {"maxplayers", 64}, {"server-token", "secret"}}, {});
+        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}, {"map", "freeride"}, {"maxplayers", 64}, {"server-token", "secret"}}, {});
         STREQUALS(opts.bindHost.c_str(), "127.0.0.1");
         EQUALS(opts.bindPort, 20025);
-        STREQUALS(opts.webBindHost.c_str(), "10.0.0.1");
-        EQUALS(opts.webBindPort, 20026);
         STREQUALS(opts.bindMapName.c_str(), "freeride");
         EQUALS(opts.maxPlayers, 64);
         STREQUALS(opts.bindSecretKey.c_str(), "secret");
@@ -78,7 +73,6 @@ MODULE(server_config, {
         EQUALS(opts.maxPlayers, 7);
         STREQUALS(opts.bindHost.c_str(), "0.0.0.0");
         EQUALS(opts.bindPort, 27015);
-        EQUALS(opts.webBindPort, 27016);
     });
 
     IT("does not consume the mod object or unknown keys", {
@@ -88,28 +82,23 @@ MODULE(server_config, {
     });
 
     IT("lets the command line override a compiled default", {
-        const auto opts = resolve(nlohmann::json::object(), {"-p", "20050", "-h", "127.0.0.1", "-P", "20051", "-H", "127.0.0.2"});
+        const auto opts = resolve(nlohmann::json::object(), {"-p", "20050", "-h", "127.0.0.1"});
         STREQUALS(opts.bindHost.c_str(), "127.0.0.1");
         EQUALS(opts.bindPort, 20050);
-        STREQUALS(opts.webBindHost.c_str(), "127.0.0.2");
-        EQUALS(opts.webBindPort, 20051);
     });
 
     IT("lets the command line override the config document", {
-        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}, {"apiport", 20026}}, {"--port", "20050", "--apiport", "20051"});
+        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}}, {"--port", "20050"});
         EQUALS(opts.bindPort, 20050);
-        EQUALS(opts.webBindPort, 20051);
         STREQUALS(opts.bindHost.c_str(), "127.0.0.1");
     });
 
     // The regression: a flag that was never passed used to read back its default_value and overwrite
     // whatever the config document had just set.
     IT("leaves the document alone for flags that were not passed", {
-        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}, {"apihost", "10.0.0.1"}, {"apiport", 20026}}, {"-p", "20050"});
+        const auto opts = resolve({{"host", "127.0.0.1"}, {"port", 20025}}, {"-p", "20050"});
         EQUALS(opts.bindPort, 20050);
         STREQUALS(opts.bindHost.c_str(), "127.0.0.1");
-        STREQUALS(opts.webBindHost.c_str(), "10.0.0.1");
-        EQUALS(opts.webBindPort, 20026);
     });
 
     // Passing the compiled default explicitly is still an override, so resolution must key off

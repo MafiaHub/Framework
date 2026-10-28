@@ -42,8 +42,6 @@ int main(int argc, char **argv) {
     opts.modVersion         = "0.0.1";
     opts.bindHost           = "127.0.0.1";
     opts.bindPort           = 27915;
-    opts.webBindHost        = "127.0.0.1";
-    opts.webBindPort        = 27916;
     opts.maxPlayers         = 1;
     opts.rpcIdentifierSalt  = 0x5DC0FFEEULL;
     opts.argc               = argc;

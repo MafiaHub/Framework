@@ -23,8 +23,8 @@ namespace Framework::Integrations::Server {
     /**
      * Builds the asset paks a resource ships for the game engine to mount -- one per lane folder the
      * mod's policy names (`<resource>/<lane>/**`) -- into the resource package staging directory,
-     * where the asset streamer serves them beside the `.fwpak`s. They travel with the resource:
-     * announced in its ResourceInfo, downloaded by the same delta transfer, refreshed by the same
+     * where the asset file server serves them beside the `.fwpak`s. They travel with the resource:
+     * announced in its ResourceInfo, served over the same HTTP file server, refreshed by the same
      * hot reload.
      *
      * A pak is a plain ZIP the engine reads in place, so it is never encrypted, and its file name

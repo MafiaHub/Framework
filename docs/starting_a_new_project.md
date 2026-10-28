@@ -139,7 +139,6 @@ extern "C" void __declspec(dllexport) InitClient(const wchar_t *projectPath) {
 int main(int argc, char **argv) {
     Framework::Integrations::Server::InstanceOptions opts;
     opts.bindHost = "0.0.0.0";  opts.bindPort = 27015;
-    opts.webBindHost = "0.0.0.0"; opts.webBindPort = 27016;
     opts.maxPlayers = 32;
     opts.modName = "NewMP"; opts.modSlug = "newmp_server"; opts.modVersion = NewMP::Version::rel;
     opts.gameName = "<Game>"; opts.gameVersion = "1.0.0";
