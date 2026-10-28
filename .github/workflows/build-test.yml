@@ -5,7 +5,34 @@ on:
          branches: [ 'master' ]
     pull_request:
          branches: [ 'develop' ]
+         # Skip PRs that cannot change the build. This is a denylist on purpose: a file nobody
+         # thought to list still builds. None of these checks is required on develop, so a skipped
+         # run never blocks a merge; if one becomes required, a skipped run would stay "Pending".
+         paths:
+           - '**'
+           - '!**.md'
+           - '!docs/**'
+           - '!types/**'
+           - '!.github/**'
+           - '.github/workflows/build-test.yml'
+           - '!.claude/**'
+           - '!.cursor/**'
+           - '!.idea/**'
+           - '!.cursorignore'
+           - '!.clang-format'
+           - '!.clang-tidy'
+           - '!.editorconfig'
+           - '!Folder.DotSettings'
+           - '!CMakeSettings.json'
+           - '!LICENSE.txt'
+           - '!NOTICE.txt'
+           - '!mise.toml'
     workflow_dispatch:
+
+# A new push to a PR supersedes the run already testing it. Pushes to master each keep their run.
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
     BUILD_TYPE: Debug
