@@ -77,6 +77,12 @@ namespace Framework::Scripting::Builtins {
         void Detach();
         bool CanAttachTo(uint64_t networkId) const;
 
+        // Whether one connection is sent the label: false hides it there (and takes it off showTo),
+        // true undoes that (and adds it to showTo while there is one).
+        void SetVisibleFor(MafiaNet::PeerGuid guid, bool visible);
+        // Keeps the label from the player it is attached to, whichever that is.
+        void SetHideForTarget(bool hide);
+
         // Server tick, before the interest rebuild: moves attached labels to their targets and
         // destroys those whose target is gone.
         static void FollowTargets(Networking::Replication::ReplicationManager &replication);
@@ -97,6 +103,7 @@ namespace Framework::Scripting::Builtins {
         static void JS_Update(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_AttachTo(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_GetOptions(const v8::FunctionCallbackInfo<v8::Value> &info);
+        static void JS_SetVisibleFor(const v8::FunctionCallbackInfo<v8::Value> &info);
 
         static void RegisterOptionsType(v8::Isolate *isolate);
 
