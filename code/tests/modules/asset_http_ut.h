@@ -983,6 +983,25 @@ MODULE(asset_http, {
         EQUALS(received.resources[0].name == "map", true);
     });
 
+    IT("binds again after a failed bind", {
+        Framework::HTTP::Webserver holder;
+        std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
+        int32_t port = 0;
+        for (int attempt = 0; attempt < 8 && port == 0; ++attempt) {
+            const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
+            if (holder.Init("127.0.0.1", candidate, "") == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
+                port = candidate;
+            }
+        }
+        NEQUALS(port, 0);
+
+        Framework::HTTP::Webserver server;
+        EQUALS(server.Init("127.0.0.1", port, "") == Framework::HTTP::WebserverError::WEBSERVER_BIND_FAILED, true);
+        holder.Shutdown();
+        EQUALS(server.Init("127.0.0.1", port, "") == Framework::HTTP::WebserverError::WEBSERVER_NONE, true);
+        server.Shutdown();
+    });
+
     IT("answers as many concurrent requests as it has workers without queueing them", {
         Framework::HTTP::Webserver server;
         server.SetWorkerCount(16);

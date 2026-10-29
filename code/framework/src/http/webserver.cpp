@@ -74,6 +74,9 @@ namespace Framework::HTTP {
         // instead of failing silently inside the listen thread.
         if (!_server->bind_to_port(address, port)) {
             Logging::GetLogger(FRAMEWORK_INNER_HTTP)->error("[Webserver] Failed to bind to {}:{}", address, port);
+            // A failed bind decommissions the httplib server, refusing every later bind until stop();
+            // reset it so the caller can try another port.
+            _server->stop();
             _running = false;
             return WebserverError::WEBSERVER_BIND_FAILED;
         }
