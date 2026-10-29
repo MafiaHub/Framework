@@ -73,7 +73,21 @@ set(VCPKG_OVERLAY_TRIPLETS "${CMAKE_CURRENT_LIST_DIR}/vcpkg-triplets" CACHE STRI
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/vcpkg-ports")
     set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_LIST_DIR}/vcpkg-ports" CACHE STRING "")
 endif()
-set(CMAKE_TOOLCHAIN_FILE "${_fw_vcpkg_root}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+# Visual Studio injects -DCMAKE_TOOLCHAIN_FILE for any user-wide `vcpkg integrate install` checkout,
+# which may not contain the pinned baseline. Replace a foreign vcpkg toolchain, chainload anything else.
+set(_fw_vcpkg_toolchain "${_fw_vcpkg_root}/scripts/buildsystems/vcpkg.cmake")
+get_filename_component(_fw_vcpkg_toolchain "${_fw_vcpkg_toolchain}" ABSOLUTE)
+if(CMAKE_TOOLCHAIN_FILE)
+    get_filename_component(_fw_incoming_toolchain "${CMAKE_TOOLCHAIN_FILE}" ABSOLUTE)
+    if(NOT _fw_incoming_toolchain STREQUAL _fw_vcpkg_toolchain)
+        if(_fw_incoming_toolchain MATCHES "/scripts/buildsystems/vcpkg\\.cmake$")
+            message(STATUS "vcpkg: ignoring toolchain ${_fw_incoming_toolchain}, use -DFW_VCPKG_ROOT to pick a checkout")
+        elseif(NOT VCPKG_CHAINLOAD_TOOLCHAIN_FILE)
+            set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "${_fw_incoming_toolchain}" CACHE STRING "")
+        endif()
+    endif()
+endif()
+set(CMAKE_TOOLCHAIN_FILE "${_fw_vcpkg_toolchain}" CACHE STRING "" FORCE)
 get_filename_component(_fw_vcpkg_root "${_fw_vcpkg_root}" ABSOLUTE)
 set(FW_VCPKG_ROOT_RESOLVED "${_fw_vcpkg_root}" CACHE INTERNAL "vcpkg checkout this build uses")
 
