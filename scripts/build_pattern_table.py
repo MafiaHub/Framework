@@ -461,6 +461,9 @@ def build_block(exe: Path, source: str, literals, preps, known, jobs: int, requi
     for block in known:
         if (block.image_base, block.size_of_image, block.file_size, block.file_crc) == (image_base, size_of_image, file_size, file_crc) and file_crc:
             for h, rva in block.entries:
+                # Storefront and explicitly supplied copies can describe the
+                # same image. One address is still one match across blocks;
+                # distinct addresses must remain ambiguous.
                 reusable.setdefault(h, set()).add(rva)
 
     hits, pending = {}, []
