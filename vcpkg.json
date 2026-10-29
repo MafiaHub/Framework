@@ -3,7 +3,7 @@
   "name": "mafiahub-framework",
   "version-string": "24.1.2",
   "description": "Third-party dependencies for the MafiaHub Framework.",
-  "builtin-baseline": "5f96cd15fd745122cf27e0524606d6c1efc5fd07",
+  "builtin-baseline": "d4c0a46cb8f63e5c9fa007d13baf1cb3e43bf7e3",
   "dependencies": [
     "cxxopts",
     "function2",
@@ -18,8 +18,8 @@
     {
       "name": "curl",
       "default-features": false,
+      "$comment": "No non-http feature: curl 8.23 dropped HTTP_ONLY, so the other protocols are always built.",
       "features": [
-        "non-http",
         "ssl"
       ]
     },
