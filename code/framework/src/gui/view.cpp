@@ -14,6 +14,8 @@
 #include <Windows.h>
 #include <WindowsX.h>
 
+#include <fmt/format.h>
+
 #include "graphics/backend/d3d11.h"
 
 namespace Framework::GUI {
@@ -22,6 +24,29 @@ namespace Framework::GUI {
         // game's frame rate rather than CEF's 30 FPS default; external_begin_frame still drives the
         // actual cadence.
         constexpr int kWindowlessFrameRate = 240;
+
+        // CEF's click API only knows left/middle/right (others hit a DCHECK and are dropped), so side
+        // buttons are synthesized as Chromium's pointer/mouse/auxclick sequence with button 3 (back)
+        // or 4 (forward), at the element under the cursor in the main frame. isTrusted is false.
+        constexpr const char *kSideButtonScript = R"js((function (x, y, button, buttons, down, detail, ctrlKey, shiftKey, altKey) {
+    var target = document.elementFromPoint(x, y) || document.documentElement;
+    var inner;
+    while (target.shadowRoot && (inner = target.shadowRoot.elementFromPoint(x, y)) && inner !== target) target = inner;
+    var init = {bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y,
+        ctrlKey: ctrlKey, shiftKey: shiftKey, altKey: altKey, button: button, buttons: buttons};
+    var chord = (buttons & ~(button === 3 ? 8 : 16)) !== 0;
+    var cancelled = !target.dispatchEvent(new PointerEvent(chord ? 'pointermove' : down ? 'pointerdown' : 'pointerup',
+        Object.assign({pointerId: 1, pointerType: 'mouse', isPrimary: true, pressure: buttons ? 0.5 : 0}, init)));
+    // A cancelled pointerdown holds back mousedown/mouseup until every button is up; auxclick still fires.
+    var held = Symbol.for('mafiahub.cancelledPointerDown');
+    if (down && !chord) window[held] = cancelled;
+    init.detail = detail;
+    if (!window[held]) target.dispatchEvent(new MouseEvent(down ? 'mousedown' : 'mouseup', init));
+    if (!down) {
+        target.dispatchEvent(new MouseEvent('auxclick', init));
+        if (!chord) window[held] = false;
+    }
+}))js";
     } // namespace
 
     View::View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager): _id(id), _graphicsRenderer(graphicsRenderer), _manager(manager), _width(0), _height(0), _x(0), _y(0), _z(0) {
@@ -253,6 +278,22 @@ namespace Framework::GUI {
         return mods;
     }
 
+    // MK_* button state as the DOM MouseEvent.buttons bitmask.
+    static int DomMouseButtons(WPARAM wParam) {
+        int buttons = 0;
+        if (wParam & MK_LBUTTON)
+            buttons |= 1;
+        if (wParam & MK_RBUTTON)
+            buttons |= 2;
+        if (wParam & MK_MBUTTON)
+            buttons |= 4;
+        if (wParam & MK_XBUTTON1)
+            buttons |= 8;
+        if (wParam & MK_XBUTTON2)
+            buttons |= 16;
+        return buttons;
+    }
+
     void View::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (!_browser || !_shouldDisplay || !_hasFocus) {
             return;
@@ -308,6 +349,24 @@ namespace Framework::GUI {
         } break;
         case WM_MBUTTONUP: {
             host->SendMouseClickEvent(cefEvent, MBT_MIDDLE, true, 1);
+        } break;
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONDBLCLK:
+        case WM_XBUTTONUP: {
+            const bool down  = msg != WM_XBUTTONUP;
+            const int button = GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? 3 : 4;
+            // Like Chromium: no release whose press went elsewhere, and a release repeats its press's click count
+            int &pressClicks = _sideButtonClicks[button - 3];
+            if (!down && pressClicks == 0) {
+                break;
+            }
+            const int detail    = down ? (msg == WM_XBUTTONDBLCLK ? 2 : 1) : pressClicks;
+            pressClicks         = down ? detail : 0;
+            const int buttons   = DomMouseButtons(GET_KEYSTATE_WPARAM(wParam));
+            const bool ctrlKey  = (cefEvent.modifiers & EVENTFLAG_CONTROL_DOWN) != 0;
+            const bool shiftKey = (cefEvent.modifiers & EVENTFLAG_SHIFT_DOWN) != 0;
+            const bool altKey   = (cefEvent.modifiers & EVENTFLAG_ALT_DOWN) != 0;
+            EvaluateScript(fmt::format("{}({},{},{},{},{},{},{},{},{});", kSideButtonScript, cefEvent.x, cefEvent.y, button, buttons, down, detail, ctrlKey, shiftKey, altKey));
         } break;
         }
     }

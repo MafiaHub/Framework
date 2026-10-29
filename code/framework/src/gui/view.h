@@ -90,6 +90,8 @@ namespace Framework::GUI {
         std::recursive_mutex _renderMutex;
         glm::vec2 _cursorPos {};
         bool _isMouseDown = false;
+        // Click count of the back/forward press this view delivered, 0 when none
+        int _sideButtonClicks[2] = {};
         int _id;
 
         void EmitViewEvent(const ViewEventData &data);
@@ -117,6 +119,9 @@ namespace Framework::GUI {
         }
 
         void Focus(bool enable) {
+            if (enable != _hasFocus) {
+                _sideButtonClicks[0] = _sideButtonClicks[1] = 0;
+            }
             _hasFocus = enable;
             if (_browser) {
                 _browser->GetHost()->SetFocus(enable);
