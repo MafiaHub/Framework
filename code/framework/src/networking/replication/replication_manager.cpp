@@ -566,8 +566,9 @@ namespace Framework::Networking::Replication {
             return;
         }
         ForEachEntity([&fn](NetworkEntity *entity) {
-            if (entity->streaming.isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
-                fn(entity->ownerGUID, entity);
+            const MafiaNet::PeerGuid player = entity->GetAvatarGuid();
+            if (entity->streaming.isViewer && player != MafiaNet::UNASSIGNED_PEER_GUID) {
+                fn(player, entity);
             }
         });
     }

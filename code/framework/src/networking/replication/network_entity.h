@@ -313,6 +313,15 @@ namespace Framework::Networking::Replication {
             return MafiaNet::UNASSIGNED_PEER_GUID;
         }
 
+        // The player this entity is the avatar of, on a client (with
+        // streaming.isViewer): ForEachAvatar names voice speakers by it. The
+        // owner by default; a server-owned avatar a player controls by RPC
+        // returns that player's guid, which ownerGUID cannot carry without
+        // making the player its authority.
+        virtual MafiaNet::PeerGuid GetAvatarGuid() const {
+            return ownerGUID;
+        }
+
         // Owning an entity -- simulating it for DelegationManager, say -- need
         // not mean owning its lifetime. Return false and the server refuses the
         // owner's destruction; the server's own DestroyEntity is unaffected.

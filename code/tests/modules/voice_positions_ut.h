@@ -289,6 +289,39 @@ MODULE(voice_positions, {
         EQUALS(atAvatar, true);
     });
 
+    // A server-owned avatar a player drives by RPC (a mod keeps the player's entity server-owned so
+    // the server stays its authority): ownerGUID is unassigned, and the entity names its player.
+    struct ControlledAvatar final: NetworkEntity {
+        MafiaNet::PeerGuid controller = MafiaNet::UNASSIGNED_PEER_GUID;
+        MafiaNet::PeerGuid GetAvatarGuid() const override {
+            return controller;
+        }
+    };
+
+    IT("places a speaker at a server-owned avatar its entity names the player of", {
+        NetworkEntity serverAvatar;
+        NetworkEntity serverOther;
+        serverAvatar.replicaManager     = serverManager;
+        serverOther.replicaManager      = serverManager;
+        serverAvatar.position           = aliceAt;
+        serverAvatar.streaming.isViewer = true;
+        serverOther.position            = bobAt;
+        serverOther.streaming.isViewer  = true;
+
+        ControlledAvatar clientAvatar;
+        NetworkEntity clientOther;
+        clientAvatar.controller = alice;
+        clientManager->Reference(&clientAvatar);
+        clientManager->Reference(&clientOther);
+        construct(serverAvatar, clientAvatar);
+        construct(serverOther, clientOther);
+
+        // The plain server-owned viewer names nobody and places no one.
+        const std::vector<Reported> reported = avatars(clientManager);
+        const bool atAvatar                  = reported.size() == 1 && reported[0].guid == alice && reported[0].position == aliceAt;
+        EQUALS(atAvatar, true);
+    });
+
     IT("moves a client's speaker to a replacement avatar made after construction", {
         // A respawn: the first body was built on the client as the avatar, the server then made
         // another one the viewer. Only the state channel can carry that.
