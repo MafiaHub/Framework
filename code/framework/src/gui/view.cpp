@@ -42,7 +42,8 @@ namespace Framework::GUI {
         Object.assign({pressure: buttons ? 0.5 : 0}, pointer, init)));
     // A cancelled pointerdown holds back mousedown/mouseup until every button is up; auxclick still fires.
     if (down && !chord) state.held = cancelled;
-    init.detail = detail;
+    // A release whose press this document never saw (it navigated in between) has no click count
+    init.detail = down || state[button] ? detail : 0;
     if (!state.held) target.dispatchEvent(new MouseEvent(down ? 'mousedown' : 'mouseup', init));
     if (down) {
         state[button] = target;
