@@ -26,10 +26,6 @@ namespace Framework::HTTP {
 
         const auto address = (host.empty() ? "0.0.0.0" : host);
 
-        if (!serveDir.empty()) {
-            _server->set_mount_point("/", serveDir.c_str());
-        }
-
         _server->set_pre_routing_handler([this](const httplib::Request &req, httplib::Response &res) {
             if (req.method != "GET" && req.method != "HEAD") {
                 return httplib::Server::HandlerResponse::Unhandled;
@@ -74,8 +70,16 @@ namespace Framework::HTTP {
         // instead of failing silently inside the listen thread.
         if (!_server->bind_to_port(address, port)) {
             Logging::GetLogger(FRAMEWORK_INNER_HTTP)->error("[Webserver] Failed to bind to {}:{}", address, port);
+            // A failed bind decommissions the httplib server, refusing every later bind until stop();
+            // reset it so the caller can try another port.
+            _server->stop();
             _running = false;
             return WebserverError::WEBSERVER_BIND_FAILED;
+        }
+
+        // Mounted only once bound: stop() keeps mount points, so a retry would still serve this one.
+        if (!serveDir.empty()) {
+            _server->set_mount_point("/", serveDir.c_str());
         }
 
         _webThread = std::jthread([this](std::stop_token) {
