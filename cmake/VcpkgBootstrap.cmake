@@ -26,9 +26,14 @@ else()
         file(MAKE_DIRECTORY "${_fw_vcpkg_root}")
         execute_process(COMMAND "${GIT_EXECUTABLE}" init -q WORKING_DIRECTORY "${_fw_vcpkg_root}" COMMAND_ERROR_IS_FATAL ANY)
         set(_fw_vcpkg_head "")
-    else()
+    elseif(EXISTS "${_fw_vcpkg_root}/.git")
         execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD WORKING_DIRECTORY "${_fw_vcpkg_root}"
             OUTPUT_VARIABLE _fw_vcpkg_head OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    else()
+        # Not a repository of its own: rev-parse would answer for the enclosing Framework checkout,
+        # and the checkout below would rewrite that tree.
+        message(STATUS "vcpkg at ${_fw_vcpkg_root} is not a Git checkout; leaving it unchanged")
+        set(_fw_vcpkg_head "${FW_VCPKG_PIN}")
     endif()
 
     # A checkout fetched for an earlier pin lacks the new baseline commit, and vcpkg cannot resolve
@@ -49,7 +54,12 @@ else()
     set(_fw_vcpkg_exe "${_fw_vcpkg_root}/vcpkg")
 endif()
 
-if(NOT EXISTS "${_fw_vcpkg_exe}" OR _fw_vcpkg_rebootstrap)
+# Drop the old tool first: a bootstrap that fails part-way would otherwise leave it in place, and the
+# next configure, already on the pin, would never retry.
+if(_fw_vcpkg_rebootstrap)
+    file(REMOVE "${_fw_vcpkg_exe}")
+endif()
+if(NOT EXISTS "${_fw_vcpkg_exe}")
     message(STATUS "Bootstrapping vcpkg")
     execute_process(COMMAND "${_fw_vcpkg_bootstrap}" -disableMetrics WORKING_DIRECTORY "${_fw_vcpkg_root}" COMMAND_ERROR_IS_FATAL ANY)
 endif()
