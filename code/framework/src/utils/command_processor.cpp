@@ -12,7 +12,7 @@
 namespace Framework::Utils {
     std::vector<std::string> CommandProcessor::Tokenize(std::string_view input) {
         std::vector<std::string> tokens;
-        std::istringstream parts{std::string(input)};
+        std::istringstream parts {std::string(input)};
         std::string item;
         while (parts >> item) {
             tokens.push_back(item);

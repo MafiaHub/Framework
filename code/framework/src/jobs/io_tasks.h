@@ -26,11 +26,11 @@ namespace Framework::Jobs::IO {
         bool success = true;
 
         static FileResult Success(std::string filePath, std::vector<uint8_t> fileData) {
-            return FileResult{std::move(filePath), std::move(fileData), "", true};
+            return FileResult {std::move(filePath), std::move(fileData), "", true};
         }
 
         static FileResult Failure(std::string filePath, std::string errorMsg) {
-            return FileResult{std::move(filePath), {}, std::move(errorMsg), false};
+            return FileResult {std::move(filePath), {}, std::move(errorMsg), false};
         }
     };
 

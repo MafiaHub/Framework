@@ -38,16 +38,28 @@ namespace Framework::Networking::RPC {
     }
 
     namespace detail {
-        constexpr std::uint64_t Rotl(std::uint64_t x, int b) { return (x << b) | (x >> (64 - b)); }
+        constexpr std::uint64_t Rotl(std::uint64_t x, int b) {
+            return (x << b) | (x >> (64 - b));
+        }
 
         struct SipState {
             std::uint64_t v0, v1, v2, v3;
 
             constexpr void Round() {
-                v0 += v1; v1 = Rotl(v1, 13); v1 ^= v0; v0 = Rotl(v0, 32);
-                v2 += v3; v3 = Rotl(v3, 16); v3 ^= v2;
-                v0 += v3; v3 = Rotl(v3, 21); v3 ^= v0;
-                v2 += v1; v1 = Rotl(v1, 17); v1 ^= v2; v2 = Rotl(v2, 32);
+                v0 += v1;
+                v1 = Rotl(v1, 13);
+                v1 ^= v0;
+                v0 = Rotl(v0, 32);
+                v2 += v3;
+                v3 = Rotl(v3, 16);
+                v3 ^= v2;
+                v0 += v3;
+                v3 = Rotl(v3, 21);
+                v3 ^= v0;
+                v2 += v1;
+                v1 = Rotl(v1, 17);
+                v1 ^= v2;
+                v2 = Rotl(v2, 32);
             }
 
             constexpr void Absorb(std::uint64_t m) {
@@ -67,12 +79,16 @@ namespace Framework::Networking::RPC {
             std::size_t offset       = 0;
             for (; offset + 8 <= length; offset += 8) {
                 std::uint64_t block = 0;
-                for (std::size_t i = 0; i < 8; ++i) { block |= static_cast<std::uint64_t>(static_cast<std::uint8_t>(data[offset + i])) << (8 * i); }
+                for (std::size_t i = 0; i < 8; ++i) {
+                    block |= static_cast<std::uint64_t>(static_cast<std::uint8_t>(data[offset + i])) << (8 * i);
+                }
                 s.Absorb(block);
             }
 
             std::uint64_t tail = static_cast<std::uint64_t>(length & 0xFF) << 56;
-            for (std::size_t i = 0; offset + i < length; ++i) { tail |= static_cast<std::uint64_t>(static_cast<std::uint8_t>(data[offset + i])) << (8 * i); }
+            for (std::size_t i = 0; offset + i < length; ++i) {
+                tail |= static_cast<std::uint64_t>(static_cast<std::uint8_t>(data[offset + i])) << (8 * i);
+            }
             s.Absorb(tail);
 
             s.v2 ^= 0xFF;
@@ -96,7 +112,9 @@ namespace Framework::Networking::RPC {
         constexpr bool operator==(const Identifier &) const = default;
     };
 
-    constexpr Identifier DigestName(std::string_view name) { return Identifier {detail::SipHash24(detail::kNameKey0, detail::kNameKey1, name)}; }
+    constexpr Identifier DigestName(std::string_view name) {
+        return Identifier {detail::SipHash24(detail::kNameKey0, detail::kNameKey1, name)};
+    }
 
     // Keyed PRF of the digest under the deployment salt. Deliberately not a salted FNV-1a: that is
     // invertible (multiply by the prime's modular inverse and unwind backwards), so one token plus its
@@ -104,7 +122,9 @@ namespace Framework::Networking::RPC {
     // rotation worthless. A keyed PRF has no such shortcut.
     constexpr std::uint64_t HashIdentifierWith(std::uint64_t salt, Identifier identifier) {
         char bytes[8] = {};
-        for (std::size_t i = 0; i < 8; ++i) { bytes[i] = static_cast<char>(static_cast<std::uint8_t>(identifier.digest >> (8 * i))); }
+        for (std::size_t i = 0; i < 8; ++i) {
+            bytes[i] = static_cast<char>(static_cast<std::uint8_t>(identifier.digest >> (8 * i)));
+        }
         return detail::SipHash24(SplitMix64(salt), SplitMix64(SplitMix64(salt)), std::string_view(bytes, 8));
     }
 
@@ -114,7 +134,9 @@ namespace Framework::Networking::RPC {
     struct Token {
         std::array<char, 17> value {};
 
-        constexpr const char *c_str() const { return value.data(); }
+        constexpr const char *c_str() const {
+            return value.data();
+        }
     };
 
     constexpr Token RenderToken(std::uint64_t hash) {
@@ -127,7 +149,9 @@ namespace Framework::Networking::RPC {
         return out;
     }
 
-    constexpr Token TokenFor(std::uint64_t salt, Identifier identifier) { return RenderToken(HashIdentifierWith(salt, identifier)); }
+    constexpr Token TokenFor(std::uint64_t salt, Identifier identifier) {
+        return RenderToken(HashIdentifierWith(salt, identifier));
+    }
 
     // The name reaches this exclusively through FW_RPC_IDENTIFIER's template argument (mandatory
     // constant evaluation), so it is never referenced at runtime and does not ship in the binary --
@@ -140,7 +164,9 @@ namespace Framework::Networking::RPC {
     // Fingerprint of the salt, folded into NetworkPeer::BuildToken. A salt mismatch otherwise has no
     // error path: RPC4 Signal to an unregistered slot is a no-op, so the peers would connect and then
     // silently dispatch nothing.
-    constexpr Token IdentifierSaltTag(std::uint64_t salt) { return TokenFor(salt, IdentifierOf<DigestName("Framework::IdentifierSalt").digest>::value); }
+    constexpr Token IdentifierSaltTag(std::uint64_t salt) {
+        return TokenFor(salt, IdentifierOf<DigestName("Framework::IdentifierSalt").digest>::value);
+    }
 } // namespace Framework::Networking::RPC
 
 // Turn a readable RPC name into its compile-time digest. Use in place of a string literal, e.g.

@@ -39,7 +39,7 @@ namespace Framework::External::Discord {
         constexpr uint32_t All        = (1u << 11) - 1;
     } // namespace PresenceField
 
-    class Wrapper final : public Framework::Lifecycle {
+    class Wrapper final: public Framework::Lifecycle {
       private:
         discord::User _user {};
         discord::Core *_instance {};

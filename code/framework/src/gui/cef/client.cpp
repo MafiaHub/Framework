@@ -15,8 +15,7 @@ namespace Framework::GUI::CEF {
         , _lifeSpanHandler(lifeSpanHandler)
         , _loadHandler(loadHandler)
         , _displayHandler(displayHandler)
-        , _sdk(sdk) {
-    }
+        , _sdk(sdk) {}
 
     bool Client::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId sourceProcess, CefRefPtr<CefProcessMessage> message) {
         const std::string name = message->GetName().ToString();

@@ -8,8 +8,8 @@
 
 #include "view.h"
 
-#include "manager.h"
 #include "logging/logger.h"
+#include "manager.h"
 
 #include <Windows.h>
 #include <WindowsX.h>
@@ -24,15 +24,7 @@ namespace Framework::GUI {
         constexpr int kWindowlessFrameRate = 240;
     } // namespace
 
-    View::View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager)
-        : _id(id)
-        , _graphicsRenderer(graphicsRenderer)
-        , _manager(manager)
-        , _width(0)
-        , _height(0)
-        , _x(0)
-        , _y(0)
-        , _z(0) {
+    View::View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager): _id(id), _graphicsRenderer(graphicsRenderer), _manager(manager), _width(0), _height(0), _x(0), _y(0), _z(0) {
         _sdk         = std::make_unique<SDK>();
         _isMouseDown = false;
     }
@@ -238,9 +230,12 @@ namespace Framework::GUI {
     // uniformly instead of off wParam, otherwise DOM e.altKey never fires.
     static uint32_t CefKeyboardModifiers() {
         uint32_t mods = 0;
-        if (GetKeyState(VK_CONTROL) & 0x8000) mods |= EVENTFLAG_CONTROL_DOWN;
-        if (GetKeyState(VK_SHIFT) & 0x8000) mods |= EVENTFLAG_SHIFT_DOWN;
-        if (GetKeyState(VK_MENU) & 0x8000) mods |= EVENTFLAG_ALT_DOWN;
+        if (GetKeyState(VK_CONTROL) & 0x8000)
+            mods |= EVENTFLAG_CONTROL_DOWN;
+        if (GetKeyState(VK_SHIFT) & 0x8000)
+            mods |= EVENTFLAG_SHIFT_DOWN;
+        if (GetKeyState(VK_MENU) & 0x8000)
+            mods |= EVENTFLAG_ALT_DOWN;
         return mods;
     }
 
@@ -249,9 +244,12 @@ namespace Framework::GUI {
     // carried by the move events, so these must reflect the live state.
     static uint32_t CefMouseButtons(WPARAM wParam) {
         uint32_t mods = 0;
-        if (wParam & MK_LBUTTON) mods |= EVENTFLAG_LEFT_MOUSE_BUTTON;
-        if (wParam & MK_MBUTTON) mods |= EVENTFLAG_MIDDLE_MOUSE_BUTTON;
-        if (wParam & MK_RBUTTON) mods |= EVENTFLAG_RIGHT_MOUSE_BUTTON;
+        if (wParam & MK_LBUTTON)
+            mods |= EVENTFLAG_LEFT_MOUSE_BUTTON;
+        if (wParam & MK_MBUTTON)
+            mods |= EVENTFLAG_MIDDLE_MOUSE_BUTTON;
+        if (wParam & MK_RBUTTON)
+            mods |= EVENTFLAG_RIGHT_MOUSE_BUTTON;
         return mods;
     }
 
@@ -269,17 +267,17 @@ namespace Framework::GUI {
             POINT pt {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ::ScreenToClient(hWnd, &pt);
             CefMouseEvent cefEvent;
-            cefEvent.x = pt.x - _x;
-            cefEvent.y = pt.y - _y;
+            cefEvent.x         = pt.x - _x;
+            cefEvent.y         = pt.y - _y;
             cefEvent.modifiers = CefKeyboardModifiers() | CefMouseButtons(GET_KEYSTATE_WPARAM(wParam));
-            int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            int delta          = GET_WHEEL_DELTA_WPARAM(wParam);
             host->SendMouseWheelEvent(cefEvent, 0, delta);
             return;
         }
 
         CefMouseEvent cefEvent;
-        cefEvent.x = GET_X_LPARAM(lParam) - _x;
-        cefEvent.y = GET_Y_LPARAM(lParam) - _y;
+        cefEvent.x         = GET_X_LPARAM(lParam) - _x;
+        cefEvent.y         = GET_Y_LPARAM(lParam) - _y;
         cefEvent.modifiers = CefKeyboardModifiers() | CefMouseButtons(wParam);
 
         switch (msg) {
@@ -322,16 +320,12 @@ namespace Framework::GUI {
         CefKeyEvent cefEvent;
 
         switch (msg) {
-        case WM_SYSKEYDOWN:
-            cefEvent.is_system_key = true;
-            [[fallthrough]];
+        case WM_SYSKEYDOWN: cefEvent.is_system_key = true; [[fallthrough]];
         case WM_KEYDOWN: {
             cefEvent.type             = KEYEVENT_RAWKEYDOWN;
             cefEvent.windows_key_code = static_cast<int>(wParam);
         } break;
-        case WM_SYSKEYUP:
-            cefEvent.is_system_key = true;
-            [[fallthrough]];
+        case WM_SYSKEYUP: cefEvent.is_system_key = true; [[fallthrough]];
         case WM_KEYUP: {
             cefEvent.type             = KEYEVENT_KEYUP;
             cefEvent.windows_key_code = static_cast<int>(wParam);
@@ -354,8 +348,7 @@ namespace Framework::GUI {
             cefEvent.character            = static_cast<char16_t>(wide);
             cefEvent.unmodified_character = static_cast<char16_t>(wide);
         } break;
-        default:
-            return;
+        default: return;
         }
 
         cefEvent.native_key_code = static_cast<int>(lParam);

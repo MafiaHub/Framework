@@ -18,9 +18,9 @@
 
 #ifdef WIN32
 #include <d3d11.h>
-#include <wrl/client.h>
-#include <directxcolors.h>
 #include <d3dcompiler.h>
+#include <directxcolors.h>
+#include <wrl/client.h>
 #else
 #define ID3D11Device        void
 #define ID3D11DeviceContext void
@@ -77,10 +77,10 @@ namespace Framework::Graphics {
         Microsoft::WRL::ComPtr<ID3D11Buffer> GetConstantBuffer();
         void UpdateConstantBuffer(const GPUState &state);
         static DirectX::XMMATRIX ConvertGLMMatrixToXMMatrix(const glm::mat4 &glmMatrix);
-        
+
       protected:
         IDXGISwapChain *_swapChain {};
-        ID3D11CommandList *_deviceCommandList {}; 
+        ID3D11CommandList *_deviceCommandList {};
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> _deferredContext;
 
         Microsoft::WRL::ComPtr<ID3D11BlendState> _blendState;

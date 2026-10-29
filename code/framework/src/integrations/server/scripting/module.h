@@ -33,7 +33,9 @@ namespace Framework::Integrations::Server::Scripting {
      * Uses Node.js for full server-side JavaScript capabilities including
      * require(), async/await, npm packages, etc.
      */
-    class ServerScriptingModule final : public Framework::Lifecycle, public Framework::Scripting::ScriptingModule {
+    class ServerScriptingModule final
+        : public Framework::Lifecycle
+        , public Framework::Scripting::ScriptingModule {
       public:
         ServerScriptingModule();
         ~ServerScriptingModule();
@@ -87,7 +89,9 @@ namespace Framework::Integrations::Server::Scripting {
         /**
          * Get the resources path.
          */
-        std::string GetResourcesPath() const { return _resourcesPath; }
+        std::string GetResourcesPath() const {
+            return _resourcesPath;
+        }
 
         /**
          * Enable/disable development mode (file-watch hot-reload). Must be set
@@ -98,7 +102,9 @@ namespace Framework::Integrations::Server::Scripting {
         /**
          * Set the mod version exposed as ExecutionEnvironment.modVersion. Must be set before Init().
          */
-        void SetModVersion(const std::string &version) { _modVersion = version; }
+        void SetModVersion(const std::string &version) {
+            _modVersion = version;
+        }
 
         /**
          * Get list of resources to send to clients.
@@ -122,7 +128,7 @@ namespace Framework::Integrations::Server::Scripting {
         std::string _modVersion;
 
         std::string _resourcesPath = "resources";
-        bool _devMode = false;
+        bool _devMode              = false;
     };
 
 } // namespace Framework::Integrations::Server::Scripting

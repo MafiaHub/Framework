@@ -36,9 +36,9 @@ namespace Framework::GUI {
         };
         std::vector<UploadBuffer> _uploadBuffers;
 
-        int _texWidth  = 0;
-        int _texHeight = 0;
-        uint32_t _uploadPitch = 0;
+        int _texWidth                       = 0;
+        int _texHeight                      = 0;
+        uint32_t _uploadPitch               = 0;
         D3D12_RESOURCE_STATES _textureState = D3D12_RESOURCE_STATE_COPY_DEST;
 
         int _srvSlot = -1;
@@ -83,8 +83,8 @@ namespace Framework::GUI {
 
         // Guards _sharedLatest, _sharedDirty and every readFence
         std::mutex _sharedMutex;
-        int _sharedLatest = -1;
-        bool _sharedDirty = false;
+        int _sharedLatest  = -1;
+        bool _sharedDirty  = false;
         bool _sharedLogged = false;
 
       public:

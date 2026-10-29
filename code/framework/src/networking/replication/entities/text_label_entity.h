@@ -46,7 +46,7 @@ namespace Framework::Networking::Replication::Entities {
 
     // A server-owned piece of world-space text, interest-streamed and drawn client-side as a screen
     // overlay. Mods register the type on both peers.
-    class TextLabelEntity : public NetworkEntity {
+    class TextLabelEntity: public NetworkEntity {
       public:
         static constexpr const char *kTypeName = "Framework::TextLabel";
 

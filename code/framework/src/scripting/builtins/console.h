@@ -10,8 +10,8 @@
 
 #include <v8pp/convert.hpp>
 
-#include <v8.h>
 #include <spdlog/spdlog.h>
+#include <v8.h>
 
 #include <string>
 
@@ -37,9 +37,7 @@ namespace Framework::Scripting::Builtins {
          * @param context Target context
          * @param resourceManager Resource manager for getting current resource context
          */
-        static void Register(v8::Isolate *isolate,
-                            v8::Local<v8::Context> context,
-                            ResourceManager *resourceManager);
+        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *resourceManager);
 
         // Helper to format arguments as a string (public for testing)
         static std::string FormatArgs(v8::Isolate *isolate, const v8::FunctionCallbackInfo<v8::Value> &args);
@@ -56,7 +54,6 @@ namespace Framework::Scripting::Builtins {
 
         // Helper to log at a specific level
         static void LogWithLevel(const v8::FunctionCallbackInfo<v8::Value> &args, spdlog::level::level_enum level);
-
     };
 
 } // namespace Framework::Scripting::Builtins

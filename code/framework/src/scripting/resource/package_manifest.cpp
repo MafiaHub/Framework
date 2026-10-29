@@ -33,7 +33,8 @@ namespace Framework::Scripting {
 
         try {
             return ParseJson(nlohmann::json::parse(contents));
-        } catch (const nlohmann::json::exception &e) {
+        }
+        catch (const nlohmann::json::exception &e) {
             _error = "JSON parse error: " + std::string(e.what());
             return false;
         }
@@ -61,9 +62,9 @@ namespace Framework::Scripting {
         }
 
         // Optional standard fields
-        _version = json.value("version", "1.0.0");
+        _version     = json.value("version", "1.0.0");
         _description = json.value("description", "");
-        _author = json.value("author", "");
+        _author      = json.value("author", "");
 
         // MafiaHub config
         if (json.contains("mafiahub") && json["mafiahub"].is_object()) {
@@ -96,7 +97,7 @@ namespace Framework::Scripting {
                 _mafiahubConfig.serverScripts.insert(_mafiahubConfig.serverScripts.begin(), _mafiahubConfig.server);
             }
             readList("clientFiles", _mafiahubConfig.files);
-            _mafiahubConfig.priority = mh.value("priority", 0);
+            _mafiahubConfig.priority      = mh.value("priority", 0);
             _mafiahubConfig.errorBehavior = mh.value("errorBehavior", "stop");
 
             // Exports
@@ -113,15 +114,19 @@ namespace Framework::Scripting {
                 for (const auto &dep : mh["resourceDependencies"]) {
                     ResourceDependency rd;
                     if (dep.is_string()) {
-                        rd.name = dep.get<std::string>();
+                        rd.name    = dep.get<std::string>();
                         rd.version = "*";
-                    } else if (dep.is_object()) {
+                    }
+                    else if (dep.is_object()) {
                         // value() throws type_error.302 on a mismatch, which would drop the whole resource over one mistyped field.
-                        const auto str = [&](const char *key, const char *fallback) { const auto it = dep.find(key); return (it != dep.end() && it->is_string()) ? it->get<std::string>() : fallback; };
-                        rd.name = str("name", "");
-                        rd.version = str("version", "*");
+                        const auto str = [&](const char *key, const char *fallback) {
+                            const auto it = dep.find(key);
+                            return (it != dep.end() && it->is_string()) ? it->get<std::string>() : fallback;
+                        };
+                        rd.name               = str("name", "");
+                        rd.version            = str("version", "*");
                         const auto optionalIt = dep.find("optional");
-                        rd.optional = optionalIt != dep.end() && optionalIt->is_boolean() && optionalIt->get<bool>();
+                        rd.optional           = optionalIt != dep.end() && optionalIt->is_boolean() && optionalIt->get<bool>();
                         if (optionalIt != dep.end() && !optionalIt->is_boolean()) {
                             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Dependency '{}': 'optional' must be a boolean; treating it as required", rd.name);
                         }

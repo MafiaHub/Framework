@@ -19,9 +19,9 @@
 #include <fstream>
 
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <set>
-#include <fstream>
 #include <sstream>
 
 #include "core_modules.h"
@@ -54,8 +54,8 @@
 #include "utils/config_schema.h"
 #include "utils/path.h"
 #include "utils/profiler.h"
-#include "utils/version.h"
 #include "utils/time.h"
+#include "utils/version.h"
 
 #include "cxxopts.hpp"
 #include <cppfs/FileHandle.h>
@@ -68,7 +68,7 @@
 
 namespace Framework::Integrations::Server {
     namespace {
-        constexpr double kTickHitchWarnMs         = 100.0;
+        constexpr double kTickHitchWarnMs = 100.0;
 
         // How much longer MafiaNet keeps a waiting connection request than the gate takes to time it
         // out, so the player always gets the gate's reason rather than a silent drop.
@@ -289,7 +289,7 @@ namespace Framework::Integrations::Server {
 
         // Initialize mod subsystems
         PostInit();
-    
+
         const auto sdkCallback = [this](Framework::Scripting::Engine *engine) {
             this->RegisterScriptingBuiltins(engine);
         };
@@ -382,7 +382,6 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("All core endpoints have been registered!");
     }
 
-
     Framework::Utils::Crypto::Key DerivePackageKey(const InstanceOptions &opts) {
         const std::string &secret = !opts.packageSecret.empty() ? opts.packageSecret : opts.bindSecretKey;
         const std::string digest  = Framework::Utils::Crypto::Sha256Hex(std::string("mafiahub-package-key") + '\0' + opts.modSlug + '\0' + secret);
@@ -395,9 +394,8 @@ namespace Framework::Integrations::Server {
         options.allow_unrecognised_options();
         options.add_options("MafiaHub Integrations server",
             {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)},
-                {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)},
-                {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()}, {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()},
-                {"download-url", "http(s) base URL clients fetch resource files from before the game port", cxxopts::value<std::string>()},
+                {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)}, {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()},
+                {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()}, {"download-url", "http(s) base URL clients fetch resource files from before the game port", cxxopts::value<std::string>()},
                 {"package-secret", "Secret the resource package key is derived from; defaults to the server token", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
@@ -513,13 +511,13 @@ namespace Framework::Integrations::Server {
 
     nlohmann::json Instance::BuildDefaultConfigFile() const {
         nlohmann::json frameworkKeys;
-        frameworkKeys["host"]         = _opts.bindHost;
-        frameworkKeys["port"]         = _opts.bindPort;
-        frameworkKeys["map"]          = _opts.bindMapName;
-        frameworkKeys["maxplayers"]   = _opts.maxPlayers;
-        frameworkKeys["server-token"] = _opts.bindSecretKey;
-        frameworkKeys["password"]     = _opts.bindPassword;
-        frameworkKeys["download-url"] = _opts.assetDownloadUrl;
+        frameworkKeys["host"]           = _opts.bindHost;
+        frameworkKeys["port"]           = _opts.bindPort;
+        frameworkKeys["map"]            = _opts.bindMapName;
+        frameworkKeys["maxplayers"]     = _opts.maxPlayers;
+        frameworkKeys["server-token"]   = _opts.bindSecretKey;
+        frameworkKeys["password"]       = _opts.bindPassword;
+        frameworkKeys["download-url"]   = _opts.assetDownloadUrl;
         frameworkKeys["package-secret"] = _opts.packageSecret;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
@@ -574,12 +572,12 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Build verified for player guid {}, sending resource list", guid.g);
 
             Framework::Networking::RPC::ServerResources resources;
-            resources.readyEventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
-            resources.tickRate     = _opts.worldConfig.tickInterval;
-            resources.packageKey   = _packageKeyHex;
+            resources.readyEventId  = Framework::Networking::NetworkServer::ReadyEventId(guid);
+            resources.tickRate      = _opts.worldConfig.tickInterval;
+            resources.packageKey    = _packageKeyHex;
             resources.downloadToken = _assetFileServer.Grant(guid.g);
             resources.downloadUrl   = _opts.assetDownloadUrl;
-            resources.resources = DescribeClientResources();
+            resources.resources     = DescribeClientResources();
             net->SendRPC(resources, guid);
 
             // Travels with the resource list: a client that learns the ranges only when
@@ -621,7 +619,7 @@ namespace Framework::Integrations::Server {
                 return;
             }
 
-            auto *replication = net->GetReplicationManager();
+            auto *replication   = net->GetReplicationManager();
             const auto peerGuid = MafiaNet::ToPeerGuid(guid);
             if (replication && (replication->GetConnectionByGUID(guid) || replication->GetViewer(peerGuid))) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring duplicate join from {}", guid.g);
@@ -806,7 +804,7 @@ namespace Framework::Integrations::Server {
         }
 
         Framework::Scripting::EngineScope scope(engine);
-        v8::Isolate *isolate = scope.Isolate();
+        v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
         std::vector<v8::Local<v8::Value>> args;
@@ -819,8 +817,7 @@ namespace Framework::Integrations::Server {
             v8::TryCatch tryCatch(isolate);
             v8::Local<v8::String> jsonStr;
             v8::Local<v8::Value> parsed;
-            if (!v8::String::NewFromUtf8(isolate, payloadJson.c_str()).ToLocal(&jsonStr) ||
-                !v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
+            if (!v8::String::NewFromUtf8(isolate, payloadJson.c_str()).ToLocal(&jsonStr) || !v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropping client event '{}' from {}: malformed JSON payload", eventName, senderNetworkId);
                 return;
             }
@@ -840,7 +837,7 @@ namespace Framework::Integrations::Server {
     }
 
     std::string Instance::GetPackageStagingDir() const {
-        const auto scripting = GetScriptingModule();
+        const auto scripting         = GetScriptingModule();
         const std::string assetsPath = Framework::Utils::GetAbsolutePathA(scripting ? scripting->GetResourcesPath() : _opts.resourcesPath);
         return (std::filesystem::path(assetsPath).parent_path() / ".packages").string();
     }
@@ -1088,11 +1085,11 @@ namespace Framework::Integrations::Server {
 
     void Instance::InitCommandListener() {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Setting up command listener and processor...");
-        
+
         _commandListener->SetCommandCallback([this](const std::string &command) {
             this->HandleCommand(command);
         });
-        
+
         _commandProcessor->RegisterCommand(
             "help", {},
             [this](cxxopts::ParseResult &) {
@@ -1103,7 +1100,7 @@ namespace Framework::Integrations::Server {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Available commands:\n{}", ss.str());
             },
             "Show this help message");
-            
+
         _commandProcessor->RegisterCommand(
             "quit", {},
             [this](cxxopts::ParseResult &) {
@@ -1129,7 +1126,8 @@ namespace Framework::Integrations::Server {
                 auto res = rm->StopResource(args[0]);
                 if (res) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopped resource '{}'", args[0]);
-                } else {
+                }
+                else {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to stop '{}': {}", args[0], res.GetError());
                 }
             },
@@ -1141,9 +1139,9 @@ namespace Framework::Integrations::Server {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Server status:");
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Name: {}", _opts.modName);
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Host: {}:{}", _opts.bindHost, _opts.bindPort);
-                
+
                 if (_networkingEngine) {
-                    const auto net = _networkingEngine->GetNetworkServer();
+                    const auto net  = _networkingEngine->GetNetworkServer();
                     const auto peer = net->GetPeer();
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Players: {}/{}", peer->NumberOfConnections(), _opts.maxPlayers);
                 }
@@ -1166,35 +1164,36 @@ namespace Framework::Integrations::Server {
                 auto res = op(rm, args[0]);
                 if (res) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}: '{}'", verb, args[0]);
-                } else {
+                }
+                else {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to {} '{}': {}", verb, args[0], res.GetError());
                 }
             };
         };
 
-        _commandProcessor->RegisterCommand(
-            "start", {},
-            resourceCommand("start", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
-                return rm->StartResource(n);
-            }),
+        _commandProcessor->RegisterCommand("start", {},
+            resourceCommand("start",
+                [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                    return rm->StartResource(n);
+                }),
             "Start a resource: start <resource>");
 
-        _commandProcessor->RegisterCommand(
-            "restart", {},
-            resourceCommand("restart", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
-                if (!rm->IsResourceRunning(n)) {
-                    return Framework::Scripting::ResourceOperationResult(std::string("resource is not running (use start)"));
-                }
-                return rm->RestartResource(n);
-            }),
+        _commandProcessor->RegisterCommand("restart", {},
+            resourceCommand("restart",
+                [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                    if (!rm->IsResourceRunning(n)) {
+                        return Framework::Scripting::ResourceOperationResult(std::string("resource is not running (use start)"));
+                    }
+                    return rm->RestartResource(n);
+                }),
             "Reload a running resource's code: restart <resource>");
 
         // Start-or-reload — the canonical verb FiveM/MTASA operators expect.
-        _commandProcessor->RegisterCommand(
-            "ensure", {},
-            resourceCommand("ensure", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
-                return rm->IsResourceRunning(n) ? rm->RefreshResource(n) : rm->StartResource(n);
-            }),
+        _commandProcessor->RegisterCommand("ensure", {},
+            resourceCommand("ensure",
+                [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                    return rm->IsResourceRunning(n) ? rm->RefreshResource(n) : rm->StartResource(n);
+                }),
             "Start or reload a resource: ensure <resource>");
 
         // Re-scan for new/changed resources (manifests), without restarting.
@@ -1220,7 +1219,8 @@ namespace Framework::Integrations::Server {
                 auto res = rm->RefreshAll();
                 if (res) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refreshed all resources ({} affected)", res.GetValue().size());
-                } else {
+                }
+                else {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to refresh all resources: {}", res.GetError());
                 }
             },
@@ -1234,28 +1234,21 @@ namespace Framework::Integrations::Server {
             auto result = _commandProcessor->ProcessCommand(command);
             if (result.GetError() != Utils::CommandProcessorError::COMMAND_NONE) {
                 switch (result.GetError()) {
-                    case Utils::CommandProcessorError::COMMAND_PRINT_HELP:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.GetValue());
-                        break;
-                    case Utils::CommandProcessorError::COMMAND_UNKNOWN: {
-                        // Not a built-in command; hand it to the mod override and the scripting layer.
-                        std::vector<std::string> tokens = Utils::CommandProcessor::Tokenize(command);
-                        if (!tokens.empty()) {
-                            const std::string name = std::move(tokens.front());
-                            tokens.erase(tokens.begin());
-                            OnConsoleCommand(std::string(command), name, tokens);
-                            EmitConsoleCommand(name, tokens);
-                        }
-                        break;
+                case Utils::CommandProcessorError::COMMAND_PRINT_HELP: Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.GetValue()); break;
+                case Utils::CommandProcessorError::COMMAND_UNKNOWN: {
+                    // Not a built-in command; hand it to the mod override and the scripting layer.
+                    std::vector<std::string> tokens = Utils::CommandProcessor::Tokenize(command);
+                    if (!tokens.empty()) {
+                        const std::string name = std::move(tokens.front());
+                        tokens.erase(tokens.begin());
+                        OnConsoleCommand(std::string(command), name, tokens);
+                        EmitConsoleCommand(name, tokens);
                     }
-                    case Utils::CommandProcessorError::COMMAND_EMPTY_INPUT:
-                        break;
-                    case Utils::CommandProcessorError::COMMAND_INTERNAL_ERROR:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, result.GetValue());
-                        break;
-                    default:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, static_cast<int>(result.GetError()));
-                        break;
+                    break;
+                }
+                case Utils::CommandProcessorError::COMMAND_EMPTY_INPUT: break;
+                case Utils::CommandProcessorError::COMMAND_INTERNAL_ERROR: Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, result.GetValue()); break;
+                default: Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, static_cast<int>(result.GetError())); break;
                 }
             }
         }
@@ -1275,7 +1268,7 @@ namespace Framework::Integrations::Server {
         }
 
         Framework::Scripting::EngineScope scope(engine);
-        v8::Isolate *isolate = scope.Isolate();
+        v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
         v8::Local<v8::Array> argsArr = v8::Array::New(isolate, static_cast<int>(args.size()));
@@ -1323,7 +1316,7 @@ namespace Framework::Integrations::Server {
         }
 
         Framework::Scripting::EngineScope scope(engine);
-        v8::Isolate *isolate = scope.Isolate();
+        v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
         for (const Voice::TalkingChange &change : _voiceTalkingChanges) {

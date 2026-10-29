@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include "graphics/types.h"
 #include "graphics/renderer.h"
+#include "graphics/types.h"
 
 #include <cstring>
 
@@ -19,9 +19,9 @@ namespace Framework::Graphics {
       protected:
         TDevice _device {};
         TContext _context {};
-        uint32_t _nextTextureID       = 1;
+        uint32_t _nextTextureID      = 1;
         uint32_t _nextRenderBufferID = 1; // render buffer id 0 is reserved for default render target view.
-        uint32_t _nextGeometryID      = 1;
+        uint32_t _nextGeometryID     = 1;
         std::vector<Command> _commandList;
         int _batchCount = 0;
 
@@ -29,7 +29,7 @@ namespace Framework::Graphics {
         Backend() = default;
 
         [[nodiscard]] virtual bool Init(const Framework::Graphics::RendererConfiguration &opts) = 0;
-        virtual void Shutdown()                                                   = 0;
+        virtual void Shutdown()                                                                 = 0;
 
         virtual void Update() = 0;
 
@@ -62,11 +62,11 @@ namespace Framework::Graphics {
         }
 
         // implemented by GPU backend renderers
-        virtual void BeginDrawing() = 0;
-        virtual void EndDrawing() = 0;
-        virtual void BindTexture(uint8_t texture_unit, uint32_t texture_id) = 0;
-        virtual void BindRenderBuffer(uint32_t render_buffer_id) = 0;
-        virtual void ClearRenderBuffer(uint32_t render_buffer_id) = 0;
+        virtual void BeginDrawing()                                                                                             = 0;
+        virtual void EndDrawing()                                                                                               = 0;
+        virtual void BindTexture(uint8_t texture_unit, uint32_t texture_id)                                                     = 0;
+        virtual void BindRenderBuffer(uint32_t render_buffer_id)                                                                = 0;
+        virtual void ClearRenderBuffer(uint32_t render_buffer_id)                                                               = 0;
         virtual void DrawGeometry(uint32_t geometry_id, uint32_t indices_count, uint32_t indices_offset, const GPUState &state) = 0;
         virtual void CreateTexture(uint32_t texture_id, Bitmap bitmap)                                                          = 0;
         virtual void UpdateTexture(uint32_t texture_id, Bitmap bitmap)                                                          = 0;
@@ -116,7 +116,7 @@ namespace Framework::Graphics {
             return _batchCount;
         }
 
-        virtual void UpdateCommandList(const CommandList& list) {
+        virtual void UpdateCommandList(const CommandList &list) {
             if (list.size) {
                 _commandList.resize(list.size);
                 std::memcpy(&_commandList[0], list.commands, sizeof(Command) * list.size);

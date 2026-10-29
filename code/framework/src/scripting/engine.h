@@ -36,7 +36,7 @@ namespace Framework::Scripting {
      * Two implementations exist: NodeEngine (server, full Node.js) and
      * V8Engine (client, standalone V8). Shared logic lives here.
      */
-    class Engine : public Framework::Lifecycle {
+    class Engine: public Framework::Lifecycle {
       public:
         using SDKRegisterCallback = fu2::function<void(Engine *) const>;
 
@@ -152,7 +152,7 @@ namespace Framework::Scripting {
         // Context::Scope setup before touching these — prefer Execute() and the SDK-register callback,
         // which establish the scopes for you. An engine that isolates resources names the runtime the
         // thread is executing in, or its own when it is in none.
-        virtual v8::Isolate *GetIsolate() const = 0;
+        virtual v8::Isolate *GetIsolate() const           = 0;
         virtual v8::Local<v8::Context> GetContext() const = 0;
 
         /**

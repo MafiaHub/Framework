@@ -19,26 +19,24 @@ namespace Framework::Scripting {
 
     const char *ResourceStateToString(ResourceState state) {
         switch (state) {
-            case ResourceState::Unloaded: return "unloaded";
-            case ResourceState::Loading: return "loading";
-            case ResourceState::Running: return "running";
-            case ResourceState::Stopping: return "stopping";
-            case ResourceState::Stopped: return "stopped";
-            case ResourceState::Error: return "error";
-            default: return "unknown";
+        case ResourceState::Unloaded: return "unloaded";
+        case ResourceState::Loading: return "loading";
+        case ResourceState::Running: return "running";
+        case ResourceState::Stopping: return "stopping";
+        case ResourceState::Stopped: return "stopped";
+        case ResourceState::Error: return "error";
+        default: return "unknown";
         }
     }
 
-    Resource::Resource(const std::string &path)
-        : _path(path)
-        , _stateTimestamp(std::chrono::system_clock::now()) {
+    Resource::Resource(const std::string &path): _path(path), _stateTimestamp(std::chrono::system_clock::now()) {
         // Try to load the manifest
         const std::string manifestPath = Utils::Vfs::IsVirtualPath(path) ? (path + "/package.json") : (std::filesystem::path(path) / "package.json").string();
-        _manifestValid = _manifest.Parse(manifestPath);
+        _manifestValid                 = _manifest.Parse(manifestPath);
 
         if (!_manifestValid) {
             _errorMessage = _manifest.GetError();
-            _state = ResourceState::Error;
+            _state        = ResourceState::Error;
         }
     }
 
@@ -65,17 +63,17 @@ namespace Framework::Scripting {
         if (this != &other) {
             ClearExports();
 
-            _path = std::move(other._path);
-            _manifest = std::move(other._manifest);
-            _manifestValid = other._manifestValid;
-            _state = other._state;
-            _errorMessage = std::move(other._errorMessage);
-            _stateTimestamp = other._stateTimestamp;
-            _loadTimestamp = other._loadTimestamp;
-            _isolate = other._isolate;
-            _exports = std::move(other._exports);
+            _path            = std::move(other._path);
+            _manifest        = std::move(other._manifest);
+            _manifestValid   = other._manifestValid;
+            _state           = other._state;
+            _errorMessage    = std::move(other._errorMessage);
+            _stateTimestamp  = other._stateTimestamp;
+            _loadTimestamp   = other._loadTimestamp;
+            _isolate         = other._isolate;
+            _exports         = std::move(other._exports);
             _restartAttempts = std::move(other._restartAttempts);
-            _ownedEntities = std::move(other._ownedEntities);
+            _ownedEntities   = std::move(other._ownedEntities);
 
             other._isolate = nullptr;
         }
@@ -206,7 +204,7 @@ namespace Framework::Scripting {
 
     int Resource::GetRestartAttemptCountUnlocked() const {
         // Count attempts within the last 5 minutes
-        auto now = std::chrono::system_clock::now();
+        auto now         = std::chrono::system_clock::now();
         auto windowStart = now - std::chrono::minutes(5);
 
         int count = 0;
@@ -234,9 +232,10 @@ namespace Framework::Scripting {
 
         // Prune old attempts (older than 10 minutes)
         auto cutoff = std::chrono::system_clock::now() - std::chrono::minutes(10);
-        _restartAttempts.erase(
-            std::remove_if(_restartAttempts.begin(), _restartAttempts.end(),
-                [&cutoff](const auto &t) { return t < cutoff; }),
+        _restartAttempts.erase(std::remove_if(_restartAttempts.begin(), _restartAttempts.end(),
+                                   [&cutoff](const auto &t) {
+                                       return t < cutoff;
+                                   }),
             _restartAttempts.end());
     }
 
@@ -315,7 +314,7 @@ namespace Framework::Scripting {
             return false;
         }
 
-        _state = newState;
+        _state          = newState;
         _stateTimestamp = std::chrono::system_clock::now();
 
         if (newState == ResourceState::Stopped || newState == ResourceState::Error) {
@@ -373,30 +372,19 @@ namespace Framework::Scripting {
 
     bool Resource::IsValidTransition(ResourceState from, ResourceState to) {
         switch (from) {
-            case ResourceState::Unloaded:
-                return to == ResourceState::Loading;
+        case ResourceState::Unloaded: return to == ResourceState::Loading;
 
-            case ResourceState::Loading:
-                return to == ResourceState::Running ||
-                       to == ResourceState::Error;
+        case ResourceState::Loading: return to == ResourceState::Running || to == ResourceState::Error;
 
-            case ResourceState::Running:
-                return to == ResourceState::Stopping ||
-                       to == ResourceState::Error;
+        case ResourceState::Running: return to == ResourceState::Stopping || to == ResourceState::Error;
 
-            case ResourceState::Stopping:
-                return to == ResourceState::Stopped ||
-                       to == ResourceState::Error;
+        case ResourceState::Stopping: return to == ResourceState::Stopped || to == ResourceState::Error;
 
-            case ResourceState::Stopped:
-                return to == ResourceState::Loading;
+        case ResourceState::Stopped: return to == ResourceState::Loading;
 
-            case ResourceState::Error:
-                return to == ResourceState::Loading ||
-                       to == ResourceState::Unloaded;
+        case ResourceState::Error: return to == ResourceState::Loading || to == ResourceState::Unloaded;
 
-            default:
-                return false;
+        default: return false;
         }
     }
 

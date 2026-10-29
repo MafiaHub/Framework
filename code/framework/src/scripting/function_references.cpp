@@ -19,7 +19,7 @@
 
 namespace Framework::Scripting {
 
-    struct FunctionReferences::State : std::enable_shared_from_this<FunctionReferences::State> {
+    struct FunctionReferences::State: std::enable_shared_from_this<FunctionReferences::State> {
         struct Runtime {
             v8::Isolate *isolate = nullptr;
             v8::Global<v8::Context> context;
@@ -39,9 +39,9 @@ namespace Framework::Scripting {
 
         // A callable in one runtime that forwards to an export of another. Collected with its JS function.
         struct StandIn {
-            State *state = nullptr;
-            uint64_t key = 0;
-            uint64_t id  = 0;
+            State *state     = nullptr;
+            uint64_t key     = 0;
+            uint64_t id      = 0;
             uint32_t runtime = 0;
             v8::Global<v8::Function> handle;
         };
@@ -49,8 +49,8 @@ namespace Framework::Scripting {
         // A promise returned to a caller in another runtime, waiting on the owner's promise. Owned here until the
         // owner's promise settles or the owner goes away; the owner's reaction functions name it by key.
         struct Settlement {
-            uint64_t key   = 0;
-            uint32_t owner = 0;
+            uint64_t key    = 0;
+            uint32_t owner  = 0;
             uint32_t caller = 0;
             bool keepValue  = true;
             v8::Global<v8::Promise::Resolver> resolver;
@@ -171,8 +171,8 @@ namespace Framework::Scripting {
             // again, the same pair reuses its entry, so a handler sent on every event costs one.
             v8::Local<v8::Map> methods;
             if (id == 0 && !holder.IsEmpty()) {
-                methods  = MethodsOf(isolate, context, holder);
-                id       = MethodExport(context, methods, function);
+                methods = MethodsOf(isolate, context, holder);
+                id      = MethodExport(context, methods, function);
             }
 
             if (id == 0) {
@@ -376,7 +376,8 @@ namespace Framework::Scripting {
         // Calls `function` inside `ownerId` with copied arguments and brings back what it returned or threw. The
         // caller holds its own scopes; on a throw the exception is pending there and the result is empty.
         // `receiver`, when set, is the `this` the function runs with.
-        v8::MaybeLocal<v8::Value> Invoke(uint32_t callerId, v8::Isolate *isolate, v8::Local<v8::Context> context, uint32_t ownerId, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments, Returned returned, const v8::Global<v8::Object> &receiver = {}) {
+        v8::MaybeLocal<v8::Value> Invoke(uint32_t callerId, v8::Isolate *isolate, v8::Local<v8::Context> context, uint32_t ownerId, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments, Returned returned,
+            const v8::Global<v8::Object> &receiver = {}) {
             const auto ownerIt = runtimes.find(ownerId);
             if (ownerIt == runtimes.end()) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
@@ -480,12 +481,12 @@ namespace Framework::Scripting {
         // Called inside the owner: react to its promise, and settle the caller's when it does. Returns the
         // settlement's key, or 0 when the reaction could not be attached.
         uint64_t Await(uint32_t owner, uint32_t caller, v8::Local<v8::Context> context, v8::Local<v8::Promise> promise, bool keepValue) {
-            v8::Isolate *isolate  = v8::Isolate::GetCurrent();
-            auto settlement       = std::make_unique<Settlement>();
-            settlement->key       = nextSettlement++;
-            settlement->owner     = owner;
-            settlement->caller    = caller;
-            settlement->keepValue = keepValue;
+            v8::Isolate *isolate      = v8::Isolate::GetCurrent();
+            auto settlement           = std::make_unique<Settlement>();
+            settlement->key           = nextSettlement++;
+            settlement->owner         = owner;
+            settlement->caller        = caller;
+            settlement->keepValue     = keepValue;
             v8::Local<v8::Value> data = CallbackData(isolate, settlement->key);
 
             v8::Local<v8::Function> onFulfilled;
@@ -522,7 +523,7 @@ namespace Framework::Scripting {
                 return;
             }
 
-            v8::Isolate *isolate = info.GetIsolate();
+            v8::Isolate *isolate       = info.GetIsolate();
             v8::Local<v8::Value> value = info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>();
             TransferredValue copied;
             if (fulfilled && owned->keepValue) {
@@ -573,12 +574,12 @@ namespace Framework::Scripting {
     }
 
     uint32_t FunctionReferences::AddRuntime(v8::Isolate *isolate, v8::Local<v8::Context> context, std::string name) {
-        const uint32_t id      = _state->nextRuntime++;
-        State::Runtime &entry  = _state->runtimes[id];
-        entry.isolate          = isolate;
+        const uint32_t id     = _state->nextRuntime++;
+        State::Runtime &entry = _state->runtimes[id];
+        entry.isolate         = isolate;
         entry.context.Reset(isolate, context);
-        entry.name = std::move(name);
-        entry.hooks = std::make_shared<const TransferFunctions>(_state->MakeHooks(id));
+        entry.name                        = std::move(name);
+        entry.hooks                       = std::make_shared<const TransferFunctions>(_state->MakeHooks(id));
         _state->runtimeByIsolate[isolate] = id;
         return id;
     }
@@ -592,7 +593,9 @@ namespace Framework::Scripting {
         const std::string name = it->second.name;
 
         // What it exported can no longer be called; stand-ins elsewhere now throw.
-        std::erase_if(state.exports, [&](const auto &entry) { return entry.second.runtime == runtime; });
+        std::erase_if(state.exports, [&](const auto &entry) {
+            return entry.second.runtime == runtime;
+        });
 
         // What its stand-ins held elsewhere is released: they die with the isolate and their weak callbacks never fire.
         for (auto standIn = state.standIns.begin(); standIn != state.standIns.end();) {
@@ -605,7 +608,9 @@ namespace Framework::Scripting {
                 ++standIn;
             }
         }
-        std::erase_if(state.standInByExport, [&](const auto &entry) { return entry.first.first == runtime; });
+        std::erase_if(state.standInByExport, [&](const auto &entry) {
+            return entry.first.first == runtime;
+        });
 
         // Promises it owed to callers will never settle: reject them. Promises owed to it have nobody to settle.
         std::vector<std::unique_ptr<State::Settlement>> owed;

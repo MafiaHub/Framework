@@ -35,7 +35,8 @@ namespace Framework::Scripting {
         if (!v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
             if (tryCatch.HasCaught()) {
                 _lastError = FormatV8Exception(isolate, tryCatch, "Script compilation error");
-            } else {
+            }
+            else {
                 _lastError = "Failed to compile script";
             }
             return false;
@@ -45,7 +46,8 @@ namespace Framework::Scripting {
         if (!script->Run(context).ToLocal(&result)) {
             if (tryCatch.HasCaught()) {
                 _lastError = FormatV8Exception(isolate, tryCatch, "Runtime error");
-            } else {
+            }
+            else {
                 _lastError = "Unknown execution error";
             }
             return false;

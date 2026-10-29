@@ -53,8 +53,8 @@ namespace Framework::Networking::Replication {
         if (!entity || !_isServer) {
             return;
         }
-        Entry &entry  = EntryFor(entity);
-        entry.pinned  = true;
+        Entry &entry   = EntryFor(entity);
+        entry.pinned   = true;
         entry.pinnedTo = guid;
         // Immediately, rather than at the next pass: a pin is an instruction, and a script that
         // pins an entity and then talks to it expects the simulator to already be the one it named.
@@ -351,16 +351,18 @@ namespace Framework::Networking::Replication {
         uint32_t dormant         = 0;
 
         for (NetworkEntity *entity : _scan) {
-            const DelegationPolicy policy     = entity->GetDelegationPolicy()->Normalized();
-            const MafiaNet::PeerGuid current  = entity->ownerGUID;
-            Entry &entry                      = EntryFor(entity);
-            MafiaNet::PeerGuid desired        = MafiaNet::UNASSIGNED_PEER_GUID;
-            DelegationChange change           = DelegationChange::Dormant;
+            const DelegationPolicy policy    = entity->GetDelegationPolicy()->Normalized();
+            const MafiaNet::PeerGuid current = entity->ownerGUID;
+            Entry &entry                     = EntryFor(entity);
+            MafiaNet::PeerGuid desired       = MafiaNet::UNASSIGNED_PEER_GUID;
+            DelegationChange change          = DelegationChange::Dormant;
 
             // A client that streamed the entity out can no longer withdraw its decline, so the decline goes with the entity.
             std::erase_if(entry.declined, [&](MafiaNet::PeerGuid guid) {
                 bool streaming = false;
-                _manager->ForEachStreamingPeer(entity, [&](MafiaNet::PeerGuid peer) { streaming = streaming || peer == guid; });
+                _manager->ForEachStreamingPeer(entity, [&](MafiaNet::PeerGuid peer) {
+                    streaming = streaming || peer == guid;
+                });
                 return !streaming;
             });
 
@@ -437,7 +439,7 @@ namespace Framework::Networking::Replication {
     }
 
     uint32_t DelegationManager::HeadroomOf(MafiaNet::PeerGuid guid) const {
-        const auto override    = _capacityOverrides.find(guid);
+        const auto override     = _capacityOverrides.find(guid);
         const uint32_t capacity = override != _capacityOverrides.end() ? override->second : _defaultCapacity;
         if (capacity == 0) {
             return std::numeric_limits<uint32_t>::max();

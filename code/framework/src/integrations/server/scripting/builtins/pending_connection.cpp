@@ -104,10 +104,11 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
     void PendingConnection::Register(v8::Isolate *isolate) {
         auto &catalog = Framework::Scripting::GetScriptingCatalog(isolate);
 
-        catalog.data_type("EventMap").add_property(ConnectionGate::kEventName, "[connection: PendingConnection]",
-            "Dispatched when a player asks to join, before the connection exists: they hold no player slot, are not counted as online, and are sent nothing -- no resource list, no download, no body. The request waits until every "
-            "handler has returned and every Promise a handler returned has settled, then it is let in if a player slot is free (otherwise it is refused as full). `connection.reject()` turns it away instead, and so does a handler "
-            "that throws or rejects, or handlers that have not settled within the server's admission timeout (30 seconds by default, restarted by every `connection.update()`). With no handler at all, every request is let in at once.");
+        catalog.data_type("EventMap")
+            .add_property(ConnectionGate::kEventName, "[connection: PendingConnection]",
+                "Dispatched when a player asks to join, before the connection exists: they hold no player slot, are not counted as online, and are sent nothing -- no resource list, no download, no body. The request waits until every "
+                "handler has returned and every Promise a handler returned has settled, then it is let in if a player slot is free (otherwise it is refused as full). `connection.reject()` turns it away instead, and so does a handler "
+                "that throws or rejects, or handlers that have not settled within the server's admission timeout (30 seconds by default, restarted by every `connection.update()`). With no handler at all, every request is let in at once.");
 
         auto &type = catalog.data_type("PendingConnection", "A player asking to join, handed to `playerConnecting`. Every identifier is reported by the player's own client and is not verified by the server.");
         type.add_property("nickname", "string", "The name the player asked to join under.", true);
@@ -121,9 +122,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             "the script's job.",
             true);
         type.add_property("ip", "string", "The remote address the connection comes from, without its port.", true);
-        type.record(v8pp::metadata::function_of<v8::FunctionCallback>("reject",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("reason", "string", true, "Shown to the player as written, up to 512 bytes. Omitted, they read that the server refused the connection.")},
-                "Turns the player away before they receive anything. Takes effect on the next server tick, whatever other handlers are still doing. Does nothing once the connection is decided or the player has left.")));
+        type.record(
+            v8pp::metadata::function_of<v8::FunctionCallback>("reject", v8pp::metadata::docs("void", {v8pp::metadata::param("reason", "string", true, "Shown to the player as written, up to 512 bytes. Omitted, they read that the server refused the connection.")},
+                                                                            "Turns the player away before they receive anything. Takes effect on the next server tick, whatever other handlers are still doing. Does nothing once the connection is decided or the player has left.")));
         type.record(v8pp::metadata::function_of<v8::FunctionCallback>("update",
             v8pp::metadata::docs("void", {v8pp::metadata::param("message", "string", false, "One line for the player's connecting screen, up to 256 bytes: 'Checking the whitelist', 'You are 4th in the queue'.")},
                 "Shows the waiting player a line of status and restarts the admission timeout, so a queue that keeps updating its players is never timed out. Does nothing once the connection is decided or the player has left.")));

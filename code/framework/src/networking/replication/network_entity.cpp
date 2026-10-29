@@ -56,7 +56,7 @@ namespace Framework::Networking::Replication {
         // The server keeps its own authoritative owner assignment and must not let an owning client
         // dictate it back; clients adopt whatever the server sends.
         if (!IsServerPeer() && ownerGUID != incomingOwner) {
-            ownerGUID = incomingOwner;
+            ownerGUID          = incomingOwner;
             _lastTransformTime = 0;
         }
     }
@@ -295,9 +295,9 @@ namespace Framework::Networking::Replication {
 
         // Idle refresh (see kTransformRefreshMs). An unchanged state channel is empty, so a forced send
         // carries only the pose.
-        const MafiaNet::Time now                = serializeParameters->curTime;
+        const MafiaNet::Time now                 = serializeParameters->curTime;
         const MafiaNet::BitStream *lastTransform = serializeParameters->lastSentBitstream[kTransformChannel];
-        bool refreshTransform                   = false;
+        bool refreshTransform                    = false;
         if (!SameBytes(lastTransform, serializeParameters->outputBitstream[kTransformChannel])) {
             if (lastTransform && lastTransform->GetNumberOfBitsUsed() > 0) {
                 _transformMoved      = true;
@@ -328,7 +328,7 @@ namespace Framework::Networking::Replication {
             // every forced refresh.
             serializeParameters->outputBitstream[kStateChannel].Reset();
         }
-        serializeParameters->pro[kStateChannel].reliability    = MafiaNet::Reliability::ReliableOrdered;
+        serializeParameters->pro[kStateChannel].reliability     = MafiaNet::Reliability::ReliableOrdered;
         serializeParameters->pro[kStateChannel].orderingChannel = ToOrderingChannel(Channel::State);
 
         // Both channels carry recipient-identical bytes, so broadcast-identically: ReplicaManager3

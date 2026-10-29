@@ -28,8 +28,7 @@ namespace Framework::GUI {
         constexpr DWORD kVertexFVF = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX1;
     } // anonymous namespace
 
-    ViewD3D9::ViewD3D9(int id, Graphics::Renderer *graphicsRenderer, Manager *manager): View(id, graphicsRenderer, manager) {
-    }
+    ViewD3D9::ViewD3D9(int id, Graphics::Renderer *graphicsRenderer, Manager *manager): View(id, graphicsRenderer, manager) {}
 
     Utils::Result<void, Framework::Error> ViewD3D9::Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated) {
         (void)gpuAccelerated;

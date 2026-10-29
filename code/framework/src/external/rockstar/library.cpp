@@ -111,11 +111,15 @@ namespace Framework::External::Rockstar {
         const auto titles = EnumerateInstalledTitles();
 
         if (!titleKey.empty()) {
-            const auto match = std::ranges::find_if(titles, [&](const InstalledTitle &title) { return _stricmp(title.titleKey.c_str(), titleKey.c_str()) == 0; });
+            const auto match = std::ranges::find_if(titles, [&](const InstalledTitle &title) {
+                return _stricmp(title.titleKey.c_str(), titleKey.c_str()) == 0;
+            });
             return match != titles.end() ? *match : InstalledTitle {};
         }
 
-        const auto match = std::ranges::find_if(titles, [&](const InstalledTitle &title) { return HoldsExecutable(title.installFolder, exeFileName); });
+        const auto match = std::ranges::find_if(titles, [&](const InstalledTitle &title) {
+            return HoldsExecutable(title.installFolder, exeFileName);
+        });
         return match != titles.end() ? *match : InstalledTitle {};
     }
 } // namespace Framework::External::Rockstar

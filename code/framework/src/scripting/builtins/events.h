@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <v8pp/convert.hpp>
 #include <v8.h>
+#include <v8pp/convert.hpp>
 
 #include "../value_transfer.h"
 
@@ -79,48 +79,34 @@ namespace Framework::Scripting::Builtins {
         ~Events();
 
         // Non-copyable
-        Events(const Events &) = delete;
+        Events(const Events &)            = delete;
         Events &operator=(const Events &) = delete;
 
         /**
          * Register the Events object on the target. isClient exposes emitServer (client -> onClient);
          * otherwise exposes emitAllClients (server -> every client's on()).
          */
-        void Register(v8::Isolate *isolate,
-                     v8::Local<v8::Context> context,
-                     v8::Local<v8::Object> target,
-                     ResourceManager *resourceManager,
-                     bool isClient = false);
+        void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager, bool isClient = false);
 
         /**
          * Emit an event from native code to all global handlers.
          * Returns a Promise that resolves when all handlers complete.
          */
-        v8::Local<v8::Promise> EmitReserved(v8::Isolate *isolate,
-                                            v8::Local<v8::Context> context,
-                                            const std::string &eventName,
-                                            const std::vector<v8::Local<v8::Value>> &args);
+        v8::Local<v8::Promise> EmitReserved(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args);
 
         /**
          * Synchronous EmitReserved. Every handler runs; returning literal false vetoes, and this
          * returns false when any did. A returned Promise is ignored — the caller needs its answer
          * before it returns, so async handlers cannot veto.
          */
-        bool EmitReservedSync(v8::Isolate *isolate,
-                              v8::Local<v8::Context> context,
-                              const std::string &eventName,
-                              const std::vector<v8::Local<v8::Value>> &args);
+        bool EmitReservedSync(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args);
 
         /**
          * Emit a native event to the global handlers of one resource only, for events the
          * framework can attribute to an owner. Returns a Promise that resolves when all
          * handlers complete.
          */
-        v8::Local<v8::Promise> EmitReservedTo(v8::Isolate *isolate,
-                                              v8::Local<v8::Context> context,
-                                              const std::string &eventName,
-                                              const std::vector<v8::Local<v8::Value>> &args,
-                                              const std::string &resourceName);
+        v8::Local<v8::Promise> EmitReservedTo(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &resourceName);
 
         /**
          * Emit a client-originated event from native code. Dispatched ONLY to onClient()
@@ -128,10 +114,7 @@ namespace Framework::Scripting::Builtins {
          * client-supplied event name can never resolve to an on() handler. Returns a Promise
          * that resolves when all handlers complete.
          */
-        v8::Local<v8::Promise> EmitClient(v8::Isolate *isolate,
-                                          v8::Local<v8::Context> context,
-                                          const std::string &eventName,
-                                          const std::vector<v8::Local<v8::Value>> &args);
+        v8::Local<v8::Promise> EmitClient(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args);
 
         /**
          * Release the native resolver retained for one emitted Promise. Used by bounded native
@@ -184,13 +167,16 @@ namespace Framework::Scripting::Builtins {
         struct CallbackContext {
             Events *events;
             ResourceManager *resourceManager;
-            std::atomic<bool> valid{true};
+            std::atomic<bool> valid {true};
         };
 
         // Selects which handler table an operation targets. The client table backs onClient()
         // and EmitClient(); it is deliberately disjoint from the global table (on()/emit()) so
         // client-originated event names cannot reach native handlers.
-        enum class HandlerScope { Global, Client };
+        enum class HandlerScope {
+            Global,
+            Client
+        };
 
         // V8 callbacks. on/once/off are shared by the global and client scopes via the *Impl
         // helpers; the bound callbacks only pin the scope.
@@ -222,49 +208,25 @@ namespace Framework::Scripting::Builtins {
         std::vector<CollectedHandler> CollectHandlers(const std::string &eventName, const std::string &targetResource, HandlerScope scope);
 
         // Internal registration helper
-        void RegisterHandler(v8::Isolate *isolate,
-                            ResourceManager *manager,
-                            std::string_view eventName,
-                            v8::Local<v8::Function> handler,
-                            bool once,
-                            HandlerScope scope);
+        void RegisterHandler(v8::Isolate *isolate, ResourceManager *manager, std::string_view eventName, v8::Local<v8::Function> handler, bool once, HandlerScope scope);
 
         // Internal emit helper - returns Promise
-        v8::Local<v8::Promise> EmitInternal(v8::Isolate *isolate,
-                                            v8::Local<v8::Context> context,
-                                            const std::string &eventName,
-                                            const std::vector<v8::Local<v8::Value>> &args,
-                                            const std::string &targetResource = "",
-                                            HandlerScope scope = HandlerScope::Global);
+        v8::Local<v8::Promise> EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource = "", HandlerScope scope = HandlerScope::Global);
 
         // Helper: invoke handlers and collect results as promises in the emitter's isolate. A handler's resource name
         // is its log context.
-        v8::Local<v8::Array> InvokeHandlersToPromiseArray(
-            v8::Isolate *isolate,
-            v8::Local<v8::Context> context,
-            std::vector<CollectedHandler> &handlers,
-            const std::vector<v8::Local<v8::Value>> &args,
-            const std::string &eventName);
+        v8::Local<v8::Array> InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName);
 
         // Calls one handler and returns what it returned, or empty with the exception caught by the caller's TryCatch.
         // `copied` holds the arguments copied out of the emitter, made on the first handler in another isolate.
-        v8::MaybeLocal<v8::Value> InvokeHandler(v8::Isolate *isolate,
-                                                v8::Local<v8::Context> context,
-                                                CollectedHandler &handler,
-                                                const std::vector<v8::Local<v8::Value>> &args,
-                                                std::optional<std::vector<TransferredValue>> &copied);
+        v8::MaybeLocal<v8::Value> InvokeHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, std::optional<std::vector<TransferredValue>> &copied);
 
         // Forward declaration for callback data tracking
         struct AllSettledCallbackData;
 
         // Helper: aggregate promises using Promise.allSettled and resolve/reject the resolver
         // Non-static to track pending callbacks for cleanup on destruction
-        void AggregateWithAllSettled(
-            v8::Isolate *isolate,
-            v8::Local<v8::Context> context,
-            v8::Local<v8::Array> promises,
-            v8::Local<v8::Promise::Resolver> resolver,
-            const std::string &aggregateErrorMessage);
+        void AggregateWithAllSettled(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Array> promises, v8::Local<v8::Promise::Resolver> resolver, const std::string &aggregateErrorMessage);
 
         // Remove callback data from tracking (called when promise settles)
         // Takes raw pointer and finds the corresponding shared_ptr to remove

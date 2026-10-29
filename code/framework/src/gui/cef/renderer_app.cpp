@@ -50,9 +50,9 @@ namespace Framework::GUI::CEF {
     }
 
     void RendererApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) {
-        CefRefPtr<CefV8Value> global  = context->GetGlobal();
+        CefRefPtr<CefV8Value> global    = context->GetGlobal();
         CefRefPtr<CefV8Handler> handler = new CallEventHandler(browser);
-        CefRefPtr<CefV8Value> func    = CefV8Value::CreateFunction("callEvent", handler);
+        CefRefPtr<CefV8Value> func      = CefV8Value::CreateFunction("callEvent", handler);
         global->SetValue("callEvent", func, V8_PROPERTY_ATTRIBUTE_NONE);
     }
 

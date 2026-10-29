@@ -138,8 +138,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope hs(isolate);
 
-        auto *voice    = Resolve();
-        const int vk   = voice != nullptr ? voice->GetPushToTalkKey() : Framework::Voice::kDefaultPushToTalkKey;
+        auto *voice  = Resolve();
+        const int vk = voice != nullptr ? voice->GetPushToTalkKey() : Framework::Voice::kDefaultPushToTalkKey;
         args.GetReturnValue().Set(v8pp::to_v8(isolate, Utils::KeyNames::FromVirtualKey(vk)));
     }
 
@@ -311,21 +311,18 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         target->Set(context, v8pp::to_v8(isolate, "Voice"), voiceObj).Check();
 
         auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Voice", "Local player's proximity voice chat settings: on/off, playback volume, hearing range and the push-to-talk binding.");
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setEnabled",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("enabled", "boolean", false, "Whether voice chat runs at all for this player.")},
-                "Turns voice chat on or off. Off closes the microphone and playback devices and tells the server to stop relaying voice to this client.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setEnabled", v8pp::metadata::docs("void", {v8pp::metadata::param("enabled", "boolean", false, "Whether voice chat runs at all for this player.")},
+                                                                                            "Turns voice chat on or off. Off closes the microphone and playback devices and tells the server to stop relaying voice to this client.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isEnabled", v8pp::metadata::docs("boolean", {}, "Checks whether voice chat is enabled for this player.", "True unless the player turned voice chat off.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setVolume", v8pp::metadata::docs("void", {v8pp::metadata::param("volume", "number", false, "Playback gain, where 1 is unattenuated. Clamped to 0..4.")},
                                                                                            "Sets the playback volume of incoming voice. A game that plays voice through its own audio engine applies the same gain there.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getVolume", v8pp::metadata::docs("number", {}, "Reads the voice playback volume.", "Current gain, where 1 is unattenuated.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setHearingRange",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("range", "number", false, "Audibility radius in world units; 0 removes the local limit.")},
-                "Narrows how far this player hears others. Can only reduce the server's range, since a talker beyond it is never relayed.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setHearingRange", v8pp::metadata::docs("void", {v8pp::metadata::param("range", "number", false, "Audibility radius in world units; 0 removes the local limit.")},
+                                                                                                 "Narrows how far this player hears others. Can only reduce the server's range, since a talker beyond it is never relayed.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getHearingRange", v8pp::metadata::docs("number", {}, "Reads the local hearing-range limit.", "Radius in world units, or 0 when the server's range applies unreduced.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getRange", v8pp::metadata::docs("number", {}, "Reads the server's proximity range for talkers with no override of their own.", "Radius in world units.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setTier",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout.")},
-                "Switches how far this player's voice carries. A request: the server paces it, decides the radius, and may move the player itself.")));
+            v8pp::metadata::docs("void", {v8pp::metadata::param("tier", "number", false, "Voice tier: 0 whisper, 1 normal, 2 shout.")}, "Switches how far this player's voice carries. A request: the server paces it, decides the radius, and may move the player itself.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getTier", v8pp::metadata::docs("number", {}, "Reads the voice tier this player is on.", "0 whisper, 1 normal, 2 shout.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPushToTalkKey",
             v8pp::metadata::docs("void", {v8pp::metadata::param("key", "string", false, "Case-insensitive key name, using the same names as Key.bind.")}, "Rebinds push-to-talk. Unknown key names and the wheel, which is never held, throw.")));
@@ -333,11 +330,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPushToTalkReleaseDelay",
             v8pp::metadata::docs("void", {v8pp::metadata::param("milliseconds", "number", false, "How long to keep transmitting after the key goes up. Clamped to 0..2000.")},
                 "Sets how long transmission continues after push-to-talk is released, so letting go slightly early does not clip the end of a word. Muting, turning voice off and losing input focus still stop it at once.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPushToTalkReleaseDelay",
-            v8pp::metadata::docs("number", {}, "Reads the push-to-talk release delay.", "Delay in milliseconds; 0 when transmission stops the moment the key is released.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isTalking",
-            v8pp::metadata::docs("boolean", {}, "Checks whether the local player is speaking right now. The same state raises the voiceStart and voiceStop events.",
-                "True while push-to-talk is open -- held, or still inside the release delay -- and the microphone is producing audio.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPushToTalkReleaseDelay", v8pp::metadata::docs("number", {}, "Reads the push-to-talk release delay.", "Delay in milliseconds; 0 when transmission stops the moment the key is released.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isTalking", v8pp::metadata::docs("boolean", {}, "Checks whether the local player is speaking right now. The same state raises the voiceStart and voiceStop events.",
+                                                                                           "True while push-to-talk is open -- held, or still inside the release delay -- and the microphone is producing audio.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("hasMicrophone", v8pp::metadata::docs("boolean", {}, "Checks whether a capture device opened for this session.", "False when the player has no working microphone, i.e. they are listen-only.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setTransmitMode",
             v8pp::metadata::docs("void", {v8pp::metadata::param("mode", "'pushToTalk' | 'voiceActivity'", false, "pushToTalk sends while the key is held; voiceActivity sends whenever the microphone is louder than the activation threshold.")},

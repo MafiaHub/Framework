@@ -11,11 +11,11 @@
 #include "channels.h"
 #include "replication/replication_manager.h"
 
+#include <logging/logger.h>
 #include <mafianet/bit_stream.h>
-#include <mafianet/message_identifiers.h>
 #include <mafianet/defines.h>
 #include <mafianet/guid_util.h>
-#include <logging/logger.h>
+#include <mafianet/message_identifiers.h>
 
 #include <algorithm>
 #include <string_view>
@@ -40,7 +40,7 @@ namespace Framework::Networking {
         _peer->SetMaximumPendingSessions(admission.pendingConnections, admission.pendingConnectionsPerAddress);
         _peer->SetSessionTimeout(admission.sessionTimeoutMs);
 
-        auto newSocketSd                  = MafiaNet::SocketDescriptor((uint16_t)port, host.c_str());
+        auto newSocketSd                     = MafiaNet::SocketDescriptor((uint16_t)port, host.c_str());
         const MafiaNet::StartupResult result = _peer->Startup(static_cast<unsigned int>(maxPlayers) + admission.pendingConnections, &newSocketSd, 1);
         if (result != MafiaNet::RAKNET_STARTED) {
             return Error(std::string("Failed to start networking peer: ") + GetStartupResultString((uint8_t)result));
@@ -85,8 +85,8 @@ namespace Framework::Networking {
         // A client asks to join. MafiaNet holds the connection unreported on both sides until it is
         // answered; the payload after the id is the client's identity.
         case ID_SESSION_CONFIG_REQUEST: {
-            const unsigned int offset = static_cast<unsigned int>(_packetDataOffset) + 1;
-            const std::string_view payload = packet->length > offset ? std::string_view(reinterpret_cast<const char *>(packet->data) + offset, packet->length - offset) : std::string_view();
+            const unsigned int offset                         = static_cast<unsigned int>(_packetDataOffset) + 1;
+            const std::string_view payload                    = packet->length > offset ? std::string_view(reinterpret_cast<const char *>(packet->data) + offset, packet->length - offset) : std::string_view();
             const std::optional<RPC::ClientIdentity> identity = RPC::ClientIdentity::Decode(payload);
             Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Connection request from {}", MafiaNet::to_string(packet->guid));
             if (_onSessionRequestCallback) {
@@ -160,8 +160,7 @@ namespace Framework::Networking {
         case ID_READY_EVENT_UNSET:
         case ID_READY_EVENT_ALL_SET:
         case ID_READY_EVENT_QUERY:
-        case ID_READY_EVENT_FORCE_ALL_SET:
-            return true;
+        case ID_READY_EVENT_FORCE_ALL_SET: return true;
 
         default: break;
         }

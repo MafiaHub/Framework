@@ -77,7 +77,7 @@ namespace Framework::Integrations::Server {
         }
 
         Framework::Scripting::EngineScope scope(engine);
-        v8::Isolate *isolate = scope.Isolate();
+        v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
         // In the table before any handler runs: one that calls reject() synchronously has to find it.
@@ -161,13 +161,13 @@ namespace Framework::Integrations::Server {
         }
 
         Framework::Scripting::EngineScope scope(engine);
-        v8::Isolate *isolate = scope.Isolate();
+        v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
         const auto now = std::chrono::steady_clock::now();
         for (auto it = _pending.begin(); it != _pending.end();) {
-            Pending &pending                     = it->second;
-            const v8::Local<v8::Promise> verdict = pending.verdict.Get(isolate);
+            Pending &pending                      = it->second;
+            const v8::Local<v8::Promise> verdict  = pending.verdict.Get(isolate);
             const v8::Promise::PromiseState state = verdict.IsEmpty() ? v8::Promise::PromiseState::kPending : verdict->State();
 
             AdmissionDecision decision {pending.guid, false, {}};

@@ -30,7 +30,7 @@ namespace Framework::Utils {
         using is_transparent = void;
 
         size_t operator()(std::string_view sv) const noexcept {
-            return std::hash<std::string_view>{}(sv);
+            return std::hash<std::string_view> {}(sv);
         }
 
         size_t operator()(const std::string &s) const noexcept {

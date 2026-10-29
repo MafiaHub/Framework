@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <function2/function2.hpp>
 #include <atomic>
+#include <function2/function2.hpp>
 #include <mutex>
 #include <queue>
 #include <string>

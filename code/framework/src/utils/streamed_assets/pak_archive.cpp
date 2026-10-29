@@ -97,7 +97,8 @@ namespace Framework::Utils::StreamedAssets {
                 return false;
             }
             const std::size_t nameLength = std::char_traits<char>::length(stat.m_filename);
-            if (ReadU32(header) != kLocalHeaderSignature || ReadU16(header + 8) != stat.m_method || ReadU32(header + 14) != stat.m_crc32 || ReadU32(header + 18) != stat.m_comp_size || ReadU32(header + 22) != stat.m_uncomp_size || ReadU16(header + 26) != nameLength || ReadU16(header + 28) != 0) {
+            if (ReadU32(header) != kLocalHeaderSignature || ReadU16(header + 8) != stat.m_method || ReadU32(header + 14) != stat.m_crc32 || ReadU32(header + 18) != stat.m_comp_size || ReadU32(header + 22) != stat.m_uncomp_size || ReadU16(header + 26) != nameLength
+                || ReadU16(header + 28) != 0) {
                 error = "the local header of " + std::string(stat.m_filename) + " disagrees with the central directory";
                 return false;
             }
@@ -115,7 +116,9 @@ namespace Framework::Utils::StreamedAssets {
             error = "a pak needs between 1 and 65535 entries";
             return false;
         }
-        std::sort(entries.begin(), entries.end(), [](const PakSourceEntry &a, const PakSourceEntry &b) { return a.path < b.path; });
+        std::sort(entries.begin(), entries.end(), [](const PakSourceEntry &a, const PakSourceEntry &b) {
+            return a.path < b.path;
+        });
         for (std::size_t i = 1; i < entries.size(); ++i) {
             if (entries[i].path == entries[i - 1].path) {
                 error = "two files map to " + entries[i].path;
@@ -261,8 +264,8 @@ namespace Framework::Utils::StreamedAssets {
             return false;
         }
 
-        bool ok                       = true;
-        const mz_uint count           = mz_zip_reader_get_num_files(&zip);
+        bool ok             = true;
+        const mz_uint count = mz_zip_reader_get_num_files(&zip);
         std::unordered_set<std::string> seen;
         if (count == 0 || count > kMaxPakEntries || mz_zip_is_zip64(&zip)) {
             error = "the pak has no entries, too many, or needs ZIP64";

@@ -176,7 +176,12 @@ namespace Framework::Scripting::Builtins {
             return;
         }
         v8::Local<v8::Value> copied;
-        const bool fetched = references->Fetch(isolate, resourceIsolate, [&](v8::Isolate *owner, v8::Local<v8::Context>) { return read(owner); }).ToLocal(&copied);
+        const bool fetched = references
+                                 ->Fetch(isolate, resourceIsolate,
+                                     [&](v8::Isolate *owner, v8::Local<v8::Context>) {
+                                         return read(owner);
+                                     })
+                                 .ToLocal(&copied);
         if (fetched) {
             args.GetReturnValue().Set(copied);
         }

@@ -35,9 +35,9 @@ namespace httplib {
 
 namespace Framework::HTTP {
     using RequestCallback = fu2::function<void(const httplib::Request &, httplib::Response &) const>;
-    using PostCallback = fu2::function<void(const httplib::Request &, httplib::Response &, const httplib::ContentReader &) const>;
+    using PostCallback    = fu2::function<void(const httplib::Request &, httplib::Response &, const httplib::ContentReader &) const>;
 
-    class Webserver final : public Framework::Lifecycle {
+    class Webserver final: public Framework::Lifecycle {
       public:
         Webserver();
         ~Webserver();

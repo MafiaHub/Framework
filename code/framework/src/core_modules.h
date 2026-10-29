@@ -20,7 +20,6 @@ namespace Framework::Networking::Replication {
     class ReplicationManager;
 } // namespace Framework::Networking::Replication
 
-
 namespace Framework::Voice {
     class VoiceClient;
     class VoiceServer;
@@ -48,28 +47,28 @@ namespace Framework::Integrations::Server {
 
 namespace Framework {
 
-#define FW_ASSERT_MODULE_REGISTRATION(current, incoming, name)                \
-    do {                                                                       \
-        if ((current) != nullptr && (incoming) != nullptr) {                   \
-            assert(false && name " is already registered in CoreModules");     \
-        }                                                                      \
+#define FW_ASSERT_MODULE_REGISTRATION(current, incoming, name)                                                                                                                                                                                                                         \
+    do {                                                                                                                                                                                                                                                                               \
+        if ((current) != nullptr && (incoming) != nullptr) {                                                                                                                                                                                                                           \
+            assert(false && name " is already registered in CoreModules");                                                                                                                                                                                                             \
+        }                                                                                                                                                                                                                                                                              \
     } while (0)
 
     // Process-global module registry; not thread-safe (set at init, read on the main loop).
     class CoreModules final {
       public:
         static void Reset() noexcept {
-            _networkPeer      = nullptr;
-            _replication      = nullptr;
-            _voiceServer      = nullptr;
-            _voiceClient      = nullptr;
-            _scriptingModule  = nullptr;
-            _webManager       = nullptr;
-            _input            = nullptr;
-            _clientInstance   = nullptr;
-            _connectionGate   = nullptr;
-            _webserver        = nullptr;
-            _tickInterval     = 1.0 / 60.0;
+            _networkPeer     = nullptr;
+            _replication     = nullptr;
+            _voiceServer     = nullptr;
+            _voiceClient     = nullptr;
+            _scriptingModule = nullptr;
+            _webManager      = nullptr;
+            _input           = nullptr;
+            _clientInstance  = nullptr;
+            _connectionGate  = nullptr;
+            _webserver       = nullptr;
+            _tickInterval    = 1.0 / 60.0;
         }
 
         // Singleton setters

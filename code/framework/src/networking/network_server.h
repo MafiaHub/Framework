@@ -10,8 +10,8 @@
 
 #include <cstdint>
 
-#include "errors.h"
 #include "connection.h"
+#include "errors.h"
 #include "network_peer.h"
 #include "rpc/client_identity.h"
 #include "rpc/rpc.h"
@@ -19,8 +19,8 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
-#include <mafianet/types.h>
 #include <mafianet/peer_interface.h>
+#include <mafianet/types.h>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -28,7 +28,7 @@
 #include <utility>
 
 namespace Framework::Networking {
-    using ClientGuidCallback = fu2::function<void(MafiaNet::RakNetGUID) const>;
+    using ClientGuidCallback      = fu2::function<void(MafiaNet::RakNetGUID) const>;
     using ConnectionReadyCallback = fu2::function<void(int, MafiaNet::RakNetGUID) const>;
     // A connection request awaiting a decision. identity is nullopt when the request carried no
     // framework identity (another build, or not a framework client); the request is still the

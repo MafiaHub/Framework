@@ -15,9 +15,9 @@
 
 namespace Framework::Graphics {
     bool D3D12Backend::Init(const Framework::Graphics::RendererConfiguration &opts) {
-        const auto swapChain = opts.d3d12.swapchain;
+        const auto swapChain    = opts.d3d12.swapchain;
         const auto commandQueue = opts.d3d12.commandQueue;
-        _context = opts.d3d12.deviceContext;
+        _context                = opts.d3d12.deviceContext;
         // #1 get device from swapchain (maybe different device)
         Microsoft::WRL::ComPtr<ID3D12Device> deviceGuard;
         if (FAILED(swapChain->GetDevice(IID_PPV_ARGS(&deviceGuard)))) {
@@ -227,7 +227,7 @@ namespace Framework::Graphics {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::AllocateSRVSlot, heap exhausted");
             return -1;
         }
-        const auto slot     = _freeSrvSlots.back();
+        const auto slot = _freeSrvSlots.back();
         _freeSrvSlots.pop_back();
         _srvSlotInUse[slot] = true;
         return static_cast<int>(slot);

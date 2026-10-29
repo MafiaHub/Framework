@@ -22,13 +22,13 @@
 #include <dxgi.h>
 
 #ifdef WIN32
-#include <d3d9.h>
 #include <d3d11.h>
 #include <d3d12.h>
+#include <d3d9.h>
 #include <dxgi1_4.h>
 #else
-#define ID3D12Device void
-#define IDirect3D9   void
+#define ID3D12Device        void
+#define IDirect3D9          void
 #define ID3D11Device        void
 #define ID3D11DeviceContext void
 #endif
@@ -64,7 +64,7 @@ namespace Framework::Graphics {
         } d3d12;
     };
 
-    class Renderer final : public Framework::Lifecycle {
+    class Renderer final: public Framework::Lifecycle {
       private:
         RendererConfiguration _config {};
         RendererState _state     = RendererState::STATE_NOT_INITIALIZED;

@@ -7,10 +7,10 @@
  */
 
 #include "v8_engine.h"
-#include "v8_engine_callbacks.h"
-#include "engine_helpers.h"
 #include "builtins/builtins.h"
 #include "builtins/messages.h"
+#include "engine_helpers.h"
+#include "v8_engine_callbacks.h"
 
 #include <logging/logger.h>
 #include <utils/vfs.h>
@@ -24,10 +24,9 @@ using namespace Framework::Scripting::V8EngineCallbacks;
 namespace Framework::Scripting {
 
     std::unique_ptr<v8::Platform> V8Engine::_platform = nullptr;
-    bool V8Engine::_platformInitialized = false;
+    bool V8Engine::_platformInitialized               = false;
 
-    V8Engine::V8Engine(const V8EngineOptions &options)
-        : _options(options) {}
+    V8Engine::V8Engine(const V8EngineOptions &options): _options(options) {}
 
     V8Engine::~V8Engine() {
         Shutdown();
@@ -134,10 +133,12 @@ namespace Framework::Scripting {
             std::string r = rootStr;
 #ifdef _WIN32
             // Windows filesystems are case-insensitive; normalize both sides.
-            std::transform(p.begin(), p.end(), p.begin(),
-                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            std::transform(r.begin(), r.end(), r.begin(),
-                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            std::transform(p.begin(), p.end(), p.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            std::transform(r.begin(), r.end(), r.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
 #endif
             if (p.size() < r.size() || p.compare(0, r.size(), r) != 0) {
                 return false;
@@ -145,7 +146,7 @@ namespace Framework::Scripting {
             // Require a directory boundary so /res/a doesn't match /res/ab.
             if (p.size() > r.size()) {
                 char next = p[r.size()];
-                char sep = static_cast<char>(fs::path::preferred_separator);
+                char sep  = static_cast<char>(fs::path::preferred_separator);
                 if (next != sep && next != '/' && r.back() != sep) {
                     return false;
                 }
@@ -156,16 +157,16 @@ namespace Framework::Scripting {
         for (auto it = _moduleCache.begin(); it != _moduleCache.end();) {
             if (insideRoot(it->first)) {
                 it = _moduleCache.erase(it);
-            } else {
+            }
+            else {
                 ++it;
             }
         }
 
-        _requireDataStore.erase(
-            std::remove_if(_requireDataStore.begin(), _requireDataStore.end(),
-                [&](const std::unique_ptr<RequireData> &d) {
-                    return d && insideRoot(d->currentDir);
-                }),
+        _requireDataStore.erase(std::remove_if(_requireDataStore.begin(), _requireDataStore.end(),
+                                    [&](const std::unique_ptr<RequireData> &d) {
+                                        return d && insideRoot(d->currentDir);
+                                    }),
             _requireDataStore.end());
     }
 
@@ -174,7 +175,9 @@ namespace Framework::Scripting {
             return;
         }
         ++_resourceGenerations[resourceName];
-        std::erase_if(_runtimeErrors, [&](const RuntimeError &error) { return error.resource == resourceName; });
+        std::erase_if(_runtimeErrors, [&](const RuntimeError &error) {
+            return error.resource == resourceName;
+        });
         for (auto &timer : _timers) {
             if (timer && timer->ownerResource == resourceName) {
                 timer->cancelled = true;
@@ -238,7 +241,7 @@ namespace Framework::Scripting {
     bool V8Engine::CreateIsolateAndContext() {
         // Create isolate with default allocator
         _createParams.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
-        _isolate = v8::Isolate::New(_createParams);
+        _isolate                             = v8::Isolate::New(_createParams);
 
         if (!_isolate) {
             _lastError = "Failed to create V8 isolate";
@@ -282,77 +285,60 @@ namespace Framework::Scripting {
 
     void V8Engine::InstallGlobals() {
         auto engineContext = GetContext();
-        auto engineKey = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.v8Engine"));
+        auto engineKey     = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.v8Engine"));
         (void)engineContext->Global()->SetPrivate(engineContext, engineKey, v8::External::New(_isolate, this)).FromMaybe(false);
         v8::Local<v8::Context> context = _context.Get(_isolate);
-        v8::Local<v8::Object> global = context->Global();
+        v8::Local<v8::Object> global   = context->Global();
 
         InstallTimerFunctions();
         InstallRequireFunction();
 
         // Install queueMicrotask
-        v8::Local<v8::FunctionTemplate> queueMicrotaskTmpl =
-            v8::FunctionTemplate::New(_isolate, QueueMicrotaskCallback);
-        global->Set(context,
-            v8::String::NewFromUtf8Literal(_isolate, "queueMicrotask"),
-            queueMicrotaskTmpl->GetFunction(context).ToLocalChecked()).Check();
+        v8::Local<v8::FunctionTemplate> queueMicrotaskTmpl = v8::FunctionTemplate::New(_isolate, QueueMicrotaskCallback);
+        global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "queueMicrotask"), queueMicrotaskTmpl->GetFunction(context).ToLocalChecked()).Check();
     }
 
     void V8Engine::InstallTimerFunctions() {
         v8::Local<v8::Context> context = _context.Get(_isolate);
-        v8::Local<v8::Object> global = context->Global();
+        v8::Local<v8::Object> global   = context->Global();
 
         // Use member structs — no heap allocation, lifetime matches engine
-        _setTimeoutData = {this, false};
-        _setIntervalData = {this, true};
-        v8::Local<v8::External> setTimeoutExternal = v8::External::New(_isolate, &_setTimeoutData);
+        _setTimeoutData                             = {this, false};
+        _setIntervalData                            = {this, true};
+        v8::Local<v8::External> setTimeoutExternal  = v8::External::New(_isolate, &_setTimeoutData);
         v8::Local<v8::External> setIntervalExternal = v8::External::New(_isolate, &_setIntervalData);
 
         v8::Local<v8::External> engineExternal = v8::External::New(_isolate, this);
 
         // setTimeout
-        v8::Local<v8::FunctionTemplate> setTimeoutTmpl =
-            v8::FunctionTemplate::New(_isolate, SetTimerCallback, setTimeoutExternal);
-        global->Set(context,
-            v8::String::NewFromUtf8Literal(_isolate, "setTimeout"),
-            setTimeoutTmpl->GetFunction(context).ToLocalChecked()).Check();
+        v8::Local<v8::FunctionTemplate> setTimeoutTmpl = v8::FunctionTemplate::New(_isolate, SetTimerCallback, setTimeoutExternal);
+        global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "setTimeout"), setTimeoutTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // setInterval
-        v8::Local<v8::FunctionTemplate> setIntervalTmpl =
-            v8::FunctionTemplate::New(_isolate, SetTimerCallback, setIntervalExternal);
-        global->Set(context,
-            v8::String::NewFromUtf8Literal(_isolate, "setInterval"),
-            setIntervalTmpl->GetFunction(context).ToLocalChecked()).Check();
+        v8::Local<v8::FunctionTemplate> setIntervalTmpl = v8::FunctionTemplate::New(_isolate, SetTimerCallback, setIntervalExternal);
+        global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "setInterval"), setIntervalTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // clearTimeout / clearInterval (same implementation)
-        v8::Local<v8::FunctionTemplate> clearTimerTmpl =
-            v8::FunctionTemplate::New(_isolate, ClearTimerCallback, engineExternal);
-        v8::Local<v8::Function> clearTimerFn = clearTimerTmpl->GetFunction(context).ToLocalChecked();
+        v8::Local<v8::FunctionTemplate> clearTimerTmpl = v8::FunctionTemplate::New(_isolate, ClearTimerCallback, engineExternal);
+        v8::Local<v8::Function> clearTimerFn           = clearTimerTmpl->GetFunction(context).ToLocalChecked();
 
-        global->Set(context,
-            v8::String::NewFromUtf8Literal(_isolate, "clearTimeout"),
-            clearTimerFn).Check();
-        global->Set(context,
-            v8::String::NewFromUtf8Literal(_isolate, "clearInterval"),
-            clearTimerFn).Check();
+        global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "clearTimeout"), clearTimerFn).Check();
+        global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "clearInterval"), clearTimerFn).Check();
     }
 
     void V8Engine::InstallRequireFunction() {
         v8::Local<v8::Context> context = _context.Get(_isolate);
-        v8::Local<v8::Object> global = context->Global();
+        v8::Local<v8::Object> global   = context->Global();
 
         // Default require uses cwd as the reference directory
         std::string cwd = std::filesystem::current_path().string();
-        auto data = std::make_unique<RequireData>(RequireData{this, cwd});
-        auto *dataPtr = data.get();
+        auto data       = std::make_unique<RequireData>(RequireData {this, cwd});
+        auto *dataPtr   = data.get();
         _requireDataStore.push_back(std::move(data));
         v8::Local<v8::External> external = v8::External::New(_isolate, dataPtr);
 
-        v8::Local<v8::FunctionTemplate> requireTmpl =
-            v8::FunctionTemplate::New(_isolate, RequireCallback, external);
-        global->Set(context,
-            v8::String::NewFromUtf8Literal(_isolate, "require"),
-            requireTmpl->GetFunction(context).ToLocalChecked()).Check();
+        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, external);
+        global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "require"), requireTmpl->GetFunction(context).ToLocalChecked()).Check();
     }
 
     uint32_t V8Engine::AddTimer(std::unique_ptr<TimerEntry> entry) {
@@ -401,10 +387,11 @@ namespace Framework::Scripting {
                     break;
                 }
             }
-            if (!timer || timer->cancelled) continue;
+            if (!timer || timer->cancelled)
+                continue;
 
             const std::string owner = timer->ownerResource;
-            const auto generation = GetResourceGeneration(owner);
+            const auto generation   = GetResourceGeneration(owner);
             v8::TryCatch tryCatch(_isolate);
 
             v8::Local<v8::Function> callback = timer->callback.Get(_isolate);
@@ -416,15 +403,13 @@ namespace Framework::Scripting {
                 args.push_back(arg.Get(_isolate));
             }
 
-            v8::MaybeLocal<v8::Value> result = callback->Call(
-                context, v8::Undefined(_isolate),
-                static_cast<int>(args.size()),
-                args.empty() ? nullptr : args.data());
+            v8::MaybeLocal<v8::Value> result = callback->Call(context, v8::Undefined(_isolate), static_cast<int>(args.size()), args.empty() ? nullptr : args.data());
 
             if (tryCatch.HasCaught()) {
                 std::string error = FormatV8Exception(_isolate, tryCatch, "Timer callback error");
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("{}", error);
-                if (!owner.empty()) _runtimeErrors.push_back({owner, std::move(error), {}, generation});
+                if (!owner.empty())
+                    _runtimeErrors.push_back({owner, std::move(error), {}, generation});
             }
 
             // Re-lookup: callback may have mutated _timers.
@@ -435,26 +420,27 @@ namespace Framework::Scripting {
                     break;
                 }
             }
-            if (!timer) continue;
+            if (!timer)
+                continue;
 
             // Re-queue intervals
             if (timer->intervalMs > 0 && !timer->cancelled) {
-                timer->fireTime = std::chrono::steady_clock::now() +
-                    std::chrono::milliseconds(timer->intervalMs);
-            } else {
+                timer->fireTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(timer->intervalMs);
+            }
+            else {
                 timer->cancelled = true;
             }
         }
 
         // Remove cancelled timers
-        _timers.erase(
-            std::remove_if(_timers.begin(), _timers.end(),
-                [](const std::unique_ptr<TimerEntry> &t) { return t->cancelled; }),
+        _timers.erase(std::remove_if(_timers.begin(), _timers.end(),
+                          [](const std::unique_ptr<TimerEntry> &t) {
+                              return t->cancelled;
+                          }),
             _timers.end());
     }
 
-    std::string V8Engine::ResolveModulePath(std::string_view requested,
-                                             std::string_view fromDir) {
+    std::string V8Engine::ResolveModulePath(std::string_view requested, std::string_view fromDir) {
         namespace fs = std::filesystem;
 
         // Lexical; PhysicsFS cannot address anything outside its mounts, so the module-root check
@@ -498,9 +484,11 @@ namespace Framework::Scripting {
 
         if (requested.starts_with("./") || requested.starts_with("../")) {
             resolved = base / requested;
-        } else if (fs::path(requested).is_absolute()) {
+        }
+        else if (fs::path(requested).is_absolute()) {
             resolved = fs::path(requested);
-        } else {
+        }
+        else {
             // Bare specifier — rejected by RequireCallback before reaching here
             return "";
         }
@@ -509,25 +497,26 @@ namespace Framework::Scripting {
 
         // Security: validate against moduleRootPath if set
         if (!_options.moduleRootPath.empty()) {
-            fs::path root = fs::weakly_canonical(fs::path(_options.moduleRootPath));
-            std::string rootStr = root.string();
+            fs::path root           = fs::weakly_canonical(fs::path(_options.moduleRootPath));
+            std::string rootStr     = root.string();
             std::string resolvedStr = resolved.string();
 
 #ifdef _WIN32
             // Windows filesystems are case-insensitive; normalize both paths
             // to lowercase so the prefix check cannot be bypassed via casing.
-            std::transform(rootStr.begin(), rootStr.end(), rootStr.begin(),
-                [](unsigned char c) { return std::tolower(c); });
-            std::transform(resolvedStr.begin(), resolvedStr.end(), resolvedStr.begin(),
-                [](unsigned char c) { return std::tolower(c); });
+            std::transform(rootStr.begin(), rootStr.end(), rootStr.begin(), [](unsigned char c) {
+                return std::tolower(c);
+            });
+            std::transform(resolvedStr.begin(), resolvedStr.end(), resolvedStr.begin(), [](unsigned char c) {
+                return std::tolower(c);
+            });
 #endif
 
             // Ensure resolved path starts with root AND sits inside the
             // directory (not just sharing a prefix).  Without the boundary
             // check, moduleRootPath="/app/cache" would also allow
             // "/app/cache-evil/malicious.js".
-            if (resolvedStr.size() < rootStr.size() ||
-                resolvedStr.compare(0, rootStr.size(), rootStr) != 0) {
+            if (resolvedStr.size() < rootStr.size() || resolvedStr.compare(0, rootStr.size(), rootStr) != 0) {
                 return ""; // Path escapes module root
             }
             if (resolvedStr.size() > rootStr.size()) {
@@ -568,8 +557,7 @@ namespace Framework::Scripting {
         return "";
     }
 
-    v8::MaybeLocal<v8::Value> V8Engine::LoadModule(std::string_view requestedPath,
-                                                    std::string_view referencingDir) {
+    v8::MaybeLocal<v8::Value> V8Engine::LoadModule(std::string_view requestedPath, std::string_view referencingDir) {
         v8::EscapableHandleScope handleScope(_isolate);
         v8::Local<v8::Context> context = _context.Get(_isolate);
 
@@ -580,8 +568,7 @@ namespace Framework::Scripting {
             msg += "' from '";
             msg.append(referencingDir);
             msg += "'";
-            _isolate->ThrowException(v8::Exception::Error(
-                v8::String::NewFromUtf8(_isolate, msg.c_str()).ToLocalChecked()));
+            _isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(_isolate, msg.c_str()).ToLocalChecked()));
             return v8::MaybeLocal<v8::Value>();
         }
 
@@ -595,8 +582,7 @@ namespace Framework::Scripting {
         std::string source;
         if (!ReadFileContents(resolvedPath, source)) {
             std::string msg = "Cannot read module '" + resolvedPath + "'";
-            _isolate->ThrowException(v8::Exception::Error(
-                v8::String::NewFromUtf8(_isolate, msg.c_str()).ToLocalChecked()));
+            _isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(_isolate, msg.c_str()).ToLocalChecked()));
             return v8::MaybeLocal<v8::Value>();
         }
 
@@ -604,11 +590,9 @@ namespace Framework::Scripting {
         std::string moduleDir = std::filesystem::path(resolvedPath).parent_path().string();
 
         // Create module and exports objects
-        v8::Local<v8::Object> moduleObj = v8::Object::New(_isolate);
+        v8::Local<v8::Object> moduleObj  = v8::Object::New(_isolate);
         v8::Local<v8::Object> exportsObj = v8::Object::New(_isolate);
-        moduleObj->Set(context,
-            v8::String::NewFromUtf8Literal(_isolate, "exports"),
-            exportsObj).Check();
+        moduleObj->Set(context, v8::String::NewFromUtf8Literal(_isolate, "exports"), exportsObj).Check();
 
         // Insert provisional cache entry before module execution to support
         // circular dependencies (A -> B -> A) without recursive re-entry.
@@ -617,25 +601,21 @@ namespace Framework::Scripting {
         _moduleCache[resolvedPath] = std::move(provisionalExports);
 
         // Create a require function bound to this module's directory (owned by engine)
-        auto requireData = std::make_unique<RequireData>(RequireData{this, moduleDir});
+        auto requireData     = std::make_unique<RequireData>(RequireData {this, moduleDir});
         auto *requireDataPtr = requireData.get();
         _requireDataStore.push_back(std::move(requireData));
-        v8::Local<v8::External> requireExternal = v8::External::New(_isolate, requireDataPtr);
-        v8::Local<v8::FunctionTemplate> requireTmpl =
-            v8::FunctionTemplate::New(_isolate, RequireCallback, requireExternal);
-        v8::Local<v8::Function> requireFn = requireTmpl->GetFunction(context).ToLocalChecked();
+        v8::Local<v8::External> requireExternal     = v8::External::New(_isolate, requireDataPtr);
+        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, requireExternal);
+        v8::Local<v8::Function> requireFn           = requireTmpl->GetFunction(context).ToLocalChecked();
 
         // Wrap source in CommonJS function
-        std::string wrapped = "(function(exports, require, module, __filename, __dirname) { " +
-            source + "\n})";
+        std::string wrapped = "(function(exports, require, module, __filename, __dirname) { " + source + "\n})";
 
         v8::TryCatch tryCatch(_isolate);
 
         // Use the resolved path as the script filename for stack traces
-        v8::Local<v8::String> v8Source =
-            v8::String::NewFromUtf8(_isolate, wrapped.c_str()).ToLocalChecked();
-        v8::ScriptOrigin origin(
-            v8::String::NewFromUtf8(_isolate, resolvedPath.c_str()).ToLocalChecked());
+        v8::Local<v8::String> v8Source = v8::String::NewFromUtf8(_isolate, wrapped.c_str()).ToLocalChecked();
+        v8::ScriptOrigin origin(v8::String::NewFromUtf8(_isolate, resolvedPath.c_str()).ToLocalChecked());
 
         v8::Local<v8::Script> script;
         if (!v8::Script::Compile(context, v8Source, &origin).ToLocal(&script)) {
@@ -660,18 +640,11 @@ namespace Framework::Scripting {
         // Prepare arguments: exports, require, module, __filename, __dirname
         // Use generic_string() for forward slashes on all platforms
         std::string genericPath = std::filesystem::path(resolvedPath).generic_string();
-        std::string genericDir = std::filesystem::path(moduleDir).generic_string();
+        std::string genericDir  = std::filesystem::path(moduleDir).generic_string();
 
-        v8::Local<v8::Value> callArgs[] = {
-            exportsObj,
-            requireFn,
-            moduleObj,
-            v8::String::NewFromUtf8(_isolate, genericPath.c_str()).ToLocalChecked(),
-            v8::String::NewFromUtf8(_isolate, genericDir.c_str()).ToLocalChecked()
-        };
+        v8::Local<v8::Value> callArgs[] = {exportsObj, requireFn, moduleObj, v8::String::NewFromUtf8(_isolate, genericPath.c_str()).ToLocalChecked(), v8::String::NewFromUtf8(_isolate, genericDir.c_str()).ToLocalChecked()};
 
-        v8::MaybeLocal<v8::Value> callResult = wrapper->Call(
-            context, v8::Undefined(_isolate), 5, callArgs);
+        v8::MaybeLocal<v8::Value> callResult = wrapper->Call(context, v8::Undefined(_isolate), 5, callArgs);
 
         if (tryCatch.HasCaught()) {
             _moduleCache.erase(resolvedPath);
@@ -686,8 +659,7 @@ namespace Framework::Scripting {
 
         // Get module.exports (may have been reassigned by the module)
         v8::Local<v8::Value> moduleExports;
-        if (!moduleObj->Get(context, v8::String::NewFromUtf8Literal(_isolate, "exports"))
-                .ToLocal(&moduleExports)) {
+        if (!moduleObj->Get(context, v8::String::NewFromUtf8Literal(_isolate, "exports")).ToLocal(&moduleExports)) {
             moduleExports = exportsObj;
         }
 
@@ -700,11 +672,13 @@ namespace Framework::Scripting {
     }
 
     V8Engine *V8Engine::FromContext(v8::Local<v8::Context> context) {
-        if (context.IsEmpty()) return nullptr;
+        if (context.IsEmpty())
+            return nullptr;
         auto *isolate = v8::Isolate::GetCurrent();
-        auto key = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.v8Engine"));
+        auto key      = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.v8Engine"));
         v8::Local<v8::Value> value;
-        if (!context->Global()->GetPrivate(context, key).ToLocal(&value) || !value->IsExternal()) return nullptr;
+        if (!context->Global()->GetPrivate(context, key).ToLocal(&value) || !value->IsExternal())
+            return nullptr;
         return static_cast<V8Engine *>(value.As<v8::External>()->Value());
     }
 
@@ -716,30 +690,36 @@ namespace Framework::Scripting {
             });
             return;
         }
-        if (message.GetEvent() != v8::kPromiseRejectWithNoHandler) return;
+        if (message.GetEvent() != v8::kPromiseRejectWithNoHandler)
+            return;
         auto context = GetContext();
-        auto key = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseOwner"));
+        auto key     = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseOwner"));
         v8::Local<v8::Value> value;
         std::string owner;
         if (promise->GetPrivate(context, key).ToLocal(&value) && value->IsString()) {
             v8::String::Utf8Value text(_isolate, value);
-            if (*text) owner.assign(*text, text.length());
+            if (*text)
+                owner.assign(*text, text.length());
         }
-        if (owner.empty() && _resourceManager) owner = _resourceManager->GetResourceContextFromStack(_isolate);
-        if (owner.empty() && _resourceManager) owner = _resourceManager->GetCurrentResourceContext();
-        auto generation = GetResourceGeneration(owner);
+        if (owner.empty() && _resourceManager)
+            owner = _resourceManager->GetResourceContextFromStack(_isolate);
+        if (owner.empty() && _resourceManager)
+            owner = _resourceManager->GetCurrentResourceContext();
+        auto generation    = GetResourceGeneration(owner);
         auto generationKey = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseGeneration"));
         if (promise->GetPrivate(context, generationKey).ToLocal(&value) && value->IsUint32()) {
             generation = value.As<v8::Uint32>()->Value();
         }
-        if (generation != GetResourceGeneration(owner)) return;
+        if (generation != GetResourceGeneration(owner))
+            return;
         // A rejection reason can throw from toString; contain that exception too.
         v8::TryCatch catcher(_isolate);
         std::string error = "Unhandled promise rejection";
         v8::Local<v8::String> text;
         if (!message.GetValue().IsEmpty() && message.GetValue()->ToString(context).ToLocal(&text)) {
             v8::String::Utf8Value utf8(_isolate, text);
-            if (*utf8) error += ": " + std::string(*utf8, utf8.length());
+            if (*utf8)
+                error += ": " + std::string(*utf8, utf8.length());
         }
         _runtimeErrors.push_back({std::move(owner), std::move(error), v8::Global<v8::Promise>(_isolate, promise), generation});
     }
@@ -751,8 +731,8 @@ namespace Framework::Scripting {
         std::vector<std::string> reported;
         for (const auto &error : errors) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("{}", error.message);
-            if (!_resourceManager || error.resource.empty() || error.generation != GetResourceGeneration(error.resource) ||
-                std::find(reported.begin(), reported.end(), error.resource) != reported.end()) continue;
+            if (!_resourceManager || error.resource.empty() || error.generation != GetResourceGeneration(error.resource) || std::find(reported.begin(), reported.end(), error.resource) != reported.end())
+                continue;
             reported.push_back(error.resource);
             _resourceManager->HandleResourceRuntimeError(error.resource, error.message);
         }
@@ -815,7 +795,8 @@ namespace Framework::Scripting {
         if (result.IsEmpty()) {
             if (tryCatch.HasCaught()) {
                 _lastError = FormatV8Exception(_isolate, tryCatch, "File execution error");
-            } else {
+            }
+            else {
                 _lastError = "Failed to execute file: " + absPathStr;
             }
             return false;

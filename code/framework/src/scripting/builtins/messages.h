@@ -30,10 +30,7 @@ namespace Framework::Scripting::Builtins {
     //   handle(messageType, handler) / request(resource, type, payload) -> Promise / send(...)
     class Messages final {
       public:
-        static void Register(v8::Isolate *isolate,
-                            v8::Local<v8::Context> context,
-                            v8::Local<v8::Object> target,
-                            ResourceManager *resourceManager);
+        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager);
 
         /**
          * Process pending message responses (call in update loop).
@@ -82,18 +79,24 @@ namespace Framework::Scripting::Builtins {
         struct PendingRequest {
             uint64_t requestId;
             v8::Global<v8::Promise::Resolver> resolver;
-            std::string sourceResource; // resource awaiting the reply (owns the Promise)
-            std::string targetResource; // resource whose handler must reply
-            std::atomic<bool> consumed{false}; // Prevents double-reply
+            std::string sourceResource;         // resource awaiting the reply (owns the Promise)
+            std::string targetResource;         // resource whose handler must reply
+            std::atomic<bool> consumed {false}; // Prevents double-reply
 
             // Where the Promise lives: the requester's runtime, which may not be the one settling it.
             v8::Isolate *isolate = nullptr;
             v8::Global<v8::Context> context;
 
             PendingRequest(uint64_t id, v8::Global<v8::Promise::Resolver> res, std::string src, std::string tgt, v8::Isolate *iso, v8::Local<v8::Context> ctx)
-                : requestId(id), resolver(std::move(res)), sourceResource(std::move(src)), targetResource(std::move(tgt)), consumed(false), isolate(iso), context(iso, ctx) {}
-            PendingRequest(PendingRequest&&) = delete;
-            PendingRequest& operator=(PendingRequest&&) = delete;
+                : requestId(id)
+                , resolver(std::move(res))
+                , sourceResource(std::move(src))
+                , targetResource(std::move(tgt))
+                , consumed(false)
+                , isolate(iso)
+                , context(iso, ctx) {}
+            PendingRequest(PendingRequest &&)            = delete;
+            PendingRequest &operator=(PendingRequest &&) = delete;
         };
 
         // Pending response structure

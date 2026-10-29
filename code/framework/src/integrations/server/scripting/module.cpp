@@ -16,8 +16,8 @@
 #include "builtins/pending_connection.h"
 #include "builtins/voice.h"
 #include <scripting/builtins/console.h>
-#include <scripting/builtins/execution_environment.h>
 #include <scripting/builtins/events.h>
+#include <scripting/builtins/execution_environment.h>
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/messages.h>
@@ -107,7 +107,7 @@ namespace Framework::Integrations::Server::Scripting {
         }
 
         Framework::Scripting::EngineScope scope(_nodeEngine.get());
-        v8::Isolate *isolate = scope.Isolate();
+        v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
         v8::Local<v8::Object> global = context->Global();
@@ -116,9 +116,11 @@ namespace Framework::Integrations::Server::Scripting {
 
         // The events the framework raises; a mod's catalog blends them into its own EventMap.
         Framework::Scripting::RegisterEventMetadata(Framework::Scripting::GetScriptingCatalog(isolate));
-        Framework::Scripting::GetScriptingCatalog(isolate).data_type("EventMap").add_property("consoleCommand", "[command: string, args: string[]]",
-            "Dispatched for a line typed into the server console that no built-in command (help, ensure, refresh, ...) claimed. `args` is the rest of the line, split on whitespace. The console is the operator's, so this is the "
-            "place for commands no player may run.");
+        Framework::Scripting::GetScriptingCatalog(isolate)
+            .data_type("EventMap")
+            .add_property("consoleCommand", "[command: string, args: string[]]",
+                "Dispatched for a line typed into the server console that no built-in command (help, ensure, refresh, ...) claimed. `args` is the rest of the line, split on whitespace. The console is the operator's, so this is the "
+                "place for commands no player may run.");
 
         // The engine installs the timers without a binding; declare them for it.
         Framework::Scripting::RegisterTimerMetadata(Framework::Scripting::GetScriptingCatalog(isolate), /*isClient*/ false);
@@ -184,7 +186,7 @@ namespace Framework::Integrations::Server::Scripting {
         // Process pending message responses
         if (_nodeEngine && _nodeEngine->IsInitialized() && _resourceManager) {
             Framework::Scripting::EngineScope scope(_nodeEngine.get());
-            v8::Isolate *isolate = scope.Isolate();
+            v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
 
             Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);

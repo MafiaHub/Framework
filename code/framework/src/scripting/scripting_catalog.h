@@ -161,8 +161,7 @@ namespace Framework::Scripting {
                 }
                 // A project extends a framework global in place (M2O's Chat adds its relay switches to
                 // the framework's Chat object), so both halves are live on the one object.
-                const bool blendable = symbol.kind == collision->kind
-                                    && (symbol.kind == v8pp::metadata::symbol_kind::data_type || symbol.kind == v8pp::metadata::symbol_kind::global_object);
+                const bool blendable = symbol.kind == collision->kind && (symbol.kind == v8pp::metadata::symbol_kind::data_type || symbol.kind == v8pp::metadata::symbol_kind::global_object);
                 if (!blendable) {
                     // A class both sides define still has to reach the output, because the project's
                     // class inherits it at runtime and records that inheritance as a base. Dropping it
@@ -177,10 +176,10 @@ namespace Framework::Scripting {
                         documented += "_";
                     }
                     v8pp::metadata::symbol &renamed = destination.constructor(documented, symbol.description);
-                    renamed.constructor            = symbol.constructor;
-                    renamed.functions              = symbol.functions;
-                    renamed.properties             = symbol.properties;
-                    renamed.bases                  = symbol.bases;
+                    renamed.constructor             = symbol.constructor;
+                    renamed.functions               = symbol.functions;
+                    renamed.properties              = symbol.properties;
+                    renamed.bases                   = symbol.bases;
                     renames.emplace_back(symbol.name, documented);
                     continue;
                 }
@@ -284,7 +283,7 @@ namespace Framework::Scripting {
     inline v8pp::metadata::registry ExportableScriptingCatalog(const v8pp::metadata::registry &catalog, const std::function<bool(const std::string &)> &isGlobal) {
         v8pp::metadata::registry exported;
         for (const auto &symbol : catalog.symbols()) {
-            const bool unpublished = symbol.kind == v8pp::metadata::symbol_kind::constructor && !isGlobal(symbol.name);
+            const bool unpublished         = symbol.kind == v8pp::metadata::symbol_kind::constructor && !isGlobal(symbol.name);
             v8pp::metadata::symbol *target = nullptr;
             switch (unpublished ? v8pp::metadata::symbol_kind::data_type : symbol.kind) {
             case v8pp::metadata::symbol_kind::global_object: target = &exported.global_object(symbol.name, symbol.description); break;

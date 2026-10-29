@@ -202,8 +202,12 @@ namespace Framework::Scripting {
         v8::Local<v8::Value> GetExportValue(std::string_view name) const;
 
         // Context access
-        v8::Isolate *GetIsolate() const { return _isolate; }
-        void SetIsolate(v8::Isolate *isolate) { _isolate = isolate; }
+        v8::Isolate *GetIsolate() const {
+            return _isolate;
+        }
+        void SetIsolate(v8::Isolate *isolate) {
+            _isolate = isolate;
+        }
 
         // Replicated entities spawned while this resource was executing; destroyed on stop/error.
         void TrackEntity(uint64_t networkId);

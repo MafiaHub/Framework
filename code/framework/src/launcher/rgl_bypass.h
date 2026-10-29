@@ -40,8 +40,8 @@ namespace Framework::Launcher::RGL {
         uintptr_t conditionalJmpOffset = 0;
 
         // Optional: Pattern to find verification call site
-        const uint8_t *verifyCallPattern = nullptr;
-        size_t verifyCallPatternSize = 0;
+        const uint8_t *verifyCallPattern  = nullptr;
+        size_t verifyCallPatternSize      = 0;
         const char *verifyCallPatternMask = nullptr;
     };
 
@@ -109,9 +109,7 @@ namespace Framework::Launcher::RGL {
         // === Static Hook Functions ===
         static LONG WINAPI WinVerifyTrustHook(HWND hwnd, GUID *pgActionID, LPVOID pWVTData);
 
-        static uintptr_t ScanPattern(uintptr_t start, size_t size,
-                                     const uint8_t *pattern, size_t patternSize,
-                                     const char *mask = nullptr);
+        static uintptr_t ScanPattern(uintptr_t start, size_t size, const uint8_t *pattern, size_t patternSize, const char *mask = nullptr);
 
       private:
         uintptr_t _moduleBase;
@@ -154,9 +152,7 @@ namespace Framework::Launcher::RGL {
          * @param timeoutMs Maximum time to wait for process
          * @return BypassResult indicating success or failure
          */
-        static BypassResult WaitAndInject(const wchar_t *processName,
-                                          const wchar_t *dllPath,
-                                          DWORD timeoutMs = 30000);
+        static BypassResult WaitAndInject(const wchar_t *processName, const wchar_t *dllPath, DWORD timeoutMs = 30000);
 
         /**
          * Find process ID by name

@@ -22,10 +22,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     // ChatBox.
     class Chat final {
       public:
-        static void Register(v8::Isolate *isolate,
-                             v8::Local<v8::Context> context,
-                             v8::Local<v8::Object> target,
-                             Framework::Scripting::ResourceManager *resourceManager);
+        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager);
 
       private:
         static void SendCallback(const v8::FunctionCallbackInfo<v8::Value> &args);

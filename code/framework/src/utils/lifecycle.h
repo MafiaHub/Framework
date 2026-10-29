@@ -29,7 +29,7 @@ namespace Framework {
         }
 
       protected:
-        Lifecycle()        = default;
+        Lifecycle()                    = default;
         std::atomic<bool> _initialized = false;
     };
 } // namespace Framework

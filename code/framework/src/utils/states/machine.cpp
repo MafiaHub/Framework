@@ -18,7 +18,7 @@ namespace Framework::Utils::States {
     }
 
     bool Machine::RequestNextState(int32_t stateId) {
-        std::scoped_lock lock(_mutex);   
+        std::scoped_lock lock(_mutex);
 
         auto it = _states.find(stateId);
         if (it == _states.end()) {
@@ -33,14 +33,14 @@ namespace Framework::Utils::States {
             return false;
         }
 
-        _nextState = it->second.get();
+        _nextState      = it->second.get();
         _currentContext = Context::Exit;
 
         Framework::Logging::GetLogger(FRAMEWORK_INNER_UTILS)->debug("[StateMachine] Requesting new state {}", _nextState->GetName());
         return true;
     }
 
-   bool Machine::Update() {
+    bool Machine::Update() {
         std::unique_lock<std::mutex> lock(_mutex);
 
         if (_isUpdating) {

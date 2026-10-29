@@ -11,30 +11,30 @@
 #include <networking/replication/replication_manager.h>
 #include <networking/rpc/rpc_identifier.h>
 
+#include "asset_downloader.h"
+#include "resource_packages.h"
+#include <external/discord/wrapper.h>
+#include <external/imgui/wrapper.h>
 #include <utils/error.h>
 #include <utils/lifecycle.h>
 #include <utils/result.h>
-#include <external/discord/wrapper.h>
-#include <external/imgui/wrapper.h>
-#include "asset_downloader.h"
-#include "resource_packages.h"
 
 #include <external/sentry/wrapper.h>
 #include <function2/function2.hpp>
 #include <graphics/renderer.h>
 #include <graphics/renderio.h>
 
+#include "integrations/client/ui/chat_box.h"
 #include "networking/engine.h"
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/server_resources.h"
-#include "integrations/client/ui/chat_box.h"
 #include "voice/client/voice_client.h"
 
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <vector>
 #include <utility>
+#include <vector>
 
 #include "scripting/module.h"
 
@@ -142,7 +142,7 @@ namespace Framework::Integrations::Client {
         Defer,
     };
 
-    class Instance : public Framework::Lifecycle {
+    class Instance: public Framework::Lifecycle {
       private:
         bool _renderInitialized = false;
         InstanceOptions _opts;
@@ -387,7 +387,7 @@ namespace Framework::Integrations::Client {
         }
 
         void SetCurrentState(CurrentState state) {
-            _currentState = std::move(state);
+            _currentState              = std::move(state);
             _currentState.serverIDHash = Framework::Utils::Hashing::CalculateCRC32(_opts.modSlug + ":" + _currentState.host + ":" + std::to_string(_currentState.port));
         }
 
@@ -506,6 +506,5 @@ namespace Framework::Integrations::Client {
         Scripting::ClientScriptingModule *GetScriptingModule() const {
             return _scriptingModule.get();
         }
-
     };
 } // namespace Framework::Integrations::Client

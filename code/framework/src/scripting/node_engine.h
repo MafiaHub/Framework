@@ -81,7 +81,7 @@ namespace Framework::Scripting {
      * Full mode provides complete Node.js APIs including require(), fs, http, etc.
      * Sandboxed mode restricts dangerous APIs for secure client-side execution.
      */
-    class NodeEngine final : public Engine {
+    class NodeEngine final: public Engine {
       public:
         explicit NodeEngine(const NodeEngineOptions &options = {});
         ~NodeEngine() override;

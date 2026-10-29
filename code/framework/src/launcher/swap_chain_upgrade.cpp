@@ -17,17 +17,17 @@
 
 namespace Framework::Launcher {
     namespace {
-        using CreateFactoryProc    = HRESULT(WINAPI *)(REFIID, void **);
-        using CreateFactory2Proc   = HRESULT(WINAPI *)(UINT, REFIID, void **);
-        using CreateSwapChainProc  = HRESULT(STDMETHODCALLTYPE *)(IDXGIFactory *, IUnknown *, DXGI_SWAP_CHAIN_DESC *, IDXGISwapChain **);
+        using CreateFactoryProc   = HRESULT(WINAPI *)(REFIID, void **);
+        using CreateFactory2Proc  = HRESULT(WINAPI *)(UINT, REFIID, void **);
+        using CreateSwapChainProc = HRESULT(STDMETHODCALLTYPE *)(IDXGIFactory *, IUnknown *, DXGI_SWAP_CHAIN_DESC *, IDXGISwapChain **);
 
         // IDXGIFactory::CreateSwapChain, after IUnknown (3), IDXGIObject (4) and the factory's first three
         constexpr size_t kCreateSwapChainSlot = 10;
 
-        CreateFactoryProc gCreateFactory          = nullptr;
-        CreateFactoryProc gCreateFactory1         = nullptr;
-        CreateFactory2Proc gCreateFactory2        = nullptr;
-        CreateSwapChainProc gOrigCreateSwapChain  = nullptr;
+        CreateFactoryProc gCreateFactory         = nullptr;
+        CreateFactoryProc gCreateFactory1        = nullptr;
+        CreateFactory2Proc gCreateFactory2       = nullptr;
+        CreateSwapChainProc gOrigCreateSwapChain = nullptr;
 
         HRESULT STDMETHODCALLTYPE CreateSwapChainStub(IDXGIFactory *factory, IUnknown *device, DXGI_SWAP_CHAIN_DESC *desc, IDXGISwapChain **swapChain) {
             if (!desc || !desc->Windowed || desc->SampleDesc.Count != 1 || (desc->SwapEffect != DXGI_SWAP_EFFECT_DISCARD && desc->SwapEffect != DXGI_SWAP_EFFECT_SEQUENTIAL)) {

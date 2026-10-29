@@ -43,10 +43,14 @@ namespace Framework::Networking {
             return;
         }
         // Slots registered under the old salt would otherwise keep answering to keys no peer sends.
-        for (const auto &registered : _rpcHandlers) { _rpc.UnregisterSlot(ResolveIdentifier(registered.identifier)); }
+        for (const auto &registered : _rpcHandlers) {
+            _rpc.UnregisterSlot(ResolveIdentifier(registered.identifier));
+        }
         _identifierSalt = salt;
         _identifierTokens.clear();
-        for (const auto &registered : _rpcHandlers) { _rpc.RegisterSlot(ResolveIdentifier(registered.identifier), &NetworkPeer::DispatchRPC, registered.slot.get(), 0); }
+        for (const auto &registered : _rpcHandlers) {
+            _rpc.RegisterSlot(ResolveIdentifier(registered.identifier), &NetworkPeer::DispatchRPC, registered.slot.get(), 0);
+        }
     }
 
     const char *NetworkPeer::ResolveIdentifier(RPC::Identifier identifier) {
@@ -108,7 +112,7 @@ namespace Framework::Networking {
                 continue;
             }
             _packetDataOffset = offset;
-            uint8_t packetID = _packet->data[_packetDataOffset];
+            uint8_t packetID  = _packet->data[_packetDataOffset];
 
             if (!HandlePacket(packetID, _packet)) {
                 if (IsReplicationPacket(packetID)) {
@@ -144,10 +148,8 @@ namespace Framework::Networking {
         case ID_REPLICA_MANAGER_SCOPE_CHANGE:
         case ID_REPLICA_MANAGER_SERIALIZE:
         case ID_REPLICA_MANAGER_DOWNLOAD_STARTED:
-        case ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE:
-            return true;
-        default:
-            return false;
+        case ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE: return true;
+        default: return false;
         }
     }
 

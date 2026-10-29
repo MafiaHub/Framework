@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <input/input_keymap.h>
 #include <utils/safe_win32.h>
+#include <input/input_keymap.h>
 
 namespace Framework::Input::PhysicalKeys {
     namespace detail {

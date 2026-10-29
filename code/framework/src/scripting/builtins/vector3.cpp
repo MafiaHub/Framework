@@ -77,8 +77,8 @@ namespace Framework::Scripting::Builtins {
         cls->property("x", &Vector3::getX, &Vector3::setX, v8pp::metadata::property_docs("number", "Mutable X component."));
         cls->property("y", &Vector3::getY, &Vector3::setY, v8pp::metadata::property_docs("number", "Mutable Y component."));
         cls->property("z", &Vector3::getZ, &Vector3::setZ, v8pp::metadata::property_docs("number", "Mutable Z component."));
-        cls->property("length", &Vector3::getLength, v8pp::metadata::property_options{"Read-only Euclidean magnitude of this vector.", "number", true, false});
-        cls->property("lengthSquared", &Vector3::getLengthSquared, v8pp::metadata::property_options{"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
+        cls->property("length", &Vector3::getLength, v8pp::metadata::property_options {"Read-only Euclidean magnitude of this vector.", "number", true, false});
+        cls->property("lengthSquared", &Vector3::getLengthSquared, v8pp::metadata::property_options {"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
 
         // toJSON method for JSON.stringify support - returns plain JS object
         protoTemplate->Set(v8pp::to_v8(isolate, "toJSON"), v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {

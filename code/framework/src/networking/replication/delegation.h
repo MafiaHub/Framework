@@ -81,8 +81,8 @@ namespace Framework::Networking::Replication {
     // One candidate simulator, as the election sees it: where its player is, which world they are
     // in, and how much simulation they are already carrying.
     struct DelegationCandidate {
-        MafiaNet::PeerGuid guid = MafiaNet::UNASSIGNED_PEER_GUID;
-        glm::vec3 position      = glm::vec3(0.0f);
+        MafiaNet::PeerGuid guid               = MafiaNet::UNASSIGNED_PEER_GUID;
+        glm::vec3 position                    = glm::vec3(0.0f);
         MafiaNet::VirtualWorldId virtualWorld = 0;
 
         // Policy weight this client is already simulating, and the most it may carry (0 = unlimited).
@@ -219,7 +219,7 @@ namespace Framework::Networking::Replication {
         // Handles rather than one slot, for the same reason state-bag subscriptions are handles: a
         // game has more than one kind of delegated entity, and the second feature to want this must
         // not silently replace the first. Returns kInvalidSimulatorHandle for an empty callback.
-        using SimulatorChangedHandle = uint32_t;
+        using SimulatorChangedHandle                                    = uint32_t;
         static constexpr SimulatorChangedHandle kInvalidSimulatorHandle = 0;
 
         SimulatorChangedHandle AddSimulatorChangedHandler(fu2::function<void(NetworkEntity *, MafiaNet::PeerGuid, MafiaNet::PeerGuid, DelegationChange) const> callback);

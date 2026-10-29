@@ -56,12 +56,14 @@ namespace Framework::Scripting {
             return out;
         }
 
-        bool HasClientContent() const { return !clientScripts.empty() || !sharedScripts.empty(); }
+        bool HasClientContent() const {
+            return !clientScripts.empty() || !sharedScripts.empty();
+        }
 
         std::vector<ResourceDependency> resourceDependencies;
         std::vector<std::string> exports;
-        int priority = 0;
-        std::string errorBehavior = "stop";              // stop, restart, continue
+        int priority              = 0;
+        std::string errorBehavior = "stop"; // stop, restart, continue
     };
 
     /**
@@ -72,14 +74,28 @@ namespace Framework::Scripting {
         bool Parse(const std::string &filepath);
         bool ParseJson(const nlohmann::json &json);
 
-        const std::string &GetName() const { return _name; }
-        const std::string &GetVersion() const { return _version; }
-        const std::string &GetDescription() const { return _description; }
-        const std::string &GetAuthor() const { return _author; }
-        const MafiaHubConfig &GetMafiaHubConfig() const { return _mafiahubConfig; }
-        const std::string &GetError() const { return _error; }
+        const std::string &GetName() const {
+            return _name;
+        }
+        const std::string &GetVersion() const {
+            return _version;
+        }
+        const std::string &GetDescription() const {
+            return _description;
+        }
+        const std::string &GetAuthor() const {
+            return _author;
+        }
+        const MafiaHubConfig &GetMafiaHubConfig() const {
+            return _mafiahubConfig;
+        }
+        const std::string &GetError() const {
+            return _error;
+        }
 
-        bool IsValid() const { return _valid; }
+        bool IsValid() const {
+            return _valid;
+        }
 
       private:
         bool _valid = false;

@@ -20,10 +20,7 @@ namespace Framework::Scripting::Builtins {
     class Exports final {
       public:
         // Exposed as `Exports`, not `exports`: Node's CommonJS module scope would shadow the latter.
-        static void Register(v8::Isolate *isolate,
-                            v8::Local<v8::Context> context,
-                            v8::Local<v8::Object> target,
-                            ResourceManager *resourceManager);
+        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager);
 
       private:
         static void RegisterCallback(const v8::FunctionCallbackInfo<v8::Value> &args);

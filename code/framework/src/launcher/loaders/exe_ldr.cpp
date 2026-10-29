@@ -25,9 +25,9 @@ namespace Framework::Launcher::Loaders {
     ExecutableLoader::ExecutableLoader(const uint8_t *origBinary, size_t binarySize) {
         hook::set_base();
 
-        _origBinary = origBinary;
+        _origBinary      = origBinary;
         _totalBinarySize = binarySize;
-        _loadLimit  = SIZE_MAX;
+        _loadLimit       = SIZE_MAX;
 
         SetLibraryLoader([](const char *name) {
             return LoadLibraryA(name);
@@ -220,8 +220,7 @@ namespace Framework::Launcher::Loaders {
             return;
         }
 
-        const auto ntHeader = reinterpret_cast<const IMAGE_NT_HEADERS *>(
-            reinterpret_cast<const uint8_t *>(_module) + dosHeader->e_lfanew);
+        const auto ntHeader = reinterpret_cast<const IMAGE_NT_HEADERS *>(reinterpret_cast<const uint8_t *>(_module) + dosHeader->e_lfanew);
         if (ntHeader->Signature != IMAGE_NT_SIGNATURE) {
             return;
         }
@@ -231,8 +230,7 @@ namespace Framework::Launcher::Loaders {
             return;
         }
 
-        const auto tls = reinterpret_cast<const IMAGE_TLS_DIRECTORY *>(
-            reinterpret_cast<const uint8_t *>(_module) + tlsDirectory.VirtualAddress);
+        const auto tls = reinterpret_cast<const IMAGE_TLS_DIRECTORY *>(reinterpret_cast<const uint8_t *>(_module) + tlsDirectory.VirtualAddress);
         if (!tls->AddressOfCallBacks) {
             return;
         }
@@ -260,70 +258,71 @@ namespace Framework::Launcher::Loaders {
 
     void ExecutableLoader::LoadDelayImports(IMAGE_NT_HEADERS *ntHeader) {
         const IMAGE_DATA_DIRECTORY *delayImportDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT];
-        
+
         // Check if there are any delay imports
         if (delayImportDirectory->VirtualAddress == 0 || delayImportDirectory->Size == 0) {
             return;
         }
-        
+
         // Get the first delay import descriptor
         auto descriptor = GetTargetRVA<IMAGE_DELAYLOAD_DESCRIPTOR>(delayImportDirectory->VirtualAddress);
-        
+
         while (descriptor->DllNameRVA != 0) {
             const char *name = GetTargetRVA<char>(descriptor->DllNameRVA);
-            
+
             HMODULE module = ResolveLibrary(name);
-            
+
             if (!module) {
                 Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load delayed dependent module {}. Error code was {}.", name, GetLastError());
                 // Continue anyway, delay-loaded DLLs are optional at load time
                 descriptor++;
                 continue;
             }
-            
+
             // "don't load"
             if (module == reinterpret_cast<HMODULE>(INVALID_HANDLE_VALUE)) {
                 descriptor++;
                 continue;
             }
-            
+
             // Load each import name and function
-            auto nameArray = GetTargetRVA<IMAGE_THUNK_DATA>(descriptor->ImportNameTableRVA);
+            auto nameArray    = GetTargetRVA<IMAGE_THUNK_DATA>(descriptor->ImportNameTableRVA);
             auto addressArray = GetTargetRVA<IMAGE_THUNK_DATA>(descriptor->ImportAddressTableRVA);
-            
+
             // Process each import in the array
             for (size_t i = 0; nameArray[i].u1.AddressOfData != 0; i++) {
                 FARPROC function;
                 const char *functionName;
-                
+
                 // Check if this is an ordinal import
                 if (IMAGE_SNAP_BY_ORDINAL(nameArray[i].u1.Ordinal)) {
                     WORD ordinal = IMAGE_ORDINAL(nameArray[i].u1.Ordinal);
-                    function = GetProcAddress(module, (LPCSTR)(ULONG_PTR)ordinal);
-                    
+                    function     = GetProcAddress(module, (LPCSTR)(ULONG_PTR)ordinal);
+
                     static char ordinalNameBuf[32];
                     sprintf_s(ordinalNameBuf, "#%u", ordinal);
                     functionName = ordinalNameBuf;
-                } else {
+                }
+                else {
                     // Get the function name from the import by name structure
                     auto importByName = GetTargetRVA<IMAGE_IMPORT_BY_NAME>(nameArray[i].u1.AddressOfData);
-                    functionName = importByName->Name;
-                    
+                    functionName      = importByName->Name;
+
                     // Resolve the function
                     function = (FARPROC)_functionResolver(module, functionName);
                 }
-                
+
                 if (!function) {
                     char pathName[MAX_PATH];
                     GetModuleFileNameA(module, pathName, sizeof(pathName));
-                    
+
                     Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load delayed function {} in dependent module {} ({}).", functionName, name, pathName);
                 }
-                
+
                 // Store the function address
                 addressArray[i].u1.Function = reinterpret_cast<DWORD_PTR>(function);
             }
-            
+
             descriptor++;
         }
     }
@@ -393,7 +392,7 @@ namespace Framework::Launcher::Loaders {
             LPVOID tlsSlot0 = tlsBase ? tlsBase[0] : nullptr;
 
             uint32_t tlsIndex = 0;
-            void *tlsInit = nullptr;
+            void *tlsInit     = nullptr;
 
             // Get allocated TLS from framework DLL (for traditional approach)
             if (_tlsInitializer) {
@@ -418,8 +417,7 @@ namespace Framework::Launcher::Loaders {
                     }
 
                     std::memcpy(tlsSlot0, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), tlsDataSize);
-                    std::memcpy(reinterpret_cast<void *>(targetTls->StartAddressOfRawData),
-                               reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), tlsDataSize);
+                    std::memcpy(reinterpret_cast<void *>(targetTls->StartAddressOfRawData), reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), tlsDataSize);
                 }
                 else if (tlsInit != nullptr && tlsBase != nullptr && tlsIndex < TLS_MINIMUM_AVAILABLE) {
                     // Allocated slot approach (traditional, for MafiaMP etc.)
@@ -462,8 +460,8 @@ namespace Framework::Launcher::Loaders {
 
         // Calculate relocation offset: difference between where we're loading (_module)
         // and where the original binary was designed to load (its ImageBase)
-        const auto origDosHeader = reinterpret_cast<const IMAGE_DOS_HEADER*>(_origBinary);
-        const auto origNtHeader = reinterpret_cast<const IMAGE_NT_HEADERS*>(_origBinary + origDosHeader->e_lfanew);
+        const auto origDosHeader   = reinterpret_cast<const IMAGE_DOS_HEADER *>(_origBinary);
+        const auto origNtHeader    = reinterpret_cast<const IMAGE_NT_HEADERS *>(_origBinary + origDosHeader->e_lfanew);
         const intptr_t relocOffset = reinterpret_cast<intptr_t>(_module) - static_cast<intptr_t>(origNtHeader->OptionalHeader.ImageBase);
 
         if (relocOffset == 0) {

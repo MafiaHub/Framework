@@ -93,7 +93,7 @@ namespace Framework::Voice {
     void MixFrameInto(float *stereoOut, const int16_t *monoIn, uint32_t samples, SpeakerGain gain) {
         for (uint32_t i = 0; i < samples; i++) {
             const float sample = static_cast<float>(monoIn[i]) * kInt16Scale;
-            stereoOut[i * 2]     += sample * gain.left;
+            stereoOut[i * 2] += sample * gain.left;
             stereoOut[i * 2 + 1] += sample * gain.right;
         }
     }

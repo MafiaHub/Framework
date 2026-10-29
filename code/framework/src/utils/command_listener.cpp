@@ -36,9 +36,9 @@ namespace Framework::Utils {
                 std::scoped_lock lock(_mutex);
                 _queue.push(commandString);
             }
-        // Thread is detached because std::getline blocks indefinitely and cannot be
-        // interrupted portably. The CommandListener must outlive the detached thread
-        // or the process must exit shortly after Shutdown().
+            // Thread is detached because std::getline blocks indefinitely and cannot be
+            // interrupted portably. The CommandListener must outlive the detached thread
+            // or the process must exit shortly after Shutdown().
         }).detach();
     }
 

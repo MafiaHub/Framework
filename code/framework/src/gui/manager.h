@@ -8,10 +8,10 @@
 
 #pragma once
 
+#include <utils/safe_win32.h>
 #include <utils/error.h>
 #include <utils/lifecycle.h>
 #include <utils/result.h>
-#include <utils/safe_win32.h>
 
 #include <atomic>
 #include <filesystem>
@@ -37,7 +37,7 @@ namespace Framework::GUI {
         int height;
     };
 
-    class Manager final : public Framework::Lifecycle {
+    class Manager final: public Framework::Lifecycle {
       private:
         ViewportConfiguration _viewportConfiguration {};
         CefRefPtr<CEF::App> _cefApp;
@@ -63,8 +63,8 @@ namespace Framework::GUI {
 
         Graphics::Renderer *_graphicsRenderer {};
         HANDLE _cacheProfileLock = INVALID_HANDLE_VALUE;
-        bool _gpuAccelerated = false;
-        int _id              = 0;
+        bool _gpuAccelerated     = false;
+        int _id                  = 0;
 
         std::atomic<bool> _compositingSuppressed = false;
 

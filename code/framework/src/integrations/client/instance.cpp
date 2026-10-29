@@ -12,27 +12,27 @@
 #include "integrations/shared/scripting/state_bag_events.h"
 #include "scripting/builtins/entity.h"
 
-#include "networking/rpc/rpc.h"
 #include "networking/rpc/chat_message.h"
-#include "networking/rpc/voice_settings.h"
 #include "networking/rpc/client_identity.h"
 #include "networking/rpc/client_join.h"
 #include "networking/rpc/resource_refresh.h"
+#include "networking/rpc/rpc.h"
 #include "networking/rpc/server_resources.h"
+#include "networking/rpc/voice_settings.h"
 
 #include "integrations/client/scripting/builtins/keybinds.h"
 
+#include "scripting/builtins/events.h"
 #include "scripting/engine_scope.h"
 #include "scripting/resource/resource_manager.h"
-#include "scripting/builtins/events.h"
 
 #include "networking/channels.h"
-#include "networking/state.h"
 #include "networking/replication/replication_manager.h"
+#include "networking/state.h"
 
-#include <cppfs/cppfs.h>
-#include <cppfs/FilePath.h>
 #include <cppfs/FileHandle.h>
+#include <cppfs/FilePath.h>
+#include <cppfs/cppfs.h>
 #include <cppfs/fs.h>
 
 #include <algorithm>
@@ -41,14 +41,14 @@
 
 #include <logging/logger.h>
 
-#include "utils/path.h"
-#include "utils/package/package.h"
-#include "utils/streamed_assets/pak_archive.h"
-#include "utils/vfs.h"
-#include "utils/profiler.h"
-#include "utils/version.h"
-#include "utils/time.h"
 #include "utils/hardware_id.h"
+#include "utils/package/package.h"
+#include "utils/path.h"
+#include "utils/profiler.h"
+#include "utils/streamed_assets/pak_archive.h"
+#include "utils/time.h"
+#include "utils/version.h"
+#include "utils/vfs.h"
 
 #include "core_modules.h"
 
@@ -88,7 +88,7 @@ namespace Framework::Integrations::Client {
             }
 
             Framework::Scripting::EngineScope scope(engine);
-            v8::Isolate *isolate = scope.Isolate();
+            v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
 
             // Parse JSON payload and emit event
@@ -135,7 +135,7 @@ namespace Framework::Integrations::Client {
             }
 
             Framework::Scripting::EngineScope scope(engine);
-            v8::Isolate *isolate = scope.Isolate();
+            v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
 
             v8::Local<v8::String> authorStr;
@@ -169,7 +169,7 @@ namespace Framework::Integrations::Client {
             }
 
             Framework::Scripting::EngineScope scope(engine);
-            v8::Isolate *isolate = scope.Isolate();
+            v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
 
             v8::Local<v8::String> textStr;
@@ -197,8 +197,8 @@ namespace Framework::Integrations::Client {
         _renderer         = std::make_unique<Graphics::Renderer>();
         _renderIO         = std::make_unique<Graphics::RenderIO>();
         _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>();
-        _webManager = std::make_unique<Framework::GUI::Manager>();
-        _crashReporter = &External::Sentry::GetCrashReporter();
+        _webManager       = std::make_unique<Framework::GUI::Manager>();
+        _crashReporter    = &External::Sentry::GetCrashReporter();
 
         // Typed lines go through "chatSend" first; Chat.send is the raw path, so a handler can
         // veto and resend without re-entering itself.
@@ -294,7 +294,7 @@ namespace Framework::Integrations::Client {
 
         InitNetworkingMessages();
         InitAssetDownloader();
-        
+
         if (!opts.initRendererManually) {
             if (auto renderResult = RenderInit(); !renderResult) {
                 return renderResult;
@@ -568,7 +568,7 @@ namespace Framework::Integrations::Client {
         }
 
         Framework::Scripting::EngineScope scope(engine);
-        v8::Isolate *isolate = scope.Isolate();
+        v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
 
         std::vector<v8::Local<v8::Value>> args;
@@ -652,11 +652,11 @@ namespace Framework::Integrations::Client {
         net->RegisterRPC<Framework::Networking::RPC::ServerResources>([this](const Framework::Networking::RPC::ServerResources &payload, MafiaNet::Packet *) {
             ++_assetProcessingGeneration;
             _deferredInitialAssetProcessingGeneration = 0;
-            _resumingDeferredInitialAssetProcessing    = false;
-            _readyEventId   = payload.readyEventId;
-            _serverTickRate = payload.tickRate;
-            _downloadToken  = payload.downloadToken;
-            _downloadUrl    = payload.downloadUrl;
+            _resumingDeferredInitialAssetProcessing   = false;
+            _readyEventId                             = payload.readyEventId;
+            _serverTickRate                           = payload.tickRate;
+            _downloadToken                            = payload.downloadToken;
+            _downloadUrl                              = payload.downloadUrl;
 
             _pendingServerResources = payload.resources;
             _assetPaks.clear();
@@ -698,7 +698,10 @@ namespace Framework::Integrations::Client {
             for (const auto &r : payload.resources) {
                 bool known = false;
                 for (const auto &e : _pendingRefreshResources) {
-                    if (e.name == r.name) { known = true; break; }
+                    if (e.name == r.name) {
+                        known = true;
+                        break;
+                    }
                 }
                 if (!known) {
                     _pendingRefreshResources.push_back(r);
@@ -798,21 +801,21 @@ namespace Framework::Integrations::Client {
             // Reset initial asset download state
             ++_assetProcessingGeneration;
             _deferredInitialAssetProcessingGeneration = 0;
-            _resumingDeferredInitialAssetProcessing    = false;
-            _serverConfig                              = nlohmann::json::object();
-            _initialDownloadDone                       = false;
+            _resumingDeferredInitialAssetProcessing   = false;
+            _serverConfig                             = nlohmann::json::object();
+            _initialDownloadDone                      = false;
             _assetDownloader.Cancel();
-            _downloadStatus                            = {};
+            _downloadStatus = {};
             _assetPaks.clear();
             _assetPaksDownloaded = false;
             _assetConsentBytes   = 0;
-            _connectionFinalized                       = false;
-            _spawnBarrierArmed                         = false;
-            _projectSpawnReady                         = false;
-            _admitted                                  = false;
+            _connectionFinalized = false;
+            _spawnBarrierArmed   = false;
+            _projectSpawnReady   = false;
+            _admitted            = false;
             _admissionStatus.clear();
             SetConnectionPhase(ConnectionPhase::Disconnected);
-            
+
             // Entity teardown is native: ReplicaManager3 deletes server-created replicas when the
             // connection drops (QueryActionOnPopConnection_Client).
             CoreModules::SetReplication(nullptr);
@@ -893,13 +896,13 @@ namespace Framework::Integrations::Client {
         GetEnvironmentVariableA("MafiaHubEpicId", epicId, sizeof(epicId));
 #endif
         Framework::Networking::RPC::ClientIdentity identity;
-        identity.name       = _currentState.nickname;
-        identity.steamId    = steamId;
-        identity.epicId     = epicId;
+        identity.name        = _currentState.nickname;
+        identity.steamId     = steamId;
+        identity.epicId      = epicId;
         identity.discordId   = _presence ? _presence->GetUserId() : "";
         identity.discordName = _presence ? _presence->GetUsername() : "";
-        identity.hardwareId = Framework::Utils::GetHardwareId();
-        identity.ticket     = _currentState.ticket;
+        identity.hardwareId  = Framework::Utils::GetHardwareId();
+        identity.ticket      = _currentState.ticket;
 
         _admitted = false;
         _admissionStatus.clear();
@@ -995,9 +998,11 @@ namespace Framework::Integrations::Client {
 
     void Instance::AnnounceAssetPaks(const std::vector<Client::Scripting::ServerResourceInfo> &resources) {
         for (const auto &resource : resources) {
-            _assetPaks.erase(std::remove_if(_assetPaks.begin(), _assetPaks.end(), [&resource](const ResourceAssetPak &pak) {
-                return pak.resource == resource.name;
-            }), _assetPaks.end());
+            _assetPaks.erase(std::remove_if(_assetPaks.begin(), _assetPaks.end(),
+                                 [&resource](const ResourceAssetPak &pak) {
+                                     return pak.resource == resource.name;
+                                 }),
+                _assetPaks.end());
             for (const auto &info : resource.assetPaks) {
                 // Untrusted: a lane or hash that could not name a cache file is dropped, and the
                 // mod's own validation decides what the rest may carry.
@@ -1214,9 +1219,7 @@ namespace Framework::Integrations::Client {
 
             // Hot-reload path: module already running, refresh just the flagged
             // resources instead of re-initializing everything.
-            if (scriptingModule && scriptingModule->GetScriptingEngine()
-                && scriptingModule->GetScriptingEngine()->IsInitialized()
-                && !_pendingRefreshResources.empty()) {
+            if (scriptingModule && scriptingModule->GetScriptingEngine() && scriptingModule->GetScriptingEngine()->IsInitialized() && !_pendingRefreshResources.empty()) {
                 AnnounceAssetPaks(_pendingRefreshResources);
                 if (VerifyAssetPaks()) {
                     OnResourceAssetPaksChanged();
@@ -1344,7 +1347,7 @@ namespace Framework::Integrations::Client {
         }
         else {
             _deferredInitialAssetProcessingGeneration = 0;
-            _resumingDeferredInitialAssetProcessing    = false;
+            _resumingDeferredInitialAssetProcessing   = false;
             (void)net->Disconnect();
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
@@ -1389,7 +1392,7 @@ namespace Framework::Integrations::Client {
         }
 
         _deferredInitialAssetProcessingGeneration = 0;
-        _resumingDeferredInitialAssetProcessing    = true;
+        _resumingDeferredInitialAssetProcessing   = true;
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("{} deferred initial asset processing for generation {}", success ? "Resuming" : "Failing", generation);
         const bool started                      = OnAssetsDownloaded(success);
         _resumingDeferredInitialAssetProcessing = false;

@@ -15,7 +15,7 @@
 #include <networking/network_client.h>
 
 namespace Framework::Integrations::Client::Networking {
-    class Engine final : public Shared::Networking::PeerEngine<Framework::Networking::NetworkClient> {
+    class Engine final: public Shared::Networking::PeerEngine<Framework::Networking::NetworkClient> {
       public:
         [[nodiscard]] Utils::Result<void, Error> Init();
 

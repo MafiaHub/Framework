@@ -26,7 +26,9 @@ namespace Framework::GUI::Resources {
         constexpr const char *kLogger = "Web";
 
         std::string ToLower(std::string value) {
-            std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
             return value;
         }
     } // namespace

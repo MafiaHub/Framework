@@ -12,8 +12,8 @@
 
 #include <logging/logger.h>
 
-#include <mafianet/message_identifiers.h>
 #include <mafianet/defines.h>
+#include <mafianet/message_identifiers.h>
 
 #include <algorithm>
 
@@ -314,8 +314,7 @@ namespace Framework::Networking {
         case ID_READY_EVENT_SET:
         case ID_READY_EVENT_UNSET:
         case ID_READY_EVENT_QUERY:
-        case ID_READY_EVENT_FORCE_ALL_SET:
-            return true;
+        case ID_READY_EVENT_FORCE_ALL_SET: return true;
         }
         return false;
     }

@@ -60,7 +60,6 @@ namespace Framework::External::ImGUI::Widgets {
 
     void UIBase::CleanUpUIWindow() const {
         if (!AreControlsLocked()) {
-
             ImGui::PopStyleColor();
             ImGui::PopStyleColor();
         }

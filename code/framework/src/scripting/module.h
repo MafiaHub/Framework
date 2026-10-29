@@ -22,7 +22,7 @@ namespace Framework::Scripting {
       public:
         virtual ~ScriptingModule() = default;
 
-        virtual Engine *GetScriptingEngine() const = 0;
+        virtual Engine *GetScriptingEngine() const          = 0;
         virtual ResourceManager *GetResourceManager() const = 0;
     };
 } // namespace Framework::Scripting

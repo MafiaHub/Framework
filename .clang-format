@@ -51,6 +51,17 @@ MaxEmptyLinesToKeep: 1
 NamespaceIndentation: All
 PointerAlignment: Right
 SortIncludes: CaseSensitive
+# safe_win32.h must precede every other include in its block: it pulls WinSock2.h in ahead of
+# Windows.h with the lean/NOMINMAX defines set. The remaining entries are the LLVM defaults.
+IncludeCategories:
+  - Regex: '[<"](utils/)?safe_win32\.h[>"]'
+    Priority: -1
+  - Regex: '^"(llvm|llvm-c|clang|clang-c)/'
+    Priority: 2
+  - Regex: '^(<|"(gtest|gmock|isl|json)/)'
+    Priority: 3
+  - Regex: '.*'
+    Priority: 1
 SortUsingDeclarations: true
 SpaceAfterCStyleCast: false
 SpaceAfterLogicalNot: false

@@ -17,7 +17,7 @@ namespace Framework::Integrations::Shared::Networking {
     // forwards Shutdown/Update to it. Derived engines add their peer-specific Init/Connect surface
     // and a typed accessor.
     template <typename TPeer>
-    class PeerEngine : public Framework::Lifecycle {
+    class PeerEngine: public Framework::Lifecycle {
       protected:
         std::unique_ptr<TPeer> _peer = std::make_unique<TPeer>();
 

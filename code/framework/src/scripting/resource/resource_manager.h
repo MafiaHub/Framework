@@ -8,9 +8,9 @@
 
 #pragma once
 
-#include "resource.h"
-#include "../engine.h"
 #include "../builtins/events.h"
+#include "../engine.h"
+#include "resource.h"
 
 #include <logging/logger.h>
 #include <utils/result.h>
@@ -88,7 +88,7 @@ namespace Framework::Scripting {
         ~ResourceManager();
 
         // Non-copyable
-        ResourceManager(const ResourceManager &) = delete;
+        ResourceManager(const ResourceManager &)            = delete;
         ResourceManager &operator=(const ResourceManager &) = delete;
 
         // Configuration
@@ -451,7 +451,7 @@ namespace Framework::Scripting {
 
         // Dev-mode file watcher: resource name -> newest file mtime seen.
         std::map<std::string, int64_t> _watchSnapshots;
-        std::chrono::steady_clock::time_point _lastFileWatchPoll{};
+        std::chrono::steady_clock::time_point _lastFileWatchPoll {};
 
         // Events instance owned by this manager
         Builtins::Events _events;

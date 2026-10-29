@@ -86,7 +86,7 @@ namespace Framework::Launcher::Loaders {
         // virtualAddress and a data buffer), as if the image had loaded `delta` lower
         template <typename Sections>
         bool UndoRelocations(Sections &sections, const std::vector<uint8_t> &sourceImage, const IMAGE_NT_HEADERS *ntHeaders, uintptr_t delta) {
-            const auto &directory = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+            const auto &directory   = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
             const auto relocSection = SectionOf(ntHeaders, directory.VirtualAddress);
             if (directory.Size == 0 || !relocSection) {
                 return false;

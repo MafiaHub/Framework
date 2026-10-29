@@ -134,7 +134,8 @@ namespace Framework::Scripting::Builtins {
                         info.GetReturnValue().Set(StateBag::NewInstance(info.GetIsolate(), self->GetId()));
                     }
                 });
-                cls->accessor_property("state", stateGetter, v8::Local<v8::FunctionTemplate>(), v8pp::metadata::property_docs("StateBag", "Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag."));
+                cls->accessor_property("state", stateGetter, v8::Local<v8::FunctionTemplate>(),
+                    v8pp::metadata::property_docs("StateBag", "Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag."));
             }
 
             // Replication placement is the server's to decide; a client writes only its own replica.

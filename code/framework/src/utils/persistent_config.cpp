@@ -17,8 +17,7 @@
 #include <logging/logger.h>
 
 namespace Framework::Utils {
-    PersistentConfig::PersistentConfig(const std::string &path): _path(path) {
-    }
+    PersistentConfig::PersistentConfig(const std::string &path): _path(path) {}
 
     bool PersistentConfig::Load() {
         std::ifstream file(_path);

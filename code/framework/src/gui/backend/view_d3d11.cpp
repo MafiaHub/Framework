@@ -13,8 +13,7 @@
 #include "gui/cef/render_handler.h"
 
 namespace Framework::GUI {
-    ViewD3D11::ViewD3D11(int id, Graphics::Renderer *graphicsRenderer, Manager *manager): View(id, graphicsRenderer, manager) {
-    }
+    ViewD3D11::ViewD3D11(int id, Graphics::Renderer *graphicsRenderer, Manager *manager): View(id, graphicsRenderer, manager) {}
 
     ViewD3D11::~ViewD3D11() {
         // The entries hold the shared textures and SRVs; nothing else frees them
@@ -90,26 +89,26 @@ namespace Framework::GUI {
         fillVertex(vertices[0]);
         vertices[0].pos[0] = vertices[0].obj[0] = left;
         vertices[0].pos[1] = vertices[0].obj[1] = top;
-        vertices[0].tex[0] = 0.0f;
-        vertices[0].tex[1] = 0.0f;
+        vertices[0].tex[0]                      = 0.0f;
+        vertices[0].tex[1]                      = 0.0f;
 
         fillVertex(vertices[1]);
         vertices[1].pos[0] = vertices[1].obj[0] = right;
         vertices[1].pos[1] = vertices[1].obj[1] = top;
-        vertices[1].tex[0] = 1.0f;
-        vertices[1].tex[1] = 0.0f;
+        vertices[1].tex[0]                      = 1.0f;
+        vertices[1].tex[1]                      = 0.0f;
 
         fillVertex(vertices[2]);
         vertices[2].pos[0] = vertices[2].obj[0] = right;
         vertices[2].pos[1] = vertices[2].obj[1] = bottom;
-        vertices[2].tex[0] = 1.0f;
-        vertices[2].tex[1] = 1.0f;
+        vertices[2].tex[0]                      = 1.0f;
+        vertices[2].tex[1]                      = 1.0f;
 
         fillVertex(vertices[3]);
         vertices[3].pos[0] = vertices[3].obj[0] = left;
         vertices[3].pos[1] = vertices[3].obj[1] = bottom;
-        vertices[3].tex[0] = 0.0f;
-        vertices[3].tex[1] = 1.0f;
+        vertices[3].tex[0]                      = 0.0f;
+        vertices[3].tex[1]                      = 1.0f;
 
         uint32_t indices[] = {0, 1, 3, 1, 2, 3};
 
@@ -178,10 +177,10 @@ namespace Framework::GUI {
         Graphics::GPUState gpuState {};
         memset(&gpuState, 0, sizeof(gpuState));
 
-        gpuState.viewport_width  = _width;
-        gpuState.viewport_height = _height;
-        gpuState.enable_scissor  = false;
-        gpuState.enable_blend    = true;
+        gpuState.viewport_width   = _width;
+        gpuState.viewport_height  = _height;
+        gpuState.enable_scissor   = false;
+        gpuState.enable_blend     = true;
         gpuState.enable_texturing = true;
         gpuState.shader_type      = Graphics::ShaderType::Fill;
         gpuState.render_buffer_id = 0;

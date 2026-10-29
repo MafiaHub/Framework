@@ -15,9 +15,9 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
+#include <memory>
 #include <steam_api.h>
 #include <string>
-#include <memory>
 
 namespace Framework::External::Steam {
     struct AuthTicket {
@@ -38,7 +38,7 @@ namespace Framework::External::Steam {
             return !IsPending() && !IsValid();
         }
     };
-    class Wrapper final : public Framework::Lifecycle {
+    class Wrapper final: public Framework::Lifecycle {
       private:
         std::unique_ptr<CSteamAPIContext> _ctx;
         AuthTicket _authTicket;

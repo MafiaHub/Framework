@@ -118,8 +118,8 @@ namespace Framework::Networking::Replication {
         // Server scope is storage, not replication -- but a key that *was* replicated and is now
         // Server still has to be taken back off the peers holding it, so the write dirties whenever
         // either side of the transition reaches the wire.
-        const bool reachesWire  = scope != StateScope::Server;
-        const bool reachedWire  = previousScope.has_value() && *previousScope != StateScope::Server;
+        const bool reachesWire = scope != StateScope::Server;
+        const bool reachedWire = previousScope.has_value() && *previousScope != StateScope::Server;
         if (reachesWire || reachedWire) {
             MarkDirty(key, scope, previousScope);
         }

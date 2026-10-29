@@ -16,8 +16,8 @@
 
 #include <networking/rpc/server_resources.h>
 #include <scripting/module.h>
-#include <scripting/v8_engine.h>
 #include <scripting/resource/resource_manager.h>
+#include <scripting/v8_engine.h>
 #include <utils/lifecycle.h>
 
 namespace Framework::Integrations::Client::Scripting {
@@ -44,7 +44,9 @@ namespace Framework::Integrations::Client::Scripting {
      * Uses standalone V8 engine for client-side JavaScript execution.
      * No Node.js APIs are available at the binary level.
      */
-    class ClientScriptingModule final : public Framework::Lifecycle, public Framework::Scripting::ScriptingModule {
+    class ClientScriptingModule final
+        : public Framework::Lifecycle
+        , public Framework::Scripting::ScriptingModule {
       public:
         ClientScriptingModule();
         ~ClientScriptingModule();
@@ -84,7 +86,6 @@ namespace Framework::Integrations::Client::Scripting {
             return _engine.get();
         }
 
-
         /**
          * Get the JavaScript resource manager.
          */
@@ -100,7 +101,9 @@ namespace Framework::Integrations::Client::Scripting {
         /**
          * Set the mod version exposed as ExecutionEnvironment.modVersion. Must be set before Init().
          */
-        void SetModVersion(const std::string &version) { _modVersion = version; }
+        void SetModVersion(const std::string &version) {
+            _modVersion = version;
+        }
 
         /**
          * Get the resource cache path.
@@ -135,7 +138,7 @@ namespace Framework::Integrations::Client::Scripting {
          */
         void SetServerResourceList(const std::vector<ServerResourceInfo> &resources) {
             _serverResourceList = resources;
-            _resourcesSynced = true;
+            _resourcesSynced    = true;
         }
 
         /**

@@ -89,8 +89,8 @@ namespace Framework::Scripting::Builtins {
         cls->property("x", &Quaternion::getX, &Quaternion::setX, v8pp::metadata::property_docs("number", "Mutable X imaginary component."));
         cls->property("y", &Quaternion::getY, &Quaternion::setY, v8pp::metadata::property_docs("number", "Mutable Y imaginary component."));
         cls->property("z", &Quaternion::getZ, &Quaternion::setZ, v8pp::metadata::property_docs("number", "Mutable Z imaginary component."));
-        cls->property("length", &Quaternion::getLength, v8pp::metadata::property_options{"Read-only magnitude (norm) of this quaternion; 1 for a unit rotation.", "number", true, false});
-        cls->property("lengthSquared", &Quaternion::getLengthSquared, v8pp::metadata::property_options{"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
+        cls->property("length", &Quaternion::getLength, v8pp::metadata::property_options {"Read-only magnitude (norm) of this quaternion; 1 for a unit rotation.", "number", true, false});
+        cls->property("lengthSquared", &Quaternion::getLengthSquared, v8pp::metadata::property_options {"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
 
         // toJSON method for JSON.stringify support - returns plain JS object
         protoTemplate->Set(v8pp::to_v8(isolate, "toJSON"), v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {

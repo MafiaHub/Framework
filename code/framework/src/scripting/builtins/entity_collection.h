@@ -9,9 +9,9 @@
 #pragma once
 
 #include <core_modules.h>
-#include <scripting/engine_helpers.h>
 #include <networking/replication/network_entity.h>
 #include <networking/replication/replication_manager.h>
+#include <scripting/engine_helpers.h>
 
 #include <v8.h>
 #include <v8pp/class.hpp>
@@ -73,7 +73,8 @@ namespace Framework::Scripting::Builtins {
             auto ctx          = isolate->GetCurrentContext();
             bool hadException = false;
             ForEachNative([&](NativeType *e) {
-                if (hadException) return;
+                if (hadException)
+                    return;
                 hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value>) {});
             });
         }
@@ -84,9 +85,11 @@ namespace Framework::Scripting::Builtins {
             v8::Local<v8::Array> arr = v8::Array::New(isolate, 0);
             uint32_t outIndex        = 0;
             ForEachNative([&](NativeType *e) {
-                if (hadException) return;
+                if (hadException)
+                    return;
                 hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object> jsEntity, v8::Local<v8::Value> result) {
-                    if (result->BooleanValue(isolate)) arr->Set(ctx, outIndex++, jsEntity).Check();
+                    if (result->BooleanValue(isolate))
+                        arr->Set(ctx, outIndex++, jsEntity).Check();
                 });
             });
             return hadException ? v8::Array::New(isolate, 0) : arr;
@@ -97,7 +100,8 @@ namespace Framework::Scripting::Builtins {
             v8::Local<v8::Value> found = v8::Undefined(isolate);
             bool foundOne = false, hadException = false;
             ForEachNative([&](NativeType *e) {
-                if (foundOne || hadException) return;
+                if (foundOne || hadException)
+                    return;
                 hadException = !InvokeCallback<v8::EscapableHandleScope>(isolate, ctx, callback, e, [&](v8::EscapableHandleScope &scope, v8::Local<v8::Object> jsEntity, v8::Local<v8::Value> result) {
                     if (result->BooleanValue(isolate)) {
                         found    = scope.Escape(jsEntity);
@@ -114,7 +118,8 @@ namespace Framework::Scripting::Builtins {
             v8::Local<v8::Array> arr = v8::Array::New(isolate, 0);
             uint32_t outIndex        = 0;
             ForEachNative([&](NativeType *e) {
-                if (hadException) return;
+                if (hadException)
+                    return;
                 hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value> result) {
                     arr->Set(ctx, outIndex++, result).Check();
                 });
@@ -123,24 +128,28 @@ namespace Framework::Scripting::Builtins {
         }
 
         bool Some(v8::Isolate *isolate, v8::Local<v8::Function> callback) {
-            auto ctx = isolate->GetCurrentContext();
+            auto ctx   = isolate->GetCurrentContext();
             bool found = false, hadException = false;
             ForEachNative([&](NativeType *e) {
-                if (found || hadException) return;
+                if (found || hadException)
+                    return;
                 hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value> result) {
-                    if (result->BooleanValue(isolate)) found = true;
+                    if (result->BooleanValue(isolate))
+                        found = true;
                 });
             });
             return hadException ? false : found;
         }
 
         bool Every(v8::Isolate *isolate, v8::Local<v8::Function> callback) {
-            auto ctx = isolate->GetCurrentContext();
+            auto ctx      = isolate->GetCurrentContext();
             bool allMatch = true, hadException = false;
             ForEachNative([&](NativeType *e) {
-                if (!allMatch || hadException) return;
+                if (!allMatch || hadException)
+                    return;
                 hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value> result) {
-                    if (!result->BooleanValue(isolate)) allMatch = false;
+                    if (!result->BooleanValue(isolate))
+                        allMatch = false;
                 });
             });
             return hadException ? false : allMatch;
@@ -158,7 +167,8 @@ namespace Framework::Scripting::Builtins {
             v8::TryCatch tryCatch(isolate);
             v8::Local<v8::Value> result;
             if (!callback->Call(ctx, v8::Undefined(isolate), 1, argv).ToLocal(&result)) {
-                if (tryCatch.HasCaught()) isolate->ThrowException(tryCatch.Exception());
+                if (tryCatch.HasCaught())
+                    isolate->ThrowException(tryCatch.Exception());
                 return false;
             }
             visit(iterationScope, jsEntity, result);
@@ -172,11 +182,10 @@ namespace Framework::Scripting::Builtins {
         auto ctx  = isolate->GetCurrentContext();
         auto tmpl = v8::ObjectTemplate::New(isolate);
 
-        tmpl->SetNativeDataProperty(v8pp::to_v8(isolate, "length").As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                CollectionType collection;
-                info.GetReturnValue().Set(collection.GetLength(info.GetIsolate()));
-            });
+        tmpl->SetNativeDataProperty(v8pp::to_v8(isolate, "length").As<v8::Name>(), [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
+            CollectionType collection;
+            info.GetReturnValue().Set(collection.GetLength(info.GetIsolate()));
+        });
 
         auto obj = tmpl->NewInstance(ctx).ToLocalChecked();
 

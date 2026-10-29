@@ -21,8 +21,8 @@ namespace Framework::GUI {
     class ViewD3D11 final: public View {
       private:
         // GPU path: texture received from CEF's OnAcceleratedPaint
-        uint32_t _textureID  = 0;
-        uint32_t _geometryID = 0;
+        uint32_t _textureID   = 0;
+        uint32_t _geometryID  = 0;
         bool _geometryCreated = false;
 
         // GPU path: a popup widget (a <select> list) comes as its own texture, drawn over the page

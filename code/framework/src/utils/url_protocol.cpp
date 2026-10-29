@@ -253,8 +253,7 @@ namespace Framework::Utils::UrlProtocol {
         // "URL Protocol" is the marker ShellExecute looks for: the name is what matters and the value
         // is empty by convention. The icon is the launcher's own, so a browser's "open with" prompt
         // shows the mod rather than a blank sheet.
-        return WriteString(root, nullptr, description) && WriteString(root, L"URL Protocol", L"") && WriteString(root + L"\\DefaultIcon", nullptr, Quoted(executablePath) + L",0")
-            && WriteString(root + L"\\shell\\open\\command", nullptr, BuildOpenCommand(executablePath));
+        return WriteString(root, nullptr, description) && WriteString(root, L"URL Protocol", L"") && WriteString(root + L"\\DefaultIcon", nullptr, Quoted(executablePath) + L",0") && WriteString(root + L"\\shell\\open\\command", nullptr, BuildOpenCommand(executablePath));
     }
 
     bool Unregister(std::wstring_view scheme) {

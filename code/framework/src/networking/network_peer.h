@@ -12,22 +12,22 @@
 #include "connection.h"
 #include "rpc/rpc.h"
 
+#include <cstdint>
+#include <logging/logger.h>
 #include <mafianet/message_identifiers.h>
+#include <mafianet/network_id_manager.h>
 #include <mafianet/packet_priority.h>
 #include <mafianet/peer_interface.h>
-#include <mafianet/rpc4_plugin.h>
 #include <mafianet/ready_event.h>
+#include <mafianet/rpc4_plugin.h>
 #include <mafianet/two_way_authentication.h>
-#include <mafianet/network_id_manager.h>
-#include <logging/logger.h>
-#include <utils/lifecycle.h>
-#include <utils/version.h>
-#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <utils/hashing.h>
+#include <utils/lifecycle.h>
+#include <utils/version.h>
 #include <vector>
 
 namespace Framework::Networking::Replication {
@@ -39,11 +39,11 @@ namespace Framework::Networking::RPC {
 } // namespace Framework::Networking::RPC
 
 namespace Framework::Networking {
-    class NetworkPeer : public Lifecycle {
+    class NetworkPeer: public Lifecycle {
       protected:
         MafiaNet::RakPeerInterface *_peer = nullptr;
         MafiaNet::Packet *_packet         = nullptr;
-        int _packetDataOffset          = 0; // Offset to skip timestamp prefix if present
+        int _packetDataOffset             = 0; // Offset to skip timestamp prefix if present
         fu2::function<bool(MafiaNet::Packet *) const> _onUnknownPacketCallback;
 
         // RPC4 dispatches remote-procedure calls by identifier to C handlers. NetworkIDManager hands

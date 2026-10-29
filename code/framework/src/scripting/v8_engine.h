@@ -54,7 +54,7 @@ namespace Framework::Scripting {
      * - queueMicrotask
      * - globalThis.Framework object for SDK bindings
      */
-    class V8Engine final : public Engine {
+    class V8Engine final: public Engine {
       public:
         explicit V8Engine(const V8EngineOptions &options = {});
         ~V8Engine() override;
@@ -96,10 +96,8 @@ namespace Framework::Scripting {
         void ClearResourceTimers(const std::string &resourceName) override;
 
         // Module loader internals (used by require callback)
-        v8::MaybeLocal<v8::Value> LoadModule(std::string_view requestedPath,
-                                              std::string_view referencingDir);
-        std::string ResolveModulePath(std::string_view requested,
-                                       std::string_view fromDir);
+        v8::MaybeLocal<v8::Value> LoadModule(std::string_view requestedPath, std::string_view referencingDir);
+        std::string ResolveModulePath(std::string_view requested, std::string_view fromDir);
 
         // Timer entry (public for anonymous-namespace callbacks)
         struct TimerEntry {

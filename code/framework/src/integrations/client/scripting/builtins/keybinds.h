@@ -29,10 +29,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     // SetActiveCallback so binds stay quiet while UI owns input.
     class Keybinds final {
       public:
-        static void Register(v8::Isolate *isolate,
-                             v8::Local<v8::Context> context,
-                             v8::Local<v8::Object> target,
-                             Framework::Scripting::ResourceManager *resourceManager);
+        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager);
 
         // Poll physical keys, detect edges, dispatch matching handlers into JS.
         static void Update();
@@ -46,7 +43,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static void Shutdown();
 
       private:
-        enum class State : uint8_t { Down, Up, Both };
+        enum class State : uint8_t {
+            Down,
+            Up,
+            Both
+        };
 
         struct Handler {
             v8::Global<v8::Function> callback;
@@ -56,7 +57,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         };
 
         struct Bucket {
-            int vk = 0;
+            int vk        = 0;
             bool prevDown = false;
             std::vector<Handler> handlers;
         };

@@ -32,7 +32,12 @@ namespace Framework::External::Sentry {
     };
 
     struct ContextValue {
-        enum class Type { String, Int, Double, Bool };
+        enum class Type {
+            String,
+            Int,
+            Double,
+            Bool
+        };
 
         Type type;
         std::string string;
@@ -87,7 +92,7 @@ namespace Framework::External::Sentry {
         std::string _version;
     };
 
-    class Wrapper final : public Framework::Lifecycle {
+    class Wrapper final: public Framework::Lifecycle {
       public:
         [[nodiscard]] Utils::Result<void, Framework::Error> Init(const InitOptions &);
 
