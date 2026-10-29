@@ -45,6 +45,8 @@ get_filename_component(_fw_cef_dir "${_fw_cef_dir}" ABSOLUTE BASE_DIR "${Framewo
 
 include(DownloadCEF)
 DownloadCEF("${CEF_PLATFORM}" "${CEF_VERSION}" "${_fw_cef_dir}")
+# The remote CEF host (cmake/FrameworkCefHost.cmake) unpacks its 64-bit distribution beside this one.
+set(FW_CEF_DOWNLOAD_DIR "${_fw_cef_dir}" CACHE INTERNAL "Directory the CEF distributions are unpacked in")
 
 # CEF_ROOT is now set by DownloadCEF() as a CACHE INTERNAL variable
 # pointing to the extracted distribution directory.

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "mafiahub-framework-cef-host",
+  "version-string": "1.0.0",
+  "description": "Third-party dependencies of the 64-bit remote CEF host; the baseline matches the Framework's vcpkg.json.",
+  "builtin-baseline": "5f96cd15fd745122cf27e0524606d6c1efc5fd07",
+  "dependencies": [
+    "function2",
+    {
+      "name": "fmt"
+    },
+    {
+      "$comment": "Default features are deliberate, as in the Framework's manifest.",
+      "name": "spdlog"
+    }
+  ]
+}

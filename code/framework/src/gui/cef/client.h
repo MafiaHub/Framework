@@ -58,6 +58,12 @@ namespace Framework::GUI::CEF {
 
         bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId sourceProcess, CefRefPtr<CefProcessMessage> message) override;
 
+        // The view is going away while CEF may still deliver messages for its
+        // closing browser: page events have nowhere to go from here on.
+        void DetachSdk() {
+            _sdk = nullptr;
+        }
+
         void SetViewEventCallback(OnViewEventCallback cb) {
             _onViewEvent = std::move(cb);
         }

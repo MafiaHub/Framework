@@ -20,11 +20,13 @@
 
 namespace Framework::GUI {
     using EventCallback = fu2::function<void(const std::string &eventPayload) const>;
+    using EventSink     = fu2::function<void(const std::string &eventName, const std::string &eventPayload) const>;
 
     class SDK final {
       private:
         CefRefPtr<CefBrowser> _browser;
         std::unordered_map<std::string, EventCallback> _eventListeners;
+        EventSink _eventSink;
 
       public:
         [[nodiscard]] Utils::Result<void, Framework::Error> Init(CefRefPtr<CefBrowser> browser);
@@ -46,7 +48,15 @@ namespace Framework::GUI {
             _eventListeners.erase(eventName);
         }
 
+        // Sees every event, listened for or not: the remote CEF host forwards them all to the client.
+        inline void SetEventSink(EventSink sink) {
+            _eventSink = std::move(sink);
+        }
+
         inline void BroadcastEvent(const std::string &eventName, const std::string &eventPayload) {
+            if (_eventSink) {
+                _eventSink(eventName, eventPayload);
+            }
             if (!_eventListeners.contains(eventName)) {
                 return;
             }

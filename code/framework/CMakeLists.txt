@@ -135,6 +135,7 @@ list(APPEND FRAMEWORK_CLIENT_SRC
     src/gui/clipboard.cpp
     src/gui/view.cpp
     src/gui/sdk.cpp
+    src/gui/backend/d3d8_view_surface.cpp
     src/gui/backend/view_d3d8.cpp
     src/gui/backend/view_d3d9.cpp
     src/gui/backend/view_d3d11.cpp
@@ -146,6 +147,13 @@ list(APPEND FRAMEWORK_CLIENT_SRC
     src/gui/cef/life_span_handler.cpp
     src/gui/cef/load_handler.cpp
     src/gui/cef/display_handler.cpp
+    src/gui/cef/runtime.cpp
+    src/gui/remote/channel.cpp
+    src/gui/remote/frame_buffer.cpp
+    src/gui/remote/protocol.cpp
+    src/gui/remote/remote_session.cpp
+    src/gui/remote/resource_server.cpp
+    src/gui/remote/remote_view.cpp
     src/gui/resources/scheme.cpp
     src/gui/resources/mime.cpp
     src/gui/resources/resource_path.cpp
@@ -454,7 +462,26 @@ if(WIN32)
     endif()
 
     # CEF GUI integration (CEF target provides include dirs via INTERFACE)
-    target_link_libraries(FrameworkClient CEF Microsoft::DirectXTK)
+    target_link_libraries(FrameworkClient CEF Microsoft::DirectXTK bcrypt)
+
+    # Remote CEF (gui/remote): Chromium runs in a 64-bit host process staged in bin/cef64, and the
+    # client only composites its frames. The default where the game is 32-bit, whose address space
+    # cannot spare Chromium; FW_CEF_MODE=remote|inprocess overrides it at run time.
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(_fw_cef_remote_default ON)
+    else()
+        set(_fw_cef_remote_default OFF)
+    endif()
+    option(FW_CEF_REMOTE "Run CEF in the 64-bit host process by default and build that host" ${_fw_cef_remote_default})
+    if(FW_CEF_REMOTE)
+        target_compile_definitions(FrameworkClient PRIVATE FW_CEF_REMOTE_DEFAULT)
+        # libcef.dll loads on first use, which remote mode never makes; the in-process fallback still can.
+        target_link_libraries(FrameworkClient delayimp)
+        target_link_options(FrameworkClient INTERFACE "/DELAYLOAD:libcef.dll")
+        include(FrameworkCefHost)
+        fw_add_cef_host()
+        add_dependencies(FrameworkClient FrameworkCefHost)
+    endif()
 
     # CEF subprocess executable
     # The renderer process must register the very same custom schemes as the

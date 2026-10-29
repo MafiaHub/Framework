@@ -31,6 +31,11 @@
 #include "resources/scheme.h"
 #include "view.h"
 
+namespace Framework::GUI::Remote {
+    class RemoteSession;
+    class RemoteView;
+} // namespace Framework::GUI::Remote
+
 namespace Framework::GUI {
     struct ViewportConfiguration {
         int width;
@@ -48,6 +53,10 @@ namespace Framework::GUI {
 
         // mutable so const readers can lock
         mutable std::recursive_mutex _renderMutex;
+
+        // Remote mode: CEF runs in the cef64 host process and this process never loads libcef.
+        // Declared before the views, which talk to it until they are destroyed.
+        std::unique_ptr<Remote::RemoteSession> _remote;
 
         std::vector<std::unique_ptr<View>> _views;
 
@@ -81,6 +90,15 @@ namespace Framework::GUI {
 
         // Off screen means off: no focus, no audio.
         void ReconcileSuppression(View *view);
+
+        // Is a browser backend up, in process or remote?
+        bool IsBackendReady() const;
+
+        // Remote mode wanted for this renderer? FW_CEF_MODE=remote|inprocess overrides the build's default.
+        bool WantsRemoteHost(const Graphics::Renderer *renderer) const;
+        [[nodiscard]] Utils::Result<void, Error> InitRemote(const std::string &rootDir, const std::filesystem::path &moduleDir);
+        void UpdateRemote();
+        Remote::RemoteView *GetRemoteView(int id) const;
 
       public:
         Manager();
@@ -129,6 +147,11 @@ namespace Framework::GUI {
         }
 
         View *GetView(int id) const;
+
+        // Are the browsers in the remote CEF host rather than in this process?
+        bool IsRemote() const {
+            return _remote != nullptr;
+        }
 
         void RegisterSchemeHandlerFactory(const std::string &schema, const std::string &domain, Framework::GUI::CEF::SchemaHandlerFactoryCallback callback);
 

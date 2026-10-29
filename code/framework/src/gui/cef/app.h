@@ -19,6 +19,9 @@
 
 namespace Framework::GUI::CEF {
 
+    // Called from any CEF thread with how soon, in ms, CefDoMessageLoopWork wants to run.
+    using MessagePumpScheduler = fu2::function<void(int64_t delayMs) const>;
+
     using SchemaHandlerFactoryCallback = fu2::function<CefRefPtr<CefResourceHandler>(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, const CefString &scheme_name, CefRefPtr<CefRequest> request) const>;
 
     struct SchemeDomainKey {
@@ -44,11 +47,28 @@ namespace Framework::GUI::CEF {
       private:
         bool _contextInitialized = false;
         bool _gpuAccelerated     = false;
+        MessagePumpScheduler _pumpScheduler;
 
       public:
         // Must be set before CefInitialize; false adds --disable-gpu (CPU OSR path only)
         void SetGPUAccelerated(bool enabled) {
             _gpuAccelerated = enabled;
+        }
+
+        // Must be set before CefInitialize: CEF then asks for its pump through |scheduler| instead
+        // of being pumped on a timer (external_message_pump).
+        void SetMessagePumpScheduler(MessagePumpScheduler scheduler) {
+            _pumpScheduler = std::move(scheduler);
+        }
+
+        bool UsesExternalMessagePump() const {
+            return static_cast<bool>(_pumpScheduler);
+        }
+
+        void OnScheduleMessagePumpWork(int64_t delayMs) override {
+            if (_pumpScheduler) {
+                _pumpScheduler(delayMs);
+            }
         }
 
         CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {

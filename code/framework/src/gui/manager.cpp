@@ -17,6 +17,10 @@
 #include "gui/backend/view_d3d12.h"
 #include "gui/backend/view_d3d8.h"
 #include "gui/backend/view_d3d9.h"
+#include "gui/cef/runtime.h"
+#include "gui/remote/launch.h"
+#include "gui/remote/remote_session.h"
+#include "gui/remote/remote_view.h"
 #include "gui/resources/scheme.h"
 
 #include "include/cef_scheme.h"
@@ -25,17 +29,13 @@
 
 #include <cstdlib>
 #include <filesystem>
-#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <variant>
 
 namespace Framework::GUI {
     namespace {
-        constexpr std::size_t kMaxCefCacheProfiles = 16;
-
-        // Bounds the wait for OnContextInitialized in Init
-        constexpr ULONGLONG kContextInitializedTimeoutMs = 5000;
-
         // ImGui has no wait/help/crosshair/zoom shapes; those fall back to the arrow.
         ImGuiMouseCursor ToImGuiCursor(cef_cursor_type_t type) {
             switch (type) {
@@ -70,145 +70,6 @@ namespace Framework::GUI {
             default: return ImGuiMouseCursor_Arrow;
             }
         }
-
-        // Guard the pump: some exit paths tear CEF down before our Shutdown runs.
-        // TODO(cef-exit): an exit-path-independent Shutdown trigger would remove this.
-        bool PumpCefMessageLoopGuarded() {
-            __try {
-                CefDoMessageLoopWork();
-                return true;
-            }
-            __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
-                return false;
-            }
-        }
-
-        // CefShutdown is as unreliable as the pump on these exit paths, and it
-        // faults inside Chromium's own teardown where nothing we own is left to
-        // save. Guard it the same way: the process is leaving either way.
-        bool CefShutdownGuarded() {
-            __try {
-                CefShutdown();
-                return true;
-            }
-            __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
-                return false;
-            }
-        }
-
-        const char *CefResultCodeName(int code) {
-            switch (code) {
-            case CEF_RESULT_CODE_NORMAL_EXIT: return "NORMAL_EXIT";
-            case CEF_RESULT_CODE_KILLED: return "KILLED";
-            case CEF_RESULT_CODE_HUNG: return "HUNG";
-            case CEF_RESULT_CODE_KILLED_BAD_MESSAGE: return "KILLED_BAD_MESSAGE";
-            case CEF_RESULT_CODE_GPU_DEAD_ON_ARRIVAL: return "GPU_DEAD_ON_ARRIVAL";
-            case CEF_RESULT_CODE_BAD_PROCESS_TYPE: return "BAD_PROCESS_TYPE";
-            case CEF_RESULT_CODE_MISSING_DATA: return "MISSING_DATA";
-            case CEF_RESULT_CODE_UNSUPPORTED_PARAM: return "UNSUPPORTED_PARAM";
-            case CEF_RESULT_CODE_PROFILE_IN_USE: return "PROFILE_IN_USE";
-            case CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED: return "NORMAL_EXIT_PROCESS_NOTIFIED";
-            case CEF_RESULT_CODE_INVALID_SANDBOX_STATE: return "INVALID_SANDBOX_STATE";
-            case CEF_RESULT_CODE_SYSTEM_RESOURCE_EXHAUSTED: return "SYSTEM_RESOURCE_EXHAUSTED";
-            default: return "unmapped";
-            }
-        }
-
-        const char *CefResultCodeHint(int code) {
-            switch (code) {
-            case CEF_RESULT_CODE_MISSING_DATA: return "a CEF runtime file is missing or unreadable";
-            case CEF_RESULT_CODE_PROFILE_IN_USE: return "another process still holds this cache profile; delete cache/profiles or end leftover cef_subprocess.exe";
-            case CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED: return "the profile was handed to an already-running browser process";
-            case CEF_RESULT_CODE_SYSTEM_RESOURCE_EXHAUSTED: return "the system is out of a resource CEF needs (handles, memory, desktop heap)";
-            default: return "";
-            }
-        }
-
-        std::string ResolveUiLocaleName() {
-            wchar_t name[LOCALE_NAME_MAX_LENGTH] = {};
-            if (LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT), name, LOCALE_NAME_MAX_LENGTH, 0) == 0) {
-                return {};
-            }
-            return std::filesystem::path(name).string();
-        }
-
-        void AuditCefRuntimeFiles(const std::filesystem::path &moduleDir) {
-            const auto logger = Framework::Logging::GetLogger("Web");
-
-            static constexpr const char *kRequiredFiles[] = {"libcef.dll", "cef_subprocess.exe", "chrome_elf.dll", "icudtl.dat", "resources.pak", "chrome_100_percent.pak", "chrome_200_percent.pak", "v8_context_snapshot.bin"};
-
-            std::error_code error;
-            bool complete = true;
-            for (const char *file : kRequiredFiles) {
-                const std::filesystem::path candidate = moduleDir / file;
-                if (!std::filesystem::is_regular_file(candidate, error)) {
-                    logger->error("CEF runtime file is missing: {}", candidate.string());
-                    complete = false;
-                }
-            }
-
-            const std::filesystem::path localesDir = moduleDir / "locales";
-            if (!std::filesystem::is_directory(localesDir, error)) {
-                logger->error("CEF locales directory is missing: {}", localesDir.string());
-                return;
-            }
-
-            std::size_t pakCount = 0;
-            for (const auto &entry : std::filesystem::directory_iterator(localesDir, error)) {
-                if (entry.path().extension() == ".pak") {
-                    ++pakCount;
-                }
-            }
-
-            const std::string uiLocale = ResolveUiLocaleName();
-            if (uiLocale.empty()) {
-                logger->error("CEF locales: {} pak(s) in '{}', OS UI locale could not be resolved", pakCount, localesDir.string());
-            }
-            else {
-                // Chromium falls back from the full name to the bare language.
-                const std::size_t separator          = uiLocale.find('-');
-                const std::filesystem::path exact    = localesDir / (uiLocale + ".pak");
-                const std::filesystem::path language = separator == std::string::npos ? exact : localesDir / (uiLocale.substr(0, separator) + ".pak");
-                const bool localeAvailable           = std::filesystem::is_regular_file(exact, error) || std::filesystem::is_regular_file(language, error);
-
-                logger->error("CEF locales: {} pak(s) in '{}', OS UI locale '{}', matching pak {}", pakCount, localesDir.string(), uiLocale, localeAvailable ? "present" : "MISSING");
-                complete = complete && localeAvailable;
-            }
-
-            if (complete) {
-                logger->error("CEF runtime files are all present; the failure is not a missing file");
-            }
-        }
-
-        std::optional<std::pair<std::filesystem::path, HANDLE>> ClaimCefCacheProfile(const std::string &rootDir) {
-            std::error_code error;
-            const std::filesystem::path profilesRoot = std::filesystem::absolute(std::filesystem::path(rootDir) / "cache" / "profiles", error);
-            if (error) {
-                return std::nullopt;
-            }
-
-            // Separate Wine prefixes run separate wineservers, which do not
-            // enforce the profile lock against each other.
-            std::size_t first = 0;
-            if (const char *base = std::getenv("FW_CEF_PROFILE_BASE")) {
-                first = static_cast<std::size_t>(std::strtoul(base, nullptr, 10));
-            }
-            for (std::size_t index = first; index < first + kMaxCefCacheProfiles; ++index) {
-                const std::filesystem::path profileRoot = profilesRoot / std::to_string(index);
-                std::filesystem::create_directories(profileRoot, error);
-                if (error) {
-                    return std::nullopt;
-                }
-
-                const std::filesystem::path lockPath = profileRoot / ".framework-profile.lock";
-                HANDLE profileLock = CreateFileW(lockPath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_HIDDEN, nullptr);
-                if (profileLock != INVALID_HANDLE_VALUE) {
-                    return std::make_pair(profileRoot, profileLock);
-                }
-            }
-
-            return std::nullopt;
-        }
     } // namespace
     Manager::Manager() {
         _clipboard        = std::make_unique<SystemClipboard>();
@@ -232,6 +93,11 @@ namespace Framework::GUI {
             _dyingViews.clear();
         }
 
+        if (_remote) {
+            _remote->Stop();
+            _remote.reset();
+        }
+
         if (_cefInitialized && _cefPumpFailed) {
             Framework::Logging::GetLogger("Web")->debug("CEF pump previously faulted, skipping CefShutdown");
             _cefInitialized = false;
@@ -242,38 +108,10 @@ namespace Framework::GUI {
                 Framework::Logging::GetLogger("Web")->debug("Process teardown in progress, skipping CefShutdown");
             }
             else {
-                CefClearSchemeHandlerFactories();
-
-                // CloseBrowser is async: pump (guarded) until every browser hits
-                // OnBeforeClose, 3s cap, then a settle pass.
-                bool pumpOk   = true;
-                int drainedMs = 0;
-                while (pumpOk && CEF::LifeSpanHandler::GetLiveBrowserCount() > 0 && drainedMs < 3000) {
-                    pumpOk = PumpCefMessageLoopGuarded();
-                    Sleep(10);
-                    drainedMs += 10;
-                }
-                for (int i = 0; pumpOk && i < 50; i++) {
-                    pumpOk = PumpCefMessageLoopGuarded();
-                    Sleep(10);
-                }
-
-                // CEF requires every browser closed before CefShutdown; calling it
-                // with one still live faults inside Chromium's teardown. The drain
-                // above is capped, so the cap can expire with browsers left.
-                const int liveBrowsers = CEF::LifeSpanHandler::GetLiveBrowserCount();
-                if (!pumpOk) {
+                bool pumpFailed = false;
+                cefStopped      = CEF::StopRuntime(pumpFailed);
+                if (pumpFailed) {
                     _cefPumpFailed = true;
-                    Framework::Logging::GetLogger("Web")->warn("CEF pump faulted during shutdown drain, skipping CefShutdown");
-                }
-                else if (liveBrowsers > 0) {
-                    Framework::Logging::GetLogger("Web")->warn("{} browser(s) still live after the shutdown drain, skipping CefShutdown", liveBrowsers);
-                }
-                else if (CefShutdownGuarded()) {
-                    cefStopped = true;
-                }
-                else {
-                    Framework::Logging::GetLogger("Web")->warn("CefShutdown faulted; leaving CEF to the process exit");
                 }
             }
             _cefInitialized = false;
@@ -290,7 +128,7 @@ namespace Framework::GUI {
     }
 
     Utils::Result<void, Error> Manager::Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated) {
-        if (_cefInitialized) {
+        if (_cefInitialized || _remote) {
             return {};
         }
         _graphicsRenderer = renderer;
@@ -298,134 +136,135 @@ namespace Framework::GUI {
 
         SetViewportConfiguration(initialViewport);
 
-        // Configure CEF settings
-        CefSettings settings;
-        settings.windowless_rendering_enabled = true;
-        settings.multi_threaded_message_loop  = false;
-        settings.no_sandbox                   = true;
-        // ERROR by default. On a machine running VBS, Chromium also logs a failed
-        // Hyper-V CPU counter every 15 seconds (CpuHealthTracker, which no switch
-        // or feature disables), but FATAL alone hides a renderer that fails to
-        // launch or dies, and a page then stalls with an empty log.
-        // MafiaHubCefErrorLog=verbose goes all the way down, for bring-up work.
-        const char *cefErrorLog = std::getenv("MafiaHubCefErrorLog");
-        const bool verboseLog   = cefErrorLog && std::string_view(cefErrorLog) == "verbose";
-        settings.log_severity   = verboseLog ? LOGSEVERITY_VERBOSE : LOGSEVERITY_ERROR;
-
-        std::error_code logDirError;
-        const std::filesystem::path logDir = std::filesystem::path(rootDir) / "logs";
-        std::filesystem::create_directories(logDir, logDirError);
-        const std::filesystem::path cefLogPath = logDir / "cef.log";
-        CefString(&settings.log_file)          = cefLogPath.wstring();
-
-        // CEF requires an absolute path for the subprocess executable
         // Resolve next to THIS module (injected DLL), not the process exe.
         const std::wstring moduleDirName = Framework::Utils::GetModuleDirW();
         if (moduleDirName.empty()) {
             Framework::Logging::GetLogger("Web")->error("Failed to resolve owning module for the CEF subprocess path");
             return Error("Failed to resolve owning module for the CEF subprocess path");
         }
-        const std::filesystem::path moduleDir        = moduleDirName;
-        const std::filesystem::path subprocessPath   = moduleDir / "cef_subprocess.exe";
-        CefString(&settings.browser_subprocess_path) = subprocessPath.wstring();
+        const std::filesystem::path moduleDir = moduleDirName;
 
-        // CEF holds a process-singleton lock on root_cache_path. Stable numbered
-        // profiles keep browser storage across launches while the extra lock
-        // gives concurrent clients different roots. The OS releases it after a
-        // crash, so the lowest available profile is reusable on the next run.
-        const auto cacheProfile = ClaimCefCacheProfile(rootDir);
-        if (!cacheProfile) {
-            Framework::Logging::GetLogger("Web")->error("Failed to claim a CEF cache profile under '{}' ({} profiles tried, last error {}); is the directory writable?", (std::filesystem::path(rootDir) / "cache" / "profiles").string(), kMaxCefCacheProfiles, GetLastError());
-            return Error("Failed to claim a persistent CEF cache profile");
+        if (WantsRemoteHost(renderer)) {
+            auto result = InitRemote(rootDir, moduleDir);
+            if (result) {
+                _initialized = true;
+                return {};
+            }
+            // A machine that cannot run the 64-bit host (a 32-bit Wine prefix) still gets a UI when
+            // the in-process runtime ships alongside.
+            std::error_code error;
+            if (!std::filesystem::is_regular_file(moduleDir / "libcef.dll", error)) {
+                return result;
+            }
+            Framework::Logging::GetLogger("Web")->warn("{}; falling back to CEF in this process", result.GetError().message);
         }
-        const std::filesystem::path &cacheRoot = cacheProfile->first;
-        _cacheProfileLock                      = cacheProfile->second;
-        CefString(&settings.root_cache_path)   = cacheRoot.wstring();
-        CefString(&settings.cache_path)        = cacheRoot.wstring();
 
         // Create the CEF app
         _cefApp = new CEF::App();
         _cefApp->SetGPUAccelerated(gpuAccelerated);
 
-        Framework::Logging::GetLogger("Web")->debug("Initializing CEF: module '{}', cache profile '{}', log '{}'", moduleDir.string(), cacheRoot.string(), cefLogPath.string());
-
-        // Explorer runs a downloaded exe inside its own job, and other hosts
-        // bring theirs; the helpers inherit it, so a log should say so
-        BOOL inJob = FALSE;
-        if (IsProcessInJob(GetCurrentProcess(), nullptr, &inJob) && inJob) {
-            JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits {};
-            DWORD written = 0;
-            if (QueryInformationJobObject(nullptr, JobObjectExtendedLimitInformation, &limits, sizeof(limits), &written)) {
-                Framework::Logging::GetLogger("Web")->debug("Process runs inside a job (limit flags 0x{:X}); CEF helpers inherit it", limits.BasicLimitInformation.LimitFlags);
-            }
-            else {
-                Framework::Logging::GetLogger("Web")->debug("Process runs inside a job; CEF helpers inherit it");
-            }
-        }
-
-        // Initialize CEF
-        CefMainArgs mainArgs(GetModuleHandle(nullptr));
-        if (!CefInitialize(mainArgs, settings, _cefApp, nullptr)) {
-            // CefGetExitCode is the only CEF call allowed after a failed init.
-            const int exitCode = CefGetExitCode();
-            const auto logger  = Framework::Logging::GetLogger("Web");
-            logger->error("CefInitialize failed: exit code {} ({})", exitCode, CefResultCodeName(exitCode));
-            if (const char *hint = CefResultCodeHint(exitCode); *hint) {
-                logger->error("{}", hint);
-            }
-            logger->error("CefInitialize inputs: module '{}', cache profile '{}'", moduleDir.string(), cacheRoot.string());
-            AuditCefRuntimeFiles(moduleDir);
-            if (std::filesystem::exists(cefLogPath, logDirError)) {
-                logger->error("Chromium logged the underlying error to '{}'", cefLogPath.string());
-            }
-            else {
-                logger->error("No '{}' was written; CEF bailed before its own logging came up", cefLogPath.string());
-            }
-
-            CloseHandle(_cacheProfileLock);
-            _cacheProfileLock = INVALID_HANDLE_VALUE;
+        if (!CEF::StartRuntime(rootDir, moduleDir, _cefApp, _resourceRegistry, _cacheProfileLock)) {
             return Error("Failed to initialize CEF");
-        }
-
-        // One factory for the whole scheme; an empty domain matches every host
-        // and the registry routes them, so CEF never learns about a root.
-        CefRegisterSchemeHandlerFactory(Resources::kResourceScheme, "", _resourceRegistry);
-
-        // OnContextInitialized only arrives through the pump, and a browser
-        // created before it races the global request context and profile
-        // setup, slowest on a new or migrated cache profile. Init returns
-        // ready, so callers can create views straight away.
-        {
-            const auto deadline = GetTickCount64() + kContextInitializedTimeoutMs;
-            while (!_cefApp->IsContextInitialized() && GetTickCount64() < deadline) {
-                if (!PumpCefMessageLoopGuarded()) {
-                    break;
-                }
-                Sleep(1);
-            }
-            if (!_cefApp->IsContextInitialized()) {
-                Framework::Logging::GetLogger("Web")->warn("CEF context not initialized after {} ms; views may start late", kContextInitializedTimeoutMs);
-            }
         }
 
         _cefInitialized = true;
         _initialized    = true;
-        Framework::Logging::GetLogger("Web")->debug("Using persistent CEF cache profile '{}'", cacheRoot.string());
         Framework::Logging::GetLogger("Web")->info("CEF initialized successfully");
         return {};
     }
 
-    void Manager::Update() {
-        if (!_cefInitialized || _cefPumpFailed) {
-            return;
+    bool Manager::WantsRemoteHost(const Graphics::Renderer *renderer) const {
+#ifdef FW_CEF_REMOTE_DEFAULT
+        bool remote = true;
+#else
+        bool remote = false;
+#endif
+        if (const char *mode = std::getenv("FW_CEF_MODE")) {
+            if (std::string_view(mode) == "remote") {
+                remote = true;
+            }
+            else if (std::string_view(mode) == "inprocess") {
+                remote = false;
+            }
+        }
+        // The host paints on the CPU, and only the D3D8 backend composites CPU frames from it.
+        if (remote && renderer && renderer->GetBackendType() != Graphics::RendererBackend::BACKEND_D3D_8) {
+            Framework::Logging::GetLogger("Web")->info("Remote CEF composites on Direct3D 8 only; running CEF in this process");
+            return false;
+        }
+        return remote;
+    }
+
+    Utils::Result<void, Error> Manager::InitRemote(const std::string &rootDir, const std::filesystem::path &moduleDir) {
+        const std::filesystem::path hostPath = moduleDir / Remote::kHostDirectory / Remote::kHostExecutable;
+        std::error_code error;
+        if (!std::filesystem::is_regular_file(hostPath, error)) {
+            return Error("The CEF host is missing at '" + hostPath.string() + "'");
         }
 
-        // Pump OUTSIDE _renderMutex: it dispatches window messages that can block
-        // on the render thread (exit-flow RHI flush) and deadlock against Render.
-        {
+        auto session = std::make_unique<Remote::RemoteSession>(_resourceRegistry.get());
+        if (auto result = session->Start(rootDir, hostPath); !result) {
+            return result;
+        }
+        _remote = std::move(session);
+        Framework::Logging::GetLogger("Web")->info("CEF runs in the host process '{}'", hostPath.string());
+        return {};
+    }
+
+    Remote::RemoteView *Manager::GetRemoteView(int id) const {
+        // Every view is a RemoteView in remote mode.
+        return _remote ? static_cast<Remote::RemoteView *>(GetView(id)) : nullptr;
+    }
+
+    void Manager::UpdateRemote() {
+        // Dispatched outside _renderMutex, as the in-process pump runs its handlers.
+        Remote::RemoteSession::Listener listener;
+        listener.onMessage = [this](const Remote::HostMessage &message) {
+            if (const auto *event = std::get_if<Remote::Protocol::ViewEventMessage>(&message)) {
+                if (auto *view = GetRemoteView(event->viewId)) {
+                    view->OnHostEvent(event->data);
+                }
+            }
+            else if (const auto *page = std::get_if<Remote::Protocol::PageEvent>(&message)) {
+                if (auto *view = GetRemoteView(page->viewId)) {
+                    view->OnHostPageEvent(page->name, page->payload);
+                }
+            }
+            else if (const auto *surface = std::get_if<Remote::Protocol::FrameSurface>(&message)) {
+                if (auto *view = GetRemoteView(surface->viewId)) {
+                    view->OnHostSurface(surface->generation, surface->width, surface->height);
+                }
+            }
+        };
+        listener.onHostLost = [this] {
+            std::scoped_lock lock(_renderMutex);
+            for (auto &view : _views) {
+                static_cast<Remote::RemoteView *>(view.get())->OnHostLost();
+            }
+        };
+        listener.onHostReady = [this] {
+            std::scoped_lock lock(_renderMutex);
+            for (auto &view : _views) {
+                static_cast<Remote::RemoteView *>(view.get())->OnHostReady();
+            }
+        };
+        _remote->Poll(listener);
+    }
+
+    void Manager::Update() {
+        if (_remote) {
+            FW_PROFILE_SCOPE_N("Cef::Remote");
+            UpdateRemote();
+        }
+        else if (!_cefInitialized || _cefPumpFailed) {
+            return;
+        }
+        else {
+            // Pump OUTSIDE _renderMutex: it dispatches window messages that can block
+            // on the render thread (exit-flow RHI flush) and deadlock against Render.
             // OnPaint runs inside here, on this thread: its zone nests under this one.
             FW_PROFILE_SCOPE_N("Cef::Pump");
-            if (!PumpCefMessageLoopGuarded()) {
+            if (!CEF::PumpMessageLoopGuarded()) {
                 _cefPumpFailed = true;
                 Framework::Logging::GetLogger("Web")->warn("CEF message pump faulted (exit teardown race) — disabling further pumps");
                 return;
@@ -486,6 +325,10 @@ namespace Framework::GUI {
         return _compositingSuppressed.load(std::memory_order_acquire);
     }
 
+    bool Manager::IsBackendReady() const {
+        return _remote || (_cefInitialized && !_cefPumpFailed);
+    }
+
     bool Manager::IsViewComposited(const View *view) const {
         return !IsCompositingSuppressed() || view->AlwaysComposites();
     }
@@ -508,7 +351,7 @@ namespace Framework::GUI {
     }
 
     void Manager::SubmitImGuiDraws() {
-        if (!_cefInitialized || _cefPumpFailed) {
+        if (!IsBackendReady()) {
             return;
         }
 
@@ -531,7 +374,7 @@ namespace Framework::GUI {
     }
 
     void Manager::Render() {
-        if (!_cefInitialized || _cefPumpFailed) {
+        if (!IsBackendReady()) {
             return;
         }
 
@@ -557,7 +400,7 @@ namespace Framework::GUI {
     }
 
     int Manager::CreateView(const std::string &url, int width, int height, int offsetX, int offsetY) {
-        if (!_cefInitialized) {
+        if (!_cefInitialized && !_remote) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: CEF is not initialized");
             return -1;
         }
@@ -576,22 +419,27 @@ namespace Framework::GUI {
 
         // Create the view based on the graphics backend
         std::unique_ptr<View> view;
-        switch (_graphicsRenderer->GetBackendType()) {
-        case Graphics::RendererBackend::BACKEND_D3D_9:
-            view = std::make_unique<ViewD3D9>(++_id, _graphicsRenderer, this);
-            break;
-        case Graphics::RendererBackend::BACKEND_D3D_11:
-            view = std::make_unique<ViewD3D11>(++_id, _graphicsRenderer, this);
-            break;
-        case Graphics::RendererBackend::BACKEND_D3D_12:
-            view = std::make_unique<ViewD3D12>(++_id, _graphicsRenderer, this);
-            break;
-        case Graphics::RendererBackend::BACKEND_D3D_8:
-            view = std::make_unique<ViewD3D8>(++_id, _graphicsRenderer, this);
-            break;
-        default:
-            Framework::Logging::GetLogger("Web")->error("Failed to create view: Unsupported renderer backend");
-            return -1;
+        if (_remote) {
+            view = std::make_unique<Remote::RemoteView>(++_id, _graphicsRenderer, this, _remote.get());
+        }
+        else {
+            switch (_graphicsRenderer->GetBackendType()) {
+            case Graphics::RendererBackend::BACKEND_D3D_9:
+                view = std::make_unique<ViewD3D9>(++_id, _graphicsRenderer, this);
+                break;
+            case Graphics::RendererBackend::BACKEND_D3D_11:
+                view = std::make_unique<ViewD3D11>(++_id, _graphicsRenderer, this);
+                break;
+            case Graphics::RendererBackend::BACKEND_D3D_12:
+                view = std::make_unique<ViewD3D12>(++_id, _graphicsRenderer, this);
+                break;
+            case Graphics::RendererBackend::BACKEND_D3D_8:
+                view = std::make_unique<ViewD3D8>(++_id, _graphicsRenderer, this);
+                break;
+            default:
+                Framework::Logging::GetLogger("Web")->error("Failed to create view: Unsupported renderer backend");
+                return -1;
+            }
         }
         if (!view) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: failed");
@@ -647,7 +495,7 @@ namespace Framework::GUI {
     }
 
     bool Manager::DestroyView(int id) {
-        if (!_cefInitialized) {
+        if (!_cefInitialized && !_remote) {
             Framework::Logging::GetLogger("Web")->error("Failed to destroy view: CEF is not initialized");
             return false;
         }
@@ -733,12 +581,20 @@ namespace Framework::GUI {
     }
 
     void Manager::RegisterSchemeHandlerFactory(const std::string &schema, const std::string &domain, Framework::GUI::CEF::SchemaHandlerFactoryCallback callback) {
+        if (_remote) {
+            // The callback makes CEF objects in this process; serve the content through RegisterResourceRoot instead.
+            Framework::Logging::GetLogger("Web")->error("Scheme handler {}://{} ignored: CEF runs in the host process", schema, domain);
+            return;
+        }
         _cefApp->RegisterSchemeHandlerFactory(schema, domain, callback);
         CefRegisterSchemeHandlerFactory(schema, domain, _cefApp);
     }
 
     void Manager::RegisterResourceRoot(const std::string &host, std::shared_ptr<Resources::ResourceProvider> provider) {
         _resourceRegistry->RegisterRoot(host, std::move(provider));
+        if (_remote) {
+            _remote->RegisterRoot(host);
+        }
     }
 
     void Manager::RegisterResourceDirectory(const std::string &host, const std::filesystem::path &root) {
@@ -746,6 +602,9 @@ namespace Framework::GUI {
     }
 
     bool Manager::UnregisterResourceRoot(const std::string &host) {
+        if (_remote) {
+            _remote->UnregisterRoot(host);
+        }
         return _resourceRegistry->UnregisterRoot(host);
     }
 

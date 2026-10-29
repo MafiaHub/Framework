@@ -85,6 +85,73 @@ trojan.
 
 [cef-3614]: https://github.com/chromiumembedded/cef/issues/3614
 
+## Remote mode: CEF outside the game
+
+A 32-bit game cannot spare the address space Chromium takes, so a client built
+for 32 bits (`FW_CEF_REMOTE`, on by default there) runs the browser process in
+a 64-bit host instead: `cef64/cef_host.exe`, with its own 64-bit
+`cef_subprocess.exe` and CEF runtime beside it. `cmake/FrameworkCefHost.cmake`
+builds it inside the client's tree as a project of its own
+(`code/framework/cef_host`) and stages it in `bin/cef64`. The game process
+links `libcef.dll` delay-loaded and never touches it in this mode.
+`FW_CEF_MODE=remote|inprocess` overrides the build's choice at run time, and a
+host that cannot start (no `cef64`, a 32-bit Wine prefix) falls back to CEF in
+the game process when the 32-bit runtime ships alongside.
+
+The host shares the in-process code: `gui/cef` (handlers, Wine switches, the
+settings and profile handling in `runtime.cpp`) and `gui/resources`. The
+client keeps `Manager` and `View` as they are; `gui/remote/remote_view.h` is
+the `View` it creates, so scripts and mods see no difference.
+
+- **Launch.** `RemoteSession` starts the host with `--fw-pipe`, `--fw-token`
+  (128 random bits naming the pipe and every frame section),
+  `--fw-host-parent` and `--fw-root`, in a kill-on-close job. The pipe's DACL
+  admits only the client's own user and no remote client, and the client
+  refuses any peer but the process it started (`GetNamedPipeClientProcessId`).
+  `Manager::Init` waits at most three seconds, for a host that fails at once;
+  CEF comes up after that, and views created before it are created on the
+  host when it reports ready. The host watches the client's process like the
+  subprocess watches its parent, and exits when its pipe breaks.
+- **Pump.** The host runs CEF with `external_message_pump`: its main thread
+  sleeps until CEF asks for work (`OnScheduleMessagePumpWork`) or the client
+  sends something, and the client's begin-frame message, one per on-screen
+  view per game tick, sets the paint cadence.
+- **Messages** (`gui/remote/protocol.h`) go over one overlapped named pipe:
+  view lifecycle, URL, origin lock, focus, mute, scripts, begin frames and
+  input one way; view events, `callEvent` payloads and frame surfaces the
+  other. Each side treats the other as untrusted: lengths are bounds-checked,
+  enums and sizes range-checked, a malformed message ends the session. What
+  the host sends the 32-bit client is capped at 1 MB a message; the host drops
+  a larger view event or `callEvent` payload with a warning.
+- **fw://** roots stay registered in the client. The host forwards each
+  request; the client answers from its own providers, virtual filesystem
+  included, on three workers that take turns over every open request a chunk
+  at a time. Each request runs at most a 1 MB window ahead of what the host
+  has read and acknowledged, and a range request's skip is sent to the client
+  as a seek rather than read through.
+- **Frames** (`gui/remote/frame_buffer.h`) are a shared section per view and
+  size: a header and three BGRA slots. The host refreshes a slot the client is
+  not reading with what changed since that slot was written, then publishes
+  it; the client copies only the union of the dirty rects since the frame its
+  texture holds into the same managed D3D8 texture `ViewD3D8` uses.
+- **A crashed host** is restarted up to five times in a row with backoff; one
+  that ran five minutes before failing has the budget back. Views are
+  created again at their last URL, size, origin lock and focus. To scripts
+  this is a reload: `browserLoadingStart` and `browserDocumentReady` fire
+  again and page state is gone; `browserCreated` does not repeat.
+
+The host is built with the same MSVC toolset as the client tree (`vcvarsall
+-vcvars_ver`), so the one runtime the client package ships from that
+toolset's redist serves both. Its build step reruns only when a source it
+compiles changes. `RunFrameworkCefRemoteTests` (unit tests, then a smoke test
+against the real host) exists in a tree configured with
+`-DFW_BUILD_CEF_REMOTE_TESTS=ON`, the default where `FW_BUILD_TESTS` is on.
+
+`RegisterSchemeHandlerFactory` and `View::SetOnBeforeBrowseCallback` take CEF
+objects and do nothing in remote mode; `View::GetBrowser` is null there. Serve
+content through `RegisterResourceRoot`, and send input through the `View`
+methods (`SendMouseClick`, `SendKeyEvent`, `ImeCommitText`, ...).
+
 ## Rules for changing it
 
 Everything added to this exe is judged by heuristic scanners on a binary with

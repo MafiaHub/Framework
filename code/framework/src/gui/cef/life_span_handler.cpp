@@ -75,6 +75,7 @@ namespace Framework::GUI::CEF {
 
     void LifeSpanHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
         _browser = nullptr;
+        _closed  = true;
         --s_liveBrowserCount;
     }
 

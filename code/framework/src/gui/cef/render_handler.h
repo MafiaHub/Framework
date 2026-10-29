@@ -155,6 +155,15 @@ namespace Framework::GUI::CEF {
             return _pixelData;
         }
 
+        // Caller holds LockPixels(). The size GetPixelData() was last painted at.
+        int GetPixelWidth() const {
+            return _pixelWidth;
+        }
+
+        int GetPixelHeight() const {
+            return _pixelHeight;
+        }
+
         bool IsPixelDataDirty() const {
             return _pixelDataDirty;
         }

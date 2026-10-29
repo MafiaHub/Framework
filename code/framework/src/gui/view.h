@@ -103,8 +103,8 @@ namespace Framework::GUI {
         virtual void Update();
         virtual void Render() = 0;
 
-        void RequestBeginFrame();
-        void CheckNavigationStarted();
+        virtual void RequestBeginFrame();
+        virtual void CheckNavigationStarted();
 
         // Submit the view's quad; called inside an ImGui frame on the game thread.
         virtual void SubmitImGuiDraw() {}
@@ -112,11 +112,28 @@ namespace Framework::GUI {
         void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
         void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+        // Is there a browser to take input and commands? Every command below is dropped while not.
+        virtual bool HasBrowser() const {
+            return _browser != nullptr;
+        }
+
+        // The browser host's input entry points, for a caller that builds its own events instead
+        // of handing over window messages. Coordinates are view-relative.
+        virtual void SendMouseMove(const CefMouseEvent &event, bool mouseLeave);
+        virtual void SendMouseClick(const CefMouseEvent &event, cef_mouse_button_type_t button, bool mouseUp, int clickCount);
+        virtual void SendMouseWheel(const CefMouseEvent &event, int deltaX, int deltaY);
+        virtual void SendKeyEvent(const CefKeyEvent &event);
+
+        // Off-screen browsers have no window for an IME to draw into; compositions go through these.
+        virtual void ImeSetComposition(const std::wstring &text, int selectionStart, int selectionEnd);
+        virtual void ImeCommitText(const std::wstring &text);
+        virtual void ImeFinishComposingText(bool keepSelection);
+
         int GetId() const {
             return _id;
         }
 
-        void Focus(bool enable) {
+        virtual void Focus(bool enable) {
             _hasFocus = enable;
             if (_browser) {
                 _browser->GetHost()->SetFocus(enable);
@@ -140,7 +157,7 @@ namespace Framework::GUI {
         bool IsOnScreen() const;
 
         // Latched: CEF's own "is muted" getter does not work. Driven by the manager.
-        void SetAudioMuted(bool muted);
+        virtual void SetAudioMuted(bool muted);
 
         bool IsAudioMuted() const {
             return _audioMuted;
@@ -177,13 +194,13 @@ namespace Framework::GUI {
         }
 
         // Resize the view and its CEF surface; backend recreates its texture on next Render.
-        void Resize(int width, int height);
+        virtual void Resize(int width, int height);
 
         // Restrict main-frame navigation and page->script events to the URL's origin.
-        void LockToOrigin(const std::string &url);
+        virtual void LockToOrigin(const std::string &url);
 
         // Navigate the main frame; re-locks the origin when the view is origin-locked.
-        void LoadURL(const std::string &url);
+        virtual void LoadURL(const std::string &url);
 
         void SetAutoResize(bool enable) {
             _autoResize = enable;
@@ -225,7 +242,7 @@ namespace Framework::GUI {
             _sdk->RemoveEventListener(eventName);
         }
 
-        inline void EvaluateScript(const std::string &script) {
+        virtual void EvaluateScript(const std::string &script) {
             if (!_browser || !_browser->GetMainFrame()) {
                 return;
             }
@@ -233,7 +250,8 @@ namespace Framework::GUI {
         }
 
         // Escape hatch: the raw CEF browser. Prefer EvaluateScript / AddEventListener / the SDK above;
-        // reach for this only for CEF features the View doesn't surface.
+        // reach for this only for CEF features the View doesn't surface. Null for a view whose
+        // browser runs in the remote CEF host.
         CefRefPtr<CefBrowser> GetBrowser() const {
             return _browser;
         }
@@ -246,7 +264,7 @@ namespace Framework::GUI {
             return _renderHandler.get();
         }
 
-        cef_cursor_type_t GetCursorType() const {
+        virtual cef_cursor_type_t GetCursorType() const {
             if (_displayHandler) {
                 return _displayHandler->GetCursorType();
             }
@@ -262,8 +280,7 @@ namespace Framework::GUI {
             return _created;
         }
 
-        inline void SetOnBeforeBrowseCallback(CEF::OnBeforeBrowseCallback cb) {
-            _lifeSpanHandler->SetOnBeforeBrowseCallback(std::move(cb));
-        }
+        // In-process views only: the callback takes CEF objects that cannot cross to the remote host.
+        void SetOnBeforeBrowseCallback(CEF::OnBeforeBrowseCallback cb);
     };
 } // namespace Framework::GUI

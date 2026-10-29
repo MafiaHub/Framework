@@ -21,6 +21,9 @@ function(fw_stage_runtime target role)
         if(role STREQUAL "CLIENT" AND TARGET CEFCopyDlls)
             add_dependencies(${target} CEFCopyDlls)
         endif()
+        if(role STREQUAL "CLIENT" AND TARGET FrameworkCefHost)
+            add_dependencies(${target} FrameworkCefHost)
+        endif()
         if(role STREQUAL "SERVER" AND TARGET libnode AND UNIX AND NOT APPLE)
             add_custom_command(TARGET ${target} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:libnode>" "$<TARGET_FILE_DIR:${target}>"

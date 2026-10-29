@@ -16,6 +16,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace Framework::GUI::Resources {
     // Maps the scheme's hosts onto providers. Registered with CEF once for the
@@ -32,6 +33,11 @@ namespace Framework::GUI::Resources {
         void RegisterRoot(const std::string &host, std::shared_ptr<ResourceProvider> provider);
         bool UnregisterRoot(const std::string &host);
         bool HasRoot(const std::string &host) const;
+
+        // The provider serving |host|, or null. For a caller answering requests CEF did not make:
+        // the remote CEF host forwards its fw:// requests to the client.
+        std::shared_ptr<ResourceProvider> FindRoot(const std::string &host) const;
+        std::vector<std::string> GetRootHosts() const;
 
         CefRefPtr<CefResourceHandler> Create(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, const CefString &schemeName, CefRefPtr<CefRequest> request) override;
 

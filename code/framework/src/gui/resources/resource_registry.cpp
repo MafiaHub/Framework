@@ -49,6 +49,22 @@ namespace Framework::GUI::Resources {
         return _roots.count(ToLower(host)) > 0;
     }
 
+    std::shared_ptr<ResourceProvider> ResourceRegistry::FindRoot(const std::string &host) const {
+        std::scoped_lock lock(_mutex);
+        const auto root = _roots.find(ToLower(host));
+        return root == _roots.end() ? nullptr : root->second;
+    }
+
+    std::vector<std::string> ResourceRegistry::GetRootHosts() const {
+        std::scoped_lock lock(_mutex);
+        std::vector<std::string> hosts;
+        hosts.reserve(_roots.size());
+        for (const auto &[host, provider] : _roots) {
+            hosts.push_back(host);
+        }
+        return hosts;
+    }
+
     CefRefPtr<CefResourceHandler> ResourceRegistry::Create(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, const CefString &schemeName, CefRefPtr<CefRequest> request) {
         const std::string url = request->GetURL().ToString();
 

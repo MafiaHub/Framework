@@ -39,6 +39,13 @@ namespace Framework::GUI {
 
     View::~View() {
         if (_browser) {
+            // CloseBrowser is asynchronous and the handlers and client outlive
+            // this view: unhook everything that points back into it first.
+            _cefClient->DetachSdk();
+            _cefClient->SetViewEventCallback({});
+            _loadHandler->SetViewEventCallback({});
+            _displayHandler->SetViewEventCallback({});
+            _lifeSpanHandler->SetViewEventCallback({});
             _browser->GetHost()->CloseBrowser(true);
             _browser = nullptr;
         }
@@ -256,11 +263,9 @@ namespace Framework::GUI {
     }
 
     void View::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-        if (!_browser || !_shouldDisplay || !_hasFocus) {
+        if (!HasBrowser() || !_shouldDisplay || !_hasFocus) {
             return;
         }
-
-        auto host = _browser->GetHost();
 
         // Handle mouse wheel separately. Unlike the client-relative messages below,
         // WM_MOUSEWHEEL reports the cursor in screen coordinates, and packs the
@@ -273,7 +278,7 @@ namespace Framework::GUI {
             cefEvent.y = pt.y - _y;
             cefEvent.modifiers = CefKeyboardModifiers() | CefMouseButtons(GET_KEYSTATE_WPARAM(wParam));
             int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-            host->SendMouseWheelEvent(cefEvent, 0, delta);
+            SendMouseWheel(cefEvent, 0, delta);
             return;
         }
 
@@ -285,37 +290,37 @@ namespace Framework::GUI {
         switch (msg) {
         case WM_MOUSEMOVE: {
             _cursorPos = {cefEvent.x, cefEvent.y};
-            host->SendMouseMoveEvent(cefEvent, false);
+            SendMouseMove(cefEvent, false);
         } break;
         case WM_LBUTTONDOWN: {
             _isMouseDown = true;
-            host->SendMouseClickEvent(cefEvent, MBT_LEFT, false, 1);
+            SendMouseClick(cefEvent, MBT_LEFT, false, 1);
         } break;
         case WM_LBUTTONDBLCLK: {
             _isMouseDown = true;
-            host->SendMouseClickEvent(cefEvent, MBT_LEFT, false, 2);
+            SendMouseClick(cefEvent, MBT_LEFT, false, 2);
         } break;
         case WM_LBUTTONUP: {
             _isMouseDown = false;
-            host->SendMouseClickEvent(cefEvent, MBT_LEFT, true, 1);
+            SendMouseClick(cefEvent, MBT_LEFT, true, 1);
         } break;
         case WM_RBUTTONDOWN: {
-            host->SendMouseClickEvent(cefEvent, MBT_RIGHT, false, 1);
+            SendMouseClick(cefEvent, MBT_RIGHT, false, 1);
         } break;
         case WM_RBUTTONUP: {
-            host->SendMouseClickEvent(cefEvent, MBT_RIGHT, true, 1);
+            SendMouseClick(cefEvent, MBT_RIGHT, true, 1);
         } break;
         case WM_MBUTTONDOWN: {
-            host->SendMouseClickEvent(cefEvent, MBT_MIDDLE, false, 1);
+            SendMouseClick(cefEvent, MBT_MIDDLE, false, 1);
         } break;
         case WM_MBUTTONUP: {
-            host->SendMouseClickEvent(cefEvent, MBT_MIDDLE, true, 1);
+            SendMouseClick(cefEvent, MBT_MIDDLE, true, 1);
         } break;
         }
     }
 
     void View::ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-        if (!_browser || !_shouldDisplay || !_hasFocus) {
+        if (!HasBrowser() || !_shouldDisplay || !_hasFocus) {
             return;
         }
 
@@ -361,7 +366,57 @@ namespace Framework::GUI {
         cefEvent.native_key_code = static_cast<int>(lParam);
         cefEvent.modifiers       = CefKeyboardModifiers();
 
-        _browser->GetHost()->SendKeyEvent(cefEvent);
+        SendKeyEvent(cefEvent);
+    }
+
+    void View::SendMouseMove(const CefMouseEvent &event, bool mouseLeave) {
+        if (_browser) {
+            _browser->GetHost()->SendMouseMoveEvent(event, mouseLeave);
+        }
+    }
+
+    void View::SendMouseClick(const CefMouseEvent &event, cef_mouse_button_type_t button, bool mouseUp, int clickCount) {
+        if (_browser) {
+            _browser->GetHost()->SendMouseClickEvent(event, button, mouseUp, clickCount);
+        }
+    }
+
+    void View::SendMouseWheel(const CefMouseEvent &event, int deltaX, int deltaY) {
+        if (_browser) {
+            _browser->GetHost()->SendMouseWheelEvent(event, deltaX, deltaY);
+        }
+    }
+
+    void View::SendKeyEvent(const CefKeyEvent &event) {
+        if (_browser) {
+            _browser->GetHost()->SendKeyEvent(event);
+        }
+    }
+
+    void View::ImeSetComposition(const std::wstring &text, int selectionStart, int selectionEnd) {
+        if (_browser) {
+            _browser->GetHost()->ImeSetComposition(text, {}, CefRange::InvalidRange(), CefRange(selectionStart, selectionEnd));
+        }
+    }
+
+    void View::ImeCommitText(const std::wstring &text) {
+        if (_browser) {
+            _browser->GetHost()->ImeCommitText(text, CefRange::InvalidRange(), 0);
+        }
+    }
+
+    void View::ImeFinishComposingText(bool keepSelection) {
+        if (_browser) {
+            _browser->GetHost()->ImeFinishComposingText(keepSelection);
+        }
+    }
+
+    void View::SetOnBeforeBrowseCallback(CEF::OnBeforeBrowseCallback cb) {
+        if (!_lifeSpanHandler) {
+            Framework::Logging::GetLogger("Web")->error("View {}: a before-browse callback needs an in-process browser; ignored", _id);
+            return;
+        }
+        _lifeSpanHandler->SetOnBeforeBrowseCallback(std::move(cb));
     }
 
     void View::SetZIndex(int z) {

@@ -34,6 +34,9 @@ namespace Framework::GUI::CEF {
         static constexpr int kMaxRenderProcessReloads = 3;
         int _renderProcessReloads                     = 0;
 
+        // OnBeforeClose ran: CEF holds nothing of this browser's client any more.
+        bool _closed = false;
+
         // Live browsers (pre-OnBeforeClose); Shutdown drains this before CefShutdown.
         static std::atomic<int> s_liveBrowserCount;
 
@@ -65,13 +68,18 @@ namespace Framework::GUI::CEF {
         static std::string HostFromURL(const CefString &url);
 
         void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
-        bool OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int popupId, const CefString &targetUrl, const CefString &targetFrameName, CefLifeSpanHandler::WindowOpenDisposition targetDisposition, bool userGesture, const CefPopupFeatures &popupFeatures, CefWindowInfo &windowInfo, CefRefPtr<CefClient> &client, CefBrowserSettings &settings, CefRefPtr<CefDictionaryValue> &extraInfo, bool *noJavascriptAccess) override;
+        bool OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int popupId, const CefString &targetUrl, const CefString &targetFrameName, CefLifeSpanHandler::WindowOpenDisposition targetDisposition, bool userGesture, const CefPopupFeatures &popupFeatures,
+            CefWindowInfo &windowInfo, CefRefPtr<CefClient> &client, CefBrowserSettings &settings, CefRefPtr<CefDictionaryValue> &extraInfo, bool *noJavascriptAccess) override;
         void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
         bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool userGesture, bool isRedirect) override;
         void OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser, TerminationStatus status, int errorCode, const CefString &errorString) override;
 
         CefRefPtr<CefBrowser> GetBrowser() const {
             return _browser;
+        }
+
+        bool HasClosed() const {
+            return _closed;
         }
 
         IMPLEMENT_REFCOUNTING(LifeSpanHandler);

@@ -9,11 +9,14 @@
 #pragma once
 
 #include <function2/function2.hpp>
+
+#include <cstdint>
 #include <string>
 
 namespace Framework::GUI {
     // Reported by CEF, never by page content — page events go through SDK::BroadcastEvent instead.
-    enum class ViewEvent {
+    // Crosses the remote host's pipe (gui/remote/protocol.h): one byte, range-checked against Count.
+    enum class ViewEvent : uint8_t {
         Created,
         LoadingStart,
         DocumentReady,
@@ -26,13 +29,15 @@ namespace Framework::GUI {
         ResourceBlocked,
         ConsoleMessage,
         OriginChange,
+        Count,
     };
 
-    enum class ViewBlockReason {
+    enum class ViewBlockReason : uint8_t {
         CrossOrigin,
         InvalidURL,
         HostFilter,
         ForeignEvent,
+        Count,
     };
 
     // Each event fills only its own fields; the rest keep their defaults.
