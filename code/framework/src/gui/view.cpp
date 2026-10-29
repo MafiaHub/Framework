@@ -57,6 +57,8 @@ namespace Framework::GUI {
     delete state[button];
     if (!chord) state.held = false;
 }))js";
+
+        constexpr const char *kSideButtonReset = "delete window[Symbol.for('mafiahub.sideButtons')];";
     } // namespace
 
     View::View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager): _id(id), _graphicsRenderer(graphicsRenderer), _manager(manager), _width(0), _height(0), _x(0), _y(0), _z(0) {
@@ -302,6 +304,11 @@ namespace Framework::GUI {
         if (wParam & MK_XBUTTON2)
             buttons |= 16;
         return buttons;
+    }
+
+    void View::ResetSideButtons() {
+        _sideButtonClicks[0] = _sideButtonClicks[1] = 0;
+        EvaluateScript(kSideButtonReset);
     }
 
     void View::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {

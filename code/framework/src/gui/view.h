@@ -96,6 +96,9 @@ namespace Framework::GUI {
 
         void EmitViewEvent(const ViewEventData &data);
 
+        // Drops side-button presses in flight, here and in the page: their releases no longer reach this view
+        void ResetSideButtons();
+
       public:
         View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);
         virtual ~View();
@@ -120,7 +123,7 @@ namespace Framework::GUI {
 
         void Focus(bool enable) {
             if (enable != _hasFocus) {
-                _sideButtonClicks[0] = _sideButtonClicks[1] = 0;
+                ResetSideButtons();
             }
             _hasFocus = enable;
             if (_browser) {
@@ -133,6 +136,9 @@ namespace Framework::GUI {
         }
 
         void Display(bool enable) {
+            if (enable != _shouldDisplay) {
+                ResetSideButtons();
+            }
             _shouldDisplay = enable;
         }
 
