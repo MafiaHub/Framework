@@ -166,6 +166,10 @@ fw_sdk_manifest(MAFIANET_VERSION "${MAFIANET_PIN_VERSION}")
 set(OPENSSL_USE_STATIC_LIBS ON)
 set(HTTPLIB_REQUIRE_OPENSSL ON)
 set(HTTPLIB_COMPILE ON)
+# 0.63 also links zstd and Brotli whenever the build machine has them (system packages via
+# pkg-config), which the exported SDK cannot re-find; downloads use neither.
+set(HTTPLIB_USE_BROTLI_IF_AVAILABLE OFF)
+set(HTTPLIB_USE_ZSTD_IF_AVAILABLE OFF)
 set(HTTPLIB_INSTALL OFF CACHE BOOL "" FORCE) # exported with the Framework targets below instead
 add_subdirectory(httplib)
 set_property(TARGET httplib PROPERTY INTERFACE_SOURCES "")
