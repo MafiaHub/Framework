@@ -542,7 +542,7 @@ MODULE(asset_http, {
 
         httplib::Client client(fixture.Origin());
         EQUALS(client.Get("/files/map.fwpak")->status, 403);
-        EQUALS(client.Get("/files/map.fwpak", {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, std::string(64, '0')}})->status, 403);
+        EQUALS(client.Get("/files/map.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, std::string(64, '0')}})->status, 403);
         EQUALS(fixture.Status("/files/map.fwpak"), 200);
     });
 
@@ -569,7 +569,7 @@ MODULE(asset_http, {
         EQUALS(fixture.token != first, true);
         EQUALS(fixture.Status("/files/map.fwpak"), 200);
         httplib::Client client(fixture.Origin());
-        EQUALS(client.Get("/files/map.fwpak", {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, first}})->status, 403);
+        EQUALS(client.Get("/files/map.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, first}})->status, 403);
     });
 
     IT("tells a request past the transfer cap to retry, and frees the slot when the transfer ends", {
@@ -737,7 +737,7 @@ MODULE(asset_http, {
         const std::string second = fixture.files.Grant(AssetHttpTest::kPeer + 1);
         const auto statusWith    = [&fixture](const std::string &token) {
             httplib::Client client(fixture.Origin());
-            return client.Get("/files/map.fwpak", {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, token}})->status;
+            return client.Get("/files/map.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, token}})->status;
         };
 
         EQUALS(second != fixture.token, true);

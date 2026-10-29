@@ -2,7 +2,7 @@ find_package(GTest)
 
 if(GTest_FOUND)
     if(NOT TARGET GTest::gtest_main AND TARGET GTest::Main)
-	# CMake <3.20
+        # CMake <3.20
         add_library(GTest::gtest_main INTERFACE IMPORTED)
         target_link_libraries(GTest::gtest_main INTERFACE GTest::Main)
     endif()
@@ -24,22 +24,24 @@ else()
     FetchContent_MakeAvailable(gtest)
 endif()
 
-add_executable(httplib-test test.cc)
+find_package(CURL REQUIRED)
+
+add_executable(httplib-test test.cc include_httplib.cc $<$<BOOL:${WIN32}>:include_windows_h.cc>)
 target_compile_options(httplib-test PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8;/bigobj>")
-target_link_libraries(httplib-test PRIVATE httplib GTest::gtest_main)
+target_link_libraries(httplib-test PRIVATE httplib GTest::gtest_main CURL::libcurl)
 gtest_discover_tests(httplib-test)
 
-execute_process(
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/www www
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/www2 www2
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/www3 www3
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_LIST_DIR}/ca-bundle.crt ca-bundle.crt
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_LIST_DIR}/image.jpg image.jpg
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    COMMAND_ERROR_IS_FATAL ANY
+file(
+    COPY www www2 www3 ca-bundle.crt image.jpg
+    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 if(HTTPLIB_IS_USING_OPENSSL)
+    if (OPENSSL_VERSION VERSION_LESS "3.2.0")
+      set(OPENSSL_X509_FLAG "-x509")
+    else()
+      set(OPENSSL_X509_FLAG "-x509v1")
+    endif()
     find_program(OPENSSL_COMMAND
         NAMES openssl
         PATHS ${OPENSSL_INCLUDE_DIR}/../bin
@@ -59,7 +61,7 @@ if(HTTPLIB_IS_USING_OPENSSL)
         COMMAND_ERROR_IS_FATAL ANY
     )
     execute_process(
-        COMMAND ${OPENSSL_COMMAND} req -x509 -new -config ${CMAKE_CURRENT_LIST_DIR}/test.conf -key key.pem -sha256 -days 3650 -nodes -out cert2.pem -extensions SAN
+        COMMAND ${OPENSSL_COMMAND} req ${OPENSSL_X509_FLAG} -new -config ${CMAKE_CURRENT_LIST_DIR}/test.conf -key key.pem -sha256 -days 3650 -nodes -out cert2.pem -extensions SAN
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMAND_ERROR_IS_FATAL ANY
     )
@@ -70,7 +72,7 @@ if(HTTPLIB_IS_USING_OPENSSL)
         COMMAND_ERROR_IS_FATAL ANY
     )
     execute_process(
-        COMMAND ${OPENSSL_COMMAND} req -x509 -new -batch -config ${CMAKE_CURRENT_LIST_DIR}/test.rootCA.conf -key rootCA.key.pem -days 1024
+        COMMAND ${OPENSSL_COMMAND} req ${OPENSSL_X509_FLAG} -new -batch -config ${CMAKE_CURRENT_LIST_DIR}/test.rootCA.conf -key rootCA.key.pem -days 1024
         OUTPUT_FILE rootCA.cert.pem
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMAND_ERROR_IS_FATAL ANY
@@ -98,6 +100,65 @@ if(HTTPLIB_IS_USING_OPENSSL)
         COMMAND ${OPENSSL_COMMAND} req -new -batch -config ${CMAKE_CURRENT_LIST_DIR}/test.conf -key key_encrypted.pem
         COMMAND ${OPENSSL_COMMAND} x509 -days 3650 -req -signkey key_encrypted.pem
         OUTPUT_FILE cert_encrypted.pem
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND_ERROR_IS_FATAL ANY
+    )
+    # Encrypted client key: make an unencrypted key + cert first, then wrap the
+    # same key two ways. Mbed TLS 4.x dropped DES/PBES1, while Ubuntu's Mbed TLS
+    # 2.28 has no PBES2-AES, so ship both and let test.cc pick by version.
+    execute_process(
+        COMMAND ${OPENSSL_COMMAND} genrsa -out client_encrypted.tmp.key.pem 2048
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND_ERROR_IS_FATAL ANY
+    )
+    execute_process(
+        COMMAND ${OPENSSL_COMMAND} req -new -batch -config ${CMAKE_CURRENT_LIST_DIR}/test.conf -key client_encrypted.tmp.key.pem
+        COMMAND ${OPENSSL_COMMAND} x509 -days 370 -req -CA rootCA.cert.pem -CAkey rootCA.key.pem -CAcreateserial
+        OUTPUT_FILE client_encrypted.cert.pem
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND_ERROR_IS_FATAL ANY
+    )
+    execute_process(
+        COMMAND ${OPENSSL_COMMAND} pkcs8 -topk8 -v2 aes-256-cbc -in client_encrypted.tmp.key.pem -passout pass:test012! -out client_encrypted.key.pem
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND_ERROR_IS_FATAL ANY
+    )
+    execute_process(
+        COMMAND ${OPENSSL_COMMAND} pkcs8 -topk8 -v1 PBE-SHA1-3DES -in client_encrypted.tmp.key.pem -passout pass:test012! -out client_encrypted_pbes1.key.pem
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND_ERROR_IS_FATAL ANY
+    )
+    file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/client_encrypted.tmp.key.pem)
+    # Certificates for IP-host hostname verification regression tests.
+    # cert_ip_cn.pem: CN is an IPv4 literal with NO subjectAltName. An IP host
+    #                 must NOT be authenticated via the CN, so verifying it
+    #                 against this cert must fail.
+    execute_process(
+        COMMAND ${OPENSSL_COMMAND} req -x509 -key key.pem -sha256 -days 3650 -nodes -subj /CN=127.0.0.1 -out cert_ip_cn.pem
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND_ERROR_IS_FATAL ANY
+    )
+    # cert_ipv6.pem:  CN is an IPv6 literal plus an IPv6 iPAddress SAN for a
+    #                 different address. The SAN address must match; the CN
+    #                 address must be ignored.
+    execute_process(
+        COMMAND ${OPENSSL_COMMAND} req -x509 -key key.pem -sha256 -days 3650 -nodes -subj /CN=::1 -addext subjectAltName=IP:2001:db8::1 -out cert_ipv6.pem
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND_ERROR_IS_FATAL ANY
+    )
+    # cert_san_types.pem: the bytes of each SAN read as the other type:
+    #                 DNS:a.zz is 97.46.122.122, IP:42.46.122.122 is "*.zz".
+    execute_process(
+        COMMAND ${OPENSSL_COMMAND} req -x509 -key key.pem -sha256 -days 3650 -nodes -subj /CN=san-types -addext subjectAltName=DNS:a.zz,IP:42.46.122.122 -out cert_san_types.pem
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND_ERROR_IS_FATAL ANY
+    )
+    # cert_wildcard_san.pem: a leftmost wildcard next to one that is not
+    #                 leftmost. "*.leftmost.example.test" matches a single
+    #                 label; the wildcard in "www.*.example.test" must not be
+    #                 honoured.
+    execute_process(
+        COMMAND ${OPENSSL_COMMAND} req -x509 -key key.pem -sha256 -days 3650 -nodes -subj /CN=wildcard-san -addext subjectAltName=DNS:*.leftmost.example.test,DNS:www.*.example.test -out cert_wildcard_san.pem
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMAND_ERROR_IS_FATAL ANY
     )
