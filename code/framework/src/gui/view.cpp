@@ -32,20 +32,30 @@ namespace Framework::GUI {
     var target = document.elementFromPoint(x, y) || document.documentElement;
     var inner;
     while (target.shadowRoot && (inner = target.shadowRoot.elementFromPoint(x, y)) && inner !== target) target = inner;
+    var key = Symbol.for('mafiahub.sideButtons');
+    var state = window[key] || (window[key] = {});
+    var pointer = {pointerId: 1, pointerType: 'mouse', isPrimary: true};
     var init = {bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y,
         ctrlKey: ctrlKey, shiftKey: shiftKey, altKey: altKey, button: button, buttons: buttons};
     var chord = (buttons & ~(button === 3 ? 8 : 16)) !== 0;
     var cancelled = !target.dispatchEvent(new PointerEvent(chord ? 'pointermove' : down ? 'pointerdown' : 'pointerup',
-        Object.assign({pointerId: 1, pointerType: 'mouse', isPrimary: true, pressure: buttons ? 0.5 : 0}, init)));
+        Object.assign({pressure: buttons ? 0.5 : 0}, pointer, init)));
     // A cancelled pointerdown holds back mousedown/mouseup until every button is up; auxclick still fires.
-    var held = Symbol.for('mafiahub.cancelledPointerDown');
-    if (down && !chord) window[held] = cancelled;
+    if (down && !chord) state.held = cancelled;
     init.detail = detail;
-    if (!window[held]) target.dispatchEvent(new MouseEvent(down ? 'mousedown' : 'mouseup', init));
-    if (!down) {
-        target.dispatchEvent(new MouseEvent('auxclick', init));
-        if (!chord) window[held] = false;
+    if (!state.held) target.dispatchEvent(new MouseEvent(down ? 'mousedown' : 'mouseup', init));
+    if (down) {
+        state[button] = target;
+        return;
     }
+    // auxclick goes to the nearest element containing both the press and release targets
+    var up = function (node) { return node.parentNode || (node.nodeType === 11 ? node.host : null); };
+    var chain = [], node;
+    for (node = target; node; node = up(node)) chain.push(node);
+    for (node = state[button]; node && (node.nodeType !== 1 || chain.indexOf(node) < 0); node = up(node));
+    if (node) node.dispatchEvent(new PointerEvent('auxclick', Object.assign({}, pointer, init)));
+    delete state[button];
+    if (!chord) state.held = false;
 }))js";
     } // namespace
 
