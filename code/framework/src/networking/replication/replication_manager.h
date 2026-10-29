@@ -58,6 +58,9 @@ namespace Framework::Networking::Replication {
         // Interval inside nearDistance. Zero, the default, sends every tick: a type whose receivers
         // re-simulate between samples (input replay, interpolation) can take a lower near rate.
         uint32_t nearIntervalMs = 0;
+        // Always-visible entities are sent every tick unless this is set. A type that is always visible
+        // only so far viewers keep it (a player on everyone's map) can still take the far rate.
+        bool appliesToAlwaysVisible = false;
 
         // Distances are clamped to 0 <= nearDistance <= midDistance, so an inverted or negative band
         // cannot hand a far viewer the near interval.

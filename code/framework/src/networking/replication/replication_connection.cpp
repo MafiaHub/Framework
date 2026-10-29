@@ -92,11 +92,14 @@ namespace Framework::Networking::Replication {
             return 0;
         }
         const NetworkEntity *viewer = _relevantViewer;
-        if (entity == viewer || entity->ownerGUID == _viewerGUID || entity->streaming.alwaysVisible || entity->streaming.targetGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+        if (viewer->streaming.unthrottled || entity == viewer || entity->ownerGUID == _viewerGUID || entity->streaming.targetGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
             return 0;
         }
         const SerializeRateBands &bands = _manager->GetSerializeRateBands(entity->GetTypeId());
         if (bands.nearIntervalMs == 0 && bands.midIntervalMs == 0 && bands.farIntervalMs == 0) {
+            return 0;
+        }
+        if (entity->streaming.alwaysVisible && !bands.appliesToAlwaysVisible) {
             return 0;
         }
         const glm::vec3 delta = entity->position - viewer->position;
@@ -112,7 +115,11 @@ namespace Framework::Networking::Replication {
         if (selected[kTransformChannel] && transform.GetNumberOfBitsUsed() != 0) {
             const auto *entity      = static_cast<const NetworkEntity *>(replica);
             const uint32_t interval = TransformSendIntervalMs(entity);
-            if (interval > 0) {
+            if (_isServer && entity->GetTransformSource() == _viewerGUID) {
+                // The pose came from this peer; see NetworkEntity::GetTransformSource.
+                selected[kTransformChannel] = false;
+            }
+            else if (interval > 0) {
                 const auto it = _lastTransformSend.find(entity);
                 if (it != _lastTransformSend.end() && curTime >= it->second && curTime - it->second < interval) {
                     selected[kTransformChannel] = false;

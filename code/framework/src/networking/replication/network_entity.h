@@ -63,6 +63,16 @@ namespace Framework::Networking::Replication {
             return _good;
         }
 
+        // The plain bitstream (transform channel, construction, forced state) for a body that packs
+        // its own bits, or null on the delta and span-walking paths, which must go through Field.
+        // Report a short read with Fail().
+        MafiaNet::BitStream *PlainStream() const {
+            return _good ? _plain : nullptr;
+        }
+        void Fail() {
+            _good = false;
+        }
+
         template <typename T>
         void Field(T &value) {
             if (!_good) {
@@ -264,6 +274,9 @@ namespace Framework::Networking::Replication {
             bool isViewer      = false;  // drives a connection's interest set (the player's avatar); replicated
             float range        = 100.0f; // interest radius (world units): a viewer's reach, and an entity's own (see InterestGrid::SetUsesEntityRange)
             MafiaNet::PeerGuid targetGUID = MafiaNet::UNASSIGNED_PEER_GUID; // if set, streams only to this connection
+            // As a viewer: every entity in range, with no per-type budget or rate band. For a peer that
+            // simulates the world for others and so needs all of it at full rate, not a player's view.
+            bool unthrottled = false;
         };
         Streaming streaming;
 
@@ -291,6 +304,14 @@ namespace Framework::Networking::Replication {
         // every tick (ReplicaManager3 memcmp-dedupes it, so a motionless entity stops sending).
         // Override to quantize or extend; the default carries position/velocity/rotation.
         virtual void SerializeTransform(FieldSerializer &fields);
+
+        // Server: the peer whose reports this entity's pose relays, when that is not its owner (a
+        // server-owned entity a client moves by RPC). The transform channel is withheld from that
+        // peer, which already has the pose and would only get its own back a round trip late.
+        // Reliable state still reaches it, so a move the server makes has to travel there.
+        virtual MafiaNet::PeerGuid GetTransformSource() const {
+            return MafiaNet::UNASSIGNED_PEER_GUID;
+        }
 
         // Owning an entity -- simulating it for DelegationManager, say -- need
         // not mean owning its lifetime. Return false and the server refuses the

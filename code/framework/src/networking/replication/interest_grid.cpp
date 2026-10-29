@@ -274,7 +274,7 @@ namespace Framework::Networking::Replication {
                 continue;
             }
 
-            const uint32_t budget = BudgetFor(entity->GetTypeId());
+            const uint32_t budget = viewer->streaming.unthrottled ? 0 : BudgetFor(entity->GetTypeId());
             if (budget == 0) {
                 out.insert(entity);
                 continue;

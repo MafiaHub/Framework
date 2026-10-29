@@ -245,4 +245,178 @@ MODULE(snapshot_buffer, {
         buffer.Sample(1300, out);
         EQUALS(out.position.x, 1000.0f);
     });
+
+    IT("keeps estimating through an idle pause and rests until the sender resumes", {
+        TransformSnapshotBuffer buffer;
+        TransformSnapshot snap, out;
+        for (MafiaNet::Time time = 1000; time <= 1500; time += 50) {
+            buffer.Push(snap, time);
+        }
+        const float delay = buffer.EffectiveDelayMs();
+        snap.position.x   = 0.1f;
+        buffer.Push(snap, 4500); // Three seconds idle, then moving again.
+        EQUALS(buffer.EffectiveDelayMs(), delay);
+        EQUALS(buffer.IntervalMs(), 50.0f);
+        buffer.Sample(4400.0, out); // Still resting where it stopped, not part way across the pause.
+        EQUALS(out.position.x, 0.0f);
+        buffer.Sample(4475.0, out);
+        GREATER(out.position.x, 0.0f);
+    });
+
+    IT("moves the presentation clock without stepping when the sender changes rate band", {
+        SnapshotBufferConfig config;
+        config.minDelayMs     = 0.0f;
+        config.maxDelayMs     = 600.0f;
+        config.delayIntervals = 2.0f;
+        TransformSnapshotBuffer buffer(&config);
+        TransformSnapshot snap;
+        snap.velocity = glm::vec3(10.0f, 0.0f, 0.0f);
+        // 10 m/s, sampled every 33 ms, then every 133 ms from 3 s on (a farther band), arriving 40 ms late.
+        MafiaNet::Time sent = 1000;
+        double previous     = -1.0;
+        float lastX         = -1.0f;
+        float maxStep       = 0.0f;
+        int heldFrames      = 0;
+        for (double now = 1000.0; now < 9000.0; now += 16.0) {
+            while (static_cast<double>(sent) + 40.0 <= now) {
+                snap.position.x = static_cast<float>(sent - 1000) * 0.01f;
+                buffer.Push(snap, sent, static_cast<double>(sent) + 40.0);
+                sent += sent < 4000 ? 33 : 133;
+            }
+            const double renderTime = buffer.RenderTimeMs(now);
+            if (renderTime <= 0.0) {
+                continue;
+            }
+            if (previous >= 0.0) {
+                // Never backwards, and never faster than wall time plus twice the slew.
+                GREATEREQ(renderTime, previous);
+                LESSEREQ(renderTime - previous, 16.0 * 1.21);
+            }
+            previous = renderTime;
+            TransformSnapshot pose;
+            bool held = false;
+            buffer.Sample(renderTime, pose, &held);
+            // Past the startup latch on the first sample.
+            if (now < 1500.0) {
+                lastX = pose.position.x;
+                continue;
+            }
+            heldFrames += held ? 1 : 0;
+            if (lastX >= 0.0f) {
+                maxStep = std::max(maxStep, std::fabs(pose.position.x - lastX));
+            }
+            lastX = pose.position.x;
+        }
+        // 16 ms at 10 m/s is 0.16 m a frame; slewing may stretch that by at most a fifth.
+        LESSEREQ(maxStep, 0.2f);
+        EQUALS(heldFrames, 0);
+        // Settled on the slow band: two 133 ms intervals plus the 40 ms lateness.
+        GREATEREQ(buffer.EffectiveDelayMs(), 2.0f * 133.0f + 40.0f - 5.0f);
+    });
+
+    IT("glides through a stall of a moving sender without snapping back, and raises the delay", {
+        SnapshotBufferConfig config;
+        config.maxExtrapolationMs = 500.0f;
+        TransformSnapshotBuffer buffer(&config);
+        TransformSnapshot snap;
+        snap.velocity       = glm::vec3(10.0f, 0.0f, 0.0f);
+        MafiaNet::Time sent = 1000;
+        float lastX         = -1.0f;
+        float maxStep       = 0.0f;
+        float delayBefore   = 0.0f;
+        float delayAfter    = 0.0f;
+        for (double now = 1000.0; now < 5000.0; now += 16.0) {
+            while (static_cast<double>(sent) <= now) {
+                snap.position.x = static_cast<float>(sent - 1000) * 0.01f;
+                buffer.Push(snap, sent, static_cast<double>(sent));
+                // One 400 ms stall at 3 s: the samples in it never come.
+                sent += sent == 3000 ? 400 : 50;
+            }
+            if (now < 3000.0) {
+                delayBefore = buffer.EffectiveDelayMs();
+            }
+            else if (now < 3600.0) {
+                delayAfter = std::max(delayAfter, buffer.EffectiveDelayMs());
+            }
+            const double renderTime = buffer.RenderTimeMs(now);
+            if (renderTime <= 0.0) {
+                continue;
+            }
+            TransformSnapshot pose;
+            buffer.Sample(renderTime, pose);
+            if (now >= 1500.0 && lastX >= 0.0f) {
+                GREATEREQ(pose.position.x, lastX);
+                maxStep = std::max(maxStep, pose.position.x - lastX);
+            }
+            lastX = pose.position.x;
+        }
+        // 0.16 m a frame at 10 m/s; the render clock may run up to a fifth fast while it slews.
+        LESSEREQ(maxStep, 0.2f);
+        // The stall counts as jitter: three times a tenth of its 350 ms excess.
+        GREATER(delayAfter, delayBefore + 90.0f);
+    });
+
+    IT("rests through a long gap when the pose stood still despite its velocity", {
+        TransformSnapshotBuffer buffer;
+        TransformSnapshot snap, out;
+        snap.velocity = glm::vec3(2.0f, 0.0f, 0.0f); // Walking into a wall: velocity, no motion.
+        for (MafiaNet::Time time = 1000; time <= 1500; time += 50) {
+            buffer.Push(snap, time);
+        }
+        snap.position.x = 0.1f;
+        buffer.Push(snap, 3500);
+        EQUALS(buffer.IntervalMs(), 50.0f);
+        buffer.Sample(3400.0, out);
+        EQUALS(out.position.x, 0.0f);
+    });
+
+    IT("learns a rate band slower than the restart gap without stopping a moving body", {
+        SnapshotBufferConfig config;
+        config.maxDelayMs         = 800.0f;
+        config.maxExtrapolationMs = 400.0f;
+        TransformSnapshotBuffer buffer(&config);
+        TransformSnapshot snap;
+        snap.velocity = glm::vec3(10.0f, 0.0f, 0.0f);
+        // 100 ms (the near band), then 317 ms from 3 s on: a 200 ms band behind a ~117 ms host cadence.
+        MafiaNet::Time sent = 1000;
+        float lastX         = -1.0f;
+        float maxStep       = 0.0f;
+        int heldFrames      = 0;
+        for (double now = 1000.0; now < 12000.0; now += 16.0) {
+            while (static_cast<double>(sent) <= now) {
+                snap.position.x = static_cast<float>(sent - 1000) * 0.01f;
+                buffer.Push(snap, sent, static_cast<double>(sent));
+                sent += sent < 3000 ? 100 : 317;
+            }
+            const double renderTime = buffer.RenderTimeMs(now);
+            if (renderTime <= 0.0) {
+                continue;
+            }
+            TransformSnapshot pose;
+            bool held = false;
+            buffer.Sample(renderTime, pose, &held);
+            if (now < 1500.0) {
+                lastX = pose.position.x;
+                continue;
+            }
+            heldFrames += held ? 1 : 0;
+            GREATEREQ(pose.position.x, lastX);
+            maxStep = std::max(maxStep, pose.position.x - lastX);
+            lastX   = pose.position.x;
+        }
+        LESSEREQ(maxStep, 0.2f);
+        EQUALS(heldFrames, 0);
+        GREATER(buffer.IntervalMs(), 250.0f);
+    });
+
+    IT("samples fractional render times between whole milliseconds", {
+        TransformSnapshotBuffer buffer;
+        TransformSnapshot a, b, out;
+        a.velocity   = glm::vec3(1.0f, 0.0f, 0.0f);
+        b.position.x = 1.0f;
+        buffer.Push(a, 1000);
+        buffer.Push(b, 1100);
+        buffer.Sample(1050.5, out);
+        LESSER(std::fabs(out.position.x - 0.505f), 0.0001f);
+    });
 });
