@@ -984,21 +984,19 @@ MODULE(asset_http, {
     });
 
     IT("binds again after a failed bind", {
-        Framework::HTTP::Webserver holder;
+        Framework::HTTP::Webserver server;
+        // A documentation address (RFC 5737) no interface holds, so the bind fails on every platform; a port
+        // held by another socket would not, since httplib listens with SO_REUSEPORT where it exists.
+        EQUALS(server.Init("203.0.113.1", 42000, "") == Framework::HTTP::WebserverError::WEBSERVER_BIND_FAILED, true);
         std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
         int32_t port = 0;
         for (int attempt = 0; attempt < 8 && port == 0; ++attempt) {
             const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
-            if (holder.Init("127.0.0.1", candidate, "") == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
+            if (server.Init("127.0.0.1", candidate, "") == Framework::HTTP::WebserverError::WEBSERVER_NONE) {
                 port = candidate;
             }
         }
         NEQUALS(port, 0);
-
-        Framework::HTTP::Webserver server;
-        EQUALS(server.Init("127.0.0.1", port, "") == Framework::HTTP::WebserverError::WEBSERVER_BIND_FAILED, true);
-        holder.Shutdown();
-        EQUALS(server.Init("127.0.0.1", port, "") == Framework::HTTP::WebserverError::WEBSERVER_NONE, true);
         server.Shutdown();
     });
 
