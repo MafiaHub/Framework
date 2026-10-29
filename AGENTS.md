@@ -151,9 +151,9 @@ Other agents do not run these hooks; the rules still apply to them as written.
 - `code/tests/` - Framework tests
 - `vendors/` - Third-party dependencies that are not on vcpkg: MafiaNet, CEF, libnode, v8pp,
   FTL, steamworks, discord, and a handful of small hand-rolled libs. Four are kept here on
-  purpose despite having ports - physfs (the port builds every archiver), tracy (no
-  `TRACY_DELAYED_INIT`), imguizmo (port predates the ImGui 1.92 `AddPolyline` change) and
-  miniaudio (port ships only the header). Each carries the reason in `vendors/CMakeLists.txt`.
+  purpose despite having ports - physfs (the port builds every archiver), tracy (the port forces
+  `TRACY_ENABLE` and lacks the localhost-only options), imguizmo (port predates the ImGui 1.92
+  `AddPolyline` change) and miniaudio (port ships only the header). Each carries the reason in `vendors/CMakeLists.txt`.
   CEF is downloaded and unpacked into `vendors/cef` at configure time; set `FW_CEF_CACHE_DIR`
   (`-D` or an environment variable) to share one copy between checkouts and worktrees.
 - `vcpkg.json` - everything else, pinned by `builtin-baseline`. vcpkg is fetched and
