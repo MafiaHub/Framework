@@ -195,15 +195,16 @@ add_subdirectory(sfd)
 
 # Build Tracy (profiler client)
 #
-# Not taken from vcpkg: the port exposes on-demand, fibers, verbose and crash-handler, but not
-# TRACY_DELAYED_INIT. Several modules link TracyClient statically on Windows (the loader exe and
-# the client inside the game DLL), and without delayed init every one of them starts a profiler
-# instance at static-init time instead of on first zone use.
+# Not taken from vcpkg: the port exposes on-demand, fibers, verbose and crash-handler only. It forces
+# TRACY_ENABLE on, so FW_PROFILING could not compile the client out, and it cannot set the two
+# network options below, which have to be compiled into TracyClient itself.
+#
+# No TRACY_DELAYED_INIT: Tracy 0.14 removed the option. It is internal now (forced on Apple), and
+# outside manual lifetime it never deferred anything - the profiler still starts at static init.
 set(TRACY_ENABLE ${FW_PROFILING} CACHE BOOL "" FORCE)
 set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
 set(TRACY_STATIC ON CACHE BOOL "" FORCE)
 set(TRACY_FIBERS ON CACHE BOOL "" FORCE) # FTL job system runs on fibers
-set(TRACY_DELAYED_INIT ON CACHE BOOL "" FORCE)
 # Profiling is a local development tool. Left at Tracy's defaults, every process that enters a zone
 # listens on all interfaces and announces itself to the network, and a connected viewer can ask it for
 # files from disk. Connect the viewer to 127.0.0.1, or reach a remote host through a tunnel.
