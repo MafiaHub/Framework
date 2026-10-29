@@ -1,13 +1,14 @@
 //
 //  upload.cc
 //
-//  Copyright (c) 2019 Yuji Hirose. All rights reserved.
+//  Copyright (c) 2026 Yuji Hirose. All rights reserved.
 //  MIT License
 //
 
 #include <fstream>
 #include <httplib.h>
 #include <iostream>
+
 using namespace httplib;
 using namespace std;
 
@@ -37,20 +38,49 @@ int main(void) {
   });
 
   svr.Post("/post", [](const Request &req, Response &res) {
-    auto image_file = req.get_file_value("image_file");
-    auto text_file = req.get_file_value("text_file");
+    const auto &image_file = req.form.get_file("image_file");
+    const auto &text_file = req.form.get_file("text_file");
 
     cout << "image file length: " << image_file.content.length() << endl
          << "image file name: " << image_file.filename << endl
          << "text file length: " << text_file.content.length() << endl
          << "text file name: " << text_file.filename << endl;
 
+    // Reduce a client-supplied filename to a safe base name, or return an
+    // empty string if it cannot be trusted (empty, ".", "..", or contains a
+    // path separator).
+    auto sanitize = [](const string &filename) -> string {
+      auto name = filename.substr(filename.find_last_of("/\\") + 1);
+      if (name.empty() || name == "." || name == ".." ||
+          name.find(':') != string::npos) {
+        return string();
+      }
+      return name;
+    };
+
+    const auto image_name = sanitize(image_file.filename);
+    const auto text_name = sanitize(text_file.filename);
+    if (image_name.empty() || text_name.empty()) {
+      res.status = StatusCode::BadRequest_400;
+      return;
+    }
+
     {
-      ofstream ofs(image_file.filename, ios::binary);
+      ofstream ofs(image_name, ios::binary);
+      if (!ofs) {
+        res.status = StatusCode::InternalServerError_500;
+        res.set_content("Failed to write image file", "text/plain");
+        return;
+      }
       ofs << image_file.content;
     }
     {
-      ofstream ofs(text_file.filename);
+      ofstream ofs(text_name);
+      if (!ofs) {
+        res.status = StatusCode::InternalServerError_500;
+        res.set_content("Failed to write text file", "text/plain");
+        return;
+      }
       ofs << text_file.content;
     }
 

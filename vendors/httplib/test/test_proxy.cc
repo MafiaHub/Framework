@@ -1,3 +1,4 @@
+#include <chrono>
 #include <future>
 #include <gtest/gtest.h>
 #include <httplib.h>
@@ -5,32 +6,41 @@
 using namespace std;
 using namespace httplib;
 
-template <typename T>
-void ProxyTest(T& cli, bool basic) {
+std::string normalizeJson(const std::string &json) {
+  std::string result;
+  for (char c : json) {
+    if (c != ' ' && c != '\t' && c != '\n' && c != '\r') { result += c; }
+  }
+  return result;
+}
+
+template <typename T> void ProxyTest(T &cli, bool basic) {
   cli.set_proxy("localhost", basic ? 3128 : 3129);
-  auto res = cli.Get("/httpbin/get");
+  auto res = cli.Get("/get");
   ASSERT_TRUE(res != nullptr);
   EXPECT_EQ(StatusCode::ProxyAuthenticationRequired_407, res->status);
 }
 
 TEST(ProxyTest, NoSSLBasic) {
-  Client cli("nghttp2.org");
+  Client cli("httpbin");
   ProxyTest(cli, true);
 }
 
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+#ifdef CPPHTTPLIB_SSL_ENABLED
 TEST(ProxyTest, SSLBasic) {
-  SSLClient cli("nghttp2.org");
+  SSLClient cli("httpbin");
+  cli.enable_server_certificate_verification(false);
   ProxyTest(cli, true);
 }
 
 TEST(ProxyTest, NoSSLDigest) {
-  Client cli("nghttp2.org");
+  Client cli("httpbin");
   ProxyTest(cli, false);
 }
 
 TEST(ProxyTest, SSLDigest) {
-  SSLClient cli("nghttp2.org");
+  SSLClient cli("httpbin");
+  cli.enable_server_certificate_verification(false);
   ProxyTest(cli, false);
 }
 #endif
@@ -38,12 +48,12 @@ TEST(ProxyTest, SSLDigest) {
 // ----------------------------------------------------------------------------
 
 template <typename T>
-void RedirectProxyText(T& cli, const char *path, bool basic) {
+void RedirectProxyText(T &cli, const char *path, bool basic) {
   cli.set_proxy("localhost", basic ? 3128 : 3129);
   if (basic) {
     cli.set_proxy_basic_auth("hello", "world");
   } else {
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+#ifdef CPPHTTPLIB_SSL_ENABLED
     cli.set_proxy_digest_auth("hello", "world");
 #endif
   }
@@ -55,34 +65,36 @@ void RedirectProxyText(T& cli, const char *path, bool basic) {
 }
 
 TEST(RedirectTest, HTTPBinNoSSLBasic) {
-  Client cli("nghttp2.org");
-  RedirectProxyText(cli, "/httpbin/redirect/2", true);
+  Client cli("httpbin");
+  RedirectProxyText(cli, "/redirect/2", true);
 }
 
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+#ifdef CPPHTTPLIB_SSL_ENABLED
 TEST(RedirectTest, HTTPBinNoSSLDigest) {
-  Client cli("nghttp2.org");
-  RedirectProxyText(cli, "/httpbin/redirect/2", false);
+  Client cli("httpbin");
+  RedirectProxyText(cli, "/redirect/2", false);
 }
 
 TEST(RedirectTest, HTTPBinSSLBasic) {
-  SSLClient cli("nghttp2.org");
-  RedirectProxyText(cli, "/httpbin/redirect/2", true);
+  SSLClient cli("httpbin");
+  cli.enable_server_certificate_verification(false);
+  RedirectProxyText(cli, "/redirect/2", true);
 }
 
 TEST(RedirectTest, HTTPBinSSLDigest) {
-  SSLClient cli("nghttp2.org");
-  RedirectProxyText(cli, "/httpbin/redirect/2", false);
+  SSLClient cli("httpbin");
+  cli.enable_server_certificate_verification(false);
+  RedirectProxyText(cli, "/redirect/2", false);
 }
 #endif
 
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+#ifdef CPPHTTPLIB_SSL_ENABLED
 TEST(RedirectTest, YouTubeNoSSLBasic) {
   Client cli("youtube.com");
   RedirectProxyText(cli, "/", true);
 }
 
-TEST(RedirectTest, DISABLED_YouTubeNoSSLDigest) {
+TEST(RedirectTest, YouTubeNoSSLDigest) {
   Client cli("youtube.com");
   RedirectProxyText(cli, "/", false);
 }
@@ -93,6 +105,7 @@ TEST(RedirectTest, YouTubeSSLBasic) {
 }
 
 TEST(RedirectTest, YouTubeSSLDigest) {
+  std::this_thread::sleep_for(std::chrono::seconds(3));
   SSLClient cli("youtube.com");
   RedirectProxyText(cli, "/", false);
 }
@@ -100,8 +113,56 @@ TEST(RedirectTest, YouTubeSSLDigest) {
 
 // ----------------------------------------------------------------------------
 
-template <typename T>
-void BaseAuthTestFromHTTPWatch(T& cli) {
+#ifdef CPPHTTPLIB_SSL_ENABLED
+TEST(RedirectTest, TLSVerificationOnProxyRedirect) {
+  // Untrusted HTTPS server with self-signed cert
+  SSLServer untrusted_svr("cert.pem", "key.pem");
+  untrusted_svr.Get("/", [](const Request &, Response &res) {
+    res.set_content("MITM'd", "text/plain");
+  });
+
+  auto untrusted_port = untrusted_svr.bind_to_any_port("0.0.0.0");
+  auto t1 = thread([&]() { untrusted_svr.listen_after_bind(); });
+  auto se1 = detail::scope_exit([&] {
+    untrusted_svr.stop();
+    t1.join();
+  });
+
+  // HTTP server that redirects to the untrusted HTTPS server
+  // Use host.docker.internal so the proxy container can reach the host
+  Server redirect_svr;
+  redirect_svr.Get("/", [&](const Request &, Response &res) {
+    res.set_redirect(
+        "https://host.docker.internal:" + to_string(untrusted_port) + "/");
+  });
+
+  auto redirect_port = redirect_svr.bind_to_any_port("0.0.0.0");
+  auto t2 = thread([&]() { redirect_svr.listen_after_bind(); });
+  auto se2 = detail::scope_exit([&] {
+    redirect_svr.stop();
+    t2.join();
+  });
+
+  // Wait until servers are up
+  untrusted_svr.wait_until_ready();
+  redirect_svr.wait_until_ready();
+
+  // Client with proxy + follow_location, verification ON (default)
+  Client cli("host.docker.internal", redirect_port);
+  cli.set_proxy("localhost", 3128);
+  cli.set_proxy_basic_auth("hello", "world");
+  cli.set_follow_location(true);
+
+  auto res = cli.Get("/");
+
+  // Self-signed cert must be rejected
+  ASSERT_TRUE(res == nullptr);
+}
+#endif
+
+// ----------------------------------------------------------------------------
+
+template <typename T> void BaseAuthTestFromHTTPWatch(T &cli) {
   cli.set_proxy("localhost", 3128);
   cli.set_proxy_basic_auth("hello", "world");
 
@@ -114,9 +175,11 @@ void BaseAuthTestFromHTTPWatch(T& cli) {
   {
     auto res =
         cli.Get("/basic-auth/hello/world",
-                {make_basic_authentication_header("hello", "world")});
+                Headers{make_basic_authentication_header("hello", "world")});
     ASSERT_TRUE(res != nullptr);
-    EXPECT_EQ("{\n  \"authenticated\": true, \n  \"user\": \"hello\"\n}\n", res->body);
+    EXPECT_EQ(normalizeJson("{\"authenticated\":true,\"user\":\"hello\","
+                            "\"authorized\":true}\n"),
+              normalizeJson(res->body));
     EXPECT_EQ(StatusCode::OK_200, res->status);
   }
 
@@ -124,7 +187,9 @@ void BaseAuthTestFromHTTPWatch(T& cli) {
     cli.set_basic_auth("hello", "world");
     auto res = cli.Get("/basic-auth/hello/world");
     ASSERT_TRUE(res != nullptr);
-    EXPECT_EQ("{\n  \"authenticated\": true, \n  \"user\": \"hello\"\n}\n", res->body);
+    EXPECT_EQ(normalizeJson("{\"authenticated\":true,\"user\":\"hello\","
+                            "\"authorized\":true}\n"),
+              normalizeJson(res->body));
     EXPECT_EQ(StatusCode::OK_200, res->status);
   }
 
@@ -144,22 +209,22 @@ void BaseAuthTestFromHTTPWatch(T& cli) {
 }
 
 TEST(BaseAuthTest, NoSSL) {
-  Client cli("httpbin.org");
+  Client cli("httpbin");
   BaseAuthTestFromHTTPWatch(cli);
 }
 
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+#ifdef CPPHTTPLIB_SSL_ENABLED
 TEST(BaseAuthTest, SSL) {
-  SSLClient cli("httpbin.org");
+  SSLClient cli("httpbin");
+  cli.enable_server_certificate_verification(false);
   BaseAuthTestFromHTTPWatch(cli);
 }
 #endif
 
 // ----------------------------------------------------------------------------
 
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-template <typename T>
-void DigestAuthTestFromHTTPWatch(T& cli) {
+#ifdef CPPHTTPLIB_SSL_ENABLED
+template <typename T> void DigestAuthTestFromHTTPWatch(T &cli) {
   cli.set_proxy("localhost", 3129);
   cli.set_proxy_digest_auth("hello", "world");
 
@@ -170,18 +235,21 @@ void DigestAuthTestFromHTTPWatch(T& cli) {
   }
 
   {
+    // go-httpbin (the "httpbin" test double) only implements MD5 and
+    // SHA-256 for digest auth, so SHA-256 is as far as this can exercise
+    // the client's digest-auth algorithm selection end-to-end.
     std::vector<std::string> paths = {
         "/digest-auth/auth/hello/world/MD5",
         "/digest-auth/auth/hello/world/SHA-256",
-        "/digest-auth/auth/hello/world/SHA-512",
-        "/digest-auth/auth-int/hello/world/MD5",
     };
 
     cli.set_digest_auth("hello", "world");
     for (auto path : paths) {
       auto res = cli.Get(path.c_str());
       ASSERT_TRUE(res != nullptr);
-      EXPECT_EQ("{\n  \"authenticated\": true, \n  \"user\": \"hello\"\n}\n", res->body);
+      EXPECT_EQ(normalizeJson("{\"authenticated\":true,\"user\":\"hello\","
+                              "\"authorized\":true}\n"),
+                normalizeJson(res->body));
       EXPECT_EQ(StatusCode::OK_200, res->status);
     }
 
@@ -192,66 +260,67 @@ void DigestAuthTestFromHTTPWatch(T& cli) {
       EXPECT_EQ(StatusCode::Unauthorized_401, res->status);
     }
 
-    // NOTE: Until httpbin.org fixes issue #46, the following test is commented
-    // out. Please see https://httpbin.org/digest-auth/auth/hello/world
-    // cli.set_digest_auth("bad", "world");
-    // for (auto path : paths) {
-    //   auto res = cli.Get(path.c_str());
-    //   ASSERT_TRUE(res != nullptr);
-    //   EXPECT_EQ(StatusCode::Unauthorized_401, res->status);
-    // }
+    cli.set_digest_auth("bad", "world");
+    for (auto path : paths) {
+      auto res = cli.Get(path.c_str());
+      ASSERT_TRUE(res != nullptr);
+      EXPECT_EQ(StatusCode::Unauthorized_401, res->status);
+    }
   }
 }
 
 TEST(DigestAuthTest, SSL) {
-  SSLClient cli("httpbin.org");
+  SSLClient cli("httpbin");
+  cli.enable_server_certificate_verification(false);
   DigestAuthTestFromHTTPWatch(cli);
 }
 
 TEST(DigestAuthTest, NoSSL) {
-  Client cli("httpbin.org");
+  Client cli("httpbin");
   DigestAuthTestFromHTTPWatch(cli);
 }
 #endif
 
 // ----------------------------------------------------------------------------
 
-template <typename T>
-void KeepAliveTest(T& cli, bool basic) {
+template <typename T> void KeepAliveTest(T &cli, bool basic) {
   cli.set_proxy("localhost", basic ? 3128 : 3129);
   if (basic) {
     cli.set_proxy_basic_auth("hello", "world");
   } else {
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+#ifdef CPPHTTPLIB_SSL_ENABLED
     cli.set_proxy_digest_auth("hello", "world");
 #endif
   }
 
   cli.set_follow_location(true);
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+#ifdef CPPHTTPLIB_SSL_ENABLED
   cli.set_digest_auth("hello", "world");
 #endif
 
   {
-    auto res = cli.Get("/httpbin/get");
+    auto res = cli.Get("/get");
+    ASSERT_TRUE(res != nullptr);
     EXPECT_EQ(StatusCode::OK_200, res->status);
   }
   {
-    auto res = cli.Get("/httpbin/redirect/2");
+    auto res = cli.Get("/redirect/2");
+    ASSERT_TRUE(res != nullptr);
     EXPECT_EQ(StatusCode::OK_200, res->status);
   }
 
   {
     std::vector<std::string> paths = {
-        "/httpbin/digest-auth/auth/hello/world/MD5",
-        "/httpbin/digest-auth/auth/hello/world/SHA-256",
-        "/httpbin/digest-auth/auth/hello/world/SHA-512",
-        "/httpbin/digest-auth/auth-int/hello/world/MD5",
+        "/digest-auth/auth/hello/world/MD5",
+        "/digest-auth/auth/hello/world/SHA-256",
     };
 
-    for (auto path: paths) {
+    for (auto path : paths) {
       auto res = cli.Get(path.c_str());
-      EXPECT_EQ("{\n  \"authenticated\": true, \n  \"user\": \"hello\"\n}\n", res->body);
+      ASSERT_TRUE(res != nullptr);
+      auto body = normalizeJson(res->body);
+      EXPECT_TRUE(body.find("\"authenticated\":true") != std::string::npos);
+      EXPECT_TRUE(body.find("\"user\":\"hello\"") != std::string::npos);
       EXPECT_EQ(StatusCode::OK_200, res->status);
     }
   }
@@ -259,30 +328,69 @@ void KeepAliveTest(T& cli, bool basic) {
   {
     int count = 10;
     while (count--) {
-      auto res = cli.Get("/httpbin/get");
+      auto res = cli.Get("/get");
+      ASSERT_TRUE(res != nullptr);
       EXPECT_EQ(StatusCode::OK_200, res->status);
     }
   }
 }
 
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+#ifdef CPPHTTPLIB_SSL_ENABLED
 TEST(KeepAliveTest, NoSSLWithBasic) {
-  Client cli("nghttp2.org");
+  Client cli("httpbin");
   KeepAliveTest(cli, true);
 }
 
 TEST(KeepAliveTest, SSLWithBasic) {
-  SSLClient cli("nghttp2.org");
+  SSLClient cli("httpbin");
+  cli.enable_server_certificate_verification(false);
   KeepAliveTest(cli, true);
 }
 
 TEST(KeepAliveTest, NoSSLWithDigest) {
-  Client cli("nghttp2.org");
+  Client cli("httpbin");
   KeepAliveTest(cli, false);
 }
 
 TEST(KeepAliveTest, SSLWithDigest) {
-  SSLClient cli("nghttp2.org");
+  SSLClient cli("httpbin");
+  cli.enable_server_certificate_verification(false);
   KeepAliveTest(cli, false);
+}
+#endif
+
+// ----------------------------------------------------------------------------
+
+// The proxy needs the absolute-form target and its credentials, the origin
+// its own
+TEST(ProxyTest, NoSSLOpenStream) {
+  Client cli("httpbin");
+  cli.set_proxy("localhost", 3128);
+  cli.set_proxy_basic_auth("hello", "world");
+  cli.set_basic_auth("hello", "world");
+
+  auto handle = cli.open_stream("GET", "/basic-auth/hello/world");
+  ASSERT_TRUE(handle.response);
+  EXPECT_EQ(StatusCode::OK_200, handle.response->status);
+}
+
+#ifdef CPPHTTPLIB_SSL_ENABLED
+TEST(ProxyTest, SSLOpenStream) {
+  SSLClient cli("httpbin");
+  cli.enable_server_certificate_verification(false);
+  cli.set_proxy("localhost", 3128);
+  cli.set_proxy_basic_auth("hello", "world");
+
+  auto handle = cli.open_stream("GET", "/get");
+  ASSERT_TRUE(handle.response);
+  EXPECT_EQ(StatusCode::OK_200, handle.response->status);
+
+  std::string body;
+  char buf[8192];
+  ssize_t n;
+  while ((n = handle.read(buf, sizeof(buf))) > 0) {
+    body.append(buf, static_cast<size_t>(n));
+  }
+  EXPECT_FALSE(body.empty());
 }
 #endif
