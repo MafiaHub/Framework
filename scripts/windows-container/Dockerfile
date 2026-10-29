@@ -15,7 +15,7 @@ RUN git init /opt/msvc-wine && cd /opt/msvc-wine && \
     python3 vsdownload.py --accept-license --major 17 --architecture x64 x86 \
         --with-msbuild no --save-manifest --dest /opt/msvc
 
-ARG VCPKG_REVISION=5f96cd15fd745122cf27e0524606d6c1efc5fd07
+ARG VCPKG_REVISION=d4c0a46cb8f63e5c9fa007d13baf1cb3e43bf7e3
 RUN git init /opt/vcpkg && cd /opt/vcpkg && \
     git fetch --depth=1 https://github.com/microsoft/vcpkg.git ${VCPKG_REVISION} && \
     git checkout --detach FETCH_HEAD

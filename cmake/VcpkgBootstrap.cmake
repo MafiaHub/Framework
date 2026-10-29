@@ -8,7 +8,7 @@
 # port versions, so a different checkout does not change what gets built. FW_VCPKG_CHECKOUT_DIR picks
 # where the fetched checkout lives (a project building against the SDK keeps it beside the SDK).
 
-set(FW_VCPKG_PIN "5f96cd15fd745122cf27e0524606d6c1efc5fd07" CACHE STRING "vcpkg commit backing the vcpkg.json baseline")
+set(FW_VCPKG_PIN "d4c0a46cb8f63e5c9fa007d13baf1cb3e43bf7e3" CACHE STRING "vcpkg commit backing the vcpkg.json baseline" FORCE)
 
 # Deliberately not $ENV{VCPKG_ROOT}: vcvars64.bat exports it pointing at the Visual Studio bundle,
 # which ships vcpkg.exe with no ports tree. Override with -DFW_VCPKG_ROOT=<path> instead.
@@ -21,13 +21,28 @@ else()
         set(_fw_vcpkg_root "${CMAKE_CURRENT_LIST_DIR}/../vendors/vcpkg")
     endif()
 
+    find_package(Git REQUIRED)
     if(NOT EXISTS "${_fw_vcpkg_root}/scripts/buildsystems/vcpkg.cmake")
-        find_package(Git REQUIRED)
-        message(STATUS "Fetching vcpkg ${FW_VCPKG_PIN}")
         file(MAKE_DIRECTORY "${_fw_vcpkg_root}")
         execute_process(COMMAND "${GIT_EXECUTABLE}" init -q WORKING_DIRECTORY "${_fw_vcpkg_root}" COMMAND_ERROR_IS_FATAL ANY)
+        set(_fw_vcpkg_head "")
+    elseif(EXISTS "${_fw_vcpkg_root}/.git")
+        execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD WORKING_DIRECTORY "${_fw_vcpkg_root}"
+            OUTPUT_VARIABLE _fw_vcpkg_head OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    else()
+        # Not a repository of its own: rev-parse would answer for the enclosing Framework checkout,
+        # and the checkout below would rewrite that tree.
+        message(STATUS "vcpkg at ${_fw_vcpkg_root} is not a Git checkout; leaving it unchanged")
+        set(_fw_vcpkg_head "${FW_VCPKG_PIN}")
+    endif()
+
+    # A checkout fetched for an earlier pin lacks the new baseline commit, and vcpkg cannot resolve
+    # the manifest against it; move it, and rebuild the tool the new commit expects.
+    if(NOT _fw_vcpkg_head STREQUAL FW_VCPKG_PIN)
+        message(STATUS "Fetching vcpkg ${FW_VCPKG_PIN}")
         execute_process(COMMAND "${GIT_EXECUTABLE}" fetch --depth 1 -q https://github.com/microsoft/vcpkg.git "${FW_VCPKG_PIN}" WORKING_DIRECTORY "${_fw_vcpkg_root}" COMMAND_ERROR_IS_FATAL ANY)
         execute_process(COMMAND "${GIT_EXECUTABLE}" checkout -q FETCH_HEAD WORKING_DIRECTORY "${_fw_vcpkg_root}" COMMAND_ERROR_IS_FATAL ANY)
+        set(_fw_vcpkg_rebootstrap TRUE)
     endif()
 endif()
 
@@ -39,6 +54,11 @@ else()
     set(_fw_vcpkg_exe "${_fw_vcpkg_root}/vcpkg")
 endif()
 
+# Drop the old tool first: a bootstrap that fails part-way would otherwise leave it in place, and the
+# next configure, already on the pin, would never retry.
+if(_fw_vcpkg_rebootstrap)
+    file(REMOVE "${_fw_vcpkg_exe}")
+endif()
 if(NOT EXISTS "${_fw_vcpkg_exe}")
     message(STATUS "Bootstrapping vcpkg")
     execute_process(COMMAND "${_fw_vcpkg_bootstrap}" -disableMetrics WORKING_DIRECTORY "${_fw_vcpkg_root}" COMMAND_ERROR_IS_FATAL ANY)
