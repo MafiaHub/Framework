@@ -117,6 +117,14 @@ endfunction()
 # Writes the package files and the install rules that depend on everything the tree declared.
 # Called once, at the end of the root CMakeLists.
 function(fw_sdk_finalize)
+    # Building the services adapter from source only produces the MafiaHub Services archive (see
+    # .github/workflows/update_services.yml). Its target is private and outside the export set, so
+    # install(EXPORT) would reject FrameworkServer's link to it; such a tree ships no SDK.
+    if(MAFIAHUB_SERVICES_BUILD_FROM_SOURCE)
+        message(STATUS "MafiaHub Services built from source: skipping the SDK package")
+        return()
+    endif()
+
     set(_cmake_dir "${Framework_SOURCE_DIR}/cmake")
     set(_gen_dir "${CMAKE_BINARY_DIR}/sdk-package")
     file(MAKE_DIRECTORY "${_gen_dir}")
