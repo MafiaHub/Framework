@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <utils/lifecycle.h>
 #include <utils/safe_win32.h>
+#include <utils/lifecycle.h>
 
 #include <utils/error.h>
 #include <utils/result.h>

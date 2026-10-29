@@ -6,8 +6,8 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#include "path.h"
 #include "safe_win32.h"
+#include "path.h"
 
 #ifdef WIN32
 #include <ShlObj.h>

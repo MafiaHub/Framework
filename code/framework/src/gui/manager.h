@@ -8,10 +8,10 @@
 
 #pragma once
 
+#include <utils/safe_win32.h>
 #include <utils/error.h>
 #include <utils/lifecycle.h>
 #include <utils/result.h>
-#include <utils/safe_win32.h>
 
 #include <atomic>
 #include <filesystem>

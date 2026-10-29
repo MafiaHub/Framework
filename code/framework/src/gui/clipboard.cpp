@@ -8,8 +8,8 @@
 
 #include "clipboard.h"
 
-#include <string>
 #include <utils/safe_win32.h>
+#include <string>
 
 namespace Framework::GUI {
     void SystemClipboard::Clear() {
