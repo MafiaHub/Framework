@@ -28,6 +28,14 @@ namespace Framework::Voice {
         // never submitted, and may be called more than once for the same speaker.
         virtual void ReleaseSpeaker(uint64_t speaker) = 0;
 
+        // Milliseconds until the last audio submitted for `speaker` has played, or -1 when the
+        // sink cannot tell. VoiceClient uses it to time each frame's speech to when it is heard
+        // rather than when it arrived; without it the client assumes the nominal jitter depth.
+        virtual int64_t GetQueuedMs(uint64_t speaker) const {
+            (void)speaker;
+            return -1;
+        }
+
         // Once per tick, after that tick's Submits: where the listener is, and where each
         // speaker still being heard stands. `speakers` covers only those the client admitted
         // and has a position for, so a sink positions what it is given and leaves the rest

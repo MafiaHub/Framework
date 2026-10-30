@@ -44,6 +44,14 @@ namespace Framework::Voice {
         VoiceActivity,
     };
 
+    // One 20ms frame of speech, for a mouth to follow: its full-scale RMS level, and how bright
+    // it sounds in [0, 1] -- low for rounded vowels, high for "ee" and hissed consonants.
+    // Unsmoothed, so a mouth can close between syllables. All zero in silence.
+    struct SpeechFrame {
+        float level      = 0.0f;
+        float brightness = 0.0f;
+    };
+
     // Built-in output path: mixes audible speakers into the default playback device with
     // distance attenuation and constant-power panning.
     //
@@ -70,6 +78,7 @@ namespace Framework::Voice {
 
         void Submit(uint64_t speaker, const int16_t *mono, uint32_t samples) override;
         void ReleaseSpeaker(uint64_t speaker) override;
+        int64_t GetQueuedMs(uint64_t speaker) const override;
 
         // Listener and speakers replace the mixer's world as one atomic flip; published
         // separately, the mixer could pan a new orientation against a stale position.
@@ -274,8 +283,18 @@ namespace Framework::Voice {
 
         // --- speech envelope ---
 
-        // Smoothed loudness in [0, 1] of the frames handed to the sink, for mouth animation.
+        // Smoothed loudness in [0, 1] of the speaker's frames as they play, for a level meter.
         float GetSpeakerLevel(uint64_t speaker) const;
+
+        // The speaker's frame playing right now, timed by the sink's playout queue where the
+        // sink reports one (IVoiceSink::GetQueuedMs), so a mouth moves with what is heard
+        // rather than with when the packet landed. Zero once their audio has played out.
+        SpeechFrame GetSpeakerSpeech(uint64_t speaker) const;
+
+        // The newest frame the microphone sent; zero while nothing goes out.
+        SpeechFrame GetLocalSpeech() const {
+            return _localSpeech;
+        }
 
         // The tier a remote talker chose, for drawing it. Normal until the server says.
         VoiceTier GetSpeakerTier(uint64_t speaker) const;
@@ -391,13 +410,36 @@ namespace Framework::Voice {
         }
 
       private:
+        // Enough for the deepest playout queue the sink keeps before it trims.
+        static constexpr uint32_t kSpeechTrackFrames = 32;
+
+        struct TimedSpeech {
+            SpeechFrame frame;
+            int64_t playAt = 0;
+        };
+
         struct AdmittedSpeaker {
             uint64_t id       = 0;
             int64_t lastFrame = 0;
             float level       = 0.0f;
             // The level holds until the audio handed to the sink has played out.
             int64_t audioUntil = 0;
+            // Frames handed to the sink and not yet heard, oldest first, each with when it plays.
+            std::array<TimedSpeech, kSpeechTrackFrames> track {};
+            uint32_t trackHead  = 0;
+            uint32_t trackCount = 0;
+            // When the queued audio runs out, for a sink that cannot say (GetQueuedMs).
+            int64_t playEnd = 0;
+            // The frame being heard, until speechUntil.
+            SpeechFrame speech;
+            int64_t speechUntil = 0;
         };
+
+        static void PushSpeech(AdmittedSpeaker &admitted, const SpeechFrame &frame);
+        // Dates the newest `frames` of the track so the last of them ends at `endMs`.
+        static void ScheduleSpeech(AdmittedSpeaker &admitted, uint32_t frames, int64_t endMs);
+        // Moves `speech` to the frame playing at `nowMs`.
+        static void AdvanceSpeech(AdmittedSpeaker &admitted, int64_t nowMs);
 
         // Tagged with the pass that last touched it, so EndSpeakerUpdate can retire the rest.
         struct PlacementEntry {
@@ -461,6 +503,7 @@ namespace Framework::Voice {
         bool _preferenceSent  = false;
         float _localLevel     = 0.0f;
         float _inputLevel     = 0.0f;
+        SpeechFrame _localSpeech {};
         bool _localTalking    = false;
         // Holds our own state across a tick that drained no capture frame.
         int64_t _localTalkingUntil = 0;

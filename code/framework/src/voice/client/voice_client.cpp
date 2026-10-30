@@ -57,6 +57,45 @@ namespace Framework::Voice {
             return std::min(1.0f, static_cast<float>(std::sqrt(sum / samples)));
         }
 
+        // A frame's RMS frequency maps onto brightness in octaves from here to there: a rounded
+        // vowel sits near the low end, "ee" near the top, and hissed consonants saturate.
+        constexpr float kBrightnessLowHz  = 500.0f;
+        constexpr float kBrightnessHighHz = 2500.0f;
+
+        // How the sink's queue would stand on a talkspurt's first frame, for a sink that does
+        // not report it: the playout buffer waits for its starting depth before it plays.
+        constexpr int64_t kNominalPlayoutMs = static_cast<int64_t>(kJitterBufferFrames) * kFrameMs;
+
+        // The level is FrameLevel's. Brightness comes from the frame's first difference: its
+        // energy against the frame's is 2(1 - cos w) for a tone at w radians per sample, so
+        // solving for w gives the RMS frequency of the frame's spectrum.
+        SpeechFrame FrameSpeech(const int16_t *mono, uint32_t samples) {
+            if (mono == nullptr || samples < 2) {
+                return {};
+            }
+
+            double energy = 0.0;
+            double change = 0.0;
+            double last   = static_cast<double>(mono[0]) / 32768.0;
+            energy += last * last;
+            for (uint32_t i = 1; i < samples; i++) {
+                const double s = static_cast<double>(mono[i]) / 32768.0;
+                energy += s * s;
+                change += (s - last) * (s - last);
+                last = s;
+            }
+
+            const float level = std::min(1.0f, static_cast<float>(std::sqrt(energy / samples)));
+            if (level < kEnvelopeFloor) {
+                return {};
+            }
+
+            const double radians = std::acos(std::clamp(1.0 - change / (2.0 * energy), -1.0, 1.0));
+            const float hz       = std::max(1.0f, static_cast<float>(radians * kSampleRate / (2.0 * 3.14159265358979)));
+            const float octaves  = std::log2(hz / kBrightnessLowHz) / std::log2(kBrightnessHighHz / kBrightnessLowHz);
+            return {level, std::clamp(octaves, 0.0f, 1.0f)};
+        }
+
         // Time based, so the same speech drives the same mouth at 30 and at 200 frames a second.
         // A meter keeps what a mouth floors: the quiet end is exactly where a threshold is set.
         float FollowEnvelope(float current, float target, float dt, float floor = kEnvelopeFloor) {
@@ -148,6 +187,19 @@ namespace Framework::Voice {
         }
 
         _slots[slot].id.store(0, std::memory_order_release);
+    }
+
+    int64_t LocalVoiceSink::GetQueuedMs(uint64_t speaker) const {
+        const int slot = FindSlot(speaker);
+        if (slot < 0) {
+            return -1;
+        }
+
+        // A buffer still priming holds its audio until the target depth; one playing drains
+        // what it has. Available is approximate off the device thread, close enough for a face.
+        const PlayoutBuffer<kSpeakerRingSamples> &audio = _slots[slot].audio;
+        const size_t queued                             = std::max(audio.Available(), static_cast<size_t>(audio.GetTargetFrames()) * kFrameSamples);
+        return static_cast<int64_t>(queued * 1000 / kSampleRate);
     }
 
     void LocalVoiceSink::PublishWorld(const ListenerTransform &listener, const SpeakerPlacement *speakers, size_t count) {
@@ -598,6 +650,7 @@ namespace Framework::Voice {
         if (!_source->IsRunning()) {
             _localLevel   = 0.0f;
             _inputLevel   = 0.0f;
+            _localSpeech  = {};
             _localTalking = false;
             return;
         }
@@ -612,6 +665,7 @@ namespace Framework::Voice {
         float loudest   = 0.0f;
         float heard     = 0.0f;
         bool sent       = false;
+        SpeechFrame newest {};
         // Push-to-talk's gate does not depend on the level, so with the key up there is nothing
         // to denoise for: the frame is thrown away. Voice activation gates on the denoised
         // level, so it has to process every frame.
@@ -654,6 +708,7 @@ namespace Framework::Voice {
 
             _voice.SendFrame(_self, _frame.data());
             loudest = std::max(loudest, level);
+            newest  = FrameSpeech(_frame.data(), static_cast<uint32_t>(_frame.size()));
             sent    = true;
         }
 
@@ -670,11 +725,13 @@ namespace Framework::Voice {
 
         // From what we send, so a blocked transmit reads as silence. A tick with no frame holds.
         if (frames > 0) {
-            _localLevel = FollowEnvelope(_localLevel, sent ? loudest : 0.0f, _envelopeStep);
-            _inputLevel = FollowEnvelope(_inputLevel, heard, _envelopeStep, kInputMeterFloor);
+            _localLevel  = FollowEnvelope(_localLevel, sent ? loudest : 0.0f, _envelopeStep);
+            _inputLevel  = FollowEnvelope(_inputLevel, heard, _envelopeStep, kInputMeterFloor);
+            _localSpeech = newest;
         }
         else if (!gateOpen) {
-            _localLevel = FollowEnvelope(_localLevel, 0.0f, _envelopeStep);
+            _localLevel  = FollowEnvelope(_localLevel, 0.0f, _envelopeStep);
+            _localSpeech = {};
         }
     }
 
@@ -701,13 +758,6 @@ namespace Framework::Voice {
 
         const int64_t nowMs = Utils::Time::GetTime();
 
-        // RakVoice drops a speaker from the active list the moment they stop, so decay here.
-        for (AdmittedSpeaker &admitted : _admitted) {
-            if (admitted.id != 0 && nowMs >= admitted.audioUntil) {
-                admitted.level = FollowEnvelope(admitted.level, 0.0f, _envelopeStep);
-            }
-        }
-
         _voice.GetActiveSpeakers(_activeSpeakers);
 
         for (unsigned i = 0; i < _activeSpeakers.Size(); i++) {
@@ -724,7 +774,6 @@ namespace Framework::Voice {
             // Drained admitted or not: the decode is already paid for, and leaving frames
             // queued only delays the audio handed back once a slot opens up.
             bool received     = false;
-            float loudest     = 0.0f;
             int64_t submitted = 0;
             while (_voice.ReceiveFrameFrom(guid, _frame.data())) {
                 if (!admissionTried) {
@@ -734,17 +783,35 @@ namespace Framework::Voice {
 
                 if (slot >= 0 && _sink != nullptr) {
                     _sink->Submit(speaker, _frame.data(), kFrameSamples);
-                    loudest = std::max(loudest, FrameLevel(_frame.data(), kFrameSamples));
+                    PushSpeech(_admitted[slot], FrameSpeech(_frame.data(), kFrameSamples));
                     submitted++;
                 }
                 received = true;
             }
 
             if (received && slot >= 0) {
-                _admitted[slot].lastFrame  = nowMs;
-                _admitted[slot].audioUntil = nowMs + submitted * kFrameMs + kEnvelopeHoldSlackMs;
-                _admitted[slot].level      = FollowEnvelope(_admitted[slot].level, loudest, _envelopeStep);
+                AdmittedSpeaker &admitted = _admitted[slot];
+                admitted.lastFrame        = nowMs;
+                admitted.audioUntil       = nowMs + submitted * kFrameMs + kEnvelopeHoldSlackMs;
+                if (submitted > 0) {
+                    // Played back to back after whatever is still queued. The sink knows the
+                    // queue; failing that, a talkspurt starts the nominal depth from now.
+                    const int64_t queuedMs = _sink->GetQueuedMs(speaker);
+                    const int64_t endMs    = queuedMs >= 0 ? nowMs + queuedMs : std::max(admitted.playEnd, nowMs + kNominalPlayoutMs - kFrameMs) + submitted * kFrameMs;
+                    admitted.playEnd       = endMs;
+                    ScheduleSpeech(admitted, static_cast<uint32_t>(submitted), endMs);
+                }
             }
+        }
+
+        // RakVoice drops a speaker from the active list the moment they stop, so the level
+        // follows the frame being heard, and decays once their audio has played out.
+        for (AdmittedSpeaker &admitted : _admitted) {
+            if (admitted.id == 0) {
+                continue;
+            }
+            AdvanceSpeech(admitted, nowMs);
+            admitted.level = FollowEnvelope(admitted.level, admitted.speech.level, _envelopeStep);
         }
 
         for (size_t i = 0; i < _admitted.size(); i++) {
@@ -812,10 +879,9 @@ namespace Framework::Voice {
     int VoiceClient::AdmitSpeaker(uint64_t speaker, int64_t nowMs) {
         for (size_t i = 0; i < _admitted.size(); i++) {
             if (_admitted[i].id == 0) {
-                _admitted[i].id         = speaker;
-                _admitted[i].lastFrame  = nowMs;
-                _admitted[i].level      = 0.0f;
-                _admitted[i].audioUntil = 0;
+                _admitted[i]           = {};
+                _admitted[i].id        = speaker;
+                _admitted[i].lastFrame = nowMs;
                 return static_cast<int>(i);
             }
         }
@@ -842,10 +908,8 @@ namespace Framework::Voice {
         }
 
         ReleaseAdmitted(farthest);
-        _admitted[farthest].id         = speaker;
-        _admitted[farthest].lastFrame  = nowMs;
-        _admitted[farthest].level      = 0.0f;
-        _admitted[farthest].audioUntil = 0;
+        _admitted[farthest].id        = speaker;
+        _admitted[farthest].lastFrame = nowMs;
         return farthest;
     }
 
@@ -858,10 +922,7 @@ namespace Framework::Voice {
             _sink->ReleaseSpeaker(_admitted[slot].id);
         }
 
-        _admitted[slot].id         = 0;
-        _admitted[slot].lastFrame  = 0;
-        _admitted[slot].level      = 0.0f;
-        _admitted[slot].audioUntil = 0;
+        _admitted[slot] = {};
     }
 
     bool VoiceClient::IsSpeakerTalking(uint64_t speaker) const {
@@ -888,6 +949,56 @@ namespace Framework::Voice {
 
         const int slot = FindAdmitted(speaker);
         return slot >= 0 ? _admitted[slot].level : 0.0f;
+    }
+
+    SpeechFrame VoiceClient::GetSpeakerSpeech(uint64_t speaker) const {
+        // 0 marks a free slot, which FindAdmitted would match.
+        if (speaker == 0) {
+            return {};
+        }
+
+        const int slot = FindAdmitted(speaker);
+        return slot >= 0 ? _admitted[slot].speech : SpeechFrame {};
+    }
+
+    void VoiceClient::PushSpeech(AdmittedSpeaker &admitted, const SpeechFrame &frame) {
+        // Full only when the sink is far deeper than it ever plays; the oldest goes unheard.
+        if (admitted.trackCount == kSpeechTrackFrames) {
+            admitted.trackHead = (admitted.trackHead + 1) % kSpeechTrackFrames;
+            admitted.trackCount--;
+        }
+        admitted.track[(admitted.trackHead + admitted.trackCount) % kSpeechTrackFrames] = {frame, 0};
+        admitted.trackCount++;
+    }
+
+    void VoiceClient::ScheduleSpeech(AdmittedSpeaker &admitted, uint32_t frames, int64_t endMs) {
+        const uint32_t dated = std::min(frames, admitted.trackCount);
+        for (uint32_t i = 0; i < dated; i++) {
+            const uint32_t index         = (admitted.trackHead + admitted.trackCount - dated + i) % kSpeechTrackFrames;
+            admitted.track[index].playAt = endMs - static_cast<int64_t>(dated - i) * kFrameMs;
+        }
+
+        // A sink that trimmed its queue plays the new frames sooner than the old dates allow;
+        // pull the frames still waiting ahead of them in, so the track stays in play order.
+        int64_t limit = endMs - static_cast<int64_t>(dated + 1) * kFrameMs;
+        for (uint32_t i = admitted.trackCount - dated; i > 0; i--) {
+            TimedSpeech &waiting = admitted.track[(admitted.trackHead + i - 1) % kSpeechTrackFrames];
+            waiting.playAt       = std::min(waiting.playAt, limit);
+            limit                = waiting.playAt - kFrameMs;
+        }
+    }
+
+    void VoiceClient::AdvanceSpeech(AdmittedSpeaker &admitted, int64_t nowMs) {
+        while (admitted.trackCount > 0 && admitted.track[admitted.trackHead].playAt <= nowMs) {
+            const TimedSpeech &due = admitted.track[admitted.trackHead];
+            admitted.speech        = due.frame;
+            admitted.speechUntil   = due.playAt + kFrameMs;
+            admitted.trackHead     = (admitted.trackHead + 1) % kSpeechTrackFrames;
+            admitted.trackCount--;
+        }
+        if (nowMs >= admitted.speechUntil) {
+            admitted.speech = {};
+        }
     }
 
     void VoiceClient::BeginSpeakerUpdate() {
