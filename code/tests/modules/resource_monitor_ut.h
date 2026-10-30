@@ -216,15 +216,16 @@ MODULE(resource_monitor, {
     IT("charges each resource for its own script when one calls another", {
         using namespace Framework::Scripting;
         TestManagerHelper::Cleanup();
-        // Busy-waits, so each burn is exactly as long as asked whatever the build.
+        // Busy-waits on performance.now(), so each burn is at least as long as asked whatever the build: Date.now() is
+        // whole milliseconds, and a 20 ms burn on it can end after 19.
         ResourceIsolationTest::WriteResource("monitor-bank", R"(
-            const burn = (ms) => { const end = Date.now() + ms; while (Date.now() < end) {} };
+            const burn = (ms) => { const end = performance.now() + ms; while (performance.now() < end) {} };
             Exports.register('api', { work(ms) { burn(ms); return ms; } });
             Events.on('audit', () => burn(200));
         )",
             "\"api\"");
         ResourceIsolationTest::WriteResource("monitor-teller", R"(
-            const burn = (ms) => { const end = Date.now() + ms; while (Date.now() < end) {} };
+            const burn = (ms) => { const end = performance.now() + ms; while (performance.now() < end) {} };
             const api = Exports.get('monitor-bank', 'api');
             setTimeout(() => { burn(20); api.work(30); Events.emit('audit'); __record('done', 1); }, 500);
         )");
@@ -245,27 +246,39 @@ MODULE(resource_monitor, {
             engine.CloseMonitorTick();
             engine.Tick();
         };
+        const auto started = std::chrono::steady_clock::now();
         frame();
-        const auto before         = engine.GetRuntimeStats();
-        const auto *tellerAtStart = Find(before, "monitor-teller");
-        const auto *bankAtStart   = Find(before, "monitor-bank");
-        EQUALS((tellerAtStart != nullptr && bankAtStart != nullptr), true);
         EQUALS(TestManagerHelper::RecordedValue("done"), -1);
 
-        // Past a second, so the heaps have been sampled too.
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
-        while (std::chrono::steady_clock::now() < deadline) {
+        // Only the frame the timer ran in: idle ticks around it cost far more on a slow runner than on a fast one.
+        const auto chargedMs = [](const std::vector<RuntimeStats> &from, const std::vector<RuntimeStats> &to, const std::string &name) {
+            const auto *start = Find(from, name);
+            const auto *end   = Find(to, name);
+            return start && end ? (end->scriptSeconds - start->scriptSeconds) * 1000.0 : -1.0;
+        };
+        double tellerMs = -1.0;
+        double bankMs   = -1.0;
+        while (TestManagerHelper::RecordedValue("done") != 1 && std::chrono::steady_clock::now() < started + std::chrono::seconds(5)) {
+            const auto before = engine.GetRuntimeStats();
             frame();
+            const auto after = engine.GetRuntimeStats();
+            if (TestManagerHelper::RecordedValue("done") == 1) {
+                tellerMs = chargedMs(before, after, "monitor-teller");
+                bankMs   = chargedMs(before, after, "monitor-bank");
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         EQUALS(TestManagerHelper::RecordedValue("done"), 1);
 
+        // Past a second, so the heaps have been sampled too.
+        while (std::chrono::steady_clock::now() < started + std::chrono::milliseconds(1200)) {
+            frame();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
         const auto after        = engine.GetRuntimeStats();
         const auto *tellerStats = Find(after, "monitor-teller");
         const auto *bankStats   = Find(after, "monitor-bank");
         EQUALS((tellerStats != nullptr && bankStats != nullptr), true);
-        const double tellerMs = (tellerStats->scriptSeconds - tellerAtStart->scriptSeconds) * 1000.0;
-        const double bankMs   = (bankStats->scriptSeconds - bankAtStart->scriptSeconds) * 1000.0;
         GREATEREQ(tellerMs, 20.0);
         LESSER(tellerMs, 70.0);
         GREATEREQ(bankMs, 230.0);
