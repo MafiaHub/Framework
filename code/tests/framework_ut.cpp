@@ -53,6 +53,7 @@
 #include "modules/d3d12_ui_compositor_ut.h"
 #include "modules/world_text_layout_ut.h"
 // The hooking layer, and so the pattern table, is Windows-only.
+#include "modules/hooking_call_ut.h"
 #include "modules/pattern_hints_ut.h"
 #include "modules/pattern_table_ut.h"
 #include "modules/physical_keys_ut.h"
@@ -113,6 +114,7 @@ int main() {
 #ifdef _WIN32
     UNIT_MODULE(d3d12_ui_compositor);
     UNIT_MODULE(world_text_layout);
+    UNIT_MODULE(hooking_call);
     UNIT_MODULE(pattern_hints);
     UNIT_MODULE(pattern_table);
     UNIT_MODULE(physical_keys);
