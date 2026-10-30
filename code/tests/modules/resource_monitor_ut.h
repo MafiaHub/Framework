@@ -80,7 +80,8 @@ MODULE(resource_monitor, {
         monitor.Leave(t0 + 46ms);
         monitor.EndTick(t0 + 50ms);
 
-        const auto *stats = Find(monitor.Snapshot(), "a");
+        const auto snapshot = monitor.Snapshot();
+        const auto *stats   = Find(snapshot, "a");
         EQUALS(stats->scriptMsPerTick, 20.0);
         EQUALS(stats->scriptMsMaxTick, 30.0);
         EQUALS(stats->scriptSeconds, 0.04);
@@ -95,7 +96,8 @@ MODULE(resource_monitor, {
         monitor.Leave(t0 + 15ms);
         monitor.EndTick(t0 + 20ms);
 
-        const auto *stats = Find(monitor.Snapshot(), "a");
+        const auto snapshot = monitor.Snapshot();
+        const auto *stats   = Find(snapshot, "a");
         EQUALS(stats->scriptMsPerTick, 7.5);
         EQUALS(stats->scriptMsMaxTick, 10.0);
     });
@@ -131,7 +133,8 @@ MODULE(resource_monitor, {
         monitor.EndTick(t0 + 2s);
 
         // Only the second that had a figure counts.
-        const auto *stats = Find(monitor.Snapshot(), "a");
+        const auto snapshot = monitor.Snapshot();
+        const auto *stats   = Find(snapshot, "a");
         EQUALS(stats->gcMsPerSecond, 12.0);
         EQUALS(stats->gcPauses, static_cast<uint64_t>(5));
         EQUALS(stats->heapUsedBytes, static_cast<uint64_t>(2000));
@@ -183,17 +186,19 @@ MODULE(resource_monitor, {
         ResourceIsolationTest::WriteResource("monitor-bank", R"(
             const burn = (ms) => { const end = Date.now() + ms; while (Date.now() < end) {} };
             Exports.register('api', { work(ms) { burn(ms); return ms; } });
-            Events.on('audit', () => burn(60));
+            Events.on('audit', () => burn(200));
         )",
             "\"api\"");
         ResourceIsolationTest::WriteResource("monitor-teller", R"(
             const burn = (ms) => { const end = Date.now() + ms; while (Date.now() < end) {} };
             const api = Exports.get('monitor-bank', 'api');
-            setTimeout(() => { burn(30); api.work(40); Events.emit('audit'); __record('done', 1); }, 500);
+            setTimeout(() => { burn(20); api.work(30); Events.emit('audit'); __record('done', 1); }, 500);
         )");
 
         NodeEngine engine;
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        // Every burn at least 70 ms from the threshold, so a scheduler pause on a busy runner cannot cross it.
+        engine.GetMonitor().SetSlowThresholdMs(100.0);
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
         ResourceManager manager(&engine, config);
@@ -227,12 +232,12 @@ MODULE(resource_monitor, {
         EQUALS((tellerStats != nullptr && bankStats != nullptr), true);
         const double tellerMs = (tellerStats->scriptSeconds - tellerAtStart->scriptSeconds) * 1000.0;
         const double bankMs   = (bankStats->scriptSeconds - bankAtStart->scriptSeconds) * 1000.0;
-        GREATEREQ(tellerMs, 30.0);
+        GREATEREQ(tellerMs, 20.0);
         LESSER(tellerMs, 70.0);
-        GREATEREQ(bankMs, 100.0);
-        LESSER(bankMs, 140.0);
-        // Only the bank's 60 ms handler is over the default threshold: its 40 ms export call is not, and the teller is
-        // not blamed for the bank's time inside its own timer.
+        GREATEREQ(bankMs, 230.0);
+        LESSER(bankMs, 300.0);
+        // Only the bank's 200 ms handler is over the threshold: its 30 ms export call is not, and the teller is not
+        // blamed for the bank's time inside its own timer.
         EQUALS(bankStats->slowReports, static_cast<uint64_t>(1));
         EQUALS(tellerStats->slowReports, static_cast<uint64_t>(0));
         GREATER(bankStats->heapUsedBytes, static_cast<uint64_t>(0));
