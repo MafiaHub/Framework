@@ -632,6 +632,7 @@ namespace Framework::Networking::Replication {
                 if (entity != viewer && entity->ownerGUID == guid) {
                     SetOwner(entity, MafiaNet::UNASSIGNED_PEER_GUID);
                 }
+                entity->streaming.Forget(guid);
             });
             if (viewer) {
                 DestroyEntity(viewer);
