@@ -9,6 +9,7 @@
 #include "state_bag.h"
 
 #include "../engine_helpers.h"
+#include "../resource_monitor.h"
 #include "../scripting_catalog.h"
 
 #include <core_modules.h>
@@ -188,10 +189,19 @@ namespace Framework::Scripting::Builtins {
             change.hadPrevious ? FromStateValue(isolate, context, change.previous) : v8::Local<v8::Value>(v8::Undefined(isolate)),
         };
 
-        // A throwing listener is its own bug and must not take down the write that raised it.
-        v8::TryCatch tryCatch(isolate);
-        (void)entry->second.callback.Get(isolate)->Call(context, v8::Undefined(isolate), 3, args);
-        tryCatch.Reset();
+        // Charged to the listener's resource, not the writer's. Off the main thread the monitor is absent.
+        auto *monitor        = ResourceMonitor::Current();
+        const double charged = monitor ? monitor->ChargedMs(isolate, ResourceMonitor::Clock::now()) : 0.0;
+        {
+            ResourceMonitor::Scope scope(isolate);
+            // A throwing listener is its own bug and must not take down the write that raised it.
+            v8::TryCatch tryCatch(isolate);
+            (void)entry->second.callback.Get(isolate)->Call(context, v8::Undefined(isolate), 3, args);
+            tryCatch.Reset();
+        }
+        if (monitor) {
+            monitor->ReportOwnTime(isolate, "state change listener for", change.key, charged, ResourceMonitor::Clock::now());
+        }
     }
 
     void StateBag::Unsubscribe(v8::Isolate *isolate, uint32_t id) {

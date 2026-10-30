@@ -49,6 +49,9 @@
 // Emits a log message into the profiler timeline.
 #define FW_PROFILE_MESSAGE(txt, size) TracyMessage(txt, size)
 
+// Whether a profiler is connected now (always false when compiled out), to skip building what only it reads.
+#define FW_PROFILE_CONNECTED() TracyIsConnected
+
 // Names the current thread in profiler output.
 #define FW_PROFILE_THREAD(name) tracy::SetThreadName(name)
 

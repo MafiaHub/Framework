@@ -11,6 +11,7 @@
 #include "replication_manager.h"
 
 #include <logging/logger.h>
+#include <utils/profiler.h>
 
 #include <mafianet/virtual_world.h>
 
@@ -323,6 +324,7 @@ namespace Framework::Networking::Replication {
         if (!_isServer || !_manager) {
             return;
         }
+        FW_PROFILE_SCOPE_N("Replication::DelegationPass");
         _passPending = false;
 
         _lastPass = MafiaNet::GetTime();

@@ -16,6 +16,9 @@
 #include <node.h>
 #include <uv.h>
 
+#include "resource_monitor.h"
+
+#include <chrono>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -67,13 +70,32 @@ namespace Framework::Scripting {
          */
         void Tick();
 
+        // Names the runtime in profiler zones and GC messages (the resource, or "server").
+        void SetName(std::string name) {
+            _name = std::move(name);
+        }
+
+        const std::string &GetName() const {
+            return _name;
+        }
+
+        // Heap figures and the collector's running totals. Locks the isolate, so nothing may be running in it.
+        RuntimeSample Sample() const;
+
       private:
         NodeRuntime() = default;
+
+        static void OnGCPrologue(v8::Isolate *isolate, v8::GCType type, v8::GCCallbackFlags flags, void *data);
+        static void OnGCEpilogue(v8::Isolate *isolate, v8::GCType type, v8::GCCallbackFlags flags, void *data);
 
         node::MultiIsolatePlatform *_platform = nullptr;
         std::unique_ptr<node::CommonEnvironmentSetup> _setup;
         node::Environment *_env = nullptr;
         v8::Isolate *_isolate   = nullptr;
+        std::string _name       = "starting";
+        std::chrono::steady_clock::time_point _gcStart;
+        uint64_t _gcPauses = 0;
+        double _gcPauseMs  = 0.0;
     };
 
 } // namespace Framework::Scripting

@@ -12,6 +12,7 @@
 #include "replication/replication_manager.h"
 
 #include <logging/logger.h>
+#include <utils/profiler.h>
 
 namespace Framework::Networking {
     NetworkPeer::NetworkPeer() {
@@ -102,8 +103,11 @@ namespace Framework::Networking {
 
         // Receive() updates every plugin before each packet; the replication pass runs on the first
         // one only, ahead of this drain's packets, which the next pass then serializes.
+        FW_PROFILE_SCOPE_N("Networking::Receive");
+        int64_t packets = 0;
         _replicationManager->BeginNetworkUpdate();
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
+            ++packets;
             if (_packet->length == 0) {
                 continue;
             }
@@ -124,6 +128,7 @@ namespace Framework::Networking {
                 Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
             }
         }
+        FW_PROFILE_VALUE(packets);
         _replicationManager->EndNetworkUpdate();
     }
 
