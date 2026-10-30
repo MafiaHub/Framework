@@ -13,6 +13,7 @@
 #include "replication_manager.h"
 
 #include <mafianet/get_time.h>
+#include <utils/profiler.h>
 
 #include <algorithm>
 #include <cstring>
@@ -50,6 +51,7 @@ namespace Framework::Networking::Replication {
             _relevantValid = false;
             return;
         }
+        FW_PROFILE_SCOPE_N("Replication::QueryReplicaList");
 
         // Dimension changes, ownership changes and lifecycle invalidation bypass the phase delay.
         const bool worldChanged = GetVirtualWorld() != viewer->GetVirtualWorld();
@@ -58,6 +60,7 @@ namespace Framework::Networking::Replication {
         const uint32_t urgentGeneration = _manager->InterestUrgentGeneration();
         const bool urgent               = !_relevantValid || _interestStale || _relevantViewer != viewer || worldChanged || _relevantUrgentGeneration != urgentGeneration;
         if (_interestRefresh.Due(MafiaNet::GetTime(), _manager->InterestRefreshInterval(), GetRakNetGUID().g, urgent, _relevantGeneration != generation)) {
+            FW_PROFILE_SCOPE_N("Replication::CollectInterest");
             _previousRelevant.swap(_relevant);
             _relevant.clear();
             _manager->CollectInterest(viewer, viewerGUID, _previousRelevant, _relevant);
@@ -85,6 +88,7 @@ namespace Framework::Networking::Replication {
                 existingReplicasToDestroy.Push(entity, _FILE_AND_LINE_);
             }
         }
+        FW_PROFILE_VALUE(static_cast<int64_t>(_relevant.size()));
     }
 
     uint32_t ReplicationConnection::TransformSendIntervalMs(const NetworkEntity *entity) const {

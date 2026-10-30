@@ -9,6 +9,7 @@
 #include "module.h"
 
 #include <logging/logger.h>
+#include <utils/profiler.h>
 
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/chat.h>
@@ -177,6 +178,7 @@ namespace Framework::Integrations::Server::Scripting {
         }
 
         if (_resourceManager) {
+            FW_PROFILE_SCOPE_N("Scripting::ResourceUpkeep");
             // Process scheduled restarts
             _resourceManager->ProcessScheduledRestarts();
             // Dev-mode: poll resource files and hot-reload on change
@@ -185,6 +187,7 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Process pending message responses
         if (_nodeEngine && _nodeEngine->IsInitialized() && _resourceManager) {
+            FW_PROFILE_SCOPE_N("Scripting::PendingResponses");
             Framework::Scripting::EngineScope scope(_nodeEngine.get());
             v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();

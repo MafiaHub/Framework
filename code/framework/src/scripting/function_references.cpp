@@ -8,6 +8,9 @@
 
 #include "function_references.h"
 #include "engine_helpers.h"
+#include "resource_monitor.h"
+
+#include <utils/profiler.h>
 
 #include <v8pp/convert.hpp>
 
@@ -383,12 +386,18 @@ namespace Framework::Scripting {
                 Throw(isolate, "The function belongs to a resource that has stopped");
                 return {};
             }
-            Runtime &owner = ownerIt->second;
+            Runtime &owner                  = ownerIt->second;
+            v8::Isolate *const ownerIsolate = owner.isolate;
+            FW_PROFILE_SCOPE_N("Scripting::CrossCall");
+            FW_PROFILE_TEXT(owner.name.c_str(), owner.name.size());
 
             std::optional<TransferredValue> result;
             std::optional<TransferredValue> thrown;
-            uint64_t settlement = 0;
+            uint64_t settlement  = 0;
+            auto *monitor        = ResourceMonitor::Current();
+            const double charged = monitor ? monitor->ChargedMs(ownerIsolate, ResourceMonitor::Clock::now()) : 0.0;
             {
+                ResourceMonitor::Scope scope(ownerIsolate);
                 Entered entered(owner);
                 v8::TryCatch tryCatch(owner.isolate);
                 const auto ownerHooks = Hooks(ownerId);
@@ -425,6 +434,11 @@ namespace Framework::Scripting {
                         thrown = ErrorValue("Return value: " + copied.GetError());
                     }
                 }
+            }
+            // Event and message dispatch ask for an outcome and report their own handlers; an export call is reported here.
+            if (monitor && returned == Returned::Value) {
+                const auto callerIt = runtimes.find(callerId);
+                monitor->ReportOwnTime(ownerIsolate, "export call from", callerIt != runtimes.end() ? std::string_view(callerIt->second.name) : std::string_view(), charged, ResourceMonitor::Clock::now());
             }
 
             const auto hooks = Hooks(callerId);
@@ -522,6 +536,8 @@ namespace Framework::Scripting {
             if (owned->resolver.IsEmpty() || caller == state.runtimes.end()) {
                 return;
             }
+            FW_PROFILE_SCOPE_N("Scripting::CrossSettle");
+            FW_PROFILE_TEXT(caller->second.name.c_str(), caller->second.name.size());
 
             v8::Isolate *isolate       = info.GetIsolate();
             v8::Local<v8::Value> value = info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>();
@@ -540,6 +556,8 @@ namespace Framework::Scripting {
                 copied = state.CopyOut(isolate, isolate->GetCurrentContext(), value, *state.Hooks(owned->owner), "The promise was rejected");
             }
 
+            // The copy above ran in the owner, which is ticking; rebuilding and resolving is the caller's.
+            ResourceMonitor::Scope charged(caller->second.isolate);
             Entered entered(caller->second);
             v8::Local<v8::Promise::Resolver> resolver = owned->resolver.Get(caller->second.isolate);
             v8::TryCatch tryCatch(caller->second.isolate);
@@ -688,10 +706,13 @@ namespace Framework::Scripting {
         }
         v8::Local<v8::Context> context = caller->GetCurrentContext();
         State::Runtime &ownerRuntime   = state.runtimes.at(ownerId);
+        FW_PROFILE_SCOPE_N("Scripting::CrossFetch");
+        FW_PROFILE_TEXT(ownerRuntime.name.c_str(), ownerRuntime.name.size());
 
         TransferredValue copied;
         std::string error;
         {
+            ResourceMonitor::Scope charged(owner);
             State::Entered entered(ownerRuntime);
             v8::TryCatch tryCatch(owner);
             v8::Local<v8::Value> value;

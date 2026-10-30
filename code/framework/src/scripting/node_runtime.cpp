@@ -8,7 +8,15 @@
 
 #include "node_runtime.h"
 
+#include <utils/profiler.h>
+
+#include <fmt/format.h>
+
 namespace Framework::Scripting {
+    namespace {
+        // A message per pause this long or longer: shorter scavenges would flood the timeline.
+        constexpr double kGCReportMs = 1.0;
+    } // namespace
 
     std::unique_ptr<NodeRuntime> NodeRuntime::Create(node::MultiIsolatePlatform *platform, const std::vector<std::string> &args, const std::vector<std::string> &execArgs, node::EnvironmentFlags::Flags flags, std::string_view bootstrap, std::string &error) {
         // CommonEnvironmentSetup gives every runtime a fresh isolate and its own uv loop.
@@ -33,6 +41,12 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(runtime->_isolate);
         v8::Context::Scope contextScope(runtime->_setup->context());
 
+        // Every runtime pauses its own heap on this thread, so a long pause is a server tick lost to one resource.
+        // The runtime outlives its isolate's last collection: the destructor disposes the isolate inside its body.
+        const auto pauses = static_cast<v8::GCType>(v8::kGCTypeScavenge | v8::kGCTypeMinorMarkSweep | v8::kGCTypeMarkSweepCompact);
+        runtime->_isolate->AddGCPrologueCallback(&NodeRuntime::OnGCPrologue, runtime.get(), pauses);
+        runtime->_isolate->AddGCEpilogueCallback(&NodeRuntime::OnGCEpilogue, runtime.get(), pauses);
+
         const std::string source(bootstrap);
         if (node::LoadEnvironment(runtime->_env, source.c_str()).IsEmpty()) {
             error = "Failed to load Node.js environment";
@@ -40,6 +54,25 @@ namespace Framework::Scripting {
         }
 
         return runtime;
+    }
+
+    void NodeRuntime::OnGCPrologue(v8::Isolate *, v8::GCType, v8::GCCallbackFlags, void *data) {
+        static_cast<NodeRuntime *>(data)->_gcStart = std::chrono::steady_clock::now();
+    }
+
+    void NodeRuntime::OnGCEpilogue(v8::Isolate *isolate, v8::GCType type, v8::GCCallbackFlags, void *data) {
+        auto *runtime   = static_cast<NodeRuntime *>(data);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - runtime->_gcStart).count();
+        ++runtime->_gcPauses;
+        runtime->_gcPauseMs += ms;
+        if (ms < kGCReportMs || !FW_PROFILE_CONNECTED()) {
+            return;
+        }
+        v8::HeapStatistics heap;
+        isolate->GetHeapStatistics(&heap);
+        const char *kind          = (type & v8::kGCTypeMarkSweepCompact) ? "mark-compact" : ((type & v8::kGCTypeMinorMarkSweep) ? "minor mark-sweep" : "scavenge");
+        const std::string message = fmt::format("GC {} {:.1f} ms in {} (heap {} MB)", kind, ms, runtime->_name, heap.used_heap_size() >> 20);
+        FW_PROFILE_MESSAGE(message.c_str(), message.size());
     }
 
     NodeRuntime::~NodeRuntime() {
@@ -59,6 +92,22 @@ namespace Framework::Scripting {
         return _setup->context();
     }
 
+    RuntimeSample NodeRuntime::Sample() const {
+        RuntimeSample sample;
+        sample.gcPauses  = _gcPauses;
+        sample.gcPauseMs = _gcPauseMs;
+
+        v8::Locker locker(_isolate);
+        v8::Isolate::Scope isolateScope(_isolate);
+        v8::HeapStatistics heap;
+        _isolate->GetHeapStatistics(&heap);
+        sample.heapUsedBytes  = heap.used_heap_size();
+        sample.heapTotalBytes = heap.total_heap_size();
+        sample.heapLimitBytes = heap.heap_size_limit();
+        sample.externalBytes  = heap.external_memory();
+        return sample;
+    }
+
     void NodeRuntime::Tick() {
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolateScope(_isolate);
@@ -66,17 +115,29 @@ namespace Framework::Scripting {
         v8::Context::Scope contextScope(_setup->context());
 
         // Process microtasks (Promise continuations, async/await)
-        _isolate->PerformMicrotaskCheckpoint();
+        {
+            FW_PROFILE_SCOPE_N("Scripting::Microtasks");
+            _isolate->PerformMicrotaskCheckpoint();
+        }
 
-        // Run pending libuv events (non-blocking)
-        uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
+        // Run pending libuv events (non-blocking): timers, I/O callbacks and setImmediate
+        {
+            FW_PROFILE_SCOPE_N("Scripting::Loop");
+            uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
+        }
 
         // Run this isolate's foreground platform tasks. Not DrainTasks(): it first waits for every background task in
         // the process, so with a runtime per resource each tick would block on all their GC and compile work.
-        _platform->FlushForegroundTasks(_isolate);
+        {
+            FW_PROFILE_SCOPE_N("Scripting::PlatformTasks");
+            _platform->FlushForegroundTasks(_isolate);
+        }
 
         // Process any microtasks that were queued by I/O callbacks or platform tasks
-        _isolate->PerformMicrotaskCheckpoint();
+        {
+            FW_PROFILE_SCOPE_N("Scripting::Microtasks");
+            _isolate->PerformMicrotaskCheckpoint();
+        }
     }
 
 } // namespace Framework::Scripting

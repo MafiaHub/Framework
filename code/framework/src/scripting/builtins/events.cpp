@@ -10,12 +10,14 @@
 #include "../engine_helpers.h"
 #include "../function_references.h"
 #include "../resource/resource_manager.h"
+#include "../resource_monitor.h"
 #include "../scripting_catalog.h"
 
 #include <core_modules.h>
 #include <integrations/shared/rpc/emit_script_event.h>
 #include <logging/logger.h>
 #include <networking/network_peer.h>
+#include <utils/profiler.h>
 
 namespace Framework::Scripting::Builtins {
 
@@ -456,26 +458,36 @@ namespace Framework::Scripting::Builtins {
         }
     }
 
-    v8::MaybeLocal<v8::Value> Events::InvokeHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, std::optional<std::vector<TransferredValue>> &copied) {
+    v8::MaybeLocal<v8::Value> Events::InvokeHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, std::optional<std::vector<TransferredValue>> &copied, std::string_view eventName) {
+        auto *monitor        = ResourceMonitor::Current();
+        const double charged = monitor ? monitor->ChargedMs(handler.isolate, ResourceMonitor::Clock::now()) : 0.0;
+        v8::MaybeLocal<v8::Value> result;
         if (handler.isolate == isolate) {
+            ResourceMonitor::Scope scope(isolate);
             std::vector<v8::Local<v8::Value>> argv(args.begin(), args.end());
-            return handler.callback.Get(isolate)->Call(context, context->Global(), static_cast<int>(argv.size()), argv.empty() ? nullptr : argv.data());
+            result = handler.callback.Get(isolate)->Call(context, context->Global(), static_cast<int>(argv.size()), argv.empty() ? nullptr : argv.data());
         }
-
-        // The handler's resource runs in a runtime of its own: call it there with the arguments copied across. What it
-        // returns only matters as a veto or a promise to wait on, so its value is never copied back.
-        FunctionReferences *references = (_callbackContext && _callbackContext->resourceManager) ? _callbackContext->resourceManager->GetFunctionReferences() : nullptr;
-        if (references == nullptr) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "The handler's resource is not reachable from here")));
-            return {};
-        }
-        if (!copied) {
-            copied = references->CopyArguments(isolate, args);
-            if (!copied) {
+        else {
+            // The handler's resource runs in a runtime of its own: call it there with the arguments copied across. What
+            // it returns only matters as a veto or a promise to wait on, so its value is never copied back.
+            FunctionReferences *references = (_callbackContext && _callbackContext->resourceManager) ? _callbackContext->resourceManager->GetFunctionReferences() : nullptr;
+            if (references == nullptr) {
+                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "The handler's resource is not reachable from here")));
                 return {};
             }
+            if (!copied) {
+                copied = references->CopyArguments(isolate, args);
+                if (!copied) {
+                    return {};
+                }
+            }
+            result = references->Call(isolate, handler.isolate, handler.callback, *copied, FunctionReferences::Returned::Outcome);
         }
-        return references->Call(isolate, handler.isolate, handler.callback, *copied, FunctionReferences::Returned::Outcome);
+        // Its own time only: copying the arguments was the emitter's, and resources it called into are theirs.
+        if (monitor) {
+            monitor->ReportOwnTime(handler.isolate, "handler for", eventName, charged, ResourceMonitor::Clock::now());
+        }
+        return result;
     }
 
     v8::Local<v8::Array> Events::InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName) {
@@ -484,9 +496,12 @@ namespace Framework::Scripting::Builtins {
 
         for (size_t i = 0; i < handlers.size(); ++i) {
             const std::string &logContext = handlers[i].resourceName;
+            FW_PROFILE_SCOPE_N("Scripting::EventHandler");
+            FW_PROFILE_TEXT(eventName.c_str(), eventName.size());
+            FW_PROFILE_TEXT(logContext.c_str(), logContext.size());
 
             v8::TryCatch tryCatch(isolate);
-            v8::MaybeLocal<v8::Value> maybeResult = InvokeHandler(isolate, context, handlers[i], args, copied);
+            v8::MaybeLocal<v8::Value> maybeResult = InvokeHandler(isolate, context, handlers[i], args, copied, eventName);
 
             if (tryCatch.HasCaught()) {
                 // FormatV8Exception pulls the JS stack trace when available and
@@ -805,9 +820,12 @@ namespace Framework::Scripting::Builtins {
 
         for (auto &handler : handlersToCall) {
             const std::string &logContext = handler.resourceName;
+            FW_PROFILE_SCOPE_N("Scripting::EventHandler");
+            FW_PROFILE_TEXT(eventName.c_str(), eventName.size());
+            FW_PROFILE_TEXT(logContext.c_str(), logContext.size());
             v8::TryCatch tryCatch(isolate);
 
-            v8::MaybeLocal<v8::Value> maybeResult = InvokeHandler(isolate, context, handler, args, copied);
+            v8::MaybeLocal<v8::Value> maybeResult = InvokeHandler(isolate, context, handler, args, copied, eventName);
 
             if (tryCatch.HasCaught()) {
                 std::string errorStr = FormatV8Exception(isolate, tryCatch, "Unknown error in event handler");

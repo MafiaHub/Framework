@@ -218,8 +218,9 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Array> InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName);
 
         // Calls one handler and returns what it returned, or empty with the exception caught by the caller's TryCatch.
-        // `copied` holds the arguments copied out of the emitter, made on the first handler in another isolate.
-        v8::MaybeLocal<v8::Value> InvokeHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, std::optional<std::vector<TransferredValue>> &copied);
+        // `copied` holds the arguments copied out of the emitter, made on the first handler in another isolate. A
+        // handler running past the resource monitor's threshold is reported under `eventName`.
+        v8::MaybeLocal<v8::Value> InvokeHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, std::optional<std::vector<TransferredValue>> &copied, std::string_view eventName);
 
         // Forward declaration for callback data tracking
         struct AllSettledCallbackData;

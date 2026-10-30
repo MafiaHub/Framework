@@ -9,6 +9,7 @@
 #include "state_bag.h"
 
 #include "../engine_helpers.h"
+#include "../resource_monitor.h"
 #include "../scripting_catalog.h"
 
 #include <core_modules.h>
@@ -180,18 +181,29 @@ namespace Framework::Scripting::Builtins {
         }
         v8::Context::Scope contextScope(context);
 
-        // Undefined rather than null for a removal and for a key that held nothing, so a stored null
-        // stays distinguishable from an absent one.
-        v8::Local<v8::Value> args[3] = {
-            v8pp::to_v8(isolate, change.key),
-            change.removed ? v8::Local<v8::Value>(v8::Undefined(isolate)) : FromStateValue(isolate, context, change.value),
-            change.hadPrevious ? FromStateValue(isolate, context, change.previous) : v8::Local<v8::Value>(v8::Undefined(isolate)),
-        };
+        // Charged to the listener's resource, not the writer's, from rebuilding its arguments on. Off the main thread
+        // the monitor is absent.
+        auto *monitor        = ResourceMonitor::Current();
+        const double charged = monitor ? monitor->ChargedMs(isolate, ResourceMonitor::Clock::now()) : 0.0;
+        {
+            ResourceMonitor::Scope scope(isolate);
 
-        // A throwing listener is its own bug and must not take down the write that raised it.
-        v8::TryCatch tryCatch(isolate);
-        (void)entry->second.callback.Get(isolate)->Call(context, v8::Undefined(isolate), 3, args);
-        tryCatch.Reset();
+            // Undefined rather than null for a removal and for a key that held nothing, so a stored null
+            // stays distinguishable from an absent one.
+            v8::Local<v8::Value> args[3] = {
+                v8pp::to_v8(isolate, change.key),
+                change.removed ? v8::Local<v8::Value>(v8::Undefined(isolate)) : FromStateValue(isolate, context, change.value),
+                change.hadPrevious ? FromStateValue(isolate, context, change.previous) : v8::Local<v8::Value>(v8::Undefined(isolate)),
+            };
+
+            // A throwing listener is its own bug and must not take down the write that raised it.
+            v8::TryCatch tryCatch(isolate);
+            (void)entry->second.callback.Get(isolate)->Call(context, v8::Undefined(isolate), 3, args);
+            tryCatch.Reset();
+        }
+        if (monitor) {
+            monitor->ReportOwnTime(isolate, "state change listener for", change.key, charged, ResourceMonitor::Clock::now());
+        }
     }
 
     void StateBag::Unsubscribe(v8::Isolate *isolate, uint32_t id) {

@@ -108,8 +108,9 @@ namespace Framework::Scripting::Builtins {
         };
 
         // Calls a handler in whichever runtime it lives in with (payload, reply). From another runtime the payload is
-        // copied and reply crosses as a reference. Empty with an exception pending in the caller when it threw.
-        static v8::MaybeLocal<v8::Value> CallHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *manager, const Handler &handler, v8::Local<v8::Value> payload, v8::Local<v8::Function> reply);
+        // copied and reply crosses as a reference. Empty with an exception pending in the caller when it threw. A
+        // handler running past the resource monitor's threshold is reported under `messageType`.
+        static v8::MaybeLocal<v8::Value> CallHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *manager, const Handler &handler, v8::Local<v8::Value> payload, v8::Local<v8::Function> reply, std::string_view messageType);
 
         // Settles a request's Promise inside the runtime it belongs to.
         static void Settle(PendingRequest &request, fu2::function_view<void(v8::Isolate *, v8::Local<v8::Context>, v8::Local<v8::Promise::Resolver>)> settle);

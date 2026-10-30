@@ -45,6 +45,7 @@ set(FRAMEWORK_SRC
     src/scripting/engine.cpp
     src/scripting/value_transfer.cpp
     src/scripting/function_references.cpp
+    src/scripting/resource_monitor.cpp
     src/scripting/builtins/builtins.cpp
     src/scripting/builtins/vector2.cpp
     src/scripting/builtins/vector3.cpp
@@ -314,6 +315,8 @@ if(LIBNODE_AVAILABLE)
     # Link to libnode for headers (includes V8 and Node.js headers)
     # Also link spdlog for logging used by node_engine.cpp
     target_link_libraries(FrameworkNodeEngine PUBLIC libnode v8pp spdlog::spdlog fmt::fmt glm::glm nlohmann_json::nlohmann_json function2::function2)
+    # Tracy's headers and TRACY_* definitions for the runtime zones; Framework links the client itself.
+    target_link_libraries(FrameworkNodeEngine PRIVATE Tracy::TracyClient)
 
     # Node.js internal APIs require NODE_WANT_INTERNALS
     target_compile_definitions(FrameworkNodeEngine PRIVATE NODE_WANT_INTERNALS=1)

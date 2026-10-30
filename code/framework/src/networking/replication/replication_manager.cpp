@@ -15,6 +15,7 @@
 #include "entity_registry.h"
 #include "replication_connection.h"
 
+#include <utils/profiler.h>
 #include <utils/time.h>
 
 #include <algorithm>
@@ -62,7 +63,11 @@ namespace Framework::Networking::Replication {
         if (_networkUpdateActive && std::exchange(_updatedThisNetworkUpdate, true)) {
             return;
         }
-        MafiaNet::ReplicaManager3::Update();
+        {
+            FW_PROFILE_SCOPE_N("Replication::RM3Update");
+            MafiaNet::ReplicaManager3::Update();
+        }
+        FW_PROFILE_SCOPE_N("Replication::FlushTransforms");
         // Flush in the same pass that queued the poses, never on the next tick.
         for (unsigned int world = 0; world < worldsList.Size(); ++world) {
             const MafiaNet::WorldId worldId = worldsList[world]->worldId;
@@ -376,6 +381,8 @@ namespace Framework::Networking::Replication {
         if (_dirtyStateBags.empty()) {
             return;
         }
+        FW_PROFILE_SCOPE_N("Replication::FlushStateBags");
+        FW_PROFILE_VALUE(static_cast<int64_t>(_dirtyStateBags.size()));
 
         // A client sends nothing outbound, and with no connections there is nowhere to send. Drop
         // the marks rather than let them accumulate for a flush that never comes.
@@ -594,6 +601,7 @@ namespace Framework::Networking::Replication {
         if (_interestDirty) {
             ++_interestUrgentGeneration;
         }
+        FW_PROFILE_SCOPE_N("Replication::RebuildInterest");
         _lastInterestRebuild = now;
         _interestDirty       = false;
         _interest.BeginRebuild();
