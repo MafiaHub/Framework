@@ -90,9 +90,14 @@ namespace Framework::GUI {
         std::recursive_mutex _renderMutex;
         glm::vec2 _cursorPos {};
         bool _isMouseDown = false;
+        // Click count of the back/forward press this view delivered, 0 when none
+        int _sideButtonClicks[2] = {};
         int _id;
 
         void EmitViewEvent(const ViewEventData &data);
+
+        // Drops side-button presses in flight, here and in the page: their releases no longer reach this view
+        void ResetSideButtons();
 
       public:
         View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);
@@ -117,6 +122,9 @@ namespace Framework::GUI {
         }
 
         void Focus(bool enable) {
+            if (enable != _hasFocus) {
+                ResetSideButtons();
+            }
             _hasFocus = enable;
             if (_browser) {
                 _browser->GetHost()->SetFocus(enable);
@@ -128,6 +136,9 @@ namespace Framework::GUI {
         }
 
         void Display(bool enable) {
+            if (enable != _shouldDisplay) {
+                ResetSideButtons();
+            }
             _shouldDisplay = enable;
         }
 
