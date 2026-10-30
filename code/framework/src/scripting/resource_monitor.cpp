@@ -144,25 +144,31 @@ namespace Framework::Scripting {
             slot->tickMs = 0.0;
         }
         if (SampleDue(now)) {
-            CloseSecond();
-            _secondStart = now;
+            CloseSecond(now);
         }
     }
 
-    void ResourceMonitor::CloseSecond() {
+    void ResourceMonitor::CloseSecond(Clock::time_point now) {
+        const double seconds = std::chrono::duration<double>(now - _secondStart).count();
         for (auto &[key, slot] : _slots) {
             // The collector's running total, as last recorded, against the one the previous slot closed on.
             if (slot->gcPauseMsAtRoll >= 0.0) {
-                slot->window[_current].gcMs       = std::max(0.0, slot->sample.gcPauseMs - slot->gcPauseMsAtRoll);
-                slot->window[_current].gcMeasured = true;
+                slot->window[_current].gcMs      = std::max(0.0, slot->sample.gcPauseMs - slot->gcPauseMsAtRoll);
+                slot->window[_current].gcSeconds = seconds;
             }
             slot->gcPauseMsAtRoll = slot->sample.gcPauseMs;
         }
-        _current = (_current + 1) % kWindowSeconds;
-        _filled  = std::min(_filled + 1, kWindowSeconds);
-        for (auto &[key, slot] : _slots) {
-            slot->window[_current] = {};
+        // A slot per elapsed second, so a long tick leaves the ones it spanned empty and the window stays a minute of
+        // wall time. The slot just closed always stays.
+        const auto advance = std::clamp<size_t>(static_cast<size_t>(seconds), 1, kWindowSeconds - 1);
+        for (size_t step = 0; step < advance; ++step) {
+            _current = (_current + 1) % kWindowSeconds;
+            _filled  = std::min(_filled + 1, kWindowSeconds);
+            for (auto &[key, slot] : _slots) {
+                slot->window[_current] = {};
+            }
         }
+        _secondStart = now;
     }
 
     ResourceMonitor::SlowOutcome ResourceMonitor::ReportIfSlow(const void *key, std::string_view what, std::string_view detail, double ms, Clock::time_point now) {
@@ -210,23 +216,21 @@ namespace Framework::Scripting {
         out.reserve(_slots.size());
         for (const auto &[key, slot] : _slots) {
             RuntimeStats stats;
-            stats.name      = slot->name;
-            double scriptMs = 0.0;
-            double gcMs     = 0.0;
-            uint64_t ticks  = 0;
-            size_t seconds  = 0;
+            stats.name       = slot->name;
+            double scriptMs  = 0.0;
+            double gcMs      = 0.0;
+            double gcSeconds = 0.0;
+            uint64_t ticks   = 0;
             for (size_t age = 0; age < _filled; ++age) {
                 const Second &second = slot->window[(_current + kWindowSeconds - age) % kWindowSeconds];
                 scriptMs += second.scriptMs;
                 gcMs += second.gcMs;
+                gcSeconds += second.gcSeconds;
                 ticks += second.ticks;
                 stats.scriptMsMaxTick = std::max(stats.scriptMsMaxTick, second.maxTickMs);
-                if (second.gcMeasured) {
-                    ++seconds;
-                }
             }
             stats.scriptMsPerTick = ticks > 0 ? scriptMs / static_cast<double>(ticks) : 0.0;
-            stats.gcMsPerSecond   = seconds > 0 ? gcMs / static_cast<double>(seconds) : 0.0;
+            stats.gcMsPerSecond   = gcSeconds > 0.0 ? gcMs / gcSeconds : 0.0;
             stats.scriptSeconds   = slot->totalMs / 1000.0;
             stats.gcPauses        = slot->sample.gcPauses;
             stats.heapUsedBytes   = slot->sample.heapUsedBytes;

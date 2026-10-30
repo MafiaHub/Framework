@@ -141,6 +141,40 @@ MODULE(resource_monitor, {
         EQUALS(stats->heapLimitBytes, static_cast<uint64_t>(4000));
     });
 
+    IT("divides collector time by the wall time a late second covered", {
+        ResourceMonitor monitor;
+        monitor.Track(&a, "a");
+        const auto t0 = ResourceMonitor::Clock::now();
+        monitor.Record(&a, {.gcPauseMs = 10.0});
+        monitor.EndTick(t0 + 1s);
+        // A five-second tick: 50 ms of collection over it is 10 ms a second.
+        monitor.Record(&a, {.gcPauseMs = 60.0});
+        monitor.EndTick(t0 + 6s);
+
+        const auto snapshot = monitor.Snapshot();
+        const auto *stats   = Find(snapshot, "a");
+        EQUALS((stats != nullptr), true);
+        EQUALS(stats->gcMsPerSecond, 10.0);
+    });
+
+    IT("drops what ran more than a minute of wall time ago", {
+        ResourceMonitor monitor;
+        monitor.Track(&a, "a");
+        const auto t0 = ResourceMonitor::Clock::now();
+        monitor.Enter(&a, t0);
+        monitor.Leave(t0 + 40ms);
+        monitor.EndTick(t0 + 1s);
+        // One tick that took 79 s: the 40 ms one is now older than the window.
+        monitor.EndTick(t0 + 80s);
+
+        const auto snapshot = monitor.Snapshot();
+        const auto *stats   = Find(snapshot, "a");
+        EQUALS((stats != nullptr), true);
+        EQUALS(stats->scriptMsMaxTick, 0.0);
+        EQUALS(stats->scriptMsPerTick, 0.0);
+        EQUALS(stats->scriptSeconds, 0.04);
+    });
+
     IT("measures a runtime's own time in a call from what it was charged", {
         ResourceMonitor monitor;
         monitor.Track(&a, "a");

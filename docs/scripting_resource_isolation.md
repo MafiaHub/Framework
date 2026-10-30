@@ -173,10 +173,11 @@ rules.
 runtime the engine enters: its own tick (timers, I/O, `await` continuations), a
 cross-runtime call or settlement, an event or message handler, a state bag
 listener. Entering a runtime pauses the one it was entered from, so a resource
-is not charged for the resources it calls. The server's scripting module closes
-one frame per server tick (`NodeEngine::CloseMonitorTick`), and once a second
-the monitor also reads each runtime's heap and its collector's pauses. It runs
-on the main thread only.
+is not charged for the resources it calls. The server closes one frame at the
+top of each server tick (`NodeEngine::CloseMonitorTick`), and once a second the
+monitor also reads each runtime's heap and its collector's pauses. Its window
+is the last minute of wall time, however long the ticks in it took. It runs on
+the main thread only.
 
 - `NodeEngine::GetRuntimeStats()` returns, per runtime, the mean and worst
   script time per server tick over the last minute, total script time, heap

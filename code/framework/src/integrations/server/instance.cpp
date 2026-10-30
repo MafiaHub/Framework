@@ -1429,6 +1429,11 @@ namespace Framework::Integrations::Server {
         if (_nextTick <= start) {
             FW_PROFILE_SCOPE_N("Server::Tick");
 
+            // One monitor frame per server tick, so a resource's RPC handlers, timers and events in it add up together.
+            if (auto *engine = _scriptingModule ? _scriptingModule->GetEngine() : nullptr; engine != nullptr && engine->IsInitialized()) {
+                engine->CloseMonitorTick();
+            }
+
             // Before the packet pump: voice frames are routed inline there, and must see the worlds
             // scripts and PostUpdate set last tick, not the ones from before them.
             auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr;

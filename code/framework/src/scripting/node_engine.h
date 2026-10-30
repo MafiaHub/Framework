@@ -182,8 +182,8 @@ namespace Framework::Scripting {
             return _monitor.Snapshot();
         }
 
-        // Ends one server frame for the monitor, and samples the heaps once a second. Once per frame, not per Tick():
-        // a resource starting or stopping pumps Tick() while it waits.
+        // Ends one server tick for the monitor, and samples the heaps once a second. The server calls it at the top of
+        // each tick, not from Tick(), which a resource starting or stopping pumps while it waits.
         void CloseMonitorTick();
 
       private:

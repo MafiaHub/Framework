@@ -133,7 +133,7 @@ namespace Framework::Scripting {
             double maxTickMs = 0.0;
             uint32_t ticks   = 0;
             double gcMs      = 0.0;
-            bool gcMeasured  = false; // closed with a collector figure, not as the slot that set the baseline
+            double gcSeconds = 0.0; // wall time gcMs covers; 0 for an open slot or the one that set the baseline
         };
 
         struct Slot {
@@ -157,7 +157,7 @@ namespace Framework::Scripting {
         };
 
         void Charge(Frame &frame, Clock::time_point now);
-        void CloseSecond();
+        void CloseSecond(Clock::time_point now);
 
         std::unordered_map<const void *, std::unique_ptr<Slot>> _slots;
         std::vector<Frame> _stack;

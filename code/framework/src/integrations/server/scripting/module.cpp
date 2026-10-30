@@ -163,9 +163,6 @@ namespace Framework::Integrations::Server::Scripting {
 
     void ServerScriptingModule::Update() {
         if (_nodeEngine && _nodeEngine->IsInitialized()) {
-            // Closes the frame since the last update, whose RPC handlers and events ran in other phases.
-            _nodeEngine->CloseMonitorTick();
-
             // Process Node.js event loop
             _nodeEngine->Tick();
 
