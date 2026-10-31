@@ -17,11 +17,29 @@
 #include <v8pp/class.hpp>
 #include <v8pp/convert.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace Framework::Integrations::Server::Scripting::Builtins {
     namespace {
+        // A Voice.capture promise, kept in the runtime that made it.
+        struct PendingCapture {
+            v8::Isolate *isolate = nullptr;
+            v8::Global<v8::Context> context;
+            v8::Global<v8::Promise::Resolver> resolver;
+        };
+
+        // By ticket. Main thread only, like every call into the builtins.
+        std::unordered_map<uint64_t, PendingCapture> &PendingCaptures() {
+            static std::unordered_map<uint64_t, PendingCapture> pending;
+            return pending;
+        }
+
         Framework::Voice::VoiceServer *Resolve() {
             return CoreModules::GetVoiceServer();
         }
@@ -67,6 +85,40 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             }
 
             out = static_cast<Framework::Voice::VoiceTier>(static_cast<uint8_t>(value));
+            return true;
+        }
+
+        // Voice.capture's optional { maxMs }, cut to the cap, which is also what an absent one means.
+        bool ReadCaptureLength(const v8::FunctionCallbackInfo<v8::Value> &info, int index, uint32_t &out) {
+            v8::Isolate *isolate = info.GetIsolate();
+            out                  = Framework::Voice::kMaxCaptureMs;
+            if (info.Length() <= index || info[index]->IsUndefined()) {
+                return true;
+            }
+            if (!info[index]->IsObject()) {
+                Framework::Scripting::ThrowTypeError(isolate, "Voice.capture: expected an options object");
+                return false;
+            }
+
+            v8::Local<v8::Value> value;
+            if (!info[index].As<v8::Object>()->Get(isolate->GetCurrentContext(), v8pp::to_v8(isolate, "maxMs")).ToLocal(&value)) {
+                return false;
+            }
+            if (value->IsUndefined()) {
+                return true;
+            }
+            if (!value->IsNumber() || std::isnan(value.As<v8::Number>()->Value())) {
+                Framework::Scripting::ThrowTypeError(isolate, "Voice.capture: maxMs must be a number");
+                return false;
+            }
+
+            const double maxMs = value.As<v8::Number>()->Value();
+            if (maxMs < 1.0) {
+                isolate->ThrowException(v8::Exception::RangeError(v8pp::to_v8(isolate, "Voice.capture: maxMs must be at least 1")));
+                return false;
+            }
+
+            out = static_cast<uint32_t>(std::min(maxMs, static_cast<double>(Framework::Voice::kMaxCaptureMs)));
             return true;
         }
     } // namespace
@@ -276,6 +328,81 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         info.GetReturnValue().Set(voice != nullptr && voice->IsPlayerTalking(player));
     }
 
+    void Voice::JS_Capture(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate = info.GetIsolate();
+        v8::HandleScope hs(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+        uint64_t player = 0;
+        uint32_t maxMs  = 0;
+        if (!ResolvePlayer(info, 0, "Voice.capture", player) || !ReadCaptureLength(info, 1, maxMs)) {
+            return;
+        }
+
+        v8::Local<v8::Promise::Resolver> resolver;
+        if (!v8::Promise::Resolver::New(context).ToLocal(&resolver)) {
+            return;
+        }
+        info.GetReturnValue().Set(resolver->GetPromise());
+
+        auto *voice           = Resolve();
+        const uint64_t ticket = voice != nullptr ? voice->StartCapture(player, maxMs) : 0;
+        if (ticket == 0) {
+            const char *reason = voice != nullptr ? "Voice.capture: this player is already being captured" : "Voice.capture: voice chat is not running on this server";
+            resolver->Reject(context, v8::Exception::Error(v8pp::to_v8(isolate, reason))).Check();
+            return;
+        }
+
+        PendingCapture &pending = PendingCaptures()[ticket];
+        pending.isolate         = isolate;
+        pending.context.Reset(isolate, context);
+        pending.resolver.Reset(isolate, resolver);
+    }
+
+    void Voice::SettleCaptures(const std::vector<Framework::Voice::CaptureResult> &results) {
+        for (const Framework::Voice::CaptureResult &result : results) {
+            auto node = PendingCaptures().extract(result.ticket);
+            if (node.empty()) {
+                continue;
+            }
+
+            PendingCapture &pending = node.mapped();
+            v8::Isolate *isolate    = pending.isolate;
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = pending.context.Get(isolate);
+            v8::Context::Scope contextScope(context);
+
+            v8::Local<v8::Array> packets = v8::Array::New(isolate, static_cast<int>(result.packets.size()));
+            for (uint32_t i = 0; i < result.packets.size(); ++i) {
+                const std::vector<uint8_t> &packet      = result.packets[i];
+                std::shared_ptr<v8::BackingStore> store = v8::ArrayBuffer::NewBackingStore(isolate, packet.size());
+                std::memcpy(store->Data(), packet.data(), packet.size());
+                packets->Set(context, i, v8::Uint8Array::New(v8::ArrayBuffer::New(isolate, std::move(store)), 0, packet.size())).FromMaybe(false);
+            }
+            // Not Check(): a runtime being terminated refuses, and that must not take the server down.
+            pending.resolver.Get(isolate)->Resolve(context, packets).FromMaybe(false);
+
+            // While the isolate is still locked.
+            pending.resolver.Reset();
+            pending.context.Reset();
+        }
+    }
+
+    void Voice::ForgetIsolate(v8::Isolate *isolate) {
+        auto *voice = Resolve();
+        std::erase_if(PendingCaptures(), [&](const auto &entry) {
+            if (entry.second.isolate != isolate) {
+                return false;
+            }
+            if (voice != nullptr) {
+                voice->CancelCapture(entry.first);
+            }
+            return true;
+        });
+    }
+
     void Voice::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
         if (!isolate || global.IsEmpty()) {
             return;
@@ -302,9 +429,10 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         attach("isLocallyMuted", &Voice::JS_IsLocallyMuted);
         attach("isPlayerVoiceEnabled", &Voice::JS_IsPlayerVoiceEnabled);
         attach("isPlayerTalking", &Voice::JS_IsPlayerTalking);
+        attach("capture", &Voice::JS_Capture);
         global->Set(ctx, v8pp::to_v8(isolate, "Voice"), voiceObj).Check();
 
-        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Voice", "Server-side proximity voice rules: how far voice carries, and who may talk to or hear whom.");
+        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Voice", "Server-side proximity voice: how far voice carries, who may talk to or hear whom, and capturing what a player says.");
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setRange", v8pp::metadata::docs("void", {v8pp::metadata::param("range", "number", false, "Audibility radius in world units; values <= 0 restore the default of 25.")},
                                                                                           "Sets how far voice carries for talkers with no override of their own. Connected clients are told, so their playback fades out at the same distance.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getRange", v8pp::metadata::docs("number", {}, "Reads the server-wide proximity range.", "Radius in world units.")));
@@ -369,6 +497,18 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             v8pp::metadata::docs("boolean", {v8pp::metadata::param("player", "Entity", false, "Player to query.")},
                 "Checks whether a player is speaking right now. Tracks speech rather than the push-to-talk key: silence is dropped before it reaches the server, and the state clears shortly after the last frame. The same signal raises the playerVoiceStart and playerVoiceStop events.",
                 "True while the player's voice is reaching the server.")));
+        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("capture",
+            v8pp::metadata::docs("Promise<Uint8Array[]>",
+                {
+                    v8pp::metadata::param("player", "Entity", false, "Player to capture."),
+                    v8pp::metadata::param("options", "{ maxMs?: number }", true, "maxMs: longest the capture runs, in ms, at least 1. Longer is cut to 10000, the default."),
+                },
+                "Hands over the voice packets one player sends, from this call until they next stop talking: 48 kHz mono Opus, 20 ms per packet, oldest first. The server checks only their size, so treat them as untrusted input. "
+                "The server never decodes voice; decode them and run your own recognition. A stop before the player has sent anything ends an earlier utterance, and the capture keeps waiting. Otherwise it settles after maxMs, or "
+                "once it holds that much audio, with whatever arrived (an empty array if nothing did); a disconnect settles it with what it holds. One capture per player at a time, across all resources: a second call while one "
+                "runs rejects. Start it before the player speaks: one started from playerVoiceStart misses the packets that raised the event. It covers only audio the player chose to send, so a player who is not transmitting is "
+                "never heard, but that includes audio nobody else hears: a player muted with setPlayerMuted, or with nobody in range, still transmits. Tell your players that server scripts can listen to their voice chat.",
+                "The Opus packets, without the relay header.")));
     }
 
 } // namespace Framework::Integrations::Server::Scripting::Builtins

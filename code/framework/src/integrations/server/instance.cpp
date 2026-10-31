@@ -39,6 +39,8 @@
 
 #include "networking/connection.h"
 
+#include "integrations/server/scripting/builtins/voice.h"
+
 #include "scripting/builtins/events.h"
 #include "scripting/builtins/player.h"
 #include "scripting/builtins/text_label.h"
@@ -1427,6 +1429,9 @@ namespace Framework::Integrations::Server {
             }
 
             DispatchVoiceChanges();
+            // After the stop events, so their handlers run before a script awaiting the capture resumes.
+            _voiceServer.DrainCaptures(_voiceCaptures);
+            Scripting::Builtins::Voice::SettleCaptures(_voiceCaptures);
 
             if (_scriptingModule) {
                 FW_PROFILE_SCOPE_N("Server::Scripting");
