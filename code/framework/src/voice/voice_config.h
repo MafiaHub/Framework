@@ -20,6 +20,7 @@ namespace Framework::Voice {
     constexpr uint32_t kChannels     = 1;
     constexpr uint32_t kFrameSamples = 960; // 20ms at 48kHz
     constexpr uint32_t kFrameBytes   = kFrameSamples * sizeof(int16_t);
+    constexpr uint32_t kFrameMs      = kFrameSamples * 1000 / kSampleRate;
 
     // Target Opus bitrate. Opus' reference for a mono stream is 64kbps; 24kbps was
     // intelligible but audibly band-limited. 40kbps costs 5KB/s per talker, and proximity
@@ -87,6 +88,10 @@ namespace Framework::Voice {
     // A talker counts as stopped after this long without a frame. Shorter flickers mid-sentence:
     // VAD punches holes between words and RakVoice flushes on a 50ms throttle.
     constexpr uint32_t kTalkingTimeoutMs = 300;
+
+    // Longest a server script's Voice.capture runs. With at most a packet per frame of it, this
+    // bounds what one capture holds: 500 packets.
+    constexpr uint32_t kMaxCaptureMs = 10000;
 
     // How long a remote speaker still reads as talking (VoiceClient::IsSpeakerTalking) after
     // their audio stops arriving. Longer than kTalkingTimeoutMs on purpose: VAD sends nothing
