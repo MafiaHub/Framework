@@ -84,9 +84,12 @@ namespace Framework::GUI::CEF {
         // Accelerated path: the popup arrives as its own shared texture.
         SharedCopy _sharedPopup;
 
-        // Union of the rects refreshed since the last ClearPixelDataDirty, for backends that
-        // upload a sub-rectangle (D3D8). Empty when nothing is pending.
-        CefRect _dirtyBounds;
+        // What changed since the last ClearPixelDataDirty as a few disjoint regions, for
+        // backends that upload sub-rectangles (D3D8): a toast in one corner and a card in
+        // another stay two small uploads instead of one box spanning the screen. Empty
+        // when nothing is pending.
+        static constexpr size_t kMaxDirtyRegions = 8;
+        std::vector<CefRect> _dirtyRegions;
 
         ID3D11Device *_device = nullptr;
         Microsoft::WRL::ComPtr<ID3D11Device1> _copyDevice;
@@ -177,12 +180,12 @@ namespace Framework::GUI::CEF {
         void ClearPixelDataDirty() {
             _pixelDataDirty = false;
             _pixelDirtyRect = CefRect();
-            _dirtyBounds    = {};
+            _dirtyRegions.clear();
         }
 
-        // Caller holds LockPixels(). Clamped to the current pixel surface.
-        const CefRect &GetDirtyBounds() const {
-            return _dirtyBounds;
+        // Caller holds LockPixels(). Disjoint, clamped to the current pixel surface.
+        const std::vector<CefRect> &GetDirtyRegions() const {
+            return _dirtyRegions;
         }
 
       private:
@@ -194,6 +197,7 @@ namespace Framework::GUI::CEF {
         void EndSharedRead(SharedCopy &copy);
         void StampPopup();
         void MarkPixelsDirty(const CefRect &rect);
+        void AddDirtyRegion(CefRect rect);
         void RecomposeAcceleratedPage(CefRefPtr<CefBrowser> browser);
         void UnstampPopup();
 

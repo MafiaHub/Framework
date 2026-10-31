@@ -12,6 +12,7 @@
 #include "logging/logger.h"
 
 #include <Windows.h>
+#include <chrono>
 #include <WindowsX.h>
 
 #include "graphics/backend/d3d11.h"
@@ -22,6 +23,8 @@ namespace Framework::GUI {
         // game's frame rate rather than CEF's 30 FPS default; external_begin_frame still drives the
         // actual cadence.
         constexpr int kWindowlessFrameRate = 240;
+        // External begin frames sent to a software-rendered view, at most: 60 a second.
+        constexpr std::chrono::microseconds kSoftwareFrameInterval {16'667};
     } // namespace
 
     View::View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager)
@@ -124,6 +127,16 @@ namespace Framework::GUI {
         // thread. Offscreen opts back in: with external begin frame, no begin frame is no paint.
         if (!_browser || (!IsOnScreen() && !_offscreen)) {
             return;
+        }
+        // A software view rasterizes and copies on the CPU, and the game thread pays for the
+        // copy; past 60 a second that buys nothing a player sees. Accelerated views keep
+        // the game's cadence.
+        if (!_gpuAccelerated) {
+            const auto now = std::chrono::steady_clock::now();
+            if (now - _lastBeginFrame < kSoftwareFrameInterval) {
+                return;
+            }
+            _lastBeginFrame = now;
         }
         _browser->GetHost()->SendExternalBeginFrame();
     }

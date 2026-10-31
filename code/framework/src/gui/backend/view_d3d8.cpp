@@ -44,19 +44,23 @@ namespace Framework::GUI {
             return true;
         }
 
-        RECT region {0, 0, _width, _height};
-        if (!fullUpload) {
-            const CefRect &dirty = renderHandler->GetDirtyBounds();
-            if (dirty.IsEmpty()) {
-                renderHandler->ClearPixelDataDirty();
-                return true;
+        const size_t pitch = static_cast<size_t>(_width) * 4;
+        if (fullUpload) {
+            if (!_surface.Upload(pixels.data(), pitch, _width, _height, RECT {0, 0, _width, _height})) {
+                return false;
             }
-            region = {dirty.x, dirty.y, dirty.x + dirty.width, dirty.y + dirty.height};
+            renderHandler->ClearPixelDataDirty();
+            return true;
         }
 
-        if (!_surface.Upload(pixels.data(), static_cast<size_t>(_width) * 4, _width, _height, region)) {
-            // keep the dirty flag so the copy retries next frame
-            return !fullUpload;
+        // Each changed region on its own: the copy scales with what changed, not with the
+        // span between the changes, which at 4K is most of a 33 MB surface.
+        for (const CefRect &dirty : renderHandler->GetDirtyRegions()) {
+            const RECT region {dirty.x, dirty.y, dirty.x + dirty.width, dirty.y + dirty.height};
+            if (!_surface.Upload(pixels.data(), pitch, _width, _height, region)) {
+                // keep the dirty flag so the copy retries next frame
+                return true;
+            }
         }
 
         renderHandler->ClearPixelDataDirty();

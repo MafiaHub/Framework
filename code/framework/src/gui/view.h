@@ -11,6 +11,7 @@
 #include <utils/safe_win32.h>
 
 #include <d3d11.h>
+#include <chrono>
 #include <function2/function2.hpp>
 #include <map>
 #include <memory>
@@ -72,6 +73,8 @@ namespace Framework::GUI {
         bool _garbageCollected = false;
 
         bool _offscreen = false;
+        // When the last external begin frame went to this software view (RequestBeginFrame).
+        std::chrono::steady_clock::time_point _lastBeginFrame {};
 
         bool _alwaysComposite = false;
         bool _audioMuted      = false;

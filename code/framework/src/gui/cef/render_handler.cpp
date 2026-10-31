@@ -356,27 +356,6 @@ namespace Framework::GUI::CEF {
         // No damage means no upload: the views re-push the whole surface on dirty.
         if (copied > 0) {
             _pixelDataDirty = true;
-            if (reshaped) {
-                _dirtyBounds = CefRect(0, 0, width, height);
-            }
-            else {
-                for (const auto &rect : dirtyRects) {
-                    int x0 = (std::max)(0, rect.x);
-                    int y0 = (std::max)(0, rect.y);
-                    int x1 = (std::min)(width, rect.x + rect.width);
-                    int y1 = (std::min)(height, rect.y + rect.height);
-                    if (x1 <= x0 || y1 <= y0) {
-                        continue;
-                    }
-                    if (!_dirtyBounds.IsEmpty()) {
-                        x0 = (std::min)(x0, _dirtyBounds.x);
-                        y0 = (std::min)(y0, _dirtyBounds.y);
-                        x1 = (std::max)(x1, _dirtyBounds.x + _dirtyBounds.width);
-                        y1 = (std::max)(y1, _dirtyBounds.y + _dirtyBounds.height);
-                    }
-                    _dirtyBounds = CefRect(x0, y0, x1 - x0, y1 - y0);
-                }
-            }
         }
 
         FW_PROFILE_PLOT("cef.paint.bytes", static_cast<int64_t>(copied));
@@ -500,6 +479,8 @@ namespace Framework::GUI::CEF {
             return;
         }
 
+        AddDirtyRegion(CefRect(x0, y0, x1 - x0, y1 - y0));
+
         if (_pixelDirtyRect.IsEmpty()) {
             _pixelDirtyRect = CefRect(x0, y0, x1 - x0, y1 - y0);
             return;
@@ -509,5 +490,39 @@ namespace Framework::GUI::CEF {
         const int right  = (std::max)(_pixelDirtyRect.x + _pixelDirtyRect.width, x1);
         const int bottom = (std::max)(_pixelDirtyRect.y + _pixelDirtyRect.height, y1);
         _pixelDirtyRect  = CefRect(left, top, right - left, bottom - top);
+    }
+
+    void RenderHandler::AddDirtyRegion(CefRect rect) {
+        // Overlapping or touching regions merge, so a moving element stays one
+        // region; the merged one may now reach others, hence the restart.
+        for (size_t i = 0; i < _dirtyRegions.size();) {
+            const CefRect &other = _dirtyRegions[i];
+            const bool apart     = rect.x > other.x + other.width || other.x > rect.x + rect.width || rect.y > other.y + other.height || other.y > rect.y + rect.height;
+            if (apart) {
+                ++i;
+                continue;
+            }
+            const int left   = (std::min)(rect.x, other.x);
+            const int top    = (std::min)(rect.y, other.y);
+            const int right  = (std::max)(rect.x + rect.width, other.x + other.width);
+            const int bottom = (std::max)(rect.y + rect.height, other.y + other.height);
+            rect             = CefRect(left, top, right - left, bottom - top);
+            _dirtyRegions.erase(_dirtyRegions.begin() + static_cast<std::ptrdiff_t>(i));
+            i = 0;
+        }
+
+        // Past a handful, one box costs less than the per-region locks.
+        if (_dirtyRegions.size() >= kMaxDirtyRegions) {
+            for (const auto &other : _dirtyRegions) {
+                const int left   = (std::min)(rect.x, other.x);
+                const int top    = (std::min)(rect.y, other.y);
+                const int right  = (std::max)(rect.x + rect.width, other.x + other.width);
+                const int bottom = (std::max)(rect.y + rect.height, other.y + other.height);
+                rect             = CefRect(left, top, right - left, bottom - top);
+            }
+            _dirtyRegions.clear();
+        }
+
+        _dirtyRegions.push_back(rect);
     }
 } // namespace Framework::GUI::CEF
