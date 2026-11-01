@@ -27,6 +27,19 @@ namespace Framework::External::Epic {
         return base + "\\Epic\\EpicGamesLauncher\\Data\\Manifests";
     }
 
+    ManifestsDirStatus EnsureManifestsDir() {
+        const std::filesystem::path dir = GetManifestsDir();
+
+        std::error_code ec;
+        if (std::filesystem::is_directory(dir, ec)) {
+            return ManifestsDirStatus::Present;
+        }
+        if (!std::filesystem::is_directory(dir.parent_path(), ec)) {
+            return ManifestsDirStatus::NoLauncher;
+        }
+        return std::filesystem::create_directory(dir, ec) ? ManifestsDirStatus::Created : ManifestsDirStatus::CreateFailed;
+    }
+
     std::vector<InstalledApp> EnumerateInstalledApps() {
         std::vector<InstalledApp> apps;
 

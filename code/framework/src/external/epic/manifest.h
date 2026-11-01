@@ -28,8 +28,21 @@ namespace Framework::External::Epic {
 
     // Directory holding the Epic Games Launcher manifests
     // (%PROGRAMDATA%\Epic\EpicGamesLauncher\Data\Manifests). Never empty (falls back to the
-    // conventional location), but the directory may not exist if Epic isn't installed.
+    // conventional location), but the directory may not exist if Epic isn't installed or has
+    // nothing installed.
     std::string GetManifestsDir();
+
+    enum class ManifestsDirStatus {
+        Present,      // the directory exists
+        Created,      // it was missing and has just been created
+        CreateFailed, // it was missing and couldn't be created
+        NoLauncher,   // the Epic launcher's data directory is absent: Epic isn't installed
+    };
+
+    // The Epic launcher writes each install's .item into the manifests directory but never creates
+    // it, so once the directory is gone no installed title gets recorded until it exists again.
+    // Creates it when the launcher's data directory is there but the manifests directory isn't.
+    ManifestsDirStatus EnsureManifestsDir();
 
     // Every installed title the Epic launcher knows about. Empty if Epic isn't installed or
     // no manifests could be read.

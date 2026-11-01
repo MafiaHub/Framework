@@ -207,7 +207,27 @@ namespace Framework::Launcher::Platforms {
 
         const auto app = External::Epic::FindInstalledApp(exeName, appName);
         if (!app.IsValid()) {
-            return unavailable("The destination game is not installed through the Epic Games Launcher");
+            constexpr auto notInstalled = "The destination game is not installed through the Epic Games Launcher";
+
+            // Without its manifests directory the Epic launcher still runs the game but can't record
+            // the install. Once the directory exists it writes every install's manifest on its next
+            // start. The directory is also absent while Epic has nothing installed, so this can't tell which.
+            constexpr auto relink   = "Fully exit the Epic Games Launcher (tray icon, Exit), start it again, then start this launcher again. "
+                                      "If the game still isn't found, verify its files in Epic (Library, the game, Manage, Verify).";
+            const auto manifestsDir = External::Epic::GetManifestsDir();
+            switch (External::Epic::EnsureManifestsDir()) {
+            case External::Epic::ManifestsDirStatus::Created:
+                return unavailable(fmt::format("{}.\n\nIf it is, Epic's Manifests folder was missing, so the install was never recorded. "
+                                               "It has now been created at {}.\n\n{}",
+                    notInstalled, manifestsDir, relink));
+            case External::Epic::ManifestsDirStatus::CreateFailed:
+                return unavailable(fmt::format("{}.\n\nIf it is, Epic's Manifests folder is missing, so the install was never recorded. "
+                                               "Create the folder {} yourself.\n\n{}",
+                    notInstalled, manifestsDir, relink));
+            case External::Epic::ManifestsDirStatus::Present:
+            case External::Epic::ManifestsDirStatus::NoLauncher: break;
+            }
+            return unavailable(notInstalled);
         }
 
         const auto installPath = ToGameRoot(app.installLocation);
