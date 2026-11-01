@@ -35,7 +35,7 @@ namespace Framework::External::Epic {
     enum class ManifestsDirStatus {
         Present,      // the directory exists
         Created,      // it was missing and has just been created
-        CreateFailed, // it was missing and couldn't be created
+        CreateFailed, // it was missing and couldn't be created, or the launcher's data dir couldn't be read
         NoLauncher,   // the Epic launcher's data directory is absent: Epic isn't installed
     };
 

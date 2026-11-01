@@ -12,15 +12,17 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <process.h>
 #include <string>
 
 MODULE(epic_manifest, {
     using namespace Framework::External::Epic;
 
-    // GetManifestsDir resolves under %PROGRAMDATA%, so point that at a scratch folder.
+    // GetManifestsDir resolves under %PROGRAMDATA%, so point that at a scratch folder of this run's own.
     const char *previous           = std::getenv("PROGRAMDATA");
     const std::string savedProgram = previous ? previous : "";
-    const auto programData         = std::filesystem::temp_directory_path() / "fw_epic_manifest_ut";
+    const auto programData         = std::filesystem::temp_directory_path() / ("fw_epic_manifest_ut_" + std::to_string(_getpid()));
     const auto launcherData        = programData / "Epic" / "EpicGamesLauncher" / "Data";
     std::filesystem::remove_all(programData);
     std::filesystem::create_directories(programData);
@@ -29,6 +31,13 @@ MODULE(epic_manifest, {
     IT("leaves no manifests folder behind when Epic isn't installed", {
         EQUALS(EnsureManifestsDir() == ManifestsDirStatus::NoLauncher, true);
         EQUALS(std::filesystem::exists(launcherData), false);
+    });
+
+    IT("reports a failure when Epic's data folder isn't a folder", {
+        std::filesystem::create_directories(launcherData.parent_path());
+        std::ofstream(launcherData).put('x');
+        EQUALS(EnsureManifestsDir() == ManifestsDirStatus::CreateFailed, true);
+        std::filesystem::remove(launcherData);
     });
 
     IT("creates the manifests folder the Epic launcher dropped", {

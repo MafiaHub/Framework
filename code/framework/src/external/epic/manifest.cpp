@@ -34,8 +34,13 @@ namespace Framework::External::Epic {
         if (std::filesystem::is_directory(dir, ec)) {
             return ManifestsDirStatus::Present;
         }
-        if (!std::filesystem::is_directory(dir.parent_path(), ec)) {
+        // Only a confirmed-absent data dir means Epic isn't installed; one we can't inspect is a failure.
+        const auto parent = std::filesystem::status(dir.parent_path(), ec);
+        if (parent.type() == std::filesystem::file_type::not_found) {
             return ManifestsDirStatus::NoLauncher;
+        }
+        if (!std::filesystem::is_directory(parent)) {
+            return ManifestsDirStatus::CreateFailed;
         }
         return std::filesystem::create_directory(dir, ec) ? ManifestsDirStatus::Created : ManifestsDirStatus::CreateFailed;
     }
