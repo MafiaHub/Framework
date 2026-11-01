@@ -51,6 +51,7 @@
 
 #ifdef _WIN32
 #include "modules/d3d12_ui_compositor_ut.h"
+#include "modules/epic_manifest_ut.h"
 #include "modules/world_text_layout_ut.h"
 // The hooking layer, and so the pattern table, is Windows-only.
 #include "modules/pattern_hints_ut.h"
@@ -112,6 +113,7 @@ int main() {
     UNIT_MODULE(streamed_assets);
 #ifdef _WIN32
     UNIT_MODULE(d3d12_ui_compositor);
+    UNIT_MODULE(epic_manifest);
     UNIT_MODULE(world_text_layout);
     UNIT_MODULE(pattern_hints);
     UNIT_MODULE(pattern_table);
