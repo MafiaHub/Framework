@@ -137,4 +137,58 @@ MODULE(network_work, {
         manager->DestroyEntity(bystander);
         manager->DestroyEntity(viewer);
     });
+
+    IT("refuses replica constructions from a client", {
+        using namespace Framework::Networking::Replication;
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        manager->ConfigureGrid(100, -4096, 4096);
+        const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::ClientConstruction");
+        auto *viewer            = manager->CreateEntity(type);
+        auto *distant           = manager->CreateEntity(type);
+        viewer->streaming.range = 100;
+        distant->position.x     = 1000;
+        const MafiaNet::RakNetGUID viewerGuid(94);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->RebuildInterest();
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+
+        // Claims the client already holds an entity outside its interest.
+        MafiaNet::BitStream bs;
+        bs.Write(static_cast<MafiaNet::MessageID>(ID_REPLICA_MANAGER_CONSTRUCTION));
+        bs.Write(static_cast<MafiaNet::WorldId>(0));
+        bs.Write(static_cast<uint16_t>(1));
+        const MafiaNet::BitSize_t entry = bs.GetWriteOffset();
+        bs.Write(entry);
+        bs.Write(distant->GetNetworkID());
+        bs.Write(true);
+        bs.AlignWriteToByteBoundary();
+        bs.Write(viewerGuid);
+        bs.Write(bs.GetWriteOffset());
+        const MafiaNet::BitSize_t end = bs.GetWriteOffset();
+        bs.SetWriteOffset(entry);
+        bs.Write(end);
+        bs.SetWriteOffset(end);
+        bs.Write(false);
+        bs.AlignWriteToByteBoundary();
+        bs.Write(static_cast<uint16_t>(0));
+
+        MafiaNet::Packet packet {};
+        packet.data   = bs.GetData();
+        packet.length = bs.GetNumberOfBytesUsed();
+        packet.guid   = viewerGuid;
+        manager->OnReceive(&packet);
+        EQUALS(connection->HasReplicaConstructed(distant), false);
+
+        manager->DestroyEntity(distant);
+        manager->DestroyEntity(viewer);
+    });
 });
