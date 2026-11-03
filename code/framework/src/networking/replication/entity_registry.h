@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 
@@ -42,7 +43,7 @@ namespace Framework::Networking::Replication {
         // Constructs an instance and stamps its typeId. Returns nullptr for an unknown id.
         NetworkEntity *Create(uint32_t typeId) const;
 
-        uint32_t TypeId(const std::string &name) const;
+        uint32_t TypeId(std::string_view name) const;
 
       private:
         struct Entry {
@@ -57,5 +58,11 @@ namespace Framework::Networking::Replication {
         return Register(name, [] {
             return new T();
         });
+    }
+
+    template <typename T>
+    inline uint32_t EntityTypeId() {
+        static const uint32_t id = EntityRegistry::Get().TypeId(T::kTypeName);
+        return id;
     }
 } // namespace Framework::Networking::Replication

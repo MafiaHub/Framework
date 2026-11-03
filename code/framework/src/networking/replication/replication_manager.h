@@ -43,7 +43,7 @@ namespace Framework::Networking::Replication {
 #if defined(_CPPRTTI)
         return dynamic_cast<T *>(entity);
 #else
-        return (entity != nullptr && entity->GetTypeId() == EntityRegistry::Get().TypeId(T::kTypeName)) ? static_cast<T *>(entity) : nullptr;
+        return (entity != nullptr && entity->GetTypeId() == EntityTypeId<T>()) ? static_cast<T *>(entity) : nullptr;
 #endif
     }
 
@@ -160,7 +160,7 @@ namespace Framework::Networking::Replication {
         // the type id from T::kTypeName.
         template <typename T>
         T *CreateEntity() {
-            return CheckedEntityCast<T>(CreateEntity(EntityRegistry::Get().TypeId(T::kTypeName)));
+            return CheckedEntityCast<T>(CreateEntity(EntityTypeId<T>()));
         }
         template <typename T>
         T *GetEntity(MafiaNet::NetworkID networkId) const {

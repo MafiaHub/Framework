@@ -19,8 +19,8 @@ namespace Framework::Networking::Replication {
         return instance;
     }
 
-    uint32_t EntityRegistry::TypeId(const std::string &name) const {
-        return Utils::Hashing::CalculateCRC32(name.c_str());
+    uint32_t EntityRegistry::TypeId(std::string_view name) const {
+        return Utils::Hashing::CalculateCRC32(name.data(), name.size());
     }
 
     uint32_t EntityRegistry::Register(const std::string &name, Constructor constructor) {
