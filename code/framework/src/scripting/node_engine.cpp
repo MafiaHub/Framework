@@ -17,8 +17,20 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <thread>
+
+#ifdef _WIN32
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+#else
+#include <poll.h>
+#endif
 
 namespace {
+    // Script started this close to the next tick could run into it.
+    constexpr auto kRunMargin = std::chrono::milliseconds(1);
+
     // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
     // Handles: backslash, single quote, newline, carriage return, and tab.
     std::string EscapeForSingleQuotedJSString(const std::string &input) {
@@ -91,6 +103,11 @@ namespace Framework::Scripting {
 
     NodeEngine::~NodeEngine() {
         Shutdown();
+#ifdef _WIN32
+        if (_waitTimer != nullptr) {
+            CloseHandle(_waitTimer);
+        }
+#endif
     }
 
     ScriptingError NodeEngine::Init() {
@@ -107,6 +124,12 @@ namespace Framework::Scripting {
         if (!CreateEnvironment()) {
             return ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
+
+#ifdef _WIN32
+        if (_waitTimer == nullptr) {
+            _waitTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+        }
+#endif
 
         _initialized = true;
         return ScriptingError::SCRIPTING_NONE;
@@ -143,6 +166,7 @@ namespace Framework::Scripting {
             _references->RemoveRuntime(_hostReference);
         }
         _references.reset();
+        _queuedWork.clear();
 
         // Release persistent handles before destroying the isolate
         _interruptDrainFn.Reset();
@@ -225,6 +249,11 @@ namespace Framework::Scripting {
 
         _references    = std::make_unique<FunctionReferences>();
         _hostReference = _references->AddRuntime(isolate, _runtime->GetContext(), "server");
+        _references->SetWorkQueuedHandler([this](uint32_t runtime) {
+            if (std::find(_queuedWork.begin(), _queuedWork.end(), runtime) == _queuedWork.end()) {
+                _queuedWork.push_back(runtime);
+            }
+        });
 
         // Apply sandbox restrictions if enabled
         if (_options.sandboxed && !ApplySandbox(_runtime->GetContext())) {
@@ -277,6 +306,9 @@ namespace Framework::Scripting {
         }
 #endif
 
+        // Every runtime is drained below.
+        _queuedWork.clear();
+
         StopExitedResources();
         FlushRetiredRuntimes();
         _references->ReleaseCollected();
@@ -308,6 +340,140 @@ namespace Framework::Scripting {
             // executing, so it was at most retired, not freed: its name still says where to carry on.
             it = _resourceRuntimes.upper_bound(entry.resourceName);
         }
+    }
+
+    void NodeEngine::RunUntil(std::chrono::steady_clock::time_point deadline) {
+        using Clock       = std::chrono::steady_clock;
+        const auto stopAt = deadline - kRunMargin;
+#ifdef _WIN32
+        auto visited = Clock::now();
+#endif
+        while (_initialized && _runtime && _pendingErrors.empty() && Clock::now() < stopAt) {
+            DrainQueuedWork(stopAt);
+
+            // Which runtimes have a timer, immediate or callback due now, how long until the next one does, and which
+            // loops to wait on for I/O until then.
+            const uint64_t generation = _runtimesGeneration;
+            int64_t waitMs            = std::max<int64_t>(0, std::chrono::ceil<std::chrono::milliseconds>(stopAt - Clock::now()).count());
+            std::vector<ResourceRuntime *> due;
+            std::vector<ResourceRuntime *> watched;
+#ifndef _WIN32
+            std::vector<pollfd> fds;
+#endif
+            const auto consider = [&](ResourceRuntime *entry, NodeRuntime &runtime) {
+                if (runtime.GetIsolate()->IsInUse()) {
+                    return;
+                }
+                const int64_t ms = runtime.MsUntilDue();
+                if (ms == 0) {
+                    due.push_back(entry);
+                    return;
+                }
+                if (ms > 0) {
+                    waitMs = std::min(waitMs, ms);
+                }
+                // uv_run does nothing for a loop with nothing referenced, whatever its fd says.
+                if (!runtime.IsAlive()) {
+                    return;
+                }
+                watched.push_back(entry);
+#ifndef _WIN32
+                fds.push_back({runtime.GetBackendFd(), POLLIN, 0});
+#endif
+            };
+            consider(nullptr, *_runtime);
+            for (const auto &[name, entry] : _resourceRuntimes) {
+                if (!entry->exited) {
+                    consider(entry.get(), *entry->runtime);
+                }
+            }
+
+            // Wait only while nothing is ready; I/O is still picked up between rounds of a runtime that stays busy.
+            const bool idle = due.empty() && _queuedWork.empty();
+#ifdef _WIN32
+            // A Windows loop is a completion port, which cannot be waited on together with others or checked without
+            // taking its completions: visit the live loops every millisecond instead.
+            if (idle) {
+                SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(watched.empty() ? waitMs : std::min<int64_t>(waitMs, 1)), stopAt));
+            }
+            if (Clock::now() - visited >= std::chrono::milliseconds(1)) {
+                visited = Clock::now();
+                due.insert(due.end(), watched.begin(), watched.end());
+            }
+#else
+            // A loop's backend fd is readable while the loop has I/O to run, and polling it consumes nothing.
+            if (poll(fds.data(), static_cast<nfds_t>(fds.size()), idle ? static_cast<int>(waitMs) : 0) > 0) {
+                for (size_t i = 0; i < fds.size(); ++i) {
+                    if (fds[i].revents != 0) {
+                        due.push_back(watched[i]);
+                    }
+                }
+            }
+#endif
+            RunReady(due, generation, stopAt);
+        }
+        if (_pendingErrors.empty()) {
+            SleepUntil(deadline);
+        }
+    }
+
+    NodeRuntime *NodeEngine::FindRunnable(uint32_t reference) const {
+        NodeRuntime *runtime = reference == _hostReference ? _runtime.get() : nullptr;
+        for (auto it = _resourceRuntimes.begin(); runtime == nullptr && it != _resourceRuntimes.end(); ++it) {
+            if (it->second->reference == reference && !it->second->exited) {
+                runtime = it->second->runtime.get();
+            }
+        }
+        return runtime != nullptr && !runtime->GetIsolate()->IsInUse() ? runtime : nullptr;
+    }
+
+    void NodeEngine::DrainQueuedWork(std::chrono::steady_clock::time_point stopAt) {
+        // One round: runtimes calling each other without end would otherwise keep every other loop waiting.
+        std::vector<uint32_t> queued;
+        queued.swap(_queuedWork);
+        for (size_t i = 0; i < queued.size(); ++i) {
+            if (std::chrono::steady_clock::now() >= stopAt) {
+                _queuedWork.insert(_queuedWork.end(), queued.begin() + static_cast<std::ptrdiff_t>(i), queued.end());
+                break;
+            }
+            if (NodeRuntime *runtime = FindRunnable(queued[i])) {
+                runtime->Drain();
+            }
+        }
+        StopExitedResources();
+        FlushRetiredRuntimes();
+    }
+
+    void NodeEngine::RunReady(const std::vector<ResourceRuntime *> &ready, uint64_t generation, std::chrono::steady_clock::time_point stopAt) {
+        if (ready.empty()) {
+            return;
+        }
+        for (ResourceRuntime *entry : ready) {
+            // Script started or stopped resources: whatever is still ready is found on the next pass.
+            if (generation != _runtimesGeneration || std::chrono::steady_clock::now() >= stopAt) {
+                break;
+            }
+            NodeRuntime &runtime = entry != nullptr ? *entry->runtime : *_runtime;
+            if ((entry == nullptr || !entry->exited) && !runtime.GetIsolate()->IsInUse()) {
+                runtime.Tick();
+            }
+        }
+        StopExitedResources();
+        FlushRetiredRuntimes();
+    }
+
+    void NodeEngine::SleepUntil(std::chrono::steady_clock::time_point until) {
+#ifdef _WIN32
+        // The timer runs on another clock and can fire a little before `until`.
+        for (auto now = std::chrono::steady_clock::now(); _waitTimer != nullptr && now < until; now = std::chrono::steady_clock::now()) {
+            LARGE_INTEGER due;
+            due.QuadPart = -static_cast<LONGLONG>(std::max<int64_t>(1, std::chrono::duration_cast<std::chrono::nanoseconds>(until - now).count() / 100));
+            if (!SetWaitableTimer(_waitTimer, &due, 0, nullptr, nullptr, FALSE) || WaitForSingleObject(_waitTimer, INFINITE) != WAIT_OBJECT_0) {
+                break;
+            }
+        }
+#endif
+        std::this_thread::sleep_until(until);
     }
 
     void NodeEngine::StopExitedResources() {

@@ -20,6 +20,7 @@
 #include <node.h>
 #include <uv.h>
 
+#include <chrono>
 #include <map>
 #include <memory>
 #include <string>
@@ -95,6 +96,14 @@ namespace Framework::Scripting {
          * Call this from game loop to process async operations.
          */
         void Tick() override;
+
+        /**
+         * Run what becomes ready in any runtime until `deadline` - I/O completions, due timers and immediates, promises
+         * settled across runtimes - as soon as it is ready instead of at the next tick. The server calls this in place
+         * of sleeping between ticks. It starts no script in the last millisecond and sleeps that out, and returns early
+         * while an uncaught error waits in DrainPendingErrors(), so the error is handled before its runtime runs again.
+         */
+        void RunUntil(std::chrono::steady_clock::time_point deadline);
 
         /**
          * Pending uncaught error from process.on('uncaughtException') or
@@ -224,6 +233,17 @@ namespace Framework::Scripting {
         // Tick every resource runtime that is not executing further up the stack.
         void TickResourceRuntimes();
 
+        // The runtime calls left work in, by its id in the references, or null when it is gone, exited or executing.
+        NodeRuntime *FindRunnable(uint32_t reference) const;
+
+        // Drain, once each, the runtimes that calls between runtimes left work in, stopping at `stopAt`.
+        void DrainQueuedWork(std::chrono::steady_clock::time_point stopAt);
+
+        // Tick these runtimes (null is the engine's own) until `stopAt`, unless script has started or stopped resources.
+        void RunReady(const std::vector<ResourceRuntime *> &ready, uint64_t generation, std::chrono::steady_clock::time_point stopAt);
+
+        void SleepUntil(std::chrono::steady_clock::time_point until);
+
         NodeEngineOptions _options;
 
         static std::unique_ptr<node::MultiIsolatePlatform> _platform;
@@ -248,6 +268,14 @@ namespace Framework::Scripting {
 
         // Bumped whenever a resource runtime is created or destroyed, so a walk over them sees the change.
         uint64_t _runtimesGeneration = 0;
+
+        // Ids in the references of runtimes that calls between runtimes left work in since the last tick.
+        std::vector<uint32_t> _queuedWork;
+
+#ifdef _WIN32
+        // std::this_thread::sleep_until can be held to the 15.6 ms system timer, most of a tick.
+        HANDLE _waitTimer = nullptr;
+#endif
 
         // Cached JS function that calls setImmediate(()=>{}) each tick.
         // This serves two purposes for inspector CDP message processing:

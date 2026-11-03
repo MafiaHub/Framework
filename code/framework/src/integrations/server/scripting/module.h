@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -62,6 +63,11 @@ namespace Framework::Integrations::Server::Scripting {
          * Call this from the game loop.
          */
         void Update() override;
+
+        /**
+         * Wait for the next tick, running scripts' I/O, timers and promises as they become ready meanwhile.
+         */
+        void WaitUntil(std::chrono::steady_clock::time_point deadline);
 
         /**
          * Get the Node.js engine.
@@ -123,6 +129,9 @@ namespace Framework::Integrations::Server::Scripting {
         void RegisterFrameworkBindings();
 
       private:
+        // Hand uncaught errors the engine queued to the resource manager, outside any script.
+        void HandleRuntimeErrors();
+
         std::unique_ptr<Framework::Scripting::NodeEngine> _nodeEngine;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
         std::string _modVersion;

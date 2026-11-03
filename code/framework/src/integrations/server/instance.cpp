@@ -1479,6 +1479,9 @@ namespace Framework::Integrations::Server {
             // Tick work consumes the interval; overruns leave no wait and no catch-up backlog.
             _nextTick = start + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(_opts.worldConfig.tickInterval));
         }
+        else if (_scriptingModule) {
+            _scriptingModule->WaitUntil(_nextTick);
+        }
         else {
             std::this_thread::sleep_until(_nextTick);
         }

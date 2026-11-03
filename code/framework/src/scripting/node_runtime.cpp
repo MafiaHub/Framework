@@ -79,10 +79,36 @@ namespace Framework::Scripting {
         RunQueuedScript();
     }
 
+    void NodeRuntime::Drain() {
+        v8::Locker locker(_isolate);
+        v8::Isolate::Scope isolateScope(_isolate);
+        v8::HandleScope handleScope(_isolate);
+        v8::Context::Scope contextScope(_setup->context());
+        RunQueuedScript();
+    }
+
     void NodeRuntime::RunQueuedScript() {
         // A bare microtask checkpoint leaves process.nextTick callbacks queued until some later libuv callback in
         // this runtime returns, which can be seconds away.
         node::CallbackScope scope(_env, _setup->context()->Global(), {0, 0});
+    }
+
+    int NodeRuntime::GetBackendFd() const {
+        return uv_backend_fd(_setup->event_loop());
+    }
+
+    bool NodeRuntime::IsAlive() const {
+        return uv_loop_alive(_setup->event_loop()) != 0;
+    }
+
+    int64_t NodeRuntime::MsUntilDue() {
+        uv_loop_t *loop = _setup->event_loop();
+        if (!uv_loop_alive(loop)) {
+            return -1;
+        }
+        // Counted on the loop's own clock, which uv_run reads to decide which timers are due.
+        uv_update_time(loop);
+        return uv_backend_timeout(loop);
     }
 
 } // namespace Framework::Scripting

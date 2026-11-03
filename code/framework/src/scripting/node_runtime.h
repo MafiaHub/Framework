@@ -67,6 +67,21 @@ namespace Framework::Scripting {
          */
         void Tick();
 
+        /**
+         * Run the promise reactions and process.nextTick callbacks that calls into the runtime left queued, as
+         * returning from a libuv callback would. Enters the isolate itself.
+         */
+        void Drain();
+
+        // The fd that is readable while the loop has I/O to run, or -1 where there is none (Windows).
+        int GetBackendFd() const;
+
+        // Whether the loop has referenced handles or requests that can still produce work.
+        bool IsAlive() const;
+
+        // Milliseconds until the loop has a timer, immediate or pending callback to run (0: now), or -1 for none.
+        int64_t MsUntilDue();
+
       private:
         // The caller holds the isolate's scopes.
         void RunQueuedScript();

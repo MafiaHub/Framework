@@ -92,6 +92,13 @@ namespace Framework::Scripting {
         uint64_t nextExport     = 1;
         uint64_t nextStandIn    = 1;
         uint64_t nextSettlement = 1;
+        std::function<void(uint32_t)> onWorkQueued;
+
+        void WorkQueued(uint32_t runtime) const {
+            if (onWorkQueued) {
+                onWorkQueued(runtime);
+            }
+        }
 
         // What a V8 callback (a stand-in, a promise reaction) is handed: this state and the key of its target. A key, not
         // a pointer: the target can go while the function still exists, such as when its runtime has left but a
@@ -426,6 +433,7 @@ namespace Framework::Scripting {
                     }
                 }
             }
+            WorkQueued(ownerId);
 
             const auto hooks = Hooks(callerId);
             if (thrown) {
@@ -554,6 +562,7 @@ namespace Framework::Scripting {
             else {
                 resolver->Reject(entered.context, rebuilt).Check();
             }
+            state.WorkQueued(owned->caller);
         }
     };
 
@@ -636,6 +645,7 @@ namespace Framework::Scripting {
             State::Entered entered(caller->second);
             v8::Local<v8::Value> error = v8::Exception::Error(v8pp::to_v8(caller->second.isolate, name + " stopped before the call finished"));
             settlement->resolver.Get(caller->second.isolate)->Reject(entered.context, error).Check();
+            state.WorkQueued(settlement->caller);
         }
     }
 
@@ -713,6 +723,7 @@ namespace Framework::Scripting {
                 }
             }
         }
+        state.WorkQueued(ownerId);
         if (!error.empty()) {
             State::Throw(caller, error);
             return {};
@@ -722,6 +733,10 @@ namespace Framework::Scripting {
 
     void FunctionReferences::ReleaseCollected() {
         _state->ReleaseCollected();
+    }
+
+    void FunctionReferences::SetWorkQueuedHandler(std::function<void(uint32_t runtime)> handler) {
+        _state->onWorkQueued = std::move(handler);
     }
 
     size_t FunctionReferences::GetExportCount() const {
