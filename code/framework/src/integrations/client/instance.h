@@ -63,6 +63,14 @@ namespace Framework::Integrations::Client {
         // A first download whose missing asset paks exceed this waits for GrantAssetConsent().
         uint64_t assetConsentThreshold = ~0ull;
 
+        // A download that does nothing observable for this long (no request, no answer, no byte, no
+        // pause it is sitting out) is given up as stalled. Waiting in a busy server's queue is not
+        // silence. 0 never gives up on its own; the transport's own timeouts still apply.
+        uint32_t downloadStallTimeoutMs = 60000;
+        // How long one file waits in a busy server's queue before the download fails; 0 waits for as
+        // long as the server keeps answering.
+        uint32_t downloadQueueWaitMs = 0;
+
         int64_t discordAppId                = 0;
         bool usePresence                    = true;
         bool useRenderer                    = true;
@@ -116,7 +124,7 @@ namespace Framework::Integrations::Client {
         uint32_t serverIDHash;
     };
 
-    // On-connect asset transfer state, filled from the MafiaNet transfer set.
+    // On-connect asset transfer state, read off the HTTP downloader every networking tick.
     struct AssetDownloadStatus {
         bool downloading         = false;
         float progress           = 0.0f; // 0..1 over the whole set
@@ -125,6 +133,16 @@ namespace Framework::Integrations::Client {
         uint32_t filesDownloaded = 0;
         uint32_t filesTotal      = 0;
         std::string currentFile;
+        // Recent throughput, smoothed over the last few seconds; 0 until bytes move.
+        uint64_t bytesPerSecond = 0;
+        // The server has no slot free and the download is waiting for one; queuePosition is how many
+        // peers stand ahead (0 is next), -1 when the server did not say.
+        bool waitingForSlot   = false;
+        int32_t queuePosition = -1;
+        // Transfers interrupted after moving bytes and resumed, over the whole set.
+        uint32_t cuts = 0;
+        // Why the download failed, for the player; empty while it runs or once it succeeded.
+        std::string failure;
     };
 
     // Observable stages of the connect handshake, for a mod's loading UI.
@@ -167,6 +185,10 @@ namespace Framework::Integrations::Client {
         // assets
         AssetDownloadStatus _downloadStatus {};
         AssetDownloader _assetDownloader;
+        // Throughput sampling for AssetDownloadStatus::bytesPerSecond.
+        int64_t _downloadSampleMs      = 0;
+        uint64_t _downloadSampleBytes  = 0;
+        double _downloadBytesPerSecond = 0.0;
         std::string _downloadToken;
         std::string _downloadUrl;
         ConnectionPhase _connectionPhase = ConnectionPhase::Disconnected;
@@ -188,11 +210,24 @@ namespace Framework::Integrations::Client {
         // The asset paks the server announced for this session, and whether they are on disk.
         std::vector<ResourceAssetPak> _assetPaks;
         bool _assetPaksDownloaded {};
+        // Paks the join does not wait for: fetched by a transfer of their own once the blocking ones are
+        // in, and moved into _assetPaks as they land.
+        std::vector<ResourceAssetPak> _deferredPaks;
+        AssetDownloader _deferredDownloader;
+        AssetDownloadStatus _deferredStatus {};
         // Bytes a held first download is waiting on consent for; 0 when none is held.
         uint64_t _assetConsentBytes {};
 
-        // Replaces the asset paks of every resource in `resources` with what it announces.
-        void AnnounceAssetPaks(const std::vector<Client::Scripting::ServerResourceInfo> &resources);
+        // Replaces the asset paks of every resource in `resources` with what it announces. On the first
+        // connect a pak marked deferred waits in _deferredPaks; a refresh fetches everything at once.
+        void AnnounceAssetPaks(const std::vector<Client::Scripting::ServerResourceInfo> &resources, bool holdDeferred);
+        // Older files a job may take chunks from: the stale copy it replaces, earlier versions of the
+        // same lane in this server's cache, the same file in another server's.
+        std::vector<std::string> ReuseCandidates(const std::string &fileName, const std::string &path) const;
+        AssetDownloader::Job MakeJob(const std::string &fileName, const std::string &sha256, uint64_t size) const;
+        std::vector<AssetDownloader::Source> DownloadSources() const;
+        void StartDeferredDownload();
+        void PollDeferredDownload();
         // Every announced asset pak is on disk at its announced size.
         bool VerifyAssetPaks() const;
         // Removes cached paks the server no longer announces; one still mounted stays until the next session.
@@ -249,6 +284,8 @@ namespace Framework::Integrations::Client {
         void InitProtocolHandler();
         // True once the initial resources started on a connection that is still current.
         bool OnAssetsDownloaded(bool success);
+        uint64_t SampleDownloadRate(int64_t nowMs, uint64_t bytes);
+        bool IsDownloadStalled(int64_t nowMs) const;
         // Registers the origin once, and re-points it at the current asset cache
         // on every call.
         void RegisterResourceSchemeHandler();
@@ -482,9 +519,19 @@ namespace Framework::Integrations::Client {
             return _assetPaks;
         }
 
-        /** Whether every announced asset pak is on disk: the first download completed and was verified. */
+        /** Whether every blocking asset pak is on disk: the first download completed and was verified. */
         bool AreResourceAssetPaksDownloaded() const {
             return _assetPaksDownloaded;
+        }
+
+        /** Paks announced as deferred that have not landed yet; they join GetResourceAssetPaks() as they do. */
+        const std::vector<ResourceAssetPak> &GetDeferredAssetPaks() const {
+            return _deferredPaks;
+        }
+
+        /** Progress of the deferred paks' transfer, which runs after the join; `downloading` is false when there is none. */
+        const AssetDownloadStatus &GetDeferredDownloadStatus() const {
+            return _deferredStatus;
         }
 
         /** Bytes of asset paks the first download waits on consent for; 0 when it is not waiting. */

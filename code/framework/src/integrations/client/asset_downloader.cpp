@@ -10,15 +10,22 @@
 
 #include <logging/logger.h>
 #include <utils/crypto.h>
+#include <utils/streamed_assets/transfer.h>
 
 #include <httplib.h>
+
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
+#include <set>
+#include <sstream>
 #include <thread>
+#include <unordered_map>
 
 namespace Framework::Integrations::Client {
     namespace {
@@ -26,6 +33,16 @@ namespace Framework::Integrations::Client {
         constexpr time_t kReadTimeoutSeconds    = 30;
         constexpr const char *kTokenHeader      = "X-Download-Token";
         constexpr int kMaxServerDelayMs         = 30000;
+        constexpr int kBusyDelayMs              = 2000; // a 503 without Retry-After
+        constexpr const char *kQueueHeader      = "X-Queue-Position";
+
+        double MiB(uint64_t bytes) {
+            return static_cast<double>(bytes) / (1024.0 * 1024.0);
+        }
+
+        double MiBPerSecond(uint64_t bytes, long long milliseconds) {
+            return milliseconds > 0 ? MiB(bytes) * 1000.0 / static_cast<double>(milliseconds) : 0.0;
+        }
 
         // origin ("https://host:port") and path ("/base", no trailing slash) of an http(s) URL.
         bool SplitUrl(const std::string &url, std::string &origin, std::string &path) {
@@ -42,13 +59,32 @@ namespace Framework::Integrations::Client {
             return origin.size() > scheme + 3;
         }
 
+        void ConfigureClient(httplib::Client &client) {
+            client.set_connection_timeout(kConnectTimeoutSeconds, 0);
+            client.set_read_timeout(kReadTimeoutSeconds, 0);
+        }
+
+        httplib::Headers HeadersFor(const AssetDownloader::Source &source) {
+            httplib::Headers headers;
+            if (!source.token.empty()) {
+                headers.emplace(kTokenHeader, source.token);
+            }
+            return headers;
+        }
+
+        // A file already in the cache and matching is not fetched: its verification note spares the
+        // hash when the file has not been touched since it was last checked.
         bool IsCached(const AssetDownloader::Job &job) {
             std::error_code code;
             if (!std::filesystem::exists(job.path, code)) {
                 return false;
             }
+            if (Utils::StreamedAssets::IsVerified(job.path, job.sha256)) {
+                return true;
+            }
             const auto size = std::filesystem::file_size(job.path, code);
             if (!code && size == job.size && Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256FileHex(job.path), job.sha256)) {
+                Utils::StreamedAssets::WriteVerifiedNote(job.path, job.sha256);
                 return true;
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Cached '{}' does not match the server's copy; downloading it again", job.fileName);
@@ -66,7 +102,51 @@ namespace Framework::Integrations::Client {
             }
             return !cancel.load();
         }
+
+        std::set<uint64_t> ReadAssemblyNote(const std::string &path, uint64_t count) {
+            std::set<uint64_t> done;
+            std::ifstream note(path);
+            uint64_t index = 0;
+            while (note >> index) {
+                if (index < count) {
+                    done.insert(index);
+                }
+            }
+            return done;
+        }
+
+        int RetryAfterMs(const std::string &header) {
+            // Clamped while parsing: the header is the server's, and a large value must not overflow.
+            const long long seconds = std::strtoll(header.c_str(), nullptr, 10);
+            return static_cast<int>(std::clamp<long long>(seconds, 0, kMaxServerDelayMs / 1000) * 1000);
+        }
     } // namespace
+
+    void AssetDownloader::Transfer::Register(httplib::Client *client) {
+        std::lock_guard lock(mutex);
+        clients.push_back(client);
+    }
+
+    void AssetDownloader::Transfer::Unregister(httplib::Client *client) {
+        std::lock_guard lock(mutex);
+        clients.erase(std::remove(clients.begin(), clients.end(), client), clients.end());
+    }
+
+    bool AssetDownloader::Transfer::NoteAnswer(int status, const std::string &retryAfter, const std::string &queue, bool accepted) {
+        Touch();
+        if (status == 503) {
+            const long long position = queue.empty() ? -1 : std::clamp<long long>(std::strtoll(queue.c_str(), nullptr, 10), 0, std::numeric_limits<int32_t>::max());
+            queuePosition.store(static_cast<int32_t>(position), std::memory_order_relaxed);
+            waitingForSlot.store(true, std::memory_order_relaxed);
+            return false;
+        }
+        (void)retryAfter;
+        if (accepted) {
+            waitingForSlot.store(false, std::memory_order_relaxed);
+            queuePosition.store(-1, std::memory_order_relaxed);
+        }
+        return accepted;
+    }
 
     AssetDownloader::~AssetDownloader() {
         Cancel();
@@ -93,8 +173,8 @@ namespace Framework::Integrations::Client {
         {
             std::lock_guard lock(_transfer->mutex);
             _transfer->cancel.store(true);
-            if (_transfer->client) {
-                _transfer->client->stop();
+            for (httplib::Client *client : _transfer->clients) {
+                client->stop();
             }
         }
         _transfer.reset();
@@ -134,8 +214,35 @@ namespace Framework::Integrations::Client {
         return _transfer->current;
     }
 
+    bool AssetDownloader::IsWaitingForSlot() const {
+        return _transfer && _transfer->waitingForSlot.load(std::memory_order_relaxed);
+    }
+
+    int32_t AssetDownloader::GetQueuePosition() const {
+        return _transfer ? _transfer->queuePosition.load(std::memory_order_relaxed) : -1;
+    }
+
+    uint32_t AssetDownloader::GetCuts() const {
+        return _transfer ? _transfer->cuts.load(std::memory_order_relaxed) : 0;
+    }
+
+    uint64_t AssetDownloader::GetBytesReused() const {
+        return _transfer ? _transfer->reused.load(std::memory_order_relaxed) : 0;
+    }
+
+    int64_t AssetDownloader::GetLastActivityMs() const {
+        return _transfer ? _transfer->lastActivityMs.load(std::memory_order_relaxed) : 0;
+    }
+
+    int64_t AssetDownloader::NowMs() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
     void AssetDownloader::Run(std::shared_ptr<Transfer> transfer, std::vector<Source> sources, std::vector<Job> jobs) {
-        bool success = true;
+        const auto started   = std::chrono::steady_clock::now();
+        uint64_t cachedBytes = 0;
+        bool success         = true;
+        transfer->Touch();
         for (const auto &job : jobs) {
             if (transfer->cancel.load()) {
                 return;
@@ -144,7 +251,10 @@ namespace Framework::Integrations::Client {
                 std::lock_guard lock(transfer->mutex);
                 transfer->current = job.fileName;
             }
+            // Hashing a cached pak is work, not silence; a pak hashes well inside the stall watch.
+            transfer->Touch();
             if (IsCached(job)) {
+                cachedBytes += job.size;
                 transfer->bytes.fetch_add(job.size, std::memory_order_relaxed);
             }
             else {
@@ -163,6 +273,13 @@ namespace Framework::Integrations::Client {
             }
             transfer->filesDone.fetch_add(1, std::memory_order_relaxed);
         }
+        const auto elapsed     = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+        const uint64_t counted = transfer->bytes.load(std::memory_order_relaxed);
+        const uint64_t reused  = transfer->reused.load(std::memory_order_relaxed);
+        const uint64_t fetched = counted - std::min(cachedBytes + reused, counted);
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)
+            ->info("Asset transfer {}: {} of {} file(s), {:.1f} MiB fetched, {:.1f} MiB reused from older files and {:.1f} MiB already cached in {:.1f} s ({:.2f} MiB/s), {} cut(s)", success ? "complete" : "failed", transfer->filesDone.load(std::memory_order_relaxed),
+                transfer->filesTotal, MiB(fetched), MiB(reused), MiB(cachedBytes), static_cast<double>(elapsed) / 1000.0, MiBPerSecond(fetched, elapsed), transfer->cuts.load(std::memory_order_relaxed));
         transfer->success.store(success);
         transfer->done.store(true);
     }
@@ -171,34 +288,120 @@ namespace Framework::Integrations::Client {
         return job.path + "." + job.sha256.substr(0, 16) + ".part";
     }
 
+    std::string AssetDownloader::AssemblyNotePath(const Job &job) {
+        return PartialPath(job) + ".done";
+    }
+
+    bool AssetDownloader::WaitBeforeRetry(Transfer &transfer, const Source &source, const Job &job, const Attempt &result, int &failuresWithoutProgress, int64_t &queuedSinceMs) {
+        if (transfer.cancel.load()) {
+            return false;
+        }
+        const RetryPolicy &policy = transfer.retry;
+        if (result.busy) {
+            // A full server is asked again after the pause it names; waiting is not failing. The
+            // wait is bounded only by the policy, so a server that never frees a slot does not
+            // park the client for good.
+            const int64_t now = NowMs();
+            if (queuedSinceMs == 0) {
+                queuedSinceMs = now;
+            }
+            if (policy.queueWaitMs > 0 && now - queuedSinceMs >= policy.queueWaitMs) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("'{}' waited {} s for a download slot at {}; giving up", job.fileName, policy.queueWaitMs / 1000, source.url);
+                return false;
+            }
+            const int delay        = result.retryAfterMs > 0 ? std::min(result.retryAfterMs, kMaxServerDelayMs) : kBusyDelayMs;
+            const int32_t position = transfer.queuePosition.load(std::memory_order_relaxed);
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("{} is busy; asking for '{}' again in {} ms{}", source.url, job.fileName, delay, position >= 0 ? fmt::format(" ({} ahead in its queue)", position) : "");
+            transfer.Touch();
+            return WaitUnlessCancelled(transfer.cancel, delay);
+        }
+        queuedSinceMs = 0;
+        if (!result.retry) {
+            return false;
+        }
+        if (result.progressed) {
+            // A transfer that was moving and got cut is a link event, not a failed request: it
+            // resumes with a fresh budget.
+            failuresWithoutProgress = 0;
+            transfer.cuts.fetch_add(1, std::memory_order_relaxed);
+        }
+        else {
+            ++failuresWithoutProgress;
+        }
+        if (failuresWithoutProgress >= policy.attempts) {
+            return false;
+        }
+        // A wait the server names is its own, bounded only so a hostile server cannot park the client.
+        const int delay = result.retryAfterMs > 0 ? std::min(result.retryAfterMs, kMaxServerDelayMs) : std::min(policy.firstDelayMs << std::min(failuresWithoutProgress, 16), policy.maxDelayMs);
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Retrying '{}' in {} ms ({})", job.fileName, delay, result.progressed ? "resuming a cut transfer" : fmt::format("attempt {} of {}", failuresWithoutProgress + 1, policy.attempts));
+        transfer.Touch();
+        return WaitUnlessCancelled(transfer.cancel, delay);
+    }
+
     bool AssetDownloader::FetchWithRetries(Transfer &transfer, const Source &source, const Job &job) {
-        const auto started = std::chrono::steady_clock::now();
-        for (int attempt = 1;; ++attempt) {
+        const auto started              = std::chrono::steady_clock::now();
+        const uint32_t cutsBefore       = transfer.cuts.load(std::memory_order_relaxed);
+        const uint64_t reusedBefore     = transfer.reused.load(std::memory_order_relaxed);
+        int failuresWithoutProgress     = 0;
+        int64_t queuedSinceMs           = 0;
+        std::vector<std::string> chunks = FetchChunkList(transfer, source, job);
+        for (;;) {
             const uint64_t before = transfer.bytes.load(std::memory_order_relaxed);
-            const Attempt result  = Fetch(transfer, source, job);
+            transfer.Touch();
+            Attempt result = chunks.empty() ? Fetch(transfer, source, job) : FetchChunked(transfer, source, job, chunks);
             if (result.done) {
-                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Downloaded '{}' ({} bytes) from {} in {} ms", job.fileName, job.size, source.url, elapsed);
+                const auto elapsed    = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+                const uint32_t cuts   = transfer.cuts.load(std::memory_order_relaxed) - cutsBefore;
+                const uint64_t reused = transfer.reused.load(std::memory_order_relaxed) - reusedBefore;
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)
+                    ->info("Downloaded '{}' ({:.1f} MiB) from {} in {:.1f} s ({:.2f} MiB/s{}{})", job.fileName, MiB(job.size), source.url, static_cast<double>(elapsed) / 1000.0, MiBPerSecond(job.size - reused, elapsed),
+                        reused > 0 ? fmt::format(", {:.1f} MiB reused from older files", MiB(reused)) : "", cuts > 0 ? fmt::format(", resumed after {} cut(s)", cuts) : "");
                 return true;
             }
             // The attempt's bytes come off the progress; the next one counts what it resumes from again.
             transfer.bytes.fetch_sub(transfer.bytes.load(std::memory_order_relaxed) - before, std::memory_order_relaxed);
-            const RetryPolicy &policy = transfer.retry;
-            if (!result.retry || attempt >= policy.attempts || transfer.cancel.load()) {
-                return false;
+            if (result.fallback && !transfer.cancel.load()) {
+                // The source serves the file but not its ranges: it is read whole from here on, at once.
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("{} does not serve '{}' by chunks; fetching it whole", source.url, job.fileName);
+                chunks.clear();
+                continue;
             }
-            // A wait the server names is its own, bounded only so a hostile server cannot park the client.
-            const int delay = result.retryAfterMs > 0 ? std::min(result.retryAfterMs, kMaxServerDelayMs) : std::min(policy.firstDelayMs << std::min(attempt - 1, 16), policy.maxDelayMs);
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Retrying '{}' in {} ms (attempt {} of {})", job.fileName, delay, attempt + 1, policy.attempts);
-            if (!WaitUnlessCancelled(transfer.cancel, delay)) {
+            if (!WaitBeforeRetry(transfer, source, job, result, failuresWithoutProgress, queuedSinceMs)) {
                 return false;
             }
         }
     }
 
+    std::vector<std::string> AssetDownloader::FetchChunkList(Transfer &transfer, const Source &source, const Job &job) {
+        std::vector<std::string> chunks;
+        std::string origin;
+        std::string base;
+        if (!SplitUrl(source.url, origin, base) || Utils::StreamedAssets::ChunkCount(job.size) < 2) {
+            // One chunk is the whole file: the plain path already resumes it.
+            return chunks;
+        }
+        httplib::Client client(origin);
+        ConfigureClient(client);
+        transfer.Register(&client);
+        transfer.Touch();
+        const auto res = client.Get(base + "/" + Utils::StreamedAssets::ChunkListFileName(job.fileName), HeadersFor(source));
+        transfer.Unregister(&client);
+        if (!res || res->status != 200) {
+            return chunks;
+        }
+        transfer.Touch();
+        if (!Utils::StreamedAssets::ParseChunkList(res->body, job.size, chunks)) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("{} describes '{}' with a chunk list that does not fit the file; fetching it whole", source.url, job.fileName);
+            chunks.clear();
+        }
+        return chunks;
+    }
+
     AssetDownloader::Attempt AssetDownloader::Fetch(Transfer &transfer, const Source &source, const Job &job) {
         const std::filesystem::path partial = PartialPath(job);
         std::error_code code;
+        // A partial of a chunked assembly is not a prefix of the file; it is not resumed as one.
+        std::filesystem::remove(AssemblyNotePath(job), code);
 
         // What an earlier attempt left is asked for no more; a partial as long as the file or longer is
         // not one this downloader wrote, and starts over.
@@ -220,17 +423,12 @@ namespace Framework::Integrations::Client {
 
         uint64_t received = 0;
         bool resumed      = false;
-        int status        = 0;
-        std::string retryAfter;
+        Answer answer;
         {
             std::ofstream output;
             httplib::Client client(origin);
-            client.set_connection_timeout(kConnectTimeoutSeconds, 0);
-            client.set_read_timeout(kReadTimeoutSeconds, 0);
-            httplib::Headers headers;
-            if (!source.token.empty()) {
-                headers.emplace(kTokenHeader, source.token);
-            }
+            ConfigureClient(client);
+            httplib::Headers headers = HeadersFor(source);
             if (offset > 0) {
                 headers.emplace("Range", "bytes=" + std::to_string(offset) + "-");
             }
@@ -239,7 +437,7 @@ namespace Framework::Integrations::Client {
                 if (transfer.cancel.load()) {
                     return {};
                 }
-                transfer.client = &client;
+                transfer.clients.push_back(&client);
             }
             // The status is judged before any body is read: an error page must not reach the partial file or
             // the progress, nor end the request early and lose the status with it. A 206 continues the
@@ -247,15 +445,17 @@ namespace Framework::Integrations::Client {
             const auto res = client.Get(
                 base + "/" + job.fileName, headers,
                 [&](const httplib::Response &response) {
-                    status     = response.status;
-                    retryAfter = response.get_header_value("Retry-After");
-                    if (status == 206 && offset > 0 && response.get_header_value("Content-Range").rfind("bytes " + std::to_string(offset) + "-", 0) == 0) {
+                    answer.status        = response.status;
+                    answer.retryAfter    = response.get_header_value("Retry-After");
+                    answer.queuePosition = response.get_header_value(kQueueHeader);
+                    transfer.Touch();
+                    if (answer.status == 206 && offset > 0 && response.get_header_value("Content-Range").rfind("bytes " + std::to_string(offset) + "-", 0) == 0) {
                         resumed  = true;
                         received = offset;
                         transfer.bytes.fetch_add(offset, std::memory_order_relaxed);
                         output.open(partial, std::ios::binary | std::ios::app);
                     }
-                    else if (status == 200) {
+                    else if (answer.status == 200) {
                         output.open(partial, std::ios::binary | std::ios::trunc);
                     }
                     else {
@@ -273,62 +473,314 @@ namespace Framework::Integrations::Client {
                     }
                     output.write(data, static_cast<std::streamsize>(length));
                     transfer.bytes.fetch_add(length, std::memory_order_relaxed);
+                    transfer.NoteAnswer(answer.status, answer.retryAfter, answer.queuePosition, true);
                     return output.good();
                 });
-            {
-                std::lock_guard lock(transfer.mutex);
-                transfer.client = nullptr;
-            }
+            transfer.Unregister(&client);
             if (transfer.cancel.load()) {
                 // Whatever arrived stays for the next transfer to resume from.
                 return {};
             }
-            const bool accepted = status == 200 || resumed;
+            const bool accepted = answer.status == 200 || resumed;
             if (!res || !accepted) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Downloading '{}' from {} failed: {}", job.fileName, source.url, status != 0 && !accepted ? "HTTP " + std::to_string(status) : httplib::to_string(res.error()));
                 Attempt failed;
-                if (status == 206 || status == 416 || received > job.size) {
+                // Bytes of the file arrived: past the partial on a resume, any at all on a fresh answer.
+                failed.progressed = received > (resumed ? offset : 0);
+                if (answer.status == 503) {
+                    transfer.NoteAnswer(answer.status, answer.retryAfter, answer.queuePosition, false);
+                    failed.retryAfterMs = RetryAfterMs(answer.retryAfter);
+                    failed.busy         = true;
+                    failed.retry        = true;
+                    return failed;
+                }
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)
+                    ->error("Downloading '{}' from {} failed{}: {}", job.fileName, source.url, failed.progressed ? fmt::format(" after {:.1f} MiB", MiB(received - (resumed ? offset : 0))) : "",
+                        answer.status != 0 && !accepted ? "HTTP " + std::to_string(answer.status) : httplib::to_string(res.error()));
+                if ((answer.status == 206 && !resumed) || answer.status == 416 || received > job.size) {
                     // A range other than the one asked for, or more bytes than the file has: start it over.
+                    // Nothing of it is kept, so nothing of it counts as progress.
                     output.close();
                     std::filesystem::remove(partial, code);
-                    failed.retry = true;
+                    failed.progressed = false;
+                    failed.retry      = true;
                     return failed;
                 }
                 // A refusal (403, 404) will not change by asking again; the network or a busy server may.
                 // Bytes already written stay for the retry to resume from.
-                failed.retry = status == 0 || accepted || status >= 500;
-                if (status == 503) {
-                    // Clamped while parsing: the header is the server's, and a large value must not overflow.
-                    const long long seconds = std::strtoll(retryAfter.c_str(), nullptr, 10);
-                    failed.retryAfterMs     = static_cast<int>(std::clamp<long long>(seconds, 0, kMaxServerDelayMs / 1000) * 1000);
-                }
+                failed.retry = answer.status == 0 || accepted || answer.status >= 500;
                 return failed;
             }
         }
 
-        if (received != job.size || !Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256FileHex(partial.string()), job.sha256)) {
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("'{}' does not match the hash the server announced{}", job.fileName, resumed ? " (resumed); fetching it whole" : "");
+        if (received != job.size) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("'{}' ended {} bytes short; fetching it whole", job.fileName, job.size - received);
             std::filesystem::remove(partial, code);
             Attempt corrupted;
             corrupted.retry = true;
             return corrupted;
         }
+        return Finish(transfer, job, partial.string(), resumed);
+    }
+
+    AssetDownloader::Attempt AssetDownloader::Finish(Transfer &transfer, const Job &job, const std::string &partial, bool resumed) {
+        std::error_code code;
+        transfer.Touch();
+        if (!Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256FileHex(partial), job.sha256)) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("'{}' does not match the hash the server announced{}", job.fileName, resumed ? " (resumed); fetching it whole" : "");
+            std::filesystem::remove(partial, code);
+            std::filesystem::remove(AssemblyNotePath(job), code);
+            Attempt corrupted;
+            corrupted.retry = true;
+            return corrupted;
+        }
         if (resumed) {
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Resumed '{}' from byte {}", job.fileName, offset);
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Resumed '{}'", job.fileName);
         }
 
         std::lock_guard lock(transfer.mutex);
         if (transfer.cancel.load()) {
             return {};
         }
+        Utils::StreamedAssets::RemoveVerifiedNote(job.path);
+        std::filesystem::remove(job.path, code);
         std::filesystem::rename(partial, job.path, code);
         if (code) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not move '{}' into the cache: {}", job.fileName, code.message());
             std::filesystem::remove(partial, code);
             return {};
         }
+        std::filesystem::remove(AssemblyNotePath(job), code);
+        Utils::StreamedAssets::WriteVerifiedNote(job.path, job.sha256);
         Attempt done;
         done.done = true;
         return done;
+    }
+
+    AssetDownloader::Attempt AssetDownloader::FetchChunk(Transfer &transfer, const Source &source, const Job &job, uint64_t index, const std::string &sha256, std::vector<char> &data) {
+        std::string origin;
+        std::string base;
+        if (!SplitUrl(source.url, origin, base)) {
+            return {};
+        }
+        const uint64_t offset = index * Utils::StreamedAssets::kChunkSize;
+        const uint64_t length = Utils::StreamedAssets::ChunkLength(job.size, index);
+        data.clear();
+        data.reserve(static_cast<size_t>(length));
+
+        httplib::Client client(origin);
+        ConfigureClient(client);
+        httplib::Headers headers = HeadersFor(source);
+        headers.emplace("Range", "bytes=" + std::to_string(offset) + "-" + std::to_string(offset + length - 1));
+        {
+            std::lock_guard lock(transfer.mutex);
+            if (transfer.cancel.load()) {
+                return {};
+            }
+            transfer.clients.push_back(&client);
+        }
+        Answer answer;
+        bool accepted  = false;
+        const auto res = client.Get(
+            base + "/" + job.fileName, headers,
+            [&](const httplib::Response &response) {
+                answer.status        = response.status;
+                answer.retryAfter    = response.get_header_value("Retry-After");
+                answer.queuePosition = response.get_header_value(kQueueHeader);
+                transfer.Touch();
+                accepted = answer.status == 206 && response.get_header_value("Content-Range").rfind("bytes " + std::to_string(offset) + "-", 0) == 0;
+                return accepted;
+            },
+            [&](const char *bytes, size_t count) {
+                if (transfer.cancel.load() || data.size() + count > length) {
+                    return false;
+                }
+                data.insert(data.end(), bytes, bytes + count);
+                transfer.bytes.fetch_add(count, std::memory_order_relaxed);
+                transfer.NoteAnswer(answer.status, answer.retryAfter, answer.queuePosition, true);
+                return true;
+            });
+        transfer.Unregister(&client);
+        if (transfer.cancel.load()) {
+            return {};
+        }
+        Attempt failed;
+        failed.progressed = !data.empty();
+        if (answer.status == 503) {
+            transfer.NoteAnswer(answer.status, answer.retryAfter, answer.queuePosition, false);
+            failed.retryAfterMs = RetryAfterMs(answer.retryAfter);
+            failed.busy         = true;
+            failed.retry        = true;
+            return failed;
+        }
+        if (!res || !accepted || data.size() != length) {
+            if (answer.status == 200 || answer.status == 416) {
+                // The source serves the file but not its ranges: the caller falls back to reading it whole.
+                failed.fallback = true;
+                return failed;
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)
+                ->error("Chunk {} of '{}' from {} failed: {}", index, job.fileName, source.url, answer.status != 0 && !accepted ? "HTTP " + std::to_string(answer.status) : (res ? "ended " + std::to_string(length - data.size()) + " bytes short" : httplib::to_string(res.error())));
+            failed.retry = answer.status == 0 || accepted || answer.status >= 500;
+            return failed;
+        }
+        if (!Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256Hex(data.data(), data.size()), sha256)) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Chunk {} of '{}' from {} does not match its announced hash", index, job.fileName, source.url);
+            failed.progressed = false;
+            failed.retry      = true;
+            return failed;
+        }
+        Attempt done;
+        done.done = true;
+        return done;
+    }
+
+    AssetDownloader::Attempt AssetDownloader::FetchChunked(Transfer &transfer, const Source &source, const Job &job, const std::vector<std::string> &chunks) {
+        const std::string partial = PartialPath(job);
+        const std::string note    = AssemblyNotePath(job);
+        const uint64_t count      = chunks.size();
+        std::error_code code;
+
+        // The assembly lives in a partial of the file's full size, with the note naming the chunks in
+        // place. A partial of another shape is an unfinished whole-file read, and starts over here.
+        std::set<uint64_t> done;
+        if (std::filesystem::exists(partial, code) && !code && std::filesystem::file_size(partial, code) == job.size && std::filesystem::exists(note, code)) {
+            done = ReadAssemblyNote(note, count);
+        }
+        else {
+            std::filesystem::remove(partial, code);
+            std::filesystem::remove(note, code);
+            std::ofstream(partial, std::ios::binary | std::ios::trunc).close();
+            std::filesystem::resize_file(partial, job.size, code);
+            if (code) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not reserve '{}' for '{}': {}", partial, job.fileName, code.message());
+                return {};
+            }
+        }
+        std::fstream output(partial, std::ios::binary | std::ios::in | std::ios::out);
+        std::ofstream noteOut(note, std::ios::app);
+        if (!output.is_open() || !noteOut.is_open()) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not open '{}' for writing", partial);
+            return {};
+        }
+        for (const uint64_t index : done) {
+            transfer.bytes.fetch_add(Utils::StreamedAssets::ChunkLength(job.size, index), std::memory_order_relaxed);
+        }
+        const bool resumed = !done.empty();
+
+        // Chunks an older file already holds are copied, never fetched.
+        std::unordered_map<std::string, std::pair<std::string, uint64_t>> known;
+        for (const std::string &older : job.reuse) {
+            if (older == partial || older == job.path || !std::filesystem::exists(older, code)) {
+                continue;
+            }
+            transfer.Touch();
+            const std::vector<std::string> theirs = Utils::StreamedAssets::HashFileChunks(older);
+            for (uint64_t i = 0; i < theirs.size(); ++i) {
+                known.emplace(theirs[i], std::make_pair(older, i));
+            }
+        }
+        std::vector<uint64_t> pending;
+        std::vector<char> buffer;
+        for (uint64_t index = 0; index < count; ++index) {
+            if (done.count(index) != 0) {
+                continue;
+            }
+            if (transfer.cancel.load()) {
+                return {};
+            }
+            const auto have = known.find(chunks[index]);
+            if (have == known.end()) {
+                pending.push_back(index);
+                continue;
+            }
+            const uint64_t length = Utils::StreamedAssets::ChunkLength(job.size, index);
+            buffer.resize(static_cast<size_t>(length));
+            std::ifstream older(have->second.first, std::ios::binary);
+            older.seekg(static_cast<std::streamoff>(have->second.second * Utils::StreamedAssets::kChunkSize));
+            older.read(buffer.data(), static_cast<std::streamsize>(length));
+            if (static_cast<uint64_t>(older.gcount()) != length || !Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256Hex(buffer.data(), buffer.size()), chunks[index])) {
+                // The older file changed under the map; this chunk comes from the network instead.
+                pending.push_back(index);
+                continue;
+            }
+            output.seekp(static_cast<std::streamoff>(index * Utils::StreamedAssets::kChunkSize));
+            output.write(buffer.data(), static_cast<std::streamsize>(length));
+            noteOut << index << '\n';
+            noteOut.flush();
+            done.insert(index);
+            transfer.bytes.fetch_add(length, std::memory_order_relaxed);
+            transfer.reused.fetch_add(length, std::memory_order_relaxed);
+            transfer.Touch();
+        }
+        output.flush();
+
+        // The rest over several connections; each chunk keeps its own retry budget.
+        std::mutex shared;
+        size_t next = 0;
+        bool failed = false;
+        Attempt failure;
+        const int workers = static_cast<int>(std::min<size_t>(static_cast<size_t>(std::max(transfer.retry.connections, 1)), pending.size()));
+        const auto worker = [&] {
+            std::vector<char> data;
+            for (;;) {
+                uint64_t index = 0;
+                {
+                    std::lock_guard lock(shared);
+                    if (failed || next >= pending.size()) {
+                        return;
+                    }
+                    index = pending[next++];
+                }
+                int failuresWithoutProgress = 0;
+                int64_t queuedSinceMs       = 0;
+                for (;;) {
+                    if (transfer.cancel.load()) {
+                        return;
+                    }
+                    const uint64_t before = transfer.bytes.load(std::memory_order_relaxed);
+                    const Attempt result  = FetchChunk(transfer, source, job, index, chunks[index], data);
+                    if (result.done) {
+                        std::lock_guard lock(shared);
+                        output.seekp(static_cast<std::streamoff>(index * Utils::StreamedAssets::kChunkSize));
+                        output.write(data.data(), static_cast<std::streamsize>(data.size()));
+                        output.flush();
+                        noteOut << index << '\n';
+                        noteOut.flush();
+                        break;
+                    }
+                    transfer.bytes.fetch_sub(transfer.bytes.load(std::memory_order_relaxed) - before, std::memory_order_relaxed);
+                    if (result.fallback || !WaitBeforeRetry(transfer, source, job, result, failuresWithoutProgress, queuedSinceMs)) {
+                        std::lock_guard lock(shared);
+                        if (!failed) {
+                            failed  = true;
+                            failure = result;
+                        }
+                        return;
+                    }
+                }
+            }
+        };
+        std::vector<std::thread> threads;
+        for (int i = 0; i < workers; ++i) {
+            threads.emplace_back(worker);
+        }
+        for (std::thread &thread : threads) {
+            thread.join();
+        }
+        output.close();
+        noteOut.close();
+        if (transfer.cancel.load()) {
+            return {};
+        }
+        if (failed) {
+            // The chunks in place stay for the next transfer. A worker that gave up has already waited
+            // out its budget or its queue, so this source is done with; one that found no ranges hands
+            // the file to the whole-file path.
+            Attempt result;
+            result.fallback = failure.fallback;
+            result.retry    = false;
+            return result;
+        }
+        return Finish(transfer, job, partial, resumed);
     }
 } // namespace Framework::Integrations::Client

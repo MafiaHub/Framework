@@ -58,6 +58,16 @@ namespace Framework::Utils::StreamedAssets {
             return true;
         }
 
+        /**
+         * Whether a lane's pak may arrive after the join instead of holding it: the client enters the
+         * world once the blocking paks are in place and mounts a deferred one when it lands, through
+         * the same path a hot reload uses. Only for lanes the game can load late (sounds, clips a
+         * script asks for); anything the level load must see stays blocking. Defaults to blocking.
+         */
+        virtual bool LaneMayDefer(std::string_view /*lane*/) const {
+            return false;
+        }
+
         bool HasLane(std::string_view lane) const;
     };
 

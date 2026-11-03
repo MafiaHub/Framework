@@ -76,6 +76,11 @@ MODULE(streamed_assets, {
     using StreamedAssetsTest::TestPolicy;
     using StreamedAssetsTest::WriteBytes;
 
+    IT("keeps every lane blocking unless a policy says otherwise", {
+        TestPolicy policy;
+        EQUALS(policy.LaneMayDefer("stream"), false);
+    });
+
     IT("writes deterministic paks the validator accepts and lists with CRCs", {
         TestPolicy policy;
         const auto root = Scratch("fw_streamed_pak");

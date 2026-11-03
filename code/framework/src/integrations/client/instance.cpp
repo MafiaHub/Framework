@@ -38,6 +38,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <iterator>
+#include <limits>
 
 #include <logging/logger.h>
 
@@ -46,6 +47,7 @@
 #include "utils/path.h"
 #include "utils/profiler.h"
 #include "utils/streamed_assets/pak_archive.h"
+#include "utils/streamed_assets/transfer.h"
 #include "utils/time.h"
 #include "utils/version.h"
 #include "utils/vfs.h"
@@ -525,6 +527,7 @@ namespace Framework::Integrations::Client {
         _networkingEngine->Update();
         // Hosts pump only UpdateNetworking while the game is loading, and that is when downloads finish.
         PollAssetDownload();
+        PollDeferredDownload();
 
         // After the peer pump: RakVoice decodes inbound frames from inside RakPeer::Receive,
         // so draining speakers here picks up this tick's audio rather than last tick's.
@@ -660,9 +663,12 @@ namespace Framework::Integrations::Client {
 
             _pendingServerResources = payload.resources;
             _assetPaks.clear();
+            _deferredPaks.clear();
+            _deferredDownloader.Cancel();
+            _deferredStatus      = {};
             _assetPaksDownloaded = false;
             _assetConsentBytes   = 0;
-            AnnounceAssetPaks(_pendingServerResources);
+            AnnounceAssetPaks(_pendingServerResources, true);
 
             // A server that predates encrypted resource packages writes a different layout, so the
             // key lands on whatever followed it and the rest of the stream is garbage. Fail here
@@ -675,7 +681,7 @@ namespace Framework::Integrations::Client {
                 return;
             }
 
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources and {} asset pak(s)", _pendingServerResources.size(), _assetPaks.size());
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources and {} asset pak(s), {} of them deferred past the join", _pendingServerResources.size(), _assetPaks.size() + _deferredPaks.size(), _deferredPaks.size());
 
             SetConnectionPhase(ConnectionPhase::Downloading);
             DownloadsAssetsFromConnectedServer();
@@ -737,6 +743,11 @@ namespace Framework::Integrations::Client {
                     _assetPaks.erase(paks, _assetPaks.end());
                     OnResourceAssetPaksChanged();
                 }
+                _deferredPaks.erase(std::remove_if(_deferredPaks.begin(), _deferredPaks.end(),
+                                        [&res](const ResourceAssetPak &pak) {
+                                            return pak.resource == res.name;
+                                        }),
+                    _deferredPaks.end());
                 if (rm->IsResourceRunning(res.name)) {
                     auto result = rm->StopResource(res.name);
                     if (!result) {
@@ -806,6 +817,9 @@ namespace Framework::Integrations::Client {
             _initialDownloadDone                      = false;
             _assetDownloader.Cancel();
             _downloadStatus = {};
+            _deferredDownloader.Cancel();
+            _deferredStatus = {};
+            _deferredPaks.clear();
             _assetPaks.clear();
             _assetPaksDownloaded = false;
             _assetConsentBytes   = 0;
@@ -968,14 +982,16 @@ namespace Framework::Integrations::Client {
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
 
         // Asset paks can be large: what this cache lacks waits for the player's consent above the
-        // mod's threshold. Scripts alone never ask.
-        PruneAssetPaks(cacheDir);
+        // mod's threshold. Scripts alone never ask. Paks the server no longer announces are pruned only
+        // once the download is through: until then they are where its unchanged chunks come from.
         uint64_t missing = 0;
-        for (auto &pak : _assetPaks) {
-            pak.path = (std::filesystem::path(cacheDir) / Framework::Utils::StreamedAssets::PakFileName(pak.resource, pak.info.lane, pak.info.sha256)).string();
-            std::error_code code;
-            if (std::filesystem::file_size(pak.path, code) != pak.info.size || code) {
-                missing += pak.info.size;
+        for (std::vector<ResourceAssetPak> *list : {&_assetPaks, &_deferredPaks}) {
+            for (auto &pak : *list) {
+                pak.path = (std::filesystem::path(cacheDir) / Framework::Utils::StreamedAssets::PakFileName(pak.resource, pak.info.lane, pak.info.sha256)).string();
+                std::error_code code;
+                if (std::filesystem::file_size(pak.path, code) != pak.info.size || code) {
+                    missing += pak.info.size;
+                }
             }
         }
         if (missing > _opts.assetConsentThreshold) {
@@ -996,13 +1012,13 @@ namespace Framework::Integrations::Client {
         StartAssetDownload(_pendingServerResources);
     }
 
-    void Instance::AnnounceAssetPaks(const std::vector<Client::Scripting::ServerResourceInfo> &resources) {
+    void Instance::AnnounceAssetPaks(const std::vector<Client::Scripting::ServerResourceInfo> &resources, bool holdDeferred) {
         for (const auto &resource : resources) {
-            _assetPaks.erase(std::remove_if(_assetPaks.begin(), _assetPaks.end(),
-                                 [&resource](const ResourceAssetPak &pak) {
-                                     return pak.resource == resource.name;
-                                 }),
-                _assetPaks.end());
+            const auto ofResource = [&resource](const ResourceAssetPak &pak) {
+                return pak.resource == resource.name;
+            };
+            _assetPaks.erase(std::remove_if(_assetPaks.begin(), _assetPaks.end(), ofResource), _assetPaks.end());
+            _deferredPaks.erase(std::remove_if(_deferredPaks.begin(), _deferredPaks.end(), ofResource), _deferredPaks.end());
             for (const auto &info : resource.assetPaks) {
                 // Untrusted: a lane or hash that could not name a cache file is dropped, and the
                 // mod's own validation decides what the rest may carry.
@@ -1016,9 +1032,117 @@ namespace Framework::Integrations::Client {
                 if (!GetAssetCachePath().empty()) {
                     pak.path = (std::filesystem::path(GetAssetCachePath()) / Framework::Utils::StreamedAssets::PakFileName(resource.name, info.lane, info.sha256)).string();
                 }
-                _assetPaks.push_back(std::move(pak));
+                if (holdDeferred && info.deferred) {
+                    _deferredPaks.push_back(std::move(pak));
+                }
+                else {
+                    _assetPaks.push_back(std::move(pak));
+                }
             }
         }
+    }
+
+    std::vector<std::string> Instance::ReuseCandidates(const std::string &fileName, const std::string &path) const {
+        std::vector<std::string> candidates;
+        std::error_code code;
+        if (std::filesystem::exists(path, code)) {
+            candidates.push_back(path);
+        }
+        // Earlier versions of the same lane: <resource>.<lane>.<otherhash>.pak beside it.
+        const std::filesystem::path file(fileName);
+        const std::string stem = file.stem().string(); // <resource>.<lane>.<hash>
+        const auto lastDot     = stem.rfind('.');
+        if (file.extension() == ".pak" && lastDot != std::string::npos) {
+            const std::string prefix = stem.substr(0, lastDot + 1);
+            for (const auto &entry : std::filesystem::directory_iterator(std::filesystem::path(path).parent_path(), code)) {
+                const std::string name = entry.path().filename().string();
+                if (name != fileName && entry.path().extension() == ".pak" && name.rfind(prefix, 0) == 0) {
+                    candidates.push_back(entry.path().string());
+                }
+            }
+        }
+        // The same file fetched for another server: its name carries its hash, so it is the same bytes.
+        const std::filesystem::path servers = std::filesystem::path(GetCacheRoot()) / "servers";
+        for (const auto &server : std::filesystem::directory_iterator(servers, code)) {
+            const std::filesystem::path other = server.path() / fileName;
+            if (server.is_directory(code) && other.string() != path && std::filesystem::exists(other, code)) {
+                candidates.push_back(other.string());
+            }
+        }
+        return candidates;
+    }
+
+    AssetDownloader::Job Instance::MakeJob(const std::string &fileName, const std::string &sha256, uint64_t size) const {
+        const std::string path = (std::filesystem::path(GetAssetCachePath()) / fileName).string();
+        return {fileName, path, sha256, size, ReuseCandidates(fileName, path)};
+    }
+
+    std::vector<AssetDownloader::Source> Instance::DownloadSources() const {
+        // The server's download URLs first, without the token (it is only the game port's), then the game port.
+        std::vector<AssetDownloader::Source> sources;
+        for (const std::string &url : Framework::Utils::StreamedAssets::SplitUrlList(_downloadUrl)) {
+            sources.push_back({url, {}});
+        }
+        sources.push_back({fmt::format("http://{}:{}/files", _currentState.host, _currentState.port), _downloadToken});
+        return sources;
+    }
+
+    void Instance::StartDeferredDownload() {
+        std::vector<AssetDownloader::Job> jobs;
+        for (const ResourceAssetPak &pak : _deferredPaks) {
+            jobs.push_back(MakeJob(Framework::Utils::StreamedAssets::PakFileName(pak.resource, pak.info.lane, pak.info.sha256), pak.info.sha256, pak.info.size));
+        }
+        _deferredStatus             = {};
+        _deferredStatus.downloading = true;
+        AssetDownloader::RetryPolicy retries;
+        retries.queueWaitMs = static_cast<int>(std::min<uint32_t>(_opts.downloadQueueWaitMs, static_cast<uint32_t>(std::numeric_limits<int>::max())));
+        _deferredDownloader.SetRetryPolicy(retries);
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Fetching {} deferred asset pak(s) behind the join", jobs.size());
+        _deferredDownloader.Start(DownloadSources(), std::move(jobs));
+    }
+
+    void Instance::PollDeferredDownload() {
+        if (!_deferredDownloader.IsRunning()) {
+            return;
+        }
+        bool success                    = false;
+        const bool finished             = _deferredDownloader.PollFinished(success);
+        _deferredStatus.bytesTotal      = _deferredDownloader.GetBytesTotal();
+        _deferredStatus.bytesDownloaded = _deferredDownloader.GetBytesDownloaded();
+        _deferredStatus.filesTotal      = _deferredDownloader.GetFilesTotal();
+        _deferredStatus.filesDownloaded = _deferredDownloader.GetFilesDone();
+        _deferredStatus.currentFile     = _deferredDownloader.GetCurrentFile();
+        _deferredStatus.progress        = _deferredStatus.bytesTotal > 0 ? _deferredStatus.bytesDownloaded / float(_deferredStatus.bytesTotal) : 1.0f;
+        _deferredStatus.downloading     = !finished;
+        _deferredStatus.waitingForSlot  = _deferredDownloader.IsWaitingForSlot();
+        _deferredStatus.queuePosition   = _deferredDownloader.GetQueuePosition();
+        _deferredStatus.cuts            = _deferredDownloader.GetCuts();
+        if (!finished) {
+            return;
+        }
+        // What landed joins the session's paks; what did not stays announced for a later refresh. Either
+        // way the cache is settled now: nothing left is a source of chunks for a transfer in flight.
+        std::vector<ResourceAssetPak> landed;
+        for (auto it = _deferredPaks.begin(); it != _deferredPaks.end();) {
+            std::error_code code;
+            if (std::filesystem::file_size(it->path, code) == it->info.size && !code) {
+                landed.push_back(std::move(*it));
+                it = _deferredPaks.erase(it);
+            }
+            else {
+                ++it;
+            }
+        }
+        if (!success) {
+            _deferredStatus.failure = "Some of the server's deferred assets could not be downloaded.";
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("{} deferred asset pak(s) did not land; the session runs without them", _deferredPaks.size());
+        }
+        if (!landed.empty()) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("{} deferred asset pak(s) landed", landed.size());
+            _assetPaks.insert(_assetPaks.end(), std::make_move_iterator(landed.begin()), std::make_move_iterator(landed.end()));
+            OnResourceAssetPaksChanged();
+        }
+        PruneAssetPaks(GetAssetCachePath());
     }
 
     bool Instance::VerifyAssetPaks() const {
@@ -1039,44 +1163,49 @@ namespace Framework::Integrations::Client {
                 continue;
             }
             const std::string name = entry.path().filename().string();
-            const bool announced   = std::any_of(_assetPaks.begin(), _assetPaks.end(), [&name](const ResourceAssetPak &pak) {
+            const auto isNamed     = [&name](const ResourceAssetPak &pak) {
                 return Framework::Utils::StreamedAssets::PakFileName(pak.resource, pak.info.lane, pak.info.sha256) == name;
-            });
-            if (!announced) {
+            };
+            if (!std::any_of(_assetPaks.begin(), _assetPaks.end(), isNamed) && !std::any_of(_deferredPaks.begin(), _deferredPaks.end(), isNamed)) {
                 std::error_code removeError;
                 std::filesystem::remove(entry.path(), removeError);
+                Framework::Utils::StreamedAssets::RemoveVerifiedNote(entry.path().string());
             }
         }
     }
 
     void Instance::StartAssetDownload(const std::vector<Client::Scripting::ServerResourceInfo> &resources) {
-        const std::filesystem::path cacheDir = GetAssetCachePath();
         std::vector<AssetDownloader::Job> jobs;
         for (const auto &resource : resources) {
             // Untrusted: a name, lane or hash that could not name a cache file is not fetched;
             // mounting or VerifyAssetPaks then refuses the resource.
             if (Framework::Utils::StreamedAssets::IsValidPackageName(resource.name) && Framework::Utils::StreamedAssets::IsSha256(resource.packageHash) && resource.packageSize > 0 && resource.packageSize <= Framework::Utils::Package::kMaxFileSize) {
-                const std::string fileName = resource.name + Framework::Utils::Package::kExtension;
-                jobs.push_back({fileName, (cacheDir / fileName).string(), resource.packageHash, resource.packageSize});
+                jobs.push_back(MakeJob(resource.name + Framework::Utils::Package::kExtension, resource.packageHash, resource.packageSize));
             }
             for (const auto &pak : resource.assetPaks) {
                 if (!Framework::Utils::StreamedAssets::IsValidResourceName(resource.name) || !pak.IsSane() || !Framework::Utils::StreamedAssets::IsSha256(pak.sha256)) {
                     continue;
                 }
-                const std::string fileName = Framework::Utils::StreamedAssets::PakFileName(resource.name, pak.lane, pak.sha256);
-                jobs.push_back({fileName, (cacheDir / fileName).string(), pak.sha256, pak.size});
+                // A deferred pak is held back only by the first connect; a refresh ships it with the rest.
+                const bool held = pak.deferred && std::any_of(_deferredPaks.begin(), _deferredPaks.end(), [&](const ResourceAssetPak &deferred) {
+                    return deferred.resource == resource.name && deferred.info.lane == pak.lane && deferred.info.sha256 == pak.sha256;
+                });
+                if (held) {
+                    continue;
+                }
+                jobs.push_back(MakeJob(Framework::Utils::StreamedAssets::PakFileName(resource.name, pak.lane, pak.sha256), pak.sha256, pak.size));
             }
         }
 
         _downloadStatus             = {};
         _downloadStatus.downloading = true;
-        // The server's download URL first, without the token (it is only the game port's), then the game port.
-        std::vector<AssetDownloader::Source> sources;
-        if (!_downloadUrl.empty()) {
-            sources.push_back({_downloadUrl, {}});
-        }
-        sources.push_back({fmt::format("http://{}:{}/files", _currentState.host, _currentState.port), _downloadToken});
-        _assetDownloader.Start(std::move(sources), std::move(jobs));
+        _downloadSampleMs           = 0;
+        _downloadSampleBytes        = 0;
+        _downloadBytesPerSecond     = 0.0;
+        AssetDownloader::RetryPolicy retries;
+        retries.queueWaitMs = static_cast<int>(std::min<uint32_t>(_opts.downloadQueueWaitMs, static_cast<uint32_t>(std::numeric_limits<int>::max())));
+        _assetDownloader.SetRetryPolicy(retries);
+        _assetDownloader.Start(DownloadSources(), std::move(jobs));
     }
 
     void Instance::PollAssetDownload() {
@@ -1093,11 +1222,57 @@ namespace Framework::Integrations::Client {
         _downloadStatus.currentFile     = _assetDownloader.GetCurrentFile();
         _downloadStatus.progress        = _downloadStatus.bytesTotal > 0 ? _downloadStatus.bytesDownloaded / float(_downloadStatus.bytesTotal) : 1.0f;
         _downloadStatus.downloading     = !finished;
+        _downloadStatus.waitingForSlot  = _assetDownloader.IsWaitingForSlot();
+        _downloadStatus.queuePosition   = _assetDownloader.GetQueuePosition();
+        _downloadStatus.cuts            = _assetDownloader.GetCuts();
+        _downloadStatus.bytesPerSecond  = SampleDownloadRate(AssetDownloader::NowMs(), _downloadStatus.bytesDownloaded);
+        if (finished && !success && _downloadStatus.failure.empty()) {
+            _downloadStatus.failure = "The server's files could not be downloaded.";
+        }
+        if (!finished && IsDownloadStalled(AssetDownloader::NowMs())) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("The asset download did nothing for {} s ({} of {} bytes, '{}'); giving it up", _opts.downloadStallTimeoutMs / 1000, _downloadStatus.bytesDownloaded, _downloadStatus.bytesTotal, _downloadStatus.currentFile);
+            _assetDownloader.Cancel();
+            _downloadStatus.downloading = false;
+            _downloadStatus.failure     = "The download stopped making progress. Check your connection and try again.";
+            OnAssetsDownloadProgress(_downloadStatus);
+            OnAssetsDownloaded(false);
+            return;
+        }
         OnAssetsDownloadProgress(_downloadStatus);
 
         if (finished) {
             OnAssetsDownloaded(success);
         }
+    }
+
+    uint64_t Instance::SampleDownloadRate(int64_t nowMs, uint64_t bytes) {
+        // One sample a second, blended so the number on screen settles rather than flickers.
+        constexpr int64_t kSampleIntervalMs = 1000;
+        constexpr double kBlend             = 0.3;
+        if (_downloadSampleMs == 0) {
+            _downloadSampleMs    = nowMs;
+            _downloadSampleBytes = bytes;
+            return 0;
+        }
+        const int64_t elapsed = nowMs - _downloadSampleMs;
+        if (elapsed < kSampleIntervalMs) {
+            return static_cast<uint64_t>(_downloadBytesPerSecond);
+        }
+        // A retry takes its attempt's bytes back off the count; that is not a negative rate.
+        const double moved      = bytes >= _downloadSampleBytes ? static_cast<double>(bytes - _downloadSampleBytes) : 0.0;
+        const double instant    = moved * 1000.0 / static_cast<double>(elapsed);
+        _downloadBytesPerSecond = _downloadBytesPerSecond == 0.0 ? instant : _downloadBytesPerSecond + (instant - _downloadBytesPerSecond) * kBlend;
+        _downloadSampleMs       = nowMs;
+        _downloadSampleBytes    = bytes;
+        return static_cast<uint64_t>(_downloadBytesPerSecond);
+    }
+
+    bool Instance::IsDownloadStalled(int64_t nowMs) const {
+        if (_opts.downloadStallTimeoutMs == 0) {
+            return false;
+        }
+        const int64_t lastActivity = _assetDownloader.GetLastActivityMs();
+        return lastActivity != 0 && nowMs - lastActivity >= static_cast<int64_t>(_opts.downloadStallTimeoutMs);
     }
 
     void Instance::SyncResourceUpdatesFromServer() {
@@ -1220,7 +1395,7 @@ namespace Framework::Integrations::Client {
             // Hot-reload path: module already running, refresh just the flagged
             // resources instead of re-initializing everything.
             if (scriptingModule && scriptingModule->GetScriptingEngine() && scriptingModule->GetScriptingEngine()->IsInitialized() && !_pendingRefreshResources.empty()) {
-                AnnounceAssetPaks(_pendingRefreshResources);
+                AnnounceAssetPaks(_pendingRefreshResources, false);
                 if (VerifyAssetPaks()) {
                     OnResourceAssetPaksChanged();
                 }
@@ -1264,6 +1439,13 @@ namespace Framework::Integrations::Client {
                 _assetPaksDownloaded = true;
                 if (!_assetPaks.empty()) {
                     OnResourceAssetPaksChanged();
+                }
+                // The paks the join did not wait for follow now; the cache is pruned once they are in.
+                if (!_deferredPaks.empty()) {
+                    StartDeferredDownload();
+                }
+                else {
+                    PruneAssetPaks(GetAssetCachePath());
                 }
 
                 const uint64_t generation = _assetProcessingGeneration;
@@ -1348,8 +1530,14 @@ namespace Framework::Integrations::Client {
         else {
             _deferredInitialAssetProcessingGeneration = 0;
             _resumingDeferredInitialAssetProcessing   = false;
+            if (_downloadStatus.failure.empty()) {
+                _downloadStatus.failure = "The server's files could not be downloaded.";
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("The asset download failed: {}", _downloadStatus.failure);
+            // Before the disconnect, so the mod reads the reason off GetAssetDownloadStatus() while
+            // the connection it belongs to is still the current one.
+            OnAssetsDownloadFinished(false);
             (void)net->Disconnect();
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
             return false;
         }

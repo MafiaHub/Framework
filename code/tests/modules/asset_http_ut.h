@@ -16,6 +16,7 @@
 #include "networking/rpc/server_resources.h"
 #include "utils/crypto.h"
 #include "utils/streamed_assets/policy.h"
+#include "utils/streamed_assets/transfer.h"
 
 #include <httplib.h>
 #include <mafianet/bit_stream.h>
@@ -54,9 +55,9 @@ namespace AssetHttpTest {
         std::filesystem::path cache;
         int32_t port = 0;
         std::string token;
-        uint32_t filesDone   = 0;
-        uint64_t bytesDone   = 0;
-        uint64_t bytesTotal  = 0;
+        uint32_t filesDone  = 0;
+        uint64_t bytesDone  = 0;
+        uint64_t bytesTotal = 0;
 
         explicit Fixture(const std::string &serveDir = "", bool shareWithNetwork = false, size_t maxTransfers = 8) {
             std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -169,6 +170,41 @@ namespace AssetHttpTest {
                 }
             }
             return true;
+        }
+    };
+
+    // Holds a download slot on the fixture's server by reading |name| with |token| and not finishing until
+    // released; releases and joins on destruction, so a failed assertion cannot leave the thread joinable.
+    struct HeldSlot {
+        std::atomic<bool> holding {};
+        std::atomic<bool> release {};
+        std::thread thread;
+
+        HeldSlot(const Fixture &fixture, const std::string &token, const std::string &name = "big.pak")
+            : thread([&fixture, token, name, this] {
+                httplib::Client client(fixture.Origin());
+                client.Get("/files/" + name, httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, token}}, [this](const char *, size_t) {
+                    holding.store(true);
+                    while (!release.load()) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    }
+                    return true;
+                });
+            }) {
+            while (!holding.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+        }
+
+        void Release() {
+            release.store(true);
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+
+        ~HeldSlot() {
+            Release();
         }
     };
 
@@ -578,25 +614,17 @@ MODULE(asset_http, {
         fixture.Stage("big.pak", std::string(8000000, 'b'), published);
         fixture.Stage("small.fwpak", "small", published);
         fixture.files.Publish(published);
+        const std::string other = fixture.files.Grant(AssetHttpTest::kPeer + 1);
 
-        // Holds the only slot by reading the big file slowly.
-        std::atomic<bool> holding {};
-        std::thread slow([&fixture, &holding] {
-            httplib::Client client(fixture.Origin());
-            client.Get("/files/big.pak", fixture.Authorized(), [&holding](const char *, size_t) {
-                holding.store(true);
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                return true;
-            });
-        });
-        while (!holding.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        }
+        // Another peer holds the only slot by reading the big file slowly.
+        AssetHttpTest::HeldSlot held(fixture, other);
         httplib::Client client(fixture.Origin());
         const auto busy = client.Get("/files/small.fwpak", fixture.Authorized());
         EQUALS(busy->status, 503);
         EQUALS(busy->get_header_value("Retry-After") == "2", true);
-        slow.join();
+        EQUALS(busy->get_header_value(Framework::Integrations::Server::AssetFileServer::kQueueHeader) == "0", true);
+        held.Release();
+        // The holder's slot lingers for its next file, but as spare capacity: the one in line is served.
         EQUALS(fixture.Status("/files/small.fwpak"), 200);
     });
 
@@ -677,7 +705,7 @@ MODULE(asset_http, {
         AssetHttpTest::ScriptedServer scripted({AssetHttpTest::ScriptedServer::Status(500)});
         NEQUALS(scripted.port, 0);
         Framework::Integrations::Client::AssetDownloader::RetryPolicy policy = AssetHttpTest::FastRetries();
-        policy.attempts = 3;
+        policy.attempts                                                      = 3;
         scripted.downloader.SetRetryPolicy(policy);
         const auto job = scripted.Job("never served");
         scripted.Start(job);
@@ -692,7 +720,7 @@ MODULE(asset_http, {
     IT("retries when the server cannot be reached", {
         Framework::Integrations::Client::AssetDownloader downloader;
         Framework::Integrations::Client::AssetDownloader::RetryPolicy policy = AssetHttpTest::FastRetries();
-        policy.attempts = 2;
+        policy.attempts                                                      = 2;
         downloader.SetRetryPolicy(policy);
         const auto cache = std::filesystem::temp_directory_path() / "fw_asset_http_unreachable";
         // Port 1 on loopback refuses at once.
@@ -962,7 +990,7 @@ MODULE(asset_http, {
     IT("does not retry a refusal", {
         AssetHttpTest::Fixture fixture;
         std::unordered_map<std::string, std::filesystem::path> published;
-        const auto job = fixture.Stage("unpublished.fwpak", "bytes", published);
+        const auto job     = fixture.Stage("unpublished.fwpak", "bytes", published);
         const auto started = std::chrono::steady_clock::now();
         EQUALS(fixture.Run({job}), false);
         EQUALS(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(500), true);
@@ -1034,5 +1062,342 @@ MODULE(asset_http, {
         EQUALS(answered.load(), 12);
         EQUALS(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(950), true);
         server.Shutdown();
+    });
+
+    IT("keeps asking a busy server past the attempt budget", {
+        std::vector<AssetHttpTest::ScriptedServer::Step> steps;
+        for (int i = 0; i < 7; ++i) {
+            steps.push_back([](const httplib::Request &, httplib::Response &res) {
+                res.status = 503;
+                res.set_header("Retry-After", "0");
+            });
+        }
+        steps.push_back(AssetHttpTest::ScriptedServer::Body("served at last"));
+        AssetHttpTest::ScriptedServer scripted(std::move(steps));
+        NEQUALS(scripted.port, 0);
+        Framework::Integrations::Client::AssetDownloader::RetryPolicy policy = AssetHttpTest::FastRetries();
+        policy.attempts                                                      = 3;
+        scripted.downloader.SetRetryPolicy(policy);
+        const auto job = scripted.Job("served at last");
+        scripted.Start(job);
+        bool success = false;
+        // Seven refusals two seconds apart, as a 503 without a usable Retry-After is paced.
+        EQUALS(scripted.Finish(success, std::chrono::seconds(30)), true);
+        EQUALS(success, true);
+        EQUALS(scripted.requests.load(), 8);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == "served at last", true);
+        EQUALS(scripted.downloader.IsWaitingForSlot(), false);
+    });
+
+    IT("reads its place in the server's queue while it waits", {
+        AssetHttpTest::ScriptedServer scripted({
+            [](const httplib::Request &, httplib::Response &res) {
+                res.status = 503;
+                res.set_header("Retry-After", "1");
+                res.set_header(Framework::Integrations::Server::AssetFileServer::kQueueHeader, "3");
+            },
+            AssetHttpTest::ScriptedServer::Body("after the queue"),
+        });
+        NEQUALS(scripted.port, 0);
+        EQUALS(scripted.downloader.GetQueuePosition(), -1);
+        scripted.Start(scripted.Job("after the queue"));
+        while (scripted.requests.load() == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        EQUALS(scripted.downloader.IsWaitingForSlot(), true);
+        EQUALS(scripted.downloader.GetQueuePosition(), 3);
+        bool success = false;
+        EQUALS(scripted.Finish(success), true);
+        EQUALS(success, true);
+        EQUALS(scripted.downloader.IsWaitingForSlot(), false);
+        EQUALS(scripted.downloader.GetQueuePosition(), -1);
+    });
+
+    IT("leaves a queue only once the policy's wait is up", {
+        AssetHttpTest::ScriptedServer scripted({[](const httplib::Request &, httplib::Response &res) {
+            res.status = 503;
+            res.set_header("Retry-After", "1");
+        }});
+        NEQUALS(scripted.port, 0);
+        Framework::Integrations::Client::AssetDownloader::RetryPolicy policy = AssetHttpTest::FastRetries();
+        policy.attempts                                                      = 1;
+        policy.queueWaitMs                                                   = 1500;
+        scripted.downloader.SetRetryPolicy(policy);
+        scripted.Start(scripted.Job("never served"));
+        bool success = true;
+        EQUALS(scripted.Finish(success, std::chrono::seconds(10)), true);
+        EQUALS(success, false);
+        // One attempt would have been one request; the queue was waited out across more than that.
+        EQUALS(scripted.requests.load() >= 2, true);
+    });
+
+    IT("resumes a cut transfer without spending an attempt", {
+        const std::string content = "0123456789";
+        // Each request is answered with one byte from where it asks, then dropped.
+        const AssetHttpTest::ScriptedServer::Step cut = [content](const httplib::Request &, httplib::Response &res) {
+            res.set_content_provider(content.size(), "application/octet-stream", [content](size_t offset, size_t, httplib::DataSink &sink) {
+                sink.write(content.data() + offset, 1);
+                return false;
+            });
+        };
+        AssetHttpTest::ScriptedServer scripted({cut, cut, cut, cut, AssetHttpTest::ScriptedServer::Body(content)});
+        NEQUALS(scripted.port, 0);
+        Framework::Integrations::Client::AssetDownloader::RetryPolicy policy = AssetHttpTest::FastRetries();
+        policy.attempts                                                      = 2;
+        scripted.downloader.SetRetryPolicy(policy);
+        const auto job = scripted.Job(content);
+        scripted.Start(job);
+        bool success = false;
+        EQUALS(scripted.Finish(success), true);
+        EQUALS(success, true);
+        EQUALS(scripted.requests.load(), 5);
+        EQUALS(scripted.ranges[1] == "bytes=1-", true);
+        EQUALS(scripted.ranges[4] == "bytes=4-", true);
+        EQUALS(scripted.downloader.GetCuts(), 4u);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+    });
+
+    IT("records when it last did anything", {
+        AssetHttpTest::ScriptedServer scripted({AssetHttpTest::ScriptedServer::Body("bytes")});
+        NEQUALS(scripted.port, 0);
+        EQUALS(scripted.downloader.GetLastActivityMs(), 0ll);
+        const int64_t before = Framework::Integrations::Client::AssetDownloader::NowMs();
+        scripted.Start(scripted.Job("bytes"));
+        bool success = false;
+        EQUALS(scripted.Finish(success), true);
+        EQUALS(success, true);
+        EQUALS(scripted.downloader.GetLastActivityMs() >= before, true);
+    });
+
+    IT("hands slots out in the order peers asked", {
+        AssetHttpTest::Fixture fixture("", false, 1);
+        std::unordered_map<std::string, std::filesystem::path> published;
+        fixture.Stage("big.pak", std::string(8000000, 'b'), published);
+        fixture.Stage("small.fwpak", "small", published);
+        fixture.files.Publish(published);
+        const std::string second = fixture.files.Grant(AssetHttpTest::kPeer + 1);
+        const std::string third  = fixture.files.Grant(AssetHttpTest::kPeer + 2);
+        const auto ask           = [&fixture](const std::string &token) {
+            httplib::Client client(fixture.Origin());
+            return client.Get("/files/small.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, token}});
+        };
+
+        AssetHttpTest::HeldSlot held(fixture, fixture.token);
+        auto res = ask(second);
+        EQUALS(res->status, 503);
+        EQUALS(res->get_header_value(Framework::Integrations::Server::AssetFileServer::kQueueHeader) == "0", true);
+        res = ask(third);
+        EQUALS(res->status, 503);
+        EQUALS(res->get_header_value(Framework::Integrations::Server::AssetFileServer::kQueueHeader) == "1", true);
+        // Asking again keeps the place; it does not move anyone back.
+        res = ask(second);
+        EQUALS(res->get_header_value(Framework::Integrations::Server::AssetFileServer::kQueueHeader) == "0", true);
+        EQUALS(fixture.files.GetQueuedClients(), 2u);
+        EQUALS(fixture.files.GetActiveClients(), 1u);
+
+        held.Release();
+        // The holder keeps its slot for a moment for its next file; the queue waits on that too.
+        res = ask(third);
+        EQUALS(res->status, 503);
+        EQUALS(res->get_header_value(Framework::Integrations::Server::AssetFileServer::kQueueHeader) == "1", true);
+        EQUALS(fixture.Status("/files/small.fwpak"), 200);
+    });
+
+    IT("lets a peer open more connections on the slot it holds", {
+        AssetHttpTest::Fixture fixture("", false, 1);
+        std::unordered_map<std::string, std::filesystem::path> published;
+        fixture.Stage("big.pak", std::string(8000000, 'b'), published);
+        fixture.Stage("small.fwpak", "small", published);
+        fixture.files.Publish(published);
+        const std::string other = fixture.files.Grant(AssetHttpTest::kPeer + 1);
+
+        AssetHttpTest::HeldSlot held(fixture, fixture.token);
+        EQUALS(fixture.Status("/files/small.fwpak"), 200);
+        httplib::Client client(fixture.Origin());
+        EQUALS(client.Get("/files/small.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, other}})->status, 503);
+        held.Release();
+    });
+
+    IT("drops a revoked peer from the queue", {
+        AssetHttpTest::Fixture fixture("", false, 1);
+        std::unordered_map<std::string, std::filesystem::path> published;
+        fixture.Stage("big.pak", std::string(8000000, 'b'), published);
+        fixture.Stage("small.fwpak", "small", published);
+        fixture.files.Publish(published);
+        const std::string second = fixture.files.Grant(AssetHttpTest::kPeer + 1);
+        const std::string third  = fixture.files.Grant(AssetHttpTest::kPeer + 2);
+        const auto ask           = [&fixture](const std::string &token) {
+            httplib::Client client(fixture.Origin());
+            return client.Get("/files/small.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, token}});
+        };
+
+        AssetHttpTest::HeldSlot held(fixture, fixture.token);
+        EQUALS(ask(second)->status, 503);
+        EQUALS(ask(third)->get_header_value(Framework::Integrations::Server::AssetFileServer::kQueueHeader) == "1", true);
+        fixture.files.Revoke(AssetHttpTest::kPeer + 1);
+        EQUALS(ask(third)->get_header_value(Framework::Integrations::Server::AssetFileServer::kQueueHeader) == "0", true);
+        held.Release();
+    });
+
+    IT("writes a chunk list beside each published file and serves it outside the slots", {
+        AssetHttpTest::Fixture fixture("", false, 1);
+        std::unordered_map<std::string, std::filesystem::path> published;
+        const std::string content(static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize * 2 + 10), 'c');
+        fixture.Stage("big.pak", content, published);
+        fixture.files.Publish(published);
+        const std::string other = fixture.files.Grant(AssetHttpTest::kPeer + 1);
+
+        EQUALS(std::filesystem::exists(fixture.staging / "big.pak.chunks"), true);
+        std::string body;
+        EQUALS(fixture.Status("/files/big.pak.chunks", &body), 200);
+        std::vector<std::string> chunks;
+        EQUALS(Framework::Utils::StreamedAssets::ParseChunkList(body, content.size(), chunks), true);
+        EQUALS(chunks.size(), 3u);
+        EQUALS(chunks[0] == Framework::Utils::Crypto::Sha256Hex(content.substr(0, static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize))), true);
+        EQUALS(chunks[2] == Framework::Utils::Crypto::Sha256Hex(content.substr(static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize * 2))), true);
+        // A queued peer still reads the list.
+        AssetHttpTest::HeldSlot held(fixture, other);
+        EQUALS(fixture.Status("/files/big.pak.chunks"), 200);
+        EQUALS(fixture.Status("/files/big.pak"), 503);
+        held.Release();
+        EQUALS(fixture.Status("/files/nothing.pak.chunks"), 404);
+    });
+
+    IT("assembles a chunked file over several ranges and verifies it", {
+        AssetHttpTest::Fixture fixture;
+        std::unordered_map<std::string, std::filesystem::path> published;
+        std::string content;
+        for (size_t i = 0; i < static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize * 3 + 123); ++i) {
+            content.push_back(static_cast<char>('a' + i % 26));
+        }
+        const auto job = fixture.Stage("chunked.pak", content, published);
+        fixture.files.Publish(published);
+
+        EQUALS(fixture.Run({job}), true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+        EQUALS(fixture.bytesDone, fixture.bytesTotal);
+        EQUALS(fixture.NoPartialsLeft(), true);
+        EQUALS(std::filesystem::exists(Framework::Integrations::Client::AssetDownloader::AssemblyNotePath(job)), false);
+        EQUALS(Framework::Utils::StreamedAssets::IsVerified(job.path, job.sha256), true);
+    });
+
+    IT("takes the chunks an older copy already holds from disk", {
+        AssetHttpTest::Fixture fixture;
+        std::unordered_map<std::string, std::filesystem::path> published;
+        const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
+        std::string older(chunk * 3, 'o');
+        std::string newer = older;
+        for (size_t i = chunk; i < chunk * 2; ++i) {
+            newer[i] = 'n';
+        }
+        auto job = fixture.Stage("map.stream.1111111111111111111111111111111111111111111111111111111111111111.pak", newer, published);
+        fixture.files.Publish(published);
+        const std::string previous = (fixture.cache / "map.stream.0000000000000000000000000000000000000000000000000000000000000000.pak").string();
+        AssetHttpTest::Fixture::Write(previous, older);
+        job.reuse = {previous};
+
+        EQUALS(fixture.Run({job}), true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == newer, true);
+        EQUALS(fixture.downloader.GetBytesReused(), static_cast<uint64_t>(chunk * 2));
+        EQUALS(fixture.bytesDone, fixture.bytesTotal);
+    });
+
+    IT("resumes an assembly from the chunks already in place", {
+        AssetHttpTest::Fixture fixture;
+        std::unordered_map<std::string, std::filesystem::path> published;
+        const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
+        const std::string content(chunk * 2 + 5, 'r');
+        const auto job = fixture.Stage("resume.pak", content, published);
+        fixture.files.Publish(published);
+        // Chunk 1 is in place and noted; chunk 0 and 2 are not.
+        std::string partial(content.size(), '\0');
+        for (size_t i = chunk; i < chunk * 2; ++i) {
+            partial[i] = 'r';
+        }
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::PartialPath(job), partial);
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::AssemblyNotePath(job), "1\n");
+
+        EQUALS(fixture.Run({job}), true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+        EQUALS(fixture.NoPartialsLeft(), true);
+    });
+
+    IT("falls back to reading a file whole when the source ignores ranges", {
+        const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
+        const std::string content(chunk * 2 + 1, 'w');
+        std::vector<std::string> chunks = {Framework::Utils::Crypto::Sha256Hex(content.substr(0, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk * 2))};
+        AssetHttpTest::ScriptedServer scripted({[chunks, content](const httplib::Request &req, httplib::Response &res) {
+            if (req.path.size() > 7 && req.path.compare(req.path.size() - 7, 7, ".chunks") == 0) {
+                res.set_content(Framework::Utils::StreamedAssets::FormatChunkList(chunks), "text/plain");
+                return;
+            }
+            // Whole body, whatever the range asked for.
+            const_cast<httplib::Request &>(req).ranges.clear();
+            res.set_content(content, "application/octet-stream");
+        }});
+        NEQUALS(scripted.port, 0);
+        const auto job = scripted.Job(content);
+        scripted.Start(job);
+        bool success = false;
+        EQUALS(scripted.Finish(success, std::chrono::seconds(20)), true);
+        EQUALS(success, true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+    });
+
+    IT("parses only a chunk list that fits the file", {
+        using Framework::Utils::StreamedAssets::ParseChunkList;
+        const std::string a(64, 'a');
+        const std::string b(64, 'b');
+        std::vector<std::string> chunks;
+        EQUALS(ParseChunkList(a + "\n" + b + "\n", Framework::Utils::StreamedAssets::kChunkSize + 1, chunks), true);
+        EQUALS(chunks.size(), 2u);
+        EQUALS(ParseChunkList(a + "\r\n" + b + "\r\n", Framework::Utils::StreamedAssets::kChunkSize * 2, chunks), true);
+        EQUALS(ParseChunkList(a + "\n", Framework::Utils::StreamedAssets::kChunkSize + 1, chunks), false);
+        EQUALS(ParseChunkList(a + "\n" + b + "\n", 10, chunks), false);
+        EQUALS(ParseChunkList("not a hash\n", 10, chunks), false);
+        EQUALS(ParseChunkList("", 0, chunks), true);
+        EQUALS(chunks.empty(), true);
+        EQUALS(Framework::Utils::StreamedAssets::ChunkCount(0), 0ull);
+        EQUALS(Framework::Utils::StreamedAssets::ChunkCount(1), 1ull);
+        EQUALS(Framework::Utils::StreamedAssets::ChunkCount(Framework::Utils::StreamedAssets::kChunkSize), 1ull);
+        EQUALS(Framework::Utils::StreamedAssets::ChunkCount(Framework::Utils::StreamedAssets::kChunkSize + 1), 2ull);
+        EQUALS(Framework::Utils::StreamedAssets::ChunkLength(Framework::Utils::StreamedAssets::kChunkSize + 5, 1), 5ull);
+    });
+
+    IT("splits a download URL list on spaces and commas", {
+        const auto urls = Framework::Utils::StreamedAssets::SplitUrlList(" https://a.example/files/, http://b.example:8080/x  ,,\thttps://c.example ");
+        EQUALS(urls.size(), 3u);
+        EQUALS(urls[0] == "https://a.example/files", true);
+        EQUALS(urls[1] == "http://b.example:8080/x", true);
+        EQUALS(urls[2] == "https://c.example", true);
+        EQUALS(Framework::Utils::StreamedAssets::SplitUrlList("").empty(), true);
+    });
+
+    IT("trusts a verified file by its note until it is touched", {
+        AssetHttpTest::Fixture fixture;
+        std::unordered_map<std::string, std::filesystem::path> published;
+        const auto job = fixture.Stage("noted.fwpak", "noted bytes", published);
+        AssetHttpTest::Fixture::Write(job.path, "noted bytes");
+        EQUALS(Framework::Utils::StreamedAssets::IsVerified(job.path, job.sha256), false);
+        Framework::Utils::StreamedAssets::WriteVerifiedNote(job.path, job.sha256);
+        EQUALS(Framework::Utils::StreamedAssets::IsVerified(job.path, job.sha256), true);
+        EQUALS(Framework::Utils::StreamedAssets::IsVerified(job.path, std::string(64, 'x')), false);
+        // A rewrite of a different length is not what was verified.
+        AssetHttpTest::Fixture::Write(job.path, "other bytes!");
+        EQUALS(Framework::Utils::StreamedAssets::IsVerified(job.path, job.sha256), false);
+        Framework::Utils::StreamedAssets::RemoveVerifiedNote(job.path);
+        EQUALS(std::filesystem::exists(Framework::Utils::StreamedAssets::VerifiedNotePath(job.path)), false);
+    });
+
+    IT("carries the deferred flag of an asset pak", {
+        Framework::Networking::RPC::AssetPakInfo sent {"sounds", std::string(64, 'd'), 42, true};
+        MafiaNet::BitStream bs;
+        sent.Serialize(&bs, true);
+        Framework::Networking::RPC::AssetPakInfo received;
+        received.Serialize(&bs, false);
+        EQUALS(received.deferred, true);
+        EQUALS(received.lane == "sounds", true);
+        EQUALS(received.IsSane(), true);
     });
 })
