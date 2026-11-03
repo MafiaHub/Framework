@@ -401,8 +401,14 @@ namespace Framework::Scripting {
                 due.insert(due.end(), watched.begin(), watched.end());
             }
 #else
-            // A loop's backend fd is readable while the loop has I/O to run, and polling it consumes nothing.
-            if (poll(fds.data(), static_cast<nfds_t>(fds.size()), idle ? static_cast<int>(waitMs) : 0) > 0) {
+            // A loop's backend fd is readable while the loop has I/O to run, and polling it consumes nothing. With no
+            // fd to wait on, sleep instead: some macOS releases return from poll() at once for zero fds.
+            if (fds.empty()) {
+                if (idle) {
+                    SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(waitMs), stopAt));
+                }
+            }
+            else if (poll(fds.data(), static_cast<nfds_t>(fds.size()), idle ? static_cast<int>(waitMs) : 0) > 0) {
                 for (size_t i = 0; i < fds.size(); ++i) {
                     if (fds[i].revents != 0) {
                         due.push_back(watched[i]);
