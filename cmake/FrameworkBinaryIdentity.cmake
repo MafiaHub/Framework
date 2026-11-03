@@ -13,11 +13,14 @@
 # In the source tree the manifest template sits with the launcher; the installed SDK keeps a copy
 # beside this module.
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/templates/launcher.manifest.in")
-    set(FW_LAUNCHER_MANIFEST_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/templates/launcher.manifest.in")
+    set(FW_LAUNCHER_MANIFEST_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/templates/launcher.manifest.in" CACHE INTERNAL "Template of the launcher manifest")
 else()
-    set(FW_LAUNCHER_MANIFEST_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/../code/framework/src/launcher/launcher.manifest.in")
+    set(FW_LAUNCHER_MANIFEST_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/../code/framework/src/launcher/launcher.manifest.in" CACHE INTERNAL "Template of the launcher manifest")
 endif()
-set(FW_BINARY_IDENTITY_RC_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/templates/binary_identity.rc.in")
+# Cached: a project that builds the Framework from source (FW_SOURCE_DIR) includes this file in the
+# Framework's directory scope and calls fw_set_binary_identity() from its own, where a plain variable
+# set here would not be visible.
+set(FW_BINARY_IDENTITY_RC_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/templates/binary_identity.rc.in" CACHE INTERNAL "Template of the binary identity resource script")
 
 function(fw_set_binary_identity target)
     if(NOT WIN32)
