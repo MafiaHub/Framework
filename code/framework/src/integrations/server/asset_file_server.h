@@ -22,8 +22,8 @@ namespace Framework::Integrations::Server {
     // served: the staging directory beside them holds the pak builder's indexes too. A request must carry a
     // token the server handed to a connected peer (kTokenHeader).
     //
-    // At most maxClients peers download at once, each over at most kMaxTransfersPerClient connections,
-    // so the webserver's other routes keep workers. A peer past the cap is told to retry (503,
+    // At most maxTransfers transfers are open at once in all, over at most that many peers and at most
+    // kMaxTransfersPerClient connections each, so the webserver's other routes keep workers. A peer past the cap is told to retry (503,
     // Retry-After) and where it stands (kQueueHeader): slots are handed out in the order peers first
     // asked, so a join burst drains fairly instead of racing. A peer that stops asking leaves the queue.
     class AssetFileServer final {
@@ -40,7 +40,9 @@ namespace Framework::Integrations::Server {
             size_t queuePosition = 0;
         };
 
-        bool Register(size_t maxClients);
+        // maxTransfers is the worker budget: how many transfers may be open at once in all, and the most
+        // peers that may hold a slot.
+        bool Register(size_t maxTransfers);
 
         // Serves these names, and beside each the chunk list the client assembles it from
         // (<name>.chunks, written next to the file when missing or older than it). A mirror copies
@@ -74,7 +76,8 @@ namespace Framework::Integrations::Server {
             std::chrono::steady_clock::time_point idleSince; // when open last reached zero
         };
 
-        size_t _maxClients = 1;
+        size_t _maxClients   = 1;
+        size_t _maxTransfers = 1;
         std::mutex _slotsMutex;
         // The peers holding a client slot: transferring, or just done and kept briefly for their next file.
         std::unordered_map<std::string, Slot> _slots;

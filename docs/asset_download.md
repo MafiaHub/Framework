@@ -56,8 +56,9 @@ through, since they are where the unchanged chunks come from.
 
 ## Why a join is never refused for load
 
-The server serves at most `maxplayers + max-downloading - 4` peers at once,
-so the webserver's other routes keep workers. A peer past that gets `503`,
+The server keeps at most `maxplayers + max-downloading - 4` transfers open at
+once, over at most that many peers, so the webserver's other routes keep
+workers. A peer past that gets `503`,
 `Retry-After: 2` and `X-Queue-Position: n`, where `n` is how many peers asked
 before it and are still asking. Slots go to the front of that line, so a join
 burst after a restart drains in the order players arrived instead of racing,

@@ -30,12 +30,13 @@ namespace Framework::Integrations::Server {
         constexpr auto kQueueEntryLifetime = std::chrono::seconds(AssetFileServer::kRetryAfterSeconds * 4);
     } // namespace
 
-    bool AssetFileServer::Register(size_t maxClients) {
+    bool AssetFileServer::Register(size_t maxTransfers) {
         const auto webServer = CoreModules::GetWebserver();
         if (!webServer) {
             return false;
         }
-        _maxClients = std::max<size_t>(maxClients, 1);
+        _maxTransfers = std::max<size_t>(maxTransfers, 1);
+        _maxClients   = _maxTransfers;
         webServer->RegisterRequest(R"(/files/([^/]+))", [this](const httplib::Request &req, httplib::Response &res) {
             const std::string token = req.get_header_value(kTokenHeader);
             if (!IsGranted(token)) {
@@ -164,9 +165,18 @@ namespace Framework::Integrations::Server {
         std::lock_guard lock(_slotsMutex);
         ExpireQueue(now);
 
-        // A peer holding a slot opens more connections on it, up to its share.
+        // Every open transfer holds a worker, so the budget binds slot holders and the line alike.
+        size_t openTransfers = 0;
+        size_t open          = 0;
+        for (const auto &entry : _slots) {
+            openTransfers += entry.second.open;
+            open += entry.second.open > 0 ? 1 : 0;
+        }
+        const size_t freeTransfers = _maxTransfers > openTransfers ? _maxTransfers - openTransfers : 0;
+
+        // A peer holding a slot opens more connections on it, up to its share and the budget.
         if (const auto held = _slots.find(token); held != _slots.end()) {
-            if (held->second.open >= kMaxTransfersPerClient) {
+            if (held->second.open >= kMaxTransfersPerClient || freeTransfers == 0) {
                 return {false, 0};
             }
             ++held->second.open;
@@ -174,10 +184,7 @@ namespace Framework::Integrations::Server {
         }
 
         // A slot kept idle for its holder's next file is spare capacity for the line, not a hold on it.
-        const size_t open = static_cast<size_t>(std::count_if(_slots.begin(), _slots.end(), [](const auto &entry) {
-            return entry.second.open > 0;
-        }));
-        const size_t free = _maxClients > open ? _maxClients - open : 0;
+        const size_t free = std::min(_maxClients > open ? _maxClients - open : 0, freeTransfers);
         auto place        = std::find_if(_queue.begin(), _queue.end(), [&token](const auto &entry) {
             return entry.first == token;
         });

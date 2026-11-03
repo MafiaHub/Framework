@@ -1205,17 +1205,22 @@ MODULE(asset_http, {
     });
 
     IT("lets a peer open more connections on the slot it holds", {
-        AssetHttpTest::Fixture fixture("", false, 1);
+        AssetHttpTest::Fixture fixture("", false, 2);
         std::unordered_map<std::string, std::filesystem::path> published;
         fixture.Stage("big.pak", std::string(8000000, 'b'), published);
         fixture.Stage("small.fwpak", "small", published);
         fixture.files.Publish(published);
         const std::string other = fixture.files.Grant(AssetHttpTest::kPeer + 1);
 
+        // Two transfers of budget, both the holder's: its second connection rides its slot, and the
+        // budget they fill keeps the other peer out.
         AssetHttpTest::HeldSlot held(fixture, fixture.token);
-        EQUALS(fixture.Status("/files/small.fwpak"), 200);
+        AssetHttpTest::HeldSlot again(fixture, fixture.token);
+        EQUALS(fixture.files.GetActiveClients(), 1u);
         httplib::Client client(fixture.Origin());
         EQUALS(client.Get("/files/small.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, other}})->status, 503);
+        again.Release();
+        EQUALS(client.Get("/files/small.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, other}})->status, 200);
         held.Release();
     });
 
@@ -1399,5 +1404,69 @@ MODULE(asset_http, {
         EQUALS(received.deferred, true);
         EQUALS(received.lane == "sounds", true);
         EQUALS(received.IsSane(), true);
+    });
+
+    IT("keeps open transfers within the worker budget whoever holds the slots", {
+        AssetHttpTest::Fixture fixture("", false, 2);
+        std::unordered_map<std::string, std::filesystem::path> published;
+        fixture.Stage("big.pak", std::string(8000000, 'b'), published);
+        fixture.Stage("small.fwpak", "small", published);
+        fixture.files.Publish(published);
+        const std::string other = fixture.files.Grant(AssetHttpTest::kPeer + 1);
+
+        // One peer's two connections fill a budget of two; its own third and another peer both wait.
+        AssetHttpTest::HeldSlot first(fixture, fixture.token);
+        AssetHttpTest::HeldSlot second(fixture, fixture.token);
+        EQUALS(fixture.Status("/files/small.fwpak"), 503);
+        httplib::Client client(fixture.Origin());
+        EQUALS(client.Get("/files/small.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, other}})->status, 503);
+        first.Release();
+        EQUALS(fixture.Status("/files/small.fwpak"), 200);
+        second.Release();
+    });
+
+    IT("fails a chunk that is cut every time instead of retrying for ever", {
+        const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
+        const std::string content(chunk * 2 + 1, 'k');
+        std::vector<std::string> chunks = {Framework::Utils::Crypto::Sha256Hex(content.substr(0, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk * 2))};
+        AssetHttpTest::ScriptedServer scripted({[chunks, content](const httplib::Request &req, httplib::Response &res) {
+            if (req.path.size() > 7 && req.path.compare(req.path.size() - 7, 7, ".chunks") == 0) {
+                res.set_content(Framework::Utils::StreamedAssets::FormatChunkList(chunks), "text/plain");
+                return;
+            }
+            // One byte of every range, then the line drops.
+            res.set_content_provider(content.size(), "application/octet-stream", [content](size_t offset, size_t, httplib::DataSink &sink) {
+                sink.write(content.data() + offset, 1);
+                return false;
+            });
+        }});
+        NEQUALS(scripted.port, 0);
+        Framework::Integrations::Client::AssetDownloader::RetryPolicy policy = AssetHttpTest::FastRetries();
+        policy.attempts                                                      = 2;
+        policy.connections                                                   = 1;
+        scripted.downloader.SetRetryPolicy(policy);
+        const auto job = scripted.Job(content);
+        scripted.Start(job);
+        bool success = true;
+        EQUALS(scripted.Finish(success, std::chrono::seconds(20)), true);
+        EQUALS(success, false);
+        EQUALS(std::filesystem::exists(job.path), false);
+    });
+
+    IT("reuses the chunks of the stale copy it replaces", {
+        AssetHttpTest::Fixture fixture;
+        std::unordered_map<std::string, std::filesystem::path> published;
+        const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
+        std::string older(chunk * 2 + 7, 's');
+        std::string newer = older;
+        newer[chunk + 1]  = 'x';
+        auto job          = fixture.Stage("pkg.fwpak", newer, published);
+        fixture.files.Publish(published);
+        AssetHttpTest::Fixture::Write(job.path, older);
+        job.reuse = {job.path};
+
+        EQUALS(fixture.Run({job}), true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == newer, true);
+        EQUALS(fixture.downloader.GetBytesReused(), static_cast<uint64_t>(chunk + 7));
     });
 })

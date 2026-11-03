@@ -604,7 +604,9 @@ namespace Framework::Integrations::Client {
             return {};
         }
         Attempt failed;
-        failed.progressed = !data.empty();
+        // The next attempt asks for the chunk from its start, so nothing received here is kept, and a
+        // chunk cut every time runs through the budget rather than for ever.
+        failed.progressed = false;
         if (answer.status == 503) {
             transfer.NoteAnswer(answer.status, answer.retryAfter, answer.queuePosition, false);
             failed.retryAfterMs = RetryAfterMs(answer.retryAfter);
@@ -670,7 +672,8 @@ namespace Framework::Integrations::Client {
         // Chunks an older file already holds are copied, never fetched.
         std::unordered_map<std::string, std::pair<std::string, uint64_t>> known;
         for (const std::string &older : job.reuse) {
-            if (older == partial || older == job.path || !std::filesystem::exists(older, code)) {
+            // The stale copy at job.path is read here and replaced only once the assembly verifies.
+            if (older == partial || !std::filesystem::exists(older, code)) {
                 continue;
             }
             transfer.Touch();
@@ -737,8 +740,7 @@ namespace Framework::Integrations::Client {
                     if (transfer.cancel.load()) {
                         return;
                     }
-                    const uint64_t before = transfer.bytes.load(std::memory_order_relaxed);
-                    const Attempt result  = FetchChunk(transfer, source, job, index, chunks[index], data);
+                    const Attempt result = FetchChunk(transfer, source, job, index, chunks[index], data);
                     if (result.done) {
                         std::lock_guard lock(shared);
                         output.seekp(static_cast<std::streamoff>(index * Utils::StreamedAssets::kChunkSize));
@@ -748,7 +750,8 @@ namespace Framework::Integrations::Client {
                         noteOut.flush();
                         break;
                     }
-                    transfer.bytes.fetch_sub(transfer.bytes.load(std::memory_order_relaxed) - before, std::memory_order_relaxed);
+                    // Only this attempt's bytes: other workers move the counter too.
+                    transfer.bytes.fetch_sub(data.size(), std::memory_order_relaxed);
                     if (result.fallback || !WaitBeforeRetry(transfer, source, job, result, failuresWithoutProgress, queuedSinceMs)) {
                         std::lock_guard lock(shared);
                         if (!failed) {
