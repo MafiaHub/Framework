@@ -152,6 +152,7 @@ namespace Framework::Networking::Replication {
             // Destroyed here, not by the base: its delete skips DestroyEntity's bookkeeping and leaves
             // the viewer map and interest sets on freed memory. The base re-resolves the id after
             // this returns and finds it gone.
+            PreDestruction(sourceConnection);
             Manager()->DestroyEntity(this);
         }
         return true;
