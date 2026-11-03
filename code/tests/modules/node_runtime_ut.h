@@ -115,6 +115,22 @@ MODULE(node_runtime, {
         engine.Shutdown();
     });
 
+    IT("runs a nextTick queued from a promise reaction in the same tick", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        std::string error;
+        auto runtime = engine.CreateRuntime(error);
+        NEQUALS(runtime.get(), nullptr);
+
+        NodeTest::Eval(*runtime, "Promise.resolve().then(() => process.nextTick(() => { globalThis.ran = true; }))");
+        runtime->Tick();
+        STREQUALS(NodeTest::Eval(*runtime, "String(globalThis.ran)").c_str(), "true");
+
+        runtime.reset();
+        engine.Shutdown();
+    });
+
     IT("stops a running worker thread when its runtime is destroyed", {
         NodeEngine engine({});
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);

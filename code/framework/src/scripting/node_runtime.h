@@ -68,6 +68,9 @@ namespace Framework::Scripting {
         void Tick();
 
       private:
+        // The caller holds the isolate's scopes.
+        void RunQueuedScript();
+
         NodeRuntime() = default;
 
         node::MultiIsolatePlatform *_platform = nullptr;

@@ -66,7 +66,7 @@ namespace Framework::Scripting {
         v8::Context::Scope contextScope(_setup->context());
 
         // Process microtasks (Promise continuations, async/await)
-        _isolate->PerformMicrotaskCheckpoint();
+        RunQueuedScript();
 
         // Run pending libuv events (non-blocking)
         uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
@@ -76,7 +76,13 @@ namespace Framework::Scripting {
         _platform->FlushForegroundTasks(_isolate);
 
         // Process any microtasks that were queued by I/O callbacks or platform tasks
-        _isolate->PerformMicrotaskCheckpoint();
+        RunQueuedScript();
+    }
+
+    void NodeRuntime::RunQueuedScript() {
+        // A bare microtask checkpoint leaves process.nextTick callbacks queued until some later libuv callback in
+        // this runtime returns, which can be seconds away.
+        node::CallbackScope scope(_env, _setup->context()->Global(), {0, 0});
     }
 
 } // namespace Framework::Scripting
