@@ -138,6 +138,57 @@ MODULE(network_work, {
         manager->DestroyEntity(viewer);
     });
 
+    IT("re-runs the replica diff after a change it did not make", {
+        using namespace Framework::Networking::Replication;
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        manager->ConfigureGrid(100, -4096, 4096);
+        // Only urgent refreshes run.
+        constexpr uint32_t kFarInterval = 1000000;
+        manager->SetInterestRebuildInterval(kFarInterval);
+        const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::QueryDiff");
+        auto *viewer            = manager->CreateEntity(type);
+        auto *nearby            = manager->CreateEntity(type);
+        viewer->streaming.range = 100;
+        const MafiaNet::RakNetGUID viewerGuid(93);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->RebuildInterest();
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+        // Query and apply, as ReplicaManager3::Update does.
+        auto pass = [&] {
+            connection->AutoConstructByQuery(manager, 0);
+        };
+
+        pass();
+        pass();
+        EQUALS(connection->HasReplicaConstructed(nearby), true);
+
+        // A refused client destruction drops it outside the diff.
+        manager->Dereference(nearby);
+        manager->Reference(nearby);
+        pass();
+        EQUALS(connection->HasReplicaConstructed(nearby), true);
+        pass();
+
+        // Settled, and a refresh still applies.
+        nearby->position.x = 1000;
+        manager->SetInterestRebuildInterval(0);
+        manager->RebuildInterest();
+        pass();
+        EQUALS(connection->HasReplicaConstructed(nearby), false);
+
+        manager->DestroyEntity(nearby);
+        manager->DestroyEntity(viewer);
+    });
+
     IT("refuses replica constructions from a client", {
         using namespace Framework::Networking::Replication;
         Framework::Networking::NetworkServer peer;

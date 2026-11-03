@@ -79,5 +79,6 @@ namespace Framework::Networking::Replication {
         NetworkEntity *_relevantViewer = nullptr;
         uint32_t _relevantGeneration   = 0;
         bool _relevantValid            = false;
+        bool _diffSettled              = false;
     };
 } // namespace Framework::Networking::Replication

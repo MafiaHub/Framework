@@ -70,6 +70,10 @@ namespace Framework::Networking::Replication {
                 it = _relevant.contains(const_cast<NetworkEntity *>(it->first)) ? std::next(it) : _lastTransformSend.erase(it);
             }
         }
+        else if (_diffSettled && constructedReplicaList.Size() == _relevant.size()) {
+            // Anything RM3 drops outside the diff, such as a refused destruction, moves the count.
+            return;
+        }
 
         for (NetworkEntity *entity : _relevant) {
             if (!HasReplicaConstructed(entity)) {
@@ -85,6 +89,7 @@ namespace Framework::Networking::Replication {
                 existingReplicasToDestroy.Push(entity, _FILE_AND_LINE_);
             }
         }
+        _diffSettled = newReplicasToCreate.Size() == 0 && existingReplicasToDestroy.Size() == 0;
     }
 
     uint32_t ReplicationConnection::TransformSendIntervalMs(const NetworkEntity *entity) const {
