@@ -169,8 +169,14 @@ namespace Framework::Networking::Replication {
         // QueryRelayDestruction, have the server relay that deletion to everyone. Only honour a
         // destruction from the entity's current owner; fail closed on a missing connection. Returning
         // false keeps the entity alive. Clients still accept the server's authoritative destructions.
-        if (IsServerPeer() && (!sourceConnection || MafiaNet::ToPeerGuid(sourceConnection->GetRakNetGUID()) != ownerGUID || !CanOwnerDestroy())) {
-            return false;
+        if (IsServerPeer()) {
+            if (!sourceConnection || MafiaNet::ToPeerGuid(sourceConnection->GetRakNetGUID()) != ownerGUID || !CanOwnerDestroy()) {
+                return false;
+            }
+            // Destroyed here, not by the base: its delete skips DestroyEntity's bookkeeping and leaves
+            // the viewer map and interest sets on freed memory. The base re-resolves the id after
+            // this returns and finds it gone.
+            Manager()->DestroyEntity(this);
         }
         return true;
     }
