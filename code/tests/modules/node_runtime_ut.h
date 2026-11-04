@@ -48,8 +48,7 @@ namespace NodeRuntimeTest {
         info.GetReturnValue().Set(v8::String::NewFromUtf8(info.GetIsolate(), result.c_str()).ToLocalChecked());
     }
 
-    // Calls a global function straight through V8, as an event handler or another runtime's call enters, and compiles
-    // nothing: a compile can post a platform task, and the platform runs those in a callback scope that drains ticks.
+    // Calls a global function straight through V8, as an event handler or another runtime's call enters.
     static std::string CallGlobal(Framework::Scripting::NodeRuntime &runtime, const char *name) {
         v8::Isolate *isolate = runtime.GetIsolate();
         v8::Locker locker(isolate);
@@ -147,15 +146,21 @@ MODULE(node_runtime, {
                                  "  process.nextTick(() => order.push('tick'));"
                                  "  new Promise((resolve) => process.nextTick(resolve)).then(() => order.push('then'));"
                                  "};"
-                                 "globalThis.read = () => order.join();");
-        // Let the tasks bootstrapping and compiling posted run first, so none drains the queue by accident below.
-        NodeRuntimeTest::TickUntil(*runtime, [] { return false; }, 200);
-
-        // The loop has nothing pending, as in a resource whose pooled MySQL connection sits idle: mysql2 hands it out
-        // through process.nextTick, so another resource's query stalled until unrelated I/O woke the runtime.
+                                 "globalThis.take = () => order.splice(0).join();");
+        // Compile everything once and let the platform tasks that posts run: the platform runs each in a callback scope,
+        // which drains the queue by accident. Twenty rounds then leave such a task no room to pass the test alone.
         NodeRuntimeTest::CallGlobal(*runtime, "queue");
-        runtime->Tick();
-        STREQUALS(NodeRuntimeTest::CallGlobal(*runtime, "read").c_str(), "tick,then");
+        NodeRuntimeTest::TickUntil(*runtime, [] { return false; }, 200);
+        NodeRuntimeTest::CallGlobal(*runtime, "take");
+
+        // The loop has nothing pending, so only the tick itself can run the callbacks.
+        int drained = 0;
+        for (int round = 0; round < 20; ++round) {
+            NodeRuntimeTest::CallGlobal(*runtime, "queue");
+            runtime->Tick();
+            drained += NodeRuntimeTest::CallGlobal(*runtime, "take") == "tick,then";
+        }
+        EQUALS(drained, 20);
 
         runtime.reset();
         engine.Shutdown();

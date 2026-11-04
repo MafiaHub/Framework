@@ -70,7 +70,7 @@ namespace Framework::Scripting {
       private:
         NodeRuntime() = default;
 
-        // The caller holds the isolate and context scopes.
+        // The caller holds the locker and the isolate, handle and context scopes.
         void DrainTaskQueues();
 
         node::MultiIsolatePlatform *_platform = nullptr;
