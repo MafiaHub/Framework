@@ -47,6 +47,25 @@ namespace NodeRuntimeTest {
         const std::string result = NodeTest::Eval(*other, *source);
         info.GetReturnValue().Set(v8::String::NewFromUtf8(info.GetIsolate(), result.c_str()).ToLocalChecked());
     }
+
+    // Calls a global function straight through V8, as an event handler or another runtime's call enters, and compiles
+    // nothing: a compile can post a platform task, and the platform runs those in a callback scope that drains ticks.
+    static std::string CallGlobal(Framework::Scripting::NodeRuntime &runtime, const char *name) {
+        v8::Isolate *isolate = runtime.GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = runtime.GetContext();
+        v8::Context::Scope contextScope(context);
+
+        v8::Local<v8::Value> fn = context->Global()->Get(context, v8::String::NewFromUtf8(isolate, name).ToLocalChecked()).ToLocalChecked();
+        v8::Local<v8::Value> result;
+        if (!fn->IsFunction() || !fn.As<v8::Function>()->Call(context, v8::Undefined(isolate), 0, nullptr).ToLocal(&result)) {
+            return "<failed>";
+        }
+        v8::String::Utf8Value text(isolate, result);
+        return *text ? *text : "";
+    }
 } // namespace NodeRuntimeTest
 
 MODULE(node_runtime, {
@@ -112,6 +131,33 @@ MODULE(node_runtime, {
 
         caller.reset();
         callee.reset();
+        engine.Shutdown();
+    });
+
+    IT("runs on its next tick the nextTick callbacks a call from outside Node queues", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        std::string error;
+        auto runtime = engine.CreateRuntime(error);
+        NEQUALS(runtime.get(), nullptr);
+
+        NodeTest::Eval(*runtime, "globalThis.order = [];"
+                                 "globalThis.queue = () => {"
+                                 "  process.nextTick(() => order.push('tick'));"
+                                 "  new Promise((resolve) => process.nextTick(resolve)).then(() => order.push('then'));"
+                                 "};"
+                                 "globalThis.read = () => order.join();");
+        // Let the tasks bootstrapping and compiling posted run first, so none drains the queue by accident below.
+        NodeRuntimeTest::TickUntil(*runtime, [] { return false; }, 200);
+
+        // The loop has nothing pending, as in a resource whose pooled MySQL connection sits idle: mysql2 hands it out
+        // through process.nextTick, so another resource's query stalled until unrelated I/O woke the runtime.
+        NodeRuntimeTest::CallGlobal(*runtime, "queue");
+        runtime->Tick();
+        STREQUALS(NodeRuntimeTest::CallGlobal(*runtime, "read").c_str(), "tick,then");
+
+        runtime.reset();
         engine.Shutdown();
     });
 

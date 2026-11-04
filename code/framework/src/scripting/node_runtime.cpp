@@ -65,8 +65,8 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(_isolate);
         v8::Context::Scope contextScope(_setup->context());
 
-        // Process microtasks (Promise continuations, async/await)
-        _isolate->PerformMicrotaskCheckpoint();
+        // Run what the calls since the last tick left queued
+        DrainTaskQueues();
 
         // Run pending libuv events (non-blocking)
         uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
@@ -75,8 +75,15 @@ namespace Framework::Scripting {
         // the process, so with a runtime per resource each tick would block on all their GC and compile work.
         _platform->FlushForegroundTasks(_isolate);
 
-        // Process any microtasks that were queued by I/O callbacks or platform tasks
-        _isolate->PerformMicrotaskCheckpoint();
+        // Run what I/O callbacks and platform tasks queued
+        DrainTaskQueues();
+    }
+
+    void NodeRuntime::DrainTaskQueues() {
+        // Event handlers and other runtimes' calls enter through V8 with no Node callback scope, so the
+        // process.nextTick callbacks they queue wait for one to close; a microtask checkpoint alone never runs them.
+        // Closing this empty scope runs the nextTick queue, the microtasks and pending unhandled rejections.
+        node::CallbackScope scope(_env, v8::Object::New(_isolate), {0, 0});
     }
 
 } // namespace Framework::Scripting

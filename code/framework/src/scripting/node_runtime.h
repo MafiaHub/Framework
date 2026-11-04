@@ -62,13 +62,16 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> GetContext() const;
 
         /**
-         * Run microtasks, ready libuv callbacks and this isolate's platform tasks without blocking.
-         * Enters the isolate itself.
+         * Run the process.nextTick queue, microtasks, ready libuv callbacks and this isolate's platform tasks
+         * without blocking. Enters the isolate itself.
          */
         void Tick();
 
       private:
         NodeRuntime() = default;
+
+        // The caller holds the isolate and context scopes.
+        void DrainTaskQueues();
 
         node::MultiIsolatePlatform *_platform = nullptr;
         std::unique_ptr<node::CommonEnvironmentSetup> _setup;
