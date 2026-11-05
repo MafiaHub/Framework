@@ -1020,6 +1020,11 @@ namespace Framework::Launcher {
             // The OS loader normally dispatches executable TLS callbacks before the entry
             // point. This image was mapped manually, so complete that loader step here.
             loader.RunTLSCallbacks();
+            if (_config.forwardThreadTlsCallbacks) {
+                if (const size_t forwarded = loader.ForwardTLSThreadCallbacks()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Forwarding thread attach/detach to {} game TLS callbacks", forwarded);
+                }
+            }
 
             if (_preLaunchFunctor) {
                 _preLaunchFunctor();

@@ -103,6 +103,10 @@ namespace Framework::Launcher {
         // Suppress the mapped game's second registration when that would abort startup.
         bool suppressThreadLocalExeAtexitCallback = false;
 
+        // PE loading only. Gives the game's TLS callbacks thread attach/detach, as the OS loader would, for every
+        // thread started after the loader's process-attach pass; protected images keep per-thread state there.
+        bool forwardThreadTlsCallbacks = false;
+
         // Protected images may query their loader record before their CRT starts.
         bool publishGameImageLayout = false;
 

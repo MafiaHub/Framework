@@ -430,7 +430,7 @@ if(WIN32)
     target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} MafiaHubServices FrameworkLoaderData ntdll sfd winhttp crypt32)
     target_link_libraries(FrameworkLoaderData udis86 minhook::minhook)
     target_compile_definitions(FrameworkLoaderData PRIVATE _USE_MATH_DEFINES NOMINMAX)
-    target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage /EXPORT:CoreSetExceptionOverride)
+    target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage /EXPORT:CoreSetExceptionOverride /EXPORT:CoreRT_ForwardGameTlsCallbacks)
 
     # FrameworkLoader-specific includes
     target_include_directories(FrameworkLoader PRIVATE

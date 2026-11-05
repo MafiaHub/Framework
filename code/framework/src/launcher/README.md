@@ -76,6 +76,12 @@ launcher did not claim the slot should retain the normal UCRT registration. Supp
 the mapped game's primary-thread TLS destructors are not run during process exit; thread
 attach/detach callbacks and normal execution are unaffected.
 
+Windows sends thread attach/detach only to the TLS callbacks of images it loaded itself, so a
+mapped game's never see a thread start or exit. Protected images that keep per-thread state there
+fault on such threads. With `config.forwardThreadTlsCallbacks = true` the loader points
+`FrameworkLoaderData.dll` at the game's callback array after the process-attach pass, and that
+DLL's own TLS callback relays both reasons to it for every later thread.
+
 ## When to Use Which Approach
 
 | Game Behavior | Approach | Config |
@@ -257,7 +263,7 @@ asking for it fails to compile.
 - `project.cpp` / `project.h` - Main launcher project class and configuration
 - `game_reserve.cpp` - the game reservation, compiled into each launcher and sized by `FW_LAUNCHER_GAME_RESERVE`
 - `loaders/exe_ldr.cpp` / `exe_ldr.h` - PE executable loader implementation
-- `data/tls.cpp` - TLS buffer for allocated slot approach (in FrameworkLoaderData.dll)
+- `data/tls.cpp` - TLS buffer for allocated slot approach, and the thread attach/detach relay to the game's TLS callbacks (in FrameworkLoaderData.dll)
 - `rgl_bypass.cpp` / `rgl_bypass.h` - Rockstar Games Launcher entry-stub decoding and signature-check bypasses; `ProcessMonitor` only with `FW_DLL_INJECTION`
 - `loaders/image_snapshot.cpp` / `image_snapshot.h` - capture and replay of the code a store wrapper decrypts at runtime
 - `loaders/image_snapshot_capture.cpp` / `image_snapshot_capture.h` - the authorised run the snapshot is captured from, linked only through `Platforms::Rockstar::Options::captureImage`
