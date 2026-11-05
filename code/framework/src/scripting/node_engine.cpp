@@ -25,6 +25,7 @@
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #endif
 #else
+#include <cstring>
 #include <poll.h>
 #endif
 
@@ -399,10 +400,26 @@ namespace Framework::Scripting {
                     SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(waitMs), stopAt));
                 }
             }
-            else if (poll(fds.data(), static_cast<nfds_t>(fds.size()), idle ? static_cast<int>(waitMs) : 0) > 0) {
-                for (size_t i = 0; i < fds.size(); ++i) {
-                    if (fds[i].revents != 0) {
-                        due.push_back(watched[i]);
+            else {
+                const int ready = poll(fds.data(), static_cast<nfds_t>(fds.size()), idle ? static_cast<int>(waitMs) : 0);
+                if (ready > 0) {
+                    for (size_t i = 0; i < fds.size(); ++i) {
+                        if (fds[i].revents != 0) {
+                            due.push_back(watched[i]);
+                        }
+                    }
+                }
+                else if (ready < 0 && errno != EINTR) {
+                    // Nothing about the fds changes before the tick, so a poll that fails outright would fail every
+                    // round: sleep the round out instead of spinning on it, and leave the I/O to the tick, as before.
+                    // Timers still set the wait.
+                    const int error = errno;
+                    if (!_pollFailed) {
+                        _pollFailed = true;
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("poll() over the script loops failed: {}. While it does, script I/O waits for the next tick", std::strerror(error));
+                    }
+                    if (idle) {
+                        SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(waitMs), stopAt));
                     }
                 }
             }

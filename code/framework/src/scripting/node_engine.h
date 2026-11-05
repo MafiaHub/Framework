@@ -266,6 +266,9 @@ namespace Framework::Scripting {
 #ifdef _WIN32
         // std::this_thread::sleep_until can be held to the 15.6 ms system timer, most of a tick.
         HANDLE _waitTimer = nullptr;
+#else
+        // RunUntil's poll() over the loops failed with something other than EINTR, which is said once.
+        bool _pollFailed = false;
 #endif
 
         // Cached JS function that calls setImmediate(()=>{}) each tick.
