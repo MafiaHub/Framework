@@ -382,7 +382,7 @@ namespace Framework::Networking::Replication {
             return;
         }
         FW_PROFILE_SCOPE_N("Replication::FlushStateBags");
-        FW_PROFILE_VALUE(static_cast<int64_t>(_dirtyStateBags.size()));
+        FW_PROFILE_VALUE(_dirtyStateBags.size());
 
         // A client sends nothing outbound, and with no connections there is nowhere to send. Drop
         // the marks rather than let them accumulate for a flush that never comes.

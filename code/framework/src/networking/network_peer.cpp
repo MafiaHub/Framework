@@ -104,7 +104,7 @@ namespace Framework::Networking {
         // Receive() updates every plugin before each packet; the replication pass runs on the first
         // one only, ahead of this drain's packets, which the next pass then serializes.
         FW_PROFILE_SCOPE_N("Networking::Receive");
-        int64_t packets = 0;
+        [[maybe_unused]] uint64_t packets = 0; // read by the profiler zone only
         _replicationManager->BeginNetworkUpdate();
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
             ++packets;

@@ -88,7 +88,7 @@ namespace Framework::Networking::Replication {
                 existingReplicasToDestroy.Push(entity, _FILE_AND_LINE_);
             }
         }
-        FW_PROFILE_VALUE(static_cast<int64_t>(_relevant.size()));
+        FW_PROFILE_VALUE(_relevant.size());
     }
 
     uint32_t ReplicationConnection::TransformSendIntervalMs(const NetworkEntity *entity) const {
