@@ -87,6 +87,29 @@ namespace Framework::Scripting {
         // Heap figures and the collector's running totals. Locks the isolate, so nothing may be running in it.
         RuntimeSample Sample() const;
 
+        /**
+         * Run ready libuv callbacks once, without Tick()'s drains: Node's own callbacks drain on their way out.
+         * Enters the isolate itself.
+         */
+        void RunLoop();
+
+        /**
+         * The fd that is readable while the loop has I/O to run, or -1 where there is none (Windows).
+         */
+        int GetBackendFd() const;
+
+        /**
+         * Whether the loop has referenced handles or requests that can still produce work. uv_run does nothing for
+         * one that has not.
+         */
+        bool IsAlive() const;
+
+        /**
+         * Milliseconds until a live loop has a timer, immediate or pending callback to run (0: now), or -1 for none.
+         * Only meaningful while IsAlive(): libuv answers 0 for a loop with nothing to run.
+         */
+        int64_t MsUntilDue();
+
       private:
         NodeRuntime() = default;
 

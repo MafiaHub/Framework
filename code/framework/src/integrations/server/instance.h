@@ -206,6 +206,9 @@ namespace Framework::Integrations::Server {
         std::chrono::steady_clock::time_point _nextTick {};
         std::chrono::steady_clock::time_point _lastHitchWarnAt {};
         uint32_t _suppressedHitches = 0;
+        // Script work run between ticks that came back past the tick's due time; warned about like a slow tick.
+        std::chrono::steady_clock::time_point _lastLateTickWarnAt {};
+        uint32_t _suppressedLateTicks = 0;
 
         InstanceOptions _opts;
 

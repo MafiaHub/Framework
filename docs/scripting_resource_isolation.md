@@ -45,6 +45,11 @@ a worker thread; what changes is that the worker now dies with its resource.
 - `NodeRuntime` is one environment. The engine initialises the process-wide
   platform once; every runtime is created against it and ticked on the
   scripting thread.
+- Between ticks the server runs a runtime as soon as it has work: I/O, or a
+  due timer or immediate (`NodeEngine::RunUntil`). It starts nothing in the
+  last millisecond before the tick. On Linux and macOS it waits on every loop's backend fd at once; a
+  Windows loop is a completion port, which cannot be waited on that way, so
+  live loops are visited every millisecond instead.
 - The engine's first environment is created with the default flags and owns
   the inspector and the process state (working directory, title, signals).
   Every further environment is created with `kNoCreateInspector`: Node allows

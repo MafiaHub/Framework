@@ -70,6 +70,7 @@
 #include "modules/resource_manager_ut.h"
 #include "modules/resource_isolation_ut.h"
 #include "modules/resource_monitor_ut.h"
+#include "modules/run_until_ut.h"
 #include "modules/resource_ut.h"
 #include "modules/timer_context_ut.h"
 
@@ -134,6 +135,7 @@ int main() {
     UNIT_MODULE(resource_manager_callbacks);
     UNIT_MODULE(resource_isolation);
     UNIT_MODULE(resource_monitor);
+    UNIT_MODULE(run_until);
     UNIT_MODULE(js_features);
     UNIT_MODULE(timer_context);
     UNIT_MODULE(connection_gate);
