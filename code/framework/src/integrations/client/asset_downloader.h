@@ -167,7 +167,8 @@ namespace Framework::Integrations::Client {
         // path then asks again).
         static std::vector<std::string> FetchChunkList(Transfer &transfer, const Source &source, const Job &job);
         static Attempt FetchChunked(Transfer &transfer, const Source &source, const Job &job, const std::vector<std::string> &chunks);
-        static Attempt FetchChunk(Transfer &transfer, const Source &source, const Job &job, uint64_t index, const std::string &sha256, std::vector<char> &data);
+        // One chunk over |client|, a connection the worker keeps across the chunks it fetches.
+        static Attempt FetchChunk(Transfer &transfer, httplib::Client &client, const std::string &path, const Source &source, const Job &job, uint64_t index, const std::string &sha256, std::vector<char> &data);
         static Attempt Finish(Transfer &transfer, const Job &job, const std::string &partial, bool resumed);
 
         std::shared_ptr<Transfer> _transfer;

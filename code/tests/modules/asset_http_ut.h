@@ -28,6 +28,7 @@
 #include <functional>
 #include <mutex>
 #include <random>
+#include <set>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -222,6 +223,8 @@ namespace AssetHttpTest {
         std::mutex seenMutex;
         std::vector<std::string> ranges; // the Range header of each request, empty when none
         std::vector<std::string> tokens; // the token header of each request
+        std::vector<std::string> paths;  // the path of each request
+        std::vector<int> ports;          // the client port of each request: one per connection
 
         explicit ScriptedServer(std::vector<Step> script): steps(std::move(script)) {
             std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -236,6 +239,8 @@ namespace AssetHttpTest {
                     std::lock_guard lock(seenMutex);
                     ranges.push_back(req.get_header_value("Range"));
                     tokens.push_back(req.get_header_value(Framework::Integrations::Server::AssetFileServer::kTokenHeader));
+                    paths.push_back(req.path);
+                    ports.push_back(req.remote_port);
                 }
                 const int index = requests++;
                 steps[std::min<size_t>(static_cast<size_t>(index), steps.size() - 1)](req, res);
@@ -1457,6 +1462,39 @@ MODULE(asset_http, {
         EQUALS(scripted.Finish(success, std::chrono::seconds(20)), true);
         EQUALS(success, false);
         EQUALS(std::filesystem::exists(job.path), false);
+    });
+
+    IT("keeps its connection across the chunks of a file", {
+        const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
+        const std::string content(chunk * 2 + 1, 'k');
+        std::vector<std::string> chunks = {Framework::Utils::Crypto::Sha256Hex(content.substr(0, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk * 2))};
+        AssetHttpTest::ScriptedServer scripted({[chunks, content](const httplib::Request &req, httplib::Response &res) {
+            if (req.path.size() > 7 && req.path.compare(req.path.size() - 7, 7, ".chunks") == 0) {
+                res.set_content(Framework::Utils::StreamedAssets::FormatChunkList(chunks), "text/plain");
+                return;
+            }
+            res.set_content_provider(content.size(), "application/octet-stream", [content](size_t offset, size_t length, httplib::DataSink &sink) {
+                return sink.write(content.data() + offset, length);
+            });
+        }});
+        NEQUALS(scripted.port, 0);
+        Framework::Integrations::Client::AssetDownloader::RetryPolicy policy = AssetHttpTest::FastRetries();
+        policy.connections                                                   = 1;
+        scripted.downloader.SetRetryPolicy(policy);
+        const auto job = scripted.Job(content);
+        scripted.Start(job);
+        bool success = false;
+        EQUALS(scripted.Finish(success, std::chrono::seconds(20)), true);
+        EQUALS(success, true);
+        // The list came on a connection of its own; the three chunks shared one.
+        std::set<int> chunkPorts;
+        for (size_t i = 0; i < scripted.paths.size(); ++i) {
+            if (scripted.paths[i].find(".chunks") == std::string::npos) {
+                chunkPorts.insert(scripted.ports[i]);
+            }
+        }
+        EQUALS(scripted.requests.load(), 4);
+        EQUALS(chunkPorts.size(), 1u);
     });
 
     IT("reuses the chunks of the stale copy it replaces", {

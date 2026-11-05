@@ -83,6 +83,9 @@ namespace Framework::Integrations::Server {
                 res.status = 503;
                 res.set_header("Retry-After", std::to_string(kRetryAfterSeconds));
                 res.set_header(kQueueHeader, std::to_string(admission.queuePosition));
+                // A refused peer sleeps out the pause on a connection it keeps alive; the worker that
+                // connection would hold meanwhile is wanted for the transfers.
+                res.set_header("Connection", "close");
                 return;
             }
             auto buffer = std::make_shared<std::vector<char>>(kReadChunk);

@@ -556,32 +556,18 @@ namespace Framework::Integrations::Client {
         return done;
     }
 
-    AssetDownloader::Attempt AssetDownloader::FetchChunk(Transfer &transfer, const Source &source, const Job &job, uint64_t index, const std::string &sha256, std::vector<char> &data) {
-        std::string origin;
-        std::string base;
-        if (!SplitUrl(source.url, origin, base)) {
-            return {};
-        }
+    AssetDownloader::Attempt AssetDownloader::FetchChunk(Transfer &transfer, httplib::Client &client, const std::string &path, const Source &source, const Job &job, uint64_t index, const std::string &sha256, std::vector<char> &data) {
         const uint64_t offset = index * Utils::StreamedAssets::kChunkSize;
         const uint64_t length = Utils::StreamedAssets::ChunkLength(job.size, index);
         data.clear();
         data.reserve(static_cast<size_t>(length));
 
-        httplib::Client client(origin);
-        ConfigureClient(client);
         httplib::Headers headers = HeadersFor(source);
         headers.emplace("Range", "bytes=" + std::to_string(offset) + "-" + std::to_string(offset + length - 1));
-        {
-            std::lock_guard lock(transfer.mutex);
-            if (transfer.cancel.load()) {
-                return {};
-            }
-            transfer.clients.push_back(&client);
-        }
         Answer answer;
         bool accepted  = false;
         const auto res = client.Get(
-            base + "/" + job.fileName, headers,
+            path, headers,
             [&](const httplib::Response &response) {
                 answer.status        = response.status;
                 answer.retryAfter    = response.get_header_value("Retry-After");
@@ -599,7 +585,6 @@ namespace Framework::Integrations::Client {
                 transfer.NoteAnswer(answer.status, answer.retryAfter, answer.queuePosition, true);
                 return true;
             });
-        transfer.Unregister(&client);
         if (transfer.cancel.load()) {
             return {};
         }
@@ -718,12 +703,40 @@ namespace Framework::Integrations::Client {
         output.flush();
 
         // The rest over several connections; each chunk keeps its own retry budget.
+        std::string origin;
+        std::string base;
+        if (!pending.empty() && !SplitUrl(source.url, origin, base)) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Cannot download from '{}': not an http(s) URL", source.url);
+            return {};
+        }
+        const std::string path = base + "/" + job.fileName;
         std::mutex shared;
         size_t next = 0;
         bool failed = false;
         Attempt failure;
         const int workers = static_cast<int>(std::min<size_t>(static_cast<size_t>(std::max(transfer.retry.connections, 1)), pending.size()));
         const auto worker = [&] {
+            // One connection for every chunk the worker fetches: a handshake per chunk, TLS on a
+            // mirror, would cost a round trip or two every few MiB.
+            httplib::Client client(origin);
+            ConfigureClient(client);
+            client.set_keep_alive(true);
+            {
+                std::lock_guard lock(transfer.mutex);
+                if (transfer.cancel.load()) {
+                    return;
+                }
+                transfer.clients.push_back(&client);
+            }
+            // Every path out of the loop: a request blocked on the network is stopped through the
+            // registration, so it must outlive the loop and no more.
+            struct Unregister {
+                Transfer &transfer;
+                httplib::Client &client;
+                ~Unregister() {
+                    transfer.Unregister(&client);
+                }
+            } const unregister {transfer, client};
             std::vector<char> data;
             for (;;) {
                 uint64_t index = 0;
@@ -740,7 +753,7 @@ namespace Framework::Integrations::Client {
                     if (transfer.cancel.load()) {
                         return;
                     }
-                    const Attempt result = FetchChunk(transfer, source, job, index, chunks[index], data);
+                    const Attempt result = FetchChunk(transfer, client, path, source, job, index, chunks[index], data);
                     if (result.done) {
                         std::lock_guard lock(shared);
                         output.seekp(static_cast<std::streamoff>(index * Utils::StreamedAssets::kChunkSize));
