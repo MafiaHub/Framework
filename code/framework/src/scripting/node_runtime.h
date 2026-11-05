@@ -64,6 +64,11 @@ namespace Framework::Scripting {
         /**
          * Run the process.nextTick queue, microtasks, ready libuv callbacks and this isolate's platform tasks
          * without blocking. Enters the isolate itself.
+         *
+         * A call that enters the runtime from outside Node - an event handler, another runtime's call - runs with no
+         * callback scope, so what it queues through process.nextTick or a promise runs here, on the next tick, not as
+         * the call returns the way Node would run it: two such calls in a row both finish before anything either
+         * queued.
          */
         void Tick();
 

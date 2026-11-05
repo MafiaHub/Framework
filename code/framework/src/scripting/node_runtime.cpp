@@ -75,7 +75,8 @@ namespace Framework::Scripting {
         // the process, so with a runtime per resource each tick would block on all their GC and compile work.
         _platform->FlushForegroundTasks(_isolate);
 
-        // Run what I/O callbacks and platform tasks queued
+        // Node's own callbacks and the platform's tasks drain on their way out; this catches what native code with no
+        // scope of its own queued meanwhile, such as an addon settling a promise from a libuv callback
         DrainTaskQueues();
     }
 

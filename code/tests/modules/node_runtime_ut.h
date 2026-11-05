@@ -147,20 +147,27 @@ MODULE(node_runtime, {
                                  "  new Promise((resolve) => process.nextTick(resolve)).then(() => order.push('then'));"
                                  "};"
                                  "globalThis.take = () => order.splice(0).join();");
-        // Compile everything once and let the platform tasks that posts run: the platform runs each in a callback scope,
-        // which drains the queue by accident. Twenty rounds then leave such a task no room to pass the test alone.
+        // Compile everything once and give the platform tasks that posts time to run: the platform runs each in a
+        // callback scope, which drains the queue by accident. Twenty rounds then leave such a task no room to pass the
+        // test alone.
         NodeRuntimeTest::CallGlobal(*runtime, "queue");
-        NodeRuntimeTest::TickUntil(*runtime, [] { return false; }, 200);
+        for (int i = 0; i < 100; ++i) {
+            runtime->Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
         NodeRuntimeTest::CallGlobal(*runtime, "take");
 
-        // The loop has nothing pending, so only the tick itself can run the callbacks.
-        int drained = 0;
+        // The loop has nothing pending, so only the tick itself can run the callbacks. Each round's transcript is
+        // kept so a failure shows which rounds drained, and what ran when one did not.
+        std::string rounds;
+        std::string expected;
         for (int round = 0; round < 20; ++round) {
             NodeRuntimeTest::CallGlobal(*runtime, "queue");
             runtime->Tick();
-            drained += NodeRuntimeTest::CallGlobal(*runtime, "take") == "tick,then";
+            rounds += NodeRuntimeTest::CallGlobal(*runtime, "take") + ";";
+            expected += "tick,then;";
         }
-        EQUALS(drained, 20);
+        STREQUALS(rounds.c_str(), expected.c_str());
 
         runtime.reset();
         engine.Shutdown();
