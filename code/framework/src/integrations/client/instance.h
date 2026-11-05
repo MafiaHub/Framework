@@ -231,7 +231,8 @@ namespace Framework::Integrations::Client {
         void PollDeferredDownload();
         // Every announced asset pak is on disk at its announced size.
         bool VerifyAssetPaks() const;
-        // Removes cached paks the server no longer announces; one still mounted stays until the next session.
+        // Removes cached paks the server no longer announces, and the partials of files no transfer will
+        // come back for; one still mounted stays until the next session. Nothing while a transfer runs.
         void PruneAssetPaks(const std::string &cacheDir) const;
 
         // The server's replicated server.json subset, decoded from the MafiaNet session payload the

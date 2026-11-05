@@ -39,6 +39,7 @@
 #include <filesystem>
 #include <iterator>
 #include <limits>
+#include <unordered_set>
 
 #include <logging/logger.h>
 
@@ -1168,19 +1169,60 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::PruneAssetPaks(const std::string &cacheDir) const {
+        // A transfer in flight reads older paks for their chunks and lands files a refresh has not
+        // announced yet; nothing goes while one runs.
+        if (_assetDownloader.IsRunning() || _deferredDownloader.IsRunning()) {
+            return;
+        }
+        // What stays: the paks announced for the session, and the partial of every file a transfer
+        // may come back for, pak or package, named by the file and the hash it expects. A partial of
+        // a chunked assembly is the file's full size, so one left behind by a pak the server replaced
+        // mid-transfer would hold that much for good.
+        std::unordered_set<std::string> paks;
+        std::unordered_set<std::string> partials;
+        const auto keep = [&paks, &partials](const std::string &fileName, const std::string &sha256) {
+            paks.insert(fileName);
+            partials.insert(fileName + "." + sha256.substr(0, 16));
+        };
+        for (const std::vector<ResourceAssetPak> *list : {&_assetPaks, &_deferredPaks}) {
+            for (const ResourceAssetPak &pak : *list) {
+                keep(Framework::Utils::StreamedAssets::PakFileName(pak.resource, pak.info.lane, pak.info.sha256), pak.info.sha256);
+            }
+        }
+        for (const std::vector<Client::Scripting::ServerResourceInfo> *list : {&_pendingServerResources, &_pendingRefreshResources}) {
+            for (const auto &resource : *list) {
+                if (!resource.packageHash.empty()) {
+                    keep(resource.name + Framework::Utils::Package::kExtension, resource.packageHash);
+                }
+                for (const auto &pak : resource.assetPaks) {
+                    keep(Framework::Utils::StreamedAssets::PakFileName(resource.name, pak.lane, pak.sha256), pak.sha256);
+                }
+            }
+        }
+
         std::error_code code;
         for (const auto &entry : std::filesystem::directory_iterator(cacheDir, code)) {
-            if (entry.path().extension() != ".pak") {
-                continue;
+            const std::string name      = entry.path().filename().string();
+            const std::string extension = entry.path().extension().string();
+            std::error_code removeError;
+            if (extension == ".pak") {
+                if (paks.count(name) == 0) {
+                    std::filesystem::remove(entry.path(), removeError);
+                    Framework::Utils::StreamedAssets::RemoveVerifiedNote(entry.path().string());
+                }
             }
-            const std::string name = entry.path().filename().string();
-            const auto isNamed     = [&name](const ResourceAssetPak &pak) {
-                return Framework::Utils::StreamedAssets::PakFileName(pak.resource, pak.info.lane, pak.info.sha256) == name;
-            };
-            if (!std::any_of(_assetPaks.begin(), _assetPaks.end(), isNamed) && !std::any_of(_deferredPaks.begin(), _deferredPaks.end(), isNamed)) {
-                std::error_code removeError;
-                std::filesystem::remove(entry.path(), removeError);
-                Framework::Utils::StreamedAssets::RemoveVerifiedNote(entry.path().string());
+            else if (extension == ".part" || extension == ".done") {
+                // <file>.<hash prefix>.part, and the assembly note <file>.<hash prefix>.part.done beside it.
+                std::string partial = name.substr(0, name.size() - extension.size());
+                if (extension == ".done") {
+                    if (std::filesystem::path(partial).extension() != ".part") {
+                        continue;
+                    }
+                    partial = partial.substr(0, partial.size() - 5);
+                }
+                if (partials.count(partial) == 0) {
+                    std::filesystem::remove(entry.path(), removeError);
+                }
             }
         }
     }
