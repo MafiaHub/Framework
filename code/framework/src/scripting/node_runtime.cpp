@@ -109,4 +109,27 @@ namespace Framework::Scripting {
         node::CallbackScope scope(_env, v8::Object::New(_isolate), {0, 0});
     }
 
+    void NodeRuntime::RunLoop() {
+        v8::Locker locker(_isolate);
+        v8::Isolate::Scope isolateScope(_isolate);
+        v8::HandleScope handleScope(_isolate);
+        v8::Context::Scope contextScope(_setup->context());
+        uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
+    }
+
+    int NodeRuntime::GetBackendFd() const {
+        return uv_backend_fd(_setup->event_loop());
+    }
+
+    bool NodeRuntime::IsAlive() const {
+        return uv_loop_alive(_setup->event_loop()) != 0;
+    }
+
+    int64_t NodeRuntime::MsUntilDue() {
+        uv_loop_t *loop = _setup->event_loop();
+        // Counted on the loop's own clock, which uv_run reads to decide which timers are due.
+        uv_update_time(loop);
+        return uv_backend_timeout(loop);
+    }
+
 } // namespace Framework::Scripting

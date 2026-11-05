@@ -18,8 +18,21 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <thread>
+
+#ifdef _WIN32
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+#else
+#include <cstring>
+#include <poll.h>
+#endif
 
 namespace {
+    // Script started this close to the next tick could run into it.
+    constexpr auto kRunMargin = std::chrono::milliseconds(1);
+
     // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
     // Handles: backslash, single quote, newline, carriage return, and tab.
     std::string EscapeForSingleQuotedJSString(const std::string &input) {
@@ -92,6 +105,11 @@ namespace Framework::Scripting {
 
     NodeEngine::~NodeEngine() {
         Shutdown();
+#ifdef _WIN32
+        if (_waitTimer != nullptr) {
+            CloseHandle(_waitTimer);
+        }
+#endif
     }
 
     ScriptingError NodeEngine::Init() {
@@ -108,6 +126,12 @@ namespace Framework::Scripting {
         if (!CreateEnvironment()) {
             return ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
+
+#ifdef _WIN32
+        if (_waitTimer == nullptr) {
+            _waitTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+        }
+#endif
 
         _initialized = true;
         return ScriptingError::SCRIPTING_NONE;
@@ -310,6 +334,135 @@ namespace Framework::Scripting {
             // executing, so it was at most retired, not freed: its name still says where to carry on.
             it = _resourceRuntimes.upper_bound(entry.resourceName);
         }
+    }
+
+    void NodeEngine::RunUntil(std::chrono::steady_clock::time_point deadline) {
+        using Clock       = std::chrono::steady_clock;
+        const auto stopAt = deadline - kRunMargin;
+        // Which runtimes have a timer, immediate or callback due now, and which loops to wait on for I/O until one
+        // does. Kept across rounds: on Windows there is one every millisecond.
+        std::vector<ResourceRuntime *> due;
+        std::vector<ResourceRuntime *> watched;
+#ifdef _WIN32
+        auto visited = Clock::now();
+#else
+        std::vector<pollfd> fds;
+#endif
+        while (_initialized && _runtime && _pendingErrors.empty() && Clock::now() < stopAt) {
+            const uint64_t generation = _runtimesGeneration;
+            // How long until the next runtime has something due, if nothing has now.
+            int64_t waitMs = std::max<int64_t>(0, std::chrono::ceil<std::chrono::milliseconds>(stopAt - Clock::now()).count());
+            due.clear();
+            watched.clear();
+#ifndef _WIN32
+            fds.clear();
+#endif
+            const auto consider = [&](ResourceRuntime *entry, NodeRuntime &runtime) {
+                // uv_run does nothing for a loop with nothing referenced, whatever its timers or its fd say.
+                if (runtime.GetIsolate()->IsInUse() || !runtime.IsAlive()) {
+                    return;
+                }
+                const int64_t ms = runtime.MsUntilDue();
+                if (ms == 0) {
+                    due.push_back(entry);
+                    return;
+                }
+                if (ms > 0) {
+                    waitMs = std::min(waitMs, ms);
+                }
+                watched.push_back(entry);
+#ifndef _WIN32
+                fds.push_back({runtime.GetBackendFd(), POLLIN, 0});
+#endif
+            };
+            consider(nullptr, *_runtime);
+            for (const auto &[name, entry] : _resourceRuntimes) {
+                if (!entry->exited) {
+                    consider(entry.get(), *entry->runtime);
+                }
+            }
+
+            // Wait only while nothing is ready; I/O is still picked up between rounds of a runtime that stays busy.
+            const bool idle = due.empty();
+#ifdef _WIN32
+            // A Windows loop is a completion port, which cannot be waited on together with others or checked without
+            // taking its completions: visit the live loops every millisecond instead.
+            if (idle) {
+                SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(watched.empty() ? waitMs : std::min<int64_t>(waitMs, 1)), stopAt));
+            }
+            if (Clock::now() - visited >= std::chrono::milliseconds(1)) {
+                visited = Clock::now();
+                due.insert(due.end(), watched.begin(), watched.end());
+            }
+#else
+            // A loop's backend fd is readable while the loop has I/O to run, and polling it consumes nothing. With no
+            // fd to wait on, sleep instead: some macOS releases return from poll() at once for zero fds.
+            if (fds.empty()) {
+                if (idle) {
+                    SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(waitMs), stopAt));
+                }
+            }
+            else {
+                const int ready = poll(fds.data(), static_cast<nfds_t>(fds.size()), idle ? static_cast<int>(waitMs) : 0);
+                if (ready > 0) {
+                    for (size_t i = 0; i < fds.size(); ++i) {
+                        if (fds[i].revents != 0) {
+                            due.push_back(watched[i]);
+                        }
+                    }
+                }
+                else if (ready < 0 && errno != EINTR) {
+                    // Nothing about the fds changes before the tick, so a poll that fails outright would fail every
+                    // round: sleep the round out instead of spinning on it, and leave the I/O to the tick, as before.
+                    // Timers still set the wait.
+                    const int error = errno;
+                    if (!_pollFailed) {
+                        _pollFailed = true;
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("poll() over the script loops failed: {}. While it does, script I/O waits for the next tick", std::strerror(error));
+                    }
+                    if (idle) {
+                        SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(waitMs), stopAt));
+                    }
+                }
+            }
+#endif
+            RunReady(due, generation, stopAt);
+        }
+        if (_pendingErrors.empty()) {
+            SleepUntil(deadline);
+        }
+    }
+
+    void NodeEngine::RunReady(const std::vector<ResourceRuntime *> &ready, uint64_t generation, std::chrono::steady_clock::time_point stopAt) {
+        if (ready.empty()) {
+            return;
+        }
+        for (ResourceRuntime *entry : ready) {
+            // Script started or stopped resources: whatever is still ready is found on the next pass.
+            if (generation != _runtimesGeneration || std::chrono::steady_clock::now() >= stopAt) {
+                break;
+            }
+            NodeRuntime &runtime = entry != nullptr ? *entry->runtime : *_runtime;
+            if ((entry == nullptr || !entry->exited) && !runtime.GetIsolate()->IsInUse()) {
+                runtime.RunLoop();
+            }
+        }
+        StopExitedResources();
+        FlushRetiredRuntimes();
+    }
+
+    void NodeEngine::SleepUntil(std::chrono::steady_clock::time_point until) {
+#ifdef _WIN32
+        // The timer runs on another clock and can fire a little before `until`.
+        for (auto now = std::chrono::steady_clock::now(); _waitTimer != nullptr && now < until; now = std::chrono::steady_clock::now()) {
+            LARGE_INTEGER due;
+            due.QuadPart = -static_cast<LONGLONG>(std::max<int64_t>(1, std::chrono::duration_cast<std::chrono::nanoseconds>(until - now).count() / 100));
+            if (!SetWaitableTimer(_waitTimer, &due, 0, nullptr, nullptr, FALSE) || WaitForSingleObject(_waitTimer, INFINITE) != WAIT_OBJECT_0) {
+                break;
+            }
+        }
+#endif
+        std::this_thread::sleep_until(until);
     }
 
     void NodeEngine::StopExitedResources() {

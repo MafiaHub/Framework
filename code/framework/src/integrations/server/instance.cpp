@@ -1516,6 +1516,22 @@ namespace Framework::Integrations::Server {
             // Tick work consumes the interval; overruns leave no wait and no catch-up backlog.
             _nextTick = start + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(_opts.worldConfig.tickInterval));
         }
+        else if (_scriptingModule) {
+            _scriptingModule->WaitUntil(_nextTick);
+
+            // A callback that ran between ticks and overran the deadline holds the next tick up as much as a slow
+            // tick does, and the tick's own timing above cannot see it.
+            const auto now      = std::chrono::steady_clock::now();
+            const double lateMs = std::chrono::duration<double, std::milli>(now - _nextTick).count();
+            if (lateMs >= kTickHitchWarnMs) {
+                ++_suppressedLateTicks;
+                if (std::chrono::duration<double, std::milli>(now - _lastLateTickWarnAt).count() >= kTickHitchWarnIntervalMs) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Script run between ticks held the next tick up by {:.0f} ms ({} late tick(s) since the last warning)", lateMs, _suppressedLateTicks);
+                    _lastLateTickWarnAt  = now;
+                    _suppressedLateTicks = 0;
+                }
+            }
+        }
         else {
             std::this_thread::sleep_until(_nextTick);
         }
