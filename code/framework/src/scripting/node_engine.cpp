@@ -358,7 +358,8 @@ namespace Framework::Scripting {
             fds.clear();
 #endif
             const auto consider = [&](ResourceRuntime *entry, NodeRuntime &runtime) {
-                if (runtime.GetIsolate()->IsInUse()) {
+                // uv_run does nothing for a loop with nothing referenced, whatever its timers or its fd say.
+                if (runtime.GetIsolate()->IsInUse() || !runtime.IsAlive()) {
                     return;
                 }
                 const int64_t ms = runtime.MsUntilDue();
@@ -368,10 +369,6 @@ namespace Framework::Scripting {
                 }
                 if (ms > 0) {
                     waitMs = std::min(waitMs, ms);
-                }
-                // uv_run does nothing for a loop with nothing referenced, whatever its fd says.
-                if (!runtime.IsAlive()) {
-                    return;
                 }
                 watched.push_back(entry);
 #ifndef _WIN32

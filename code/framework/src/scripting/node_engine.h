@@ -107,8 +107,9 @@ namespace Framework::Scripting {
 
         /**
          * Pending uncaught error from process.on('uncaughtException') or
-         * process.on('unhandledRejection'), queued during Tick() for
-         * deferred processing outside of V8/libuv callbacks.
+         * process.on('unhandledRejection'), queued while script runs in
+         * Tick() or RunUntil() for deferred processing outside of V8/libuv
+         * callbacks.
          */
         struct PendingUncaughtError {
             std::string resourceName;
@@ -126,7 +127,7 @@ namespace Framework::Scripting {
 
         /**
          * Drain pending uncaught errors. Returns and clears the queue.
-         * Call after Tick() to process errors outside of V8/libuv callbacks.
+         * Call after Tick() or RunUntil() to process errors outside of V8/libuv callbacks.
          */
         std::vector<PendingUncaughtError> DrainPendingErrors();
 

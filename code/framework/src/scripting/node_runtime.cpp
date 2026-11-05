@@ -127,9 +127,6 @@ namespace Framework::Scripting {
 
     int64_t NodeRuntime::MsUntilDue() {
         uv_loop_t *loop = _setup->event_loop();
-        if (!uv_loop_alive(loop)) {
-            return -1;
-        }
         // Counted on the loop's own clock, which uv_run reads to decide which timers are due.
         uv_update_time(loop);
         return uv_backend_timeout(loop);
