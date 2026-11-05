@@ -122,6 +122,11 @@ namespace Framework::Scripting {
             return _slowThresholdMs;
         }
 
+        // Whether `ms` of own time would be reported, so a caller can build a report's label only when it is.
+        bool IsSlow(double ms) const {
+            return _slowThresholdMs > 0.0 && ms >= _slowThresholdMs;
+        }
+
         std::vector<RuntimeStats> Snapshot() const;
 
         // The installed monitor, on the thread that installed it (the server's main thread); null on any other thread

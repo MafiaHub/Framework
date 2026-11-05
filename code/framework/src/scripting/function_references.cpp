@@ -38,6 +38,7 @@ namespace Framework::Scripting {
             uint32_t runtime = 0;
             v8::Global<v8::Function> function;
             v8::Global<v8::Object> receiver;
+            std::string name; // the function's own: a function crosses as a value, and the monitor's slow reports need one
             uint32_t holds = 0;
         };
 
@@ -193,6 +194,7 @@ namespace Framework::Scripting {
                 Export &entry = exports[id];
                 entry.runtime = runtime;
                 entry.function.Reset(isolate, function);
+                entry.name                   = ToUtf8(isolate, function->GetDebugName());
                 v8::Local<v8::Value> idValue = v8::Number::New(isolate, static_cast<double>(id));
                 if (!methods.IsEmpty()) {
                     // Weak: the method needs its object only while the owner keeps it.
@@ -356,8 +358,9 @@ namespace Framework::Scripting {
             const Export &exported    = state.exports.at(id);
             v8::Global<v8::Function> function(ownerIsolate, exported.function);
             v8::Global<v8::Object> receiver(ownerIsolate, exported.receiver);
+            const std::string name = exported.name;
             v8::Local<v8::Value> result;
-            if (state.Invoke(caller, isolate, isolate->GetCurrentContext(), owner, function, copied, Returned::Value, receiver).ToLocal(&result)) {
+            if (state.Invoke(caller, isolate, isolate->GetCurrentContext(), owner, function, copied, Returned::Value, receiver, name).ToLocal(&result)) {
                 info.GetReturnValue().Set(result);
             }
         }
@@ -388,9 +391,10 @@ namespace Framework::Scripting {
 
         // Calls `function` inside `ownerId` with copied arguments and brings back what it returned or threw. The
         // caller holds its own scopes; on a throw the exception is pending there and the result is empty.
-        // `receiver`, when set, is the `this` the function runs with.
+        // `receiver`, when set, is the `this` the function runs with. `exportName` names an export call in the
+        // monitor's slow reports.
         v8::MaybeLocal<v8::Value> Invoke(uint32_t callerId, v8::Isolate *isolate, v8::Local<v8::Context> context, uint32_t ownerId, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments, Returned returned,
-            const v8::Global<v8::Object> &receiver = {}) {
+            const v8::Global<v8::Object> &receiver = {}, std::string_view exportName = {}) {
             const auto ownerIt = runtimes.find(ownerId);
             if (ownerIt == runtimes.end()) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
@@ -445,10 +449,16 @@ namespace Framework::Scripting {
                     }
                 }
             }
-            // Event and message dispatch ask for an outcome and report their own handlers; an export call is reported here.
+            // Event and message dispatch ask for an outcome and report their own handlers; an export call is reported
+            // here, under the export's name so one slow export does not hide the next one of the same owner and caller.
+            // The label is built only for a call that was slow: every export call passes here.
             if (monitor && returned == Returned::Value) {
-                const auto callerIt = runtimes.find(callerId);
-                monitor->ReportOwnTime(ownerIsolate, "export call from", callerIt != runtimes.end() ? std::string_view(callerIt->second.name) : std::string_view(), charged, ResourceMonitor::Clock::now());
+                const auto now     = ResourceMonitor::Clock::now();
+                const double ownMs = monitor->ChargedMs(ownerIsolate, now) - charged;
+                if (monitor->IsSlow(ownMs)) {
+                    const std::string what = "export '" + (exportName.empty() ? std::string("(anonymous)") : std::string(exportName)) + "' called from";
+                    monitor->ReportIfSlow(ownerIsolate, what, NameOf(callerId), ownMs, now);
+                }
             }
 
             const auto hooks = Hooks(callerId);

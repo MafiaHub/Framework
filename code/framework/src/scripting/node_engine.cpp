@@ -498,7 +498,7 @@ namespace Framework::Scripting {
                 runtime.RunLoop();
                 const auto end = ResourceMonitor::Clock::now();
                 _monitor.Leave(end);
-                if (const double slowMs = _monitor.GetSlowThresholdMs(); slowMs > 0.0 && std::chrono::duration<double, std::milli>(end - start).count() >= slowMs) {
+                if (_monitor.IsSlow(std::chrono::duration<double, std::milli>(end - start).count())) {
                     _monitor.ReportOwnTime(isolate, "timers, I/O and await continuations", {}, charged, end);
                 }
             }

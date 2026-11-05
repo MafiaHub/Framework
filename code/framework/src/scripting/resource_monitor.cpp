@@ -172,7 +172,7 @@ namespace Framework::Scripting {
     }
 
     ResourceMonitor::SlowOutcome ResourceMonitor::ReportIfSlow(const void *key, std::string_view what, std::string_view detail, double ms, Clock::time_point now) {
-        if (_slowThresholdMs <= 0.0 || ms < _slowThresholdMs) {
+        if (!IsSlow(ms)) {
             return SlowOutcome::Under;
         }
         const auto slotIt = _slots.find(key);
