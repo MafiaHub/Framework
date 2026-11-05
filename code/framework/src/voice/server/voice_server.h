@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "voice_capture.h"
 #include "voice_router.h"
 
 #include <mafianet/voice.h>
@@ -132,12 +133,25 @@ namespace Framework::Voice {
 
         void OnPlayerDisconnect(uint64_t guid);
 
+        // Starts buffering `guid`'s packets for a script (Voice.capture); see VoiceCapture. The
+        // ticket its result will carry, or 0 when `guid` already has a capture running.
+        uint64_t StartCapture(uint64_t guid, uint32_t maxMs);
+
+        // Drops a capture nothing waits on any more.
+        void CancelCapture(uint64_t ticket);
+
+        // Moves the captures that ended since the last call into `out`, which is cleared first.
+        void DrainCaptures(std::vector<CaptureResult> &out);
+
       private:
         // Moves what the relay heard into the talking set and the speakers the table covers.
         void TakeArrivals();
 
         // Rebuilds the relay table once it is due or stale.
         void PublishRelayTable();
+
+        // Ends captures on the stop edges from `firstEdge` on, and those past their deadline.
+        void SettleCaptures(size_t firstEdge, int64_t nowMs);
 
         // Queues a start edge on the first frame after silence.
         void MarkTalking(uint64_t talker, int64_t nowMs);
@@ -168,14 +182,18 @@ namespace Framework::Voice {
         bool _relayTableDirty        = false;
         int64_t _relayTableBuiltAtMs = 0;
 
-        // Shared with the relay on the network thread. Held only to swap a pointer or note an
-        // arrival, never across a call into RakVoice.
+        // Shared with the relay on the network thread. Held only to swap a pointer, note an
+        // arrival or copy a captured packet, never across a call into RakVoice.
         mutable std::mutex _relayMutex;
         // Speaker -> recipients, as the relay sees them. Replaced whole, never edited in place.
         std::shared_ptr<const std::unordered_map<uint64_t, std::vector<MafiaNet::RakNetGUID>>> _relayTable;
         // Talker -> arrival time of their latest relayed frame since the last Update.
         std::unordered_map<uint64_t, int64_t> _arrivals;
         std::unordered_map<uint64_t, int64_t> _arrivalsTaken;
+        // The relay taps it, so it is shared too; its results are main thread only.
+        VoiceCapture _capture;
+        std::vector<CaptureResult> _captureResults;
+        uint64_t _nextCaptureTicket = 1;
         // Talker -> arrival time of their most recent frame. Presence is the talking flag.
         std::unordered_map<uint64_t, int64_t> _talking;
         std::vector<TalkingChange> _talkingChanges;

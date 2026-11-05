@@ -71,8 +71,10 @@ namespace Framework::Voice {
             std::lock_guard<std::mutex> lock(_relayMutex);
             _relayTable.reset();
             _arrivals.clear();
+            _capture.Clear();
         }
         _arrivalsTaken.clear();
+        _captureResults.clear();
         _speakers.clear();
         _relayTableDirty     = false;
         _relayTableBuiltAtMs = 0;
@@ -93,6 +95,7 @@ namespace Framework::Voice {
             it = ApplyTierRequest(it->first, it->second, nowMs) ? _pendingTiers.erase(it) : std::next(it);
         }
 
+        const size_t firstEdge = _talkingChanges.size();
         for (auto it = _talking.begin(); it != _talking.end();) {
             if ((nowMs - it->second) <= static_cast<int64_t>(kTalkingTimeoutMs)) {
                 ++it;
@@ -104,6 +107,7 @@ namespace Framework::Voice {
             _talkingChanges.push_back({guid, false});
         }
 
+        SettleCaptures(firstEdge, nowMs);
         PublishRelayTable();
     }
 
@@ -111,6 +115,8 @@ namespace Framework::Voice {
         {
             std::lock_guard<std::mutex> lock(_relayMutex);
             _arrivals.swap(_arrivalsTaken);
+            // With the arrivals, so a stop decided from them ends a capture on the same packets.
+            _capture.Checkpoint();
         }
 
         for (const auto &[talker, arrivedAtMs] : _arrivalsTaken) {
@@ -181,6 +187,40 @@ namespace Framework::Voice {
         }
     }
 
+    void VoiceServer::SettleCaptures(size_t firstEdge, int64_t nowMs) {
+        if (_capture.Empty()) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(_relayMutex);
+        for (size_t i = firstEdge; i < _talkingChanges.size(); ++i) {
+            if (!_talkingChanges[i].talking) {
+                _capture.OnTalkingStopped(_talkingChanges[i].guid, _captureResults);
+            }
+        }
+        _capture.Expire(nowMs, _captureResults);
+    }
+
+    uint64_t VoiceServer::StartCapture(uint64_t guid, uint32_t maxMs) {
+        {
+            std::lock_guard<std::mutex> lock(_relayMutex);
+            if (!_capture.Start(guid, _nextCaptureTicket, maxMs, Utils::Time::GetTime())) {
+                return 0;
+            }
+        }
+        return _nextCaptureTicket++;
+    }
+
+    void VoiceServer::CancelCapture(uint64_t ticket) {
+        std::lock_guard<std::mutex> lock(_relayMutex);
+        _capture.Cancel(ticket);
+    }
+
+    void VoiceServer::DrainCaptures(std::vector<CaptureResult> &out) {
+        out.clear();
+        out.swap(_captureResults);
+    }
+
     void VoiceServer::MarkTalking(uint64_t talker, int64_t nowMs) {
         const auto [it, inserted] = _talking.emplace(talker, nowMs);
         it->second                = nowMs;
@@ -205,6 +245,7 @@ namespace Framework::Voice {
         {
             std::lock_guard<std::mutex> lock(_relayMutex);
             _arrivals.erase(guid);
+            _capture.Finish(guid, _captureResults);
         }
         _talking.erase(guid);
         _speakers.erase(guid);
@@ -389,8 +430,10 @@ namespace Framework::Voice {
         std::shared_ptr<const std::unordered_map<uint64_t, std::vector<MafiaNet::RakNetGUID>>> table;
         {
             std::lock_guard<std::mutex> lock(_relayMutex);
-            _arrivals[talker] = Utils::Time::GetTime();
-            table             = _relayTable;
+            const int64_t nowMs = Utils::Time::GetTime();
+            _arrivals[talker]   = nowMs;
+            table               = _relayTable;
+            _capture.Tap(talker, nowMs, packet->data + MafiaNet::RAKVOICE_RELAY_HEADER_SIZE, packet->length - MafiaNet::RAKVOICE_RELAY_HEADER_SIZE);
         }
 
         if (table == nullptr) {

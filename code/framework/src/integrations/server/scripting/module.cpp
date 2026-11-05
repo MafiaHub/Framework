@@ -82,6 +82,9 @@ namespace Framework::Integrations::Server::Scripting {
             RegisterFrameworkBindings();
             engine->InitFrameworkSDK();
         });
+        _nodeEngine->AddRuntimeDisposingListener([](v8::Isolate *isolate) {
+            Builtins::Voice::ForgetIsolate(isolate);
+        });
 
         if (!v8pp::metadata::export_catalog_from_environment("framework-server", "FRAMEWORK_SCRIPTING_API_METADATA")) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export Framework server scripting API metadata");
@@ -153,6 +156,12 @@ namespace Framework::Integrations::Server::Scripting {
 
         if (_nodeEngine) {
             Framework::Scripting::ClearScriptingCatalog(_nodeEngine->GetIsolate());
+            // The engine's own runtime gets no disposing call, yet the inspector can start a capture in it.
+            if (v8::Isolate *isolate = _nodeEngine->GetIsolate()) {
+                v8::Locker locker(isolate);
+                v8::Isolate::Scope isolateScope(isolate);
+                Builtins::Voice::ForgetIsolate(isolate);
+            }
             _nodeEngine->Shutdown();
             _nodeEngine.reset();
         }

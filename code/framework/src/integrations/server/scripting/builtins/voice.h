@@ -10,6 +10,12 @@
 
 #include <v8.h>
 
+#include <vector>
+
+namespace Framework::Voice {
+    struct CaptureResult;
+} // namespace Framework::Voice
+
 namespace Framework::Integrations::Server::Scripting::Builtins {
 
     // Server-side proximity voice rules, exposed as the global Voice. Players are addressed
@@ -17,6 +23,12 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
     class Voice final {
       public:
         static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+
+        // Resolves the Voice.capture promises whose captures ended, each in the runtime that asked.
+        static void SettleCaptures(const std::vector<Framework::Voice::CaptureResult> &results);
+
+        // Drops the captures a runtime waits on; call before it is disposed.
+        static void ForgetIsolate(v8::Isolate *isolate);
 
       private:
         static void JS_SetRange(const v8::FunctionCallbackInfo<v8::Value> &info);
@@ -35,6 +47,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         static void JS_IsLocallyMuted(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_IsPlayerVoiceEnabled(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_IsPlayerTalking(const v8::FunctionCallbackInfo<v8::Value> &info);
+        static void JS_Capture(const v8::FunctionCallbackInfo<v8::Value> &info);
     };
 
 } // namespace Framework::Integrations::Server::Scripting::Builtins

@@ -43,6 +43,7 @@
 #include "modules/transform_batch_ut.h"
 #include "modules/url_protocol_ut.h"
 #include "modules/voice_activity_ut.h"
+#include "modules/voice_capture_ut.h"
 #include "modules/voice_mixer_ut.h"
 #include "modules/voice_positions_ut.h"
 #include "modules/voice_ptt_gate_ut.h"
@@ -102,6 +103,7 @@ int main() {
     UNIT_MODULE(url_protocol);
     UNIT_MODULE(snapshot_buffer);
     UNIT_MODULE(voice_router);
+    UNIT_MODULE(voice_capture);
     UNIT_MODULE(voice_positions);
     UNIT_MODULE(spsc_ring);
     UNIT_MODULE(playout_buffer);

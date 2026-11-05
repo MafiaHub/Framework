@@ -224,6 +224,7 @@ namespace Framework::Integrations::Server {
         // Reused every tick so the drain never allocates.
         std::vector<Voice::TalkingChange> _voiceTalkingChanges;
         std::vector<Voice::TierChange> _voiceTierChanges;
+        std::vector<Voice::CaptureResult> _voiceCaptures;
         std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
         std::unordered_set<uint64_t> _readyPlayerGuids;
         // Connections that joined the world (ClientJoin): the ones holding a player slot.

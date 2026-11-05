@@ -88,6 +88,7 @@ set(FRAMEWORK_SERVER_SRC
     src/integrations/server/scripting/builtins/voice.cpp
     src/integrations/server/scripting/builtins/pending_connection.cpp
 
+    src/voice/server/voice_capture.cpp
     src/voice/server/voice_router.cpp
     src/voice/server/voice_server.cpp
 )
