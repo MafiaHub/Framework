@@ -322,15 +322,20 @@ namespace Framework::Scripting::Builtins {
         }
 
         for (auto &response : responses) {
-            std::scoped_lock lock(_pendingRequestsMutex);
-            auto it = _pendingRequests.find(response.requestId);
-            if (it == _pendingRequests.end()) {
+            // Out of the table under the lock, settled outside it: settling runs the requester's continuations, which
+            // may make requests of their own. A late reply() finds nothing either way.
+            std::map<uint64_t, PendingRequest>::node_type request;
+            {
+                std::scoped_lock lock(_pendingRequestsMutex);
+                request = _pendingRequests.extract(response.requestId);
+            }
+            if (request.empty()) {
                 continue;
             }
 
             // reply() ran in the requester's runtime (from another one it arrives through a reference), so the
             // response lives where the Promise does.
-            Settle(it->second, [&](v8::Isolate *owner, v8::Local<v8::Context> ownerContext, v8::Local<v8::Promise::Resolver> resolver) {
+            Settle(request.mapped(), [&](v8::Isolate *owner, v8::Local<v8::Context> ownerContext, v8::Local<v8::Promise::Resolver> resolver) {
                 v8::Local<v8::Value> responseValue = response.response.Get(owner);
                 if (response.isError) {
                     resolver->Reject(ownerContext, responseValue).Check();
@@ -339,8 +344,6 @@ namespace Framework::Scripting::Builtins {
                     resolver->Resolve(ownerContext, responseValue).Check();
                 }
             });
-
-            _pendingRequests.erase(it);
         }
     }
 
@@ -355,26 +358,27 @@ namespace Framework::Scripting::Builtins {
         // Settle and drop every pending request tied to the stopped resource:
         // - source: a request this resource made, whose reply it can no longer receive;
         // - target: a request another resource is still awaiting a reply from this one.
-        // Reject the awaiting Promise first (so `await request(...)` rejects instead of hanging
-        // forever) before erasing, then release the resolver Global.
+        // A request still in the table is not yet settled — ProcessPendingResponses takes a request
+        // out under this same mutex before settling it — so rejecting always moves the awaiting
+        // Promise out of pending (so `await request(...)` rejects instead of hanging forever), and a
+        // late reply() finds nothing. Settled outside the lock: the requester's continuations run then.
+        std::vector<std::map<uint64_t, PendingRequest>::node_type> stopped;
         {
             std::scoped_lock lock(_pendingRequestsMutex);
             for (auto it = _pendingRequests.begin(); it != _pendingRequests.end();) {
-                PendingRequest &req = it->second;
+                const PendingRequest &req = it->second;
                 if (req.sourceResource == resourceName || req.targetResource == resourceName) {
-                    // A request still in the table is not yet settled — ProcessPendingResponses
-                    // settles and erases atomically under this same mutex — so rejecting always
-                    // moves the awaiting Promise out of pending (and V8 ignores a reject on an
-                    // already-settled promise anyway). After erasing, a late reply() finds nothing.
-                    Settle(req, [&](v8::Isolate *owner, v8::Local<v8::Context> ownerContext, v8::Local<v8::Promise::Resolver> resolver) {
-                        resolver->Reject(ownerContext, v8pp::to_v8(owner, "Messages.request: resource '" + resourceName + "' stopped before reply")).Check();
-                    });
-                    it = _pendingRequests.erase(it);
+                    stopped.push_back(_pendingRequests.extract(it++));
                 }
                 else {
                     ++it;
                 }
             }
+        }
+        for (auto &request : stopped) {
+            Settle(request.mapped(), [&](v8::Isolate *owner, v8::Local<v8::Context> ownerContext, v8::Local<v8::Promise::Resolver> resolver) {
+                resolver->Reject(ownerContext, v8pp::to_v8(owner, "Messages.request: resource '" + resourceName + "' stopped before reply")).Check();
+            });
         }
     }
 
