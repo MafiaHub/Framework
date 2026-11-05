@@ -7,6 +7,7 @@
  */
 
 #include "messages.h"
+#include "../callback_scope.h"
 #include "../engine.h"
 #include "../engine_helpers.h"
 #include "../function_references.h"
@@ -427,6 +428,8 @@ namespace Framework::Scripting::Builtins {
         v8::HandleScope handleScope(isolate);
         v8::Local<v8::Context> context = request.context.Get(isolate);
         v8::Context::Scope contextScope(context);
+        // The requester's continuations run as this closes, so no lock of this class may be held here.
+        const auto callbackScope = OpenCallbackScope(isolate);
         settle(isolate, context, request.resolver.Get(isolate));
     }
 

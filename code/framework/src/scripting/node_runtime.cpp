@@ -7,6 +7,20 @@
  */
 
 #include "node_runtime.h"
+#include "callback_scope.h"
+
+namespace {
+    // Node's own scope on the runtime's environment, as Node opens around its callbacks and the platform's tasks:
+    // closing it runs the nextTick queue, the microtasks and the unhandled rejections. Node keeps the resource object
+    // by handle, so the caller's handle scope must outlive this, which every entry's does.
+    class NodeCallbackScope final: public Framework::Scripting::CallbackScope {
+      public:
+        NodeCallbackScope(node::Environment *env, v8::Isolate *isolate): _scope(env, v8::Object::New(isolate), {0, 0}) {}
+
+      private:
+        node::CallbackScope _scope;
+    };
+} // anonymous namespace
 
 namespace Framework::Scripting {
 
@@ -28,6 +42,12 @@ namespace Framework::Scripting {
         runtime->_env      = setup->env();
         runtime->_setup    = std::move(setup);
 
+        // From here every entry into the runtime (a script, an event handler, another runtime's call) runs inside
+        // Node's scope, as its own callbacks do.
+        RegisterCallbackScope(runtime->_isolate, [env = runtime->_env, isolate = runtime->_isolate] {
+            return std::make_unique<NodeCallbackScope>(env, isolate);
+        });
+
         v8::Locker locker(runtime->_isolate);
         v8::Isolate::Scope isolateScope(runtime->_isolate);
         v8::HandleScope handleScope(runtime->_isolate);
@@ -46,6 +66,8 @@ namespace Framework::Scripting {
         if (!_setup) {
             return;
         }
+
+        UnregisterCallbackScope(_isolate);
 
         // Per embedtest.cc: stop with no V8 scope held, then let CommonEnvironmentSetup free the
         // environment (which stops its workers), dispose the isolate and close the loop.
@@ -81,8 +103,8 @@ namespace Framework::Scripting {
     }
 
     void NodeRuntime::DrainTaskQueues() {
-        // Event handlers and other runtimes' calls enter through V8 with no Node callback scope, so the
-        // process.nextTick callbacks they queue wait for one to close; a microtask checkpoint alone never runs them.
+        // A call that entered through raw V8, past the framework's entries, ran with no Node callback scope, so the
+        // process.nextTick callbacks it queued wait for one to close; a microtask checkpoint alone never runs them.
         // Closing this empty scope runs the nextTick queue, the microtasks and pending unhandled rejections.
         node::CallbackScope scope(_env, v8::Object::New(_isolate), {0, 0});
     }

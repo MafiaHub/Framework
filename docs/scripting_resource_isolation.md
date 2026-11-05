@@ -71,6 +71,17 @@ a worker thread; what changes is that the worker now dies with its resource.
   executing in: a resource's own while inside it, the host otherwise. Native
   code reached from a resource (a binding, an event it emits) therefore works
   in that resource's isolate without being told which one it is.
+- A call into a runtime from outside its JavaScript - the host entering through
+  `EngineScope` or `Engine::Execute`, another runtime calling an export or a
+  handler, a reply or a cross-runtime promise settling - runs inside a Node
+  callback scope, as Node's own callbacks do. What it queues with
+  `process.nextTick` or a promise runs as the call returns, before the host
+  does anything else, and an unhandled rejection or a throwing `nextTick`
+  callback reaches the resource's error handling then. Entries that nest (a
+  handler emitting to its own runtime, a builtin entering the engine from
+  inside a script) drain once, when the outermost returns. A call made through
+  raw V8 with no scope has what it queued run at the runtime's next tick
+  instead.
 - Each runtime gets the same bindings: the engine runs the setup callback
   inside every runtime it creates, and the server module registers the
   framework builtins and the project's SDK callback from it.
@@ -163,6 +174,12 @@ that is executing and values built in the host are copied into resources:
   stops. Drop such handles from `Engine::AddRuntimeDisposingListener`, which
   runs with the isolate still alive, and resolve a pending promise inside the
   isolate it was made in, not the one `GetIsolate()` names at that moment.
+- Enter a runtime through `EngineScope`, or run a script through
+  `Engine::Execute`, so that what the call queues runs as it returns. A call
+  made with only V8's own scopes (`v8::Locker`, `Isolate::Scope`,
+  `Context::Scope` and a `Function::Call`) has no Node callback scope: its
+  `process.nextTick` callbacks and promise continuations wait for the
+  runtime's next tick, or for the next scoped call into it to return.
 
 This is a scripting-layer change and a minor version bump under the versioning
 rules.

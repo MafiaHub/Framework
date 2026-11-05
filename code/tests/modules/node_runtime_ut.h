@@ -48,7 +48,7 @@ namespace NodeRuntimeTest {
         info.GetReturnValue().Set(v8::String::NewFromUtf8(info.GetIsolate(), result.c_str()).ToLocalChecked());
     }
 
-    // Calls a global function straight through V8, as an event handler or another runtime's call enters.
+    // Calls a global function straight through V8, with no callback scope, as a call past the framework's entries does.
     static std::string CallGlobal(Framework::Scripting::NodeRuntime &runtime, const char *name) {
         v8::Isolate *isolate = runtime.GetIsolate();
         v8::Locker locker(isolate);
