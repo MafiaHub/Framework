@@ -207,8 +207,9 @@ the main thread only.
 - `NodeEngine::GetRuntimeStats()` returns, per runtime, the mean and worst
   script time per server tick over the last minute, total script time, heap
   used and limit, collector time per second, and the slow reports below.
-- The `resmon` console command prints that table, sorted by script time, or by
-  heap with `resmon heap`.
+- The `resmon` console command prints a summary of them: per runtime, the mean
+  and worst script time per tick, heap used and limit, collector time per
+  second and slow reports, sorted by script time, or by heap with `resmon heap`.
 - An event or message handler, state bag listener, export call, message reply,
   runtime tick or loop run between ticks whose own script time reaches
   `slow-script-ms` (server.json, default 50, 0 turns it off) logs one line naming the resource, at most once every 10 s for
