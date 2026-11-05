@@ -1207,7 +1207,9 @@ namespace Framework::Integrations::Server {
                 for (const auto &runtime : stats) {
                     table += fmt::format("{:<28} {:>8.2f} {:>8.1f} {:>8.1f} {:>9.0f} {:>8.2f} {:>6}\n", runtime.name, runtime.scriptMsPerTick, runtime.scriptMsMaxTick, runtime.heapUsedBytes / kMB, runtime.heapLimitBytes / kMB, runtime.gcMsPerSecond, runtime.slowReports);
                 }
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Resource monitor, last minute (slow: over {} ms since start):\n{}", _opts.slowScriptWarnMs, table);
+                const double slowMs        = engine->GetMonitor().GetSlowThresholdMs();
+                const std::string slowNote = slowMs > 0.0 ? fmt::format("over {:.0f} ms since start", slowMs) : std::string("warnings off");
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Resource monitor, last minute (slow: {}):\n{}", slowNote, table);
             },
             "Script time, heap and GC per resource over the last minute: resmon [heap]");
 
