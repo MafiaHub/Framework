@@ -90,11 +90,14 @@ as the server keeps answering). `AssetDownloadStatus::waitingForSlot` and
 ## Why a flaky link still finishes
 
 `RetryPolicy::attempts` counts requests that moved **no** bytes. A transfer
-that was moving and got cut resumes with a fresh budget; the cut is counted in
-`AssetDownloadStatus::cuts` and logged. The server's write timeout is raised
-from httplib's 5 s to 120 s (`kAssetWriteTimeout` in the server instance), so
-a receiver that stalls for a while is not cut by the sender in the first
-place.
+that was moving and got cut resumes with a fresh budget, a chunked one from
+the first chunk it did not get whole; the cut is counted in
+`AssetDownloadStatus::cuts` and logged. The webserver's write timeout is
+raised from httplib's 5 s to 120 s (`kAssetWriteTimeout` in the server
+instance; httplib has one timeout for every route), so a receiver that stalls
+for a while is not cut by the sender in the first place. Each download worker
+keeps one connection across the chunks it fetches; a `503` closes it, so a
+peer sleeping out its `Retry-After` holds no webserver worker meanwhile.
 
 A refusal (`403`, `404`) is still not retried: it will not change by asking
 again.
