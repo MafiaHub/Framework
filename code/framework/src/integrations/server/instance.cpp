@@ -13,8 +13,10 @@
 #include <scripting/resource/resource_packager.h>
 #include <utils/crypto.h>
 #include <utils/package/package.h>
+#include <utils/streamed_assets/transfer.h>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 
@@ -73,6 +75,9 @@ namespace Framework::Integrations::Server {
         // How much longer MafiaNet keeps a waiting connection request than the gate takes to time it
         // out, so the player always gets the gate's reason rather than a silent drop.
         constexpr uint32_t kAdmissionTimeoutMarginMs = 15000;
+
+        // How long one write of an asset file may block on its receiver before the transfer is cut.
+        constexpr std::chrono::seconds kAssetWriteTimeout {120};
 
         // What a player reads when the server refuses without a script having said anything.
         constexpr const char *kServerFullReason   = "The server is full.";
@@ -196,11 +201,19 @@ namespace Framework::Integrations::Server {
         }
         // MafiaNet keeps 255 bytes and silently drops the rest, so a longer one would be a different
         // password from the one the operator wrote, and nobody could type the one it enforces.
-        while (!_opts.assetDownloadUrl.empty() && _opts.assetDownloadUrl.back() == '/') {
-            _opts.assetDownloadUrl.pop_back();
+        {
+            // Normalised to one space-separated list the client splits the same way.
+            std::string urls;
+            for (const std::string &url : Framework::Utils::StreamedAssets::SplitUrlList(_opts.assetDownloadUrl)) {
+                if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) {
+                    return Error("download-url entries must start with http:// or https:// (got '" + url + "')");
+                }
+                urls += (urls.empty() ? "" : " ") + url;
+            }
+            _opts.assetDownloadUrl = urls;
         }
-        if (!_opts.assetDownloadUrl.empty() && _opts.assetDownloadUrl.rfind("http://", 0) != 0 && _opts.assetDownloadUrl.rfind("https://", 0) != 0) {
-            return Error("download-url must start with http:// or https:// (got '" + _opts.assetDownloadUrl + "')");
+        if (_opts.maxDownloading < 0) {
+            return Error("max-downloading must be 0 or more (got " + std::to_string(_opts.maxDownloading) + ")");
         }
         if (_opts.bindPassword.size() > 255) {
             return Error("password must be at most 255 bytes (got " + std::to_string(_opts.bindPassword.size()) + ")");
@@ -219,14 +232,20 @@ namespace Framework::Integrations::Server {
         admission.pendingConnections           = _opts.pendingConnections;
         admission.pendingConnectionsPerAddress = _opts.pendingConnectionsPerAddress;
         admission.sessionTimeoutMs             = static_cast<uint32_t>(std::max(_opts.admissionTimeoutMs, 1)) + kAdmissionTimeoutMarginMs;
-        if (auto netResult = _networkingEngine->Init(_opts.bindHost, _opts.bindPort, _opts.maxPlayers, _opts.bindPassword, admission); !netResult) {
+        // Downloading connections live beside the player slots: the transport takes them all, the join
+        // (ClientJoin) is where maxPlayers is enforced.
+        const int32_t connectionSlots = _opts.maxPlayers + _opts.maxDownloading;
+        if (auto netResult = _networkingEngine->Init(_opts.bindHost, _opts.bindPort, connectionSlots, _opts.bindPassword, admission); !netResult) {
             return netResult;
         }
 
         // Same port number as the game, over TCP: MafiaNet only binds it for UDP.
         // A joining player holds a worker for the whole download, so one per slot keeps a join burst out of the queue.
-        const size_t webWorkers = static_cast<size_t>(std::clamp(_opts.maxPlayers, 8, 256));
+        const size_t webWorkers = static_cast<size_t>(std::clamp(connectionSlots, 8, 256));
         _webServer->SetWorkerCount(webWorkers);
+        // A pak takes minutes on a slow link and a receiver may stall for a while in between; the
+        // transfer is given up only once a write has made no headway for this long.
+        _webServer->SetWriteTimeout(kAssetWriteTimeout);
         if (_webServer->Init(_opts.bindHost, _opts.bindPort, _opts.httpServeDir) != HTTP::WebserverError::WEBSERVER_NONE) {
             return Error("Failed to start the HTTP server on TCP " + _opts.bindHost + ":" + std::to_string(_opts.bindPort));
         }
@@ -395,7 +414,8 @@ namespace Framework::Integrations::Server {
         options.add_options("MafiaHub Integrations server",
             {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)},
                 {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)}, {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()},
-                {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()}, {"download-url", "http(s) base URL clients fetch resource files from before the game port", cxxopts::value<std::string>()},
+                {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()}, {"download-url", "http(s) base URLs clients fetch resource files from before the game port, separated by spaces or commas", cxxopts::value<std::string>()},
+                {"max-downloading", "Connections admitted beyond maxplayers while they download; 0 keeps downloads on player slots", cxxopts::value<int32_t>()},
                 {"package-secret", "Secret the resource package key is derived from; defaults to the server token", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
@@ -413,6 +433,7 @@ namespace Framework::Integrations::Server {
         read("server-token", opts.bindSecretKey);
         read("password", opts.bindPassword);
         read("download-url", opts.assetDownloadUrl);
+        read("max-downloading", opts.maxDownloading);
         read("package-secret", opts.packageSecret);
     }
 
@@ -430,6 +451,7 @@ namespace Framework::Integrations::Server {
         read("server-token", opts.bindSecretKey);
         read("password", opts.bindPassword);
         read("download-url", opts.assetDownloadUrl);
+        read("max-downloading", opts.maxDownloading);
         read("package-secret", opts.packageSecret);
     }
 
@@ -511,14 +533,15 @@ namespace Framework::Integrations::Server {
 
     nlohmann::json Instance::BuildDefaultConfigFile() const {
         nlohmann::json frameworkKeys;
-        frameworkKeys["host"]           = _opts.bindHost;
-        frameworkKeys["port"]           = _opts.bindPort;
-        frameworkKeys["map"]            = _opts.bindMapName;
-        frameworkKeys["maxplayers"]     = _opts.maxPlayers;
-        frameworkKeys["server-token"]   = _opts.bindSecretKey;
-        frameworkKeys["password"]       = _opts.bindPassword;
-        frameworkKeys["download-url"]   = _opts.assetDownloadUrl;
-        frameworkKeys["package-secret"] = _opts.packageSecret;
+        frameworkKeys["host"]            = _opts.bindHost;
+        frameworkKeys["port"]            = _opts.bindPort;
+        frameworkKeys["map"]             = _opts.bindMapName;
+        frameworkKeys["maxplayers"]      = _opts.maxPlayers;
+        frameworkKeys["server-token"]    = _opts.bindSecretKey;
+        frameworkKeys["password"]        = _opts.bindPassword;
+        frameworkKeys["download-url"]    = _opts.assetDownloadUrl;
+        frameworkKeys["max-downloading"] = _opts.maxDownloading;
+        frameworkKeys["package-secret"]  = _opts.packageSecret;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
 
@@ -590,6 +613,7 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
             _armedSpawnBarrierGuids.erase(guid.g);
             _readyPlayerGuids.erase(guid.g);
+            _joinedGuids.erase(guid.g);
             // Drop voice state unconditionally: a peer that never reached the ready barrier can
             // still have been registered in the router by a position push.
             _voiceServer.OnPlayerDisconnect(guid.g);
@@ -625,6 +649,15 @@ namespace Framework::Integrations::Server {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring duplicate join from {}", guid.g);
                 return;
             }
+
+            // The player slot is taken here, not at admission: a connection that only downloaded held
+            // one of the maxDownloading places. The world may have filled meanwhile.
+            if (_joinedGuids.size() >= static_cast<size_t>(_opts.maxPlayers)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refusing the join of guid {}: the server filled up while it was downloading", guid.g);
+                net->KickPlayer(guid, Framework::Networking::DisconnectionReason::KICKED_CUSTOM, kServerFullReason);
+                return;
+            }
+            _joinedGuids.insert(guid.g);
 
             // Only a request carrying an identity is ever accepted, so a connection has one.
             const Framework::Networking::RPC::ClientIdentity &identity = *net->GetPeerIdentity(guid);
@@ -752,8 +785,11 @@ namespace Framework::Integrations::Server {
     void Instance::AdmitSession(MafiaNet::RakNetGUID guid) {
         auto *net = _networkingEngine->GetNetworkServer();
         // The pool let the request in whatever the player count, so a queue can hold people while the
-        // server is full. Letting one in still needs a free slot.
-        if (net->GetPlayerCount() >= static_cast<uint32_t>(_opts.maxPlayers)) {
+        // server is full. Letting one in still needs a free slot: a player slot for the world it will
+        // join, and a connection for the download in between.
+        const bool worldFull       = _joinedGuids.size() >= static_cast<size_t>(_opts.maxPlayers);
+        const bool connectionsFull = net->GetPlayerCount() >= static_cast<uint32_t>(_opts.maxPlayers + _opts.maxDownloading);
+        if (worldFull || connectionsFull) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refusing guid {}: the server is full", guid.g);
             net->RejectSession(guid, kServerFullReason);
             return;
@@ -955,7 +991,8 @@ namespace Framework::Integrations::Server {
                     continue;
                 }
                 std::vector<Framework::Networking::RPC::AssetPakInfo> paks = _assetPakBuilder.Build(resourceName, resource->GetPath());
-                for (const auto &pak : paks) {
+                for (auto &pak : paks) {
+                    pak.deferred                                                                              = _opts.assetPakPolicy->LaneMayDefer(pak.lane);
                     served[Framework::Utils::StreamedAssets::PakFileName(resourceName, pak.lane, pak.sha256)] = _assetPakBuilder.PathOf(resourceName, pak);
                 }
                 if (!paks.empty()) {
@@ -969,7 +1006,7 @@ namespace Framework::Integrations::Server {
             for (const auto &[name, path] : served) {
                 names += (names.empty() ? "" : ", ") + name;
             }
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Clients download from {} first; mirror these files from '{}' there: {}", _opts.assetDownloadUrl, stagingDir, names.empty() ? "(none)" : names);
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Clients download from {} first; mirror these files and their .chunks lists from '{}' there: {}", _opts.assetDownloadUrl, stagingDir, names.empty() ? "(none)" : names);
         }
         _assetFileServer.Publish(std::move(served));
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset file server ready with {} encrypted resource packages ({} files) and {} resource(s) shipping asset paks", _packageHashes.size(), packagedFiles, _assetPaks.size());
