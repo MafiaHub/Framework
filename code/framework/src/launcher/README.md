@@ -77,7 +77,7 @@ the mapped game's primary-thread TLS destructors are not run during process exit
 attach/detach callbacks and normal execution are unaffected.
 
 Windows sends thread attach/detach only to the TLS callbacks of images it loaded itself, so a
-mapped game's never see a thread start or exit. Protected images that keep per-thread state there
+mapped game's TLS callbacks never see a thread start or exit. Protected images that keep per-thread state there
 fault on such threads. With `config.forwardThreadTlsCallbacks = true` the loader points
 `FrameworkLoaderData.dll` at the game's callback array after the process-attach pass, and that
 DLL's own TLS callback relays both reasons to it for every later thread.
