@@ -324,7 +324,7 @@ namespace Framework::Scripting {
         if (!_runtime->GetIsolate()->IsInUse()) {
             FW_PROFILE_SCOPE_N("Scripting::Runtime");
             FW_PROFILE_TEXT(_runtime->GetName().c_str(), _runtime->GetName().size());
-            ResourceMonitor::Scope charged(_runtime->GetIsolate());
+            ResourceMonitor::Scope charged(_monitor, _runtime->GetIsolate());
             _runtime->Tick();
         }
 
@@ -364,7 +364,7 @@ namespace Framework::Scripting {
                 v8::Isolate *isolate = entry.runtime->GetIsolate();
                 const double charged = _monitor.ChargedMs(isolate, ResourceMonitor::Clock::now());
                 {
-                    ResourceMonitor::Scope scope(isolate);
+                    ResourceMonitor::Scope scope(_monitor, isolate);
                     entry.runtime->Tick();
                 }
                 _monitor.ReportOwnTime(isolate, "timers, I/O and await continuations", {}, charged, ResourceMonitor::Clock::now());
@@ -752,7 +752,7 @@ namespace Framework::Scripting {
 
         // Entered, the runtime is the one GetIsolate() names, so the file runs in it.
         v8::Isolate *isolate = it->second->runtime->GetIsolate();
-        ResourceMonitor::Scope charged(isolate);
+        ResourceMonitor::Scope charged(_monitor, isolate);
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
         return ExecuteFile(filepath);

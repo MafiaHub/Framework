@@ -68,10 +68,6 @@ namespace Framework::Scripting {
         _slots.erase(it);
     }
 
-    bool ResourceMonitor::IsTracked(const void *key) const {
-        return _slots.contains(key);
-    }
-
     void ResourceMonitor::Charge(Frame &frame, Clock::time_point now) {
         if (frame.slot && now > frame.since) {
             const double ms = ToMs(now - frame.since);
@@ -104,6 +100,10 @@ namespace Framework::Scripting {
         if (_monitor) {
             _monitor->Enter(key, Clock::now());
         }
+    }
+
+    ResourceMonitor::Scope::Scope(ResourceMonitor &monitor, const void *key): _monitor(&monitor) {
+        _monitor->Enter(key, Clock::now());
     }
 
     ResourceMonitor::Scope::~Scope() {

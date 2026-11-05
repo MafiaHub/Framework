@@ -17,17 +17,9 @@
 #include <unordered_map>
 #include <vector>
 
-namespace Framework::Scripting {
+#include "runtime_sample.h"
 
-    // A runtime's heap and its collector's running totals, read once a second.
-    struct RuntimeSample {
-        uint64_t heapUsedBytes  = 0;
-        uint64_t heapTotalBytes = 0;
-        uint64_t heapLimitBytes = 0;
-        uint64_t externalBytes  = 0;
-        uint64_t gcPauses       = 0;
-        double gcPauseMs        = 0.0;
-    };
+namespace Framework::Scripting {
 
     // What one runtime costs. Script time is its own: time spent in runtimes it called into is theirs.
     struct RuntimeStats {
@@ -78,17 +70,17 @@ namespace Framework::Scripting {
         // totals are counted from zero.
         void Track(const void *key, std::string name);
         void Untrack(const void *key);
-        bool IsTracked(const void *key) const;
 
         // Charge time to `key`'s runtime until the matching Leave(). An untracked key charges nobody but still
         // pauses the runtime it was entered from.
         void Enter(const void *key, Clock::time_point now);
         void Leave(Clock::time_point now);
 
-        // Enter() and Leave() on Current(), if there is one.
+        // Enter() and Leave() on a monitor: the one given, or Current() if there is one.
         class Scope final {
           public:
             explicit Scope(const void *key);
+            Scope(ResourceMonitor &monitor, const void *key);
             ~Scope();
 
             Scope(const Scope &)            = delete;

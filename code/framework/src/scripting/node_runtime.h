@@ -16,7 +16,7 @@
 #include <node.h>
 #include <uv.h>
 
-#include "resource_monitor.h"
+#include "runtime_sample.h"
 
 #include <chrono>
 #include <memory>
