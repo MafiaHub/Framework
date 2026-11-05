@@ -197,24 +197,32 @@ runtime the engine enters: its own tick and its loop runs between ticks
 event or message handler, a state bag listener, a message reply. What an entry
 queues runs as it returns, and is charged with it. Entering a runtime pauses
 the one it was entered from, so a resource is not charged for the resources it
-calls. The server closes one frame at the top of each server tick
-(`NodeEngine::CloseMonitorTick`), so script run between two ticks counts in the
-first one's frame. Once a second the
-monitor also reads each runtime's heap and its collector's pauses. Its window
-is the last minute of wall time, however long the ticks in it took. It runs on
-the main thread only.
+calls. A resource re-entered through another (its handler calls a second
+resource, whose code raises an event the first one handles) is charged for
+both of its frames, as its own time. The server closes one frame at the top of
+each server tick (`NodeEngine::CloseMonitorTick`), so script run between two
+ticks counts in the first one's frame. Once a second the monitor also reads
+each runtime's heap and its collector's pauses, counted from zero at the
+runtime's start, so a resource's startup collections are in its first second.
+Its window is the last minute of wall time, however long the ticks in it took.
+It runs on the main thread only.
 
 - `NodeEngine::GetRuntimeStats()` returns, per runtime, the mean and worst
   script time per server tick over the last minute, total script time, heap
-  used and limit, collector time per second, and the slow reports below.
-- The `resmon` console command prints a summary of them: per runtime, the mean
-  and worst script time per tick, heap used and limit, collector time per
-  second and slow reports, sorted by script time, or by heap with `resmon heap`.
+  used, committed and limit, external memory, collector time per second and
+  pause count, and the slow reports below.
+- The `resmon` console command prints the time view of them: per runtime, the
+  mean and worst script time per tick, heap used and limit, collector time per
+  second and slow reports, sorted by script time. `resmon heap` prints the
+  memory view: heap used, committed and limit, external memory, collector time
+  and pauses, sorted by what each runtime holds.
 - An event or message handler, state bag listener, export call, message reply,
   runtime tick or loop run between ticks whose own script time reaches
-  `slow-script-ms` (server.json, default 50, 0 turns it off) logs one line naming the resource, at most once every 10 s for
-  the same resource, kind and event. Time it spent in other resources is theirs
-  and is reported against them.
+  `slow-script-ms` (server.json, default 50, 0 turns it off) logs one line
+  naming the resource and, for a handler or listener, the event or key, for an
+  export call, the function's name and the calling resource; at most once every
+  10 s for the same resource, kind and name. Time it spent in other resources
+  is theirs and is reported against them.
 - With Tracy connected, each runtime's tick is a `Scripting::Runtime` zone
   and each loop run between ticks a `Scripting::RunLoop` zone, both named after
   its resource, and every collector pause of 1 ms or more is a
