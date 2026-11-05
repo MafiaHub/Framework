@@ -26,6 +26,8 @@ on:
            - '!CMakeSettings.json'
            - '!LICENSE.txt'
            - '!NOTICE.txt'
+           # Only stamps the SDK package version; the release run builds that SDK anyway.
+           - '!VERSION'
            - '!mise.toml'
     workflow_dispatch:
 

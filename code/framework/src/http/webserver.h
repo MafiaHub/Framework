@@ -13,6 +13,7 @@
 #include <utils/lifecycle.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <function2/function2.hpp>
 #include <memory>
@@ -47,6 +48,10 @@ namespace Framework::HTTP {
 
         // Each in-flight request holds a worker until its response is written; call before Init.
         void SetWorkerCount(size_t count);
+        // How long one write to a client may block before the response is abandoned. httplib's 5 s
+        // default cuts a large transfer whenever the receiver stalls that long; a route streaming files
+        // wants more. Applies to every route.
+        void SetWriteTimeout(std::chrono::seconds timeout);
 
         void RegisterRequest(const std::string &path, const RequestCallback &callback) const;
         void RegisterPostRequest(const std::string &path, const PostCallback &callback) const;

@@ -117,10 +117,16 @@ namespace Framework::Integrations::Server {
         int32_t bindPort;
         std::string bindPassword;
 
-        // http(s) base URL clients fetch resource packages and asset paks from (<url>/<file>), such as a
-        // CDN the operator mirrors the staged files to. Clients fall back to the game port. Empty: the
+        // http(s) base URLs clients fetch resource packages and asset paks from (<url>/<file>), such as
+        // CDNs the operator mirrors the staged files (and their .chunks lists) to; several are separated
+        // by whitespace or commas and tried in order. Clients fall back to the game port. Empty: the
         // game port only.
         std::string assetDownloadUrl;
+
+        // Connections admitted beyond maxPlayers to download and start resources: a player takes one of
+        // the maxPlayers slots only when it joins the world, so a join burst does not fill the server
+        // with downloads. 0 keeps every admitted connection on a player slot.
+        int32_t maxDownloading = 0;
 
         // Secret the resource package key is derived from (with modSlug). Empty: the server token
         // (bindSecretKey). Changing it changes every package hash, so clients download them again.
@@ -224,6 +230,8 @@ namespace Framework::Integrations::Server {
         std::vector<Voice::TierChange> _voiceTierChanges;
         std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
         std::unordered_set<uint64_t> _readyPlayerGuids;
+        // Connections that joined the world (ClientJoin): the ones holding a player slot.
+        std::unordered_set<uint64_t> _joinedGuids;
 
         // Holds each authenticated connection until the playerConnecting handlers answer.
         ConnectionGate _connectionGate;

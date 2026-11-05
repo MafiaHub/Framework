@@ -219,8 +219,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     }
 
     void Voice::GetInputLevelCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        // The microphone is open all session, so the ungated level would let any server watch a
+        // player who thinks they are muted. IsTransmitting drops on ticks that drained no frame.
         auto *voice = Resolve();
-        args.GetReturnValue().Set(voice != nullptr ? voice->GetInputLevel() : 0.0f);
+        args.GetReturnValue().Set(voice != nullptr && voice->IsLocalTalking() ? voice->GetInputLevel() : 0.0f);
     }
 
     void Voice::SetNoiseSuppressionCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -342,8 +344,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                                                                                                         "Sets the voice-activation sensitivity: lower sends quieter speech, higher ignores more background noise. Clamped to 0..1.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getActivationThreshold", v8pp::metadata::docs("number", {}, "Reads the voice-activation threshold.", "Level from 0 to 1.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getInputLevel",
-            v8pp::metadata::docs("number", {}, "Reads how loud the microphone is right now, whether or not anything is being sent -- the value to draw a level meter from and to tune the activation threshold against.",
-                "Smoothed level from 0 to 1; 0 while no microphone is open.")));
+            v8pp::metadata::docs("number", {}, "Reads how loud the microphone is while this player is sending voice. The microphone stays open for the whole session, so what it hears the rest of the time is not given to scripts.",
+                "Smoothed level from 0 to 1 while isTalking is true; 0 otherwise.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setNoiseSuppression", v8pp::metadata::docs("void", {v8pp::metadata::param("enabled", "boolean", false, "Whether to filter background noise out of the microphone.")},
                                                                                                      "Turns noise suppression on or off. It runs before the level is measured, so it also keeps steady noise from tripping voice activation.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isNoiseSuppressionEnabled", v8pp::metadata::docs("boolean", {}, "Checks whether noise suppression is on.", "True while background noise is being filtered.")));

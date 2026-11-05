@@ -98,6 +98,10 @@ namespace Framework::HTTP {
         };
     }
 
+    void Webserver::SetWriteTimeout(std::chrono::seconds timeout) {
+        _server->set_write_timeout(timeout);
+    }
+
     void Webserver::Shutdown() {
         if (!_running)
             return;
