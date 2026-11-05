@@ -221,8 +221,8 @@ namespace Framework::Integrations::Client {
         // Replaces the asset paks of every resource in `resources` with what it announces. On the first
         // connect a pak marked deferred waits in _deferredPaks; a refresh fetches everything at once.
         void AnnounceAssetPaks(const std::vector<Client::Scripting::ServerResourceInfo> &resources, bool holdDeferred);
-        // Older files a job may take chunks from: the stale copy it replaces, earlier versions of the
-        // same lane in this server's cache, the same file in another server's.
+        // Older paks a job may take chunks from: earlier versions of the same lane in this server's
+        // cache, the same pak in another server's. Nothing for a package: a changed one shares no bytes.
         std::vector<std::string> ReuseCandidates(const std::string &fileName, const std::string &path) const;
         AssetDownloader::Job MakeJob(const std::string &fileName, const std::string &sha256, uint64_t size) const;
         std::vector<AssetDownloader::Source> DownloadSources() const;

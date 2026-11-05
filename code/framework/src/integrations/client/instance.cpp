@@ -1044,24 +1044,25 @@ namespace Framework::Integrations::Client {
 
     std::vector<std::string> Instance::ReuseCandidates(const std::string &fileName, const std::string &path) const {
         std::vector<std::string> candidates;
-        std::error_code code;
-        if (std::filesystem::exists(path, code)) {
-            candidates.push_back(path);
-        }
-        // Earlier versions of the same lane: <resource>.<lane>.<otherhash>.pak beside it.
+        // Only a pak has chunks worth looking for: a changed .fwpak shares none with what it replaces
+        // (its nonce is derived from its content) and none with another server's package of the same
+        // name, which is encrypted under that server's key. Hashing those would be reading for nothing.
         const std::filesystem::path file(fileName);
         const std::string stem = file.stem().string(); // <resource>.<lane>.<hash>
         const auto lastDot     = stem.rfind('.');
-        if (file.extension() == ".pak" && lastDot != std::string::npos) {
-            const std::string prefix = stem.substr(0, lastDot + 1);
-            for (const auto &entry : std::filesystem::directory_iterator(std::filesystem::path(path).parent_path(), code)) {
-                const std::string name = entry.path().filename().string();
-                if (name != fileName && entry.path().extension() == ".pak" && name.rfind(prefix, 0) == 0) {
-                    candidates.push_back(entry.path().string());
-                }
+        if (file.extension() != ".pak" || lastDot == std::string::npos) {
+            return candidates;
+        }
+        std::error_code code;
+        // Earlier versions of the same lane: <resource>.<lane>.<otherhash>.pak beside it.
+        const std::string prefix = stem.substr(0, lastDot + 1);
+        for (const auto &entry : std::filesystem::directory_iterator(std::filesystem::path(path).parent_path(), code)) {
+            const std::string name = entry.path().filename().string();
+            if (name != fileName && entry.path().extension() == ".pak" && name.rfind(prefix, 0) == 0) {
+                candidates.push_back(entry.path().string());
             }
         }
-        // The same file fetched for another server: its name carries its hash, so it is the same bytes.
+        // The same pak fetched for another server: its name carries its hash, so it is the same bytes.
         const std::filesystem::path servers = std::filesystem::path(GetCacheRoot()) / "servers";
         for (const auto &server : std::filesystem::directory_iterator(servers, code)) {
             const std::filesystem::path other = server.path() / fileName;
