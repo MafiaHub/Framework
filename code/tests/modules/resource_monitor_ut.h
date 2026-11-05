@@ -53,9 +53,12 @@ MODULE(resource_monitor, {
         monitor.Leave(t0 + 30ms);
         monitor.EndTick(t0 + 30ms);
 
-        const auto stats = monitor.Snapshot();
-        EQUALS(Find(stats, "a")->scriptMsPerTick, 15.0);
-        EQUALS(Find(stats, "b")->scriptMsPerTick, 15.0);
+        const auto stats     = monitor.Snapshot();
+        const auto *statsOfA = Find(stats, "a");
+        const auto *statsOfB = Find(stats, "b");
+        EQUALS((statsOfA != nullptr && statsOfB != nullptr), true);
+        EQUALS(statsOfA->scriptMsPerTick, 15.0);
+        EQUALS(statsOfB->scriptMsPerTick, 15.0);
     });
 
     IT("pauses the caller while an untracked runtime runs", {
@@ -68,7 +71,10 @@ MODULE(resource_monitor, {
         monitor.Leave(t0 + 50ms);
         monitor.EndTick(t0 + 50ms);
 
-        EQUALS(Find(monitor.Snapshot(), "a")->scriptMsPerTick, 20.0);
+        const auto snapshot = monitor.Snapshot();
+        const auto *stats   = Find(snapshot, "a");
+        EQUALS((stats != nullptr), true);
+        EQUALS(stats->scriptMsPerTick, 20.0);
     });
 
     IT("averages over ticks and keeps the worst one", {
@@ -84,6 +90,7 @@ MODULE(resource_monitor, {
 
         const auto snapshot = monitor.Snapshot();
         const auto *stats   = Find(snapshot, "a");
+        EQUALS((stats != nullptr), true);
         EQUALS(stats->scriptMsPerTick, 20.0);
         EQUALS(stats->scriptMsMaxTick, 30.0);
         EQUALS(stats->scriptSeconds, 0.04);
@@ -100,6 +107,7 @@ MODULE(resource_monitor, {
 
         const auto snapshot = monitor.Snapshot();
         const auto *stats   = Find(snapshot, "a");
+        EQUALS((stats != nullptr), true);
         EQUALS(stats->scriptMsPerTick, 7.5);
         EQUALS(stats->scriptMsMaxTick, 10.0);
     });
@@ -118,7 +126,8 @@ MODULE(resource_monitor, {
 
         const auto stats = monitor.Snapshot();
         EQUALS(stats.size(), static_cast<size_t>(1));
-        EQUALS(Find(stats, "a")->scriptMsPerTick, 20.0);
+        EQUALS(stats[0].name, std::string("a"));
+        EQUALS(stats[0].scriptMsPerTick, 20.0);
     });
 
     IT("takes collector time per second from the recorded totals", {
@@ -209,7 +218,10 @@ MODULE(resource_monitor, {
         EQUALS(monitor.ReportIfSlow(&a, "handler for", "playerDisconnect", 70.0, t0 + 1s), Outcome::Logged);
         EQUALS(monitor.ReportIfSlow(&a, "handler for", "playerConnect", 80.0, t0 + 11s), Outcome::Logged);
         EQUALS(monitor.ReportIfSlow(&unknown, "handler for", "playerConnect", 70.0, t0), Outcome::Under);
-        EQUALS(Find(monitor.Snapshot(), "a")->slowReports, static_cast<uint64_t>(4));
+        const auto snapshot = monitor.Snapshot();
+        const auto *stats   = Find(snapshot, "a");
+        EQUALS((stats != nullptr), true);
+        EQUALS(stats->slowReports, static_cast<uint64_t>(4));
 
         monitor.SetSlowThresholdMs(0.0);
         EQUALS(monitor.ReportIfSlow(&a, "handler for", "playerConnect", 1000.0, t0 + 30s), Outcome::Under);
