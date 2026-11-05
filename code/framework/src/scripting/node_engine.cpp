@@ -339,18 +339,23 @@ namespace Framework::Scripting {
     void NodeEngine::RunUntil(std::chrono::steady_clock::time_point deadline) {
         using Clock       = std::chrono::steady_clock;
         const auto stopAt = deadline - kRunMargin;
+        // Which runtimes have a timer, immediate or callback due now, and which loops to wait on for I/O until one
+        // does. Kept across rounds: on Windows there is one every millisecond.
+        std::vector<ResourceRuntime *> due;
+        std::vector<ResourceRuntime *> watched;
 #ifdef _WIN32
         auto visited = Clock::now();
+#else
+        std::vector<pollfd> fds;
 #endif
         while (_initialized && _runtime && _pendingErrors.empty() && Clock::now() < stopAt) {
-            // Which runtimes have a timer, immediate or callback due now, how long until the next one does, and which
-            // loops to wait on for I/O until then.
             const uint64_t generation = _runtimesGeneration;
-            int64_t waitMs            = std::max<int64_t>(0, std::chrono::ceil<std::chrono::milliseconds>(stopAt - Clock::now()).count());
-            std::vector<ResourceRuntime *> due;
-            std::vector<ResourceRuntime *> watched;
+            // How long until the next runtime has something due, if nothing has now.
+            int64_t waitMs = std::max<int64_t>(0, std::chrono::ceil<std::chrono::milliseconds>(stopAt - Clock::now()).count());
+            due.clear();
+            watched.clear();
 #ifndef _WIN32
-            std::vector<pollfd> fds;
+            fds.clear();
 #endif
             const auto consider = [&](ResourceRuntime *entry, NodeRuntime &runtime) {
                 if (runtime.GetIsolate()->IsInUse()) {
