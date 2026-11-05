@@ -1106,6 +1106,7 @@ namespace Framework::Integrations::Client {
         }
         _deferredStatus             = {};
         _deferredStatus.downloading = true;
+        _deferredRate               = {};
         AssetDownloader::RetryPolicy retries;
         retries.queueWaitMs = static_cast<int>(std::min<uint32_t>(_opts.downloadQueueWaitMs, static_cast<uint32_t>(std::numeric_limits<int>::max())));
         _deferredDownloader.SetRetryPolicy(retries);
@@ -1117,20 +1118,16 @@ namespace Framework::Integrations::Client {
         if (!_deferredDownloader.IsRunning()) {
             return;
         }
-        bool success                    = false;
-        const bool finished             = _deferredDownloader.PollFinished(success);
-        _deferredStatus.bytesTotal      = _deferredDownloader.GetBytesTotal();
-        _deferredStatus.bytesDownloaded = _deferredDownloader.GetBytesDownloaded();
-        _deferredStatus.filesTotal      = _deferredDownloader.GetFilesTotal();
-        _deferredStatus.filesDownloaded = _deferredDownloader.GetFilesDone();
-        _deferredStatus.currentFile     = _deferredDownloader.GetCurrentFile();
-        _deferredStatus.progress        = _deferredStatus.bytesTotal > 0 ? _deferredStatus.bytesDownloaded / float(_deferredStatus.bytesTotal) : 1.0f;
-        _deferredStatus.downloading     = !finished;
-        _deferredStatus.waitingForSlot  = _deferredDownloader.IsWaitingForSlot();
-        _deferredStatus.queuePosition   = _deferredDownloader.GetQueuePosition();
-        _deferredStatus.cuts            = _deferredDownloader.GetCuts();
+        bool success        = false;
+        const bool finished = ReadDownloadStatus(_deferredDownloader, _deferredRate, _deferredStatus, success);
         if (!finished) {
-            return;
+            if (!IsDownloadStalled(_deferredDownloader, AssetDownloader::NowMs())) {
+                return;
+            }
+            // The session runs either way; what landed before the silence is kept like any other.
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("The deferred asset download did nothing for {} s ({} of {} bytes, '{}'); giving it up", _opts.downloadStallTimeoutMs / 1000, _deferredStatus.bytesDownloaded, _deferredStatus.bytesTotal, _deferredStatus.currentFile);
+            _deferredDownloader.Cancel();
+            _deferredStatus.downloading = false;
         }
         // What landed joins the session's paks; what did not stays announced for a later refresh. Either
         // way the cache is settled now: nothing left is a source of chunks for a transfer in flight.
@@ -1252,9 +1249,7 @@ namespace Framework::Integrations::Client {
 
         _downloadStatus             = {};
         _downloadStatus.downloading = true;
-        _downloadSampleMs           = 0;
-        _downloadSampleBytes        = 0;
-        _downloadBytesPerSecond     = 0.0;
+        _downloadRate               = {};
         AssetDownloader::RetryPolicy retries;
         retries.queueWaitMs = static_cast<int>(std::min<uint32_t>(_opts.downloadQueueWaitMs, static_cast<uint32_t>(std::numeric_limits<int>::max())));
         _assetDownloader.SetRetryPolicy(retries);
@@ -1266,23 +1261,11 @@ namespace Framework::Integrations::Client {
             return;
         }
         bool success        = false;
-        const bool finished = _assetDownloader.PollFinished(success);
-
-        _downloadStatus.bytesTotal      = _assetDownloader.GetBytesTotal();
-        _downloadStatus.bytesDownloaded = _assetDownloader.GetBytesDownloaded();
-        _downloadStatus.filesTotal      = _assetDownloader.GetFilesTotal();
-        _downloadStatus.filesDownloaded = _assetDownloader.GetFilesDone();
-        _downloadStatus.currentFile     = _assetDownloader.GetCurrentFile();
-        _downloadStatus.progress        = _downloadStatus.bytesTotal > 0 ? _downloadStatus.bytesDownloaded / float(_downloadStatus.bytesTotal) : 1.0f;
-        _downloadStatus.downloading     = !finished;
-        _downloadStatus.waitingForSlot  = _assetDownloader.IsWaitingForSlot();
-        _downloadStatus.queuePosition   = _assetDownloader.GetQueuePosition();
-        _downloadStatus.cuts            = _assetDownloader.GetCuts();
-        _downloadStatus.bytesPerSecond  = SampleDownloadRate(AssetDownloader::NowMs(), _downloadStatus.bytesDownloaded);
+        const bool finished = ReadDownloadStatus(_assetDownloader, _downloadRate, _downloadStatus, success);
         if (finished && !success && _downloadStatus.failure.empty()) {
             _downloadStatus.failure = "The server's files could not be downloaded.";
         }
-        if (!finished && IsDownloadStalled(AssetDownloader::NowMs())) {
+        if (!finished && IsDownloadStalled(_assetDownloader, AssetDownloader::NowMs())) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("The asset download did nothing for {} s ({} of {} bytes, '{}'); giving it up", _opts.downloadStallTimeoutMs / 1000, _downloadStatus.bytesDownloaded, _downloadStatus.bytesTotal, _downloadStatus.currentFile);
             _assetDownloader.Cancel();
             _downloadStatus.downloading = false;
@@ -1298,33 +1281,49 @@ namespace Framework::Integrations::Client {
         }
     }
 
-    uint64_t Instance::SampleDownloadRate(int64_t nowMs, uint64_t bytes) {
+    bool Instance::ReadDownloadStatus(AssetDownloader &downloader, DownloadRate &rate, AssetDownloadStatus &status, bool &success) {
+        const bool finished    = downloader.PollFinished(success);
+        status.bytesTotal      = downloader.GetBytesTotal();
+        status.bytesDownloaded = downloader.GetBytesDownloaded();
+        status.filesTotal      = downloader.GetFilesTotal();
+        status.filesDownloaded = downloader.GetFilesDone();
+        status.currentFile     = downloader.GetCurrentFile();
+        status.progress        = status.bytesTotal > 0 ? status.bytesDownloaded / float(status.bytesTotal) : 1.0f;
+        status.downloading     = !finished;
+        status.waitingForSlot  = downloader.IsWaitingForSlot();
+        status.queuePosition   = downloader.GetQueuePosition();
+        status.cuts            = downloader.GetCuts();
+        status.bytesPerSecond  = rate.Sample(AssetDownloader::NowMs(), status.bytesDownloaded);
+        return finished;
+    }
+
+    uint64_t Instance::DownloadRate::Sample(int64_t nowMs, uint64_t bytes) {
         // One sample a second, blended so the number on screen settles rather than flickers.
         constexpr int64_t kSampleIntervalMs = 1000;
         constexpr double kBlend             = 0.3;
-        if (_downloadSampleMs == 0) {
-            _downloadSampleMs    = nowMs;
-            _downloadSampleBytes = bytes;
+        if (sampleMs == 0) {
+            sampleMs    = nowMs;
+            sampleBytes = bytes;
             return 0;
         }
-        const int64_t elapsed = nowMs - _downloadSampleMs;
+        const int64_t elapsed = nowMs - sampleMs;
         if (elapsed < kSampleIntervalMs) {
-            return static_cast<uint64_t>(_downloadBytesPerSecond);
+            return static_cast<uint64_t>(bytesPerSecond);
         }
         // A retry takes its attempt's bytes back off the count; that is not a negative rate.
-        const double moved      = bytes >= _downloadSampleBytes ? static_cast<double>(bytes - _downloadSampleBytes) : 0.0;
-        const double instant    = moved * 1000.0 / static_cast<double>(elapsed);
-        _downloadBytesPerSecond = _downloadBytesPerSecond == 0.0 ? instant : _downloadBytesPerSecond + (instant - _downloadBytesPerSecond) * kBlend;
-        _downloadSampleMs       = nowMs;
-        _downloadSampleBytes    = bytes;
-        return static_cast<uint64_t>(_downloadBytesPerSecond);
+        const double moved   = bytes >= sampleBytes ? static_cast<double>(bytes - sampleBytes) : 0.0;
+        const double instant = moved * 1000.0 / static_cast<double>(elapsed);
+        bytesPerSecond       = bytesPerSecond == 0.0 ? instant : bytesPerSecond + (instant - bytesPerSecond) * kBlend;
+        sampleMs             = nowMs;
+        sampleBytes          = bytes;
+        return static_cast<uint64_t>(bytesPerSecond);
     }
 
-    bool Instance::IsDownloadStalled(int64_t nowMs) const {
+    bool Instance::IsDownloadStalled(const AssetDownloader &downloader, int64_t nowMs) const {
         if (_opts.downloadStallTimeoutMs == 0) {
             return false;
         }
-        const int64_t lastActivity = _assetDownloader.GetLastActivityMs();
+        const int64_t lastActivity = downloader.GetLastActivityMs();
         return lastActivity != 0 && nowMs - lastActivity >= static_cast<int64_t>(_opts.downloadStallTimeoutMs);
     }
 

@@ -112,9 +112,10 @@ again.
 
 Either way `OnAssetsDownloadFinished(false)` fires with
 `AssetDownloadStatus::failure` set to a sentence for the player, then the
-connection closes. A deferred transfer that fails does not: the session runs
-without the paks that did not land, `GetDeferredDownloadStatus().failure`
-says so, and a later refresh fetches them again.
+connection closes. A deferred transfer that fails, or stalls for the same
+`downloadStallTimeoutMs`, does not: the session runs without the paks that
+did not land, `GetDeferredDownloadStatus().failure` says so, and a later
+refresh fetches them again.
 
 ## Deferred lanes
 

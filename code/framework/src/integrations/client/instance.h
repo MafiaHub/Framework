@@ -185,10 +185,15 @@ namespace Framework::Integrations::Client {
         // assets
         AssetDownloadStatus _downloadStatus {};
         AssetDownloader _assetDownloader;
-        // Throughput sampling for AssetDownloadStatus::bytesPerSecond.
-        int64_t _downloadSampleMs      = 0;
-        uint64_t _downloadSampleBytes  = 0;
-        double _downloadBytesPerSecond = 0.0;
+        // Throughput sampling for AssetDownloadStatus::bytesPerSecond, one per transfer.
+        struct DownloadRate {
+            int64_t sampleMs      = 0;
+            uint64_t sampleBytes  = 0;
+            double bytesPerSecond = 0.0;
+            uint64_t Sample(int64_t nowMs, uint64_t bytes);
+        };
+        DownloadRate _downloadRate;
+        DownloadRate _deferredRate;
         std::string _downloadToken;
         std::string _downloadUrl;
         ConnectionPhase _connectionPhase = ConnectionPhase::Disconnected;
@@ -286,8 +291,9 @@ namespace Framework::Integrations::Client {
         void InitProtocolHandler();
         // True once the initial resources started on a connection that is still current.
         bool OnAssetsDownloaded(bool success);
-        uint64_t SampleDownloadRate(int64_t nowMs, uint64_t bytes);
-        bool IsDownloadStalled(int64_t nowMs) const;
+        // Reads a transfer's progress into |status|; true once it finished, with |success| its outcome.
+        static bool ReadDownloadStatus(AssetDownloader &downloader, DownloadRate &rate, AssetDownloadStatus &status, bool &success);
+        bool IsDownloadStalled(const AssetDownloader &downloader, int64_t nowMs) const;
         // Registers the origin once, and re-points it at the current asset cache
         // on every call.
         void RegisterResourceSchemeHandler();
