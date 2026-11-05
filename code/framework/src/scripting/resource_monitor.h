@@ -67,13 +67,15 @@ namespace Framework::Scripting {
             Suppressed, // over it, but the same report was logged less than kSlowReportPeriod ago
         };
 
-        ResourceMonitor();
+        // `start` opens the first window slot; tests pass the instant their clock counts from.
+        explicit ResourceMonitor(Clock::time_point start = Clock::now());
         ~ResourceMonitor();
 
         ResourceMonitor(const ResourceMonitor &)            = delete;
         ResourceMonitor &operator=(const ResourceMonitor &) = delete;
 
-        // `key` is what Enter() names the runtime by: its isolate.
+        // `key` is what Enter() names the runtime by: its isolate. Track a runtime as soon as it exists: its collector
+        // totals are counted from zero.
         void Track(const void *key, std::string name);
         void Untrack(const void *key);
         bool IsTracked(const void *key) const;
@@ -133,7 +135,7 @@ namespace Framework::Scripting {
             double maxTickMs = 0.0;
             uint32_t ticks   = 0;
             double gcMs      = 0.0;
-            double gcSeconds = 0.0; // wall time gcMs covers; 0 for an open slot or the one that set the baseline
+            double gcSeconds = 0.0; // wall time gcMs covers; 0 for an open slot
         };
 
         struct Slot {
@@ -141,8 +143,8 @@ namespace Framework::Scripting {
             double tickMs  = 0.0; // charged since the last EndTick
             double totalMs = 0.0;
             std::array<Second, kWindowSeconds> window {};
-            RuntimeSample sample;          // last Record()
-            double gcPauseMsAtRoll = -1.0; // sample.gcPauseMs when the last slot closed; negative before the first
+            RuntimeSample sample;         // last Record()
+            double gcPauseMsAtRoll = 0.0; // sample.gcPauseMs when the last slot closed
             uint64_t slowReports   = 0;
         };
 

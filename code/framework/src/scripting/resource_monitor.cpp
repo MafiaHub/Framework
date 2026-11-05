@@ -29,7 +29,7 @@ namespace Framework::Scripting {
         }
     } // namespace
 
-    ResourceMonitor::ResourceMonitor(): _secondStart(Clock::now()) {}
+    ResourceMonitor::ResourceMonitor(Clock::time_point start): _secondStart(start) {}
 
     ResourceMonitor::~ResourceMonitor() {
         ResourceMonitor *self = this;
@@ -151,12 +151,12 @@ namespace Framework::Scripting {
     void ResourceMonitor::CloseSecond(Clock::time_point now) {
         const double seconds = std::chrono::duration<double>(now - _secondStart).count();
         for (auto &[key, slot] : _slots) {
-            // The collector's running total, as last recorded, against the one the previous slot closed on.
-            if (slot->gcPauseMsAtRoll >= 0.0) {
-                slot->window[_current].gcMs      = std::max(0.0, slot->sample.gcPauseMs - slot->gcPauseMsAtRoll);
-                slot->window[_current].gcSeconds = seconds;
-            }
-            slot->gcPauseMsAtRoll = slot->sample.gcPauseMs;
+            // The collector's running total, as last recorded, against the one the previous slot closed on. A runtime
+            // is tracked as soon as it exists, so the first slot counts from zero rather than discarding the pauses of
+            // its first second, which is where a resource's startup collections land.
+            slot->window[_current].gcMs      = std::max(0.0, slot->sample.gcPauseMs - slot->gcPauseMsAtRoll);
+            slot->window[_current].gcSeconds = seconds;
+            slot->gcPauseMsAtRoll            = slot->sample.gcPauseMs;
         }
         // A slot per elapsed second, so a long tick leaves the ones it spanned empty and the window stays a minute of
         // wall time. The slot just closed always stays.

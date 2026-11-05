@@ -131,34 +131,38 @@ MODULE(resource_monitor, {
     });
 
     IT("takes collector time per second from the recorded totals", {
-        ResourceMonitor monitor;
-        monitor.Track(&a, "a");
         const auto t0 = ResourceMonitor::Clock::now();
+        ResourceMonitor monitor(t0);
+        monitor.Track(&a, "a");
 
-        // The first closed second only sets the baseline.
+        // A runtime's totals count from zero, so its first second is not lost: 4 ms in it, 12 in the next.
         EQUALS(monitor.SampleDue(t0 + 1s), true);
         monitor.Record(&a, {.heapUsedBytes = 1000, .gcPauses = 3, .gcPauseMs = 4.0});
         monitor.EndTick(t0 + 1s);
         EQUALS(monitor.SampleDue(t0 + 1500ms), false);
+        const auto firstSecond = monitor.Snapshot();
+        const auto *first      = Find(firstSecond, "a");
+        EQUALS((first != nullptr), true);
+        EQUALS(first->gcMsPerSecond, 4.0);
         monitor.Record(&a, {.heapUsedBytes = 2000, .heapLimitBytes = 4000, .gcPauses = 5, .gcPauseMs = 16.0});
         monitor.EndTick(t0 + 2s);
 
-        // Only the second that had a figure counts.
         const auto snapshot = monitor.Snapshot();
         const auto *stats   = Find(snapshot, "a");
-        EQUALS(stats->gcMsPerSecond, 12.0);
+        EQUALS((stats != nullptr), true);
+        EQUALS(stats->gcMsPerSecond, 8.0);
         EQUALS(stats->gcPauses, static_cast<uint64_t>(5));
         EQUALS(stats->heapUsedBytes, static_cast<uint64_t>(2000));
         EQUALS(stats->heapLimitBytes, static_cast<uint64_t>(4000));
     });
 
     IT("divides collector time by the wall time a late second covered", {
-        ResourceMonitor monitor;
-        monitor.Track(&a, "a");
         const auto t0 = ResourceMonitor::Clock::now();
+        ResourceMonitor monitor(t0);
+        monitor.Track(&a, "a");
         monitor.Record(&a, {.gcPauseMs = 10.0});
         monitor.EndTick(t0 + 1s);
-        // A five-second tick: 50 ms of collection over it is 10 ms a second.
+        // A five-second tick: 50 ms of collection over it is 10 ms a second, as the 10 ms in the first second were.
         monitor.Record(&a, {.gcPauseMs = 60.0});
         monitor.EndTick(t0 + 6s);
 
@@ -400,6 +404,56 @@ MODULE(resource_monitor, {
         GREATEREQ(nightMs, 120.0);
         LESSER(nightMs, 190.0);
         EQUALS(end->slowReports, static_cast<uint64_t>(1));
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("counts a real runtime's collector pauses from its first second", {
+        using namespace Framework::Scripting;
+        TestManagerHelper::Cleanup();
+        // Allocates short-lived arrays for 300 ms as it starts: hundreds of scavenges, all in the runtime's first
+        // second, where a resource's startup collections land.
+        ResourceIsolationTest::WriteResource("monitor-churn", R"(
+            const end = performance.now() + 300;
+            let keep = [];
+            while (performance.now() < end) {
+                keep.push(new Array(1000).fill({a: 1}));
+                if (keep.length > 200) keep = [];
+            }
+            __record('churned', 1);
+        )");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("monitor-churn"), true);
+        EQUALS(TestManagerHelper::RecordedValue("churned"), 1);
+
+        // Frames until the first second closes: it carries the churn's collections, or nothing ever will.
+        const auto started = std::chrono::steady_clock::now();
+        std::vector<RuntimeStats> stats;
+        const RuntimeStats *churn = nullptr;
+        while (std::chrono::steady_clock::now() < started + std::chrono::seconds(5)) {
+            engine.CloseMonitorTick();
+            engine.Tick();
+            stats = engine.GetRuntimeStats();
+            churn = Find(stats, "monitor-churn");
+            if (churn != nullptr && churn->gcMsPerSecond > 0.0) {
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        EQUALS((churn != nullptr), true);
+        GREATER(churn->gcPauses, static_cast<uint64_t>(0));
+        GREATER(churn->gcMsPerSecond, 0.0);
+        GREATER(churn->heapUsedBytes, static_cast<uint64_t>(0));
+        GREATEREQ(churn->heapTotalBytes, churn->heapUsedBytes);
 
         manager.StopAll();
         engine.Shutdown();
