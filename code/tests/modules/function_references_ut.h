@@ -161,6 +161,27 @@ namespace FunctionReferencesTest {
         context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "out"), result).Check();
         return Framework::Scripting::ToUtf8(isolate, result);
     }
+
+    // How globalThis[name] in the runtime, a promise, stands: "pending", or how it settled and with what.
+    static std::string PromiseState(Framework::Scripting::NodeRuntime &runtime, const char *name) {
+        v8::Isolate *isolate = runtime.GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = runtime.GetContext();
+        v8::Context::Scope contextScope(context);
+        v8::Local<v8::Value> value = context->Global()->Get(context, v8::String::NewFromUtf8(isolate, name).ToLocalChecked()).ToLocalChecked();
+        if (!value->IsPromise()) {
+            return "not a promise";
+        }
+        v8::Local<v8::Promise> promise = value.As<v8::Promise>();
+        switch (promise->State()) {
+        case v8::Promise::kPending: return "pending";
+        case v8::Promise::kFulfilled: return "fulfilled:" + Framework::Scripting::ToUtf8(isolate, promise->Result());
+        case v8::Promise::kRejected: return "rejected:" + Framework::Scripting::ToUtf8(isolate, promise->Result());
+        }
+        return "";
+    }
 } // namespace FunctionReferencesTest
 
 MODULE(function_references, {
@@ -192,6 +213,34 @@ MODULE(function_references, {
         NodeTest::Eval(*pair.caller, "globalThis.out = []; api.load(7).then(v => out.push(v.id + ':' + v.name)); api.refuse().catch(e => out.push(e.message))");
         EQUALS(pair.TickUntil("out.length === 2"), true);
         STREQUALS(NodeTest::Eval(*pair.caller, "out.sort().join('|')").c_str(), "7:sword|locked");
+    });
+
+    IT("settles the caller's promise as the call returns when the owner's settled on the way out", {
+        using Returned = FunctionReferences::Returned;
+        FunctionReferencesTest::Pair pair;
+        NodeTest::Eval(*pair.owner, "globalThis.fns = { now: async () => 42, later: () => new Promise((resolve) => process.nextTick(() => resolve('later'))), refuse: async () => { throw new Error('locked'); } }");
+
+        // The owner's queues drain as the call leaves it, so a promise it settles there, by then or from a nextTick
+        // callback, has settled before the call returns, and the caller's with it, with nothing ticked.
+        STREQUALS(FunctionReferencesTest::CallOwner(pair, "now", Returned::Value).c_str(), "[object Promise]");
+        STREQUALS(FunctionReferencesTest::PromiseState(*pair.caller, "out").c_str(), "fulfilled:42");
+        STREQUALS(FunctionReferencesTest::CallOwner(pair, "later", Returned::Value).c_str(), "[object Promise]");
+        STREQUALS(FunctionReferencesTest::PromiseState(*pair.caller, "out").c_str(), "fulfilled:later");
+        STREQUALS(FunctionReferencesTest::CallOwner(pair, "refuse", Returned::Value).c_str(), "[object Promise]");
+        STREQUALS(FunctionReferencesTest::PromiseState(*pair.caller, "out").c_str(), "rejected:Error: locked");
+        NodeTest::Eval(*pair.caller, "out.catch(() => {})");
+    });
+
+    IT("runs the caller's continuations as a settlement leaves it", {
+        FunctionReferencesTest::Pair pair;
+        STREQUALS(FunctionReferencesTest::Export(pair, "{ wait() { return new Promise((resolve) => { globalThis.fns = { release: () => resolve('released') }; }); } }").c_str(), "");
+        NodeTest::Eval(*pair.caller, "globalThis.got = ''; api.wait().then((v) => got = v)");
+        STREQUALS(NodeTest::Eval(*pair.caller, "got").c_str(), "");
+
+        // Released through a call into the owner: its promise settles as that call leaves, the settlement enters the
+        // caller, and the caller's continuation runs as the settlement leaves it, before anything is ticked.
+        STREQUALS(FunctionReferencesTest::CallOwner(pair, "release", FunctionReferences::Returned::Outcome).c_str(), "undefined");
+        STREQUALS(NodeTest::Eval(*pair.caller, "got").c_str(), "released");
     });
 
     IT("throws once the owner has stopped, and rejects what it still owed", {
