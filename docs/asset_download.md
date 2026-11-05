@@ -56,17 +56,17 @@ through, since they are where the unchanged chunks come from.
 
 ## Why a join is never refused for load
 
-The server keeps at most `maxplayers + max-downloading - 4` transfers open at
-once, over at most that many peers, so the webserver's other routes keep
-workers. A peer past that gets `503`,
-`Retry-After: 2` and `X-Queue-Position: n`, where `n` is how many peers asked
-before it and are still asking. Slots go to the front of that line, so a join
-burst after a restart drains in the order players arrived instead of racing,
-and a peer that stops asking leaves the line after a few `Retry-After`
-periods. A peer that holds a slot keeps it for the same grace between two
-files of its set, as spare capacity the line may take, and may open up to
-`kMaxTransfersPerClient` connections on it. Chunk lists are answered outside
-the slots.
+The server has a budget of `maxplayers + max-downloading - 4` transfers, so
+the webserver's other routes keep workers, and cuts it into slots of
+`kMaxTransfersPerClient` (4) connections, one slot per peer: a peer that holds
+a slot is never short of its connections, whatever the other peers do. A peer
+past the slots gets `503`, `Retry-After: 2` and `X-Queue-Position: n`, where
+`n` is how many peers asked before it and are still asking. Slots go to the
+front of that line, so a join burst after a restart drains in the order
+players arrived instead of racing, and a peer that stops asking leaves the
+line after a few `Retry-After` periods. A peer that holds a slot keeps it for
+the same grace between two files of its set, as spare capacity the line may
+take. Chunk lists are answered outside the slots.
 
 On the client a `503` is a wait, not a failed attempt: the downloader asks
 again after the pause the server names, for as long as

@@ -22,15 +22,18 @@ namespace Framework::Integrations::Server {
     // served: the staging directory beside them holds the pak builder's indexes too. A request must carry a
     // token the server handed to a connected peer (kTokenHeader).
     //
-    // At most maxTransfers transfers are open at once in all, over at most that many peers and at most
-    // kMaxTransfersPerClient connections each, so the webserver's other routes keep workers. A peer past the cap is told to retry (503,
-    // Retry-After) and where it stands (kQueueHeader): slots are handed out in the order peers first
-    // asked, so a join burst drains fairly instead of racing. A peer that stops asking leaves the queue.
+    // The worker budget handed to Register is cut into slots of kMaxTransfersPerClient connections, one
+    // slot per peer, so the webserver's other routes keep workers whatever the peers do. A peer past
+    // the slots is told to retry (503, Retry-After) and where it stands (kQueueHeader): slots are
+    // handed out in the order peers first asked, so a join burst drains in that order instead of
+    // racing, and a slot holder is never short of its connections. A peer that stops asking leaves
+    // the queue.
     class AssetFileServer final {
       public:
         static constexpr const char *kTokenHeader = "X-Download-Token";
         // How many peers stood ahead of the refused one when it asked; 0 means it is next.
-        static constexpr const char *kQueueHeader      = "X-Queue-Position";
+        static constexpr const char *kQueueHeader = "X-Queue-Position";
+        // Connections one slot carries; a budget smaller than this is one slot of that many.
         static constexpr size_t kMaxTransfersPerClient = 4;
         // Seconds a refused peer is told to wait; its place in the queue is kept for a few of them.
         static constexpr int kRetryAfterSeconds = 2;
@@ -40,8 +43,7 @@ namespace Framework::Integrations::Server {
             size_t queuePosition = 0;
         };
 
-        // maxTransfers is the worker budget: how many transfers may be open at once in all, and the most
-        // peers that may hold a slot.
+        // maxTransfers is the worker budget: how many transfers may be open at once in all.
         bool Register(size_t maxTransfers);
 
         // Serves these names, and beside each the chunk list the client assembles it from
@@ -63,6 +65,7 @@ namespace Framework::Integrations::Server {
 
       private:
         bool IsGranted(const std::string &token);
+        // Forgets the peers that stopped asking and the idle slots nobody came back for.
         void ExpireQueue(std::chrono::steady_clock::time_point now);
 
         std::mutex _filesMutex;
@@ -76,8 +79,8 @@ namespace Framework::Integrations::Server {
             std::chrono::steady_clock::time_point idleSince; // when open last reached zero
         };
 
-        size_t _maxClients   = 1;
-        size_t _maxTransfers = 1;
+        size_t _maxClients       = 1;
+        size_t _transfersPerSlot = 1;
         std::mutex _slotsMutex;
         // The peers holding a client slot: transferring, or just done and kept briefly for their next file.
         std::unordered_map<std::string, Slot> _slots;

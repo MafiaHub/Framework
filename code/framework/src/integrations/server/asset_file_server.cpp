@@ -35,8 +35,10 @@ namespace Framework::Integrations::Server {
         if (!webServer) {
             return false;
         }
-        _maxTransfers = std::max<size_t>(maxTransfers, 1);
-        _maxClients   = _maxTransfers;
+        // Whole slots only: the connections of a slot are its holder's whatever the others do, so the
+        // slots never add up to more than the budget. What is left over stays with the other routes.
+        _transfersPerSlot = std::max<size_t>(std::min(kMaxTransfersPerClient, maxTransfers), 1);
+        _maxClients       = std::max<size_t>(maxTransfers / _transfersPerSlot, 1);
         webServer->RegisterRequest(R"(/files/([^/]+))", [this](const httplib::Request &req, httplib::Response &res) {
             const std::string token = req.get_header_value(kTokenHeader);
             if (!IsGranted(token)) {
@@ -55,18 +57,22 @@ namespace Framework::Integrations::Server {
                 path = file->second;
             }
 
+            // A chunk list is small and a queued peer needs it before its turn; it takes no slot.
+            if (path.extension() == ".chunks") {
+                std::ifstream list(path, std::ios::binary);
+                if (!list.is_open()) {
+                    res.status = 404;
+                    return;
+                }
+                res.set_content(std::string(std::istreambuf_iterator<char>(list), std::istreambuf_iterator<char>()), "text/plain");
+                return;
+            }
+
             auto stream = std::make_shared<std::ifstream>(path, std::ios::binary);
             std::error_code code;
             const auto size = std::filesystem::file_size(path, code);
             if (!stream->is_open() || code) {
                 res.status = 404;
-                return;
-            }
-
-            // A chunk list is a few hundred bytes a queued peer needs before its turn; it takes no slot.
-            if (path.extension() == ".chunks") {
-                std::ifstream list(path, std::ios::binary);
-                res.set_content(std::string(std::istreambuf_iterator<char>(list), std::istreambuf_iterator<char>()), "text/plain");
                 return;
             }
 
@@ -165,18 +171,10 @@ namespace Framework::Integrations::Server {
         std::lock_guard lock(_slotsMutex);
         ExpireQueue(now);
 
-        // Every open transfer holds a worker, so the budget binds slot holders and the line alike.
-        size_t openTransfers = 0;
-        size_t open          = 0;
-        for (const auto &entry : _slots) {
-            openTransfers += entry.second.open;
-            open += entry.second.open > 0 ? 1 : 0;
-        }
-        const size_t freeTransfers = _maxTransfers > openTransfers ? _maxTransfers - openTransfers : 0;
-
-        // A peer holding a slot opens more connections on it, up to its share and the budget.
+        // A peer holding a slot opens more connections on it, up to the slot's share; nobody else's
+        // transfers can take them.
         if (const auto held = _slots.find(token); held != _slots.end()) {
-            if (held->second.open >= kMaxTransfersPerClient || freeTransfers == 0) {
+            if (held->second.open >= _transfersPerSlot) {
                 return {false, 0};
             }
             ++held->second.open;
@@ -184,7 +182,10 @@ namespace Framework::Integrations::Server {
         }
 
         // A slot kept idle for its holder's next file is spare capacity for the line, not a hold on it.
-        const size_t free = std::min(_maxClients > open ? _maxClients - open : 0, freeTransfers);
+        const size_t busy = static_cast<size_t>(std::count_if(_slots.begin(), _slots.end(), [](const auto &entry) {
+            return entry.second.open > 0;
+        }));
+        const size_t free = _maxClients > busy ? _maxClients - busy : 0;
         auto place        = std::find_if(_queue.begin(), _queue.end(), [&token](const auto &entry) {
             return entry.first == token;
         });
@@ -232,9 +233,11 @@ namespace Framework::Integrations::Server {
     }
 
     size_t AssetFileServer::GetQueuedClients() {
+        const auto now = std::chrono::steady_clock::now();
         std::lock_guard lock(_slotsMutex);
-        ExpireQueue(std::chrono::steady_clock::now());
-        return _queue.size();
+        return static_cast<size_t>(std::count_if(_queue.begin(), _queue.end(), [now](const auto &entry) {
+            return now - entry.second <= kQueueEntryLifetime;
+        }));
     }
 
     void AssetFileServer::Publish(std::unordered_map<std::string, std::filesystem::path> files) {

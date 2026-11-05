@@ -1197,7 +1197,8 @@ MODULE(asset_http, {
         EQUALS(fixture.files.GetActiveClients(), 1u);
 
         held.Release();
-        // The holder keeps its slot for a moment for its next file; the queue waits on that too.
+        // The idle slot goes to the head of the line, which is still the second peer; the third keeps
+        // waiting behind it, and the holder's own next file rides its slot while it has it.
         res = ask(third);
         EQUALS(res->status, 503);
         EQUALS(res->get_header_value(Framework::Integrations::Server::AssetFileServer::kQueueHeader) == "1", true);
@@ -1212,16 +1213,21 @@ MODULE(asset_http, {
         fixture.files.Publish(published);
         const std::string other = fixture.files.Grant(AssetHttpTest::kPeer + 1);
 
-        // Two transfers of budget, both the holder's: its second connection rides its slot, and the
-        // budget they fill keeps the other peer out.
+        // A budget of two is one slot of two connections: the holder's second connection rides its
+        // slot, and the slot is the holder's while either runs, not the other peer's for the asking.
         AssetHttpTest::HeldSlot held(fixture, fixture.token);
         AssetHttpTest::HeldSlot again(fixture, fixture.token);
         EQUALS(fixture.files.GetActiveClients(), 1u);
-        httplib::Client client(fixture.Origin());
-        EQUALS(client.Get("/files/small.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, other}})->status, 503);
+        const auto ask = [&fixture, &other] {
+            httplib::Client client(fixture.Origin());
+            return client.Get("/files/small.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, other}})->status;
+        };
+        EQUALS(ask(), 503);
         again.Release();
-        EQUALS(client.Get("/files/small.fwpak", httplib::Headers {{Framework::Integrations::Server::AssetFileServer::kTokenHeader, other}})->status, 200);
+        EQUALS(ask(), 503);
+        // Once the holder is idle its slot is spare capacity, and the peer in line takes it.
         held.Release();
+        EQUALS(ask(), 200);
     });
 
     IT("drops a revoked peer from the queue", {
