@@ -380,4 +380,8 @@ namespace Framework::External::ImGUI {
         io.MouseDrawCursor = show;
     }
 
+    bool Wrapper::WantsTextInput() {
+        return isContextInitialized && ImGui::GetIO().WantTextInput;
+    }
+
 } // namespace Framework::External::ImGUI

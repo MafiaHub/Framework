@@ -62,24 +62,18 @@ namespace Framework::GUI::CEF {
             return;
         }
 
-        const bool typing = node && node->GetType() == CefDOMNode::Type::DOM_NODE_TYPE_ELEMENT && node->GetFormControlElementType() != CefDOMNode::FormControlType::DOM_FORM_CONTROL_TYPE_UNSUPPORTED;
+        const bool element     = node && node->GetType() == CefDOMNode::Type::DOM_NODE_TYPE_ELEMENT;
+        const bool formControl = element && node->GetFormControlElementType() != CefDOMNode::FormControlType::DOM_FORM_CONTROL_TYPE_UNSUPPORTED;
+        // Text inputs, textareas and contenteditable: where a keystroke becomes a character.
+        const bool editable = element && node->IsEditable();
 
-        bool &previous = _inputFocus[browser->GetIdentifier()];
-        if (previous == typing) {
-            return;
-        }
-        previous = typing;
-
+        // Every change is sent: the view dedupes, and resets per document, which a renderer
+        // can't see across a cross-process navigation.
         auto message = CefProcessMessage::Create("InputFocus");
-        message->GetArgumentList()->SetBool(0, typing);
+        message->GetArgumentList()->SetBool(0, formControl);
+        message->GetArgumentList()->SetBool(1, editable);
         if (auto mainFrame = browser->GetMainFrame()) {
             mainFrame->SendProcessMessage(PID_BROWSER, message);
-        }
-    }
-
-    void RendererApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) {
-        if (browser) {
-            _inputFocus.erase(browser->GetIdentifier());
         }
     }
 } // namespace Framework::GUI::CEF

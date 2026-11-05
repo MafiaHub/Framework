@@ -87,7 +87,8 @@ Every payload carries `viewId` in addition to the fields below.
   has no window to draw a native one, so nothing appears unless you draw it.
 - **`browserInputFocusChange`** — `focused` is `true` while a form control inside
   the page holds focus. Use it to stop forwarding keys to the game while the user
-  is typing into the view.
+  is typing into the view. Only changes fire, and loading a new document over a
+  focused control reports `false`.
 - **`browserResourceBlocked`** — the view refused something. `reason` is one of:
   - `"cross-origin"` — main-frame navigation away from the view's locked origin
   - `"invalid-url"` — a request URL that could not be parsed
