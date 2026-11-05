@@ -8,6 +8,7 @@
 
 #include "state_bag.h"
 
+#include "../callback_scope.h"
 #include "../engine_helpers.h"
 #include "../scripting_catalog.h"
 
@@ -179,6 +180,9 @@ namespace Framework::Scripting::Builtins {
             return;
         }
         v8::Context::Scope contextScope(context);
+        // A change raised by the host enters the runtime here; what the listener queues runs as this closes. One
+        // raised by a script's own write nests inside that script's scope and leaves it to that.
+        const auto callbackScope = OpenCallbackScope(isolate);
 
         // Undefined rather than null for a removal and for a key that held nothing, so a stored null
         // stays distinguishable from an absent one.

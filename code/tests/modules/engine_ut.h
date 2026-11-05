@@ -8,9 +8,42 @@
 
 #pragma once
 
+#include "scripting/engine_scope.h"
 #include "scripting/node_engine.h"
 
 #include <csignal>
+#include <string>
+
+namespace EngineTest {
+    // Runs `source` in the engine's current runtime through raw V8, with no callback scope, as a call past the
+    // framework's entries does, and returns the result as text, or "<threw> " and the exception.
+    static std::string Eval(Framework::Scripting::Engine &engine, const std::string &source) {
+        v8::Isolate *isolate = engine.GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = engine.GetContext();
+        v8::Context::Scope contextScope(context);
+        v8::TryCatch tryCatch(isolate);
+
+        v8::Local<v8::Script> script;
+        v8::Local<v8::Value> result;
+        if (!v8::Script::Compile(context, v8::String::NewFromUtf8(isolate, source.c_str()).ToLocalChecked()).ToLocal(&script) || !script->Run(context).ToLocal(&result)) {
+            v8::String::Utf8Value text(isolate, tryCatch.Exception());
+            return std::string("<threw> ") + (*text ? *text : "");
+        }
+        v8::String::Utf8Value text(isolate, result);
+        return *text ? *text : "";
+    }
+
+    // Calls globalThis[name] inside an EngineScope the host holds, as native code calling into script does.
+    static void CallGlobal(const Framework::Scripting::EngineScope &scope, const char *name) {
+        v8::Isolate *isolate           = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
+        v8::Local<v8::Value> fn        = context->Global()->Get(context, v8::String::NewFromUtf8(isolate, name).ToLocalChecked()).ToLocalChecked();
+        (void)fn.As<v8::Function>()->Call(context, v8::Undefined(isolate), 0, nullptr);
+    }
+} // namespace EngineTest
 
 MODULE(engine, {
     using namespace Framework::Scripting;
@@ -156,6 +189,65 @@ MODULE(engine, {
         NodeEngine engine({});
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
         STREQUALS(engine.GetLastError().c_str(), "");
+        engine.Shutdown();
+    });
+
+    IT("runs what a script queued as Execute returns", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        EQUALS(engine.Execute("globalThis.order = ['script']; process.nextTick(() => order.push('tick')); Promise.resolve().then(() => order.push('micro')); order.push('end');", "<queue>"), true);
+        // Nothing ticked: the script ran inside Node's callback scope, which drained the queues on its way out, the
+        // nextTick callbacks before the microtasks as Node orders them.
+        STREQUALS(EngineTest::Eval(engine, "order.join()").c_str(), "script,end,tick,micro");
+
+        engine.Shutdown();
+    });
+
+    IT("attributes a nextTick callback's throw to the runtime, not to the script that queued it", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        {
+            EngineScope scope(&engine);
+            engine.InstallUncaughtExceptionHandler("");
+        }
+
+        EQUALS(engine.Execute("process.nextTick(() => { throw new Error('later'); });", "<queue>"), true);
+        STREQUALS(engine.GetLastError().c_str(), "");
+        const auto errors = engine.DrainPendingErrors();
+        EQUALS(errors.size(), size_t(1));
+        EQUALS(errors.empty() || errors[0].errorMessage.find("later") != std::string::npos, true);
+
+        engine.Shutdown();
+    });
+
+    IT("runs what the host queued inside an EngineScope as the scope closes", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        EngineTest::Eval(engine, "globalThis.order = [];"
+                                 "globalThis.a = () => { order.push('a'); process.nextTick(() => order.push('a-tick')); Promise.resolve().then(() => order.push('a-micro')); };"
+                                 "globalThis.b = () => order.push('b');");
+
+        // Two calls inside one scope are one callback into the runtime: it drains once, as the scope closes.
+        {
+            EngineScope scope(&engine);
+            EngineTest::CallGlobal(scope, "a");
+            EngineTest::CallGlobal(scope, "b");
+        }
+        STREQUALS(EngineTest::Eval(engine, "order.splice(0).join()").c_str(), "a,b,a-tick,a-micro");
+
+        // A scope per call: each drains as its scope closes, before the host makes the next call.
+        {
+            EngineScope scope(&engine);
+            EngineTest::CallGlobal(scope, "a");
+        }
+        {
+            EngineScope scope(&engine);
+            EngineTest::CallGlobal(scope, "b");
+        }
+        STREQUALS(EngineTest::Eval(engine, "order.splice(0).join()").c_str(), "a,a-tick,a-micro,b");
+
         engine.Shutdown();
     });
 

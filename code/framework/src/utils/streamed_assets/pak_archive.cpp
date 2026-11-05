@@ -322,4 +322,42 @@ namespace Framework::Utils::StreamedAssets {
         }
         return ok;
     }
+
+    bool PakArchive::EntryOffsets(const std::string &pakPath, std::vector<std::uint64_t> &offsets) {
+        offsets.clear();
+
+        std::error_code code;
+        const std::uintmax_t fileSize = std::filesystem::file_size(pakPath, code);
+        if (code || fileSize == 0 || fileSize > kMaxPakSize) {
+            return false;
+        }
+        std::FILE *file = std::fopen(pakPath.c_str(), "rb");
+        if (file == nullptr) {
+            return false;
+        }
+        mz_zip_archive zip {};
+        if (!mz_zip_reader_init_cfile(&zip, file, fileSize, 0)) {
+            std::fclose(file);
+            return false;
+        }
+
+        bool ok             = true;
+        const mz_uint count = mz_zip_reader_get_num_files(&zip);
+        for (mz_uint i = 0; ok && i < count; ++i) {
+            mz_zip_archive_file_stat stat {};
+            ok = mz_zip_reader_file_stat(&zip, i, &stat);
+            if (ok) {
+                offsets.push_back(static_cast<std::uint64_t>(stat.m_local_header_ofs));
+            }
+        }
+        if (ok) {
+            offsets.push_back(static_cast<std::uint64_t>(zip.m_central_directory_file_ofs));
+        }
+        mz_zip_reader_end(&zip);
+        std::fclose(file);
+        if (!ok) {
+            offsets.clear();
+        }
+        return ok;
+    }
 } // namespace Framework::Utils::StreamedAssets

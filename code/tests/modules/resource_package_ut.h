@@ -19,10 +19,43 @@
 #include "utils/vfs.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <set>
 #include <string>
+
+#ifdef _WIN32
+#include "utils/safe_win32.h"
+
+#include <psapi.h>
+#else
+#include <unistd.h>
+#endif
+
+namespace ResourcePackageTest {
+    // What the process holds: the memory Windows has committed to it, or what Linux keeps resident.
+    // Empty where neither can be read.
+    inline std::optional<uint64_t> ProcessMemory() {
+#ifdef _WIN32
+        PROCESS_MEMORY_COUNTERS_EX counters {};
+        if (!GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS *>(&counters), sizeof(counters))) {
+            return std::nullopt;
+        }
+        return counters.PrivateUsage;
+#elif defined(__linux__)
+        std::ifstream statm("/proc/self/statm");
+        uint64_t pages = 0, resident = 0;
+        if (!(statm >> pages >> resident)) {
+            return std::nullopt;
+        }
+        return resident * static_cast<uint64_t>(sysconf(_SC_PAGESIZE));
+#else
+        return std::nullopt;
+#endif
+    }
+} // namespace ResourcePackageTest
 
 MODULE(resource_package, {
     // Process singleton; Init is idempotent.
@@ -150,6 +183,45 @@ MODULE(resource_package, {
         EQUALS(n1 == n2, false);
         EQUALS(n1 == n1again, true);
         EQUALS(Framework::Utils::Crypto::DeriveNonce(otherKey, "payload one") == n1, false);
+    });
+
+    IT("frees the ZIP buffer of every build", {
+        // A server rebuilds every client package whenever a resource starts, so a buffer kept per
+        // build grew it by the size of all its client packages on every restart, for good.
+        if (!ResourcePackageTest::ProcessMemory()) {
+            SKIP();
+        }
+
+        // Incompressible, so the ZIP is as large as the entry and every build allocates megabytes.
+        std::string data(2 * 1024 * 1024, '\0');
+        uint32_t state = 0x9E3779B9u;
+        for (auto &byte : data) {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            byte = static_cast<char>(state);
+        }
+        Framework::Utils::Package::Writer writer;
+        const bool added = writer.Add("data.bin", std::move(data));
+        EQUALS(added, true);
+
+        // The heap keeps some of what the first builds free for the next ones, and stops growing
+        // after about five: measure from after that.
+        std::string blob;
+        bool built = true;
+        for (int i = 0; i < 8; ++i) {
+            built = writer.Build(nullptr, blob) && built;
+        }
+        const auto before = static_cast<int64_t>(*ResourcePackageTest::ProcessMemory());
+        for (int i = 0; i < 48; ++i) {
+            built = writer.Build(nullptr, blob) && built;
+        }
+        EQUALS(built, true);
+        const int64_t growth = static_cast<int64_t>(*ResourcePackageTest::ProcessMemory()) - before;
+
+        // Kept, the 48 buffers would hold at least 96 MB; freed, each build reuses what the last let go.
+        const int64_t limit = 32 * 1024 * 1024;
+        LESSER(growth, limit);
     });
 
     IT("rejects a wrong key, a tampered body, and a truncated container", {

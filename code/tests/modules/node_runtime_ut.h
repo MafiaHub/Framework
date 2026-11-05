@@ -47,6 +47,24 @@ namespace NodeRuntimeTest {
         const std::string result = NodeTest::Eval(*other, *source);
         info.GetReturnValue().Set(v8::String::NewFromUtf8(info.GetIsolate(), result.c_str()).ToLocalChecked());
     }
+
+    // Calls a global function straight through V8, with no callback scope, as a call past the framework's entries does.
+    static std::string CallGlobal(Framework::Scripting::NodeRuntime &runtime, const char *name) {
+        v8::Isolate *isolate = runtime.GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = runtime.GetContext();
+        v8::Context::Scope contextScope(context);
+
+        v8::Local<v8::Value> fn = context->Global()->Get(context, v8::String::NewFromUtf8(isolate, name).ToLocalChecked()).ToLocalChecked();
+        v8::Local<v8::Value> result;
+        if (!fn->IsFunction() || !fn.As<v8::Function>()->Call(context, v8::Undefined(isolate), 0, nullptr).ToLocal(&result)) {
+            return "<failed>";
+        }
+        v8::String::Utf8Value text(isolate, result);
+        return *text ? *text : "";
+    }
 } // namespace NodeRuntimeTest
 
 MODULE(node_runtime, {
@@ -115,7 +133,7 @@ MODULE(node_runtime, {
         engine.Shutdown();
     });
 
-    IT("runs a nextTick queued from a promise reaction in the same tick", {
+    IT("runs on its next tick the nextTick callbacks a call from outside Node queues", {
         NodeEngine engine({});
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
@@ -123,9 +141,33 @@ MODULE(node_runtime, {
         auto runtime = engine.CreateRuntime(error);
         NEQUALS(runtime.get(), nullptr);
 
-        NodeTest::Eval(*runtime, "Promise.resolve().then(() => process.nextTick(() => { globalThis.ran = true; }))");
-        runtime->Tick();
-        STREQUALS(NodeTest::Eval(*runtime, "String(globalThis.ran)").c_str(), "true");
+        NodeTest::Eval(*runtime, "globalThis.order = [];"
+                                 "globalThis.queue = () => {"
+                                 "  process.nextTick(() => order.push('tick'));"
+                                 "  new Promise((resolve) => process.nextTick(resolve)).then(() => order.push('then'));"
+                                 "};"
+                                 "globalThis.take = () => order.splice(0).join();");
+        // Compile everything once and give the platform tasks that posts time to run: the platform runs each in a
+        // callback scope, which drains the queue by accident. Twenty rounds then leave such a task no room to pass the
+        // test alone.
+        NodeRuntimeTest::CallGlobal(*runtime, "queue");
+        for (int i = 0; i < 100; ++i) {
+            runtime->Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        NodeRuntimeTest::CallGlobal(*runtime, "take");
+
+        // The loop has nothing pending, so only the tick itself can run the callbacks. Each round's transcript is
+        // kept so a failure shows which rounds drained, and what ran when one did not.
+        std::string rounds;
+        std::string expected;
+        for (int round = 0; round < 20; ++round) {
+            NodeRuntimeTest::CallGlobal(*runtime, "queue");
+            runtime->Tick();
+            rounds += NodeRuntimeTest::CallGlobal(*runtime, "take") + ";";
+            expected += "tick,then;";
+        }
+        STREQUALS(rounds.c_str(), expected.c_str());
 
         runtime.reset();
         engine.Shutdown();

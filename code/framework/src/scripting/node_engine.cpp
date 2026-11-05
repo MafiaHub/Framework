@@ -9,6 +9,7 @@
 #include "node_engine.h"
 #include "builtins/builtins.h"
 #include "builtins/messages.h"
+#include "callback_scope.h"
 #include "engine_helpers.h"
 #include "resource/resource_manager.h"
 #include "scripting_catalog.h"
@@ -166,7 +167,6 @@ namespace Framework::Scripting {
             _references->RemoveRuntime(_hostReference);
         }
         _references.reset();
-        _queuedWork.clear();
 
         // Release persistent handles before destroying the isolate
         _interruptDrainFn.Reset();
@@ -249,11 +249,6 @@ namespace Framework::Scripting {
 
         _references    = std::make_unique<FunctionReferences>();
         _hostReference = _references->AddRuntime(isolate, _runtime->GetContext(), "server");
-        _references->SetWorkQueuedHandler([this](uint32_t runtime) {
-            if (std::find(_queuedWork.begin(), _queuedWork.end(), runtime) == _queuedWork.end()) {
-                _queuedWork.push_back(runtime);
-            }
-        });
 
         // Apply sandbox restrictions if enabled
         if (_options.sandboxed && !ApplySandbox(_runtime->GetContext())) {
@@ -302,12 +297,10 @@ namespace Framework::Scripting {
             v8::HandleScope handleScope(isolate);
             v8::Local<v8::Context> context = _runtime->GetContext();
             v8::Context::Scope contextScope(context);
+            const auto callbackScope = OpenCallbackScope(isolate);
             _interruptDrainFn.Get(isolate)->Call(context, v8::Undefined(isolate), 0, nullptr).FromMaybe(v8::Local<v8::Value>());
         }
 #endif
-
-        // Every runtime is drained below.
-        _queuedWork.clear();
 
         StopExitedResources();
         FlushRetiredRuntimes();
@@ -349,8 +342,6 @@ namespace Framework::Scripting {
         auto visited = Clock::now();
 #endif
         while (_initialized && _runtime && _pendingErrors.empty() && Clock::now() < stopAt) {
-            DrainQueuedWork(stopAt);
-
             // Which runtimes have a timer, immediate or callback due now, how long until the next one does, and which
             // loops to wait on for I/O until then.
             const uint64_t generation = _runtimesGeneration;
@@ -389,7 +380,7 @@ namespace Framework::Scripting {
             }
 
             // Wait only while nothing is ready; I/O is still picked up between rounds of a runtime that stays busy.
-            const bool idle = due.empty() && _queuedWork.empty();
+            const bool idle = due.empty();
 #ifdef _WIN32
             // A Windows loop is a completion port, which cannot be waited on together with others or checked without
             // taking its completions: visit the live loops every millisecond instead.
@@ -421,33 +412,6 @@ namespace Framework::Scripting {
         if (_pendingErrors.empty()) {
             SleepUntil(deadline);
         }
-    }
-
-    NodeRuntime *NodeEngine::FindRunnable(uint32_t reference) const {
-        NodeRuntime *runtime = reference == _hostReference ? _runtime.get() : nullptr;
-        for (auto it = _resourceRuntimes.begin(); runtime == nullptr && it != _resourceRuntimes.end(); ++it) {
-            if (it->second->reference == reference && !it->second->exited) {
-                runtime = it->second->runtime.get();
-            }
-        }
-        return runtime != nullptr && !runtime->GetIsolate()->IsInUse() ? runtime : nullptr;
-    }
-
-    void NodeEngine::DrainQueuedWork(std::chrono::steady_clock::time_point stopAt) {
-        // One round: runtimes calling each other without end would otherwise keep every other loop waiting.
-        std::vector<uint32_t> queued;
-        queued.swap(_queuedWork);
-        for (size_t i = 0; i < queued.size(); ++i) {
-            if (std::chrono::steady_clock::now() >= stopAt) {
-                _queuedWork.insert(_queuedWork.end(), queued.begin() + static_cast<std::ptrdiff_t>(i), queued.end());
-                break;
-            }
-            if (NodeRuntime *runtime = FindRunnable(queued[i])) {
-                runtime->Drain();
-            }
-        }
-        StopExitedResources();
-        FlushRetiredRuntimes();
     }
 
     void NodeEngine::RunReady(const std::vector<ResourceRuntime *> &ready, uint64_t generation, std::chrono::steady_clock::time_point stopAt) {

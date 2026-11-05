@@ -20,6 +20,7 @@ set(FRAMEWORK_SRC
     src/utils/package/package.cpp
     src/utils/streamed_assets/pak_archive.cpp
     src/utils/streamed_assets/policy.cpp
+    src/utils/streamed_assets/transfer.cpp
     src/utils/path.cpp
     src/utils/safe_string.cpp
     src/utils/url_protocol.cpp

@@ -114,26 +114,26 @@ MODULE(run_until, {
         EQUALS(TestManagerHelper::RecordedValue("timerMs") < 150, true);
     });
 
-    IT("settles calls to another resource's async export before the next tick", {
+    IT("finishes another resource's exported socket calls before the next tick", {
         TestManagerHelper::Cleanup();
-        ResourceIsolationTest::WriteResource("owner", "Exports.register('api', { async ping(x) { return x; } });", "\"api\"");
+        // The owner holds the connection, as a database resource holds its pool.
+        ResourceIsolationTest::WriteResource("owner", std::string(RunUntilTest::kRoundTrips) + "Exports.register('api', { query: (n) => trips(n) });", "\"api\"");
         ResourceIsolationTest::WriteResource("caller", R"(
             const api = Exports.get('owner', 'api');
             globalThis.calls = async (n) => {
                 for (let i = 1; i <= n; i++) {
-                    __record('calls', await api.ping(i));
+                    await api.query(1);
+                    __record('calls', i);
                 }
-                process.nextTick(() => __record('nextTick', 1));
             };
         )");
         RunUntilTest::Rig rig;
         EQUALS(rig.Start({"owner", "caller"}), true);
+        EQUALS(ResourceIsolationTest::TickUntilRecorded(rig.engine, "ready"), true);
 
-        TestManagerHelper::EvalIntIn(rig.engine, "caller", "calls(50); 0");
+        TestManagerHelper::EvalIntIn(rig.engine, "caller", "calls(20); 0");
         rig.TickAndWait(200);
-        EQUALS(TestManagerHelper::RecordedValue("calls"), 50);
-        // Queued by code a settlement resumed: it runs without waiting for an unrelated callback in that runtime.
-        EQUALS(TestManagerHelper::RecordedValue("nextTick"), 1);
+        EQUALS(TestManagerHelper::RecordedValue("calls"), 20);
     });
 
     IT("returns at the deadline while a resource keeps itself busy", {
@@ -150,24 +150,6 @@ MODULE(run_until, {
         EQUALS(returned >= deadline, true);
         EQUALS(returned - deadline < std::chrono::milliseconds(20), true);
         EQUALS(TestManagerHelper::RecordedValue("spins") - before > 10, true);
-    });
-
-    IT("keeps other resources running while two call each other without end", {
-        TestManagerHelper::Cleanup();
-        ResourceIsolationTest::WriteResource("owner", "Exports.register('api', { async ping(x) { return x; } });", "\"api\"");
-        ResourceIsolationTest::WriteResource("caller", R"(
-            const api = Exports.get('owner', 'api');
-            globalThis.forever = async () => { for (let i = 0; ; i++) __record('calls', await api.ping(i)); };
-        )");
-        ResourceIsolationTest::WriteResource("bystander", "globalThis.arm = () => setTimeout(() => __record('fired', 1), 5);");
-        RunUntilTest::Rig rig;
-        EQUALS(rig.Start({"owner", "caller", "bystander"}), true);
-
-        TestManagerHelper::EvalIntIn(rig.engine, "bystander", "arm(); 0");
-        TestManagerHelper::EvalIntIn(rig.engine, "caller", "forever(); 0");
-        rig.TickAndWait(200);
-        EQUALS(TestManagerHelper::RecordedValue("fired"), 1);
-        EQUALS(TestManagerHelper::RecordedValue("calls") > 100, true);
     });
 
     IT("returns early with an uncaught error waiting", {

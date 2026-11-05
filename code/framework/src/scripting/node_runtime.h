@@ -62,16 +62,15 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> GetContext() const;
 
         /**
-         * Run microtasks, ready libuv callbacks and this isolate's platform tasks without blocking.
-         * Enters the isolate itself.
+         * Run the process.nextTick queue, microtasks, ready libuv callbacks and this isolate's platform tasks
+         * without blocking. Enters the isolate itself.
+         *
+         * A call that enters through one of the framework's entries (EngineScope, Engine::Execute, another runtime's
+         * call) runs inside Node's callback scope, so what it queues through process.nextTick or a promise runs as the
+         * call returns, as Node runs it. One made through raw V8 with no scope has that run here, on the next tick:
+         * two such calls in a row both finish before anything either queued.
          */
         void Tick();
-
-        /**
-         * Run the promise reactions and process.nextTick callbacks that calls into the runtime left queued, as
-         * returning from a libuv callback would. Enters the isolate itself.
-         */
-        void Drain();
 
         // The fd that is readable while the loop has I/O to run, or -1 where there is none (Windows).
         int GetBackendFd() const;
@@ -83,10 +82,10 @@ namespace Framework::Scripting {
         int64_t MsUntilDue();
 
       private:
-        // The caller holds the isolate's scopes.
-        void RunQueuedScript();
-
         NodeRuntime() = default;
+
+        // The caller holds the locker and the isolate, handle and context scopes.
+        void DrainTaskQueues();
 
         node::MultiIsolatePlatform *_platform = nullptr;
         std::unique_ptr<node::CommonEnvironmentSetup> _setup;

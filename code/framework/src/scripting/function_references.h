@@ -13,7 +13,6 @@
 #include <v8.h>
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -109,12 +108,6 @@ namespace Framework::Scripting {
          * inside a weak callback; call this regularly, outside any collection, such as once per tick.
          */
         void ReleaseCollected();
-
-        /**
-         * Told the id of a runtime that a call may have left promise reactions queued in: the owner after every call
-         * into it, the caller when a promise it awaits from another runtime settles. Nothing here runs them.
-         */
-        void SetWorkQueuedHandler(std::function<void(uint32_t runtime)> handler);
 
         // Diagnostics and tests: live exports, and stand-ins still tracked.
         size_t GetExportCount() const;
