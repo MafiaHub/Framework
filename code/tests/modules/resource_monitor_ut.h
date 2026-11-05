@@ -356,4 +356,41 @@ MODULE(resource_monitor, {
         engine.Shutdown();
         TestManagerHelper::Cleanup();
     });
+
+    IT("charges a timer that runs between ticks", {
+        using namespace Framework::Scripting;
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("monitor-night", R"(
+            const burn = (ms) => { const end = performance.now() + ms; while (performance.now() < end) {} };
+            setTimeout(() => { burn(120); __record('ran', 1); }, 200);
+        )");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        engine.GetMonitor().SetSlowThresholdMs(100.0);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("monitor-night"), true);
+
+        // No tick at all: the timer can only run in the wait the server does between ticks.
+        const auto before = engine.GetRuntimeStats();
+        engine.RunUntil(std::chrono::steady_clock::now() + std::chrono::milliseconds(800));
+        const auto after = engine.GetRuntimeStats();
+        EQUALS(TestManagerHelper::RecordedValue("ran"), 1);
+
+        const auto *start = Find(before, "monitor-night");
+        const auto *end   = Find(after, "monitor-night");
+        EQUALS((start != nullptr && end != nullptr), true);
+        const double nightMs = (end->scriptSeconds - start->scriptSeconds) * 1000.0;
+        GREATEREQ(nightMs, 120.0);
+        LESSER(nightMs, 190.0);
+        EQUALS(end->slowReports, static_cast<uint64_t>(1));
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
 })

@@ -487,7 +487,20 @@ namespace Framework::Scripting {
             }
             NodeRuntime &runtime = entry != nullptr ? *entry->runtime : *_runtime;
             if ((entry == nullptr || !entry->exited) && !runtime.GetIsolate()->IsInUse()) {
+                FW_PROFILE_SCOPE_N("Scripting::RunLoop");
+                FW_PROFILE_TEXT(runtime.GetName().c_str(), runtime.GetName().size());
+                // Charged as the tick's own loop run is. A live loop is visited every millisecond on Windows, so the
+                // charge is read back only when the visit itself lasted the slow threshold.
+                v8::Isolate *isolate = runtime.GetIsolate();
+                const auto start     = ResourceMonitor::Clock::now();
+                const double charged = _monitor.ChargedMs(isolate, start);
+                _monitor.Enter(isolate, start);
                 runtime.RunLoop();
+                const auto end = ResourceMonitor::Clock::now();
+                _monitor.Leave(end);
+                if (const double slowMs = _monitor.GetSlowThresholdMs(); slowMs > 0.0 && std::chrono::duration<double, std::milli>(end - start).count() >= slowMs) {
+                    _monitor.ReportOwnTime(isolate, "timers, I/O and await continuations", {}, charged, end);
+                }
             }
         }
         StopExitedResources();
