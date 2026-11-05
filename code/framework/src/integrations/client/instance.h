@@ -219,7 +219,8 @@ namespace Framework::Integrations::Client {
         uint64_t _assetConsentBytes {};
 
         // Replaces the asset paks of every resource in `resources` with what it announces. On the first
-        // connect a pak marked deferred waits in _deferredPaks; a refresh fetches everything at once.
+        // connect a pak marked deferred waits in _deferredPaks; a refresh fetches everything at once,
+        // except a deferred pak the first connect's transfer is still fetching, which stays with it.
         void AnnounceAssetPaks(const std::vector<Client::Scripting::ServerResourceInfo> &resources, bool holdDeferred);
         // Older paks a job may take chunks from: earlier versions of the same lane in this server's
         // cache, the same pak in another server's. Nothing for a package: a changed one shares no bytes.

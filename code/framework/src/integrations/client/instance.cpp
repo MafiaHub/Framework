@@ -1017,6 +1017,13 @@ namespace Framework::Integrations::Client {
             const auto ofResource = [&resource](const ResourceAssetPak &pak) {
                 return pak.resource == resource.name;
             };
+            // A deferred pak still on its way stays where its transfer will find it. Moved to the
+            // session's paks by a refresh, it would be missing until it landed and announced to nobody
+            // when it did: the transfer hands over only what it finds among the deferred ones.
+            std::vector<ResourceAssetPak> inFlight;
+            if (!holdDeferred && _deferredDownloader.IsRunning()) {
+                std::copy_if(_deferredPaks.begin(), _deferredPaks.end(), std::back_inserter(inFlight), ofResource);
+            }
             _assetPaks.erase(std::remove_if(_assetPaks.begin(), _assetPaks.end(), ofResource), _assetPaks.end());
             _deferredPaks.erase(std::remove_if(_deferredPaks.begin(), _deferredPaks.end(), ofResource), _deferredPaks.end());
             for (const auto &info : resource.assetPaks) {
@@ -1032,7 +1039,10 @@ namespace Framework::Integrations::Client {
                 if (!GetAssetCachePath().empty()) {
                     pak.path = (std::filesystem::path(GetAssetCachePath()) / Framework::Utils::StreamedAssets::PakFileName(resource.name, info.lane, info.sha256)).string();
                 }
-                if (holdDeferred && info.deferred) {
+                const bool stillInFlight = std::any_of(inFlight.begin(), inFlight.end(), [&info](const ResourceAssetPak &deferred) {
+                    return deferred.info.lane == info.lane && deferred.info.sha256 == info.sha256;
+                });
+                if ((holdDeferred && info.deferred) || stillInFlight) {
                     _deferredPaks.push_back(std::move(pak));
                 }
                 else {
