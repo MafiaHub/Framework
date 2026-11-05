@@ -76,13 +76,24 @@ namespace Framework::Scripting {
         return runtime;
     }
 
-    void NodeRuntime::OnGCPrologue(v8::Isolate *, v8::GCType, v8::GCCallbackFlags, void *data) {
-        static_cast<NodeRuntime *>(data)->_gcStart = std::chrono::steady_clock::now();
+    // The filter above leaves only the atomic pauses, which V8 14.6 never nests; the type check is the same
+    // insurance Node's perf_hooks keep (nodejs/node#44046), for a V8 that interleaves another pair inside one.
+    void NodeRuntime::OnGCPrologue(v8::Isolate *, v8::GCType type, v8::GCCallbackFlags, void *data) {
+        auto *runtime = static_cast<NodeRuntime *>(data);
+        if (runtime->_gcType != 0) {
+            return;
+        }
+        runtime->_gcType  = type;
+        runtime->_gcStart = std::chrono::steady_clock::now();
     }
 
     void NodeRuntime::OnGCEpilogue(v8::Isolate *isolate, v8::GCType type, v8::GCCallbackFlags, void *data) {
-        auto *runtime   = static_cast<NodeRuntime *>(data);
-        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - runtime->_gcStart).count();
+        auto *runtime = static_cast<NodeRuntime *>(data);
+        if (type != runtime->_gcType) {
+            return;
+        }
+        runtime->_gcType = static_cast<v8::GCType>(0);
+        const double ms  = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - runtime->_gcStart).count();
         ++runtime->_gcPauses;
         runtime->_gcPauseMs += ms;
         if (ms < kGCReportMs || !FW_PROFILE_CONNECTED()) {

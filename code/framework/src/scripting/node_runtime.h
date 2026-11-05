@@ -124,6 +124,7 @@ namespace Framework::Scripting {
         node::Environment *_env = nullptr;
         v8::Isolate *_isolate   = nullptr;
         std::string _name       = "starting";
+        v8::GCType _gcType      = static_cast<v8::GCType>(0); // the pause in progress, or 0 outside one
         std::chrono::steady_clock::time_point _gcStart;
         uint64_t _gcPauses = 0;
         double _gcPauseMs  = 0.0;
