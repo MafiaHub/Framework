@@ -103,6 +103,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("open", v8pp::metadata::docs("void", {}, "Opens and focuses the native chat input field.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("close", v8pp::metadata::docs("void", {}, "Closes the native chat input field without submitting its contents.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isOpen", v8pp::metadata::docs("boolean", {}, "Checks whether the native chat input field is active.", "True while chat is capturing keyboard input.")));
+
+        auto &events = Framework::Scripting::GetScriptingCatalog(isolate).data_type("EventMap");
+        events.add_property("chatMessage", "[message: { author: string; text: string; color: number }]", "Dispatched for every chat line the server sends. An empty author is a notice line; color is packed 0xRRGGBBAA, 0 for the chat box's default.");
+        events.add_property("chatSend", "[text: string]", "Dispatched synchronously for a line the player typed into the chat box, before it is sent. A handler returning false, not a Promise of it, blocks it; Chat.send does not raise this.");
     }
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins
