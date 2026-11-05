@@ -189,8 +189,9 @@ rules.
 `ResourceMonitor` (`scripting/resource_monitor.h`) charges script time to the
 runtime the engine enters: its own tick (timers, I/O, `await` continuations), a
 cross-runtime call or settlement, an event or message handler, a state bag
-listener. Entering a runtime pauses the one it was entered from, so a resource
-is not charged for the resources it calls. The server closes one frame at the
+listener, a message reply. What an entry queues runs as it returns, and is
+charged with it. Entering a runtime pauses the one it was entered from, so a
+resource is not charged for the resources it calls. The server closes one frame at the
 top of each server tick (`NodeEngine::CloseMonitorTick`), and once a second the
 monitor also reads each runtime's heap and its collector's pauses. Its window
 is the last minute of wall time, however long the ticks in it took. It runs on
@@ -201,8 +202,8 @@ the main thread only.
   used and limit, collector time per second, and the slow reports below.
 - The `resmon` console command prints that table, sorted by script time, or by
   heap with `resmon heap`.
-- An event or message handler, state bag listener, export call or runtime tick
-  whose own script time reaches `slow-script-ms` (server.json, default 50, 0
+- An event or message handler, state bag listener, export call, message reply
+  or runtime tick whose own script time reaches `slow-script-ms` (server.json, default 50, 0
   turns it off) logs one line naming the resource, at most once every 10 s for
   the same resource, kind and event. Time it spent in other resources is theirs
   and is reported against them.

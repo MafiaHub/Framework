@@ -181,9 +181,6 @@ namespace Framework::Scripting::Builtins {
             return;
         }
         v8::Context::Scope contextScope(context);
-        // A change raised by the host enters the runtime here; what the listener queues runs as this closes. One
-        // raised by a script's own write nests inside that script's scope and leaves it to that.
-        const auto callbackScope = OpenCallbackScope(isolate);
 
         // Charged to the listener's resource, not the writer's, from rebuilding its arguments on. Off the main thread
         // the monitor is absent.
@@ -191,6 +188,9 @@ namespace Framework::Scripting::Builtins {
         const double charged = monitor ? monitor->ChargedMs(isolate, ResourceMonitor::Clock::now()) : 0.0;
         {
             ResourceMonitor::Scope scope(isolate);
+            // A change raised by the host enters the runtime here; what the listener queues runs as this closes, inside
+            // the charge. One raised by a script's own write nests inside that script's scope and leaves it to that.
+            const auto callbackScope = OpenCallbackScope(isolate);
 
             // Undefined rather than null for a removal and for a key that held nothing, so a stored null
             // stays distinguishable from an absent one.

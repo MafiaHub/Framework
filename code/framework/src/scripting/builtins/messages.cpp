@@ -433,14 +433,23 @@ namespace Framework::Scripting::Builtins {
 
     void Messages::Settle(PendingRequest &request, fu2::function_view<void(v8::Isolate *, v8::Local<v8::Context>, v8::Local<v8::Promise::Resolver>)> settle) {
         v8::Isolate *isolate = request.isolate;
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = request.context.Get(isolate);
-        v8::Context::Scope contextScope(context);
-        // The requester's continuations run as this closes, so no lock of this class may be held here.
-        const auto callbackScope = OpenCallbackScope(isolate);
-        settle(isolate, context, request.resolver.Get(isolate));
+        // The requester's continuations run in here, so they are charged to it as its own time.
+        auto *monitor        = ResourceMonitor::Current();
+        const double charged = monitor ? monitor->ChargedMs(isolate, ResourceMonitor::Clock::now()) : 0.0;
+        {
+            ResourceMonitor::Scope scope(isolate);
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = request.context.Get(isolate);
+            v8::Context::Scope contextScope(context);
+            // The requester's continuations run as this closes, so no lock of this class may be held here.
+            const auto callbackScope = OpenCallbackScope(isolate);
+            settle(isolate, context, request.resolver.Get(isolate));
+        }
+        if (monitor) {
+            monitor->ReportOwnTime(isolate, "continuations of a reply from", request.targetResource, charged, ResourceMonitor::Clock::now());
+        }
     }
 
     void Messages::Shutdown() {

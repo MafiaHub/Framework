@@ -9,6 +9,8 @@
 #pragma once
 
 // Uses TestManagerHelper from resource_manager_ut.h and WriteResource from resource_isolation_ut.h, included before.
+#include "scripting/builtins/messages.h"
+#include "scripting/engine_scope.h"
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
 #include "scripting/resource_monitor.h"
@@ -289,6 +291,66 @@ MODULE(resource_monitor, {
         EQUALS(tellerStats->slowReports, static_cast<uint64_t>(0));
         GREATER(bankStats->heapUsedBytes, static_cast<uint64_t>(0));
         GREATER(bankStats->heapLimitBytes, bankStats->heapUsedBytes);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("charges a reply's continuations to the resource that awaited it", {
+        using namespace Framework::Scripting;
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("monitor-vault", R"(
+            Messages.handle('balance', (payload, reply) => reply(payload));
+        )");
+        ResourceIsolationTest::WriteResource("monitor-clerk", R"(
+            const burn = (ms) => { const end = performance.now() + ms; while (performance.now() < end) {} };
+            setTimeout(() => {
+                Messages.request('monitor-vault', 'balance', 1).then(() => { burn(150); __record('replied', 1); });
+            }, 300);
+        )");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        engine.GetMonitor().SetSlowThresholdMs(100.0);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 2u);
+        EQUALS((bool)manager.StartResource("monitor-vault"), true);
+        EQUALS((bool)manager.StartResource("monitor-clerk"), true);
+        // The server's frame: replies settle after the runtimes tick, as the requester's continuations run.
+        const auto frame = [&engine] {
+            engine.CloseMonitorTick();
+            engine.Tick();
+            EngineScope scope(&engine);
+            Builtins::Messages::ProcessPendingResponses(scope.Isolate(), scope.Context());
+        };
+
+        double clerkMs     = -1.0;
+        const auto started = std::chrono::steady_clock::now();
+        while (TestManagerHelper::RecordedValue("replied") != 1 && std::chrono::steady_clock::now() < started + std::chrono::seconds(5)) {
+            const auto before = engine.GetRuntimeStats();
+            frame();
+            const auto after = engine.GetRuntimeStats();
+            if (TestManagerHelper::RecordedValue("replied") == 1) {
+                const auto *start = Find(before, "monitor-clerk");
+                const auto *end   = Find(after, "monitor-clerk");
+                clerkMs           = start && end ? (end->scriptSeconds - start->scriptSeconds) * 1000.0 : -1.0;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        EQUALS(TestManagerHelper::RecordedValue("replied"), 1);
+
+        const auto stats       = engine.GetRuntimeStats();
+        const auto *clerkStats = Find(stats, "monitor-clerk");
+        const auto *vaultStats = Find(stats, "monitor-vault");
+        EQUALS((clerkStats != nullptr && vaultStats != nullptr), true);
+        GREATEREQ(clerkMs, 150.0);
+        LESSER(clerkMs, 220.0);
+        EQUALS(clerkStats->slowReports, static_cast<uint64_t>(1));
+        EQUALS(vaultStats->slowReports, static_cast<uint64_t>(0));
 
         manager.StopAll();
         engine.Shutdown();
