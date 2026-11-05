@@ -1200,18 +1200,30 @@ namespace Framework::Integrations::Server {
                 auto stats        = engine->GetRuntimeStats();
                 const bool byHeap = !result.unmatched().empty() && result.unmatched()[0] == "heap";
                 std::ranges::sort(stats, [byHeap](const Framework::Scripting::RuntimeStats &a, const Framework::Scripting::RuntimeStats &b) {
-                    return byHeap ? a.heapUsedBytes > b.heapUsedBytes : a.scriptMsPerTick > b.scriptMsPerTick;
+                    return byHeap ? a.heapUsedBytes + a.externalBytes > b.heapUsedBytes + b.externalBytes : a.scriptMsPerTick > b.scriptMsPerTick;
                 });
                 constexpr double kMB = 1024.0 * 1024.0;
-                std::string table    = fmt::format("{:<28} {:>8} {:>8} {:>8} {:>9} {:>8} {:>6}\n", "resource", "ms/tick", "max ms", "heap MB", "limit MB", "GC ms/s", "slow");
-                for (const auto &runtime : stats) {
-                    table += fmt::format("{:<28} {:>8.2f} {:>8.1f} {:>8.1f} {:>9.0f} {:>8.2f} {:>6}\n", runtime.name, runtime.scriptMsPerTick, runtime.scriptMsMaxTick, runtime.heapUsedBytes / kMB, runtime.heapLimitBytes / kMB, runtime.gcMsPerSecond, runtime.slowReports);
+                std::string table;
+                if (byHeap) {
+                    // The memory view: what each runtime holds, on the heap and outside it (Buffers, ArrayBuffers), and
+                    // what collecting it costs.
+                    table = fmt::format("{:<28} {:>8} {:>8} {:>9} {:>8} {:>8} {:>7}\n", "resource", "heap MB", "total MB", "limit MB", "ext MB", "GC ms/s", "GCs");
+                    for (const auto &runtime : stats) {
+                        table +=
+                            fmt::format("{:<28} {:>8.1f} {:>8.1f} {:>9.0f} {:>8.1f} {:>8.2f} {:>7}\n", runtime.name, runtime.heapUsedBytes / kMB, runtime.heapTotalBytes / kMB, runtime.heapLimitBytes / kMB, runtime.externalBytes / kMB, runtime.gcMsPerSecond, runtime.gcPauses);
+                    }
+                }
+                else {
+                    table = fmt::format("{:<28} {:>8} {:>8} {:>8} {:>9} {:>8} {:>6}\n", "resource", "ms/tick", "max ms", "heap MB", "limit MB", "GC ms/s", "slow");
+                    for (const auto &runtime : stats) {
+                        table += fmt::format("{:<28} {:>8.2f} {:>8.1f} {:>8.1f} {:>9.0f} {:>8.2f} {:>6}\n", runtime.name, runtime.scriptMsPerTick, runtime.scriptMsMaxTick, runtime.heapUsedBytes / kMB, runtime.heapLimitBytes / kMB, runtime.gcMsPerSecond, runtime.slowReports);
+                    }
                 }
                 const double slowMs        = engine->GetMonitor().GetSlowThresholdMs();
                 const std::string slowNote = slowMs > 0.0 ? fmt::format("over {:.0f} ms since start", slowMs) : std::string("warnings off");
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Resource monitor, last minute (slow: {}):\n{}", slowNote, table);
             },
-            "Script time, heap and GC per resource over the last minute: resmon [heap]");
+            "Script time, heap and GC per resource over the last minute; resmon heap for the memory view");
 
         // Resource lifecycle commands. Helper folds the shared boilerplate
         // (resolve manager, require a name, log the result).
