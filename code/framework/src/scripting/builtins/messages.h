@@ -18,6 +18,7 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Framework::Scripting {
