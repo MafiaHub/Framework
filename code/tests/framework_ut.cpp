@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 64
+#define UNIT_MAX_MODULES 96
 #include "alloc_counter.h"
 #include "logging/logger.h"
 #include "unit.h"
@@ -79,6 +79,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/world_text_ut.h"
 
 #ifdef _WIN32
+#include "modules/d3d12_backend_ut.h"
 #include "modules/d3d12_ui_compositor_ut.h"
 #include "modules/epic_manifest_ut.h"
 #include "modules/world_text_layout_ut.h"
@@ -149,6 +150,7 @@ int main() {
     UNIT_MODULE(resource_package);
     UNIT_MODULE(streamed_assets);
 #ifdef _WIN32
+    UNIT_MODULE(d3d12_backend);
     UNIT_MODULE(d3d12_ui_compositor);
     UNIT_MODULE(epic_manifest);
     UNIT_MODULE(world_text_layout);

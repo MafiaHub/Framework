@@ -91,14 +91,19 @@ namespace Framework::Graphics {
     }
 
     bool Renderer::GetBackBufferSize(int &width, int &height) const {
-        IDXGISwapChain *swapChain = nullptr;
+        // The game thread asks this; the D3D12 swapchain may already be freed there.
         if (_d3d12Backend) {
-            swapChain = _d3d12Backend->GetSwapChain();
-        }
-        else if (_d3d11Backend) {
-            swapChain = _d3d11Backend->GetSwapChain();
+            UINT bufferWidth  = 0;
+            UINT bufferHeight = 0;
+            if (!_d3d12Backend->GetBackBufferSize(bufferWidth, bufferHeight)) {
+                return false;
+            }
+            width  = static_cast<int>(bufferWidth);
+            height = static_cast<int>(bufferHeight);
+            return true;
         }
 
+        IDXGISwapChain *swapChain = _d3d11Backend ? _d3d11Backend->GetSwapChain() : nullptr;
         DXGI_SWAP_CHAIN_DESC desc {};
         if (!swapChain || FAILED(swapChain->GetDesc(&desc)) || desc.BufferDesc.Width == 0 || desc.BufferDesc.Height == 0) {
             return false;
