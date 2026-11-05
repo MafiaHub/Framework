@@ -233,7 +233,7 @@ namespace Framework::Scripting {
         // Tick every resource runtime that is not executing further up the stack.
         void TickResourceRuntimes();
 
-        // Tick these runtimes (null is the engine's own) until `stopAt`, unless script has started or stopped resources.
+        // Run these runtimes' loops (null is the engine's own) until `stopAt`, unless script started or stopped resources.
         void RunReady(const std::vector<ResourceRuntime *> &ready, uint64_t generation, std::chrono::steady_clock::time_point stopAt);
 
         void SleepUntil(std::chrono::steady_clock::time_point until);

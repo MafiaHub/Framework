@@ -72,6 +72,10 @@ namespace Framework::Scripting {
          */
         void Tick();
 
+        // Run ready libuv callbacks once, without Tick()'s drains: Node's own callbacks drain on their way out. Enters the
+        // isolate itself.
+        void RunLoop();
+
         // The fd that is readable while the loop has I/O to run, or -1 where there is none (Windows).
         int GetBackendFd() const;
 

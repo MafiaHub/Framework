@@ -109,6 +109,14 @@ namespace Framework::Scripting {
         node::CallbackScope scope(_env, v8::Object::New(_isolate), {0, 0});
     }
 
+    void NodeRuntime::RunLoop() {
+        v8::Locker locker(_isolate);
+        v8::Isolate::Scope isolateScope(_isolate);
+        v8::HandleScope handleScope(_isolate);
+        v8::Context::Scope contextScope(_setup->context());
+        uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
+    }
+
     int NodeRuntime::GetBackendFd() const {
         return uv_backend_fd(_setup->event_loop());
     }

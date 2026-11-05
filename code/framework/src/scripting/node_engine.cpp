@@ -425,7 +425,7 @@ namespace Framework::Scripting {
             }
             NodeRuntime &runtime = entry != nullptr ? *entry->runtime : *_runtime;
             if ((entry == nullptr || !entry->exited) && !runtime.GetIsolate()->IsInUse()) {
-                runtime.Tick();
+                runtime.RunLoop();
             }
         }
         StopExitedResources();
