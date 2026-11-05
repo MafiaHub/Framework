@@ -166,8 +166,15 @@ namespace Framework::Integrations::Client {
         static void Run(std::shared_ptr<Transfer> transfer, std::vector<Source> sources, std::vector<Job> jobs);
         // reuseSearched is the job's: whether its older files were already searched for chunks.
         static bool FetchWithRetries(Transfer &transfer, const Source &source, const Job &job, bool &reuseSearched);
+        // What one request's retries have cost so far: attempts in a row without a byte, and since
+        // when it has been waiting for a slot.
+        struct RetryState {
+            int failuresWithoutProgress = 0;
+            int64_t queuedSinceMs       = 0;
+        };
+
         // Waits out a refusal or a failure before the next try; false once the policy or a cancel ends it.
-        static bool WaitBeforeRetry(Transfer &transfer, const Source &source, const Job &job, const Attempt &result, int &failuresWithoutProgress, int64_t &queuedSinceMs);
+        static bool WaitBeforeRetry(Transfer &transfer, const Source &source, const Job &job, const Attempt &result, RetryState &state);
         static Attempt Fetch(Transfer &transfer, const Source &source, const Job &job);
         // The source's chunk list for the file, asked again while it is busy or unreachable; empty
         // when it has none or the file is no longer than one chunk.

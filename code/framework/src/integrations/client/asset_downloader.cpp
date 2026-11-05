@@ -307,7 +307,7 @@ namespace Framework::Integrations::Client {
         return PartialPath(job) + ".done";
     }
 
-    bool AssetDownloader::WaitBeforeRetry(Transfer &transfer, const Source &source, const Job &job, const Attempt &result, int &failuresWithoutProgress, int64_t &queuedSinceMs) {
+    bool AssetDownloader::WaitBeforeRetry(Transfer &transfer, const Source &source, const Job &job, const Attempt &result, RetryState &state) {
         if (transfer.cancel.load()) {
             return false;
         }
@@ -317,10 +317,10 @@ namespace Framework::Integrations::Client {
             // wait is bounded only by the policy, so a server that never frees a slot does not
             // park the client for good.
             const int64_t now = NowMs();
-            if (queuedSinceMs == 0) {
-                queuedSinceMs = now;
+            if (state.queuedSinceMs == 0) {
+                state.queuedSinceMs = now;
             }
-            if (policy.queueWaitMs > 0 && now - queuedSinceMs >= policy.queueWaitMs) {
+            if (policy.queueWaitMs > 0 && now - state.queuedSinceMs >= policy.queueWaitMs) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("'{}' waited {} s for a download slot at {}; giving up", job.fileName, policy.queueWaitMs / 1000, source.url);
                 return false;
             }
@@ -330,25 +330,25 @@ namespace Framework::Integrations::Client {
             transfer.Touch();
             return WaitUnlessCancelled(transfer.cancel, delay);
         }
-        queuedSinceMs = 0;
+        state.queuedSinceMs = 0;
         if (!result.retry) {
             return false;
         }
         if (result.progressed) {
             // A transfer that was moving and got cut is a link event, not a failed request: it
             // resumes with a fresh budget.
-            failuresWithoutProgress = 0;
+            state.failuresWithoutProgress = 0;
             transfer.cuts.fetch_add(1, std::memory_order_relaxed);
         }
         else {
-            ++failuresWithoutProgress;
+            ++state.failuresWithoutProgress;
         }
-        if (failuresWithoutProgress >= policy.attempts) {
+        if (state.failuresWithoutProgress >= policy.attempts) {
             return false;
         }
         // A wait the server names is its own, bounded only so a hostile server cannot park the client.
-        const int delay = result.retryAfterMs > 0 ? std::min(result.retryAfterMs, kMaxServerDelayMs) : std::min(policy.firstDelayMs << std::min(failuresWithoutProgress, 16), policy.maxDelayMs);
-        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Retrying '{}' in {} ms ({})", job.fileName, delay, result.progressed ? "resuming a cut transfer" : fmt::format("attempt {} of {}", failuresWithoutProgress + 1, policy.attempts));
+        const int delay = result.retryAfterMs > 0 ? std::min(result.retryAfterMs, kMaxServerDelayMs) : std::min(policy.firstDelayMs << std::min(state.failuresWithoutProgress, 16), policy.maxDelayMs);
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Retrying '{}' in {} ms ({})", job.fileName, delay, result.progressed ? "resuming a cut transfer" : fmt::format("attempt {} of {}", state.failuresWithoutProgress + 1, policy.attempts));
         transfer.Touch();
         return WaitUnlessCancelled(transfer.cancel, delay);
     }
@@ -357,9 +357,8 @@ namespace Framework::Integrations::Client {
         const auto started          = std::chrono::steady_clock::now();
         const uint32_t cutsBefore   = transfer.cuts.load(std::memory_order_relaxed);
         const uint64_t reusedBefore = transfer.reused.load(std::memory_order_relaxed);
-        int failuresWithoutProgress = 0;
-        int64_t queuedSinceMs       = 0;
-        std::vector<Chunk> chunks   = FetchChunkList(transfer, source, job);
+        RetryState retries;
+        std::vector<Chunk> chunks = FetchChunkList(transfer, source, job);
         for (;;) {
             const uint64_t before = transfer.bytes.load(std::memory_order_relaxed);
             transfer.Touch();
@@ -382,7 +381,7 @@ namespace Framework::Integrations::Client {
                 chunks.clear();
                 continue;
             }
-            if (!WaitBeforeRetry(transfer, source, job, result, failuresWithoutProgress, queuedSinceMs)) {
+            if (!WaitBeforeRetry(transfer, source, job, result, retries)) {
                 return false;
             }
         }
@@ -396,10 +395,9 @@ namespace Framework::Integrations::Client {
             // A file no longer than a chunk is one request either way, and the plain path resumes it.
             return chunks;
         }
-        const std::string path      = base + "/" + Utils::StreamedAssets::ChunkListFileName(job.fileName);
-        const uint64_t mostBytes    = Utils::StreamedAssets::MaxChunkCount(job.size) * kChunkListLineBytes;
-        int failuresWithoutProgress = 0;
-        int64_t queuedSinceMs       = 0;
+        const std::string path   = base + "/" + Utils::StreamedAssets::ChunkListFileName(job.fileName);
+        const uint64_t mostBytes = Utils::StreamedAssets::MaxChunkCount(job.size) * kChunkListLineBytes;
+        RetryState retries;
         // A list a busy source or a flaky link withholds is asked for again like the file would be:
         // read whole, the file would lose what its chunks could have taken from older copies.
         for (;;) {
@@ -448,7 +446,7 @@ namespace Framework::Integrations::Client {
             }
             // A source without the list (404) serves the file whole; one that cannot be reached or is
             // busy is asked again, and the file is read whole once that is given up on.
-            if (!failed.retry || !WaitBeforeRetry(transfer, source, job, failed, failuresWithoutProgress, queuedSinceMs)) {
+            if (!failed.retry || !WaitBeforeRetry(transfer, source, job, failed, retries)) {
                 return {};
             }
         }
@@ -845,8 +843,7 @@ namespace Framework::Integrations::Client {
                     }
                     run = runs[next++];
                 }
-                int failuresWithoutProgress = 0;
-                int64_t queuedSinceMs       = 0;
+                RetryState retries;
                 for (;;) {
                     if (transfer.cancel.load()) {
                         return;
@@ -889,7 +886,7 @@ namespace Framework::Integrations::Client {
                         result.retry = true;
                     }
                     result.progressed = kept > 0;
-                    if (result.fallback || !WaitBeforeRetry(transfer, source, job, result, failuresWithoutProgress, queuedSinceMs)) {
+                    if (result.fallback || !WaitBeforeRetry(transfer, source, job, result, retries)) {
                         std::lock_guard lock(shared);
                         if (!failed) {
                             failed  = true;
