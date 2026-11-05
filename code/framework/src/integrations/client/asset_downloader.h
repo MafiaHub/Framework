@@ -19,6 +19,10 @@ namespace httplib {
     class Client;
 } // namespace httplib
 
+namespace Framework::Utils::StreamedAssets {
+    struct Chunk;
+} // namespace Framework::Utils::StreamedAssets
+
 namespace Framework::Integrations::Client {
     // Fetches a server's resource packages and asset paks over HTTP, off the main thread. A file is
     // only written into the cache once its SHA-256 matches the one the server announced; one already
@@ -26,8 +30,9 @@ namespace Framework::Integrations::Client {
     //
     // A file the server describes chunk by chunk (<name>.chunks, see utils/streamed_assets/transfer.h)
     // is assembled: chunks an older copy of the file already holds are copied from it, the rest are
-    // fetched by Range over several connections at once, and the assembly survives a restart. A
-    // server or mirror without chunk lists is read whole, resumable from the bytes already received.
+    // fetched by Range, neighbouring chunks in one request, over several connections at once, and the
+    // assembly survives a cut or a restart with every whole chunk it had. A server or mirror without
+    // chunk lists is read whole, resumable from the bytes already received.
     //
     // A server that answers 503 is busy, not broken: the request is asked again after the pause the
     // server names, for as long as the policy allows, without counting against the attempts. Only a
@@ -71,7 +76,7 @@ namespace Framework::Integrations::Client {
         // The partial a job's bytes collect in until they are verified; named by the expected hash so a
         // newer version of the file never resumes from an older one's bytes.
         static std::string PartialPath(const Job &job);
-        // Beside the partial of a chunked assembly: the indexes of the chunks already in place.
+        // Beside the partial of a chunked assembly: one "<offset> <length> <sha256>" per chunk in place.
         static std::string AssemblyNotePath(const Job &job);
 
         // Applies from the next Start.
@@ -136,9 +141,9 @@ namespace Framework::Integrations::Client {
             }
             void Register(httplib::Client *client);
             void Unregister(httplib::Client *client);
-            // Reads the answer's status, pacing and queue headers into the attempt; true when the body
-            // is the file's bytes.
-            bool NoteAnswer(int status, const std::string &retryAfter, const std::string &queuePosition, bool accepted);
+            // Reads an answer's status and queue header into the progress: a 503 is a wait for a slot,
+            // an accepted one the end of it.
+            void NoteAnswer(int status, const std::string &queuePosition, bool accepted);
         };
 
         // Whether a request succeeded, and if not, whether asking again could help and after how long.
@@ -159,17 +164,25 @@ namespace Framework::Integrations::Client {
         };
 
         static void Run(std::shared_ptr<Transfer> transfer, std::vector<Source> sources, std::vector<Job> jobs);
-        static bool FetchWithRetries(Transfer &transfer, const Source &source, const Job &job);
+        // reuseSearched is the job's: whether its older files were already searched for chunks.
+        static bool FetchWithRetries(Transfer &transfer, const Source &source, const Job &job, bool &reuseSearched);
         // Waits out a refusal or a failure before the next try; false once the policy or a cancel ends it.
         static bool WaitBeforeRetry(Transfer &transfer, const Source &source, const Job &job, const Attempt &result, int &failuresWithoutProgress, int64_t &queuedSinceMs);
         static Attempt Fetch(Transfer &transfer, const Source &source, const Job &job);
-        // The server's chunk list for the file, or empty when it has none (or is busy: the whole-file
-        // path then asks again).
-        static std::vector<std::string> FetchChunkList(Transfer &transfer, const Source &source, const Job &job);
-        static Attempt FetchChunked(Transfer &transfer, const Source &source, const Job &job, const std::vector<std::string> &chunks);
-        // One chunk over |client|, a connection the worker keeps across the chunks it fetches.
-        static Attempt FetchChunk(Transfer &transfer, httplib::Client &client, const std::string &path, const Source &source, const Job &job, uint64_t index, const std::string &sha256, std::vector<char> &data);
-        static Attempt Finish(Transfer &transfer, const Job &job, const std::string &partial, bool resumed);
+        // The source's chunk list for the file, asked again while it is busy or unreachable; empty
+        // when it has none or the file is no longer than one chunk.
+        static std::vector<Utils::StreamedAssets::Chunk> FetchChunkList(Transfer &transfer, const Source &source, const Job &job);
+        static Attempt FetchChunked(Transfer &transfer, const Source &source, const Job &job, const std::vector<Utils::StreamedAssets::Chunk> &chunks, bool &reuseSearched);
+        // The chunks |first| to |last|, neighbours in the file, in one request over |client|, a
+        // connection the worker keeps across the runs it fetches. Done when every byte came; |data|
+        // holds whatever did, and the caller keeps the whole chunks of it either way.
+        static Attempt FetchRun(Transfer &transfer, httplib::Client &client, const std::string &path, const Source &source, const Job &job, const std::vector<Utils::StreamedAssets::Chunk> &chunks, size_t first, size_t last, std::vector<char> &data);
+        // An assembly that is complete but not the file announced: the chunks not as written come
+        // again; if every one is, the list was not the file's and it is read whole.
+        static Attempt RepairAssembly(Transfer &transfer, const Job &job, const std::vector<Utils::StreamedAssets::Chunk> &chunks, const std::string &partial, const std::string &note);
+        static bool VerifyFile(Transfer &transfer, const Job &job, const std::string &partial);
+        // Moves the verified partial into the cache and writes its note.
+        static Attempt Install(Transfer &transfer, const Job &job, const std::string &partial);
 
         std::shared_ptr<Transfer> _transfer;
         RetryPolicy _retryPolicy;

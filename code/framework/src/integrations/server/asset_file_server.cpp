@@ -243,14 +243,31 @@ namespace Framework::Integrations::Server {
         }));
     }
 
+    namespace {
+        // A list beside the file is kept while it is newer than the file and still describes it;
+        // one of another shape (an older format, a write cut short) is made again.
+        bool HasCurrentChunkList(const std::filesystem::path &path, const std::filesystem::path &list) {
+            std::error_code code;
+            if (!std::filesystem::exists(list, code) || code || std::filesystem::last_write_time(list, code) < std::filesystem::last_write_time(path, code) || code) {
+                return false;
+            }
+            const auto size = std::filesystem::file_size(path, code);
+            if (code) {
+                return false;
+            }
+            std::ifstream in(list, std::ios::binary);
+            const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            std::vector<Utils::StreamedAssets::Chunk> chunks;
+            return Utils::StreamedAssets::ParseChunkList(text, size, chunks);
+        }
+    } // namespace
+
     void AssetFileServer::Publish(std::unordered_map<std::string, std::filesystem::path> files) {
         std::unordered_map<std::string, std::filesystem::path> lists;
         for (const auto &[name, path] : files) {
             const std::filesystem::path list = path.string() + ".chunks";
-            std::error_code code;
-            const bool stale = !std::filesystem::exists(list, code) || std::filesystem::last_write_time(list, code) < std::filesystem::last_write_time(path, code) || code;
-            if (stale) {
-                const std::vector<std::string> chunks = Utils::StreamedAssets::HashFileChunks(path.string());
+            if (!HasCurrentChunkList(path, list)) {
+                const std::vector<Utils::StreamedAssets::Chunk> chunks = Utils::StreamedAssets::HashFileChunks(path.string());
                 if (chunks.empty()) {
                     continue;
                 }

@@ -15,6 +15,7 @@
 #include "networking/network_server.h"
 #include "networking/rpc/server_resources.h"
 #include "utils/crypto.h"
+#include "utils/streamed_assets/pak_archive.h"
 #include "utils/streamed_assets/policy.h"
 #include "utils/streamed_assets/transfer.h"
 
@@ -302,7 +303,64 @@ namespace AssetHttpTest {
                 res.set_content(content, "application/octet-stream");
             };
         }
+
+        // Serves |content| by whatever range is asked, as a server would.
+        static Step Ranges(const std::string &content) {
+            return [content](const httplib::Request &, httplib::Response &res) {
+                res.set_content_provider(content.size(), "application/octet-stream", [content](size_t offset, size_t length, httplib::DataSink &sink) {
+                    return sink.write(content.data() + offset, length);
+                });
+            };
+        }
+
+        static bool IsChunkList(const httplib::Request &req) {
+            return req.path.size() > 7 && req.path.compare(req.path.size() - 7, 7, ".chunks") == 0;
+        }
     };
+
+    // |content| cut every kChunkSize, as a file that is not a pak is.
+    inline std::vector<Framework::Utils::StreamedAssets::Chunk> FixedChunks(const std::string &content) {
+        std::vector<Framework::Utils::StreamedAssets::Chunk> chunks;
+        const size_t size = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
+        for (size_t offset = 0; offset < content.size(); offset += size) {
+            const size_t length = std::min(size, content.size() - offset);
+            chunks.push_back({offset, length, Framework::Utils::Crypto::Sha256Hex(content.substr(offset, length))});
+        }
+        return chunks;
+    }
+
+    // A policy that stores every entry as is, so a pak's layout follows from its entries' sizes.
+    class StorePolicy final: public Framework::Utils::StreamedAssets::Policy {
+      public:
+        const std::vector<std::string> &GetLanes() const override {
+            static const std::vector<std::string> lanes = {"stream"};
+            return lanes;
+        }
+        bool NormalizeEntry(std::string_view, std::string_view, std::string_view raw, std::string &out, std::string &) const override {
+            out = std::string(raw);
+            return true;
+        }
+        bool PrefersStore(std::string_view) const override {
+            return true;
+        }
+    };
+
+    // Writes a pak of |entries| (path to bytes) at |pakPath| and returns its bytes.
+    inline std::string WritePak(const std::filesystem::path &pakPath, const std::vector<std::pair<std::string, std::string>> &entries) {
+        const std::filesystem::path sources = pakPath.parent_path() / (pakPath.filename().string() + ".src");
+        std::filesystem::create_directories(sources);
+        std::vector<Framework::Utils::StreamedAssets::PakSourceEntry> list;
+        for (const auto &[path, bytes] : entries) {
+            Fixture::Write(sources / path, bytes);
+            list.push_back({path, (sources / path).string()});
+        }
+        std::string error;
+        StorePolicy policy;
+        if (!Framework::Utils::StreamedAssets::PakArchive::Write(pakPath.string(), list, policy, error)) {
+            return {};
+        }
+        return Fixture::Read(pakPath);
+    }
 } // namespace AssetHttpTest
 
 MODULE(asset_http, {
@@ -1267,11 +1325,18 @@ MODULE(asset_http, {
         EQUALS(std::filesystem::exists(fixture.staging / "big.pak.chunks"), true);
         std::string body;
         EQUALS(fixture.Status("/files/big.pak.chunks", &body), 200);
-        std::vector<std::string> chunks;
+        std::vector<Framework::Utils::StreamedAssets::Chunk> chunks;
         EQUALS(Framework::Utils::StreamedAssets::ParseChunkList(body, content.size(), chunks), true);
         EQUALS(chunks.size(), 3u);
-        EQUALS(chunks[0] == Framework::Utils::Crypto::Sha256Hex(content.substr(0, static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize))), true);
-        EQUALS(chunks[2] == Framework::Utils::Crypto::Sha256Hex(content.substr(static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize * 2))), true);
+        EQUALS(chunks[0].sha256 == Framework::Utils::Crypto::Sha256Hex(content.substr(0, static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize))), true);
+        EQUALS(chunks[2].offset, Framework::Utils::StreamedAssets::kChunkSize * 2);
+        EQUALS(chunks[2].length, 10ull);
+        EQUALS(chunks[2].sha256 == Framework::Utils::Crypto::Sha256Hex(content.substr(static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize * 2))), true);
+        // A list of another shape beside the file is made again, not served.
+        AssetHttpTest::Fixture::Write(fixture.staging / "big.pak.chunks", "not a list\n");
+        fixture.files.Publish(published);
+        EQUALS(fixture.Status("/files/big.pak.chunks", &body), 200);
+        EQUALS(Framework::Utils::StreamedAssets::ParseChunkList(body, content.size(), chunks), true);
         // A queued peer still reads the list.
         AssetHttpTest::HeldSlot held(fixture, other);
         EQUALS(fixture.Status("/files/big.pak.chunks"), 200);
@@ -1326,25 +1391,27 @@ MODULE(asset_http, {
         const std::string content(chunk * 2 + 5, 'r');
         const auto job = fixture.Stage("resume.pak", content, published);
         fixture.files.Publish(published);
-        // Chunk 1 is in place and noted; chunk 0 and 2 are not.
+        // Chunk 1 is in place and noted; chunk 0 and 2 are not, nor is a chunk noted under another list's shape.
         std::string partial(content.size(), '\0');
         for (size_t i = chunk; i < chunk * 2; ++i) {
             partial[i] = 'r';
         }
         AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::PartialPath(job), partial);
-        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::AssemblyNotePath(job), "1\n");
+        const std::string middle = Framework::Utils::Crypto::Sha256Hex(content.substr(chunk, chunk));
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::AssemblyNotePath(job), std::to_string(chunk) + " " + std::to_string(chunk) + " " + middle + "\n0 " + std::to_string(chunk) + " " + std::string(64, 'f') + "\n");
 
         EQUALS(fixture.Run({job}), true);
         EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
         EQUALS(fixture.NoPartialsLeft(), true);
+        EQUALS(fixture.bytesDone, fixture.bytesTotal);
     });
 
     IT("falls back to reading a file whole when the source ignores ranges", {
         const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
         const std::string content(chunk * 2 + 1, 'w');
-        std::vector<std::string> chunks = {Framework::Utils::Crypto::Sha256Hex(content.substr(0, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk * 2))};
+        const auto chunks = AssetHttpTest::FixedChunks(content);
         AssetHttpTest::ScriptedServer scripted({[chunks, content](const httplib::Request &req, httplib::Response &res) {
-            if (req.path.size() > 7 && req.path.compare(req.path.size() - 7, 7, ".chunks") == 0) {
+            if (AssetHttpTest::ScriptedServer::IsChunkList(req)) {
                 res.set_content(Framework::Utils::StreamedAssets::FormatChunkList(chunks), "text/plain");
                 return;
             }
@@ -1362,23 +1429,30 @@ MODULE(asset_http, {
     });
 
     IT("parses only a chunk list that fits the file", {
+        using Framework::Utils::StreamedAssets::kChunkSize;
         using Framework::Utils::StreamedAssets::ParseChunkList;
         const std::string a(64, 'a');
         const std::string b(64, 'b');
-        std::vector<std::string> chunks;
-        EQUALS(ParseChunkList(a + "\n" + b + "\n", Framework::Utils::StreamedAssets::kChunkSize + 1, chunks), true);
+        const std::string whole = std::to_string(kChunkSize);
+        std::vector<Framework::Utils::StreamedAssets::Chunk> chunks;
+        EQUALS(ParseChunkList(whole + " " + a + "\n1 " + b + "\n", kChunkSize + 1, chunks), true);
         EQUALS(chunks.size(), 2u);
-        EQUALS(ParseChunkList(a + "\r\n" + b + "\r\n", Framework::Utils::StreamedAssets::kChunkSize * 2, chunks), true);
-        EQUALS(ParseChunkList(a + "\n", Framework::Utils::StreamedAssets::kChunkSize + 1, chunks), false);
-        EQUALS(ParseChunkList(a + "\n" + b + "\n", 10, chunks), false);
-        EQUALS(ParseChunkList("not a hash\n", 10, chunks), false);
+        EQUALS(chunks[1].offset, kChunkSize);
+        EQUALS(chunks[1].length, 1ull);
+        EQUALS(chunks[1].sha256 == b, true);
+        // Pieces of any length up to a chunk, in the order they lie; a blank line and a CR are nothing.
+        EQUALS(ParseChunkList("3 " + a + "\r\n\r\n7 " + b + "\r\n", 10, chunks), true);
+        EQUALS(chunks[1].offset, 3ull);
+        // Short of the file, past it, a piece longer than a chunk, a piece of nothing, a bad digest.
+        EQUALS(ParseChunkList(whole + " " + a + "\n", kChunkSize + 1, chunks), false);
+        EQUALS(ParseChunkList("6 " + a + "\n6 " + b + "\n", 10, chunks), false);
+        EQUALS(ParseChunkList(std::to_string(kChunkSize + 1) + " " + a + "\n", kChunkSize + 1, chunks), false);
+        EQUALS(ParseChunkList("0 " + a + "\n10 " + b + "\n", 10, chunks), false);
+        EQUALS(ParseChunkList("10 not a hash\n", 10, chunks), false);
+        EQUALS(ParseChunkList(a + "\n", 10, chunks), false);
         EQUALS(ParseChunkList("", 0, chunks), true);
         EQUALS(chunks.empty(), true);
-        EQUALS(Framework::Utils::StreamedAssets::ChunkCount(0), 0ull);
-        EQUALS(Framework::Utils::StreamedAssets::ChunkCount(1), 1ull);
-        EQUALS(Framework::Utils::StreamedAssets::ChunkCount(Framework::Utils::StreamedAssets::kChunkSize), 1ull);
-        EQUALS(Framework::Utils::StreamedAssets::ChunkCount(Framework::Utils::StreamedAssets::kChunkSize + 1), 2ull);
-        EQUALS(Framework::Utils::StreamedAssets::ChunkLength(Framework::Utils::StreamedAssets::kChunkSize + 5, 1), 5ull);
+        EQUALS(Framework::Utils::StreamedAssets::FormatChunkList({{0, 3, a}, {3, 7, b}}) == "3 " + a + "\n7 " + b + "\n", true);
     });
 
     IT("splits a download URL list on spaces and commas", {
@@ -1439,9 +1513,9 @@ MODULE(asset_http, {
     IT("fails a chunk that is cut every time instead of retrying for ever", {
         const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
         const std::string content(chunk * 2 + 1, 'k');
-        std::vector<std::string> chunks = {Framework::Utils::Crypto::Sha256Hex(content.substr(0, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk * 2))};
+        const auto chunks = AssetHttpTest::FixedChunks(content);
         AssetHttpTest::ScriptedServer scripted({[chunks, content](const httplib::Request &req, httplib::Response &res) {
-            if (req.path.size() > 7 && req.path.compare(req.path.size() - 7, 7, ".chunks") == 0) {
+            if (AssetHttpTest::ScriptedServer::IsChunkList(req)) {
                 res.set_content(Framework::Utils::StreamedAssets::FormatChunkList(chunks), "text/plain");
                 return;
             }
@@ -1467,9 +1541,9 @@ MODULE(asset_http, {
     IT("keeps its connection across the chunks of a file", {
         const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
         const std::string content(chunk * 2 + 1, 'k');
-        std::vector<std::string> chunks = {Framework::Utils::Crypto::Sha256Hex(content.substr(0, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk, chunk)), Framework::Utils::Crypto::Sha256Hex(content.substr(chunk * 2))};
+        const auto chunks = AssetHttpTest::FixedChunks(content);
         AssetHttpTest::ScriptedServer scripted({[chunks, content](const httplib::Request &req, httplib::Response &res) {
-            if (req.path.size() > 7 && req.path.compare(req.path.size() - 7, 7, ".chunks") == 0) {
+            if (AssetHttpTest::ScriptedServer::IsChunkList(req)) {
                 res.set_content(Framework::Utils::StreamedAssets::FormatChunkList(chunks), "text/plain");
                 return;
             }
@@ -1495,6 +1569,147 @@ MODULE(asset_http, {
         }
         EQUALS(scripted.requests.load(), 4);
         EQUALS(chunkPorts.size(), 1u);
+    });
+
+    IT("reuses the entries of an older pak after one of them grew", {
+        AssetHttpTest::Fixture fixture;
+        std::unordered_map<std::string, std::filesystem::path> published;
+        std::mt19937 random(7);
+        const auto bytes = [&random](size_t size) {
+            std::string out(size, '\0');
+            for (char &c : out) {
+                c = static_cast<char>(random());
+            }
+            return out;
+        };
+        // Three stored entries; the middle one grows by a byte, which moves the third and the central
+        // directory. Cut at entries, the first and the third are the same pieces at other offsets.
+        const std::string first  = bytes(1536 * 1024);
+        const std::string second = bytes(2048 * 1024);
+        const std::string third  = bytes(1536 * 1024);
+        const std::string older  = AssetHttpTest::WritePak(fixture.cache / "map.stream.0000000000000000.pak", {{"a.bin", first}, {"b.bin", second}, {"c.bin", third}});
+        const std::string newer  = AssetHttpTest::WritePak(fixture.staging / "map.stream.1111111111111111.pak", {{"a.bin", first}, {"b.bin", second + "!"}, {"c.bin", third}});
+        EQUALS(older.empty(), false);
+        EQUALS(newer.empty(), false);
+        EQUALS(newer.size() > Framework::Utils::StreamedAssets::kChunkSize, true);
+        published["map.stream.1111111111111111.pak"] = fixture.staging / "map.stream.1111111111111111.pak";
+        fixture.files.Publish(published);
+        Framework::Integrations::Client::AssetDownloader::Job job {"map.stream.1111111111111111.pak", (fixture.cache / "map.stream.1111111111111111.pak").string(), Framework::Utils::Crypto::Sha256Hex(newer), newer.size(),
+            {(fixture.cache / "map.stream.0000000000000000.pak").string()}};
+
+        EQUALS(fixture.Run({job}), true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == newer, true);
+        // Everything but the grown entry and the central directory came from the older pak: the
+        // two unchanged entries with their local headers.
+        const auto chunks = Framework::Utils::StreamedAssets::HashFileChunks(job.path);
+        EQUALS(chunks.size(), 4u);
+        EQUALS(fixture.downloader.GetBytesReused(), chunks[0].length + chunks[2].length);
+        EQUALS(fixture.downloader.GetBytesReused() > first.size() + third.size(), true);
+        EQUALS(fixture.bytesDone, fixture.bytesTotal);
+    });
+
+    IT("keeps the whole chunks of a cut run and goes on from the cut", {
+        const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
+        std::string content(chunk + 3000, 'c');
+        for (size_t i = 0; i < content.size(); ++i) {
+            content[i] = static_cast<char>('a' + i % 26);
+        }
+        // Three small chunks, one request between them, then one of a chunk's full length.
+        std::vector<Framework::Utils::StreamedAssets::Chunk> chunks;
+        for (size_t offset = 0; offset < content.size();) {
+            const size_t length = offset < 3000 ? 1000 : chunk;
+            chunks.push_back({offset, length, Framework::Utils::Crypto::Sha256Hex(content.substr(offset, length))});
+            offset += length;
+        }
+        const auto list = [chunks](const httplib::Request &, httplib::Response &res) {
+            res.set_content(Framework::Utils::StreamedAssets::FormatChunkList(chunks), "text/plain");
+        };
+        // The first run of three chunks is cut in its third: 2500 bytes, then the line drops.
+        const auto cut = [content](const httplib::Request &, httplib::Response &res) {
+            res.set_content_provider(content.size(), "application/octet-stream", [content](size_t offset, size_t, httplib::DataSink &sink) {
+                sink.write(content.data() + offset, 2500);
+                return false;
+            });
+        };
+        AssetHttpTest::ScriptedServer scripted({list, cut, AssetHttpTest::ScriptedServer::Ranges(content)});
+        NEQUALS(scripted.port, 0);
+        Framework::Integrations::Client::AssetDownloader::RetryPolicy policy = AssetHttpTest::FastRetries();
+        policy.attempts                                                      = 1;
+        policy.connections                                                   = 1;
+        scripted.downloader.SetRetryPolicy(policy);
+        const auto job = scripted.Job(content);
+        scripted.Start(job);
+        bool success = false;
+        EQUALS(scripted.Finish(success, std::chrono::seconds(20)), true);
+        EQUALS(success, true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+        // The two whole chunks stayed, so the cut spent no attempt of a budget of one and the next
+        // request began at the third chunk.
+        EQUALS(scripted.downloader.GetCuts(), 1u);
+        EQUALS(scripted.requests.load(), 4);
+        EQUALS(scripted.ranges[1] == "bytes=0-2999", true);
+        EQUALS(scripted.ranges[2] == "bytes=2000-2999", true);
+        EQUALS(scripted.ranges[3] == "bytes=3000-" + std::to_string(content.size() - 1), true);
+    });
+
+    IT("fetches again the chunks of an assembly that are not as written", {
+        const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
+        std::string content(chunk * 2 + 5, 'm');
+        for (size_t i = 0; i < content.size(); ++i) {
+            content[i] = static_cast<char>('a' + i % 26);
+        }
+        const auto chunks = AssetHttpTest::FixedChunks(content);
+        AssetHttpTest::ScriptedServer scripted({[chunks, content](const httplib::Request &req, httplib::Response &res) {
+            if (AssetHttpTest::ScriptedServer::IsChunkList(req)) {
+                res.set_content(Framework::Utils::StreamedAssets::FormatChunkList(chunks), "text/plain");
+                return;
+            }
+            AssetHttpTest::ScriptedServer::Ranges(content)(req, res);
+        }});
+        NEQUALS(scripted.port, 0);
+        const auto job = scripted.Job(content);
+        // The note says every chunk is in place; the middle one is not what was written.
+        std::string damaged = content;
+        damaged[chunk + 1]  = '#';
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::PartialPath(job), damaged);
+        std::string note;
+        for (const auto &piece : chunks) {
+            note += std::to_string(piece.offset) + " " + std::to_string(piece.length) + " " + piece.sha256 + "\n";
+        }
+        AssetHttpTest::Fixture::Write(Framework::Integrations::Client::AssetDownloader::AssemblyNotePath(job), note);
+
+        scripted.Start(job);
+        bool success = false;
+        EQUALS(scripted.Finish(success, std::chrono::seconds(20)), true);
+        EQUALS(success, true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+        // Only the damaged chunk came over the network.
+        EQUALS(scripted.requests.load(), 2);
+        EQUALS(scripted.ranges[1] == "bytes=" + std::to_string(chunk) + "-" + std::to_string(chunk * 2 - 1), true);
+        EQUALS(std::filesystem::exists(Framework::Integrations::Client::AssetDownloader::AssemblyNotePath(job)), false);
+    });
+
+    IT("reads a file whole when its chunk list is not the file's", {
+        const size_t chunk = static_cast<size_t>(Framework::Utils::StreamedAssets::kChunkSize);
+        const std::string content(chunk + 1, 'f');
+        const std::string other(chunk + 1, 'o');
+        // The list and the ranges describe another file of the same size; the whole read is the file.
+        const auto chunks = AssetHttpTest::FixedChunks(other);
+        AssetHttpTest::ScriptedServer scripted({[chunks, content, other](const httplib::Request &req, httplib::Response &res) {
+            if (AssetHttpTest::ScriptedServer::IsChunkList(req)) {
+                res.set_content(Framework::Utils::StreamedAssets::FormatChunkList(chunks), "text/plain");
+                return;
+            }
+            AssetHttpTest::ScriptedServer::Ranges(req.has_header("Range") ? other : content)(req, res);
+        }});
+        NEQUALS(scripted.port, 0);
+        const auto job = scripted.Job(content);
+        scripted.Start(job);
+        bool success = false;
+        EQUALS(scripted.Finish(success, std::chrono::seconds(20)), true);
+        EQUALS(success, true);
+        EQUALS(AssetHttpTest::Fixture::Read(job.path) == content, true);
+        EQUALS(scripted.ranges.back().empty(), true);
     });
 
     IT("reuses the chunks of the stale copy it replaces", {

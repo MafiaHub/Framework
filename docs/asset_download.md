@@ -31,25 +31,38 @@ pak never costs the player the join. The code is
    repeats the same transfer for the resources it changed, deferred paks
    included.
 
-## Chunks: a one-file edit costs one chunk
+## Chunks: a one-file edit costs that file
 
-The server writes `<name>.chunks` beside every file it publishes: one SHA-256
-per 4 MiB chunk (`Utils::StreamedAssets::kChunkSize`), reused across restarts
-while the file is unchanged. The client fetches the list, then assembles the
-file in a partial of its full size:
+The server writes `<name>.chunks` beside every file it publishes, one
+`<length> <sha256>` line per chunk in file order, reused across restarts while
+the file is unchanged. A pak is cut at its entries and at its central
+directory, a long entry every 4 MiB (`Utils::StreamedAssets::kChunkSize`), so
+an edit that grows or shrinks one entry moves the entries after it without
+changing their chunks; a file that is not a pak (a `.fwpak`) is cut every
+4 MiB. The client fetches the list, then assembles the file in a partial of
+its full size:
 
-- chunks an older file on disk already holds are copied from it: the stale
-  copy the file replaces, earlier versions of the same lane pak
+- chunks an older pak on disk already holds are copied from it, found by
+  hash wherever they lie in it: earlier versions of the same lane pak
   (`<resource>.<lane>.<otherhash>.pak`) in this server's cache, and the same
-  file in another server's cache (its name carries its hash, so the bytes are
-  the same);
-- the rest are fetched by `Range`, `RetryPolicy::connections` (4) at a time;
-- a note beside the partial records which chunks are in place, so a transfer
-  cut at any point resumes with what it has, in this session or a later one.
+  pak in another server's cache (its name carries its hash, so the bytes are
+  the same). The older paks are hashed once per file, whatever source serves
+  it. A `.fwpak` has nothing to reuse: its nonce is derived from its content,
+  so any change rewrites every byte of it;
+- the rest are fetched by `Range`, neighbouring chunks in one request of up
+  to 4 MiB, `RetryPolicy::connections` (4) requests at a time;
+- a note beside the partial records which chunks are in place, by offset,
+  length and hash, so a transfer cut at any point resumes with every whole
+  chunk it had, in this session or a later one. A cut costs the chunk it fell
+  in, not the request.
 
 The whole file is still verified against the announced SHA-256 before it is
-used. A source that answers a range with the whole file is taken for one
-without range support, and the file is read whole from it instead.
+used. If that fails, each chunk in place is checked against the list and the
+ones that are not as written (a crash between the data and the note) come
+again; if every chunk is as the list says, the list is not the file's and
+the file is read whole. A source that answers a range with the whole file is
+taken for one without range support, and the file is read whole from it
+instead.
 
 Paks the server no longer announces are pruned only once the transfer is
 through, since they are where the unchanged chunks come from.
