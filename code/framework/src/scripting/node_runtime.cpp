@@ -7,10 +7,24 @@
  */
 
 #include "node_runtime.h"
+#include "callback_scope.h"
 
 #include <utils/profiler.h>
 
 #include <fmt/format.h>
+
+namespace {
+    // Node's own scope on the runtime's environment, as Node opens around its callbacks and the platform's tasks:
+    // closing it runs the nextTick queue, the microtasks and the unhandled rejections. Node keeps the resource object
+    // by handle, so the caller's handle scope must outlive this, which every entry's does.
+    class NodeCallbackScope final: public Framework::Scripting::CallbackScope {
+      public:
+        NodeCallbackScope(node::Environment *env, v8::Isolate *isolate): _scope(env, v8::Object::New(isolate), {0, 0}) {}
+
+      private:
+        node::CallbackScope _scope;
+    };
+} // anonymous namespace
 
 namespace Framework::Scripting {
     namespace {
@@ -35,6 +49,12 @@ namespace Framework::Scripting {
         runtime->_isolate  = setup->isolate();
         runtime->_env      = setup->env();
         runtime->_setup    = std::move(setup);
+
+        // From here every entry into the runtime (a script, an event handler, another runtime's call) runs inside
+        // Node's scope, as its own callbacks do.
+        RegisterCallbackScope(runtime->_isolate, [env = runtime->_env, isolate = runtime->_isolate] {
+            return std::make_unique<NodeCallbackScope>(env, isolate);
+        });
 
         v8::Locker locker(runtime->_isolate);
         v8::Isolate::Scope isolateScope(runtime->_isolate);
@@ -80,6 +100,8 @@ namespace Framework::Scripting {
             return;
         }
 
+        UnregisterCallbackScope(_isolate);
+
         // Per embedtest.cc: stop with no V8 scope held, then let CommonEnvironmentSetup free the
         // environment (which stops its workers), dispose the isolate and close the loop.
         node::Stop(_env);
@@ -114,11 +136,8 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(_isolate);
         v8::Context::Scope contextScope(_setup->context());
 
-        // Process microtasks (Promise continuations, async/await)
-        {
-            FW_PROFILE_SCOPE_N("Scripting::Microtasks");
-            _isolate->PerformMicrotaskCheckpoint();
-        }
+        // Run what the calls since the last tick left queued
+        DrainTaskQueues();
 
         // Run pending libuv events (non-blocking): timers, I/O callbacks and setImmediate
         {
@@ -133,11 +152,18 @@ namespace Framework::Scripting {
             _platform->FlushForegroundTasks(_isolate);
         }
 
-        // Process any microtasks that were queued by I/O callbacks or platform tasks
-        {
-            FW_PROFILE_SCOPE_N("Scripting::Microtasks");
-            _isolate->PerformMicrotaskCheckpoint();
-        }
+        // Node's own callbacks and the platform's tasks drain on their way out; this catches what native code with no
+        // scope of its own queued meanwhile, such as an addon settling a promise from a libuv callback
+        DrainTaskQueues();
+    }
+
+    void NodeRuntime::DrainTaskQueues() {
+        // Declared first so the zone spans the drain, which runs as the scope below closes.
+        FW_PROFILE_SCOPE_N("Scripting::TaskQueues");
+        // A call that entered through raw V8, past the framework's entries, ran with no Node callback scope, so the
+        // process.nextTick callbacks it queued wait for one to close; a microtask checkpoint alone never runs them.
+        // Closing this empty scope runs the nextTick queue, the microtasks and pending unhandled rejections.
+        node::CallbackScope scope(_env, v8::Object::New(_isolate), {0, 0});
     }
 
 } // namespace Framework::Scripting

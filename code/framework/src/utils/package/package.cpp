@@ -166,8 +166,11 @@ namespace Framework::Utils::Package {
             return false;
         }
 
+        // Finalising hands the buffer over: mz_zip_writer_end no longer frees it.
         std::string payload(static_cast<const char *>(zipBuffer), zipSize);
-        mz_zip_writer_end(&zip); // frees zipBuffer
+        Crypto::SecureZero(zipBuffer, zipSize);
+        zip.m_pFree(zip.m_pAlloc_opaque, zipBuffer);
+        mz_zip_writer_end(&zip);
 
         if (payload.size() > kMaxPayloadSize) {
             Logging::GetLogger(FRAMEWORK_INNER_UTILS)->error("Package payload of {} bytes exceeds the {} byte limit", payload.size(), kMaxPayloadSize);

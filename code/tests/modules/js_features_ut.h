@@ -987,6 +987,40 @@ MODULE(js_features, {
         EventsTestHelper::Cleanup();
     });
 
+    // A reply settles the requester's promise as it is processed, and the continuation runs right then, inside
+    // ProcessPendingResponses. A continuation that requests again must find the request table unlocked.
+    IT("messages.request can be chained from a reply's continuation", {
+        EventsTestHelper::Setup();
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = EventsTestHelper::GetTestPath();
+        ResourceManager manager(&engine, config);
+        registerMessages(engine, manager);
+
+        manager.SetCurrentResourceContext("provider");
+        RunJS(engine, "Messages.handle('ping', (payload, reply) => { reply(payload + 1); }); 0");
+        manager.SetCurrentResourceContext("consumer");
+        RunJS(engine, R"(
+            globalThis.__chain = 0;
+            Messages.request('provider', 'ping', 1)
+                .then((v) => Messages.request('provider', 'ping', v))
+                .then((v) => { globalThis.__chain = v; }, () => { globalThis.__chain = -1; });
+            0
+        )");
+        pumpMessages(engine);
+        EQUALS(RunJS(engine, "globalThis.__chain"), 3);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            Messages::Shutdown();
+        }
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
     // ========================================
     // REGISTRATION SHAPE
     // ========================================

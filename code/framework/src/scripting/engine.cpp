@@ -7,6 +7,7 @@
  */
 
 #include "engine.h"
+#include "callback_scope.h"
 #include "engine_helpers.h"
 
 #include <logging/logger.h>
@@ -25,6 +26,10 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(isolate);
         v8::Local<v8::Context> context = GetContext();
         v8::Context::Scope contextScope(context);
+
+        // The script is a call from the host: what it queues runs as it returns. Opened outside the try/catch so a
+        // throwing nextTick callback is the runtime's uncaught error, not this script's failure.
+        const auto callbackScope = OpenCallbackScope(isolate);
 
         v8::TryCatch tryCatch(isolate);
 

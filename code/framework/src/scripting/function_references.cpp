@@ -7,6 +7,7 @@
  */
 
 #include "function_references.h"
+#include "callback_scope.h"
 #include "engine_helpers.h"
 #include "resource_monitor.h"
 
@@ -57,6 +58,13 @@ namespace Framework::Scripting {
             uint32_t caller = 0;
             bool keepValue  = true;
             v8::Global<v8::Promise::Resolver> resolver;
+
+            // Set once the owner's promise has settled: how, and with what, copied out of the owner. The owner's queue
+            // drains as the call leaves it, so a promise already resolved by then settles before the caller's promise
+            // exists; the outcome waits here for Invoke to make one.
+            bool settled   = false;
+            bool fulfilled = false;
+            TransferredValue outcome;
         };
 
         // Keeps an export alive for as long as a copy holding it exists.
@@ -71,15 +79,17 @@ namespace Framework::Scripting {
             }
         };
 
-        // Enters a runtime for the lifetime of the object, in the order V8 requires.
+        // Enters a runtime for the lifetime of the object, in the order V8 requires, inside its callback scope: what
+        // the stay queues there runs as the object goes, before the code that entered carries on.
         struct Entered {
-            explicit Entered(Runtime &runtime): locker(runtime.isolate), isolateScope(runtime.isolate), handleScope(runtime.isolate), context(runtime.context.Get(runtime.isolate)), contextScope(context) {}
+            explicit Entered(Runtime &runtime): locker(runtime.isolate), isolateScope(runtime.isolate), handleScope(runtime.isolate), context(runtime.context.Get(runtime.isolate)), contextScope(context), callbackScope(OpenCallbackScope(runtime.isolate)) {}
 
             v8::Locker locker;
             v8::Isolate::Scope isolateScope;
             v8::HandleScope handleScope;
             v8::Local<v8::Context> context;
             v8::Context::Scope contextScope;
+            std::unique_ptr<CallbackScope> callbackScope;
         };
 
         std::map<uint32_t, Runtime> runtimes;
@@ -461,6 +471,12 @@ namespace Framework::Scripting {
                     return {};
                 }
                 waiting->second->resolver.Reset(isolate, resolver);
+                // Settled already, as the owner's queue drained on the way out of the call: nothing left to wait for.
+                if (waiting->second->settled) {
+                    std::unique_ptr<Settlement> owned = std::move(waiting->second);
+                    settlements.erase(waiting);
+                    SettleIn(isolate, context, *owned);
+                }
                 return resolver->GetPromise();
             }
             if (!result) {
@@ -527,50 +543,73 @@ namespace Framework::Scripting {
             State &state             = *statePointer;
             const auto it            = state.settlements.find(key);
             if (it == state.settlements.end()) {
-                return; // Already settled, or its owner or caller has left.
+                return; // Already settled, or its owner has left.
             }
+            // Held while the value is copied: copying runs the owner's getters.
             std::unique_ptr<Settlement> owned = std::move(it->second);
             state.settlements.erase(it);
-
             const auto caller = state.runtimes.find(owned->caller);
-            if (owned->resolver.IsEmpty() || caller == state.runtimes.end()) {
-                return;
+            if (caller == state.runtimes.end()) {
+                return; // The caller has left: nobody to settle.
             }
             FW_PROFILE_SCOPE_N("Scripting::CrossSettle");
             FW_PROFILE_TEXT(caller->second.name.c_str(), caller->second.name.size());
 
             v8::Isolate *isolate       = info.GetIsolate();
             v8::Local<v8::Value> value = info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>();
-            TransferredValue copied;
+            owned->settled             = true;
+            owned->fulfilled           = fulfilled;
             if (fulfilled && owned->keepValue) {
                 auto result = ValueTransfer::Copy(isolate, isolate->GetCurrentContext(), value, *state.Hooks(owned->owner));
                 if (result) {
-                    copied = std::move(result).GetValue();
+                    owned->outcome = std::move(result).GetValue();
                 }
                 else {
-                    copied    = ErrorValue("Resolved value: " + result.GetError());
-                    fulfilled = false;
+                    owned->outcome   = ErrorValue("Resolved value: " + result.GetError());
+                    owned->fulfilled = false;
                 }
             }
             else if (!fulfilled) {
-                copied = state.CopyOut(isolate, isolate->GetCurrentContext(), value, *state.Hooks(owned->owner), "The promise was rejected");
+                owned->outcome = state.CopyOut(isolate, isolate->GetCurrentContext(), value, *state.Hooks(owned->owner), "The promise was rejected");
             }
 
-            // The copy above ran in the owner, which is ticking; rebuilding and resolving is the caller's.
+            // Settled as the call that awaits it leaves the owner: the caller's promise does not exist yet. Left here
+            // with its outcome for Invoke, which settles the promise as soon as it has made it.
+            if (owned->resolver.IsEmpty()) {
+                state.settlements.emplace(owned->key, std::move(owned));
+                return;
+            }
+            state.SettleCaller(*owned);
+        }
+
+        // Settles the caller's promise with the outcome the settlement carries, from outside the caller.
+        void SettleCaller(Settlement &settlement) {
+            const auto caller = runtimes.find(settlement.caller);
+            if (settlement.resolver.IsEmpty() || caller == runtimes.end()) {
+                return;
+            }
+            // The copy ran in the owner; rebuilding, resolving and the continuations that run as the caller is left
+            // are the caller's.
             ResourceMonitor::Scope charged(caller->second.isolate);
             Entered entered(caller->second);
-            v8::Local<v8::Promise::Resolver> resolver = owned->resolver.Get(caller->second.isolate);
-            v8::TryCatch tryCatch(caller->second.isolate);
+            SettleIn(caller->second.isolate, entered.context, settlement);
+        }
+
+        // Settles the caller's promise with the outcome the settlement carries, rebuilt in the caller, which is entered.
+        void SettleIn(v8::Isolate *isolate, v8::Local<v8::Context> context, Settlement &settlement) {
+            v8::Local<v8::Promise::Resolver> resolver = settlement.resolver.Get(isolate);
+            bool fulfilled                            = settlement.fulfilled;
+            v8::TryCatch tryCatch(isolate);
             v8::Local<v8::Value> rebuilt;
-            if (!ValueTransfer::Rebuild(caller->second.isolate, entered.context, copied, *state.Hooks(owned->caller)).ToLocal(&rebuilt)) {
+            if (!ValueTransfer::Rebuild(isolate, context, settlement.outcome, *Hooks(settlement.caller)).ToLocal(&rebuilt)) {
                 rebuilt   = tryCatch.Exception();
                 fulfilled = false;
             }
             if (fulfilled) {
-                resolver->Resolve(entered.context, rebuilt).Check();
+                resolver->Resolve(context, rebuilt).Check();
             }
             else {
-                resolver->Reject(entered.context, rebuilt).Check();
+                resolver->Reject(context, rebuilt).Check();
             }
         }
     };

@@ -9,6 +9,7 @@
 #include "node_engine.h"
 #include "builtins/builtins.h"
 #include "builtins/messages.h"
+#include "callback_scope.h"
 #include "engine_helpers.h"
 #include "resource/resource_manager.h"
 #include "scripting_catalog.h"
@@ -282,6 +283,7 @@ namespace Framework::Scripting {
             v8::HandleScope handleScope(isolate);
             v8::Local<v8::Context> context = _runtime->GetContext();
             v8::Context::Scope contextScope(context);
+            const auto callbackScope = OpenCallbackScope(isolate);
             _interruptDrainFn.Get(isolate)->Call(context, v8::Undefined(isolate), 0, nullptr).FromMaybe(v8::Local<v8::Value>());
         }
 #endif
