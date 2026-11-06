@@ -16,6 +16,9 @@
 #include <node.h>
 #include <uv.h>
 
+#include "runtime_sample.h"
+
+#include <chrono>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -62,18 +65,69 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> GetContext() const;
 
         /**
-         * Run microtasks, ready libuv callbacks and this isolate's platform tasks without blocking.
-         * Enters the isolate itself.
+         * Run the process.nextTick queue, microtasks, ready libuv callbacks and this isolate's platform tasks
+         * without blocking. Enters the isolate itself.
+         *
+         * A call that enters through one of the framework's entries (EngineScope, Engine::Execute, another runtime's
+         * call) runs inside Node's callback scope, so what it queues through process.nextTick or a promise runs as the
+         * call returns, as Node runs it. One made through raw V8 with no scope has that run here, on the next tick:
+         * two such calls in a row both finish before anything either queued.
          */
         void Tick();
 
+        // Names the runtime in profiler zones and GC messages (the resource, or "server").
+        void SetName(std::string name) {
+            _name = std::move(name);
+        }
+
+        const std::string &GetName() const {
+            return _name;
+        }
+
+        // Heap figures and the collector's running totals. Locks the isolate, so nothing may be running in it.
+        RuntimeSample Sample();
+
+        /**
+         * Run ready libuv callbacks once, without Tick()'s drains: Node's own callbacks drain on their way out.
+         * Enters the isolate itself.
+         */
+        void RunLoop();
+
+        /**
+         * The fd that is readable while the loop has I/O to run, or -1 where there is none (Windows).
+         */
+        int GetBackendFd() const;
+
+        /**
+         * Whether the loop has referenced handles or requests that can still produce work. uv_run does nothing for
+         * one that has not.
+         */
+        bool IsAlive() const;
+
+        /**
+         * Milliseconds until a live loop has a timer, immediate or pending callback to run (0: now), or -1 for none.
+         * Only meaningful while IsAlive(): libuv answers 0 for a loop with nothing to run.
+         */
+        int64_t MsUntilDue();
+
       private:
         NodeRuntime() = default;
+
+        static void OnGCPrologue(v8::Isolate *isolate, v8::GCType type, v8::GCCallbackFlags flags, void *data);
+        static void OnGCEpilogue(v8::Isolate *isolate, v8::GCType type, v8::GCCallbackFlags flags, void *data);
+
+        // The caller holds the locker and the isolate, handle and context scopes.
+        void DrainTaskQueues();
 
         node::MultiIsolatePlatform *_platform = nullptr;
         std::unique_ptr<node::CommonEnvironmentSetup> _setup;
         node::Environment *_env = nullptr;
         v8::Isolate *_isolate   = nullptr;
+        std::string _name       = "starting";
+        v8::GCType _gcType      = static_cast<v8::GCType>(0); // the pause in progress, or 0 outside one
+        std::chrono::steady_clock::time_point _gcStart;
+        uint64_t _gcPauses = 0;
+        double _gcPauseMs  = 0.0;
     };
 
 } // namespace Framework::Scripting

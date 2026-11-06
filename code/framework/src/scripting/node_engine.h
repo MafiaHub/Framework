@@ -16,10 +16,12 @@
 #include "engine.h"
 #include "function_references.h"
 #include "node_runtime.h"
+#include "resource_monitor.h"
 
 #include <node.h>
 #include <uv.h>
 
+#include <chrono>
 #include <map>
 #include <memory>
 #include <string>
@@ -97,9 +99,18 @@ namespace Framework::Scripting {
         void Tick() override;
 
         /**
+         * Run what becomes ready in any runtime until `deadline` - I/O completions, due timers and immediates - as soon
+         * as it is ready instead of at the next tick. The server calls this in place of sleeping between ticks. It starts
+         * no script in the last millisecond and sleeps that out, and returns early while an uncaught error waits in
+         * DrainPendingErrors(), so the error is handled before its runtime runs again.
+         */
+        void RunUntil(std::chrono::steady_clock::time_point deadline);
+
+        /**
          * Pending uncaught error from process.on('uncaughtException') or
-         * process.on('unhandledRejection'), queued during Tick() for
-         * deferred processing outside of V8/libuv callbacks.
+         * process.on('unhandledRejection'), queued while script runs in
+         * Tick() or RunUntil() for deferred processing outside of V8/libuv
+         * callbacks.
          */
         struct PendingUncaughtError {
             std::string resourceName;
@@ -117,7 +128,7 @@ namespace Framework::Scripting {
 
         /**
          * Drain pending uncaught errors. Returns and clears the queue.
-         * Call after Tick() to process errors outside of V8/libuv callbacks.
+         * Call after Tick() or RunUntil() to process errors outside of V8/libuv callbacks.
          */
         std::vector<PendingUncaughtError> DrainPendingErrors();
 
@@ -173,6 +184,18 @@ namespace Framework::Scripting {
         // The runtime a running resource executes in, or null. For diagnostics and tests.
         NodeRuntime *GetResourceRuntime(const std::string &resourceName) const;
 
+        // Script time, heap and collector cost of the engine's runtime and every resource's.
+        ResourceMonitor &GetMonitor() {
+            return _monitor;
+        }
+        std::vector<RuntimeStats> GetRuntimeStats() const {
+            return _monitor.Snapshot();
+        }
+
+        // Ends one server tick for the monitor, and samples the heaps once a second. The server calls it at the top of
+        // each tick, not from Tick(), which a resource starting or stopping pumps while it waits.
+        void CloseMonitorTick();
+
       private:
         bool InitializeNode();
         bool CreateEnvironment();
@@ -224,6 +247,14 @@ namespace Framework::Scripting {
         // Tick every resource runtime that is not executing further up the stack.
         void TickResourceRuntimes();
 
+        // Hand the monitor every idle runtime's heap and collector totals.
+        void SampleRuntimes();
+
+        // Run these runtimes' loops (null is the engine's own) until `stopAt`, unless script started or stopped resources.
+        void RunReady(const std::vector<ResourceRuntime *> &ready, uint64_t generation, std::chrono::steady_clock::time_point stopAt);
+
+        void SleepUntil(std::chrono::steady_clock::time_point until);
+
         NodeEngineOptions _options;
 
         static std::unique_ptr<node::MultiIsolatePlatform> _platform;
@@ -231,6 +262,8 @@ namespace Framework::Scripting {
         static bool _platformInitialized;
 
         std::unique_ptr<NodeRuntime> _runtime;
+
+        ResourceMonitor _monitor;
 
         // Calls and values between the engine's runtime and every resource's.
         std::unique_ptr<FunctionReferences> _references;
@@ -248,6 +281,14 @@ namespace Framework::Scripting {
 
         // Bumped whenever a resource runtime is created or destroyed, so a walk over them sees the change.
         uint64_t _runtimesGeneration = 0;
+
+#ifdef _WIN32
+        // std::this_thread::sleep_until can be held to the 15.6 ms system timer, most of a tick.
+        HANDLE _waitTimer = nullptr;
+#else
+        // RunUntil's poll() over the loops failed with something other than EINTR, which is said once.
+        bool _pollFailed = false;
+#endif
 
         // Cached JS function that calls setImmediate(()=>{}) each tick.
         // This serves two purposes for inspector CDP message processing:

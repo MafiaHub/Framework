@@ -81,6 +81,10 @@ namespace Framework::Integrations::Server {
         // Leave off in production.
         bool developmentMode = false;
 
+        // A script handler, listener, export call or resource tick that spends at least this long in its own
+        // script logs a warning naming the resource (server.json "slow-script-ms"; 0 turns the warnings off).
+        int32_t slowScriptWarnMs = 50;
+
         // What a resource's asset paks may carry, one lane per folder (`<resource>/<lane>/`). Null
         // ships none. See AssetPakBuilder.
         std::shared_ptr<const Utils::StreamedAssets::Policy> assetPakPolicy;
@@ -113,10 +117,16 @@ namespace Framework::Integrations::Server {
         int32_t bindPort;
         std::string bindPassword;
 
-        // http(s) base URL clients fetch resource packages and asset paks from (<url>/<file>), such as a
-        // CDN the operator mirrors the staged files to. Clients fall back to the game port. Empty: the
+        // http(s) base URLs clients fetch resource packages and asset paks from (<url>/<file>), such as
+        // CDNs the operator mirrors the staged files (and their .chunks lists) to; several are separated
+        // by whitespace or commas and tried in order. Clients fall back to the game port. Empty: the
         // game port only.
         std::string assetDownloadUrl;
+
+        // Connections admitted beyond maxPlayers to download and start resources: a player takes one of
+        // the maxPlayers slots only when it joins the world, so a join burst does not fill the server
+        // with downloads. 0 keeps every admitted connection on a player slot.
+        int32_t maxDownloading = 0;
 
         // Secret the resource package key is derived from (with modSlug). Empty: the server token
         // (bindSecretKey). Changing it changes every package hash, so clients download them again.
@@ -196,6 +206,9 @@ namespace Framework::Integrations::Server {
         std::chrono::steady_clock::time_point _nextTick {};
         std::chrono::steady_clock::time_point _lastHitchWarnAt {};
         uint32_t _suppressedHitches = 0;
+        // Script work run between ticks that came back past the tick's due time; warned about like a slow tick.
+        std::chrono::steady_clock::time_point _lastLateTickWarnAt {};
+        uint32_t _suppressedLateTicks = 0;
 
         InstanceOptions _opts;
 
@@ -220,6 +233,8 @@ namespace Framework::Integrations::Server {
         std::vector<Voice::TierChange> _voiceTierChanges;
         std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
         std::unordered_set<uint64_t> _readyPlayerGuids;
+        // Connections that joined the world (ClientJoin): the ones holding a player slot.
+        std::unordered_set<uint64_t> _joinedGuids;
 
         // Holds each authenticated connection until the playerConnecting handlers answer.
         ConnectionGate _connectionGate;

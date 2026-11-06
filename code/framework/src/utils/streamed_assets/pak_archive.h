@@ -58,5 +58,12 @@ namespace Framework::Utils::StreamedAssets {
          * in normalised form -- a pak that needs normalising was not written by a server.
          */
         static bool Validate(const std::string &pakPath, const Policy &policy, std::string_view lane, std::string_view resource, std::vector<PakEntry> &entries, std::string &error);
+
+        /**
+         * Where each entry begins and, last, where the central directory does, in file order: the
+         * places a transfer cuts the pak at, so that an edit leaves every piece after it intact.
+         * False when the file is not a readable zip.
+         */
+        static bool EntryOffsets(const std::string &pakPath, std::vector<std::uint64_t> &offsets);
     };
 } // namespace Framework::Utils::StreamedAssets

@@ -7,7 +7,11 @@
  */
 
 #include "function_references.h"
+#include "callback_scope.h"
 #include "engine_helpers.h"
+#include "resource_monitor.h"
+
+#include <utils/profiler.h>
 
 #include <v8pp/convert.hpp>
 
@@ -34,6 +38,7 @@ namespace Framework::Scripting {
             uint32_t runtime = 0;
             v8::Global<v8::Function> function;
             v8::Global<v8::Object> receiver;
+            std::string name; // the function's own: a function crosses as a value, and the monitor's slow reports need one
             uint32_t holds = 0;
         };
 
@@ -54,6 +59,13 @@ namespace Framework::Scripting {
             uint32_t caller = 0;
             bool keepValue  = true;
             v8::Global<v8::Promise::Resolver> resolver;
+
+            // Set once the owner's promise has settled: how, and with what, copied out of the owner. The owner's queue
+            // drains as the call leaves it, so a promise already resolved by then settles before the caller's promise
+            // exists; the outcome waits here for Invoke to make one.
+            bool settled   = false;
+            bool fulfilled = false;
+            TransferredValue outcome;
         };
 
         // Keeps an export alive for as long as a copy holding it exists.
@@ -68,15 +80,17 @@ namespace Framework::Scripting {
             }
         };
 
-        // Enters a runtime for the lifetime of the object, in the order V8 requires.
+        // Enters a runtime for the lifetime of the object, in the order V8 requires, inside its callback scope: what
+        // the stay queues there runs as the object goes, before the code that entered carries on.
         struct Entered {
-            explicit Entered(Runtime &runtime): locker(runtime.isolate), isolateScope(runtime.isolate), handleScope(runtime.isolate), context(runtime.context.Get(runtime.isolate)), contextScope(context) {}
+            explicit Entered(Runtime &runtime): locker(runtime.isolate), isolateScope(runtime.isolate), handleScope(runtime.isolate), context(runtime.context.Get(runtime.isolate)), contextScope(context), callbackScope(OpenCallbackScope(runtime.isolate)) {}
 
             v8::Locker locker;
             v8::Isolate::Scope isolateScope;
             v8::HandleScope handleScope;
             v8::Local<v8::Context> context;
             v8::Context::Scope contextScope;
+            std::unique_ptr<CallbackScope> callbackScope;
         };
 
         std::map<uint32_t, Runtime> runtimes;
@@ -180,6 +194,7 @@ namespace Framework::Scripting {
                 Export &entry = exports[id];
                 entry.runtime = runtime;
                 entry.function.Reset(isolate, function);
+                entry.name                   = DebugName(isolate, context, function);
                 v8::Local<v8::Value> idValue = v8::Number::New(isolate, static_cast<double>(id));
                 if (!methods.IsEmpty()) {
                     // Weak: the method needs its object only while the owner keeps it.
@@ -199,6 +214,21 @@ namespace Framework::Scripting {
             hold->id      = id;
             out.reference = id;
             out.retainer  = std::move(hold);
+        }
+
+        // The name a slow call reports the function by: its own, or the one Exports.register() gave it when it has none
+        // of its own, as an arrow function passed straight to register() has not.
+        static std::string DebugName(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Function> function) {
+            std::string name = ToUtf8(isolate, function->GetDebugName());
+            v8::Local<v8::Value> registered;
+            if (name.empty() && function->GetPrivate(context, ExportNameKey(isolate)).ToLocal(&registered) && registered->IsString()) {
+                name = ToUtf8(isolate, registered);
+            }
+            return name;
+        }
+
+        static v8::Local<v8::Private> ExportNameKey(v8::Isolate *isolate) {
+            return v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.exportName"));
         }
 
         // The table of methods an object has had exported, function to export id, kept on the object itself. Empty
@@ -344,7 +374,7 @@ namespace Framework::Scripting {
             v8::Global<v8::Function> function(ownerIsolate, exported.function);
             v8::Global<v8::Object> receiver(ownerIsolate, exported.receiver);
             v8::Local<v8::Value> result;
-            if (state.Invoke(caller, isolate, isolate->GetCurrentContext(), owner, function, copied, Returned::Value, receiver).ToLocal(&result)) {
+            if (state.Invoke(caller, isolate, isolate->GetCurrentContext(), owner, function, copied, Returned::Value, receiver, id).ToLocal(&result)) {
                 info.GetReturnValue().Set(result);
             }
         }
@@ -375,20 +405,27 @@ namespace Framework::Scripting {
 
         // Calls `function` inside `ownerId` with copied arguments and brings back what it returned or threw. The
         // caller holds its own scopes; on a throw the exception is pending there and the result is empty.
-        // `receiver`, when set, is the `this` the function runs with.
+        // `receiver`, when set, is the `this` the function runs with. `exportId` names an export call in the
+        // monitor's slow reports.
         v8::MaybeLocal<v8::Value> Invoke(uint32_t callerId, v8::Isolate *isolate, v8::Local<v8::Context> context, uint32_t ownerId, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments, Returned returned,
-            const v8::Global<v8::Object> &receiver = {}) {
+            const v8::Global<v8::Object> &receiver = {}, uint64_t exportId = 0) {
             const auto ownerIt = runtimes.find(ownerId);
             if (ownerIt == runtimes.end()) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
                 return {};
             }
-            Runtime &owner = ownerIt->second;
+            Runtime &owner                  = ownerIt->second;
+            v8::Isolate *const ownerIsolate = owner.isolate;
+            FW_PROFILE_SCOPE_N("Scripting::CrossCall");
+            FW_PROFILE_TEXT(owner.name.c_str(), owner.name.size());
 
             std::optional<TransferredValue> result;
             std::optional<TransferredValue> thrown;
-            uint64_t settlement = 0;
+            uint64_t settlement  = 0;
+            auto *monitor        = ResourceMonitor::Current();
+            const double charged = monitor ? monitor->ChargedMs(ownerIsolate, ResourceMonitor::Clock::now()) : 0.0;
             {
+                ResourceMonitor::Scope scope(ownerIsolate);
                 Entered entered(owner);
                 v8::TryCatch tryCatch(owner.isolate);
                 const auto ownerHooks = Hooks(ownerId);
@@ -426,6 +463,22 @@ namespace Framework::Scripting {
                     }
                 }
             }
+            // Event and message dispatch ask for an outcome and report their own handlers; an export call is reported
+            // here, under the export's name so one slow export does not hide the next one of the same owner and caller.
+            // The name is looked up only for a call that was slow: every export call passes here, and the export may
+            // have been released during the call.
+            if (monitor && returned == Returned::Value) {
+                const auto now     = ResourceMonitor::Clock::now();
+                const double ownMs = monitor->ChargedMs(ownerIsolate, now) - charged;
+                if (monitor->IsSlow(ownMs)) {
+                    std::string what = "export call from";
+                    if (exportId != 0) {
+                        const auto exported = exports.find(exportId);
+                        what                = "export '" + (exported != exports.end() ? exported->second.name : std::string("(since released)")) + "' called from";
+                    }
+                    monitor->ReportIfSlow(ownerIsolate, what, NameOf(callerId), ownMs, now);
+                }
+            }
 
             const auto hooks = Hooks(callerId);
             if (thrown) {
@@ -447,6 +500,12 @@ namespace Framework::Scripting {
                     return {};
                 }
                 waiting->second->resolver.Reset(isolate, resolver);
+                // Settled already, as the owner's queue drained on the way out of the call: nothing left to wait for.
+                if (waiting->second->settled) {
+                    std::unique_ptr<Settlement> owned = std::move(waiting->second);
+                    settlements.erase(waiting);
+                    SettleIn(isolate, context, *owned);
+                }
                 return resolver->GetPromise();
             }
             if (!result) {
@@ -513,46 +572,73 @@ namespace Framework::Scripting {
             State &state             = *statePointer;
             const auto it            = state.settlements.find(key);
             if (it == state.settlements.end()) {
-                return; // Already settled, or its owner or caller has left.
+                return; // Already settled, or its owner has left.
             }
+            // Held while the value is copied: copying runs the owner's getters.
             std::unique_ptr<Settlement> owned = std::move(it->second);
             state.settlements.erase(it);
-
             const auto caller = state.runtimes.find(owned->caller);
-            if (owned->resolver.IsEmpty() || caller == state.runtimes.end()) {
-                return;
+            if (caller == state.runtimes.end()) {
+                return; // The caller has left: nobody to settle.
             }
+            FW_PROFILE_SCOPE_N("Scripting::CrossSettle");
+            FW_PROFILE_TEXT(caller->second.name.c_str(), caller->second.name.size());
 
             v8::Isolate *isolate       = info.GetIsolate();
             v8::Local<v8::Value> value = info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>();
-            TransferredValue copied;
+            owned->settled             = true;
+            owned->fulfilled           = fulfilled;
             if (fulfilled && owned->keepValue) {
                 auto result = ValueTransfer::Copy(isolate, isolate->GetCurrentContext(), value, *state.Hooks(owned->owner));
                 if (result) {
-                    copied = std::move(result).GetValue();
+                    owned->outcome = std::move(result).GetValue();
                 }
                 else {
-                    copied    = ErrorValue("Resolved value: " + result.GetError());
-                    fulfilled = false;
+                    owned->outcome   = ErrorValue("Resolved value: " + result.GetError());
+                    owned->fulfilled = false;
                 }
             }
             else if (!fulfilled) {
-                copied = state.CopyOut(isolate, isolate->GetCurrentContext(), value, *state.Hooks(owned->owner), "The promise was rejected");
+                owned->outcome = state.CopyOut(isolate, isolate->GetCurrentContext(), value, *state.Hooks(owned->owner), "The promise was rejected");
             }
 
+            // Settled as the call that awaits it leaves the owner: the caller's promise does not exist yet. Left here
+            // with its outcome for Invoke, which settles the promise as soon as it has made it.
+            if (owned->resolver.IsEmpty()) {
+                state.settlements.emplace(owned->key, std::move(owned));
+                return;
+            }
+            state.SettleCaller(*owned);
+        }
+
+        // Settles the caller's promise with the outcome the settlement carries, from outside the caller.
+        void SettleCaller(Settlement &settlement) {
+            const auto caller = runtimes.find(settlement.caller);
+            if (settlement.resolver.IsEmpty() || caller == runtimes.end()) {
+                return;
+            }
+            // The copy ran in the owner; rebuilding, resolving and the continuations that run as the caller is left
+            // are the caller's.
+            ResourceMonitor::Scope charged(caller->second.isolate);
             Entered entered(caller->second);
-            v8::Local<v8::Promise::Resolver> resolver = owned->resolver.Get(caller->second.isolate);
-            v8::TryCatch tryCatch(caller->second.isolate);
+            SettleIn(caller->second.isolate, entered.context, settlement);
+        }
+
+        // Settles the caller's promise with the outcome the settlement carries, rebuilt in the caller, which is entered.
+        void SettleIn(v8::Isolate *isolate, v8::Local<v8::Context> context, Settlement &settlement) {
+            v8::Local<v8::Promise::Resolver> resolver = settlement.resolver.Get(isolate);
+            bool fulfilled                            = settlement.fulfilled;
+            v8::TryCatch tryCatch(isolate);
             v8::Local<v8::Value> rebuilt;
-            if (!ValueTransfer::Rebuild(caller->second.isolate, entered.context, copied, *state.Hooks(owned->caller)).ToLocal(&rebuilt)) {
+            if (!ValueTransfer::Rebuild(isolate, context, settlement.outcome, *Hooks(settlement.caller)).ToLocal(&rebuilt)) {
                 rebuilt   = tryCatch.Exception();
                 fulfilled = false;
             }
             if (fulfilled) {
-                resolver->Resolve(entered.context, rebuilt).Check();
+                resolver->Resolve(context, rebuilt).Check();
             }
             else {
-                resolver->Reject(entered.context, rebuilt).Check();
+                resolver->Reject(context, rebuilt).Check();
             }
         }
     };
@@ -688,10 +774,13 @@ namespace Framework::Scripting {
         }
         v8::Local<v8::Context> context = caller->GetCurrentContext();
         State::Runtime &ownerRuntime   = state.runtimes.at(ownerId);
+        FW_PROFILE_SCOPE_N("Scripting::CrossFetch");
+        FW_PROFILE_TEXT(ownerRuntime.name.c_str(), ownerRuntime.name.size());
 
         TransferredValue copied;
         std::string error;
         {
+            ResourceMonitor::Scope charged(owner);
             State::Entered entered(ownerRuntime);
             v8::TryCatch tryCatch(owner);
             v8::Local<v8::Value> value;
@@ -722,6 +811,10 @@ namespace Framework::Scripting {
 
     void FunctionReferences::ReleaseCollected() {
         _state->ReleaseCollected();
+    }
+
+    void FunctionReferences::NameExport(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Function> function, const std::string &name) {
+        (void)function->SetPrivate(context, State::ExportNameKey(isolate), v8pp::to_v8(isolate, name));
     }
 
     size_t FunctionReferences::GetExportCount() const {

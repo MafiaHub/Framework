@@ -109,6 +109,12 @@ namespace Framework::Scripting {
          */
         void ReleaseCollected();
 
+        /**
+         * Name a function registered as an export, for the resource monitor's slow reports: one with no name of its
+         * own, such as an arrow function passed straight to Exports.register(), is reported by this one.
+         */
+        static void NameExport(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Function> function, const std::string &name);
+
         // Diagnostics and tests: live exports, and stand-ins still tracked.
         size_t GetExportCount() const;
         size_t GetStandInCount() const;

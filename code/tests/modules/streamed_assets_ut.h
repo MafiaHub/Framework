@@ -13,6 +13,7 @@
 #include "utils/crypto.h"
 #include "utils/streamed_assets/pak_archive.h"
 #include "utils/streamed_assets/policy.h"
+#include "utils/streamed_assets/transfer.h"
 
 #include <mafianet/bit_stream.h>
 
@@ -76,6 +77,11 @@ MODULE(streamed_assets, {
     using StreamedAssetsTest::TestPolicy;
     using StreamedAssetsTest::WriteBytes;
 
+    IT("keeps every lane blocking unless a policy says otherwise", {
+        TestPolicy policy;
+        EQUALS(policy.LaneMayDefer("stream"), false);
+    });
+
     IT("writes deterministic paks the validator accepts and lists with CRCs", {
         TestPolicy policy;
         const auto root = Scratch("fw_streamed_pak");
@@ -91,6 +97,45 @@ MODULE(streamed_assets, {
         EQUALS(Framework::Utils::StreamedAssets::PakArchive::Validate((root / "one.pak").string(), policy, "stream", "demo", listed, error), true);
         UEQUALS(listed.size(), 2u);
         EQUALS(listed[0].path == "a.txt" && listed[0].size == 5000 && listed[0].crc32 != 0, true);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("cuts a pak at its entries so an edit leaves the pieces after it intact", {
+        using Framework::Utils::StreamedAssets::kChunkSize;
+        TestPolicy policy;
+        const auto root = Scratch("fw_streamed_chunks");
+        WriteBytes(root / "a.bin", 1000, 1);
+        WriteBytes(root / "b.txt", 5000, 2);
+        WriteBytes(root / "b2.txt", 7000, 5);
+        WriteBytes(root / "big.bin", static_cast<std::size_t>(kChunkSize) + 1, 4);
+        WriteBytes(root / "c.bin", 3000, 3);
+        std::string error;
+        // The second entry changes between the two; the one after it and the long one move.
+        EQUALS(Framework::Utils::StreamedAssets::PakArchive::Write((root / "v1.pak").string(), {{"a.bin", (root / "a.bin").string()}, {"b.txt", (root / "b.txt").string()}, {"big.bin", (root / "big.bin").string()}, {"c.bin", (root / "c.bin").string()}}, policy, error), true);
+        EQUALS(Framework::Utils::StreamedAssets::PakArchive::Write((root / "v2.pak").string(), {{"a.bin", (root / "a.bin").string()}, {"b.txt", (root / "b2.txt").string()}, {"big.bin", (root / "big.bin").string()}, {"c.bin", (root / "c.bin").string()}}, policy, error), true);
+
+        std::vector<std::uint64_t> offsets;
+        EQUALS(Framework::Utils::StreamedAssets::PakArchive::EntryOffsets((root / "v2.pak").string(), offsets), true);
+        UEQUALS(offsets.size(), 5u);
+        EQUALS(offsets[0], 0ull);
+        EQUALS(Framework::Utils::StreamedAssets::PakArchive::EntryOffsets((root / "a.bin").string(), offsets), false);
+
+        // a, b, the long entry in two, c, the central directory.
+        const auto v1 = Framework::Utils::StreamedAssets::HashFileChunks((root / "v1.pak").string());
+        const auto v2 = Framework::Utils::StreamedAssets::HashFileChunks((root / "v2.pak").string());
+        UEQUALS(v1.size(), 6u);
+        UEQUALS(v2.size(), 6u);
+        EQUALS(v2[0].sha256 == v1[0].sha256, true);
+        EQUALS(v2[1].sha256 != v1[1].sha256, true);
+        EQUALS(v2[2].length, kChunkSize);
+        EQUALS(v2[2].sha256 == v1[2].sha256 && v2[2].offset != v1[2].offset, true);
+        EQUALS(v2[3].sha256 == v1[3].sha256 && v2[3].length < 100, true);
+        EQUALS(v2[4].sha256 == v1[4].sha256 && v2[4].offset != v1[4].offset, true);
+        EQUALS(v2[5].sha256 != v1[5].sha256, true);
+        EQUALS(v2[5].offset + v2[5].length, std::filesystem::file_size(root / "v2.pak"));
+        // A file that is not a pak is cut every kChunkSize.
+        UEQUALS(Framework::Utils::StreamedAssets::HashFileChunks((root / "big.bin").string()).size(), 2u);
+        UEQUALS(Framework::Utils::StreamedAssets::HashFileChunks((root / "a.bin").string()).size(), 1u);
         std::filesystem::remove_all(root);
     });
 

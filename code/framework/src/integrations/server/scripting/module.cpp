@@ -9,6 +9,7 @@
 #include "module.h"
 
 #include <logging/logger.h>
+#include <utils/profiler.h>
 
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/chat.h>
@@ -25,6 +26,8 @@
 #include <scripting/event_metadata.h>
 #include <scripting/scripting_catalog.h>
 #include <scripting/timer_metadata.h>
+
+#include <thread>
 
 namespace Framework::Integrations::Server::Scripting {
 
@@ -168,15 +171,11 @@ namespace Framework::Integrations::Server::Scripting {
             // Process uncaught errors captured during Tick().
             // Deferred to here so HandleResourceRuntimeError can safely
             // stop/restart resources outside of V8/libuv callbacks.
-            if (_resourceManager) {
-                auto errors = _nodeEngine->DrainPendingErrors();
-                for (const auto &err : errors) {
-                    _resourceManager->HandleResourceRuntimeError(err.resourceName, err.errorMessage);
-                }
-            }
+            HandleRuntimeErrors();
         }
 
         if (_resourceManager) {
+            FW_PROFILE_SCOPE_N("Scripting::ResourceUpkeep");
             // Process scheduled restarts
             _resourceManager->ProcessScheduledRestarts();
             // Dev-mode: poll resource files and hot-reload on change
@@ -185,11 +184,32 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Process pending message responses
         if (_nodeEngine && _nodeEngine->IsInitialized() && _resourceManager) {
+            FW_PROFILE_SCOPE_N("Scripting::PendingResponses");
             Framework::Scripting::EngineScope scope(_nodeEngine.get());
             v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
 
             Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);
+        }
+    }
+
+    void ServerScriptingModule::WaitUntil(std::chrono::steady_clock::time_point deadline) {
+        if (!_nodeEngine || !_nodeEngine->IsInitialized()) {
+            std::this_thread::sleep_until(deadline);
+            return;
+        }
+        // RunUntil comes back early with an error waiting, so the resource is stopped or restarted before it runs on.
+        while (std::chrono::steady_clock::now() < deadline) {
+            _nodeEngine->RunUntil(deadline);
+            HandleRuntimeErrors();
+        }
+    }
+
+    void ServerScriptingModule::HandleRuntimeErrors() {
+        for (const auto &err : _nodeEngine->DrainPendingErrors()) {
+            if (_resourceManager) {
+                _resourceManager->HandleResourceRuntimeError(err.resourceName, err.errorMessage);
+            }
         }
     }
 

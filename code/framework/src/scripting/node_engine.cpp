@@ -9,16 +9,31 @@
 #include "node_engine.h"
 #include "builtins/builtins.h"
 #include "builtins/messages.h"
+#include "callback_scope.h"
 #include "engine_helpers.h"
 #include "resource/resource_manager.h"
 #include "scripting_catalog.h"
 
 #include <logging/logger.h>
+#include <utils/profiler.h>
 
 #include <algorithm>
 #include <filesystem>
+#include <thread>
+
+#ifdef _WIN32
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+#else
+#include <cstring>
+#include <poll.h>
+#endif
 
 namespace {
+    // Script started this close to the next tick could run into it.
+    constexpr auto kRunMargin = std::chrono::milliseconds(1);
+
     // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
     // Handles: backslash, single quote, newline, carriage return, and tab.
     std::string EscapeForSingleQuotedJSString(const std::string &input) {
@@ -91,6 +106,11 @@ namespace Framework::Scripting {
 
     NodeEngine::~NodeEngine() {
         Shutdown();
+#ifdef _WIN32
+        if (_waitTimer != nullptr) {
+            CloseHandle(_waitTimer);
+        }
+#endif
     }
 
     ScriptingError NodeEngine::Init() {
@@ -107,6 +127,12 @@ namespace Framework::Scripting {
         if (!CreateEnvironment()) {
             return ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
+
+#ifdef _WIN32
+        if (_waitTimer == nullptr) {
+            _waitTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+        }
+#endif
 
         _initialized = true;
         return ScriptingError::SCRIPTING_NONE;
@@ -149,6 +175,10 @@ namespace Framework::Scripting {
 
         // Drop cached builtin class wrappers before the isolate dies (avoids leak + stale reuse).
         Builtins::UnregisterAll(isolate);
+        _monitor.Untrack(isolate);
+        if (ResourceMonitor::Current() == &_monitor) {
+            ResourceMonitor::SetCurrent(nullptr);
+        }
 
         // Stops the environment with no V8 scope held, then disposes the isolate (embedtest.cc order).
         _runtime.reset();
@@ -216,6 +246,9 @@ namespace Framework::Scripting {
         if (!_runtime) {
             return false;
         }
+        _runtime->SetName("server");
+        _monitor.Track(_runtime->GetIsolate(), _runtime->GetName());
+        ResourceMonitor::SetCurrent(&_monitor);
 
         v8::Isolate *isolate = _runtime->GetIsolate();
         v8::Locker locker(isolate);
@@ -267,23 +300,31 @@ namespace Framework::Scripting {
         // safepoint) and activates Node's CheckImmediate uv_check handle,
         // which calls RunAndClearNativeImmediates → RunAndClearInterrupts.
         if (!_interruptDrainFn.IsEmpty()) {
+            FW_PROFILE_SCOPE_N("Scripting::InspectorDrain");
             v8::Isolate *isolate = _runtime->GetIsolate();
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
             v8::Local<v8::Context> context = _runtime->GetContext();
             v8::Context::Scope contextScope(context);
+            const auto callbackScope = OpenCallbackScope(isolate);
             _interruptDrainFn.Get(isolate)->Call(context, v8::Undefined(isolate), 0, nullptr).FromMaybe(v8::Local<v8::Value>());
         }
 #endif
 
-        StopExitedResources();
-        FlushRetiredRuntimes();
-        _references->ReleaseCollected();
+        {
+            FW_PROFILE_SCOPE_N("Scripting::RuntimeUpkeep");
+            StopExitedResources();
+            FlushRetiredRuntimes();
+            _references->ReleaseCollected();
+        }
 
         // A runtime that is executing further up this thread's stack is not ticked from inside itself: uv_run does
         // not nest.
         if (!_runtime->GetIsolate()->IsInUse()) {
+            FW_PROFILE_SCOPE_N("Scripting::Runtime");
+            FW_PROFILE_TEXT(_runtime->GetName().c_str(), _runtime->GetName().size());
+            ResourceMonitor::Scope charged(_monitor, _runtime->GetIsolate());
             _runtime->Tick();
         }
 
@@ -293,12 +334,40 @@ namespace Framework::Scripting {
         FlushRetiredRuntimes();
     }
 
+    void NodeEngine::CloseMonitorTick() {
+        const auto now = ResourceMonitor::Clock::now();
+        if (_monitor.SampleDue(now)) {
+            SampleRuntimes();
+        }
+        _monitor.EndTick(now);
+    }
+
+    void NodeEngine::SampleRuntimes() {
+        // A runtime executing further up the stack is skipped this second: its heap is read with nothing running in it.
+        if (!_runtime->GetIsolate()->IsInUse()) {
+            _monitor.Record(_runtime->GetIsolate(), _runtime->Sample());
+        }
+        for (const auto &[name, entry] : _resourceRuntimes) {
+            if (!entry->exited && !entry->runtime->GetIsolate()->IsInUse()) {
+                _monitor.Record(entry->runtime->GetIsolate(), entry->runtime->Sample());
+            }
+        }
+    }
+
     void NodeEngine::TickResourceRuntimes() {
         for (auto it = _resourceRuntimes.begin(); it != _resourceRuntimes.end();) {
             ResourceRuntime &entry    = *it->second;
             const uint64_t generation = _runtimesGeneration;
             if (!entry.exited && !entry.runtime->GetIsolate()->IsInUse()) {
-                entry.runtime->Tick();
+                FW_PROFILE_SCOPE_N("Scripting::Runtime");
+                FW_PROFILE_TEXT(entry.resourceName.c_str(), entry.resourceName.size());
+                v8::Isolate *isolate = entry.runtime->GetIsolate();
+                const double charged = _monitor.ChargedMs(isolate, ResourceMonitor::Clock::now());
+                {
+                    ResourceMonitor::Scope scope(_monitor, isolate);
+                    entry.runtime->Tick();
+                }
+                _monitor.ReportOwnTime(isolate, "timers, I/O and await continuations", {}, charged, ResourceMonitor::Clock::now());
             }
             if (generation == _runtimesGeneration) {
                 ++it;
@@ -308,6 +377,148 @@ namespace Framework::Scripting {
             // executing, so it was at most retired, not freed: its name still says where to carry on.
             it = _resourceRuntimes.upper_bound(entry.resourceName);
         }
+    }
+
+    void NodeEngine::RunUntil(std::chrono::steady_clock::time_point deadline) {
+        using Clock       = std::chrono::steady_clock;
+        const auto stopAt = deadline - kRunMargin;
+        // Which runtimes have a timer, immediate or callback due now, and which loops to wait on for I/O until one
+        // does. Kept across rounds: on Windows there is one every millisecond.
+        std::vector<ResourceRuntime *> due;
+        std::vector<ResourceRuntime *> watched;
+#ifdef _WIN32
+        auto visited = Clock::now();
+#else
+        std::vector<pollfd> fds;
+#endif
+        while (_initialized && _runtime && _pendingErrors.empty() && Clock::now() < stopAt) {
+            const uint64_t generation = _runtimesGeneration;
+            // How long until the next runtime has something due, if nothing has now.
+            int64_t waitMs = std::max<int64_t>(0, std::chrono::ceil<std::chrono::milliseconds>(stopAt - Clock::now()).count());
+            due.clear();
+            watched.clear();
+#ifndef _WIN32
+            fds.clear();
+#endif
+            const auto consider = [&](ResourceRuntime *entry, NodeRuntime &runtime) {
+                // uv_run does nothing for a loop with nothing referenced, whatever its timers or its fd say.
+                if (runtime.GetIsolate()->IsInUse() || !runtime.IsAlive()) {
+                    return;
+                }
+                const int64_t ms = runtime.MsUntilDue();
+                if (ms == 0) {
+                    due.push_back(entry);
+                    return;
+                }
+                if (ms > 0) {
+                    waitMs = std::min(waitMs, ms);
+                }
+                watched.push_back(entry);
+#ifndef _WIN32
+                fds.push_back({runtime.GetBackendFd(), POLLIN, 0});
+#endif
+            };
+            consider(nullptr, *_runtime);
+            for (const auto &[name, entry] : _resourceRuntimes) {
+                if (!entry->exited) {
+                    consider(entry.get(), *entry->runtime);
+                }
+            }
+
+            // Wait only while nothing is ready; I/O is still picked up between rounds of a runtime that stays busy.
+            const bool idle = due.empty();
+#ifdef _WIN32
+            // A Windows loop is a completion port, which cannot be waited on together with others or checked without
+            // taking its completions: visit the live loops every millisecond instead.
+            if (idle) {
+                SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(watched.empty() ? waitMs : std::min<int64_t>(waitMs, 1)), stopAt));
+            }
+            if (Clock::now() - visited >= std::chrono::milliseconds(1)) {
+                visited = Clock::now();
+                due.insert(due.end(), watched.begin(), watched.end());
+            }
+#else
+            // A loop's backend fd is readable while the loop has I/O to run, and polling it consumes nothing. With no
+            // fd to wait on, sleep instead: some macOS releases return from poll() at once for zero fds.
+            if (fds.empty()) {
+                if (idle) {
+                    SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(waitMs), stopAt));
+                }
+            }
+            else {
+                const int ready = poll(fds.data(), static_cast<nfds_t>(fds.size()), idle ? static_cast<int>(waitMs) : 0);
+                if (ready > 0) {
+                    for (size_t i = 0; i < fds.size(); ++i) {
+                        if (fds[i].revents != 0) {
+                            due.push_back(watched[i]);
+                        }
+                    }
+                }
+                else if (ready < 0 && errno != EINTR) {
+                    // Nothing about the fds changes before the tick, so a poll that fails outright would fail every
+                    // round: sleep the round out instead of spinning on it, and leave the I/O to the tick, as before.
+                    // Timers still set the wait.
+                    const int error = errno;
+                    if (!_pollFailed) {
+                        _pollFailed = true;
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("poll() over the script loops failed: {}. While it does, script I/O waits for the next tick", std::strerror(error));
+                    }
+                    if (idle) {
+                        SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(waitMs), stopAt));
+                    }
+                }
+            }
+#endif
+            RunReady(due, generation, stopAt);
+        }
+        if (_pendingErrors.empty()) {
+            SleepUntil(deadline);
+        }
+    }
+
+    void NodeEngine::RunReady(const std::vector<ResourceRuntime *> &ready, uint64_t generation, std::chrono::steady_clock::time_point stopAt) {
+        if (ready.empty()) {
+            return;
+        }
+        for (ResourceRuntime *entry : ready) {
+            // Script started or stopped resources: whatever is still ready is found on the next pass.
+            if (generation != _runtimesGeneration || std::chrono::steady_clock::now() >= stopAt) {
+                break;
+            }
+            NodeRuntime &runtime = entry != nullptr ? *entry->runtime : *_runtime;
+            if ((entry == nullptr || !entry->exited) && !runtime.GetIsolate()->IsInUse()) {
+                FW_PROFILE_SCOPE_N("Scripting::RunLoop");
+                FW_PROFILE_TEXT(runtime.GetName().c_str(), runtime.GetName().size());
+                // Charged as the tick's own loop run is. A live loop is visited every millisecond on Windows, so the
+                // charge is read back only when the visit itself lasted the slow threshold.
+                v8::Isolate *isolate = runtime.GetIsolate();
+                const auto start     = ResourceMonitor::Clock::now();
+                const double charged = _monitor.ChargedMs(isolate, start);
+                _monitor.Enter(isolate, start);
+                runtime.RunLoop();
+                const auto end = ResourceMonitor::Clock::now();
+                _monitor.Leave(end);
+                if (_monitor.IsSlow(std::chrono::duration<double, std::milli>(end - start).count())) {
+                    _monitor.ReportOwnTime(isolate, "timers, I/O and await continuations", {}, charged, end);
+                }
+            }
+        }
+        StopExitedResources();
+        FlushRetiredRuntimes();
+    }
+
+    void NodeEngine::SleepUntil(std::chrono::steady_clock::time_point until) {
+#ifdef _WIN32
+        // The timer runs on another clock and can fire a little before `until`.
+        for (auto now = std::chrono::steady_clock::now(); _waitTimer != nullptr && now < until; now = std::chrono::steady_clock::now()) {
+            LARGE_INTEGER due;
+            due.QuadPart = -static_cast<LONGLONG>(std::max<int64_t>(1, std::chrono::duration_cast<std::chrono::nanoseconds>(until - now).count() / 100));
+            if (!SetWaitableTimer(_waitTimer, &due, 0, nullptr, nullptr, FALSE) || WaitForSingleObject(_waitTimer, INFINITE) != WAIT_OBJECT_0) {
+                break;
+            }
+        }
+#endif
+        std::this_thread::sleep_until(until);
     }
 
     void NodeEngine::StopExitedResources() {
@@ -424,6 +635,7 @@ namespace Framework::Scripting {
         if (!entry->runtime) {
             return false;
         }
+        entry->runtime->SetName(resourceName);
 
         ResourceRuntime *runtime = entry.get();
         v8::Isolate *isolate     = runtime->runtime->GetIsolate();
@@ -452,6 +664,7 @@ namespace Framework::Scripting {
         _runtimeByIsolate[isolate]      = runtime;
         _resourceRuntimes[resourceName] = std::move(entry);
         ++_runtimesGeneration;
+        _monitor.Track(isolate, resourceName);
 
         // Uncaught errors in this runtime can only be this resource's; no stack to read.
         v8::Local<v8::Function> sink = v8::FunctionTemplate::New(isolate, OnResourceUncaughtError, v8::External::New(isolate, runtime))->GetFunction(context).ToLocalChecked();
@@ -506,6 +719,7 @@ namespace Framework::Scripting {
         Builtins::UnregisterAll(isolate);
         ClearScriptingCatalog(isolate);
         _runtimeByIsolate.erase(isolate);
+        _monitor.Untrack(isolate);
 
         // Frees the environment: its timers, handles and worker threads stop with it.
         runtime->runtime.reset();
@@ -538,6 +752,7 @@ namespace Framework::Scripting {
 
         // Entered, the runtime is the one GetIsolate() names, so the file runs in it.
         v8::Isolate *isolate = it->second->runtime->GetIsolate();
+        ResourceMonitor::Scope charged(_monitor, isolate);
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
         return ExecuteFile(filepath);

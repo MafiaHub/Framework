@@ -353,6 +353,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setInputDevice", v8pp::metadata::docs("void", {v8pp::metadata::param("name", "string", false, "A name from getInputDevices, or an empty string for the system default.")},
                                                                                                 "Chooses the microphone. A running microphone is reopened on the new device; a device that is no longer connected falls back to the default.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getInputDevice", v8pp::metadata::docs("string", {}, "Reads the chosen microphone.", "Its name, or an empty string for the system default.")));
+
+        auto &events = Framework::Scripting::GetScriptingCatalog(isolate).data_type("EventMap");
+        events.add_property("voiceStart", "[]", "Dispatched when the local player starts speaking, as isTalking turns true.");
+        events.add_property("voiceStop", "[]", "Dispatched when the local player stops speaking, as isTalking turns false.");
     }
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins

@@ -30,11 +30,15 @@ namespace Framework::Networking::RPC {
         std::string lane;
         std::string sha256;
         uint64_t size = 0;
+        // The join does not wait for it: fetched once the blocking paks are in and announced through
+        // OnResourceAssetPaksChanged when it lands (Utils::StreamedAssets::Policy::LaneMayDefer).
+        bool deferred = false;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, lane);
             bs->Serialize(write, sha256);
             bs->Serialize(write, size);
+            bs->Serialize(write, deferred);
         }
 
         bool IsSane() const {

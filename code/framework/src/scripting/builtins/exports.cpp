@@ -87,6 +87,11 @@ namespace Framework::Scripting::Builtins {
         // Set the isolate for the resource (needed for storing exports)
         currentResource->SetIsolate(isolate);
 
+        // A function registered directly is reported by this name when it has none of its own.
+        if (exportValue->IsFunction()) {
+            FunctionReferences::NameExport(isolate, isolate->GetCurrentContext(), exportValue.As<v8::Function>(), exportName);
+        }
+
         // Register the export
         bool registered = currentResource->RegisterExport(exportName, exportValue);
         if (!registered) {
