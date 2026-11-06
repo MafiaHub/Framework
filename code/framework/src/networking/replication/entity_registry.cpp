@@ -9,7 +9,6 @@
 #include "entity_registry.h"
 
 #include <logging/logger.h>
-#include <utils/hashing.h>
 
 #include <cassert>
 
@@ -17,10 +16,6 @@ namespace Framework::Networking::Replication {
     EntityRegistry &EntityRegistry::Get() {
         static EntityRegistry instance;
         return instance;
-    }
-
-    uint32_t EntityRegistry::TypeId(const std::string &name) const {
-        return Utils::Hashing::CalculateCRC32(name.c_str());
     }
 
     uint32_t EntityRegistry::Register(const std::string &name, Constructor constructor) {

@@ -14,7 +14,6 @@ set(FRAMEWORK_SRC
     src/utils/time.cpp
     src/utils/command_listener.cpp
     src/utils/command_processor.cpp
-    src/utils/hashing.cpp
     src/utils/crypto.cpp
     src/utils/vfs.cpp
     src/utils/package/package.cpp
@@ -190,7 +189,6 @@ if(WIN32)
     # Build the loader and it's data
     add_library(FrameworkLoader
         STATIC
-        src/utils/hashing.cpp
         src/launcher/gpu_preference.cpp
         src/launcher/project.cpp
         src/launcher/platforms/platforms.cpp

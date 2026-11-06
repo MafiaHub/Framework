@@ -23,6 +23,7 @@
 
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -33,18 +34,15 @@ namespace Framework::Networking {
 } // namespace Framework::Networking
 
 namespace Framework::Networking::Replication {
-    // Downcast a base NetworkEntity* to a concrete subclass. Uses RTTI where it
-    // is available; when a target is built with /GR- (RTTI disabled) it falls
-    // back to comparing the registered type id, which requires the concrete
-    // type to declare a kTypeName. Both paths are identical for the exact
-    // registered leaf type -- the id check just cannot see a base class.
+    // Downcast a base NetworkEntity* to a concrete subclass by comparing the registered type id
+    // against the compile-time id of T::kTypeName. This is an exact-type match, not an is-a test:
+    // it does not see base classes the way dynamic_cast would, and it does not need RTTI, so every
+    // target (including the /GR- client) resolves typed lookups the same way.
     template <typename T>
     inline T *CheckedEntityCast(NetworkEntity *entity) {
-#if defined(_CPPRTTI)
-        return dynamic_cast<T *>(entity);
-#else
-        return (entity != nullptr && entity->GetTypeId() == EntityRegistry::Get().TypeId(T::kTypeName)) ? static_cast<T *>(entity) : nullptr;
-#endif
+        static_assert(std::is_base_of_v<NetworkEntity, T>, "CheckedEntityCast<T>: T must derive from NetworkEntity");
+        constexpr uint32_t kId = EntityTypeId<T>();
+        return (entity != nullptr && entity->GetTypeId() == kId) ? static_cast<T *>(entity) : nullptr;
     }
 
     // Server-side transform send interval by distance from the viewer: every tick inside nearDistance,
@@ -160,7 +158,7 @@ namespace Framework::Networking::Replication {
         // the type id from T::kTypeName.
         template <typename T>
         T *CreateEntity() {
-            return CheckedEntityCast<T>(CreateEntity(EntityRegistry::Get().TypeId(T::kTypeName)));
+            return CheckedEntityCast<T>(CreateEntity(EntityTypeId<T>()));
         }
         template <typename T>
         T *GetEntity(MafiaNet::NetworkID networkId) const {

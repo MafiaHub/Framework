@@ -16,6 +16,7 @@
 #include "modules/connection_admission_ut.h"
 #include "modules/connection_gate_ut.h"
 #include "modules/delegation_ut.h"
+#include "modules/entity_registry_ut.h"
 #include "modules/gui_resources_ut.h"
 #include "modules/input_state_ut.h"
 #include "modules/interest_grid_ut.h"
@@ -94,6 +95,7 @@ int main() {
     UNIT_MODULE(interest_grid);
     UNIT_MODULE(input_state);
     UNIT_MODULE(delegation);
+    UNIT_MODULE(entity_registry);
     UNIT_MODULE(state_bag);
     UNIT_MODULE(state_bag_scripting);
     UNIT_MODULE(scripting_catalog);

@@ -10,10 +10,13 @@
 
 #include "network_entity.h"
 
+#include <utils/hashing.h>
+
 #include <function2/function2.hpp>
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 
@@ -42,7 +45,11 @@ namespace Framework::Networking::Replication {
         // Constructs an instance and stamps its typeId. Returns nullptr for an unknown id.
         NetworkEntity *Create(uint32_t typeId) const;
 
-        uint32_t TypeId(const std::string &name) const;
+        // The wire id of a type name: CRC32 of the bytes. Pure, so it is usable in constant
+        // expressions; EntityTypeId<T>() below is the zero-cost form for a known type.
+        static constexpr uint32_t TypeId(std::string_view name) {
+            return Utils::Hashing::CalculateCRC32(name);
+        }
 
       private:
         struct Entry {
@@ -57,5 +64,12 @@ namespace Framework::Networking::Replication {
         return Register(name, [] {
             return new T();
         });
+    }
+
+    // T's wire id, folded at compile time from T::kTypeName. A subclass that does not declare its
+    // own kTypeName inherits its parent's id, which is how a client-side leaf shares the server's.
+    template <typename T>
+    constexpr uint32_t EntityTypeId() {
+        return EntityRegistry::TypeId(std::string_view(T::kTypeName));
     }
 } // namespace Framework::Networking::Replication
