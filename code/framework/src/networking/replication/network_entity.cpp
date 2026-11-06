@@ -35,11 +35,11 @@ namespace Framework::Networking::Replication {
     } // namespace
 
     void NetworkEntity::Streaming::Forget(MafiaNet::PeerGuid guid) {
-        if (exceptGUID == guid) {
-            exceptGUID = MafiaNet::UNASSIGNED_PEER_GUID;
-        }
         if (!viewers) {
             return;
+        }
+        if (viewers->exceptFollowed == guid) {
+            viewers->exceptFollowed = MafiaNet::UNASSIGNED_PEER_GUID;
         }
         viewers->except.erase(guid);
         if (viewers->only) {

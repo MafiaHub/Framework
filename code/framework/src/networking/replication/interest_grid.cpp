@@ -214,7 +214,7 @@ namespace Framework::Networking::Replication {
         const auto observerWorld = viewer->GetVirtualWorld();
 
         // A private entity (targetGUID set) is only ever relevant to its target connection, and for
-        // that viewer the target stands in for the dimension gate. exceptGUID and viewers only narrow.
+        // that viewer the target stands in for the dimension gate. A viewer filter only narrows.
         const auto admits = [viewerGUID](const NetworkEntity *entity) {
             return entity->streaming.Admits(viewerGUID);
         };

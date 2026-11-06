@@ -212,6 +212,67 @@ namespace Framework::Networking::Replication {
         }
     }
 
+    void ReplicationManager::SetViewerFilter(NetworkEntity &entity, ViewerFilter filter) {
+        auto &current = entity.streaming.viewers;
+        const ViewerFilter none;
+        const ViewerFilter &before = current ? *current : none;
+        if (before == filter) {
+            return;
+        }
+        if (before.only.has_value() != filter.only.has_value()) {
+            ++_interestUrgentGeneration;
+        }
+        else {
+            const ViewerFilter *sides[] {&before, &filter};
+            for (const ViewerFilter *side : sides) {
+                if (side->only) {
+                    for (const MafiaNet::PeerGuid guid : *side->only) {
+                        InvalidateInterestOf(guid);
+                    }
+                }
+                for (const MafiaNet::PeerGuid guid : side->except) {
+                    InvalidateInterestOf(guid);
+                }
+                InvalidateInterestOf(side->exceptFollowed);
+            }
+        }
+        if (filter.Empty()) {
+            current.reset();
+        }
+        else {
+            current = std::make_unique<ViewerFilter>(std::move(filter));
+        }
+    }
+
+    void ReplicationManager::SetViewerAdmitted(NetworkEntity &entity, MafiaNet::PeerGuid guid, bool admitted) {
+        auto &viewers = entity.streaming.viewers;
+        if (!viewers) {
+            if (admitted) {
+                return;
+            }
+            viewers = std::make_unique<ViewerFilter>();
+        }
+        const bool wasAdmitted = viewers->Admits(guid);
+        if (admitted) {
+            viewers->except.erase(guid);
+            if (viewers->only) {
+                viewers->only->insert(guid);
+            }
+        }
+        else {
+            viewers->except.insert(guid);
+            if (viewers->only) {
+                viewers->only->erase(guid);
+            }
+        }
+        if (viewers->Admits(guid) != wasAdmitted) {
+            InvalidateInterestOf(guid);
+        }
+        if (viewers->Empty()) {
+            viewers.reset();
+        }
+    }
+
     void ReplicationManager::SetOwner(NetworkEntity *entity, MafiaNet::PeerGuid guid) {
         if (!entity) {
             return;

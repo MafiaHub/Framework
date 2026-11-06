@@ -428,7 +428,7 @@ MODULE(interest_grid, {
         EQUALS(out.contains(doomed), false);
     });
 
-    IT("narrows an entity to the connections its viewer filter and exceptGUID admit", {
+    IT("narrows an entity to the connections its viewer filter admits", {
         using Framework::Networking::Replication::ViewerFilter;
         InterestGrid grid;
         freshGrid(grid);
@@ -450,13 +450,13 @@ MODULE(interest_grid, {
             return out.contains(entity);
         };
 
-        nearby->streaming.exceptGUID = strangerGuid;
+        nearby->streaming.viewers                 = std::make_unique<ViewerFilter>();
+        nearby->streaming.viewers->exceptFollowed = strangerGuid;
         EQUALS(sees(nearby), true);
-        nearby->streaming.exceptGUID = viewerGuid;
+        nearby->streaming.viewers->exceptFollowed = viewerGuid;
         EQUALS(sees(nearby), false);
-        nearby->streaming.exceptGUID = MafiaNet::UNASSIGNED_PEER_GUID;
+        nearby->streaming.viewers->exceptFollowed = MafiaNet::UNASSIGNED_PEER_GUID;
 
-        nearby->streaming.viewers = std::make_unique<ViewerFilter>();
         nearby->streaming.viewers->only.emplace();
         EQUALS(sees(nearby), false); // an empty showTo is nobody, not everyone
         nearby->streaming.viewers->only->insert(viewerGuid);
@@ -469,10 +469,10 @@ MODULE(interest_grid, {
         EQUALS(sees(global), false);
 
         // A closed connection leaves nothing behind: the next one to hold that guid starts clean.
-        nearby->streaming.exceptGUID = viewerGuid;
+        nearby->streaming.viewers->exceptFollowed = viewerGuid;
         nearby->streaming.Forget(viewerGuid);
         global->streaming.Forget(viewerGuid);
-        EQUALS(nearby->streaming.exceptGUID == MafiaNet::UNASSIGNED_PEER_GUID, true);
+        EQUALS(nearby->streaming.viewers->exceptFollowed == MafiaNet::UNASSIGNED_PEER_GUID, true);
         EQUALS(nearby->streaming.viewers->only->empty(), true);
         EQUALS(global->streaming.viewers == nullptr, true);
         EQUALS(sees(global), true);

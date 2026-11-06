@@ -68,7 +68,7 @@ namespace Framework::Networking::Replication::Entities {
         // sent ownPosition instead; detaching puts both back.
         glm::vec3 ownPosition    = glm::vec3(0.0f);
         uint32_t ownVirtualWorld = 0;
-        // Server only: the player it is attached to is not sent it (streaming.exceptGUID).
+        // Server only: the player it is attached to is not sent it (ViewerFilter::exceptFollowed).
         bool hideForTarget = false;
 
         // The full look. Colours are 0xAARRGGBB; a colour with zero alpha turns its part off.

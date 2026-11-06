@@ -260,21 +260,22 @@ namespace Framework::Networking::Replication {
         }
 
         // Bumped by a change every viewer must see before its next phase: a destroyed entity (a cached
-        // set must never hand it out), a rebuild caused by creation or destruction, or
-        // InvalidateAllInterest.
+        // set must never hand it out), a rebuild caused by creation or destruction, or a viewer filter
+        // switching `only` on or off.
         uint32_t InterestUrgentGeneration() const {
             return _interestUrgentGeneration;
         }
-        // Server: who may see an entity changed without anything moving (a viewer filter, say), so every
-        // viewer re-queries on its next pass. Prefer InvalidateInterestOf when the change names players.
-        void InvalidateAllInterest() {
-            ++_interestUrgentGeneration;
-        }
-        // Makes the connection of this peer, if any, refresh its interest on its next query.
-        void InvalidateInterestOf(MafiaNet::PeerGuid guid);
         uint32_t InterestRefreshInterval() const {
             return _interestRebuildInterval;
         }
+
+        // Server: who may be sent an entity. The change reaches the viewers it concerns before their
+        // next refresh phase: the players either filter names, or everyone if `only` is switched on or
+        // off. An identical filter concerns nobody.
+        void SetViewerFilter(NetworkEntity &entity, ViewerFilter filter);
+        // One connection in or out, without copying the filter: false puts it in `except` and takes it
+        // off `only`, true undoes both, adding it to `only` while there is one.
+        void SetViewerAdmitted(NetworkEntity &entity, MafiaNet::PeerGuid guid, bool admitted);
 
         // Server: transform rate bands, default and per-type override.
         void SetSerializeRateBands(const SerializeRateBands &bands) {
@@ -325,6 +326,9 @@ namespace Framework::Networking::Replication {
         void DeallocConnection(MafiaNet::Connection_RM3 *connection) const override;
 
       private:
+        // Makes the connection of this peer, if any, refresh its interest on its next query.
+        void InvalidateInterestOf(MafiaNet::PeerGuid guid);
+
         bool _isServer                 = false;
         bool _batchTransforms          = false;
         bool _networkUpdateActive      = false;

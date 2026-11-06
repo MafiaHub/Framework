@@ -344,4 +344,75 @@ MODULE(text_label, {
         manager->OnClosedConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guids[1], MafiaNet::LCR_CONNECTION_LOST);
         EQUALS((label->streaming.viewers == nullptr), true);
     });
+
+    IT("a replaced viewer filter re-queries the players it names, and everyone when only is switched", {
+        using Framework::Networking::Replication::ViewerFilter;
+        TextLabelWorld world;
+        auto *manager = world.Manager();
+        const MafiaNet::RakNetGUID guids[] {MafiaNet::RakNetGUID(91), MafiaNet::RakNetGUID(92)};
+        NetworkEntity *players[2];
+        for (int i = 0; i < 2; ++i) {
+            players[i]            = manager->CreateEntity(world.targetType);
+            players[i]->ownerGUID = MafiaNet::ToPeerGuid(guids[i]);
+            manager->SetViewer(players[i]->ownerGUID, players[i]);
+        }
+        auto *label = manager->CreateEntity<TextLabelEntity>();
+        auto *prop  = manager->CreateEntity(world.targetType);
+        manager->RebuildInterest();
+        for (const auto &guid : guids) {
+            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+        }
+        constexpr uint32_t kFarInterval = 1000000;
+        manager->SetInterestRebuildInterval(kFarInterval);
+        const auto sees = [&](int player, NetworkEntity *entity) {
+            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
+            DataStructures::List<MafiaNet::Replica3 *> create, destroy;
+            connection->QueryReplicaList(create, destroy);
+            for (unsigned int i = 0; i < create.Size(); ++i) {
+                if (create[i] == entity) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        // The prop moves without anyone being told: only a player who re-queries notices.
+        const auto moveProp = [&](float x) {
+            prop->position.x = x;
+            manager->SetInterestRebuildInterval(0);
+            manager->RebuildInterest();
+            manager->SetInterestRebuildInterval(kFarInterval);
+        };
+        EQUALS(sees(0, prop), true);
+        EQUALS(sees(1, prop), true);
+
+        moveProp(2000.0f);
+        manager->SetViewerFilter(*label, ViewerFilter {});
+        EQUALS(sees(0, prop), true); // no filter to no filter concerns nobody
+        EQUALS(sees(1, prop), true);
+
+        ViewerFilter hideSecond;
+        hideSecond.except.insert(players[1]->ownerGUID);
+        manager->SetViewerFilter(*label, hideSecond);
+        EQUALS(sees(1, label), false);
+        EQUALS(sees(1, prop), false); // named, so it re-queried
+        EQUALS(sees(0, label), true);
+        EQUALS(sees(0, prop), true); // not named, so it kept its phase
+
+        moveProp(0.0f);
+        manager->SetViewerFilter(*label, hideSecond);
+        EQUALS(sees(1, prop), false); // the same filter again concerns nobody
+
+        moveProp(2000.0f);
+        ViewerFilter onlyFirst;
+        onlyFirst.only.emplace();
+        onlyFirst.only->insert(players[0]->ownerGUID);
+        manager->SetViewerFilter(*label, onlyFirst);
+        EQUALS(sees(0, label), true);
+        EQUALS(sees(0, prop), false); // switching only on reaches a player it does not change
+        EQUALS(sees(1, label), false);
+
+        manager->SetViewerFilter(*label, ViewerFilter {});
+        EQUALS((label->streaming.viewers == nullptr), true);
+        EQUALS(sees(1, label), true);
+    });
 });

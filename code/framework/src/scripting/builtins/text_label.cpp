@@ -534,10 +534,12 @@ namespace Framework::Scripting::Builtins {
             if (label.hideForTarget && target && replication.GetViewer(target->ownerGUID) == target) {
                 hidden = target->ownerGUID;
             }
-            if (label.streaming.exceptGUID != hidden) {
-                replication.InvalidateInterestOf(label.streaming.exceptGUID);
-                replication.InvalidateInterestOf(hidden);
-                label.streaming.exceptGUID = hidden;
+            // Runs every tick for an attached label, so nothing is copied unless it changed.
+            const auto *viewers = label.streaming.viewers.get();
+            if ((viewers ? viewers->exceptFollowed : MafiaNet::UNASSIGNED_PEER_GUID) != hidden) {
+                Networking::Replication::ViewerFilter next = viewers ? *viewers : Networking::Replication::ViewerFilter {};
+                next.exceptFollowed                        = hidden;
+                replication.SetViewerFilter(label, std::move(next));
             }
         }
 
@@ -550,51 +552,22 @@ namespace Framework::Scripting::Builtins {
             HideFromTarget(replication, label, &target);
         }
 
-        const std::unordered_set<MafiaNet::PeerGuid> kNoPlayers;
-
-        // Re-queries the players in exactly one of the two sets: those a change between them concerns.
-        void InvalidateChanged(Networking::Replication::ReplicationManager &replication, const std::unordered_set<MafiaNet::PeerGuid> &before, const std::unordered_set<MafiaNet::PeerGuid> &after) {
-            for (const MafiaNet::PeerGuid guid : before) {
-                if (!after.contains(guid)) {
-                    replication.InvalidateInterestOf(guid);
-                }
-            }
-            for (const MafiaNet::PeerGuid guid : after) {
-                if (!before.contains(guid)) {
-                    replication.InvalidateInterestOf(guid);
-                }
-            }
-        }
-
-        // Replaces the showTo and/or hideFrom halves of a label's viewer filter. Only the players it
-        // admits differently re-query, unless showTo is switched on or off, which concerns everyone.
+        // Replaces the showTo and/or hideFrom halves of a label's viewer filter.
         void ApplyViewers(Networking::Replication::ReplicationManager &replication, Networking::Replication::Entities::TextLabelEntity &label, const Options &options) {
-            auto &viewers = label.streaming.viewers;
-            if (!viewers) {
-                viewers = std::make_unique<Networking::Replication::ViewerFilter>();
-            }
-            const Networking::Replication::ViewerFilter before = *viewers;
+            const auto *viewers                        = label.streaming.viewers.get();
+            Networking::Replication::ViewerFilter next = viewers ? *viewers : Networking::Replication::ViewerFilter {};
             if (options.showTo) {
                 if (options.showTo->has_value()) {
-                    viewers->only.emplace(options.showToGuids.begin(), options.showToGuids.end());
+                    next.only.emplace(options.showToGuids.begin(), options.showToGuids.end());
                 }
                 else {
-                    viewers->only.reset();
+                    next.only.reset();
                 }
             }
             if (options.hideFrom) {
-                viewers->except = std::unordered_set<MafiaNet::PeerGuid>(options.hideFromGuids.begin(), options.hideFromGuids.end());
+                next.except = std::unordered_set<MafiaNet::PeerGuid>(options.hideFromGuids.begin(), options.hideFromGuids.end());
             }
-            if (before.only.has_value() != viewers->only.has_value()) {
-                replication.InvalidateAllInterest();
-            }
-            else {
-                InvalidateChanged(replication, before.only ? *before.only : kNoPlayers, viewers->only ? *viewers->only : kNoPlayers);
-                InvalidateChanged(replication, before.except, viewers->except);
-            }
-            if (viewers->Empty()) {
-                viewers.reset();
-            }
+            replication.SetViewerFilter(label, std::move(next));
         }
 
         void ApplyOptions(TextLabel &handle, Networking::Replication::Entities::TextLabelEntity &label, const Options &options) {
@@ -959,32 +932,7 @@ namespace Framework::Scripting::Builtins {
         if (!label) {
             return;
         }
-        auto &viewers = label->streaming.viewers;
-        if (!viewers) {
-            if (visible) {
-                return;
-            }
-            viewers = std::make_unique<Networking::Replication::ViewerFilter>();
-        }
-        const bool admitted = viewers->Admits(guid);
-        if (visible) {
-            viewers->except.erase(guid);
-            if (viewers->only) {
-                viewers->only->insert(guid);
-            }
-        }
-        else {
-            viewers->except.insert(guid);
-            if (viewers->only) {
-                viewers->only->erase(guid);
-            }
-        }
-        if (viewers->Admits(guid) != admitted) {
-            CoreModules::GetReplication()->InvalidateInterestOf(guid);
-        }
-        if (viewers->Empty()) {
-            viewers.reset();
-        }
+        CoreModules::GetReplication()->SetViewerAdmitted(*label, guid, visible);
     }
 
     void TextLabel::SetHideForTarget(bool hide) {

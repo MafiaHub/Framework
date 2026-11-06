@@ -205,14 +205,19 @@ namespace Framework::Networking::Replication {
     struct ViewerFilter {
         std::optional<std::unordered_set<MafiaNet::PeerGuid>> only; // set: just these, and empty means nobody
         std::unordered_set<MafiaNet::PeerGuid> except;
+        // The player the entity follows, derived from what it is attached to: apart from except, which
+        // a script replaces whole.
+        MafiaNet::PeerGuid exceptFollowed = MafiaNet::UNASSIGNED_PEER_GUID;
 
         bool Admits(MafiaNet::PeerGuid guid) const {
-            return (!only || only->contains(guid)) && !except.contains(guid);
+            return (!only || only->contains(guid)) && !except.contains(guid) && exceptFollowed != guid;
         }
 
         bool Empty() const {
-            return !only && except.empty();
+            return !only && except.empty() && exceptFollowed == MafiaNet::UNASSIGNED_PEER_GUID;
         }
+
+        bool operator==(const ViewerFilter &) const = default;
     };
 
     // A replicated game object. Game entities derive from this and override SerializeFields (per-tick
@@ -281,11 +286,10 @@ namespace Framework::Networking::Replication {
             bool isViewer                 = false;                          // drives a connection's interest set (the player's avatar); replicated
             float range                   = 100.0f;                         // interest radius (world units): a viewer's reach, and an entity's own (see InterestGrid::SetUsesEntityRange)
             MafiaNet::PeerGuid targetGUID = MafiaNet::UNASSIGNED_PEER_GUID; // if set, streams only to this connection
-            MafiaNet::PeerGuid exceptGUID = MafiaNet::UNASSIGNED_PEER_GUID; // if set, never streams to this connection
-            std::unique_ptr<ViewerFilter> viewers;                          // if set, streams only to the connections it admits
+            std::unique_ptr<ViewerFilter> viewers;                          // if set, streams only to the connections it admits; see ReplicationManager::SetViewerFilter
 
             bool Admits(MafiaNet::PeerGuid guid) const {
-                return (targetGUID == MafiaNet::UNASSIGNED_PEER_GUID || targetGUID == guid) && exceptGUID != guid && (!viewers || viewers->Admits(guid));
+                return (targetGUID == MafiaNet::UNASSIGNED_PEER_GUID || targetGUID == guid) && (!viewers || viewers->Admits(guid));
             }
 
             // A connection that closed: whoever reconnects is a new audience member.
