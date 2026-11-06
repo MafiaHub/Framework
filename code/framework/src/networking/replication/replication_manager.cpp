@@ -54,6 +54,23 @@ namespace Framework::Networking::Replication {
                 bs->Serialize(write, declined);
             }
         };
+
+        // Clients never construct, and RM3 would add an entry naming an existing id to the sender's
+        // constructed list unchecked, outside its interest.
+        bool CarriesConstructions(const MafiaNet::Packet *packet) {
+            std::size_t offset = 2;
+            unsigned char id   = packet->length > 0 ? packet->data[0] : 0;
+            if (id == ID_TIMESTAMP) {
+                offset = 3 + sizeof(MafiaNet::Time);
+                id     = packet->length > 1 + sizeof(MafiaNet::Time) ? packet->data[1 + sizeof(MafiaNet::Time)] : 0;
+            }
+            if (id != ID_REPLICA_MANAGER_CONSTRUCTION || packet->length < offset + sizeof(uint16_t)) {
+                return false;
+            }
+            MafiaNet::BitStream bs(packet->data + offset, packet->length - offset, false);
+            uint16_t count = 0;
+            return bs.Read(count) && count != 0;
+        }
     } // namespace
 
     ReplicationManager::ReplicationManager()  = default;
@@ -78,6 +95,9 @@ namespace Framework::Networking::Replication {
     }
 
     MafiaNet::PluginReceiveResult ReplicationManager::OnReceive(MafiaNet::Packet *packet) {
+        if (_isServer && CarriesConstructions(packet)) {
+            return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
+        }
         if (!TransformBatch::IsBatch(packet->data, packet->length)) {
             return MafiaNet::ReplicaManager3::OnReceive(packet);
         }
