@@ -456,6 +456,49 @@ MODULE(text_label, {
         EQUALS(sees(1, label), true);
     });
 
+    IT("Entity.setVisibleTo reaches the viewers it concerns before their next refresh", {
+        using Framework::Scripting::Builtins::TextLabel;
+        TextLabelWorld world;
+        auto *manager = world.Manager();
+        const MafiaNet::RakNetGUID guids[] {MafiaNet::RakNetGUID(95), MafiaNet::RakNetGUID(96)};
+        NetworkEntity *players[2];
+        for (int i = 0; i < 2; ++i) {
+            players[i]            = manager->CreateEntity(world.targetType);
+            players[i]->ownerGUID = MafiaNet::ToPeerGuid(guids[i]);
+            manager->SetViewer(players[i]->ownerGUID, players[i]);
+        }
+        auto *label = manager->CreateEntity<TextLabelEntity>();
+        TextLabel handle(label->GetNetworkID());
+        manager->RebuildInterest();
+        for (const auto &guid : guids) {
+            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+        }
+        manager->SetInterestRebuildInterval(1000000);
+        const auto sees = [&](int player) {
+            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
+            DataStructures::List<MafiaNet::Replica3 *> create, destroy;
+            connection->QueryReplicaList(create, destroy);
+            for (unsigned int i = 0; i < create.Size(); ++i) {
+                if (create[i] == label) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        EQUALS(sees(0), true);
+        EQUALS(sees(1), true);
+
+        handle.SetVisibleTo(players[1]);
+        EQUALS(sees(0), false);
+        EQUALS(sees(1), true);
+        handle.SetVisibleTo(players[0]);
+        EQUALS(sees(0), true);
+        EQUALS(sees(1), false);
+        handle.SetVisibleTo(nullptr);
+        EQUALS(sees(0), true);
+        EQUALS(sees(1), true);
+    });
+
     // Real peers over loopback: what a hidden player's client is actually sent.
     IT("a hidden player's client loses the label without being sent the text changed with it", {
         using Framework::Scripting::Builtins::TextLabel;

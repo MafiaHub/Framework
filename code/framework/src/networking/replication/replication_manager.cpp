@@ -273,6 +273,21 @@ namespace Framework::Networking::Replication {
         }
     }
 
+    void ReplicationManager::SetStreamTarget(NetworkEntity &entity, MafiaNet::PeerGuid guid) {
+        const MafiaNet::PeerGuid previous = entity.streaming.targetGUID;
+        if (previous == guid) {
+            return;
+        }
+        entity.streaming.targetGUID = guid;
+        if (previous == MafiaNet::UNASSIGNED_PEER_GUID || guid == MafiaNet::UNASSIGNED_PEER_GUID) {
+            ++_interestUrgentGeneration;
+        }
+        else {
+            InvalidateInterestOf(previous);
+            InvalidateInterestOf(guid);
+        }
+    }
+
     void ReplicationManager::SetOwner(NetworkEntity *entity, MafiaNet::PeerGuid guid) {
         if (!entity) {
             return;
