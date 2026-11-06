@@ -10,11 +10,15 @@
 
 #include "networking/network_server.h"
 #include "networking/replication/network_entity.h"
+#include "networking/replication/replication_connection.h"
 #include "networking/replication/replication_manager.h"
 
 #include <mafianet/bit_stream.h>
+#include <mafianet/message_identifiers.h>
 #include <mafianet/replica_manager3.h>
 #include <mafianet/types.h>
+
+#include <vector>
 
 // Server authority over entity destruction. The base ReplicaManager3 destruction dispatch resolves
 // the target replica by a NetworkID read straight from the packet body and deletes it the moment
@@ -79,13 +83,90 @@ MODULE(replication_authority, {
         EQUALS(entity.DeserializeDestruction(&bs, nullptr), true);
     });
 
-    IT("lets the server delete an entity when the request comes from its owner", {
-        NetworkEntity entity;
-        entity.replicaManager = serverManager;
-        entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
+    // Through a real destruction packet, so the whole server path runs.
+    IT("lets an owner destroy its entity and forgets it as DestroyEntity does", {
+        using namespace Framework::Networking::Replication;
+        NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        std::vector<uint64_t> destroyed;
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        manager->ConfigureGrid(100, -4096, 4096);
+        // No routine refresh: only the destruction may change what a connection is offered.
+        manager->SetInterestRebuildInterval(1000000);
+        const MafiaNet::RakNetGUID player(3000), other(3001);
+        const auto type   = EntityRegistry::Get().Register<NetworkEntity>("Test::OwnerDestruction");
+        auto *avatar      = manager->CreateEntity(type);
+        auto *prop        = manager->CreateEntity(type);
+        auto *watcher     = manager->CreateEntity(type);
+        avatar->ownerGUID = MafiaNet::ToPeerGuid(player);
+        prop->ownerGUID   = MafiaNet::ToPeerGuid(player);
+        manager->SetViewer(MafiaNet::ToPeerGuid(player), avatar);
+        manager->SetViewer(MafiaNet::ToPeerGuid(other), watcher);
+        manager->SetOnEntityDestroyed([&destroyed](uint64_t networkId) {
+            destroyed.push_back(networkId);
+        });
+        manager->RebuildInterest();
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, player));
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, other));
+        auto *playerConnection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(player));
+        auto *otherConnection  = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(other));
 
-        MafiaNet::BitStream bs;
-        EQUALS(entity.DeserializeDestruction(&bs, ownerConn), true);
+        // A construction message carrying one destruction.
+        const auto destroyFrom = [&](MafiaNet::RakNetGUID sender, MafiaNet::NetworkID networkId) {
+            MafiaNet::BitStream bs;
+            bs.Write(static_cast<unsigned char>(ID_REPLICA_MANAGER_CONSTRUCTION));
+            bs.Write(static_cast<MafiaNet::WorldId>(0));
+            bs.Write(static_cast<uint16_t>(0));
+            bs.Write(static_cast<uint16_t>(1));
+            bs.Write(networkId);
+            bs.Write(static_cast<MafiaNet::BitSize_t>(0));
+            bs.Write(sender);
+            MafiaNet::Packet packet {};
+            packet.data   = bs.GetData();
+            packet.length = bs.GetNumberOfBytesUsed();
+            packet.guid   = sender;
+            manager->OnReceive(&packet);
+        };
+        // Compared by address only: a freed entity is what came back here.
+        const auto offered = [](ReplicationConnection *connection, const MafiaNet::Replica3 *entity) {
+            DataStructures::List<MafiaNet::Replica3 *> create, destroy;
+            connection->QueryReplicaList(create, destroy);
+            for (unsigned int i = 0; i < create.Size(); ++i) {
+                if (create[i] == entity) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        const MafiaNet::NetworkID propId      = prop->GetNetworkID();
+        const MafiaNet::NetworkID avatarId    = avatar->GetNetworkID();
+        const MafiaNet::Replica3 *propReplica = prop;
+        EQUALS(offered(otherConnection, propReplica), true);
+        EQUALS(offered(playerConnection, propReplica), true);
+
+        destroyFrom(other, propId);
+        EQUALS(manager->GetEntityByNetworkID(propId) == prop, true);
+        EQUALS(destroyed.size(), 0u);
+
+        destroyFrom(player, propId);
+        EQUALS(manager->GetEntityByNetworkID(propId) == nullptr, true);
+        EQUALS(destroyed.size(), 1u);
+        EQUALS(destroyed[0], propId);
+        EQUALS(offered(otherConnection, propReplica), false);
+        EQUALS(offered(playerConnection, propReplica), false);
+
+        destroyFrom(player, avatarId);
+        EQUALS(manager->GetEntityByNetworkID(avatarId) == nullptr, true);
+        EQUALS(destroyed.size(), 2u);
+        EQUALS(manager->GetViewer(MafiaNet::ToPeerGuid(player)) == nullptr, true);
+        manager->DestroyEntity(watcher);
     });
 
     IT("refuses a client's attempt to destroy an entity it does not own", {
