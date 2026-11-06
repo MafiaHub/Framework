@@ -30,8 +30,10 @@ MODULE(entity_registry, {
     using namespace EntityRegistryTest;
 
     IT("keeps type ids stable on the wire", {
-        EQUALS(EntityTypeId<Entities::TextLabelEntity>(), 0x1803d2b3u);
-        EQUALS(EntityRegistry::Get().TypeId(Entities::TextLabelEntity::kTypeName), 0x1803d2b3u);
+        static_assert(EntityTypeId<Entities::TextLabelEntity>() == 0x1803d2b3u, "Framework::TextLabel wire id changed");
+        static_assert(EntityTypeId<ClientWalker>() == EntityTypeId<Walker>());
+        EQUALS(EntityRegistry::TypeId(Entities::TextLabelEntity::kTypeName), 0x1803d2b3u);
+        EQUALS(EntityRegistry::TypeId(std::string(Entities::TextLabelEntity::kTypeName)), 0x1803d2b3u);
     });
 
     IT("gives a type the id its name registers under, and a subclass its parent's", {
