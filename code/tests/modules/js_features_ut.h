@@ -1141,9 +1141,9 @@ MODULE(js_features, {
         EventsTestHelper::Cleanup();
     });
 
-    // A value that is no player or id is the caller's TypeError; an id that names no connected player,
-    // gone or an NPC, is a plain Error, as for Entity.setVisibleTo.
-    IT("TextLabel viewer options take connected players and read back as their network ids", {
+    // A value that is no player or id is the caller's TypeError; an id that is no player's avatar, gone
+    // or an NPC, is a plain Error.
+    IT("TextLabel viewer options take connected players and getAudience reads them back as network ids", {
         EventsTestHelper::Setup();
         TextLabelWorld world;
         auto *manager = world.Manager();
@@ -1172,12 +1172,12 @@ MODULE(js_features, {
             Builtins::TextLabel::Register(isolate, target);
         }
 
-        const std::string read = "const viewers = (l) => { const o = l.getOptions(); return JSON.stringify([o.showTo, o.hideFrom, o.hideForTarget]); };";
+        const std::string read = "const viewers = (l) => { const o = l.getAudience(); return JSON.stringify([o.showTo, o.hideFrom, o.hideForTarget]); };";
         const std::string flow = "(() => { " + read + " const l = TextLabel.create(0, 0, 0, 'x', { showTo: [" + a + "], hideFrom: [{ id: " + b + " }], hideForTarget: true }); const made = viewers(l); l.setVisibleFor(" + b + ", true); l.setVisibleFor(" + a
                                  + ", false); const toggled = viewers(l); l.update(l.getOptions()); const again = viewers(l); l.update({ showTo: null, hideFrom: [] }); return made + '|' + toggled + '|' + again + '|' + viewers(l); })()";
         const std::string toggled = "[[" + b + "],[" + a + "],true]";
         STREQUALS(RunJSString(engine, flow.c_str()).c_str(), ("[[" + a + "],[" + b + "],true]|" + toggled + "|" + toggled + "|[null,[],true]").c_str());
-        STREQUALS(RunJSString(engine, "JSON.stringify(TextLabel.create(0, 0, 0, 'x', { showTo: [] }).getOptions().showTo)").c_str(), "[]");
+        STREQUALS(RunJSString(engine, "JSON.stringify(TextLabel.create(0, 0, 0, 'x', { showTo: [] }).getAudience().showTo)").c_str(), "[]");
 
         STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', { showTo: [" + n + "] })").c_str(), "Error");
         STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', { hideFrom: [99999] })").c_str(), "Error");
@@ -1189,6 +1189,20 @@ MODULE(js_features, {
         STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x').setVisibleFor(99999, false)").c_str(), "Error");
         // A bad player in an update changes nothing else in it.
         STREQUALS(RunJSString(engine, "(() => { const l = TextLabel.create(0, 0, 0, 'x'); try { l.update({ opacity: 0.5, hideFrom: [99999] }); } catch (e) {} return String(l.getOptions().opacity); })()").c_str(), "1");
+
+        // getOptions() carries no audience, so applying it cannot change who sees a label.
+        STREQUALS(RunJSString(engine, ("(() => { const o = TextLabel.create(0, 0, 0, 'x', { hideFrom: [" + a + "], hideForTarget: true }).getOptions(); return String('showTo' in o || 'hideFrom' in o || 'hideForTarget' in o); })()").c_str()).c_str(), "false");
+        STREQUALS(RunJSString(engine, ("(() => { const seed = TextLabel.create(0, 0, 0, 'a'); const l = TextLabel.create(0, 0, 0, 'b', { hideFrom: [" + a + "] }); l.update(seed.getOptions()); return JSON.stringify(l.getAudience().hideFrom); })()").c_str()).c_str(),
+            ("[" + a + "]").c_str());
+
+        // A player with no avatar stays hidden through a getOptions() round trip, old or new, and is
+        // only left out of what getAudience() can show.
+        RunJSString(engine, ("globalThis.kept = TextLabel.create(0, 0, 0, 'k', { hideFrom: [" + a + "] }); globalThis.snapshot = kept.getOptions(); 'x'").c_str());
+        const auto *kept = manager->GetEntityByNetworkID(std::stoull(RunJSString(engine, "String(kept.id)")));
+        const auto guidA = players[0]->ownerGUID;
+        manager->DestroyEntity(players[0]);
+        STREQUALS(RunJSString(engine, "kept.update(snapshot); kept.update(kept.getOptions()); JSON.stringify(kept.getAudience().hideFrom)").c_str(), "[]");
+        EQUALS(kept->streaming.Admits(guidA), false);
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();

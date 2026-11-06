@@ -103,6 +103,7 @@ namespace Framework::Scripting::Builtins {
         static void JS_Update(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_AttachTo(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_GetOptions(const v8::FunctionCallbackInfo<v8::Value> &info);
+        static void JS_GetAudience(const v8::FunctionCallbackInfo<v8::Value> &info);
         static void JS_SetVisibleFor(const v8::FunctionCallbackInfo<v8::Value> &info);
 
         static void RegisterOptionsType(v8::Isolate *isolate);

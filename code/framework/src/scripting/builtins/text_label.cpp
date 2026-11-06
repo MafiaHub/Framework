@@ -238,7 +238,6 @@ namespace Framework::Scripting::Builtins {
             // Read once: an element's getter can grow the array.
             const uint32_t length = array->Length();
             std::vector<uint64_t> ids;
-            ids.reserve(length);
             for (uint32_t i = 0; i < length; ++i) {
                 v8::Local<v8::Value> entry;
                 if (!array->Get(isolate->GetCurrentContext(), i).ToLocal(&entry)) {
@@ -503,11 +502,12 @@ namespace Framework::Scripting::Builtins {
         }
 
         // A player's connection, found from their avatar: what a viewer filter is keyed on. An id that
-        // names no connected player, gone or an NPC, is an Error, as for Entity.setVisibleTo.
+        // is no player's current avatar (gone, an NPC, or an entity they merely own) is an Error, so a
+        // player can only be named once SetViewer has run for them.
         bool ResolvePlayer(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, uint64_t id, const std::string &name, MafiaNet::PeerGuid &guid) {
             const auto *entity = replication.GetEntityByNetworkID(id);
             if (!entity || replication.GetViewer(entity->ownerGUID) != entity) {
-                return FailError(isolate, name + ": " + std::to_string(id) + " is not a connected player");
+                return FailError(isolate, name + ": " + std::to_string(id) + " is not a player's avatar");
             }
             guid = entity->ownerGUID;
             return true;
@@ -702,7 +702,8 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
-        // A filter's players as their avatars' network ids, ascending; one who left is dropped.
+        // A filter's players as their avatars' network ids, ascending. A connected player with no avatar
+        // right now has no id to show: they stay in the filter but are left out here.
         v8::Local<v8::Array> PlayerIdArray(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, const std::unordered_set<MafiaNet::PeerGuid> &guids) {
             std::vector<uint64_t> ids;
             for (const MafiaNet::PeerGuid guid : guids) {
@@ -728,8 +729,25 @@ namespace Framework::Scripting::Builtins {
             return std::string(entries[0].first);
         }
 
+        // Who the label is for, as getAudience() reports it.
+        v8::Local<v8::Object> AudienceObject(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, const Networking::Replication::Entities::TextLabelEntity &label) {
+            auto context                = isolate->GetCurrentContext();
+            const auto *viewers         = label.streaming.viewers.get();
+            auto out                    = v8::Object::New(isolate);
+            v8::Local<v8::Value> showTo = v8::Null(isolate);
+            if (viewers && viewers->only) {
+                showTo = PlayerIdArray(isolate, replication, *viewers->only);
+            }
+            out->Set(context, Str(isolate, "showTo"), showTo).Check();
+            out->Set(context, Str(isolate, "hideFrom"), viewers ? PlayerIdArray(isolate, replication, viewers->except) : v8::Array::New(isolate)).Check();
+            out->Set(context, Str(isolate, "hideForTarget"), v8pp::to_v8(isolate, label.hideForTarget)).Check();
+            return out;
+        }
+
         // The label as an options object: what update() takes, so one label's look can seed another's.
-        v8::Local<v8::Object> OptionsObject(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, const Networking::Replication::Entities::TextLabelEntity &label, uint32_t virtualWorld) {
+        // The audience stays out of it: applying this to another label, or later, must not change who
+        // can see that label.
+        v8::Local<v8::Object> OptionsObject(v8::Isolate *isolate, const Networking::Replication::Entities::TextLabelEntity &label, uint32_t virtualWorld) {
             auto context   = isolate->GetCurrentContext();
             const auto put = [&](v8::Local<v8::Object> object, std::string_view key, v8::Local<v8::Value> value) {
                 object->Set(context, Str(isolate, key), value).Check();
@@ -803,16 +821,6 @@ namespace Framework::Scripting::Builtins {
             set(out, "fadeDistance", label.fadeDistance);
             set(out, "occlusion", label.occlusion);
             set(out, "virtualWorld", virtualWorld);
-
-            const auto *viewers = label.streaming.viewers.get();
-            if (viewers && viewers->only) {
-                put(out, "showTo", PlayerIdArray(isolate, replication, *viewers->only));
-            }
-            else {
-                put(out, "showTo", v8::Null(isolate));
-            }
-            put(out, "hideFrom", PlayerIdArray(isolate, replication, viewers ? viewers->except : kNoPlayers));
-            set(out, "hideForTarget", label.hideForTarget);
             return out;
         }
     } // namespace
@@ -1089,7 +1097,10 @@ namespace Framework::Scripting::Builtins {
                     {v8pp::metadata::param("target", "Entity | number", false, "The entity to follow, or its network id."),
                         v8pp::metadata::param("offset", "Vector3 | { x: number; y: number; z: number }", true, "Where to draw relative to it; the game decides the reference point (a player's head, say).")},
                     "Follows another live entity instead of staying at the label's own position. It streams from where the target is, moves into its virtual world and is destroyed with it."));
-            cls->prototype_function("getOptions", &TextLabel::JS_GetOptions, v8pp::metadata::docs("TextLabelOptions", {}, "The label's current look, placement and audience, in the shape update() takes."));
+            cls->prototype_function("getOptions", &TextLabel::JS_GetOptions, v8pp::metadata::docs("TextLabelOptions", {}, "The label's current look and placement, in the shape update() takes. The audience is left out: see getAudience()."));
+            cls->prototype_function("getAudience", &TextLabel::JS_GetAudience,
+                v8pp::metadata::docs("{ showTo: number[] | null; hideFrom: number[]; hideForTarget: boolean }", {},
+                    "Who the label is for, with players as network ids. For reading: a connected player with no avatar right now has no id and is left out, though the label stays as set for them, so passing this to update() would drop them."));
             cls->prototype_function("setVisibleFor", &TextLabel::JS_SetVisibleFor,
                 v8pp::metadata::docs("void",
                     {v8pp::metadata::param("player", "Player | number", false, "A connected player, or their network id."),
@@ -1127,8 +1138,9 @@ namespace Framework::Scripting::Builtins {
         type.add_property("fadeDistance", optional("number"), "World units where fading starts; 0 starts at 75% of drawDistance.");
         type.add_property("occlusion", optional("boolean"), "Hidden behind world geometry. Default true.");
         type.add_property("virtualWorld", optional("number"), "The virtual world it lives in while it is not attached, and returns to when detached.");
-        type.add_property("showTo", optional("(Player | number)[] | null"), "Only these players are sent it; [] is nobody, null (default) everyone. hideFrom wins over it. Read back as network ids.");
-        type.add_property("hideFrom", optional("(Player | number)[] | null"), "These players are never sent it; null or [] clears. Read back as network ids.");
+        type.add_property("showTo", optional("(Player | number)[] | null"),
+            "Only these players are sent it; [] is nobody, null (default) everyone. hideFrom wins over it. Lasts for the connection: a player who reconnects is off it until added again. Read back through getAudience().");
+        type.add_property("hideFrom", optional("(Player | number)[] | null"), "These players are not sent it; null or [] clears. Lasts for the connection: a player who reconnects sees it again until hidden again. Read back through getAudience().");
         type.add_property("hideForTarget", optional("boolean"), "Not sent to the player it is attached to, as for their own name tag. Default false.");
     }
 
@@ -1292,7 +1304,18 @@ namespace Framework::Scripting::Builtins {
             info.GetReturnValue().SetNull();
             return;
         }
-        info.GetReturnValue().Set(OptionsObject(isolate, *CoreModules::GetReplication(), *label, label->attachNetworkId != 0 ? label->ownVirtualWorld : self->GetVirtualWorld()));
+        info.GetReturnValue().Set(OptionsObject(isolate, *label, label->attachNetworkId != 0 ? label->ownVirtualWorld : self->GetVirtualWorld()));
+    }
+
+    void TextLabel::JS_GetAudience(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate = info.GetIsolate();
+        auto *self           = v8pp::class_<TextLabel>::unwrap_object(isolate, info.This());
+        auto *label          = self ? self->ResolveLabel() : nullptr;
+        if (!label) {
+            info.GetReturnValue().SetNull();
+            return;
+        }
+        info.GetReturnValue().Set(AudienceObject(isolate, *CoreModules::GetReplication(), *label));
     }
 
     void TextLabel::UnregisterIsolate(v8::Isolate *isolate) {
