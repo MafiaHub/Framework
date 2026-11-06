@@ -194,7 +194,7 @@ namespace Framework::Scripting {
                 Export &entry = exports[id];
                 entry.runtime = runtime;
                 entry.function.Reset(isolate, function);
-                entry.name                   = ToUtf8(isolate, function->GetDebugName());
+                entry.name                   = DebugName(isolate, context, function);
                 v8::Local<v8::Value> idValue = v8::Number::New(isolate, static_cast<double>(id));
                 if (!methods.IsEmpty()) {
                     // Weak: the method needs its object only while the owner keeps it.
@@ -214,6 +214,21 @@ namespace Framework::Scripting {
             hold->id      = id;
             out.reference = id;
             out.retainer  = std::move(hold);
+        }
+
+        // The name a slow call reports the function by: its own, or the one Exports.register() gave it when it has none
+        // of its own, as an arrow function passed straight to register() has not.
+        static std::string DebugName(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Function> function) {
+            std::string name = ToUtf8(isolate, function->GetDebugName());
+            v8::Local<v8::Value> registered;
+            if (name.empty() && function->GetPrivate(context, ExportNameKey(isolate)).ToLocal(&registered) && registered->IsString()) {
+                name = ToUtf8(isolate, registered);
+            }
+            return name;
+        }
+
+        static v8::Local<v8::Private> ExportNameKey(v8::Isolate *isolate) {
+            return v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.exportName"));
         }
 
         // The table of methods an object has had exported, function to export id, kept on the object itself. Empty
@@ -358,9 +373,8 @@ namespace Framework::Scripting {
             const Export &exported    = state.exports.at(id);
             v8::Global<v8::Function> function(ownerIsolate, exported.function);
             v8::Global<v8::Object> receiver(ownerIsolate, exported.receiver);
-            const std::string name = exported.name;
             v8::Local<v8::Value> result;
-            if (state.Invoke(caller, isolate, isolate->GetCurrentContext(), owner, function, copied, Returned::Value, receiver, name).ToLocal(&result)) {
+            if (state.Invoke(caller, isolate, isolate->GetCurrentContext(), owner, function, copied, Returned::Value, receiver, id).ToLocal(&result)) {
                 info.GetReturnValue().Set(result);
             }
         }
@@ -391,10 +405,10 @@ namespace Framework::Scripting {
 
         // Calls `function` inside `ownerId` with copied arguments and brings back what it returned or threw. The
         // caller holds its own scopes; on a throw the exception is pending there and the result is empty.
-        // `receiver`, when set, is the `this` the function runs with. `exportName` names an export call in the
+        // `receiver`, when set, is the `this` the function runs with. `exportId` names an export call in the
         // monitor's slow reports.
         v8::MaybeLocal<v8::Value> Invoke(uint32_t callerId, v8::Isolate *isolate, v8::Local<v8::Context> context, uint32_t ownerId, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments, Returned returned,
-            const v8::Global<v8::Object> &receiver = {}, std::string_view exportName = {}) {
+            const v8::Global<v8::Object> &receiver = {}, uint64_t exportId = 0) {
             const auto ownerIt = runtimes.find(ownerId);
             if (ownerIt == runtimes.end()) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
@@ -451,12 +465,17 @@ namespace Framework::Scripting {
             }
             // Event and message dispatch ask for an outcome and report their own handlers; an export call is reported
             // here, under the export's name so one slow export does not hide the next one of the same owner and caller.
-            // The label is built only for a call that was slow: every export call passes here.
+            // The name is looked up only for a call that was slow: every export call passes here, and the export may
+            // have been released during the call.
             if (monitor && returned == Returned::Value) {
                 const auto now     = ResourceMonitor::Clock::now();
                 const double ownMs = monitor->ChargedMs(ownerIsolate, now) - charged;
                 if (monitor->IsSlow(ownMs)) {
-                    const std::string what = "export '" + (exportName.empty() ? std::string("(anonymous)") : std::string(exportName)) + "' called from";
+                    std::string what = "export call from";
+                    if (exportId != 0) {
+                        const auto exported = exports.find(exportId);
+                        what                = "export '" + (exported != exports.end() ? exported->second.name : std::string("(since released)")) + "' called from";
+                    }
                     monitor->ReportIfSlow(ownerIsolate, what, NameOf(callerId), ownMs, now);
                 }
             }
@@ -792,6 +811,10 @@ namespace Framework::Scripting {
 
     void FunctionReferences::ReleaseCollected() {
         _state->ReleaseCollected();
+    }
+
+    void FunctionReferences::NameExport(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Function> function, const std::string &name) {
+        (void)function->SetPrivate(context, State::ExportNameKey(isolate), v8pp::to_v8(isolate, name));
     }
 
     size_t FunctionReferences::GetExportCount() const {
