@@ -1087,13 +1087,18 @@ MODULE(js_features, {
             "{ drawDistance: 0 }",
             "{ virtualWorld: 1.5 }",
             "{ minSize: 20, maxSize: 10 }",
+            "{ showTo: 5 }",
+            "{ showTo: ['a'] }",
+            "{ hideFrom: [null] }",
+            "{ hideFrom: [, 1] }",
+            "{ hideForTarget: 1 }",
         };
         for (const char *options : rejected) {
             STREQUALS(RunJSErrorName(engine, std::string("TextLabel.create(0, 0, 0, 'x', ") + options + ")").c_str(), "TypeError");
         }
 
         const std::string accepted = "TextLabel.create(0, 0, 0, 'x', { fontSize: 20, opacity: 0.5, outline: { width: 2 }, shadow: { blur: 4 }, background: true, sizeMode: 'world', "
-                                     "style: 'box', attachTo: 5, offset: [0, 0, 10], markup: true, align: 'left', anchor: 'bottom', color: new Color(1, 0, 0, 1) })";
+                                     "style: 'box', attachTo: 5, offset: [0, 0, 10], markup: true, align: 'left', anchor: 'bottom', color: new Color(1, 0, 0, 1), showTo: [], hideFrom: null, hideForTarget: true })";
         STREQUALS(RunJSErrorName(engine, accepted).c_str(), "Error");
         STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', 18, 40)").c_str(), "Error");
 
@@ -1131,6 +1136,73 @@ MODULE(js_features, {
         STREQUALS(RunJSErrorName(engine, "const l = TextLabel.create(0, 0, 0, 'x'); l.update({ attachTo: l.id })").c_str(), "TypeError");
         STREQUALS(RunJSErrorName(engine, "const l = TextLabel.create(0, 0, 0, 'x', { maxSize: 10 }); l.update({ minSize: 20 })").c_str(), "TypeError");
         STREQUALS(RunJSErrorName(engine, "const t = TextLabel.create(0, 0, 0, 't'); TextLabel.create(0, 0, 0, 'x', { attachTo: t, minSize: 4, maxSize: 10 })").c_str(), "");
+
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
+    // A value that is no player or id is the caller's TypeError; an id that is no player's avatar, gone
+    // or an NPC, is a plain Error.
+    IT("TextLabel viewer options take connected players and getAudience reads them back as network ids", {
+        EventsTestHelper::Setup();
+        TextLabelWorld world;
+        auto *manager = world.Manager();
+        Framework::Networking::Replication::NetworkEntity *players[2];
+        for (int i = 0; i < 2; ++i) {
+            players[i]            = manager->CreateEntity(world.targetType);
+            players[i]->ownerGUID = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(71 + i));
+            manager->SetViewer(players[i]->ownerGUID, players[i]);
+        }
+        auto *npc           = manager->CreateEntity(world.targetType);
+        const std::string a = std::to_string(players[0]->GetNetworkID());
+        const std::string b = std::to_string(players[1]->GetNetworkID());
+        const std::string n = std::to_string(npc->GetNetworkID());
+
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        v8::Isolate *isolate = engine.GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            v8::Local<v8::Object> target = context->Global();
+            Builtins::RegisterValueTypes(isolate, target);
+            Builtins::TextLabel::Register(isolate, target);
+        }
+
+        const std::string read = "const viewers = (l) => { const o = l.getAudience(); return JSON.stringify([o.showTo, o.hideFrom, o.hideForTarget]); };";
+        const std::string flow = "(() => { " + read + " const l = TextLabel.create(0, 0, 0, 'x', { showTo: [" + a + "], hideFrom: [{ id: " + b + " }], hideForTarget: true }); const made = viewers(l); l.setVisibleFor(" + b + ", true); l.setVisibleFor(" + a
+                                 + ", false); const toggled = viewers(l); l.update(l.getOptions()); const again = viewers(l); l.update({ showTo: null, hideFrom: [] }); return made + '|' + toggled + '|' + again + '|' + viewers(l); })()";
+        const std::string toggled = "[[" + b + "],[" + a + "],true]";
+        STREQUALS(RunJSString(engine, flow.c_str()).c_str(), ("[[" + a + "],[" + b + "],true]|" + toggled + "|" + toggled + "|[null,[],true]").c_str());
+        STREQUALS(RunJSString(engine, "JSON.stringify(TextLabel.create(0, 0, 0, 'x', { showTo: [] }).getAudience().showTo)").c_str(), "[]");
+
+        STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', { showTo: [" + n + "] })").c_str(), "Error");
+        STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', { hideFrom: [99999] })").c_str(), "Error");
+        STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', { hideFrom: [0] })").c_str(), "Error");
+        STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x').setVisibleFor(" + n + ", true)").c_str(), "Error");
+        STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x').setVisibleFor(0, true)").c_str(), "Error");
+        STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x').setVisibleFor(null, true)").c_str(), "TypeError");
+        STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x').setVisibleFor(" + a + ")").c_str(), "TypeError");
+        STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x').setVisibleFor(99999, false)").c_str(), "Error");
+        // A bad player in an update changes nothing else in it.
+        STREQUALS(RunJSString(engine, "(() => { const l = TextLabel.create(0, 0, 0, 'x'); try { l.update({ opacity: 0.5, hideFrom: [99999] }); } catch (e) {} return String(l.getOptions().opacity); })()").c_str(), "1");
+
+        // getOptions() carries no audience, so applying it cannot change who sees a label.
+        STREQUALS(RunJSString(engine, ("(() => { const o = TextLabel.create(0, 0, 0, 'x', { hideFrom: [" + a + "], hideForTarget: true }).getOptions(); return String('showTo' in o || 'hideFrom' in o || 'hideForTarget' in o); })()").c_str()).c_str(), "false");
+        STREQUALS(RunJSString(engine, ("(() => { const seed = TextLabel.create(0, 0, 0, 'a'); const l = TextLabel.create(0, 0, 0, 'b', { hideFrom: [" + a + "] }); l.update(seed.getOptions()); return JSON.stringify(l.getAudience().hideFrom); })()").c_str()).c_str(),
+            ("[" + a + "]").c_str());
+
+        // A player with no avatar stays hidden through a getOptions() round trip, old or new, and is
+        // only left out of what getAudience() can show.
+        RunJSString(engine, ("globalThis.kept = TextLabel.create(0, 0, 0, 'k', { hideFrom: [" + a + "] }); globalThis.snapshot = kept.getOptions(); 'x'").c_str());
+        const auto *kept = manager->GetEntityByNetworkID(std::stoull(RunJSString(engine, "String(kept.id)")));
+        const auto guidA = players[0]->ownerGUID;
+        manager->DestroyEntity(players[0]);
+        STREQUALS(RunJSString(engine, "kept.update(snapshot); kept.update(kept.getOptions()); JSON.stringify(kept.getAudience().hideFrom)").c_str(), "[]");
+        EQUALS(kept->streaming.Admits(guidA), false);
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();

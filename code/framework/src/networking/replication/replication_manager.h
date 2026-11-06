@@ -260,13 +260,25 @@ namespace Framework::Networking::Replication {
         }
 
         // Bumped by a change every viewer must see before its next phase: a destroyed entity (a cached
-        // set must never hand it out) or a rebuild caused by creation or destruction.
+        // set must never hand it out), a rebuild caused by creation or destruction, or a viewer filter
+        // or stream target being switched on or off.
         uint32_t InterestUrgentGeneration() const {
             return _interestUrgentGeneration;
         }
         uint32_t InterestRefreshInterval() const {
             return _interestRebuildInterval;
         }
+
+        // Server: who may be sent an entity. The change reaches the viewers it concerns before their
+        // next refresh phase: the players either filter names, or everyone if `only` is switched on or
+        // off. An identical filter concerns nobody.
+        void SetViewerFilter(NetworkEntity &entity, ViewerFilter filter);
+        // One connection in or out, without copying the filter: false puts it in `except` and takes it
+        // off `only`, true undoes both, adding it to `only` while there is one.
+        void SetViewerAdmitted(NetworkEntity &entity, MafiaNet::PeerGuid guid, bool admitted);
+        // Streams the entity only to this connection, or to everyone in reach if unassigned. Moving it
+        // between connections concerns those two; switching it on or off, everyone.
+        void SetStreamTarget(NetworkEntity &entity, MafiaNet::PeerGuid guid);
 
         // Server: transform rate bands, default and per-type override.
         void SetSerializeRateBands(const SerializeRateBands &bands) {

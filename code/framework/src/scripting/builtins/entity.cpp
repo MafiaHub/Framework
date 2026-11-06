@@ -76,7 +76,7 @@ namespace Framework::Scripting::Builtins {
 
     void Entity::SetVisibleTo(Networking::Replication::NetworkEntity *targetEntity) {
         if (auto *e = Resolve()) {
-            e->streaming.targetGUID = targetEntity ? targetEntity->ownerGUID : MafiaNet::UNASSIGNED_PEER_GUID;
+            CoreModules::GetReplication()->SetStreamTarget(*e, targetEntity ? targetEntity->ownerGUID : MafiaNet::UNASSIGNED_PEER_GUID);
         }
     }
 
