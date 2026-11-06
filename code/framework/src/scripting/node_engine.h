@@ -16,6 +16,7 @@
 #include "engine.h"
 #include "function_references.h"
 #include "node_runtime.h"
+#include "resource_monitor.h"
 
 #include <node.h>
 #include <uv.h>
@@ -183,6 +184,18 @@ namespace Framework::Scripting {
         // The runtime a running resource executes in, or null. For diagnostics and tests.
         NodeRuntime *GetResourceRuntime(const std::string &resourceName) const;
 
+        // Script time, heap and collector cost of the engine's runtime and every resource's.
+        ResourceMonitor &GetMonitor() {
+            return _monitor;
+        }
+        std::vector<RuntimeStats> GetRuntimeStats() const {
+            return _monitor.Snapshot();
+        }
+
+        // Ends one server tick for the monitor, and samples the heaps once a second. The server calls it at the top of
+        // each tick, not from Tick(), which a resource starting or stopping pumps while it waits.
+        void CloseMonitorTick();
+
       private:
         bool InitializeNode();
         bool CreateEnvironment();
@@ -234,6 +247,9 @@ namespace Framework::Scripting {
         // Tick every resource runtime that is not executing further up the stack.
         void TickResourceRuntimes();
 
+        // Hand the monitor every idle runtime's heap and collector totals.
+        void SampleRuntimes();
+
         // Run these runtimes' loops (null is the engine's own) until `stopAt`, unless script started or stopped resources.
         void RunReady(const std::vector<ResourceRuntime *> &ready, uint64_t generation, std::chrono::steady_clock::time_point stopAt);
 
@@ -246,6 +262,8 @@ namespace Framework::Scripting {
         static bool _platformInitialized;
 
         std::unique_ptr<NodeRuntime> _runtime;
+
+        ResourceMonitor _monitor;
 
         // Calls and values between the engine's runtime and every resource's.
         std::unique_ptr<FunctionReferences> _references;

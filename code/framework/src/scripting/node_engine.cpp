@@ -15,6 +15,7 @@
 #include "scripting_catalog.h"
 
 #include <logging/logger.h>
+#include <utils/profiler.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -174,6 +175,10 @@ namespace Framework::Scripting {
 
         // Drop cached builtin class wrappers before the isolate dies (avoids leak + stale reuse).
         Builtins::UnregisterAll(isolate);
+        _monitor.Untrack(isolate);
+        if (ResourceMonitor::Current() == &_monitor) {
+            ResourceMonitor::SetCurrent(nullptr);
+        }
 
         // Stops the environment with no V8 scope held, then disposes the isolate (embedtest.cc order).
         _runtime.reset();
@@ -241,6 +246,9 @@ namespace Framework::Scripting {
         if (!_runtime) {
             return false;
         }
+        _runtime->SetName("server");
+        _monitor.Track(_runtime->GetIsolate(), _runtime->GetName());
+        ResourceMonitor::SetCurrent(&_monitor);
 
         v8::Isolate *isolate = _runtime->GetIsolate();
         v8::Locker locker(isolate);
@@ -292,6 +300,7 @@ namespace Framework::Scripting {
         // safepoint) and activates Node's CheckImmediate uv_check handle,
         // which calls RunAndClearNativeImmediates → RunAndClearInterrupts.
         if (!_interruptDrainFn.IsEmpty()) {
+            FW_PROFILE_SCOPE_N("Scripting::InspectorDrain");
             v8::Isolate *isolate = _runtime->GetIsolate();
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
@@ -303,13 +312,19 @@ namespace Framework::Scripting {
         }
 #endif
 
-        StopExitedResources();
-        FlushRetiredRuntimes();
-        _references->ReleaseCollected();
+        {
+            FW_PROFILE_SCOPE_N("Scripting::RuntimeUpkeep");
+            StopExitedResources();
+            FlushRetiredRuntimes();
+            _references->ReleaseCollected();
+        }
 
         // A runtime that is executing further up this thread's stack is not ticked from inside itself: uv_run does
         // not nest.
         if (!_runtime->GetIsolate()->IsInUse()) {
+            FW_PROFILE_SCOPE_N("Scripting::Runtime");
+            FW_PROFILE_TEXT(_runtime->GetName().c_str(), _runtime->GetName().size());
+            ResourceMonitor::Scope charged(_monitor, _runtime->GetIsolate());
             _runtime->Tick();
         }
 
@@ -319,12 +334,40 @@ namespace Framework::Scripting {
         FlushRetiredRuntimes();
     }
 
+    void NodeEngine::CloseMonitorTick() {
+        const auto now = ResourceMonitor::Clock::now();
+        if (_monitor.SampleDue(now)) {
+            SampleRuntimes();
+        }
+        _monitor.EndTick(now);
+    }
+
+    void NodeEngine::SampleRuntimes() {
+        // A runtime executing further up the stack is skipped this second: its heap is read with nothing running in it.
+        if (!_runtime->GetIsolate()->IsInUse()) {
+            _monitor.Record(_runtime->GetIsolate(), _runtime->Sample());
+        }
+        for (const auto &[name, entry] : _resourceRuntimes) {
+            if (!entry->exited && !entry->runtime->GetIsolate()->IsInUse()) {
+                _monitor.Record(entry->runtime->GetIsolate(), entry->runtime->Sample());
+            }
+        }
+    }
+
     void NodeEngine::TickResourceRuntimes() {
         for (auto it = _resourceRuntimes.begin(); it != _resourceRuntimes.end();) {
             ResourceRuntime &entry    = *it->second;
             const uint64_t generation = _runtimesGeneration;
             if (!entry.exited && !entry.runtime->GetIsolate()->IsInUse()) {
-                entry.runtime->Tick();
+                FW_PROFILE_SCOPE_N("Scripting::Runtime");
+                FW_PROFILE_TEXT(entry.resourceName.c_str(), entry.resourceName.size());
+                v8::Isolate *isolate = entry.runtime->GetIsolate();
+                const double charged = _monitor.ChargedMs(isolate, ResourceMonitor::Clock::now());
+                {
+                    ResourceMonitor::Scope scope(_monitor, isolate);
+                    entry.runtime->Tick();
+                }
+                _monitor.ReportOwnTime(isolate, "timers, I/O and await continuations", {}, charged, ResourceMonitor::Clock::now());
             }
             if (generation == _runtimesGeneration) {
                 ++it;
@@ -444,7 +487,20 @@ namespace Framework::Scripting {
             }
             NodeRuntime &runtime = entry != nullptr ? *entry->runtime : *_runtime;
             if ((entry == nullptr || !entry->exited) && !runtime.GetIsolate()->IsInUse()) {
+                FW_PROFILE_SCOPE_N("Scripting::RunLoop");
+                FW_PROFILE_TEXT(runtime.GetName().c_str(), runtime.GetName().size());
+                // Charged as the tick's own loop run is. A live loop is visited every millisecond on Windows, so the
+                // charge is read back only when the visit itself lasted the slow threshold.
+                v8::Isolate *isolate = runtime.GetIsolate();
+                const auto start     = ResourceMonitor::Clock::now();
+                const double charged = _monitor.ChargedMs(isolate, start);
+                _monitor.Enter(isolate, start);
                 runtime.RunLoop();
+                const auto end = ResourceMonitor::Clock::now();
+                _monitor.Leave(end);
+                if (_monitor.IsSlow(std::chrono::duration<double, std::milli>(end - start).count())) {
+                    _monitor.ReportOwnTime(isolate, "timers, I/O and await continuations", {}, charged, end);
+                }
             }
         }
         StopExitedResources();
@@ -579,6 +635,7 @@ namespace Framework::Scripting {
         if (!entry->runtime) {
             return false;
         }
+        entry->runtime->SetName(resourceName);
 
         ResourceRuntime *runtime = entry.get();
         v8::Isolate *isolate     = runtime->runtime->GetIsolate();
@@ -607,6 +664,7 @@ namespace Framework::Scripting {
         _runtimeByIsolate[isolate]      = runtime;
         _resourceRuntimes[resourceName] = std::move(entry);
         ++_runtimesGeneration;
+        _monitor.Track(isolate, resourceName);
 
         // Uncaught errors in this runtime can only be this resource's; no stack to read.
         v8::Local<v8::Function> sink = v8::FunctionTemplate::New(isolate, OnResourceUncaughtError, v8::External::New(isolate, runtime))->GetFunction(context).ToLocalChecked();
@@ -661,6 +719,7 @@ namespace Framework::Scripting {
         Builtins::UnregisterAll(isolate);
         ClearScriptingCatalog(isolate);
         _runtimeByIsolate.erase(isolate);
+        _monitor.Untrack(isolate);
 
         // Frees the environment: its timers, handles and worker threads stop with it.
         runtime->runtime.reset();
@@ -693,6 +752,7 @@ namespace Framework::Scripting {
 
         // Entered, the runtime is the one GetIsolate() names, so the file runs in it.
         v8::Isolate *isolate = it->second->runtime->GetIsolate();
+        ResourceMonitor::Scope charged(_monitor, isolate);
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
         return ExecuteFile(filepath);

@@ -9,6 +9,8 @@
 #include "value_transfer.h"
 #include "engine_helpers.h"
 
+#include <utils/profiler.h>
+
 #include <v8pp/convert.hpp>
 
 #include <cstring>
@@ -174,6 +176,10 @@ namespace Framework::Scripting {
                 const bool copied = CopyObject(object, out, where);
                 _ancestors.pop_back();
                 return copied;
+            }
+
+            size_t GetCopiedCount() const {
+                return ValueTransfer::kMaxValues - _valuesLeft;
             }
 
             const std::string &GetError() const {
@@ -558,11 +564,14 @@ namespace Framework::Scripting {
     }
 
     Utils::Result<TransferredValue, std::string> ValueTransfer::Copy(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> value, const TransferFunctions &functions) {
+        FW_PROFILE_SCOPE_N("Scripting::CopyValue");
         // Getters run during the copy; one that throws fails the copy rather than leaking the exception to the caller.
         v8::TryCatch tryCatch(isolate);
         Copier copier(isolate, context, functions);
         TransferredValue out;
-        if (!copier.Copy(value, out, Path {})) {
+        const bool copied = copier.Copy(value, out, Path {});
+        FW_PROFILE_VALUE(copier.GetCopiedCount());
+        if (!copied) {
             std::string error = copier.GetError();
             if (tryCatch.HasCaught() && !tryCatch.HasTerminated()) {
                 error += " (" + ToUtf8(isolate, tryCatch.Exception()) + ")";
@@ -573,6 +582,7 @@ namespace Framework::Scripting {
     }
 
     v8::MaybeLocal<v8::Value> ValueTransfer::Rebuild(v8::Isolate *isolate, v8::Local<v8::Context> context, const TransferredValue &value, const TransferFunctions &functions) {
+        FW_PROFILE_SCOPE_N("Scripting::RebuildValue");
         Builder builder(isolate, context, functions);
         return builder.Build(value);
     }

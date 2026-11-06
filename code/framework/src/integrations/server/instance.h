@@ -81,6 +81,10 @@ namespace Framework::Integrations::Server {
         // Leave off in production.
         bool developmentMode = false;
 
+        // A script handler, listener, export call or resource tick that spends at least this long in its own
+        // script logs a warning naming the resource (server.json "slow-script-ms"; 0 turns the warnings off).
+        int32_t slowScriptWarnMs = 50;
+
         // What a resource's asset paks may carry, one lane per folder (`<resource>/<lane>/`). Null
         // ships none. See AssetPakBuilder.
         std::shared_ptr<const Utils::StreamedAssets::Policy> assetPakPolicy;

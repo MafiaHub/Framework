@@ -320,6 +320,9 @@ namespace Framework::Integrations::Server {
         if (_scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
             return Error("Failed to initialize the scripting engine");
         }
+        if (auto *engine = _scriptingModule->GetEngine()) {
+            engine->GetMonitor().SetSlowThresholdMs(_opts.slowScriptWarnMs);
+        }
 
         CoreModules::SetScriptingModule(_scriptingModule.get());
 
@@ -435,6 +438,7 @@ namespace Framework::Integrations::Server {
         read("download-url", opts.assetDownloadUrl);
         read("max-downloading", opts.maxDownloading);
         read("package-secret", opts.packageSecret);
+        read("slow-script-ms", opts.slowScriptWarnMs);
     }
 
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts) {
@@ -542,6 +546,7 @@ namespace Framework::Integrations::Server {
         frameworkKeys["download-url"]    = _opts.assetDownloadUrl;
         frameworkKeys["max-downloading"] = _opts.maxDownloading;
         frameworkKeys["package-secret"]  = _opts.packageSecret;
+        frameworkKeys["slow-script-ms"]  = _opts.slowScriptWarnMs;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
 
@@ -1185,6 +1190,41 @@ namespace Framework::Integrations::Server {
             },
             "Show server status");
 
+        _commandProcessor->RegisterCommand(
+            "resmon", {},
+            [this](cxxopts::ParseResult &result) {
+                auto *engine = _scriptingModule ? _scriptingModule->GetEngine() : nullptr;
+                if (!engine) {
+                    return;
+                }
+                auto stats        = engine->GetRuntimeStats();
+                const bool byHeap = !result.unmatched().empty() && result.unmatched()[0] == "heap";
+                std::ranges::sort(stats, [byHeap](const Framework::Scripting::RuntimeStats &a, const Framework::Scripting::RuntimeStats &b) {
+                    return byHeap ? a.heapUsedBytes + a.externalBytes > b.heapUsedBytes + b.externalBytes : a.scriptMsPerTick > b.scriptMsPerTick;
+                });
+                constexpr double kMB = 1024.0 * 1024.0;
+                std::string table;
+                if (byHeap) {
+                    // The memory view: what each runtime holds, on the heap and outside it (Buffers, ArrayBuffers), and
+                    // what collecting it costs.
+                    table = fmt::format("{:<28} {:>8} {:>8} {:>9} {:>8} {:>8} {:>7}\n", "resource", "heap MB", "total MB", "limit MB", "ext MB", "GC ms/s", "GCs");
+                    for (const auto &runtime : stats) {
+                        table +=
+                            fmt::format("{:<28} {:>8.1f} {:>8.1f} {:>9.0f} {:>8.1f} {:>8.2f} {:>7}\n", runtime.name, runtime.heapUsedBytes / kMB, runtime.heapTotalBytes / kMB, runtime.heapLimitBytes / kMB, runtime.externalBytes / kMB, runtime.gcMsPerSecond, runtime.gcPauses);
+                    }
+                }
+                else {
+                    table = fmt::format("{:<28} {:>8} {:>8} {:>8} {:>9} {:>8} {:>6}\n", "resource", "ms/tick", "max ms", "heap MB", "limit MB", "GC ms/s", "slow");
+                    for (const auto &runtime : stats) {
+                        table += fmt::format("{:<28} {:>8.2f} {:>8.1f} {:>8.1f} {:>9.0f} {:>8.2f} {:>6}\n", runtime.name, runtime.scriptMsPerTick, runtime.scriptMsMaxTick, runtime.heapUsedBytes / kMB, runtime.heapLimitBytes / kMB, runtime.gcMsPerSecond, runtime.slowReports);
+                    }
+                }
+                const double slowMs        = engine->GetMonitor().GetSlowThresholdMs();
+                const std::string slowNote = slowMs > 0.0 ? fmt::format("over {:.0f} ms since start", slowMs) : std::string("warnings off");
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Resource monitor, last minute (slow: {}):\n{}", slowNote, table);
+            },
+            "Script time, heap and GC per resource over the last minute; resmon heap for the memory view");
+
         // Resource lifecycle commands. Helper folds the shared boilerplate
         // (resolve manager, require a name, log the result).
         auto resourceCommand = [this](std::string_view verb, auto op) {
@@ -1440,6 +1480,11 @@ namespace Framework::Integrations::Server {
         if (_nextTick <= start) {
             FW_PROFILE_SCOPE_N("Server::Tick");
 
+            // One monitor frame per server tick, so a resource's RPC handlers, timers and events in it add up together.
+            if (auto *engine = _scriptingModule ? _scriptingModule->GetEngine() : nullptr; engine != nullptr && engine->IsInitialized()) {
+                engine->CloseMonitorTick();
+            }
+
             // Before the packet pump: voice frames are routed inline there, and must see the worlds
             // scripts and PostUpdate set last tick, not the ones from before them.
             auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr;
@@ -1451,6 +1496,7 @@ namespace Framework::Integrations::Server {
             // Before the interest rebuild in the packet pump, so attached labels stream from where
             // their targets are now.
             if (replication) {
+                FW_PROFILE_SCOPE_N("Server::TextLabels");
                 Framework::Scripting::Builtins::TextLabel::FollowTargets(*replication);
             }
 
@@ -1460,10 +1506,14 @@ namespace Framework::Integrations::Server {
             }
 
             if (replication) {
+                FW_PROFILE_SCOPE_N("Server::Voice");
                 _voiceServer.Update();
             }
 
-            DispatchVoiceChanges();
+            {
+                FW_PROFILE_SCOPE_N("Server::VoiceChanges");
+                DispatchVoiceChanges();
+            }
 
             if (_scriptingModule) {
                 FW_PROFILE_SCOPE_N("Server::Scripting");

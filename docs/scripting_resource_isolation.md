@@ -189,6 +189,45 @@ that is executing and values built in the host are copied into resources:
 This is a scripting-layer change and a minor version bump under the versioning
 rules.
 
+### Monitoring resources
+
+`ResourceMonitor` (`scripting/resource_monitor.h`) charges script time to the
+runtime the engine enters: its own tick and its loop runs between ticks
+(timers, I/O, `await` continuations), a cross-runtime call or settlement, an
+event or message handler, a state bag listener, a message reply. What an entry
+queues runs as it returns, and is charged with it. Entering a runtime pauses
+the one it was entered from, so a resource is not charged for the resources it
+calls. A resource re-entered through another (its handler calls a second
+resource, whose code raises an event the first one handles) is charged for
+both of its frames, as its own time. The server closes one frame at the top of
+each server tick (`NodeEngine::CloseMonitorTick`), so script run between two
+ticks counts in the first one's frame. Once a second the monitor also reads
+each runtime's heap and its collector's pauses, counted from zero at the
+runtime's start, so a resource's startup collections are in its first second.
+Its window is the last minute of wall time, however long the ticks in it took.
+It runs on the main thread only.
+
+- `NodeEngine::GetRuntimeStats()` returns, per runtime, the mean and worst
+  script time per server tick over the last minute, total script time, heap
+  used, committed and limit, external memory, collector time per second and
+  pause count, and the slow reports below.
+- The `resmon` console command prints the time view of them: per runtime, the
+  mean and worst script time per tick, heap used and limit, collector time per
+  second and slow reports, sorted by script time. `resmon heap` prints the
+  memory view: heap used, committed and limit, external memory, collector time
+  and pauses, sorted by what each runtime holds.
+- An event or message handler, state bag listener, export call, message reply,
+  runtime tick or loop run between ticks whose own script time reaches
+  `slow-script-ms` (server.json, default 50, 0 turns it off) logs one line
+  naming the resource and, for a handler or listener, the event or key, for an
+  export call, the function's name and the calling resource; at most once every
+  10 s for the same resource, kind and name. Time it spent in other resources
+  is theirs and is reported against them.
+- With Tracy connected, each runtime's tick is a `Scripting::Runtime` zone
+  and each loop run between ticks a `Scripting::RunLoop` zone, both named after
+  its resource, and every collector pause of 1 ms or more is a
+  message naming the runtime.
+
 ## Plan
 
 1. **Runtime split** - `NodeRuntime` extracted from `NodeEngine`; the engine
@@ -211,8 +250,8 @@ rules.
 7. **Projects** - kcd2, m2o, m3o and hogwarts register their handle types and
    drop the handles they keep in a resource's runtime when it stops.
 8. **Follow-ups** - a per-resource monitor (time and heap per runtime, slow
-   handler warnings), an opt-in for worker threads per resource, and inspector
-   access to a chosen resource.
+   handler warnings) *(done, see "Monitoring resources")*, an opt-in for worker
+   threads per resource, and inspector access to a chosen resource.
 
 ## Open questions
 

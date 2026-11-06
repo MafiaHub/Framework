@@ -9,6 +9,10 @@
 #include "node_runtime.h"
 #include "callback_scope.h"
 
+#include <utils/profiler.h>
+
+#include <fmt/format.h>
+
 namespace {
     // Node's own scope on the runtime's environment, as Node opens around its callbacks and the platform's tasks:
     // closing it runs the nextTick queue, the microtasks and the unhandled rejections. Node keeps the resource object
@@ -23,6 +27,10 @@ namespace {
 } // anonymous namespace
 
 namespace Framework::Scripting {
+    namespace {
+        // A message per pause this long or longer: shorter scavenges would flood the timeline.
+        constexpr double kGCReportMs = 1.0;
+    } // namespace
 
     std::unique_ptr<NodeRuntime> NodeRuntime::Create(node::MultiIsolatePlatform *platform, const std::vector<std::string> &args, const std::vector<std::string> &execArgs, node::EnvironmentFlags::Flags flags, std::string_view bootstrap, std::string &error) {
         // CommonEnvironmentSetup gives every runtime a fresh isolate and its own uv loop.
@@ -53,6 +61,12 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(runtime->_isolate);
         v8::Context::Scope contextScope(runtime->_setup->context());
 
+        // Every runtime pauses its own heap on this thread, so a long pause is a server tick lost to one resource.
+        // The runtime outlives its isolate's last collection: the destructor disposes the isolate inside its body.
+        const auto pauses = static_cast<v8::GCType>(v8::kGCTypeScavenge | v8::kGCTypeMinorMarkSweep | v8::kGCTypeMarkSweepCompact);
+        runtime->_isolate->AddGCPrologueCallback(&NodeRuntime::OnGCPrologue, runtime.get(), pauses);
+        runtime->_isolate->AddGCEpilogueCallback(&NodeRuntime::OnGCEpilogue, runtime.get(), pauses);
+
         const std::string source(bootstrap);
         if (node::LoadEnvironment(runtime->_env, source.c_str()).IsEmpty()) {
             error = "Failed to load Node.js environment";
@@ -60,6 +74,36 @@ namespace Framework::Scripting {
         }
 
         return runtime;
+    }
+
+    // The filter above leaves only the atomic pauses, which V8 14.6 never nests; the type check is the same
+    // insurance Node's perf_hooks keep (nodejs/node#44046), for a V8 that interleaves another pair inside one.
+    void NodeRuntime::OnGCPrologue(v8::Isolate *, v8::GCType type, v8::GCCallbackFlags, void *data) {
+        auto *runtime = static_cast<NodeRuntime *>(data);
+        if (runtime->_gcType != 0) {
+            return;
+        }
+        runtime->_gcType  = type;
+        runtime->_gcStart = std::chrono::steady_clock::now();
+    }
+
+    void NodeRuntime::OnGCEpilogue(v8::Isolate *isolate, v8::GCType type, v8::GCCallbackFlags, void *data) {
+        auto *runtime = static_cast<NodeRuntime *>(data);
+        if (type != runtime->_gcType) {
+            return;
+        }
+        runtime->_gcType = static_cast<v8::GCType>(0);
+        const double ms  = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - runtime->_gcStart).count();
+        ++runtime->_gcPauses;
+        runtime->_gcPauseMs += ms;
+        if (ms < kGCReportMs || !FW_PROFILE_CONNECTED()) {
+            return;
+        }
+        v8::HeapStatistics heap;
+        isolate->GetHeapStatistics(&heap);
+        const char *kind          = (type & v8::kGCTypeMarkSweepCompact) ? "mark-compact" : ((type & v8::kGCTypeMinorMarkSweep) ? "minor mark-sweep" : "scavenge");
+        const std::string message = fmt::format("GC {} {:.1f} ms in {} (heap {} MB)", kind, ms, runtime->_name, heap.used_heap_size() >> 20);
+        FW_PROFILE_MESSAGE(message.c_str(), message.size());
     }
 
     NodeRuntime::~NodeRuntime() {
@@ -81,6 +125,25 @@ namespace Framework::Scripting {
         return _setup->context();
     }
 
+    RuntimeSample NodeRuntime::Sample() {
+        RuntimeSample sample;
+        sample.gcPauses  = _gcPauses;
+        sample.gcPauseMs = _gcPauseMs;
+
+        v8::Locker locker(_isolate);
+        v8::Isolate::Scope isolateScope(_isolate);
+        // Nothing runs in the isolate while it is held here, so no pause is in progress: a prologue whose epilogue
+        // never came would otherwise leave the pairing stuck and the pauses uncounted from then on.
+        _gcType = static_cast<v8::GCType>(0);
+        v8::HeapStatistics heap;
+        _isolate->GetHeapStatistics(&heap);
+        sample.heapUsedBytes  = heap.used_heap_size();
+        sample.heapTotalBytes = heap.total_heap_size();
+        sample.heapLimitBytes = heap.heap_size_limit();
+        sample.externalBytes  = heap.external_memory();
+        return sample;
+    }
+
     void NodeRuntime::Tick() {
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolateScope(_isolate);
@@ -90,12 +153,18 @@ namespace Framework::Scripting {
         // Run what the calls since the last tick left queued
         DrainTaskQueues();
 
-        // Run pending libuv events (non-blocking)
-        uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
+        // Run pending libuv events (non-blocking): timers, I/O callbacks and setImmediate
+        {
+            FW_PROFILE_SCOPE_N("Scripting::Loop");
+            uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
+        }
 
         // Run this isolate's foreground platform tasks. Not DrainTasks(): it first waits for every background task in
         // the process, so with a runtime per resource each tick would block on all their GC and compile work.
-        _platform->FlushForegroundTasks(_isolate);
+        {
+            FW_PROFILE_SCOPE_N("Scripting::PlatformTasks");
+            _platform->FlushForegroundTasks(_isolate);
+        }
 
         // Node's own callbacks and the platform's tasks drain on their way out; this catches what native code with no
         // scope of its own queued meanwhile, such as an addon settling a promise from a libuv callback
@@ -103,6 +172,8 @@ namespace Framework::Scripting {
     }
 
     void NodeRuntime::DrainTaskQueues() {
+        // Declared first so the zone spans the drain, which runs as the scope below closes.
+        FW_PROFILE_SCOPE_N("Scripting::TaskQueues");
         // A call that entered through raw V8, past the framework's entries, ran with no Node callback scope, so the
         // process.nextTick callbacks it queued wait for one to close; a microtask checkpoint alone never runs them.
         // Closing this empty scope runs the nextTick queue, the microtasks and pending unhandled rejections.
