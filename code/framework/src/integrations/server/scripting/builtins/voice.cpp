@@ -369,6 +369,11 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             v8pp::metadata::docs("boolean", {v8pp::metadata::param("player", "Entity", false, "Player to query.")},
                 "Checks whether a player is speaking right now. Tracks speech rather than the push-to-talk key: silence is dropped before it reaches the server, and the state clears shortly after the last frame. The same signal raises the playerVoiceStart and playerVoiceStop events.",
                 "True while the player's voice is reaching the server.")));
+
+        auto &events = Framework::Scripting::GetScriptingCatalog(isolate).data_type("EventMap");
+        events.add_property("playerVoiceStart", "[player: Player]", "Dispatched when a player starts speaking, as isPlayerTalking turns true.");
+        events.add_property("playerVoiceStop", "[player: Player]", "Dispatched shortly after a player's last voice frame, as isPlayerTalking turns false. A player who disconnects while talking gets no stop, so clear them on disconnect too.");
+        events.add_property("playerVoiceTierChange", "[player: Player, tier: number]", "Dispatched when a player switches voice tier themselves: 0 whisper, 1 normal, 2 shout. setPlayerTier does not raise it.");
     }
 
 } // namespace Framework::Integrations::Server::Scripting::Builtins
