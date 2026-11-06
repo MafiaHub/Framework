@@ -125,13 +125,16 @@ namespace Framework::Scripting {
         return _setup->context();
     }
 
-    RuntimeSample NodeRuntime::Sample() const {
+    RuntimeSample NodeRuntime::Sample() {
         RuntimeSample sample;
         sample.gcPauses  = _gcPauses;
         sample.gcPauseMs = _gcPauseMs;
 
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolateScope(_isolate);
+        // Nothing runs in the isolate while it is held here, so no pause is in progress: a prologue whose epilogue
+        // never came would otherwise leave the pairing stuck and the pauses uncounted from then on.
+        _gcType = static_cast<v8::GCType>(0);
         v8::HeapStatistics heap;
         _isolate->GetHeapStatistics(&heap);
         sample.heapUsedBytes  = heap.used_heap_size();

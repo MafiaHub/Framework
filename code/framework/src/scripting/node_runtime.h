@@ -85,7 +85,7 @@ namespace Framework::Scripting {
         }
 
         // Heap figures and the collector's running totals. Locks the isolate, so nothing may be running in it.
-        RuntimeSample Sample() const;
+        RuntimeSample Sample();
 
         /**
          * Run ready libuv callbacks once, without Tick()'s drains: Node's own callbacks drain on their way out.
