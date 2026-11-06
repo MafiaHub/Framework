@@ -102,5 +102,12 @@ namespace Framework::Launcher::Loaders {
         void Protect() const;
         void LoadIntoModule(HMODULE module);
         void RunTLSCallbacks() const;
+
+        // Hands the game's TLS callbacks to FrameworkLoaderData.dll, which relays thread attach/detach to them
+        // from then on, as the OS loader would. Returns how many callbacks it took.
+        size_t ForwardTLSThreadCallbacks() const;
+
+      private:
+        PIMAGE_TLS_CALLBACK *GetTLSCallbacks() const;
     };
 } // namespace Framework::Launcher::Loaders
