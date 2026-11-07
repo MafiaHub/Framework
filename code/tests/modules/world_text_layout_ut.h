@@ -10,6 +10,7 @@
 
 // Windows only: ImGui comes from a Windows-only vcpkg port.
 
+#include "external/imgui/font_fallback.h"
 #include "external/imgui/widgets/world_text_layout.h"
 #include "integrations/client/ui/text_label_imgui.h"
 
@@ -36,6 +37,29 @@ namespace WorldTextLayoutTest {
         }
         ~Frame() {
             ImGui::EndFrame();
+            ImGui::DestroyContext(context);
+        }
+    };
+
+    // No fonts and no frame yet, so a test adds its own before the first NewFrame.
+    struct FontFrame {
+        ImGuiContext *context = nullptr;
+        bool started          = false;
+        FontFrame() {
+            context        = ImGui::CreateContext();
+            ImGuiIO &io    = ImGui::GetIO();
+            io.DisplaySize = ImVec2(1280.0f, 720.0f);
+            io.DeltaTime   = 1.0f / 60.0f;
+            io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+        }
+        void Start() {
+            ImGui::NewFrame();
+            started = true;
+        }
+        ~FontFrame() {
+            if (started) {
+                ImGui::EndFrame();
+            }
             ImGui::DestroyContext(context);
         }
     };
@@ -157,5 +181,27 @@ MODULE(world_text_layout, {
         UEQUALS(coloured.spans.size(), 2u);
         UEQUALS(*coloured.spans[coloured.glyphs.front().span].color, 0xFFFF0000u);
         EQUALS((!coloured.spans[coloured.glyphs.back().span].color.has_value()), true);
+    });
+
+    IT("a family face draws what it lacks in the default font, and its own glyphs first", {
+        FontFrame frame;
+        ImGuiIO &io      = ImGui::GetIO();
+        ImFont *fallback = io.Fonts->AddFontDefaultBitmap();
+        // Faces without A-Z, standing in for a family file that lacks a character.
+        static const ImWchar kNoCapitals[] = {'A', 'Z', 0};
+        ImFontConfig cfg;
+        cfg.GlyphExcludeRanges = kNoCapitals;
+        ImFont *face           = io.Fonts->AddFontDefaultVector(&cfg);
+        ImFont *bare           = io.Fonts->AddFontDefaultVector(&cfg);
+        Framework::External::ImGUI::MergeFontFallback(*io.Fonts, face, fallback);
+        UEQUALS(face->Sources.Size, 1 + fallback->Sources.Size);
+        frame.Start();
+
+        ImFontBaked *baked          = face->GetFontBaked(26.0f);
+        const ImFontGlyph *own      = baked->FindGlyphNoFallback('a');
+        const ImFontGlyph *borrowed = baked->FindGlyphNoFallback('A');
+        EQUALS((own != nullptr && own->SourceIdx == 0), true);
+        EQUALS((borrowed != nullptr && borrowed->SourceIdx == 1), true);
+        EQUALS((bare->GetFontBaked(26.0f)->FindGlyphNoFallback('A') == nullptr), true);
     });
 });

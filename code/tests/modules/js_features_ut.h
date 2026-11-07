@@ -1092,6 +1092,8 @@ MODULE(js_features, {
             "{ hideFrom: [null] }",
             "{ hideFrom: [, 1] }",
             "{ hideForTarget: 1 }",
+            "{ font: 5 }",
+            "{ font: 'x'.repeat(65) }",
             "{ minDrawDistance: -1 }",
             "{ minFadeDistance: 'far' }",
             "{ drawDistance: 10, minDrawDistance: 10 }",
@@ -1102,7 +1104,7 @@ MODULE(js_features, {
 
         const std::string accepted = "TextLabel.create(0, 0, 0, 'x', { fontSize: 20, opacity: 0.5, outline: { width: 2 }, shadow: { blur: 4 }, background: true, sizeMode: 'world', "
                                      "style: 'box', attachTo: 5, offset: [0, 0, 10], markup: true, align: 'left', anchor: 'bottom', color: new Color(1, 0, 0, 1), showTo: [], hideFrom: null, hideForTarget: true, "
-                                     "minDrawDistance: 2, minFadeDistance: 4 })";
+                                     "font: 'Inter', minDrawDistance: 2, minFadeDistance: 4 })";
         STREQUALS(RunJSErrorName(engine, accepted).c_str(), "Error");
         STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', 18, 40)").c_str(), "Error");
 
@@ -1149,12 +1151,12 @@ MODULE(js_features, {
                       .c_str(),
             "hi,25,0");
 
-        // The near edge reads back through getOptions(), the properties and the setters.
-        STREQUALS(RunJSString(engine, "(() => { const l = TextLabel.create(0, 0, 0, 'x', { drawDistance: 20, minDrawDistance: 5, minFadeDistance: 7 }); const o = l.getOptions(); "
-                                      "const copy = TextLabel.create(0, 0, 0, 'y', o).getOptions(); l.setMinDrawDistance(3); l.setMinFadeDistance(4); "
-                                      "return [o.minDrawDistance, o.minFadeDistance, copy.minDrawDistance, l.minDrawDistance, l.minFadeDistance].join(); })()")
+        // The near edge and the font read back through getOptions(), the properties and the setters.
+        STREQUALS(RunJSString(engine, "(() => { const l = TextLabel.create(0, 0, 0, 'x', { drawDistance: 20, minDrawDistance: 5, minFadeDistance: 7, font: 'Inter' }); const o = l.getOptions(); "
+                                      "const copy = TextLabel.create(0, 0, 0, 'y', o).getOptions(); l.setMinDrawDistance(3); l.setMinFadeDistance(4); l.update({ font: null }); "
+                                      "return [o.minDrawDistance, o.minFadeDistance, o.font, copy.minDrawDistance, copy.font, l.minDrawDistance, l.minFadeDistance, JSON.stringify(l.font)].join(); })()")
                       .c_str(),
-            "5,7,5,3,4");
+            "5,7,Inter,5,Inter,3,4,\"\"");
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();

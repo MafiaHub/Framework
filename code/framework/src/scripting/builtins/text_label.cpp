@@ -70,6 +70,7 @@ namespace Framework::Scripting::Builtins {
             std::optional<float> fadeDistance;
             std::optional<float> minDrawDistance;
             std::optional<float> minFadeDistance;
+            std::optional<std::string> font; // "" = the default font
             std::optional<bool> occlusion;
             std::optional<uint32_t> virtualWorld;
             std::optional<std::optional<std::vector<uint64_t>>> showTo; // set to nullopt = everyone, to {} = nobody
@@ -81,7 +82,7 @@ namespace Framework::Scripting::Builtins {
             std::vector<MafiaNet::PeerGuid> hideFromGuids;
         };
 
-        constexpr std::string_view kOptionKeys[] {"text", "markup", "position", "attachTo", "offset", "fontSize", "sizeMode", "minSize", "maxSize", "color", "opacity", "style", "outline", "shadow", "background", "align", "anchor", "lineSpacing", "maxWidth",
+        constexpr std::string_view kOptionKeys[] {"text", "markup", "position", "attachTo", "offset", "fontSize", "font", "sizeMode", "minSize", "maxSize", "color", "opacity", "style", "outline", "shadow", "background", "align", "anchor", "lineSpacing", "maxWidth",
             "drawDistance", "fadeDistance", "minDrawDistance", "minFadeDistance", "occlusion", "virtualWorld", "showTo", "hideFrom", "hideForTarget"};
 
         constexpr std::pair<std::string_view, Networking::Replication::Entities::TextLabelStyle> kStyles[] {{"none", Networking::Replication::Entities::TextLabelStyle::None}, {"shadow", Networking::Replication::Entities::TextLabelStyle::Shadow},
@@ -346,6 +347,15 @@ namespace Framework::Scripting::Builtins {
                 }
                 else if (key == "fontSize") {
                     ok = number(TextLabel::kMinFontSize, TextLabel::kMaxFontSize, options.fontSize);
+                }
+                else if (key == "font") {
+                    std::string family = value->IsString() ? v8pp::from_v8<std::string>(isolate, value) : std::string();
+                    if (value->IsNull() || (value->IsString() && family.size() <= TextLabel::kMaxFontBytes)) {
+                        options.font = std::move(family);
+                    }
+                    else {
+                        ok = Fail(isolate, "font must be a family name of at most " + std::to_string(TextLabel::kMaxFontBytes) + " bytes, or null");
+                    }
                 }
                 else if (key == "sizeMode") {
                     ok = (options.sizeMode = Enum(isolate, value, name, kSizeModes)).has_value();
@@ -614,6 +624,9 @@ namespace Framework::Scripting::Builtins {
             if (options.fontSize) {
                 handle.SetFontSize(*options.fontSize);
             }
+            if (options.font) {
+                label.font = *options.font;
+            }
             if (options.sizeMode) {
                 label.sizeMode = *options.sizeMode;
             }
@@ -773,6 +786,7 @@ namespace Framework::Scripting::Builtins {
             }
             put(out, "offset", vec(label.attachOffset));
             set(out, "fontSize", label.fontSize);
+            set(out, "font", label.font);
             set(out, "sizeMode", EnumName(label.sizeMode, kSizeModes));
             set(out, "minSize", label.minSize);
             set(out, "maxSize", label.maxSize);
@@ -927,6 +941,18 @@ namespace Framework::Scripting::Builtins {
         }
     }
 
+    std::string TextLabel::GetFont() const {
+        auto *label = ResolveLabel();
+        return label ? label->font : std::string();
+    }
+
+    void TextLabel::SetFont(const std::string &family) {
+        if (auto *label = ResolveLabel()) {
+            label->font = family;
+            Utils::StringUtils::TruncateUtf8(label->font, kMaxFontBytes);
+        }
+    }
+
     uint32_t TextLabel::GetStyle() const {
         auto *label = ResolveLabel();
         return label ? static_cast<uint32_t>(label->style) : 0;
@@ -1054,6 +1080,9 @@ namespace Framework::Scripting::Builtins {
                         "Changes how close the label stops drawing, so another can take over up close. It is still sent that close, so the swap has no gap; one at or past the draw distance never draws."))
                 .function("setMinFadeDistance", &TextLabel::SetMinFadeDistance,
                     v8pp::metadata::docs("void", {v8pp::metadata::param("distance", "number", false, "World units where the label is fully faded in; at or below the min draw distance it appears at once.")}, "Changes how far the label fades in from its min draw distance."))
+                .function("setFont", &TextLabel::SetFont,
+                    v8pp::metadata::docs("void", {v8pp::metadata::param("family", "string", false, "A family viewers' clients registered with Fonts.register, at most 64 bytes; empty is the game's font.")},
+                        "Changes the label's font. A viewer whose client never registered the family sees the game's font."))
                 .function("setStyle", &TextLabel::SetStyle, v8pp::metadata::docs("void", {v8pp::metadata::param("style", "number", false, "0 none, 1 shadow, 2 outline, 3 box; unsupported values are ignored.")}, "Resets the outline, shadow and background to a preset."))
                 .function("detach", &TextLabel::Detach, v8pp::metadata::docs("void", {}, "Stops following an entity; the label returns to its own position."))
                 .property("text", &TextLabel::GetText, v8pp::metadata::property_docs("string", "Current replicated label text."))
@@ -1063,6 +1092,7 @@ namespace Framework::Scripting::Builtins {
                 .property("fadeDistance", &TextLabel::GetFadeDistance, v8pp::metadata::property_docs("number", "Distance in world units where fading starts."))
                 .property("minDrawDistance", &TextLabel::GetMinDrawDistance, v8pp::metadata::property_docs("number", "Distance in world units up to which the label does not draw."))
                 .property("minFadeDistance", &TextLabel::GetMinFadeDistance, v8pp::metadata::property_docs("number", "Distance in world units where the label is fully faded in."))
+                .property("font", &TextLabel::GetFont, v8pp::metadata::property_docs("string", "The font family it asks for; empty is the game's font."))
                 .property("style", &TextLabel::GetStyle, v8pp::metadata::property_docs("number", "The preset nearest the current look: 0 none, 1 shadow, 2 outline, 3 box."));
 
             // setColor accepts either a Color or byte components (r, g, b, a from 0-255), so scripts
@@ -1125,6 +1155,7 @@ namespace Framework::Scripting::Builtins {
         type.add_property("attachTo", optional("Entity | number | null"), "Another live entity to follow, or its network id; null or 0 detaches. The label is destroyed with it.");
         type.add_property("offset", optional("Vector3 | { x: number; y: number; z: number }"), "Relative to the attached entity; the game decides the reference point (a player's head, say).");
         type.add_property("fontSize", optional("number"), "Pixels, 1-512. Default 16.");
+        type.add_property("font", optional("string | null"), "A family viewers' clients registered with Fonts.register; {b} and {i} use its bold and italic faces. Empty or null (default), or a family a viewer's client never registered, is the game's font. At most 64 bytes.");
         type.add_property("sizeMode", optional("\"screen\" | \"world\""), "\"screen\" (default): fontSize pixels at any distance. \"world\": fontSize pixels at one metre on a 1080p view, shrinking with distance.");
         type.add_property("minSize", optional("number"), "World mode: never smaller than this many pixels.");
         type.add_property("maxSize", optional("number"), "World mode: never larger than this many pixels; 0 = no cap.");

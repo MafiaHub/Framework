@@ -15,6 +15,7 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
+#include "font_family.h"
 #include "graphics/backend/d3d12_ui_compositor.h"
 #include "graphics/types.h"
 
@@ -76,6 +77,25 @@ namespace Framework::External::ImGUI {
 
         std::unordered_map<std::string, ImFont *> _fonts;
 
+        // Families added at runtime: queued from any thread, loaded before the next frame. A face
+        // stays in the atlas until shutdown, as layouts keep pointers into it, so one file is loaded
+        // once and a budget caps what servers can add over the process.
+        struct PendingFamily {
+            std::string family;
+            FontFamilySource faces;
+        };
+        static constexpr size_t kMaxRuntimeFaces     = 64;
+        static constexpr size_t kMaxRuntimeFontBytes = 64u << 20;
+        mutable std::mutex _familyMtx;
+        std::vector<PendingFamily> _pendingFamilies;
+        bool _clearFamilies = false;
+        std::unordered_map<std::string, FontFamily> _families;
+        std::unordered_map<std::string, ImFont *> _runtimeFaces; // by file size and hash; null = failed
+        size_t _runtimeFontBytes = 0;
+
+        void LoadPendingFamilies();
+        ImFont *LoadRuntimeFace(const std::string &family, const char *face, const std::string &bytes);
+
         static inline std::atomic_bool isContextInitialized = false;
 
         bool _processEventEnabled = true;
@@ -123,6 +143,14 @@ namespace Framework::External::ImGUI {
             const auto it = _fonts.find(name);
             return it != _fonts.end() ? it->second : nullptr;
         }
+
+        // Loads a family's faces before the next frame, replacing what it had. Any thread. A face
+        // that fails to parse, or would pass the budget, stays null and is logged.
+        void QueueFontFamily(const std::string &family, FontFamilySource faces);
+        // Forgets every family's name, as a session ends; the faces stay loaded for the next one.
+        void ClearFontFamilies();
+        // A queued family once it has loaded, else a declared font as the regular face.
+        FontFamily GetFontFamily(const std::string &family) const;
 
         void PushWidget(const RenderProc &proc) {
             _renderQueue.push(proc);

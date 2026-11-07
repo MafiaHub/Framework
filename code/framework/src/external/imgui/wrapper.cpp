@@ -8,10 +8,17 @@
 
 #include "wrapper.h"
 
+#include "font_fallback.h"
 #include "graphics/renderer.h"
 
 #include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <functional>
 #include <logging/logger.h>
+#include <utility>
+
+#include <imgui.h>
 
 #include <imgui_impl_dx11.h>
 #ifdef FW_IMGUI_DX12
@@ -171,6 +178,14 @@ namespace Framework::External::ImGUI {
 
         ImGui::DestroyContext();
         _fonts.clear(); // the atlas that owned them is gone
+        {
+            std::scoped_lock lock(_familyMtx);
+            _pendingFamilies.clear();
+            _clearFamilies = false;
+            _families.clear();
+        }
+        _runtimeFaces.clear();
+        _runtimeFontBytes = 0;
 
         isContextInitialized = false;
         Lifecycle::Shutdown();
@@ -178,6 +193,9 @@ namespace Framework::External::ImGUI {
 
     void Wrapper::Update() {
         std::scoped_lock _lock(_renderMtx);
+
+        // Between frames, so no draw list of this frame holds a face being added.
+        LoadPendingFamilies();
 
         switch (_config.renderBackend) {
         case Graphics::RendererBackend::BACKEND_D3D_9: {
@@ -384,6 +402,114 @@ namespace Framework::External::ImGUI {
 
     bool Wrapper::WantsTextInput() {
         return isContextInitialized && ImGui::GetIO().WantTextInput;
+    }
+
+    static size_t FaceBytes(const FontFamilySource &faces) {
+        return faces.regular.size() + faces.bold.size() + faces.italic.size() + faces.boldItalic.size();
+    }
+
+    void Wrapper::QueueFontFamily(const std::string &family, FontFamilySource faces) {
+        std::scoped_lock lock(_familyMtx);
+        // Registering again before the next frame replaces the queued faces, and the queue holds no
+        // more than the runtime budget, so a script that registers in a loop cannot grow it.
+        std::erase_if(_pendingFamilies, [&](const PendingFamily &entry) {
+            return entry.family == family;
+        });
+        size_t queued = 0;
+        for (const PendingFamily &entry : _pendingFamilies) {
+            queued += FaceBytes(entry.faces);
+        }
+        if (FaceBytes(faces) > kMaxRuntimeFontBytes - queued) {
+            Logging::GetLogger("ImGui")->warn("Font '{}' not loaded: more than {} MiB of fonts are waiting for the next frame", family, kMaxRuntimeFontBytes >> 20);
+            return;
+        }
+        _pendingFamilies.push_back({family, std::move(faces)});
+    }
+
+    void Wrapper::ClearFontFamilies() {
+        std::scoped_lock lock(_familyMtx);
+        _pendingFamilies.clear();
+        _clearFamilies = true;
+    }
+
+    FontFamily Wrapper::GetFontFamily(const std::string &family) const {
+        if (family.empty()) {
+            return {};
+        }
+        {
+            std::scoped_lock lock(_familyMtx);
+            if (const auto it = _families.find(family); it != _families.end()) {
+                return it->second;
+            }
+        }
+        return {GetFont(family)};
+    }
+
+    void Wrapper::LoadPendingFamilies() {
+        std::vector<PendingFamily> pending;
+        bool clear = false;
+        {
+            std::scoped_lock lock(_familyMtx);
+            pending.swap(_pendingFamilies);
+            clear = std::exchange(_clearFamilies, false);
+        }
+        if (clear) {
+            std::scoped_lock lock(_familyMtx);
+            _families.clear();
+        }
+        if (!isContextInitialized) {
+            return;
+        }
+        // Parsing runs outside the lock: a render-thread GetFontFamily must not wait on it.
+        for (const PendingFamily &entry : pending) {
+            const FontFamily loaded {LoadRuntimeFace(entry.family, "regular", entry.faces.regular), LoadRuntimeFace(entry.family, "bold", entry.faces.bold), LoadRuntimeFace(entry.family, "italic", entry.faces.italic),
+                LoadRuntimeFace(entry.family, "boldItalic", entry.faces.boldItalic)};
+            std::scoped_lock lock(_familyMtx);
+            _families[entry.family] = loaded;
+        }
+    }
+
+    ImFont *Wrapper::LoadRuntimeFace(const std::string &family, const char *face, const std::string &bytes) {
+        // ImGui asserts on anything this small; no real font is.
+        if (bytes.size() <= 100) {
+            return nullptr;
+        }
+        const std::string key = std::to_string(bytes.size()) + ":" + std::to_string(std::hash<std::string> {}(bytes));
+        if (const auto it = _runtimeFaces.find(key); it != _runtimeFaces.end()) {
+            return it->second;
+        }
+        if (_runtimeFaces.size() >= kMaxRuntimeFaces || bytes.size() > kMaxRuntimeFontBytes - _runtimeFontBytes) {
+            Logging::GetLogger("ImGui")->warn("Font '{}' {} face not loaded: runtime fonts are capped at {} faces and {} MiB until the game restarts", family, face, kMaxRuntimeFaces, kMaxRuntimeFontBytes >> 20);
+            return nullptr;
+        }
+
+        // The default font keeps the first slot (see Init), and is what a face falls back to.
+        ImGuiIO &io = ImGui::GetIO();
+        if (io.Fonts->Fonts.empty()) {
+            io.Fonts->AddFontDefault();
+        }
+        const ImFont *fallback = io.FontDefault ? io.FontDefault : io.Fonts->Fonts[0];
+
+        // The atlas owns the copy, and frees it itself when the face fails to load.
+        void *data = IM_ALLOC(bytes.size());
+        std::memcpy(data, bytes.data(), bytes.size());
+        ImFontConfig cfg;
+        cfg.Flags |= ImFontFlags_NoLoadError;
+        std::snprintf(cfg.Name, sizeof(cfg.Name), "%s %s", family.c_str(), face);
+        // ImGui asserts on a file that does not parse; a server's file is only logged.
+        const bool assertOnError           = std::exchange(io.ConfigErrorRecoveryEnableAssert, false);
+        ImFont *font                       = io.Fonts->AddFontFromMemoryTTF(data, static_cast<int>(bytes.size()), 0.0f, &cfg);
+        io.ConfigErrorRecoveryEnableAssert = assertOnError;
+        if (!font) {
+            Logging::GetLogger("ImGui")->warn("Font '{}' {} face failed to load; it draws with the default font", family, face);
+        }
+        else {
+            MergeFontFallback(*io.Fonts, font, fallback);
+            _runtimeFontBytes += bytes.size();
+        }
+        // A failure too, so registering the same broken file again does not parse it again.
+        _runtimeFaces[key] = font;
+        return font;
     }
 
 } // namespace Framework::External::ImGUI
