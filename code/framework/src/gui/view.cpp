@@ -163,6 +163,23 @@ namespace Framework::GUI {
 
         if (data.event == ViewEvent::LoadingStart && data.isMainFrame) {
             _navigationStarted = true;
+            // A new document starts with nothing focused, and the old one never reports its caret leaving,
+            // so the blur is raised here: scripts see false before the next document's true.
+            _textInputFocused = false;
+            if (_formControlFocused) {
+                ViewEventData blur;
+                blur.event = ViewEvent::InputFocusChange;
+                EmitViewEvent(blur);
+            }
+        }
+
+        if (data.event == ViewEvent::InputFocusChange) {
+            _textInputFocused = data.editable;
+            // The renderer reports every focus change; scripts hear only form-control transitions.
+            if (data.focused == _formControlFocused) {
+                return;
+            }
+            _formControlFocused = data.focused;
         }
 
         // window object exists from main-frame load start; bind before anything talks to the page

@@ -674,6 +674,16 @@ namespace Framework::GUI {
         return false;
     }
 
+    bool Manager::IsAnyViewTextInputFocused() const {
+        std::scoped_lock lock(_renderMutex);
+        for (const auto &view : _views) {
+            if (view->HasTextInputFocus()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool Manager::IsAnyGCViewFocused() const {
         std::scoped_lock lock(_renderMutex);
         for (const auto &view : _views) {

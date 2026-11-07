@@ -10,6 +10,8 @@
 
 #include "gui/resources/scheme.h"
 
+#include <utility>
+
 namespace Framework::GUI::CEF {
     void RendererApp::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) {
         // Identical to App's on purpose: a scheme missing from one process of a
@@ -49,37 +51,80 @@ namespace Framework::GUI::CEF {
         return true;
     }
 
+    namespace {
+        // The DOM is only reachable in the renderer, so the browser process cannot decide this for itself.
+        // Every report is sent: the view dedupes, and resets per document, which a renderer can't see
+        // across a cross-process navigation.
+        void ReportFocusedNode(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDOMNode> node) {
+            const bool element     = node && node->GetType() == CefDOMNode::Type::DOM_NODE_TYPE_ELEMENT;
+            const bool formControl = element && node->GetFormControlElementType() != CefDOMNode::FormControlType::DOM_FORM_CONTROL_TYPE_UNSUPPORTED;
+            // Text inputs, textareas and contenteditable: where a keystroke becomes a character.
+            const bool editable = element && node->IsEditable();
+
+            auto message = CefProcessMessage::Create("InputFocus");
+            message->GetArgumentList()->SetBool(0, formControl);
+            message->GetArgumentList()->SetBool(1, editable);
+            if (auto mainFrame = browser->GetMainFrame()) {
+                mainFrame->SendProcessMessage(PID_BROWSER, message);
+            }
+        }
+
+        class FocusedNodeVisitor final: public CefDOMVisitor {
+            CefRefPtr<CefBrowser> _browser;
+
+          public:
+            explicit FocusedNodeVisitor(CefRefPtr<CefBrowser> browser): _browser(std::move(browser)) {}
+
+            void Visit(CefRefPtr<CefDOMDocument> document) override {
+                ReportFocusedNode(_browser, document->GetFocusedNode());
+            }
+
+            IMPLEMENT_REFCOUNTING(FocusedNodeVisitor);
+        };
+
+        // An element made editable while it holds focus moves no focus, so OnFocusedNodeChanged never
+        // hears of it. The page's observer calls this instead; it is never put on window.
+        class FocusRecheckHandler final: public CefV8Handler {
+          public:
+            bool Execute(const CefString &, CefRefPtr<CefV8Value>, const CefV8ValueList &, CefRefPtr<CefV8Value> &, CefString &) override {
+                const auto context = CefV8Context::GetCurrentContext();
+                const auto frame   = context ? context->GetFrame() : nullptr;
+                const auto browser = context ? context->GetBrowser() : nullptr;
+                if (frame && browser) {
+                    frame->VisitDOM(new FocusedNodeVisitor(browser));
+                }
+                return true;
+            }
+
+            IMPLEMENT_REFCOUNTING(FocusRecheckHandler);
+        };
+
+        // Re-reads the focused element when it or an ancestor changes what makes it editable. Focus
+        // inside a child frame is that frame's own observer's to report.
+        constexpr const char *kFocusRecheckObserver = R"js(((recheck) => {
+            new MutationObserver((records) => {
+                const active = document.activeElement;
+                if (active && active.localName !== "iframe" && records.some((record) => record.target.contains(active))) recheck();
+            }).observe(document, { subtree: true, attributes: true, attributeFilter: ["contenteditable", "type"] });
+        }))js";
+    } // namespace
+
     void RendererApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) {
         CefRefPtr<CefV8Value> global    = context->GetGlobal();
         CefRefPtr<CefV8Handler> handler = new CallEventHandler(browser);
         CefRefPtr<CefV8Value> func      = CefV8Value::CreateFunction("callEvent", handler);
         global->SetValue("callEvent", func, V8_PROPERTY_ATTRIBUTE_NONE);
+
+        CefRefPtr<CefV8Value> observe;
+        CefRefPtr<CefV8Exception> error;
+        if (context->Eval(kFocusRecheckObserver, CefString(), 0, observe, error) && observe && observe->IsFunction()) {
+            observe->ExecuteFunctionWithContext(context, nullptr, {CefV8Value::CreateFunction("recheck", new FocusRecheckHandler())});
+        }
     }
 
-    // The DOM is only reachable here, so the browser process cannot decide this for itself.
     void RendererApp::OnFocusedNodeChanged(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefDOMNode> node) {
-        if (!browser) {
-            return;
-        }
-
-        const bool typing = node && node->GetType() == CefDOMNode::Type::DOM_NODE_TYPE_ELEMENT && node->GetFormControlElementType() != CefDOMNode::FormControlType::DOM_FORM_CONTROL_TYPE_UNSUPPORTED;
-
-        bool &previous = _inputFocus[browser->GetIdentifier()];
-        if (previous == typing) {
-            return;
-        }
-        previous = typing;
-
-        auto message = CefProcessMessage::Create("InputFocus");
-        message->GetArgumentList()->SetBool(0, typing);
-        if (auto mainFrame = browser->GetMainFrame()) {
-            mainFrame->SendProcessMessage(PID_BROWSER, message);
-        }
-    }
-
-    void RendererApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) {
         if (browser) {
-            _inputFocus.erase(browser->GetIdentifier());
+            ReportFocusedNode(browser, node);
         }
     }
 } // namespace Framework::GUI::CEF
