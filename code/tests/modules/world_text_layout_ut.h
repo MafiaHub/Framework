@@ -11,6 +11,7 @@
 // Windows only: ImGui comes from a Windows-only vcpkg port.
 
 #include "external/imgui/widgets/world_text_layout.h"
+#include "integrations/client/ui/text_label_imgui.h"
 
 #include <imgui.h>
 
@@ -68,6 +69,37 @@ MODULE(world_text_layout, {
             previous = bake;
         }
         EQUALS((distinct < 40), true);
+    });
+
+    // A name up close and "Unknown" past it: the far label fades out across the band the near
+    // edge of the other fades in over, so the two always sum to one.
+    IT("a label's near edge culls, fades in and leaves the far fade to it", {
+        namespace Labels = Framework::Integrations::Client::UI::TextLabels;
+        Framework::Networking::Replication::Entities::TextLabelEntity name, unknown;
+        name.drawDistance       = 10.0f;
+        name.fadeDistance       = 8.0f;
+        unknown.minDrawDistance = 8.0f;
+        unknown.minFadeDistance = 10.0f;
+        unknown.drawDistance    = 50.0f;
+        unknown.fadeDistance    = 40.0f;
+        for (float d = 0.5f; d < 10.0f; d += 0.5f) {
+            EQUALS((std::abs(Labels::Alpha(name, d) + Labels::Alpha(unknown, d) - 1.0f) < 1e-5f), true);
+        }
+        UEQUALS(Labels::Alpha(unknown, 8.0f), 0.0f);
+        UEQUALS(Labels::Alpha(unknown, 9.0f), 0.5f);
+        UEQUALS(Labels::Alpha(unknown, 20.0f), 1.0f);
+        UEQUALS(Labels::Alpha(unknown, 45.0f), 0.5f);
+        UEQUALS(Labels::Alpha(unknown, 50.0f), 0.0f);
+
+        // A fade end at or below the near edge is a hard one; with no near edge the label fades in
+        // from the camera, and with neither nothing is culled.
+        unknown.minFadeDistance = 0.0f;
+        UEQUALS(Labels::Alpha(unknown, 8.0f), 0.0f);
+        UEQUALS(Labels::Alpha(unknown, 8.01f), 1.0f);
+        UEQUALS(W::WorldTextNearAlpha(2.5f, 0.0f, 5.0f), 0.5f);
+        UEQUALS(W::WorldTextNearAlpha(5.0f, 0.0f, 5.0f), 1.0f);
+        UEQUALS(W::WorldTextNearAlpha(0.0f, 0.0f, 0.0f), 1.0f);
+        UEQUALS(W::WorldTextNearAlpha(3.0f, std::nanf(""), 0.0f), 1.0f);
     });
 
     IT("layout breaks lines at newlines", {

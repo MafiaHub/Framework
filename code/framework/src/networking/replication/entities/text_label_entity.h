@@ -92,6 +92,11 @@ namespace Framework::Networking::Replication::Entities {
         float maxWidth             = 0.0f; // wrap width in fontSize pixels; 0 = never
         bool occlusion             = true; // hidden behind world geometry
 
+        // The near edge, as fadeDistance is the far one: nothing up to minDrawDistance, opaque from
+        // minFadeDistance. A minFadeDistance at or below minDrawDistance is a hard edge.
+        float minDrawDistance = 0.0f;
+        float minFadeDistance = 0.0f;
+
         // Not replicated: bumped whenever the label is constructed or updated, so a renderer can
         // keep its layout until something changes.
         uint32_t revision = 0;
@@ -154,6 +159,8 @@ namespace Framework::Networking::Replication::Entities {
             fields.Field(lineSpacing);
             fields.Field(maxWidth);
             fields.Field(occlusion);
+            fields.Field(minDrawDistance);
+            fields.Field(minFadeDistance);
 
             if (!fields.Writing()) {
                 style    = static_cast<TextLabelStyle>(styleRaw);

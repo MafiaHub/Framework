@@ -68,6 +68,8 @@ namespace Framework::Scripting::Builtins {
             std::optional<float> maxWidth;
             std::optional<float> drawDistance;
             std::optional<float> fadeDistance;
+            std::optional<float> minDrawDistance;
+            std::optional<float> minFadeDistance;
             std::optional<bool> occlusion;
             std::optional<uint32_t> virtualWorld;
             std::optional<std::optional<std::vector<uint64_t>>> showTo; // set to nullopt = everyone, to {} = nobody
@@ -79,8 +81,8 @@ namespace Framework::Scripting::Builtins {
             std::vector<MafiaNet::PeerGuid> hideFromGuids;
         };
 
-        constexpr std::string_view kOptionKeys[] {"text", "markup", "position", "attachTo", "offset", "fontSize", "sizeMode", "minSize", "maxSize", "color", "opacity", "style", "outline", "shadow", "background", "align", "anchor", "lineSpacing", "maxWidth", "drawDistance",
-            "fadeDistance", "occlusion", "virtualWorld", "showTo", "hideFrom", "hideForTarget"};
+        constexpr std::string_view kOptionKeys[] {"text", "markup", "position", "attachTo", "offset", "fontSize", "sizeMode", "minSize", "maxSize", "color", "opacity", "style", "outline", "shadow", "background", "align", "anchor", "lineSpacing", "maxWidth",
+            "drawDistance", "fadeDistance", "minDrawDistance", "minFadeDistance", "occlusion", "virtualWorld", "showTo", "hideFrom", "hideForTarget"};
 
         constexpr std::pair<std::string_view, Networking::Replication::Entities::TextLabelStyle> kStyles[] {{"none", Networking::Replication::Entities::TextLabelStyle::None}, {"shadow", Networking::Replication::Entities::TextLabelStyle::Shadow},
             {"outline", Networking::Replication::Entities::TextLabelStyle::Outline}, {"box", Networking::Replication::Entities::TextLabelStyle::Box}};
@@ -447,6 +449,12 @@ namespace Framework::Scripting::Builtins {
                 else if (key == "fadeDistance") {
                     ok = number(0.0, maxDistance, options.fadeDistance);
                 }
+                else if (key == "minDrawDistance") {
+                    ok = number(0.0, maxDistance, options.minDrawDistance);
+                }
+                else if (key == "minFadeDistance") {
+                    ok = number(0.0, maxDistance, options.minFadeDistance);
+                }
                 else if (key == "occlusion") {
                     ok = (options.occlusion = Bool(isolate, value, name)).has_value();
                 }
@@ -489,6 +497,17 @@ namespace Framework::Scripting::Builtins {
             const float minSize = options.minSize.value_or(label ? label->minSize : 0.0f);
             const float maxSize = options.maxSize.value_or(label ? label->maxSize : 0.0f);
             return maxSize <= 0.0f || minSize <= maxSize || Fail(isolate, "minSize must not exceed maxSize");
+        }
+
+        // A near edge at or past the far one would leave nothing to draw. Only a call that sets either
+        // is checked: the setters allow it, and an unrelated update must not fail on what they left.
+        bool CheckDistances(v8::Isolate *isolate, const Options &options, const Networking::Replication::Entities::TextLabelEntity *label, float unitsPerMetre) {
+            if (!options.minDrawDistance && !options.drawDistance) {
+                return true;
+            }
+            const float minDraw = options.minDrawDistance.value_or(label ? label->minDrawDistance : 0.0f);
+            const float draw    = options.drawDistance.value_or(label ? label->drawDistance : TextLabel::kDefaultMetres * unitsPerMetre);
+            return minDraw < draw || Fail(isolate, "minDrawDistance must be less than drawDistance");
         }
 
         // `handle` is null while the label is still to be created, so it cannot be its own target.
@@ -655,6 +674,12 @@ namespace Framework::Scripting::Builtins {
             if (options.fadeDistance) {
                 handle.SetFadeDistance(*options.fadeDistance);
             }
+            if (options.minDrawDistance) {
+                handle.SetMinDrawDistance(*options.minDrawDistance);
+            }
+            if (options.minFadeDistance) {
+                handle.SetMinFadeDistance(*options.minFadeDistance);
+            }
             if (options.occlusion) {
                 label.occlusion = *options.occlusion;
             }
@@ -792,6 +817,8 @@ namespace Framework::Scripting::Builtins {
             set(out, "maxWidth", label.maxWidth);
             set(out, "drawDistance", label.drawDistance);
             set(out, "fadeDistance", label.fadeDistance);
+            set(out, "minDrawDistance", label.minDrawDistance);
+            set(out, "minFadeDistance", label.minFadeDistance);
             set(out, "occlusion", label.occlusion);
             set(out, "virtualWorld", virtualWorld);
             return out;
@@ -875,6 +902,28 @@ namespace Framework::Scripting::Builtins {
     void TextLabel::SetFadeDistance(float distance) {
         if (auto *label = ResolveLabel()) {
             label->fadeDistance = std::max(distance, 0.0f);
+        }
+    }
+
+    float TextLabel::GetMinDrawDistance() const {
+        auto *label = ResolveLabel();
+        return label ? label->minDrawDistance : 0.0f;
+    }
+
+    void TextLabel::SetMinDrawDistance(float distance) {
+        if (auto *label = ResolveLabel(); label && std::isfinite(distance)) {
+            label->minDrawDistance = std::clamp(distance, 0.0f, kMaxDrawMetres * _unitsPerMetre);
+        }
+    }
+
+    float TextLabel::GetMinFadeDistance() const {
+        auto *label = ResolveLabel();
+        return label ? label->minFadeDistance : 0.0f;
+    }
+
+    void TextLabel::SetMinFadeDistance(float distance) {
+        if (auto *label = ResolveLabel(); label && std::isfinite(distance)) {
+            label->minFadeDistance = std::clamp(distance, 0.0f, kMaxDrawMetres * _unitsPerMetre);
         }
     }
 
@@ -1000,6 +1049,11 @@ namespace Framework::Scripting::Builtins {
                     v8pp::metadata::docs("void", {v8pp::metadata::param("distance", "number", false, "Maximum rendering distance in world units, clamped from 1 to 1000 metres' worth.")}, "Changes how far away clients can render the label."))
                 .function("setFadeDistance", &TextLabel::SetFadeDistance,
                     v8pp::metadata::docs("void", {v8pp::metadata::param("distance", "number", false, "Distance in world units where fading starts; 0 starts it at 75% of the draw distance.")}, "Changes where the label starts fading out."))
+                .function("setMinDrawDistance", &TextLabel::SetMinDrawDistance,
+                    v8pp::metadata::docs("void", {v8pp::metadata::param("distance", "number", false, "World units, clamped from 0 to 1000 metres' worth; 0 draws from the camera out.")},
+                        "Changes how close the label stops drawing, so another can take over up close. It is still sent that close, so the swap has no gap; one at or past the draw distance never draws."))
+                .function("setMinFadeDistance", &TextLabel::SetMinFadeDistance,
+                    v8pp::metadata::docs("void", {v8pp::metadata::param("distance", "number", false, "World units where the label is fully faded in; at or below the min draw distance it appears at once.")}, "Changes how far the label fades in from its min draw distance."))
                 .function("setStyle", &TextLabel::SetStyle, v8pp::metadata::docs("void", {v8pp::metadata::param("style", "number", false, "0 none, 1 shadow, 2 outline, 3 box; unsupported values are ignored.")}, "Resets the outline, shadow and background to a preset."))
                 .function("detach", &TextLabel::Detach, v8pp::metadata::docs("void", {}, "Stops following an entity; the label returns to its own position."))
                 .property("text", &TextLabel::GetText, v8pp::metadata::property_docs("string", "Current replicated label text."))
@@ -1007,6 +1061,8 @@ namespace Framework::Scripting::Builtins {
                 .property("fontSize", &TextLabel::GetFontSize, v8pp::metadata::property_docs("number", "Current font size."))
                 .property("drawDistance", &TextLabel::GetDrawDistance, v8pp::metadata::property_docs("number", "Current maximum rendering distance in world units."))
                 .property("fadeDistance", &TextLabel::GetFadeDistance, v8pp::metadata::property_docs("number", "Distance in world units where fading starts."))
+                .property("minDrawDistance", &TextLabel::GetMinDrawDistance, v8pp::metadata::property_docs("number", "Distance in world units up to which the label does not draw."))
+                .property("minFadeDistance", &TextLabel::GetMinFadeDistance, v8pp::metadata::property_docs("number", "Distance in world units where the label is fully faded in."))
                 .property("style", &TextLabel::GetStyle, v8pp::metadata::property_docs("number", "The preset nearest the current look: 0 none, 1 shadow, 2 outline, 3 box."));
 
             // setColor accepts either a Color or byte components (r, g, b, a from 0-255), so scripts
@@ -1084,6 +1140,9 @@ namespace Framework::Scripting::Builtins {
         type.add_property("maxWidth", optional("number"), "Wraps at spaces past this width, in fontSize pixels. 0 (default) never wraps.");
         type.add_property("drawDistance", optional("number"), "World units; the label neither draws nor streams past it. Default 30 metres' worth.");
         type.add_property("fadeDistance", optional("number"), "World units where fading starts; 0 starts at 75% of drawDistance.");
+        type.add_property("minDrawDistance", optional("number"), "World units; the label does not draw this close, so a second label can take over up close (a name near, \"Unknown\" far). It is still sent, so the swap has no gap. Must be less than drawDistance. Default 0.");
+        type.add_property("minFadeDistance", optional("number"),
+            "World units where it is fully faded in from minDrawDistance (from the camera when that is 0); at or below minDrawDistance (default) it appears at once. To cross-fade with a label that fades out, set minDrawDistance to its fadeDistance and this to its drawDistance.");
         type.add_property("occlusion", optional("boolean"), "Hidden behind world geometry. Default true.");
         type.add_property("virtualWorld", optional("number"), "The virtual world it lives in while it is not attached, and returns to when detached.");
         type.add_property("showTo", optional("(Player | number)[] | null"),
@@ -1126,7 +1185,7 @@ namespace Framework::Scripting::Builtins {
         // Options are checked before anything exists, so a bad one leaves nothing half-made.
         Options options;
         const bool withOptions = info.Length() >= 5 && info[4]->IsObject() && !info[4]->IsArray();
-        if (withOptions && (!ParseOptions(isolate, info[4].As<v8::Object>(), _unitsPerMetre, options) || !CheckSizes(isolate, options, nullptr))) {
+        if (withOptions && (!ParseOptions(isolate, info[4].As<v8::Object>(), _unitsPerMetre, options) || !CheckSizes(isolate, options, nullptr) || !CheckDistances(isolate, options, nullptr, _unitsPerMetre))) {
             return;
         }
 
@@ -1196,7 +1255,7 @@ namespace Framework::Scripting::Builtins {
         }
         // Parsing ran the options' getters, which can destroy the label; look it up only now.
         auto *label = self->ResolveLabel();
-        if (label && CheckTarget(isolate, options, self) && CheckSizes(isolate, options, label) && CheckViewers(isolate, *CoreModules::GetReplication(), options)) {
+        if (label && CheckTarget(isolate, options, self) && CheckSizes(isolate, options, label) && CheckDistances(isolate, options, label, _unitsPerMetre) && CheckViewers(isolate, *CoreModules::GetReplication(), options)) {
             ApplyOptions(*self, *label, options);
         }
     }

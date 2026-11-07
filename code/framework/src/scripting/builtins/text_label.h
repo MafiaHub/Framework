@@ -66,6 +66,14 @@ namespace Framework::Scripting::Builtins {
         float GetFadeDistance() const;
         void SetFadeDistance(float distance);
 
+        // The near edge. Not the streaming radius: a label too close to draw is still sent, so
+        // another can take over at that distance without a gap.
+        float GetMinDrawDistance() const;
+        void SetMinDrawDistance(float distance);
+
+        float GetMinFadeDistance() const;
+        void SetMinFadeDistance(float distance);
+
         uint32_t GetStyle() const;
         void SetStyle(uint32_t style);
 
