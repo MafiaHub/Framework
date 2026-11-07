@@ -103,7 +103,7 @@ namespace Framework::GUI::CEF {
         };
 
         // An element made editable while it holds focus moves no focus, so OnFocusedNodeChanged never
-        // hears of it. The page's observer calls this instead; it is never put on window.
+        // hears of it. The page's observer and key listener call this instead; it is never put on window.
         class FocusRecheckHandler final: public CefV8Handler {
           public:
             bool Execute(const CefString &, CefRefPtr<CefV8Value>, const CefV8ValueList &, CefRefPtr<CefV8Value> &, CefString &) override {
@@ -117,14 +117,15 @@ namespace Framework::GUI::CEF {
             IMPLEMENT_REFCOUNTING(FocusRecheckHandler);
         };
 
-        // Re-reads the focused element when it or an ancestor changes what makes it editable, the
-        // same attributes ReportFocusedNode reads. Focus inside a child frame is that frame's own
-        // observer's to report.
+        // Re-reads the focused element when it or an ancestor changes an attribute ReportFocusedNode reads;
+        // a child frame reports its own. Shadow roots, designMode and CSS escape the observer, so each key
+        // re-reads it too: keys cross shadow boundaries, and this listener precedes the page's.
         constexpr const char *kFocusRecheckObserver = R"js(((recheck) => {
             new MutationObserver((records) => {
                 const active = document.activeElement;
                 if (active && active.localName !== "iframe" && active.localName !== "frame" && records.some((record) => record.target.contains(active))) recheck();
             }).observe(document, { subtree: true, attributes: true, attributeFilter: ["contenteditable", "type", "role", "readonly"] });
+            window.addEventListener("keydown", () => recheck(), true);
         }))js";
     } // namespace
 
