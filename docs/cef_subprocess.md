@@ -23,7 +23,7 @@ The exe is three translation units:
 | file | role |
 | --- | --- |
 | `gui/cef/subprocess_main.cpp` | entry point: parent watch, then `CefExecuteProcess` |
-| `gui/cef/renderer_app.cpp` | `RendererApp`, the renderer side of the JS bindings (`callEvent`) |
+| `gui/cef/renderer_app.cpp` | `RendererApp`, the renderer side of the JS bindings (`callEvent`) and of the focus reports push-to-talk reads (`InputFocus`) |
 | `gui/resources/scheme.cpp` | custom scheme registration |
 
 Every process in a CEF instance must register the identical set of custom

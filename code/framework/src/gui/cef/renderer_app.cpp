@@ -10,6 +10,9 @@
 
 #include "gui/resources/scheme.h"
 
+#include "include/base/cef_logging.h"
+
+#include <string>
 #include <utility>
 
 namespace Framework::GUI::CEF {
@@ -117,8 +120,10 @@ namespace Framework::GUI::CEF {
 
         CefRefPtr<CefV8Value> observe;
         CefRefPtr<CefV8Exception> error;
-        if (context->Eval(kFocusRecheckObserver, CefString(), 0, observe, error) && observe && observe->IsFunction()) {
-            observe->ExecuteFunctionWithContext(context, nullptr, {CefV8Value::CreateFunction("recheck", new FocusRecheckHandler())});
+        const bool evaluated = context->Eval(kFocusRecheckObserver, CefString(), 0, observe, error) && observe && observe->IsFunction();
+        if (!evaluated || !observe->ExecuteFunctionWithContext(context, nullptr, {CefV8Value::CreateFunction("recheck", new FocusRecheckHandler())})) {
+            // Without it a field made editable in place is never reported, and push-to-talk stays open over it.
+            LOG(ERROR) << "Focus re-check observer not installed in " << (frame ? frame->GetURL().ToString() : std::string {}) << ": " << (error ? error->GetMessage().ToString() : std::string {"no observer function"});
         }
     }
 
