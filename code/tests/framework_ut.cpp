@@ -22,6 +22,7 @@
 #include "modules/interest_grid_ut.h"
 #include "modules/interpolator_ut.h"
 #include "modules/nametag_ut.h"
+#include "modules/player_ids_ut.h"
 #include "modules/network_packets_ut.h"
 #include "modules/network_work_ut.h"
 #include "modules/persistent_config_ut.h"
@@ -143,6 +144,7 @@ int main() {
     UNIT_MODULE(connection_gate);
     UNIT_MODULE(connection_admission);
     UNIT_MODULE(nametag);
+    UNIT_MODULE(player_ids);
 
     return UNIT_RUN();
 }
