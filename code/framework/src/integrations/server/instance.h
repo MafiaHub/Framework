@@ -186,6 +186,10 @@ namespace Framework::Integrations::Server {
     struct PlayerConnectionData {
         MafiaNet::PeerGuid guid {};
         uint16_t playerIndex = MafiaNet::UNASSIGNED_PLAYER_INDEX; // the connection's dense slot
+        // What scripts and admins know the player by: 1 for the first join after startup, one higher
+        // for each join after, never a disconnected player's (Networking::PlayerIdAllocator). Not the
+        // avatar's entity network ID, which every replicated entity draws from.
+        uint32_t playerId = 0;
         std::string nickname;
         std::string hardwareID;
         std::string steamId;

@@ -672,12 +672,14 @@ namespace Framework::Integrations::Server {
             PlayerConnectionData data;
             data.guid        = peerGuid;
             data.playerIndex = guid.systemIndex;
+            data.playerId    = net->AssignPlayerId(guid);
             data.nickname    = identity.name;
             data.hardwareID  = identity.hardwareId;
             data.steamId     = identity.steamId;
             data.epicId      = identity.epicId;
             data.discordId   = identity.discordId;
             data.discordName = identity.discordName;
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} joined as player {}", identity.name, data.playerId);
             OnPlayerConnect(data);
 
             // Gate opens: this connection now starts receiving the replicated world.
@@ -1186,6 +1188,18 @@ namespace Framework::Integrations::Server {
                     const auto net  = _networkingEngine->GetNetworkServer();
                     const auto peer = net->GetPeer();
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Players: {}/{}", peer->NumberOfConnections(), _opts.maxPlayers);
+
+                    // Joined players by player ID, the number admins and scripts address them by.
+                    std::vector<std::pair<uint32_t, uint64_t>> joined;
+                    net->GetPlayerIds().ForEach([&joined](uint32_t playerId, uint64_t guid) {
+                        joined.emplace_back(playerId, guid);
+                    });
+                    std::sort(joined.begin(), joined.end());
+                    for (const auto &[playerId, guidValue] : joined) {
+                        const MafiaNet::RakNetGUID guid(guidValue);
+                        const auto *identity = net->GetPeerIdentity(guid);
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("    [{}] {} ({} ms)", playerId, identity ? identity->name : "", net->GetPing(guid));
+                    }
                 }
             },
             "Show server status");
