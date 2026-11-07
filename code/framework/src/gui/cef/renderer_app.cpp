@@ -12,6 +12,8 @@
 
 #include "include/base/cef_logging.h"
 
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <utility>
 
@@ -55,31 +57,46 @@ namespace Framework::GUI::CEF {
     }
 
     namespace {
+        bool IsFrameElement(CefRefPtr<CefDOMNode> node) {
+            std::string tag = node->GetElementTagName().ToString();
+            std::transform(tag.begin(), tag.end(), tag.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            return tag == "iframe" || tag == "frame";
+        }
+
         // The DOM is only reachable in the renderer, so the browser process cannot decide this for itself.
         // Every report is sent: the view dedupes, and resets per document, which a renderer can't see
         // across a cross-process navigation.
-        void ReportFocusedNode(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDOMNode> node) {
-            const bool element     = node && node->GetType() == CefDOMNode::Type::DOM_NODE_TYPE_ELEMENT;
+        void ReportFocusedNode(CefRefPtr<CefFrame> frame, CefRefPtr<CefDOMNode> node) {
+            const bool element = node && node->GetType() == CefDOMNode::Type::DOM_NODE_TYPE_ELEMENT;
+            // A focused frame element hands the keys to the document inside it, which reports for
+            // itself, from its own process when cross-origin. Reporting the frame element as well
+            // would race that report, and arriving last would reopen push-to-talk over a text field.
+            if (element && IsFrameElement(node)) {
+                return;
+            }
             const bool formControl = element && node->GetFormControlElementType() != CefDOMNode::FormControlType::DOM_FORM_CONTROL_TYPE_UNSUPPORTED;
-            // Text inputs, textareas and contenteditable: where a keystroke becomes a character.
-            const bool editable = element && node->IsEditable();
+            // Text inputs, textareas, contenteditable and role="textbox": where a keystroke becomes a
+            // character. A read-only control takes the caret but no characters.
+            const bool editable = element && node->IsEditable() && !(formControl && node->HasElementAttribute("readonly"));
 
             auto message = CefProcessMessage::Create("InputFocus");
             message->GetArgumentList()->SetBool(0, formControl);
             message->GetArgumentList()->SetBool(1, editable);
-            if (auto mainFrame = browser->GetMainFrame()) {
-                mainFrame->SendProcessMessage(PID_BROWSER, message);
-            }
+            // From the reporting frame: in a cross-origin child frame's process the main frame is
+            // remote, and GetMainFrame returns null there.
+            frame->SendProcessMessage(PID_BROWSER, message);
         }
 
         class FocusedNodeVisitor final: public CefDOMVisitor {
-            CefRefPtr<CefBrowser> _browser;
+            CefRefPtr<CefFrame> _frame;
 
           public:
-            explicit FocusedNodeVisitor(CefRefPtr<CefBrowser> browser): _browser(std::move(browser)) {}
+            explicit FocusedNodeVisitor(CefRefPtr<CefFrame> frame): _frame(std::move(frame)) {}
 
             void Visit(CefRefPtr<CefDOMDocument> document) override {
-                ReportFocusedNode(_browser, document->GetFocusedNode());
+                ReportFocusedNode(_frame, document->GetFocusedNode());
             }
 
             IMPLEMENT_REFCOUNTING(FocusedNodeVisitor);
@@ -91,10 +108,8 @@ namespace Framework::GUI::CEF {
           public:
             bool Execute(const CefString &, CefRefPtr<CefV8Value>, const CefV8ValueList &, CefRefPtr<CefV8Value> &, CefString &) override {
                 const auto context = CefV8Context::GetCurrentContext();
-                const auto frame   = context ? context->GetFrame() : nullptr;
-                const auto browser = context ? context->GetBrowser() : nullptr;
-                if (frame && browser) {
-                    frame->VisitDOM(new FocusedNodeVisitor(browser));
+                if (const auto frame = context ? context->GetFrame() : nullptr) {
+                    frame->VisitDOM(new FocusedNodeVisitor(frame));
                 }
                 return true;
             }
@@ -102,13 +117,14 @@ namespace Framework::GUI::CEF {
             IMPLEMENT_REFCOUNTING(FocusRecheckHandler);
         };
 
-        // Re-reads the focused element when it or an ancestor changes what makes it editable. Focus
-        // inside a child frame is that frame's own observer's to report.
+        // Re-reads the focused element when it or an ancestor changes what makes it editable, the
+        // same attributes ReportFocusedNode reads. Focus inside a child frame is that frame's own
+        // observer's to report.
         constexpr const char *kFocusRecheckObserver = R"js(((recheck) => {
             new MutationObserver((records) => {
                 const active = document.activeElement;
-                if (active && active.localName !== "iframe" && records.some((record) => record.target.contains(active))) recheck();
-            }).observe(document, { subtree: true, attributes: true, attributeFilter: ["contenteditable", "type"] });
+                if (active && active.localName !== "iframe" && active.localName !== "frame" && records.some((record) => record.target.contains(active))) recheck();
+            }).observe(document, { subtree: true, attributes: true, attributeFilter: ["contenteditable", "type", "role", "readonly"] });
         }))js";
     } // namespace
 
@@ -128,8 +144,8 @@ namespace Framework::GUI::CEF {
     }
 
     void RendererApp::OnFocusedNodeChanged(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefDOMNode> node) {
-        if (browser) {
-            ReportFocusedNode(browser, node);
+        if (frame) {
+            ReportFocusedNode(frame, node);
         }
     }
 } // namespace Framework::GUI::CEF
