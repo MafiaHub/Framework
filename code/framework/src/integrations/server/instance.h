@@ -187,8 +187,11 @@ namespace Framework::Integrations::Server {
         MafiaNet::PeerGuid guid {};
         uint16_t playerIndex = MafiaNet::UNASSIGNED_PLAYER_INDEX; // the connection's dense slot
         // What scripts and admins know the player by: 1 for the first join after startup, one higher
-        // for each join after, never a disconnected player's (Networking::PlayerIdAllocator). Not the
-        // avatar's entity network ID, which every replicated entity draws from.
+        // for each join after, and a disconnected player's is not reused until the counter wraps
+        // (Networking::PlayerIdAllocator). Not the avatar's entity network ID, which every replicated
+        // entity draws from. It stays readable through OnPlayerDisconnect, but that fires only for a
+        // player who reached OnPlayerReady: state keyed on it here must also expect a player who
+        // leaves before that and is never reported.
         uint32_t playerId = 0;
         std::string nickname;
         std::string hardwareID;

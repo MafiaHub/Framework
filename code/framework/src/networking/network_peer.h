@@ -208,8 +208,8 @@ namespace Framework::Networking {
             return "";
         }
 
-        // Server-only; the connection's player ID (see PlayerIdAllocator), or 0 before it joins and
-        // after it leaves.
+        // Server-only; the connection's player ID (see PlayerIdAllocator), or 0 when it holds none:
+        // not joined yet, or its disconnect already handled.
         virtual uint32_t GetPlayerId(MafiaNet::RakNetGUID) const {
             return 0;
         }

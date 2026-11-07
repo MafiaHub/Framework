@@ -53,7 +53,7 @@ namespace Framework::Scripting::Builtins {
         int GetPing() const;
 
         // The connection's player ID (Networking::PlayerIdAllocator), not the entity ID. Server-only;
-        // 0 once the player has left.
+        // 0 when unavailable.
         uint32_t GetPlayerId() const;
 
         // Connection's remote IP address (no port). Server-only; empty when unavailable.
