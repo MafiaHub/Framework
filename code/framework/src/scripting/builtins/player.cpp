@@ -82,6 +82,15 @@ namespace Framework::Scripting::Builtins {
         return peer ? peer->GetPing(MafiaNet::ToGuid(entity->ownerGUID)) : -1;
     }
 
+    uint32_t Player::GetPlayerId() const {
+        const auto *entity = Resolve();
+        if (!entity) {
+            return 0;
+        }
+        auto *peer = CoreModules::GetNetworkPeer();
+        return peer ? peer->GetPlayerId(MafiaNet::ToGuid(entity->ownerGUID)) : 0;
+    }
+
     std::string Player::GetAddress() const {
         const auto *entity = Resolve();
         if (!entity) {
@@ -193,6 +202,10 @@ namespace Framework::Scripting::Builtins {
                 cls->property("discordId", &Player::GetDiscordId, v8pp::metadata::property_docs("string", "Authenticated Discord identifier, or an empty string when unavailable."));
                 cls->property("discordName", &Player::GetDiscordName, v8pp::metadata::property_docs("string", "Discord username the client reported, not verified by the server, or an empty string when unavailable."));
                 cls->property("hardwareId", &Player::GetHardwareId, v8pp::metadata::property_docs("string", "Framework hardware identifier, or an empty string when unavailable."));
+                cls->property("playerId", &Player::GetPlayerId,
+                    v8pp::metadata::property_docs("number",
+                        "Player ID: the number admins and scripts know this player by. The first player to join after the server starts is 1 and each join after takes the next number. The ID of a player who left is not handed "
+                        "out again, so a reconnect gets a new one. Separate from `id`, the entity network ID, which every replicated entity draws from. 0 once the player has left."));
                 cls->property("ping", &Player::GetPing, v8pp::metadata::property_docs("number", "Current round-trip latency in milliseconds, or -1 when unavailable."));
                 cls->property("ip", &Player::GetAddress, v8pp::metadata::property_docs("string", "Current remote network address, or an empty string when unavailable."));
             }

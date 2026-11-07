@@ -1053,6 +1053,52 @@ MODULE(js_features, {
         EventsTestHelper::Cleanup();
     });
 
+    // Entities spawned before a player joins push its avatar's entity id up; its player ID only
+    // counts joins. Kicking releases it, and it is not handed out again.
+    IT("Player.playerId is the connection's player ID, apart from its entity id", {
+        EventsTestHelper::Setup();
+        TextLabelWorld world;
+        struct PeerScope {
+            explicit PeerScope(Framework::Networking::NetworkPeer *peer) {
+                Framework::CoreModules::SetNetworkPeer(peer);
+            }
+            ~PeerScope() {
+                Framework::CoreModules::SetNetworkPeer(nullptr);
+            }
+        } peerScope(&world.peer);
+
+        auto *manager = world.Manager();
+        for (int i = 0; i < 10; ++i) {
+            manager->CreateEntity(world.targetType);
+        }
+        const MafiaNet::RakNetGUID guid(0x2001);
+        auto *avatar      = manager->CreateEntity(world.targetType);
+        avatar->ownerGUID = MafiaNet::ToPeerGuid(guid);
+        manager->SetViewer(avatar->ownerGUID, avatar);
+        EQUALS(world.peer.AssignPlayerId(guid), 1u);
+
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        v8::Isolate *isolate = engine.GetIsolate();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+            Builtins::Player::Register(isolate, context->Global());
+        }
+
+        const std::string id = std::to_string(avatar->GetNetworkID());
+        STREQUALS(RunJSString(engine, ("globalThis.p = new Player(" + id + "); p.playerId + '|' + p.id").c_str()).c_str(), ("1|" + id).c_str());
+        STREQUALS(RunJSErrorName(engine, "p.kick('test')").c_str(), "");
+        STREQUALS(RunJSString(engine, "String(p.playerId)").c_str(), "0");
+        EQUALS(world.peer.AssignPlayerId(guid), 2u);
+
+        engine.Shutdown();
+        EventsTestHelper::Cleanup();
+    });
+
     // TextLabel options are validated before anything is created, so a bad key throws a TypeError
     // with no replication at all, and a good set gets as far as the replication check.
     IT("TextLabel.create validates its options before it needs replication", {
