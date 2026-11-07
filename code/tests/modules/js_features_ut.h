@@ -1054,7 +1054,8 @@ MODULE(js_features, {
     });
 
     // Entities spawned before a player joins push its avatar's entity id up; its player ID only
-    // counts joins. Kicking releases it, and it is not handed out again.
+    // counts joins. The peer here never started, so the kick has no live connection to wait on and
+    // releases the ID at once (player_ids covers a live one); either way it is not handed out again.
     IT("Player.playerId is the connection's player ID, apart from its entity id", {
         EventsTestHelper::Setup();
         TextLabelWorld world;

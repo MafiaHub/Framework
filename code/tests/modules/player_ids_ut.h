@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "connection_admission_ut.h" // ConnectionAdmissionRig: a server and client over loopback
+
 #include "networking/network_server.h"
 #include "networking/player_ids.h"
 #include "networking/replication/entity_registry.h"
@@ -132,5 +134,75 @@ MODULE(player_ids, {
         for (auto *spot : spots) {
             manager->DestroyEntity(spot);
         }
+    });
+
+    // The disconnect handlers (the game's OnPlayerDisconnect, the scripts' playerDisconnect) run
+    // when the server handles the close. The player's ID and identity must still resolve then, on
+    // every way a connection ends, and be gone once it is handled.
+    // Declared before the rig so it outlives the server callbacks that write to it.
+    struct JoinedPlayer {
+        MafiaNet::RakNetGUID guid;
+        bool connected       = false;
+        bool handled         = false;
+        uint32_t idInHandler = 0;
+        std::string nameInHandler;
+
+        // Connects the rig's client and gives it an identity and a player ID, as a join does.
+        bool Join(ConnectionAdmissionRig &rig) {
+            rig.server->SetOnPlayerConnectCallback([this](MafiaNet::Packet *packet) {
+                guid      = packet->guid;
+                connected = true;
+            });
+            if (!rig.Connect("") || !rig.PumpUntil([&] { return connected && rig.seen.clientConnected && rig.server->IsAuthenticated(guid); })) {
+                return false;
+            }
+            Framework::Networking::RPC::ClientIdentity identity;
+            identity.name = "Jan";
+            rig.server->SetPeerIdentity(guid, identity);
+            rig.server->AssignPlayerId(guid);
+            auto *server = rig.server.get();
+            server->SetOnPlayerDisconnectCallback([this, server](MafiaNet::Packet *, Framework::Networking::DisconnectionReason, const std::string &) {
+                handled             = true;
+                idInHandler         = server->GetPlayerId(guid);
+                const auto *known   = server->GetPeerIdentity(guid);
+                nameInHandler       = known ? known->name : "";
+            });
+            return true;
+        }
+    };
+
+    IT("keeps a kicked player's ID and identity until the server handles the disconnect", {
+        JoinedPlayer player;
+        ConnectionAdmissionRig rig;
+        EQUALS(rig.StartServer(false), true);
+        EQUALS(player.Join(rig), true);
+        EQUALS(rig.server->GetPlayerId(player.guid), 1u);
+
+        rig.server->KickPlayer(player.guid, Framework::Networking::DisconnectionReason::KICKED_CUSTOM, "bye");
+        // Closing, not closed: the kick shuts the build gate and releases nothing else.
+        EQUALS(rig.server->IsAuthenticated(player.guid), false);
+        EQUALS(rig.server->GetPlayerId(player.guid), 1u);
+
+        EQUALS(rig.PumpUntil([&] { return player.handled; }), true);
+        EQUALS(player.idInHandler, 1u);
+        STREQUALS(player.nameInHandler.c_str(), "Jan");
+        EQUALS(rig.server->GetPlayerId(player.guid), 0u);
+        EQUALS(rig.server->GetPeerIdentity(player.guid) == nullptr, true);
+        EQUALS(rig.server->FindPlayerById(1).has_value(), false);
+    });
+
+    IT("keeps a leaving player's ID and identity until the server handles the disconnect", {
+        JoinedPlayer player;
+        ConnectionAdmissionRig rig;
+        EQUALS(rig.StartServer(false), true);
+        EQUALS(player.Join(rig), true);
+
+        EQUALS(static_cast<bool>(rig.client->Disconnect()), true);
+
+        EQUALS(rig.PumpUntil([&] { return player.handled; }), true);
+        EQUALS(player.idInHandler, 1u);
+        STREQUALS(player.nameInHandler.c_str(), "Jan");
+        EQUALS(rig.server->GetPlayerId(player.guid), 0u);
+        EQUALS(rig.server->GetPeerIdentity(player.guid) == nullptr, true);
     });
 })
