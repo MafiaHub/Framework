@@ -13,6 +13,7 @@
 #include "connection.h"
 #include "errors.h"
 #include "network_peer.h"
+#include "player_ids.h"
 #include "rpc/client_identity.h"
 #include "rpc/rpc.h"
 
@@ -65,6 +66,9 @@ namespace Framework::Networking {
 
         // Identities from the session request, kept for the connection's lifetime.
         std::unordered_map<uint64_t, RPC::ClientIdentity> _peerIdentities;
+
+        // Player IDs of joined connections, held until the connection closes.
+        PlayerIdAllocator _playerIds;
 
         void ClearClientState(MafiaNet::RakNetGUID guid);
 
@@ -124,6 +128,31 @@ namespace Framework::Networking {
         const RPC::ClientIdentity *GetPeerIdentity(MafiaNet::RakNetGUID guid) const override {
             const auto it = _peerIdentities.find(guid.g);
             return it != _peerIdentities.end() ? &it->second : nullptr;
+        }
+
+        // Give a connection its player ID when it takes a player slot; the integration calls this on
+        // join, before the game builds the avatar. Idempotent. The ID is released with the rest of the
+        // connection's state when it closes, and is not reused (see PlayerIdAllocator).
+        uint32_t AssignPlayerId(MafiaNet::RakNetGUID guid) {
+            return _playerIds.Assign(guid.g);
+        }
+
+        uint32_t GetPlayerId(MafiaNet::RakNetGUID guid) const override {
+            return _playerIds.Get(guid.g);
+        }
+
+        // The connection holding a player ID, if a joined player holds it. Its avatar is
+        // GetReplicationManager()->GetViewer(*guid).
+        std::optional<MafiaNet::PeerGuid> FindPlayerById(uint32_t playerId) const {
+            const auto guid = _playerIds.FindGuid(playerId);
+            if (!guid) {
+                return std::nullopt;
+            }
+            return static_cast<MafiaNet::PeerGuid>(*guid);
+        }
+
+        const PlayerIdAllocator &GetPlayerIds() const noexcept {
+            return _playerIds;
         }
 
         // Per-connection ReadyEvent id, derived from the slot so both ends agree without coordination.

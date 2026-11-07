@@ -234,13 +234,25 @@ namespace Framework::Networking {
         // Reason rides the disconnect notification, so no separate message races the close.
         MafiaNet::BitStream reasonData;
         payload.Serialize(&reasonData, true);
+
+        // A live connection is not gone yet: MafiaNet reports its close as an ID_DISCONNECTION_NOTIFICATION
+        // a tick or more from now, and the disconnect handlers that run then still read its identity and
+        // player ID. Its state is cleared there; only the build gate closes now, so nothing more from the
+        // peer is acted on meanwhile. A guid with no live connection gets no notification to wait for.
+        const MafiaNet::ConnectionState state = _peer->GetConnectionState(guid);
         _peer->CloseConnection(guid, true, 0, MafiaNet::Priority::Low, &reasonData);
-        ClearClientState(guid);
+        if (state == MafiaNet::IS_CONNECTED || state == MafiaNet::IS_DISCONNECTING) {
+            _authenticatedClients.erase(guid.g);
+        }
+        else {
+            ClearClientState(guid);
+        }
     }
 
     void NetworkServer::ClearClientState(MafiaNet::RakNetGUID guid) {
         _authenticatedClients.erase(guid.g);
         _peerIdentities.erase(guid.g);
+        _playerIds.Release(guid.g);
         _readyEvent.DeleteEvent(ReadyEventId(guid)); // recycle the slot for reconnects
     }
 } // namespace Framework::Networking

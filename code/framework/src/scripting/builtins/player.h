@@ -52,6 +52,10 @@ namespace Framework::Scripting::Builtins {
         // Connection's average round-trip time in ms. Server-only; -1 when unavailable.
         int GetPing() const;
 
+        // The connection's player ID (Networking::PlayerIdAllocator), not the entity ID. Server-only;
+        // 0 when unavailable.
+        uint32_t GetPlayerId() const;
+
         // Connection's remote IP address (no port). Server-only; empty when unavailable.
         std::string GetAddress() const;
 
