@@ -90,6 +90,45 @@ static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     return result;
 }
 
+// The OS loader runs an executable's process-attach TLS callbacks under the loader lock, so a thread they start waits
+// for it and then gets its thread attach. Holding the lock until the relay is live gives such threads the same.
+static void RunGameTlsCallbacksForwardingThreads(const Framework::Launcher::Loaders::ExecutableLoader &loader, HMODULE base) {
+    using LockLoaderLockProc   = LONG(NTAPI *)(ULONG flags, ULONG * disposition, PVOID * cookie);
+    using UnlockLoaderLockProc = LONG(NTAPI *)(ULONG flags, PVOID cookie);
+    using ForwardProc          = BOOL (*)(PVOID module, const PIMAGE_TLS_CALLBACK *callbacks);
+
+    const HMODULE ntdll           = GetModuleHandleW(L"ntdll.dll");
+    const auto lockLoaderLock     = reinterpret_cast<LockLoaderLockProc>(GetProcAddress(ntdll, "LdrLockLoaderLock"));
+    const auto unlockLoaderLock   = reinterpret_cast<UnlockLoaderLockProc>(GetProcAddress(ntdll, "LdrUnlockLoaderLock"));
+    const auto forwardThreadCalls = reinterpret_cast<ForwardProc>(GetProcAddress(tlsDll, "CoreRT_ForwardGameTlsCallbacks"));
+
+    const auto callbacks = loader.GetTLSCallbacks();
+    if (!callbacks) {
+        throw std::runtime_error("forwardThreadTlsCallbacks is set but the game has no TLS callbacks");
+    }
+
+    struct LoaderLock final {
+        UnlockLoaderLockProc unlock;
+        PVOID cookie      = nullptr;
+        ULONG disposition = 0;
+        ~LoaderLock() {
+            unlock(0, cookie);
+        }
+    };
+
+    bool forwarding = false;
+    {
+        LoaderLock lock {unlockLoaderLock};
+        lockLoaderLock(0, &lock.disposition, &lock.cookie);
+        loader.RunTLSCallbacks();
+        forwarding = forwardThreadCalls(base, callbacks);
+    }
+
+    if (!forwarding) {
+        throw std::runtime_error("Could not forward thread attach/detach to the game's TLS callbacks");
+    }
+}
+
 void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
     Framework::Launcher::Project::InitialiseClientDLL();
 
@@ -1019,11 +1058,12 @@ namespace Framework::Launcher {
 
             // The OS loader normally dispatches executable TLS callbacks before the entry
             // point. This image was mapped manually, so complete that loader step here.
-            loader.RunTLSCallbacks();
             if (_config.forwardThreadTlsCallbacks) {
-                if (const size_t forwarded = loader.ForwardTLSThreadCallbacks()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Forwarding thread attach/detach to {} game TLS callbacks", forwarded);
-                }
+                RunGameTlsCallbacksForwardingThreads(loader, base);
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Forwarding thread attach/detach to the game's TLS callbacks");
+            }
+            else {
+                loader.RunTLSCallbacks();
             }
 
             if (_preLaunchFunctor) {

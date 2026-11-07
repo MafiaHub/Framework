@@ -74,10 +74,14 @@ extern "C" __declspec(allocate(".CRT$XLY")) const PIMAGE_TLS_CALLBACK CoreRT_Gam
 #pragma comment(linker, "/INCLUDE:CoreRT_GameTlsForwarder")
 #endif
 
-// Starts relaying thread attach/detach to the game's null-terminated TLS callback array.
+// Starts relaying thread attach/detach to the game's null-terminated TLS callback array. The array may still be
+// empty: it is walked on every thread, so entries the image fills in later are reached.
 extern "C" __declspec(dllexport) BOOL CoreRT_ForwardGameTlsCallbacks(PVOID module, const PIMAGE_TLS_CALLBACK *callbacks) {
-    if (!callbacks || gGameTlsCallbacks.load(std::memory_order_acquire)) {
-        return callbacks != nullptr;
+    if (!callbacks) {
+        return FALSE;
+    }
+    if (const auto current = gGameTlsCallbacks.load(std::memory_order_acquire)) {
+        return current == callbacks;
     }
     if ((gAttachedSlot = TlsAlloc()) == TLS_OUT_OF_INDEXES) {
         return FALSE;

@@ -104,7 +104,7 @@ namespace Framework::Launcher {
         bool suppressThreadLocalExeAtexitCallback = false;
 
         // PE loading only. Gives the game's TLS callbacks thread attach/detach, as the OS loader would, for every
-        // thread started after the loader's process-attach pass; protected images keep per-thread state there.
+        // thread started from the loader's process-attach pass on; protected images keep per-thread state there.
         bool forwardThreadTlsCallbacks = false;
 
         // Protected images may query their loader record before their CRT starts.

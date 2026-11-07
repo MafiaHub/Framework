@@ -240,25 +240,6 @@ namespace Framework::Launcher::Loaders {
         }
     }
 
-    size_t ExecutableLoader::ForwardTLSThreadCallbacks() const {
-        const auto callbacks = GetTLSCallbacks();
-        size_t count         = 0;
-        while (callbacks && callbacks[count]) {
-            ++count;
-        }
-        if (count == 0) {
-            return 0;
-        }
-
-        const HMODULE coreRT = GetModuleHandleW(L"FrameworkLoaderData.dll");
-        const auto forward   = coreRT ? reinterpret_cast<BOOL (*)(PVOID, const PIMAGE_TLS_CALLBACK *)>(GetProcAddress(coreRT, "CoreRT_ForwardGameTlsCallbacks")) : nullptr;
-        if (!forward || !forward(_module, callbacks)) {
-            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->warn("Could not forward thread attach/detach to the game's {} TLS callbacks", count);
-            return 0;
-        }
-        return count;
-    }
-
 #if defined(_M_AMD64)
     void ExecutableLoader::LoadExceptionTable(IMAGE_NT_HEADERS *ntHeader) {
         const IMAGE_DATA_DIRECTORY *exceptionDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
