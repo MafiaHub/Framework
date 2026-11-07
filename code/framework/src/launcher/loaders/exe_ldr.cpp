@@ -210,35 +210,33 @@ namespace Framework::Launcher::Loaders {
         }
     }
 
-    void ExecutableLoader::RunTLSCallbacks() const {
+    PIMAGE_TLS_CALLBACK *ExecutableLoader::GetTLSCallbacks() const {
         if (!_module) {
-            return;
+            return nullptr;
         }
 
         const auto dosHeader = reinterpret_cast<const IMAGE_DOS_HEADER *>(_module);
         if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
-            return;
+            return nullptr;
         }
 
         const auto ntHeader = reinterpret_cast<const IMAGE_NT_HEADERS *>(reinterpret_cast<const uint8_t *>(_module) + dosHeader->e_lfanew);
         if (ntHeader->Signature != IMAGE_NT_SIGNATURE) {
-            return;
+            return nullptr;
         }
 
         const auto &tlsDirectory = ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS];
         if (!tlsDirectory.VirtualAddress || tlsDirectory.Size < sizeof(IMAGE_TLS_DIRECTORY)) {
-            return;
+            return nullptr;
         }
 
         const auto tls = reinterpret_cast<const IMAGE_TLS_DIRECTORY *>(reinterpret_cast<const uint8_t *>(_module) + tlsDirectory.VirtualAddress);
-        if (!tls->AddressOfCallBacks) {
-            return;
-        }
+        return reinterpret_cast<PIMAGE_TLS_CALLBACK *>(tls->AddressOfCallBacks);
+    }
 
-        auto callbacks = reinterpret_cast<PIMAGE_TLS_CALLBACK *>(tls->AddressOfCallBacks);
-        while (*callbacks) {
+    void ExecutableLoader::RunTLSCallbacks() const {
+        for (auto callbacks = GetTLSCallbacks(); callbacks && *callbacks; ++callbacks) {
             (*callbacks)(_module, DLL_PROCESS_ATTACH, nullptr);
-            ++callbacks;
         }
     }
 
