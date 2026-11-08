@@ -13,10 +13,23 @@
 
 #include <v8pp/convert.hpp>
 
+#include <array>
 #include <cstring>
+#include <functional>
+#include <string_view>
 
 namespace Framework::Scripting {
     namespace {
+        // A string's UTF-8 straight into `out`: no intermediate buffer, and none at all for a short one, which fits
+        // std::string's own storage. Lone surrogates are replaced, as String::Utf8Value does.
+        void WriteUtf8(v8::Isolate *isolate, v8::Local<v8::String> string, std::string &out) {
+            const size_t length = string->Utf8LengthV2(isolate);
+            out.resize(length);
+            if (length != 0) {
+                string->WriteUtf8V2(isolate, out.data(), length, v8::String::WriteFlags::kReplaceInvalidUtf8);
+            }
+        }
+
         // Deep enough for any real payload, shallow enough that the copy cannot exhaust the native stack.
         constexpr size_t kMaxDepth = 128;
 
@@ -147,7 +160,7 @@ namespace Framework::Scripting {
                         return Fail(where, "it is too large to copy");
                     }
                     out.kind = TransferredValue::Kind::String;
-                    out.text = ToUtf8(_isolate, value);
+                    WriteUtf8(_isolate, value.As<v8::String>(), out.text);
                     return Spend(where, out.text.size());
                 }
                 if (value->IsSymbol()) {
@@ -342,24 +355,23 @@ namespace Framework::Scripting {
                     return Fail(where, "its properties could not be listed");
                 }
                 const uint32_t count = keys->Length();
+                out.properties.reserve(out.properties.size() + count);
                 for (uint32_t i = 0; i < count; ++i) {
                     v8::Local<v8::Value> key;
                     v8::Local<v8::Value> field;
                     if (!keys->Get(_context, i).ToLocal(&key) || !object->Get(_context, key).ToLocal(&field)) {
                         return Fail(where, "a property could not be read");
                     }
-                    std::string name = ToUtf8(_isolate, key);
+                    // Copied in place: a property is written where it stays rather than built and then moved there.
+                    auto &[name, copied] = out.properties.emplace_back();
+                    WriteUtf8(_isolate, key.As<v8::String>(), name);
                     if (isError && (name == "name" || name == "message" || name == "stack")) {
+                        out.properties.pop_back();
                         continue;
                     }
-                    if (!Spend(where, name.size())) {
+                    if (!Spend(where, name.size()) || !Copy(field, copied, where.Property(name), object)) {
                         return false;
                     }
-                    TransferredValue copied;
-                    if (!Copy(field, copied, where.Property(name), object)) {
-                        return false;
-                    }
-                    out.properties.emplace_back(std::move(name), std::move(copied));
                 }
                 return true;
             }
@@ -435,15 +447,45 @@ namespace Framework::Scripting {
                 return built;
             }
 
+            // Built from its elements in one call rather than stored into one index at a time. The element handles
+            // live on a stack shared by every array in the value, so a nested array allocates nothing either.
             v8::MaybeLocal<v8::Value> BuildArray(const TransferredValue &value) {
-                v8::Local<v8::Array> array = v8::Array::New(_isolate, static_cast<int>(value.items.size()));
-                for (size_t i = 0; i < value.items.size(); ++i) {
+                const size_t base = _elements.size();
+                for (const TransferredValue &item : value.items) {
                     v8::Local<v8::Value> element;
-                    if (!Build(value.items[i]).ToLocal(&element) || array->Set(_context, static_cast<uint32_t>(i), element).IsNothing()) {
+                    if (!Build(item).ToLocal(&element)) {
+                        _elements.resize(base);
                         return {};
                     }
+                    _elements.push_back(element);
                 }
+                v8::Local<v8::Array> array = v8::Array::New(_isolate, _elements.data() + base, value.items.size());
+                _elements.resize(base);
                 return array;
+            }
+
+            // A property name as an internalized string, made once per distinct name in the value: a list of records
+            // repeats the same few names for every record, and making each again means decoding it and looking it up
+            // in the string table every time.
+            v8::Local<v8::String> Key(const std::string &name) {
+                const size_t hash = std::hash<std::string_view> {}(name);
+                for (size_t probe = 0; probe < kKeyCacheSize; ++probe) {
+                    KeyEntry &entry = _keys[(hash + probe) % kKeyCacheSize];
+                    if (entry.name == nullptr) {
+                        entry.name = &name;
+                        entry.hash = hash;
+                        entry.key  = MakeKey(name);
+                        return entry.key;
+                    }
+                    if (entry.hash == hash && *entry.name == name) {
+                        return entry.key;
+                    }
+                }
+                return MakeKey(name); // a value with more distinct names than the cache holds
+            }
+
+            v8::Local<v8::String> MakeKey(const std::string &name) {
+                return v8::String::NewFromUtf8(_isolate, name.data(), v8::NewStringType::kInternalized, static_cast<int>(name.size())).FromMaybe(v8::String::Empty(_isolate));
             }
 
             // Writes the copied properties onto `object` as its own, leaving out the one named `skip`. Defined, not
@@ -454,7 +496,7 @@ namespace Framework::Scripting {
                         continue;
                     }
                     v8::Local<v8::Value> built;
-                    if (!Build(field).ToLocal(&built) || object->CreateDataProperty(_context, v8pp::to_v8(_isolate, name), built).IsNothing()) {
+                    if (!Build(field).ToLocal(&built) || object->CreateDataProperty(_context, Key(name), built).IsNothing()) {
                         return {};
                     }
                 }
@@ -548,9 +590,18 @@ namespace Framework::Scripting {
                 return function;
             }
 
+            static constexpr size_t kKeyCacheSize = 128;
+            struct KeyEntry {
+                const std::string *name = nullptr;
+                size_t hash             = 0;
+                v8::Local<v8::String> key;
+            };
+
             v8::Isolate *_isolate;
             v8::Local<v8::Context> _context;
             const TransferFunctions &_functions;
+            std::array<KeyEntry, kKeyCacheSize> _keys {};
+            std::vector<v8::Local<v8::Value>> _elements;
         };
     } // namespace
 

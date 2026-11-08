@@ -48,6 +48,13 @@ add_executable(FrameworkReplicationBench bench/replication_bench.cpp)
 target_include_directories(FrameworkReplicationBench PRIVATE ../framework/src)
 target_link_libraries(FrameworkReplicationBench Framework FrameworkServer libnode)
 
+# Not a test: what copying a value between two resources costs (see the file). Build it in
+# RelWithDebInfo or Release.
+add_executable(FrameworkValueTransferBench bench/value_transfer_bench.cpp)
+target_include_directories(FrameworkValueTransferBench PRIVATE ../framework/src)
+target_link_libraries(FrameworkValueTransferBench Framework FrameworkServer libnode)
+target_compile_definitions(FrameworkValueTransferBench PRIVATE NODE_WANT_INTERNALS=1)
+
 
 # Tests use Node.js APIs through the scripting engine
 target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
