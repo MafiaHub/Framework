@@ -85,18 +85,22 @@ namespace Framework::Networking::Replication {
 
     void ReplicationManager::UpdateServer() {
         const MafiaNet::Time time = MafiaNet::GetTime();
+        bool constructed          = false;
         {
             FW_PROFILE_SCOPE_N("Replication::Construct");
             for (unsigned int world = 0; world < worldsList.Size(); ++world) {
                 const auto &connections = worldsList[world]->connectionList;
                 for (unsigned int i = 0; i < connections.Size(); ++i) {
-                    if (connections[i]->isValidated) {
-                        static_cast<ReplicationConnection *>(connections[i])->AutoConstruct(worldsList[world]->worldId);
+                    if (connections[i]->isValidated && static_cast<ReplicationConnection *>(connections[i])->AutoConstruct(worldsList[world]->worldId)) {
+                        constructed = true;
                     }
                 }
             }
         }
-        if (time - lastAutoSerializeOccurance < autoSerializeInterval) {
+        // A construction seeds its viewer with values no pass has compared yet. Serializing in the same
+        // pass keeps them the ones the next delta is taken against; otherwise a value that changed back
+        // before the next pass would never reach that viewer.
+        if (!constructed && time - lastAutoSerializeOccurance < autoSerializeInterval) {
             return;
         }
         FW_PROFILE_SCOPE_N("Replication::Serialize");

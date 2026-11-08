@@ -38,8 +38,8 @@ namespace Framework::Networking::Replication {
         void QueryReplicaList(DataStructures::List<MafiaNet::Replica3 *> &newReplicasToCreate, DataStructures::List<MafiaNet::Replica3 *> &existingReplicasToDestroy) override;
 
         // Server: AutoConstructByQuery, then the same constructions and destructions applied to each
-        // entity's audience (see ReplicationManager::UpdateServer).
-        void AutoConstruct(MafiaNet::WorldId worldId);
+        // entity's audience (see ReplicationManager::UpdateServer). True when it constructed anything.
+        bool AutoConstruct(MafiaNet::WorldId worldId);
 
         MafiaNet::WorldId GetWorldId() const {
             return _worldId;

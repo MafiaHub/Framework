@@ -91,7 +91,7 @@ namespace Framework::Networking::Replication {
         FW_PROFILE_VALUE(_relevant.size());
     }
 
-    void ReplicationConnection::AutoConstruct(MafiaNet::WorldId worldId) {
+    bool ReplicationConnection::AutoConstruct(MafiaNet::WorldId worldId) {
         _worldId = worldId;
         AutoConstructByQuery(_manager, worldId);
         // The lists QueryReplicaList returned, which ReplicaManager3 applied in full: it constructs
@@ -102,6 +102,7 @@ namespace Framework::Networking::Replication {
         for (unsigned i = 0; i < destroyedReplicasCulled.Size(); ++i) {
             _manager->LeaveAudience(static_cast<NetworkEntity *>(destroyedReplicasCulled[i]), this);
         }
+        return constructedReplicasCulled.Size() > 0;
     }
 
     uint32_t ReplicationConnection::TransformSendIntervalMs(const NetworkEntity *entity) const {

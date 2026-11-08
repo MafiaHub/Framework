@@ -356,4 +356,25 @@ MODULE(network_work, {
         EQUALS(probe->stateSends[viewer], 0);
         EQUALS(probe->stateSends[other], 1);
     });
+
+    IT("brings a viewer constructed between serialize passes up to a value that changed back", {
+        NetworkWorkTest::Server server;
+        server.Connect(241, 0, 1000);
+        auto *probe  = server.Probe(0);
+        probe->value = 1;
+        server.manager->RebuildInterest();
+        server.Pass(3);
+
+        // Constructed with 2 on a pass with no serialize due; the value is 1 again before the next one.
+        server.manager->SetAutoSerializeInterval(60000);
+        probe->value                   = 2;
+        MafiaNet::Connection_RM3 *late = server.Connect(242, 0, 1000);
+        server.Pass();
+        EQUALS(late->HasReplicaConstructed(probe), true);
+        probe->Forget();
+        probe->value = 1;
+        server.manager->SetAutoSerializeInterval(0);
+        server.Pass();
+        EQUALS(probe->stateSends[late], 1);
+    });
 });
