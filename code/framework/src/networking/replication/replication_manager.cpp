@@ -24,6 +24,23 @@
 
 namespace Framework::Networking::Replication {
     namespace {
+        // Whether a ReplicaManager3 construction message lists at least one construction (it may
+        // carry destructions alone): [ID_TIMESTAMP, time,] id, world, uint16 count, ...
+        bool CarriesConstructions(const MafiaNet::Packet *packet) {
+            std::size_t offset = 2;
+            unsigned char id   = packet->length > 0 ? packet->data[0] : 0;
+            if (id == ID_TIMESTAMP) {
+                offset = 3 + sizeof(MafiaNet::Time);
+                id     = packet->length > 1 + sizeof(MafiaNet::Time) ? packet->data[1 + sizeof(MafiaNet::Time)] : 0;
+            }
+            if (id != ID_REPLICA_MANAGER_CONSTRUCTION || packet->length < offset + sizeof(uint16_t)) {
+                return false;
+            }
+            MafiaNet::BitStream bs(packet->data + offset, packet->length - offset, false);
+            uint16_t count = 0;
+            return bs.Read(count) && count != 0;
+        }
+
         // Raw RPC: the tail is the entity's polymorphic SerializeForcedState payload.
         constexpr auto kForceStateId = FW_RPC_IDENTIFIER("Framework::ForceState");
 
@@ -99,6 +116,11 @@ namespace Framework::Networking::Replication {
     }
 
     MafiaNet::PluginReceiveResult ReplicationManager::OnReceive(MafiaNet::Packet *packet) {
+        // The server alone decides what exists: a client's constructions would sit outside every
+        // viewer's interest set, streamed to no one and never streamed out.
+        if (_isServer && CarriesConstructions(packet)) {
+            return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
+        }
         if (!TransformBatch::IsBatch(packet->data, packet->length)) {
             return MafiaNet::ReplicaManager3::OnReceive(packet);
         }
