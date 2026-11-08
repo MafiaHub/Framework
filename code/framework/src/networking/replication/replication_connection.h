@@ -8,14 +8,13 @@
 
 #pragma once
 
-#include "interest_refresh.h"
+#include "interest_grid.h"
 #include "transform_batch.h"
 
 #include <mafianet/replica_manager3.h>
 
 #include <cstdint>
-#include <unordered_map>
-#include <unordered_set>
+#include <vector>
 
 namespace Framework::Networking::Replication {
     class NetworkEntity;
@@ -25,6 +24,12 @@ namespace Framework::Networking::Replication {
     // server it decides which replicas should exist on this connection (QueryReplicaList). It runs in
     // QUERY_CONNECTION_FOR_REPLICA_LIST mode, so the streaming relevance rules live in
     // QueryReplicaList rather than in Replica3::QueryConstruction/QueryDestruction.
+    //
+    // ReplicaManager3 asks QueryReplicaList every pass, so the answer is incremental: a recomputed
+    // interest set (on this viewer's turn, see ReplicationManager::RebuildInterest, or at once when
+    // something concerning this viewer alone changed) is diffed against what ReplicaManager3 has
+    // constructed here; between those, only entities the manager asked every viewer to re-evaluate
+    // (created, or their audience widened) are looked at. A pass in which neither happened is free.
     class ReplicationConnection final: public MafiaNet::Connection_RM3 {
       public:
         ReplicationConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID guid, ReplicationManager *manager, bool isServer);
@@ -47,13 +52,45 @@ namespace Framework::Networking::Replication {
         // Sends what the pass queued. Called once per replication pass, after every entity.
         void FlushTransforms(MafiaNet::RakPeerInterface *rakPeer);
 
-        // Recompute this viewer's interest on its next query instead of at its phase: for a change
+        // Recompute this viewer's interest on its next query instead of on its turn: for a change
         // that concerns this connection alone, such as gaining or losing ownership of an entity.
         void InvalidateInterest() {
             _interestStale = true;
         }
 
+        // Whether this viewer's interest set, as of its last query, holds the entity. What
+        // ReplicaManager3 constructs follows it one pass later.
+        bool IsRelevant(const NetworkEntity *entity) const;
+
+        // --- Driven by ReplicationManager ---
+
+        // Whether this connection needs its interest recomputed before its next query regardless of
+        // its turn: never computed, invalidated, or its viewer or dimension changed.
+        bool InterestUrgent() const;
+
+        // Computes this viewer's interest set into the pending result QueryReplicaList applies next.
+        // Reads only shared state; runs on any thread, several connections at once.
+        void ComputeInterest(InterestGrid::Scratch &scratch);
+
+        // The entity in this slot is gone: drop it from the set and any pending result.
+        void ForgetSlot(uint32_t slot);
+
       private:
+        struct SlotRef {
+            uint32_t slot;
+            uint32_t generation;
+        };
+        struct SendStamp {
+            uint32_t generation;
+            MafiaNet::Time time;
+        };
+
+        NetworkEntity *Viewer() const;
+        void ApplyRefresh(DataStructures::List<MafiaNet::Replica3 *> &create, DataStructures::List<MafiaNet::Replica3 *> &destroy);
+        // False when a verdict needs the whole set recomputed. `admitOnly` right after a recompute:
+        // what it decided stands, and only entities filed too late for it to find are let in.
+        bool ApplyReevaluations(NetworkEntity *viewer, DataStructures::List<MafiaNet::Replica3 *> &create, bool admitOnly);
+        void Admit(NetworkEntity *entity, uint32_t slot, DataStructures::List<MafiaNet::Replica3 *> &create);
         void SendPacket(MafiaNet::RakPeerInterface *rakPeer, MafiaNet::BitStream &packet, const MafiaNet::PRO &parameters) const;
 
         ReplicationManager *_manager = nullptr;
@@ -63,21 +100,25 @@ namespace Framework::Networking::Replication {
         std::size_t _packetBudget      = 0;
         MafiaNet::PeerGuid _viewerGUID = MafiaNet::UNASSIGNED_PEER_GUID;
 
-        // Last transform send per replica; pruned against the interest set, keys never dereferenced.
-        std::unordered_map<const NetworkEntity *, MafiaNet::Time> _lastTransformSend;
+        // Last transform send per entity slot; a stamp left by the slot's previous occupant reads as
+        // never sent.
+        std::vector<SendStamp> _lastTransformSend;
 
-        // Routine queries run at a per-viewer phase. Lifecycle invalidation is immediate so a cached
-        // set never exposes deleted entity pointers.
-        InterestRefresh _interestRefresh;
-        uint32_t _relevantUrgentGeneration = 0;
-        bool _interestStale                = false;
-        std::unordered_set<NetworkEntity *> _relevant;
-        // The previous _relevant, swapped aside on each recompute: the hysteresis state the grid
-        // needs for the stream-out margin and the sticky budget ranking. Membership only — entries
-        // are compared, never dereferenced.
-        std::unordered_set<NetworkEntity *> _previousRelevant;
+        // The current set; also the hysteresis input of the next computation.
+        SlotSet _relevant;
+        // A computed set waiting for QueryReplicaList. Slots carry their generation, so an entity that
+        // left and had its slot reused in between is not mistaken for the new occupant.
+        std::vector<uint32_t> _computedSlots;
+        std::vector<SlotRef> _computed;
+        bool _computedReady = false;
+        // What the pending result was computed for; a change since makes it stale.
+        const NetworkEntity *_computedViewer = nullptr;
+        MafiaNet::VirtualWorldId _computedWorld {};
+        // Everything the manager queued for re-evaluation up to this sequence number has been seen.
+        uint64_t _reevaluationsSeen = 0;
+
         NetworkEntity *_relevantViewer = nullptr;
-        uint32_t _relevantGeneration   = 0;
+        bool _interestStale            = false;
         bool _relevantValid            = false;
     };
 } // namespace Framework::Networking::Replication

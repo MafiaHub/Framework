@@ -186,6 +186,8 @@ MODULE(interest_scale, {
     IT("runs a tick in which nothing changed without allocating", {
         World world;
         world.manager->SetInterestRebuildInterval(100);
+        // The count is per thread: keep the work on this one.
+        world.manager->SetReplicationWorkerThreads(0);
         // A crowd: every player sees every other one and a few hundred things around them.
         for (int i = 0; i < 32; ++i) {
             world.Join(100 + i, static_cast<float>(i), 0.0f);
@@ -206,6 +208,7 @@ MODULE(interest_scale, {
 
     IT("recomputes a viewer's interest without allocating once it has settled", {
         World world;
+        world.manager->SetReplicationWorkerThreads(0);
         for (int i = 0; i < 300; ++i) {
             world.Spawn(static_cast<float>(i % 50), static_cast<float>(i / 50));
         }
@@ -221,5 +224,37 @@ MODULE(interest_scale, {
             world.Tick();
         }
         EQUALS(allocations.Count(), static_cast<uint64_t>(0));
+    });
+
+    IT("computes the same interest on worker threads as on the server thread", {
+        // Two identical crowds, one recomputed serially and one across workers, every tick.
+        World serial, parallel;
+        serial.manager->SetReplicationWorkerThreads(0);
+        parallel.manager->SetReplicationWorkerThreads(3);
+        std::vector<NetworkEntity *> serialThings, parallelThings;
+        for (World *world : {&serial, &parallel}) {
+            auto &things = world == &serial ? serialThings : parallelThings;
+            for (int i = 0; i < 48; ++i) {
+                world->Join(100 + i, (i % 8) * 60.0f, (i / 8) * 60.0f);
+            }
+            for (int i = 0; i < 400; ++i) {
+                things.push_back(world->Spawn((i % 20) * 25.0f, (i / 20) * 25.0f));
+            }
+        }
+        for (int tick = 0; tick < 12; ++tick) {
+            for (size_t i = 0; i < serialThings.size(); ++i) {
+                // The same drift in both, so sets keep changing.
+                const float dx = ((static_cast<int>(i) * 7 + tick * 13) % 21 - 10) * 3.0f;
+                serialThings[i]->position.x += dx;
+                parallelThings[i]->position.x += dx;
+            }
+            serial.Tick();
+            parallel.Tick();
+            for (size_t c = 0; c < serial.connections.size(); ++c) {
+                for (size_t i = 0; i < serialThings.size(); ++i) {
+                    EQUALS(parallel.connections[c]->IsRelevant(parallelThings[i]), serial.connections[c]->IsRelevant(serialThings[i]));
+                }
+            }
+        }
     });
 });

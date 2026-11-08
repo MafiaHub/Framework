@@ -27,6 +27,7 @@
 namespace Framework::Networking::Replication {
     class ReplicationManager;
     class EntityRegistry;
+    class InterestGrid;
     struct NametagState;
     struct DelegationPolicy;
 
@@ -230,7 +231,8 @@ namespace Framework::Networking::Replication {
         NetworkEntity() {
             state.Bind(this);
         }
-        ~NetworkEntity() override = default;
+        // Leaves the server's interest index however it is deleted, so no viewer is handed it after.
+        ~NetworkEntity() override;
 
         // The bag points back at its entity, so a copy would raise the original's changes. Nothing
         // legitimately copies an entity; this makes the mistake a compile error.
@@ -489,6 +491,10 @@ namespace Framework::Networking::Replication {
         // CRC32 of the registered name; stamped by EntityRegistry, not game-settable.
         uint32_t _typeId = 0;
         friend class EntityRegistry;
+
+        // Server: this entity's slot in the interest index (InterestGrid::SlotOf); none on a client.
+        uint32_t _interestSlot = UINT32_MAX;
+        friend class InterestGrid;
 
         // Tracks the last value of each serialized variable per connection so updates carry only
         // what changed (the documented ReplicaManager3 delta path).

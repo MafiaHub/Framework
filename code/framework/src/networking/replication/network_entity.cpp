@@ -34,6 +34,14 @@ namespace Framework::Networking::Replication {
         }
     } // namespace
 
+    NetworkEntity::~NetworkEntity() {
+        if (_interestSlot != UINT32_MAX) {
+            if (ReplicationManager *manager = Manager()) {
+                manager->ForgetEntity(this);
+            }
+        }
+    }
+
     void NetworkEntity::Streaming::Forget(MafiaNet::PeerGuid guid) {
         if (!viewers) {
             return;

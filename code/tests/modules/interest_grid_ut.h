@@ -15,6 +15,8 @@
 #include <glm/glm.hpp>
 #include <mafianet/types.h>
 
+#include <initializer_list>
+
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -61,6 +63,32 @@ MODULE(interest_grid, {
         grid.Configure(100.0f, -4096.0f, 4096.0f);
     };
 
+    // A tick's pass over exactly these entities, as ReplicationManager::RebuildInterest makes it.
+    auto rebuild = [](InterestGrid &grid, std::initializer_list<NetworkEntity *> entities) {
+        grid.BeginSync();
+        for (NetworkEntity *entity : entities) {
+            grid.Sync(entity);
+        }
+        grid.EndSync();
+    };
+    // The viewer's set as entities, from its previous one.
+    auto collect = [viewerGuid](const InterestGrid &grid, NetworkEntity *viewer, const std::unordered_set<NetworkEntity *> &before) {
+        Framework::Networking::Replication::SlotSet previous;
+        for (NetworkEntity *entity : before) {
+            if (grid.SlotOf(entity) != InterestGrid::kNoSlot) {
+                previous.Set(grid.SlotOf(entity));
+            }
+        }
+        InterestGrid::Scratch scratch;
+        std::vector<uint32_t> slots;
+        grid.CollectVisible(viewer, viewerGuid, previous, scratch, slots);
+        std::unordered_set<NetworkEntity *> out;
+        for (const uint32_t slot : slots) {
+            out.insert(grid.EntityAt(slot));
+        }
+        return out;
+    };
+
     IT("streams an entity in within the viewer's range and not beyond it", {
         InterestGrid grid;
         freshGrid(grid);
@@ -70,13 +98,10 @@ MODULE(interest_grid, {
         NetworkEntity *nearby    = make(typeA, 200.0f, 0.0f);
         NetworkEntity *distant     = make(typeA, 400.0f, 0.0f);
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(nearby);
-        grid.Insert(distant);
+        rebuild(grid, {viewer, nearby, distant});
 
         std::unordered_set<NetworkEntity *> out;
-        grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
+        out = collect(grid, viewer, nothingBefore);
 
         EQUALS(out.contains(nearby), true);
         EQUALS(out.contains(distant), false);
@@ -94,13 +119,10 @@ MODULE(interest_grid, {
         // Same distance, but content with the viewer's radius.
         NetworkEntity *farPed = make(typeB, 340.0f, 10.0f);
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(farCar);
-        grid.Insert(farPed);
+        rebuild(grid, {viewer, farCar, farPed});
 
         std::unordered_set<NetworkEntity *> out;
-        grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
+        out = collect(grid, viewer, nothingBefore);
 
         EQUALS(out.contains(farCar), true);
         EQUALS(out.contains(farPed), false);
@@ -128,17 +150,11 @@ MODULE(interest_grid, {
         NetworkEntity *leaving = make(typeB, 55.0f, 10.0f);
         leaving->streaming.range = 50.0f;
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(nearChest);
-        grid.Insert(farChest);
-        grid.Insert(wideChest);
-        grid.Insert(otherType);
-        grid.Insert(leaving);
+        rebuild(grid, {viewer, nearChest, farChest, wideChest, otherType, leaving});
 
         const std::unordered_set<NetworkEntity *> before {leaving};
         std::unordered_set<NetworkEntity *> out;
-        grid.CollectVisible(viewer, viewerGuid, before, out);
+        out = collect(grid, viewer, before);
 
         EQUALS(out.contains(nearChest), true);
         EQUALS(out.contains(farChest), false);
@@ -148,11 +164,9 @@ MODULE(interest_grid, {
 
         // Turned back off, the viewer's range widens it again from the next rebuild.
         grid.SetUsesEntityRange(typeB, false);
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(farChest);
+        rebuild(grid, {viewer, farChest});
         out.clear();
-        grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
+        out = collect(grid, viewer, nothingBefore);
         EQUALS(out.contains(farChest), true);
     });
 
@@ -166,29 +180,25 @@ MODULE(interest_grid, {
         // In the margin band: past the stream-in radius, inside the stream-out radius.
         NetworkEntity *pacing = make(typeA, 270.0f, 0.0f);
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(pacing);
+        rebuild(grid, {viewer, pacing});
 
         // Not previously relevant: the margin must not pull it in early.
         std::unordered_set<NetworkEntity *> cold;
-        grid.CollectVisible(viewer, viewerGuid, nothingBefore, cold);
+        cold = collect(grid, viewer, nothingBefore);
         EQUALS(cold.contains(pacing), false);
 
         // Previously relevant: it holds.
         std::unordered_set<NetworkEntity *> previous;
         previous.insert(pacing);
         std::unordered_set<NetworkEntity *> warm;
-        grid.CollectVisible(viewer, viewerGuid, previous, warm);
+        warm = collect(grid, viewer, previous);
         EQUALS(warm.contains(pacing), true);
 
         // Past the margin it goes regardless of history.
         pacing->position = glm::vec3(310.0f, 0.0f, 0.0f);
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(pacing);
+        rebuild(grid, {viewer, pacing});
         std::unordered_set<NetworkEntity *> gone;
-        grid.CollectVisible(viewer, viewerGuid, previous, gone);
+        gone = collect(grid, viewer, previous);
         EQUALS(gone.contains(pacing), false);
     });
 
@@ -205,13 +215,10 @@ MODULE(interest_grid, {
         // Behind, inside the plain radius: measuring only from the look-ahead point would lose it.
         NetworkEntity *behind = make(typeA, -240.0f, 0.0f);
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(ahead);
-        grid.Insert(behind);
+        rebuild(grid, {viewer, ahead, behind});
 
         std::unordered_set<NetworkEntity *> out;
-        grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
+        out = collect(grid, viewer, nothingBefore);
 
         EQUALS(out.contains(ahead), true);
         EQUALS(out.contains(behind), true);
@@ -231,17 +238,10 @@ MODULE(interest_grid, {
         NetworkEntity *b110 = make(typeB, 110.0f, 0.0f);
         NetworkEntity *b120 = make(typeB, 120.0f, 0.0f);
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(a10);
-        grid.Insert(a20);
-        grid.Insert(a30);
-        grid.Insert(b100);
-        grid.Insert(b110);
-        grid.Insert(b120);
+        rebuild(grid, {viewer, a10, a20, a30, b100, b110, b120});
 
         std::unordered_set<NetworkEntity *> out;
-        grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
+        out = collect(grid, viewer, nothingBefore);
 
         EQUALS(out.contains(a10), true);
         EQUALS(out.contains(a20), true);
@@ -263,35 +263,29 @@ MODULE(interest_grid, {
         // 5% nearer: not enough to justify a despawn/respawn pair.
         NetworkEntity *challenger = make(typeA, 95.0f, 0.0f);
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(incumbent);
-        grid.Insert(challenger);
+        rebuild(grid, {viewer, incumbent, challenger});
 
         std::unordered_set<NetworkEntity *> previous;
         previous.insert(incumbent);
         std::unordered_set<NetworkEntity *> out;
-        grid.CollectVisible(viewer, viewerGuid, previous, out);
+        out = collect(grid, viewer, previous);
 
         EQUALS(out.contains(incumbent), true);
         EQUALS(out.contains(challenger), false);
 
         // Decisively closer: the swap happens, so the cap cannot wedge.
         challenger->position = glm::vec3(40.0f, 0.0f, 0.0f);
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(incumbent);
-        grid.Insert(challenger);
+        rebuild(grid, {viewer, incumbent, challenger});
         std::unordered_set<NetworkEntity *> swapped;
-        grid.CollectVisible(viewer, viewerGuid, previous, swapped);
+        swapped = collect(grid, viewer, previous);
         EQUALS(swapped.contains(challenger), true);
         EQUALS(swapped.contains(incumbent), false);
     });
 
     // The defect this guards: CollectVisible skips an entity owned by the viewer from ranking and
     // re-adds it from the owned index instead. Ownership is granted by delegation *after*
-    // RebuildInterest has already built that index, and the rebuild is rate-limited -- so without
-    // Reown the entity is in neither set for a whole interval and the peer that was just told to
+    // the interest step has already filed it, and the next sync is a tick away -- so without
+    // Reown the entity is in neither set until then and the peer that was just told to
     // simulate it has its replica destroyed and rebuilt. Seen live as an NPC despawning and
     // respawning every few seconds on the simulating client only.
     IT("keeps an entity relevant to the viewer it is granted to after the rebuild", {
@@ -304,15 +298,11 @@ MODULE(interest_grid, {
         // case a delegated entity is in the moment it is handed over near the edge of the world.
         NetworkEntity *granted  = make(typeA, 5000.0f, 0.0f);
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(granted);
+        rebuild(grid, {viewer, granted});
 
         std::unordered_set<NetworkEntity *> before;
-        grid.CollectVisible(viewer, viewerGuid, nothingBefore, before);
+        before = collect(grid, viewer, nothingBefore);
         EQUALS(before.contains(granted), false);
-
-        const uint32_t generationBefore = grid.Generation();
 
         // The grant, as delegation makes it: ownerGUID written, then the grid told -- with no
         // rebuild in between.
@@ -320,11 +310,8 @@ MODULE(interest_grid, {
         grid.Reown(granted, MafiaNet::UNASSIGNED_PEER_GUID);
 
         std::unordered_set<NetworkEntity *> after;
-        grid.CollectVisible(viewer, viewerGuid, before, after);
+        after = collect(grid, viewer, before);
         EQUALS(after.contains(granted), true);
-        // Viewers cache their relevant set against the generation, so it has to move or nobody
-        // recomputes and the grant is invisible until the next rebuild.
-        EQUALS(grid.Generation() != generationBefore, true);
     });
 
     IT("stops treating an entity as owned once it is handed back", {
@@ -336,19 +323,17 @@ MODULE(interest_grid, {
         NetworkEntity *released = make(typeA, 5000.0f, 0.0f);
         released->ownerGUID     = viewerGuid;
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(released);
+        rebuild(grid, {viewer, released});
 
         std::unordered_set<NetworkEntity *> owned;
-        grid.CollectVisible(viewer, viewerGuid, nothingBefore, owned);
+        owned = collect(grid, viewer, nothingBefore);
         EQUALS(owned.contains(released), true);
 
         released->ownerGUID = MafiaNet::UNASSIGNED_PEER_GUID;
         grid.Reown(released, viewerGuid);
 
         std::unordered_set<NetworkEntity *> handedBack;
-        grid.CollectVisible(viewer, viewerGuid, owned, handedBack);
+        handedBack = collect(grid, viewer, owned);
         EQUALS(handedBack.contains(released), false);
     });
 
@@ -366,14 +351,10 @@ MODULE(interest_grid, {
         NetworkEntity *stranger   = make(typeA, 50.0f, 0.0f);
         stranger->ownerGUID       = strangerGuid;
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(mine);
-        grid.Insert(global);
-        grid.Insert(stranger);
+        rebuild(grid, {viewer, mine, global, stranger});
 
         std::unordered_set<NetworkEntity *> out;
-        grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
+        out = collect(grid, viewer, nothingBefore);
 
         EQUALS(out.contains(mine), true);
         EQUALS(out.contains(global), true);
@@ -396,14 +377,10 @@ MODULE(interest_grid, {
         rider->dependency = farCar;
         owned.emplace_back(rider);
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(nearCar);
-        grid.Insert(farCar);
-        grid.Insert(rider);
+        rebuild(grid, {viewer, nearCar, farCar, rider});
 
         std::unordered_set<NetworkEntity *> out;
-        grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
+        out = collect(grid, viewer, nothingBefore);
 
         EQUALS(out.contains(rider), true);
         EQUALS(out.contains(nearCar), true); // the one budgeted slot, being nearest
@@ -418,13 +395,11 @@ MODULE(interest_grid, {
         viewer->streaming.range = 250.0f;
         NetworkEntity *doomed   = make(typeA, 50.0f, 0.0f);
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(doomed);
+        rebuild(grid, {viewer, doomed});
         grid.Remove(doomed);
 
         std::unordered_set<NetworkEntity *> out;
-        grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
+        out = collect(grid, viewer, nothingBefore);
         EQUALS(out.contains(doomed), false);
     });
 
@@ -439,15 +414,10 @@ MODULE(interest_grid, {
         NetworkEntity *global           = make(typeA, 3000.0f, 0.0f);
         global->streaming.alwaysVisible = true;
 
-        grid.BeginRebuild();
-        grid.Insert(viewer);
-        grid.Insert(nearby);
-        grid.Insert(global);
+        rebuild(grid, {viewer, nearby, global});
 
         const auto sees = [&](NetworkEntity *entity) {
-            std::unordered_set<NetworkEntity *> out;
-            grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
-            return out.contains(entity);
+            return collect(grid, viewer, nothingBefore).contains(entity);
         };
 
         nearby->streaming.viewers                 = std::make_unique<ViewerFilter>();
