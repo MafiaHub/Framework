@@ -559,6 +559,9 @@ namespace Framework::Networking::Replication {
         entity->SetNetworkID(++_nextNetworkId);
         Reference(entity);
         _interestDirty = true;
+        if (_isServer) {
+            _createdSinceRebuild.push_back(entity);
+        }
         if (_onEntityCreated) {
             _onEntityCreated(entity->GetNetworkID());
         }
@@ -580,9 +583,12 @@ namespace Framework::Networking::Replication {
                 ++it;
             }
         }
-        // Scrub the interest indices so this delete can't dangle before the next rebuild.
+        // Scrub the interest indices and every cached set so this delete can't dangle.
         _interest.Remove(entity);
-        ++_interestUrgentGeneration;
+        std::erase(_createdSinceRebuild, entity);
+        for (unsigned i = 0; i < GetConnectionCount(); ++i) {
+            static_cast<ReplicationConnection *>(GetConnectionAtIndex(i))->ForgetEntity(entity);
+        }
         _interestDirty = true;
         // And the delegation bookkeeping, which is keyed by NetworkID: ids are monotonic, but an
         // entry left behind would still be found by a later entity that reused the id after a
@@ -674,9 +680,6 @@ namespace Framework::Networking::Replication {
         if (!_interestDirty && _interestRebuildInterval > 0 && now - _lastInterestRebuild < static_cast<int64_t>(_interestRebuildInterval)) {
             return;
         }
-        if (_interestDirty) {
-            ++_interestUrgentGeneration;
-        }
         FW_PROFILE_SCOPE_N("Replication::RebuildInterest");
         _lastInterestRebuild = now;
         _interestDirty       = false;
@@ -684,6 +687,12 @@ namespace Framework::Networking::Replication {
         ForEachEntity([this](NetworkEntity *entity) {
             _interest.Insert(entity);
         });
+        if (!_createdSinceRebuild.empty()) {
+            for (unsigned i = 0; i < GetConnectionCount(); ++i) {
+                static_cast<ReplicationConnection *>(GetConnectionAtIndex(i))->AdmitCreated(_createdSinceRebuild);
+            }
+            _createdSinceRebuild.clear();
+        }
     }
 
     void ReplicationManager::CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const EntitySet &previous, EntitySet &out) {

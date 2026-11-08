@@ -125,6 +125,10 @@ namespace Framework::Networking::Replication {
         // compared, never dereferenced, so a stale entry is harmless.
         void CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const EntitySet &previous, EntitySet &out);
 
+        // Add to `out` the entities of `created` that CollectVisible would admit, with what they drag
+        // in. A budgeted type is left for the viewer's next refresh, which ranks it against the rest.
+        void CollectCreated(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::vector<NetworkEntity *> &created, EntitySet &out);
+
       private:
         // An in-range candidate and its budget-ranking distance (sticky discount folded in).
         struct Ranked {
@@ -141,6 +145,8 @@ namespace Framework::Networking::Replication {
             return _groundXY ? p.y : p.z;
         }
 
+        // The avatar, plus where its velocity puts it a moment from now.
+        void SetFocus(const NetworkEntity *viewer);
         // Ground-plane distance² to the nearest of the current focus points.
         float NearestFocusDistSq(const glm::vec3 &p) const;
 

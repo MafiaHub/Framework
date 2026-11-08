@@ -627,19 +627,21 @@ MODULE(interest_grid, {
                 }
             }
             out.insert(viewer);
-            const std::vector<NetworkEntity *> survivors(out.begin(), out.end());
-            for (NetworkEntity *e : survivors) {
+            // Admitted in their own right, before the dependencies below.
+            std::unordered_set<NetworkEntity *> direct = out;
+            for (NetworkEntity *e : direct) {
                 NetworkEntity *dependency = e->GetInterestDependency();
                 if (dependency && live.contains(dependency) && dependency->streaming.visible && admits(dependency)) {
                     out.insert(dependency);
                 }
             }
-            return out;
+            return std::make_pair(std::move(direct), std::move(out));
         };
 
         EntitySet previous;
-        int mismatches = 0;
-        size_t seen    = 0;
+        int mismatches        = 0;
+        int admittedCreations = 0;
+        size_t seen           = 0;
         for (int step = 0; step < 30; ++step) {
             viewer->velocity = glm::vec3(coord(rng) * 0.1f, coord(rng) * 0.1f, 0.0f);
             viewer->position += glm::vec3(coord(rng) * 0.05f, coord(rng) * 0.05f, 0.0f);
@@ -661,15 +663,43 @@ MODULE(interest_grid, {
             }
             EntitySet out;
             grid.CollectVisible(viewer, viewerGuid, previous, out);
-            const std::unordered_set<NetworkEntity *> expected = bruteForce(live, previous);
+            const auto [direct, expected] = bruteForce(live, previous);
             mismatches += out.size() != expected.size();
             for (NetworkEntity *e : expected) {
                 mismatches += !out.contains(e);
+            }
+
+            // Taken as just created, a sample joins where the rule admits it in its own right, budgeted
+            // types aside, and otherwise only as what an admitted one drags in.
+            std::vector<NetworkEntity *> created;
+            for (NetworkEntity *e : world) {
+                if (unit(rng) < 0.3f && !previous.contains(e)) {
+                    created.push_back(e);
+                }
+            }
+            EntitySet joined;
+            grid.CollectCreated(viewer, viewerGuid, created, joined);
+            const auto ownRight = [&](NetworkEntity *e) {
+                return direct.contains(e) && (e->GetTypeId() != typeB || e->ownerGUID == viewerGuid || e->streaming.alwaysVisible);
+            };
+            std::unordered_set<NetworkEntity *> dragged;
+            for (NetworkEntity *e : created) {
+                if (ownRight(e) && e->GetInterestDependency()) {
+                    dragged.insert(e->GetInterestDependency());
+                }
+            }
+            for (NetworkEntity *e : created) {
+                mismatches += ownRight(e) ? !joined.contains(e) : joined.contains(e) && !dragged.contains(e);
+                admittedCreations += ownRight(e);
+            }
+            for (NetworkEntity *e : joined) {
+                mismatches += !expected.contains(e);
             }
             seen += out.size();
             previous = out;
         }
         EQUALS(mismatches, 0);
         GREATER(seen, size_t {30 * 40});
+        GREATER(admittedCreations, 30);
     });
 })

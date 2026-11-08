@@ -170,6 +170,19 @@ namespace Framework::Networking::Replication {
         });
     }
 
+    void InterestGrid::SetFocus(const NetworkEntity *viewer) {
+        _focus.clear();
+        _focus.push_back(viewer->position);
+        if (_lookaheadSeconds > 0.0f) {
+            const glm::vec3 ahead = viewer->position + viewer->velocity * _lookaheadSeconds;
+            const float dx        = ahead.x - viewer->position.x;
+            const float dv        = GroundV(ahead) - GroundV(viewer->position);
+            if (dx * dx + dv * dv > kMinLookaheadDist * kMinLookaheadDist) {
+                _focus.push_back(ahead);
+            }
+        }
+    }
+
     float InterestGrid::NearestFocusDistSq(const glm::vec3 &p) const {
         const float x = p.x;
         const float v = GroundV(p);
@@ -235,16 +248,7 @@ namespace Framework::Networking::Replication {
 
         // Focus points: the avatar, plus where its velocity puts it a moment from now. Relevance
         // takes the nearest, so the look-ahead only adds what is coming up.
-        _focus.clear();
-        _focus.push_back(viewer->position);
-        if (_lookaheadSeconds > 0.0f) {
-            const glm::vec3 ahead = viewer->position + viewer->velocity * _lookaheadSeconds;
-            const float dx        = ahead.x - viewer->position.x;
-            const float dv        = GroundV(ahead) - GroundV(viewer->position);
-            if (dx * dx + dv * dv > kMinLookaheadDist * kMinLookaheadDist) {
-                _focus.push_back(ahead);
-            }
-        }
+        SetFocus(viewer);
 
         // One query per focus point at the widest reach any entity can claim; the exact per-entity
         // range test happens below.
@@ -335,6 +339,40 @@ namespace Framework::Networking::Replication {
                 continue;
             }
             if (dependency->streaming.visible && admits(dependency)) {
+                out.insert(dependency);
+            }
+        }
+    }
+
+    void InterestGrid::CollectCreated(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::vector<NetworkEntity *> &created, EntitySet &out) {
+        if (!viewer || !_ready || created.empty()) {
+            return;
+        }
+        SetFocus(viewer);
+        // CollectVisible's rule for an entity that was relevant to nobody before.
+        const auto admits = [&](const NetworkEntity *entity) {
+            if (!_live.contains(entity) || !entity->streaming.visible || !entity->streaming.Admits(viewerGUID)) {
+                return false;
+            }
+            if (entity == viewer || entity->ownerGUID == viewerGUID) {
+                return true;
+            }
+            if (entity->streaming.targetGUID == MafiaNet::UNASSIGNED_PEER_GUID && !MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), viewer->GetVirtualWorld())) {
+                return false;
+            }
+            if (entity->streaming.alwaysVisible) {
+                return true;
+            }
+            const float range = RangeFor(entity, viewer->streaming.range);
+            return BudgetFor(entity->GetTypeId()) == 0 && NearestFocusDistSq(entity->position) <= range * range;
+        };
+        for (NetworkEntity *entity : created) {
+            if (!admits(entity)) {
+                continue;
+            }
+            out.insert(entity);
+            NetworkEntity *dependency = entity->GetInterestDependency();
+            if (dependency && _live.contains(dependency) && dependency->streaming.visible && dependency->streaming.Admits(viewerGUID)) {
                 out.insert(dependency);
             }
         }

@@ -91,6 +91,22 @@ namespace Framework::Networking::Replication {
         FW_PROFILE_VALUE(_relevant.size());
     }
 
+    void ReplicationConnection::AdmitCreated(const std::vector<NetworkEntity *> &created) {
+        // An invalid set is recomputed whole on the next query.
+        if (_relevantValid) {
+            _manager->CollectCreated(_relevantViewer, _viewerGUID, created, _relevant);
+        }
+    }
+
+    void ReplicationConnection::ForgetEntity(const NetworkEntity *entity) {
+        _relevant.erase(entity);
+        _previousRelevant.erase(entity);
+        _lastTransformSend.erase(entity);
+        if (entity == _relevantViewer) {
+            _relevantValid = false;
+        }
+    }
+
     uint32_t ReplicationConnection::TransformSendIntervalMs(const NetworkEntity *entity) const {
         if (!_isServer || !_manager || !entity || !_relevantValid || !_relevantViewer || !_manager->HasSerializeRateBands()) {
             return 0;

@@ -210,4 +210,64 @@ MODULE(network_work, {
         manager->DestroyEntity(bystander);
         manager->DestroyEntity(viewer);
     });
+
+    IT("adds a creation and drops a destruction without refreshing anyone", {
+        using namespace Framework::Networking::Replication;
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        manager->ConfigureGrid(100, -4096, 4096);
+        constexpr uint32_t kFarInterval = 1000000;
+        manager->SetInterestRebuildInterval(kFarInterval);
+        const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::InterestChurn");
+        auto *viewer            = manager->CreateEntity(type);
+        auto *mover             = manager->CreateEntity(type);
+        viewer->streaming.range = 100;
+        mover->position.x       = 50;
+        const MafiaNet::RakNetGUID viewerGuid(91);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->RebuildInterest();
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+        auto sees        = [connection](NetworkEntity *entity) {
+            DataStructures::List<MafiaNet::Replica3 *> create, destroy;
+            connection->QueryReplicaList(create, destroy);
+            for (unsigned int i = 0; i < create.Size(); ++i) {
+                if (create[i] == entity) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        EQUALS(sees(mover), true);
+
+        // The mover leaves quietly, so a refresh would show by dropping it.
+        mover->position.x = 2000;
+        manager->SetInterestRebuildInterval(0);
+        manager->RebuildInterest();
+        manager->SetInterestRebuildInterval(kFarInterval);
+
+        auto *spawned       = manager->CreateEntity(type);
+        auto *farAway       = manager->CreateEntity(type);
+        spawned->position.x = 20;
+        farAway->position.x = 3000;
+        manager->RebuildInterest();
+        EQUALS(sees(spawned), true);
+        EQUALS(sees(farAway), false);
+        EQUALS(sees(mover), true);
+
+        manager->DestroyEntity(spawned);
+        EQUALS(sees(spawned), false);
+        EQUALS(sees(mover), true);
+
+        manager->DestroyEntity(farAway);
+        manager->DestroyEntity(mover);
+        manager->DestroyEntity(viewer);
+    });
 });
