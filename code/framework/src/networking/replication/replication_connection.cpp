@@ -176,7 +176,9 @@ namespace Framework::Networking::Replication {
             return true;
         }
         const InterestGrid &interest = _manager->Interest();
-        for (uint64_t i = _reevaluationsSeen; i < end; ++i) {
+        // A connection behind the base (new, or skipped by a pass) has just recomputed: what it missed
+        // is in that result, and the queue no longer holds it.
+        for (uint64_t i = std::max(_reevaluationsSeen, _manager->ReevaluationBase()); i < end; ++i) {
             const auto [slot, generation] = _manager->ReevaluationAt(i);
             NetworkEntity *entity         = interest.EntityAt(slot);
             if (entity == nullptr || interest.GenerationOf(slot) != generation) {

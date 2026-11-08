@@ -419,4 +419,38 @@ MODULE(network_work, {
         manager->DestroyEntity(distant);
         manager->DestroyEntity(viewer);
     });
+
+    IT("lets a viewer join after earlier passes consumed re-evaluations", {
+        using namespace Framework::Networking::Replication;
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        manager->ConfigureGrid(100, -4096, 4096);
+        const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::LateJoin");
+        auto *viewer            = manager->CreateEntity(type);
+        viewer->streaming.range = 100;
+        manager->RebuildInterest();
+        manager->Update();
+        // Queued and consumed before the viewer's connection exists.
+        auto *nearby = manager->CreateEntity(type);
+        manager->RebuildInterest();
+        manager->Update();
+        EQUALS(manager->ReevaluationBase() > 0, true);
+
+        const MafiaNet::RakNetGUID viewerGuid(97);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+        connection->AutoConstructByQuery(manager, 0);
+        EQUALS(connection->HasReplicaConstructed(nearby), true);
+
+        manager->DestroyEntity(nearby);
+        manager->DestroyEntity(viewer);
+    });
 });
