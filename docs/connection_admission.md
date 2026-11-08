@@ -117,26 +117,22 @@ itself; `steamId` is read from an environment variable the launcher sets and is
 not checked against Steam. A whitelist that must hold against a modified client
 should check the `ticket` with whatever issued it.
 
-The Epic launcher sets `MafiaHubEpicId` from its signed-in account, and the client
-includes that ID in the existing connection handshake. The server applies a hex
-format check and exposes it as `PendingConnection.epicId` before admission and
-`Player.epicId` after joining. It is an Epic account ID, not an EOS Product User
-ID. No Epic proof or server-side account verification is performed.
-
-For temporary, non-security filtering only, a handler can compare the
-client-reported Epic ID with a list. This does not authenticate the player: a
-modified client can submit a listed ID. For an authorization whitelist, validate
-`connection.ticket` with its issuer before admitting the player.
-
-The example below performs only the client-reported ID filter:
-
 ```js
 Events.on("playerConnecting", async (connection) => {
-    if (!connection.epicId || !await whitelist.containsEpicAccount(connection.epicId)) {
-        connection.reject("Your Epic account is not on the whitelist.");
+    // Ask whatever issued the ticket; a modified client cannot forge an answer from it.
+    if (!connection.ticket || !await launcher.verifyTicket(connection.ticket, connection.nickname)) {
+        connection.reject("Your launch ticket could not be verified.");
     }
 });
 ```
+
+`epicId` is the account ID of the player signed in to the Epic launcher, which
+sets `MafiaHubEpicId` for the client to report. It is an Epic account ID, not an
+EOS Product User ID, and nothing checks it with Epic. The server keeps it only
+as exactly 32 hex characters, lowercased, and drops anything else, so it is
+either empty or compares directly against a lowercase list. The same value is
+`Player.epicId` once the player has joined. Matching it against a list is
+filtering, not authorization: a modified client can report any listed ID.
 
 ---
 

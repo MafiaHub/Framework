@@ -946,7 +946,7 @@ namespace Framework::Integrations::Client {
         // The Steam id is launcher-set when the game was located through Steam, the Epic id when it
         // authenticated through Epic; Win32 read, the CRT's getenv copy predates them.
         char steamId[32] = {};
-        char epicId[33]  = {}; // EOS account id: 32 hex chars + null
+        char epicId[33]  = {}; // Epic account id: 32 hex chars + null
 #ifdef _WIN32
         GetEnvironmentVariableA("MafiaHubSteamId", steamId, sizeof(steamId));
         GetEnvironmentVariableA("MafiaHubEpicId", epicId, sizeof(epicId));
