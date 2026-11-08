@@ -12,6 +12,7 @@ set(FRAMEWORK_SRC
     src/utils/persistent_config.cpp
     src/utils/interpolator.cpp
     src/utils/time.cpp
+    src/utils/fork_join_pool.cpp
     src/utils/command_listener.cpp
     src/utils/command_processor.cpp
     src/utils/crypto.cpp

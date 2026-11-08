@@ -40,6 +40,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/connection_gate_ut.h"
 #include "modules/delegation_ut.h"
 #include "modules/entity_registry_ut.h"
+#include "modules/fork_join_pool_ut.h"
 #include "modules/gui_resources_ut.h"
 #include "modules/input_state_ut.h"
 #include "modules/interest_grid_ut.h"
@@ -118,6 +119,7 @@ int main() {
     UNIT_MODULE(transform_batch);
     UNIT_MODULE(interest_grid);
     UNIT_MODULE(interest_scale);
+    UNIT_MODULE(fork_join_pool);
     UNIT_MODULE(input_state);
     UNIT_MODULE(delegation);
     UNIT_MODULE(entity_registry);
