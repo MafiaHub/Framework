@@ -42,6 +42,12 @@ endif()
 target_include_directories(FrameworkTests PRIVATE . ../framework/src)
 target_link_libraries(FrameworkTests Framework FrameworkServer libnode)
 
+# Not a test: what a server tick's replication costs as players gather (see the file). Build it in
+# RelWithDebInfo or Release.
+add_executable(FrameworkReplicationBench bench/replication_bench.cpp)
+target_include_directories(FrameworkReplicationBench PRIVATE ../framework/src)
+target_link_libraries(FrameworkReplicationBench Framework FrameworkServer libnode)
+
 
 # Tests use Node.js APIs through the scripting engine
 target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
