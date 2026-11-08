@@ -252,7 +252,8 @@ namespace Framework::Networking::Replication {
 
         // Idle refresh of an unchanged pose, so a lost final packet is repaired: every kTransformRefreshMs
         // for kTransformRefreshBurstMs after the last change, then every kTransformHeartbeatMs. Entities
-        // that never moved since construction are not refreshed.
+        // that never moved since construction are not refreshed. A type with rate bands also resends
+        // once its slowest band's interval after the last change, for the viewers a band withheld it from.
         static constexpr MafiaNet::Time kTransformRefreshMs      = 500;
         static constexpr MafiaNet::Time kTransformRefreshBurstMs = 2000;
         static constexpr MafiaNet::Time kTransformHeartbeatMs    = 5000;
@@ -498,6 +499,7 @@ namespace Framework::Networking::Replication {
         bool _transformMoved                = false;
         MafiaNet::Time _lastTransformChange = 0;
         MafiaNet::Time _lastTransformSend   = 0;
+        uint32_t _transformSettleMs         = 0;
 
         // Receiver: send time of the newest applied pose. The transform channel is plain Unreliable
         // (a sequenced stream is per channel, not per entity), so this is the per-entity ordering.

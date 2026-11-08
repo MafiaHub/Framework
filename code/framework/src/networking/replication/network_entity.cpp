@@ -14,6 +14,7 @@
 #include <mafianet/get_time.h>
 #include <utils/time.h>
 
+#include <algorithm>
 #include <cstring>
 
 namespace Framework::Networking::Replication {
@@ -31,6 +32,15 @@ namespace Framework::Networking::Replication {
             }
             const MafiaNet::BitSize_t bytes = current.GetNumberOfBytesUsed();
             return bytes == 0 || std::memcmp(last->GetData(), current.GetData(), bytes) == 0;
+        }
+
+        // The longest a rate band can withhold this type's pose from a viewer; 0 when none applies.
+        uint32_t SlowestBandMs(const ReplicationManager *manager, uint32_t typeId) {
+            if (manager == nullptr || !manager->IsServer() || !manager->HasSerializeRateBands()) {
+                return 0;
+            }
+            const SerializeRateBands &bands = manager->GetSerializeRateBands(typeId);
+            return std::max({bands.nearIntervalMs, bands.midIntervalMs, bands.farIntervalMs});
         }
     } // namespace
 
@@ -318,8 +328,14 @@ namespace Framework::Networking::Replication {
             if (lastTransform && lastTransform->GetNumberOfBitsUsed() > 0) {
                 _transformMoved      = true;
                 _lastTransformChange = now;
+                _transformSettleMs   = SlowestBandMs(Manager(), _typeId);
             }
             _lastTransformSend = now;
+        }
+        else if (_transformSettleMs != 0 && now >= _lastTransformChange && now - _lastTransformChange >= _transformSettleMs) {
+            _transformSettleMs = 0;
+            _lastTransformSend = now;
+            refreshTransform   = true;
         }
         else if (_transformMoved && now >= _lastTransformSend) {
             const bool inBurst          = now >= _lastTransformChange && now - _lastTransformChange < kTransformRefreshBurstMs;
