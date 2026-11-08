@@ -156,6 +156,9 @@ Other agents do not run these hooks; the rules still apply to them as written.
   `AddPolyline` change) and miniaudio (port ships only the header). Each carries the reason in `vendors/CMakeLists.txt`.
   CEF is downloaded and unpacked into `vendors/cef` at configure time; set `FW_CEF_CACHE_DIR`
   (`-D` or an environment variable) to share one copy between checkouts and worktrees.
+  MafiaNet is the pinned release archive (`cmake/MafiaNetPin.cmake`); for a change spanning both
+  repositories, set `FW_MAFIANET_ROOT` (`-D` or an environment variable) to the prefix of a Release,
+  `/MD` `cmake --install` of a MafiaNet checkout. Never release with it set.
 - `vcpkg.json` - everything else, pinned by `builtin-baseline`. vcpkg is fetched and
   bootstrapped at configure time by `cmake/VcpkgBootstrap.cmake`; override with
   `-DFW_VCPKG_ROOT=<path>` (not the `VCPKG_ROOT` env var, which `vcvars64.bat` hijacks).
