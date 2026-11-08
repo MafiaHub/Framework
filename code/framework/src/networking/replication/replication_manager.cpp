@@ -20,9 +20,27 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <thread>
 
 namespace Framework::Networking::Replication {
     namespace {
+        // Whether a ReplicaManager3 construction message lists at least one construction (it may
+        // carry destructions alone): [ID_TIMESTAMP, time,] id, world, uint16 count, ...
+        bool CarriesConstructions(const MafiaNet::Packet *packet) {
+            std::size_t offset = 2;
+            unsigned char id   = packet->length > 0 ? packet->data[0] : 0;
+            if (id == ID_TIMESTAMP) {
+                offset = 3 + sizeof(MafiaNet::Time);
+                id     = packet->length > 1 + sizeof(MafiaNet::Time) ? packet->data[1 + sizeof(MafiaNet::Time)] : 0;
+            }
+            if (id != ID_REPLICA_MANAGER_CONSTRUCTION || packet->length < offset + sizeof(uint16_t)) {
+                return false;
+            }
+            MafiaNet::BitStream bs(packet->data + offset, packet->length - offset, false);
+            uint16_t count = 0;
+            return bs.Read(count) && count != 0;
+        }
+
         // Raw RPC: the tail is the entity's polymorphic SerializeForcedState payload.
         constexpr auto kForceStateId = FW_RPC_IDENTIFIER("Framework::ForceState");
 
@@ -56,8 +74,22 @@ namespace Framework::Networking::Replication {
         };
     } // namespace
 
+    namespace {
+        // Below this many viewers in a tick, waking the workers costs more than it saves.
+        constexpr size_t kParallelMin = 8;
+        // Enough to take a crowd's refresh off the server thread without competing with the network
+        // thread and the scripts' own threads for the rest of the machine.
+        constexpr uint32_t kDefaultWorkerThreads = 3;
+    } // namespace
+
     ReplicationManager::ReplicationManager()  = default;
     ReplicationManager::~ReplicationManager() = default;
+
+    void ReplicationManager::SetReplicationWorkerThreads(uint32_t workers) {
+        _workerThreads = workers;
+        _workersSet    = true;
+        _workers.reset();
+    }
 
     void ReplicationManager::Update() {
         if (_networkUpdateActive && std::exchange(_updatedThisNetworkUpdate, true)) {
@@ -67,17 +99,28 @@ namespace Framework::Networking::Replication {
             FW_PROFILE_SCOPE_N("Replication::RM3Update");
             MafiaNet::ReplicaManager3::Update();
         }
-        FW_PROFILE_SCOPE_N("Replication::FlushTransforms");
-        // Flush in the same pass that queued the poses, never on the next tick.
-        for (unsigned int world = 0; world < worldsList.Size(); ++world) {
-            const MafiaNet::WorldId worldId = worldsList[world]->worldId;
-            for (unsigned int i = 0; i < GetConnectionCount(worldId); ++i) {
-                static_cast<ReplicationConnection *>(GetConnectionAtIndex(i, worldId))->FlushTransforms(GetRakPeerInterface());
+        {
+            FW_PROFILE_SCOPE_N("Replication::FlushTransforms");
+            // Flush in the same pass that queued the poses, never on the next tick.
+            for (unsigned int world = 0; world < worldsList.Size(); ++world) {
+                const MafiaNet::WorldId worldId = worldsList[world]->worldId;
+                for (unsigned int i = 0; i < GetConnectionCount(worldId); ++i) {
+                    static_cast<ReplicationConnection *>(GetConnectionAtIndex(i, worldId))->FlushTransforms(GetRakPeerInterface());
+                }
             }
         }
+        // Every connection the pass asked has read the re-evaluations; one it did not ask catches up
+        // with a full recompute.
+        _reevaluationBase += _reevaluations.size();
+        _reevaluations.clear();
     }
 
     MafiaNet::PluginReceiveResult ReplicationManager::OnReceive(MafiaNet::Packet *packet) {
+        // The server alone decides what exists: a client's constructions would sit outside every
+        // viewer's interest set, streamed to no one and never streamed out.
+        if (_isServer && CarriesConstructions(packet)) {
+            return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
+        }
         if (!TransformBatch::IsBatch(packet->data, packet->length)) {
             return MafiaNet::ReplicaManager3::OnReceive(packet);
         }
@@ -220,7 +263,7 @@ namespace Framework::Networking::Replication {
             return;
         }
         if (before.only.has_value() != filter.only.has_value()) {
-            ++_interestUrgentGeneration;
+            Reevaluate(&entity);
         }
         else {
             const ViewerFilter *sides[] {&before, &filter};
@@ -280,7 +323,7 @@ namespace Framework::Networking::Replication {
         }
         entity.streaming.targetGUID = guid;
         if (previous == MafiaNet::UNASSIGNED_PEER_GUID || guid == MafiaNet::UNASSIGNED_PEER_GUID) {
-            ++_interestUrgentGeneration;
+            Reevaluate(&entity);
         }
         else {
             InvalidateInterestOf(previous);
@@ -558,7 +601,12 @@ namespace Framework::Networking::Replication {
         // them as plain numbers. Clients adopt this id via the construction snapshot.
         entity->SetNetworkID(++_nextNetworkId);
         Reference(entity);
-        _interestDirty = true;
+        if (_isServer) {
+            // Into the index now, so it can be handed out before the next sync; every viewer decides
+            // on it at its next query, by which time the caller has placed it.
+            _interest.Sync(entity);
+            Reevaluate(entity);
+        }
         if (_onEntityCreated) {
             _onEntityCreated(entity->GetNetworkID());
         }
@@ -580,10 +628,8 @@ namespace Framework::Networking::Replication {
                 ++it;
             }
         }
-        // Scrub the interest indices so this delete can't dangle before the next rebuild.
-        _interest.Remove(entity);
-        ++_interestUrgentGeneration;
-        _interestDirty = true;
+        // Out of the index and every viewer's set, so this delete can't dangle.
+        ForgetEntity(entity);
         // And the delegation bookkeeping, which is keyed by NetworkID: ids are monotonic, but an
         // entry left behind would still be found by a later entity that reused the id after a
         // reconnect, and would carry a stale pin into it.
@@ -666,28 +712,102 @@ namespace Framework::Networking::Replication {
         _viewers.erase(it);
     }
 
+    void ReplicationManager::Reevaluate(NetworkEntity *entity) {
+        const uint32_t slot = _interest.SlotOf(entity);
+        if (slot != InterestGrid::kNoSlot) {
+            _reevaluations.emplace_back(slot, _interest.GenerationOf(slot));
+        }
+    }
+
+    void ReplicationManager::ForgetEntity(NetworkEntity *entity) {
+        const uint32_t slot = _interest.SlotOf(entity);
+        if (slot == InterestGrid::kNoSlot) {
+            return;
+        }
+        _interest.Remove(entity);
+        ForgetSlot(slot);
+    }
+
+    void ReplicationManager::ForgetSlot(uint32_t slot) {
+        const unsigned count = GetConnectionCount();
+        for (unsigned i = 0; i < count; ++i) {
+            static_cast<ReplicationConnection *>(GetConnectionAtIndex(i))->ForgetSlot(slot);
+        }
+    }
+
     void ReplicationManager::RebuildInterest() {
         if (!_isServer) {
             return;
         }
-        const int64_t now = Utils::Time::GetTime();
-        if (!_interestDirty && _interestRebuildInterval > 0 && now - _lastInterestRebuild < static_cast<int64_t>(_interestRebuildInterval)) {
+        FW_PROFILE_SCOPE_N("Replication::RebuildInterest");
+        {
+            FW_PROFILE_SCOPE_N("Replication::SyncInterest");
+            _interest.BeginSync();
+            ForEachEntity([this](NetworkEntity *entity) {
+                _interest.Sync(entity);
+            });
+            for (const uint32_t slot : _interest.EndSync()) {
+                ForgetSlot(slot);
+            }
+            for (const uint32_t slot : _interest.DependencyChanges()) {
+                _reevaluations.emplace_back(slot, _interest.GenerationOf(slot));
+            }
+        }
+
+        _dueConnections.clear();
+        const unsigned count = GetConnectionCount();
+        if (count == 0) {
             return;
         }
-        if (_interestDirty) {
-            ++_interestUrgentGeneration;
+
+        // This tick's share of the viewers, measured in ticks rather than wall time: a tick that ran
+        // long earns no more turns than any other.
+        uint32_t turns = count;
+        if (_interestRebuildInterval > 0) {
+            const double tickMs = static_cast<double>(std::max<MafiaNet::Time>(autoSerializeInterval, 1));
+            _refreshCredit      = std::min(_refreshCredit + count * tickMs / _interestRebuildInterval, static_cast<double>(count));
+            turns               = static_cast<uint32_t>(_refreshCredit);
+            _refreshCredit -= turns;
         }
-        FW_PROFILE_SCOPE_N("Replication::RebuildInterest");
-        _lastInterestRebuild = now;
-        _interestDirty       = false;
-        _interest.BeginRebuild();
-        ForEachEntity([this](NetworkEntity *entity) {
-            _interest.Insert(entity);
-        });
+        for (unsigned i = 0; i < count; ++i) {
+            const unsigned index = (_refreshCursor + i) % count;
+            auto *connection     = static_cast<ReplicationConnection *>(GetConnectionAtIndex(index));
+            if (i < turns || connection->InterestUrgent()) {
+                _dueConnections.push_back(connection);
+            }
+        }
+        _refreshCursor = (_refreshCursor + turns) % count;
+        FW_PROFILE_VALUE(_dueConnections.size());
+        ComputeDueInterest();
     }
 
-    void ReplicationManager::CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::unordered_set<NetworkEntity *> &previous, std::unordered_set<NetworkEntity *> &out) {
-        _interest.CollectVisible(viewer, viewerGUID, previous, out);
+    void ReplicationManager::ComputeDueInterest() {
+        FW_PROFILE_SCOPE_N("Replication::CollectInterest");
+        if (_dueConnections.size() >= kParallelMin && !_workers) {
+            if (!_workersSet) {
+                const uint32_t cores = std::thread::hardware_concurrency();
+                _workerThreads       = std::min(kDefaultWorkerThreads, cores > 2 ? cores - 2 : 0);
+                _workersSet          = true;
+            }
+            if (_workerThreads > 0) {
+                _workers = std::make_unique<Utils::ForkJoinPool>(_workerThreads);
+            }
+        }
+        const uint32_t lanes = _workers ? _workers->Lanes() : 1;
+        if (_scratch.size() < lanes) {
+            _scratch.resize(lanes);
+        }
+        const auto compute = [this](uint32_t index, uint32_t lane) {
+            _dueConnections[index]->ComputeInterest(_scratch[lane]);
+        };
+        if (_workers && _dueConnections.size() >= kParallelMin) {
+            _workers->Run(static_cast<uint32_t>(_dueConnections.size()), compute);
+        }
+        else {
+            for (uint32_t i = 0; i < _dueConnections.size(); ++i) {
+                compute(i, 0);
+            }
+        }
     }
 
     void ReplicationManager::OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) {

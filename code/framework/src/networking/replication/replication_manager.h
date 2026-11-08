@@ -13,6 +13,8 @@
 #include "interest_grid.h"
 #include "network_entity.h"
 
+#include <utils/fork_join_pool.h>
+
 #include <mafianet/network_id_manager.h>
 #include <mafianet/peer_interface.h>
 #include <mafianet/replica_manager3.h>
@@ -22,6 +24,7 @@
 #include <glm/glm.hpp>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -34,6 +37,8 @@ namespace Framework::Networking {
 } // namespace Framework::Networking
 
 namespace Framework::Networking::Replication {
+    class ReplicationConnection;
+
     // Downcast a base NetworkEntity* to a concrete subclass by comparing the registered type id
     // against the compile-time id of T::kTypeName. This is an exact-type match, not an is-a test:
     // it does not see base classes the way dynamic_cast would, and it does not need RTTI, so every
@@ -244,40 +249,61 @@ namespace Framework::Networking::Replication {
         void SetInterestUsesEntityRange(const std::string &typeName, bool usesEntityRange) {
             _interest.SetUsesEntityRange(EntityRegistry::Get().TypeId(typeName), usesEntityRange);
         }
-        // Minimum milliseconds between spatial-index rebuilds (0 = every tick, the default). Viewer
-        // queries are staggered across the same interval. Entity creation and destruction still force
-        // an immediate rebuild and refresh every viewer; an ownership change refreshes its two owners.
+        // How often each viewer's interest is recomputed, in milliseconds of server ticks (0 = every
+        // tick, the default). The work is spread evenly: each tick recomputes the share of viewers
+        // the tick rate (SetAutoSerializeInterval) gives, round robin, so the cost per tick is the
+        // same however long ticks take -- a slow tick does not make the next one slower.
+        //
+        // Between turns a viewer's set changes only for what concerns it: an entity created or
+        // shown to it, one destroyed, a change to its own avatar, ownership or dimension.
         void SetInterestRebuildInterval(uint32_t intervalMs) {
             _interestRebuildInterval = intervalMs;
-        }
-        // Rebuild the spatial index from current entity positions. Server only; call once per tick
-        // before ReplicaManager3 serializes (driven from NetworkPeer::Update). Honours the interval.
-        void RebuildInterest();
-        void CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::unordered_set<NetworkEntity *> &previous, std::unordered_set<NetworkEntity *> &out);
-        // Change counter for the interest index (see InterestGrid::Generation).
-        uint32_t InterestGeneration() const {
-            return _interest.Generation();
-        }
-
-        // Bumped by a change every viewer must see before its next phase: a destroyed entity (a cached
-        // set must never hand it out), a rebuild caused by creation or destruction, or a viewer filter
-        // or stream target being switched on or off.
-        uint32_t InterestUrgentGeneration() const {
-            return _interestUrgentGeneration;
         }
         uint32_t InterestRefreshInterval() const {
             return _interestRebuildInterval;
         }
 
+        // Threads that do replication work alongside the server thread, which waits for them:
+        // recomputing viewers' interest, each independent of the others. 0 keeps it on the server
+        // thread. Defaults to a few, fewer on a small machine.
+        void SetReplicationWorkerThreads(uint32_t workers);
+
+        // The per-tick interest step. Server only; call once per tick before ReplicaManager3
+        // serializes (driven from NetworkPeer::Update): brings the spatial index up to date with
+        // every entity's position, then computes the interest of the viewers whose turn it is.
+        void RebuildInterest();
+
+        // --- Read by ReplicationConnection ---
+        const InterestGrid &Interest() const {
+            return _interest;
+        }
+        // Working memory for a query run on the server thread outside RebuildInterest.
+        InterestGrid::Scratch &MainScratch() {
+            return _scratch.front();
+        }
+        // Entities every viewer has to look at again, as a sequence each connection reads up to
+        // where it got: created, or its audience widened. A connection behind ReevaluationBase has
+        // missed some and recomputes.
+        uint64_t ReevaluationBase() const {
+            return _reevaluationBase;
+        }
+        uint64_t ReevaluationEnd() const {
+            return _reevaluationBase + _reevaluations.size();
+        }
+        std::pair<uint32_t, uint32_t> ReevaluationAt(uint64_t sequence) const {
+            return _reevaluations[static_cast<size_t>(sequence - _reevaluationBase)];
+        }
+
         // Server: who may be sent an entity. The change reaches the viewers it concerns before their
-        // next refresh phase: the players either filter names, or everyone if `only` is switched on or
-        // off. An identical filter concerns nobody.
+        // next refresh: the players the filter names, or every viewer for the entity alone if `only`
+        // is switched on or off. An identical filter concerns nobody.
         void SetViewerFilter(NetworkEntity &entity, ViewerFilter filter);
         // One connection in or out, without copying the filter: false puts it in `except` and takes it
         // off `only`, true undoes both, adding it to `only` while there is one.
         void SetViewerAdmitted(NetworkEntity &entity, MafiaNet::PeerGuid guid, bool admitted);
         // Streams the entity only to this connection, or to everyone in reach if unassigned. Moving it
-        // between connections concerns those two; switching it on or off, everyone.
+        // between connections concerns those two; switching it on or off, every viewer, for this
+        // entity alone.
         void SetStreamTarget(NetworkEntity &entity, MafiaNet::PeerGuid guid);
 
         // Server: transform rate bands, default and per-type override.
@@ -331,6 +357,15 @@ namespace Framework::Networking::Replication {
       private:
         // Makes the connection of this peer, if any, refresh its interest on its next query.
         void InvalidateInterestOf(MafiaNet::PeerGuid guid);
+        // Queues the entity for every viewer to decide on again (see ReevaluationBase).
+        void Reevaluate(NetworkEntity *entity);
+        // The entity is leaving: out of the index and out of every viewer's set, before its pointer
+        // can be handed out again. From DestroyEntity, and from ~NetworkEntity for any other way out.
+        void ForgetEntity(NetworkEntity *entity);
+        void ForgetSlot(uint32_t slot);
+        // Recomputes the viewers RebuildInterest found due, across the worker pool when it pays.
+        void ComputeDueInterest();
+        friend class NetworkEntity;
 
         bool _isServer                 = false;
         bool _batchTransforms          = false;
@@ -348,11 +383,18 @@ namespace Framework::Networking::Replication {
         DelegationManager _delegation;
         SerializeRateBands _rateBands;
         std::unordered_map<uint32_t, SerializeRateBands> _rateBandsByType;
-        uint32_t _interestUrgentGeneration = 0;
-        uint32_t _interestRebuildInterval  = 0;
-        int64_t _lastInterestRebuild       = 0;
-        // Entity set changed since the last rebuild; forces one regardless of the interval.
-        bool _interestDirty = true;
+        uint32_t _interestRebuildInterval = 0;
+        // Viewers owed a recompute, in fractions: each tick adds its share, whole ones are spent.
+        double _refreshCredit   = 0.0;
+        uint32_t _refreshCursor = 0;
+        std::vector<std::pair<uint32_t, uint32_t>> _reevaluations; // slot, generation
+        uint64_t _reevaluationBase = 0;
+        std::vector<ReplicationConnection *> _dueConnections;
+        // One scratch per lane of the pool; the first is the server thread's.
+        std::vector<InterestGrid::Scratch> _scratch = std::vector<InterestGrid::Scratch>(1);
+        std::unique_ptr<Utils::ForkJoinPool> _workers;
+        uint32_t _workerThreads = 0;
+        bool _workersSet        = false;
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
         // By NetworkID, not pointer: an entity can be destroyed between dirtying and the flush.
         std::unordered_set<uint64_t> _dirtyStateBags;

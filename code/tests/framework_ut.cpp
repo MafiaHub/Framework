@@ -7,8 +7,31 @@
  */
 
 #define UNIT_MAX_MODULES 64
+#include "alloc_counter.h"
 #include "logging/logger.h"
 #include "unit.h"
+
+#include <cstdlib>
+#include <new>
+
+// Feeds FrameworkTests::AllocationScope. Every other form of new and delete defaults onto these two.
+void *operator new(std::size_t size) {
+    if (FrameworkTests::g_countAllocations) {
+        ++FrameworkTests::g_allocations;
+    }
+    if (void *block = std::malloc(size == 0 ? 1 : size)) {
+        return block;
+    }
+    throw std::bad_alloc();
+}
+
+void operator delete(void *block) noexcept {
+    std::free(block);
+}
+
+void operator delete(void *block, std::size_t) noexcept {
+    std::free(block);
+}
 
 /* TEST CATEGORIES */
 #include "modules/asset_http_ut.h"
@@ -17,9 +40,11 @@
 #include "modules/connection_gate_ut.h"
 #include "modules/delegation_ut.h"
 #include "modules/entity_registry_ut.h"
+#include "modules/fork_join_pool_ut.h"
 #include "modules/gui_resources_ut.h"
 #include "modules/input_state_ut.h"
 #include "modules/interest_grid_ut.h"
+#include "modules/interest_scale_ut.h"
 #include "modules/interpolator_ut.h"
 #include "modules/nametag_ut.h"
 #include "modules/network_packets_ut.h"
@@ -93,6 +118,8 @@ int main() {
     UNIT_MODULE(replication_rate);
     UNIT_MODULE(transform_batch);
     UNIT_MODULE(interest_grid);
+    UNIT_MODULE(interest_scale);
+    UNIT_MODULE(fork_join_pool);
     UNIT_MODULE(input_state);
     UNIT_MODULE(delegation);
     UNIT_MODULE(entity_registry);

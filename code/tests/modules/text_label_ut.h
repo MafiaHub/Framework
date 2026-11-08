@@ -296,12 +296,7 @@ MODULE(text_label, {
             auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guid));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
-            for (unsigned int i = 0; i < create.Size(); ++i) {
-                if (create[i] == label) {
-                    return true;
-                }
-            }
-            return false;
+            return connection->IsRelevant(label);
         };
         EQUALS(sees(nearbyGuid), true);
         EQUALS(sees(distantGuid), false);
@@ -339,12 +334,7 @@ MODULE(text_label, {
             auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
-            for (unsigned int i = 0; i < create.Size(); ++i) {
-                if (create[i] == entity) {
-                    return true;
-                }
-            }
-            return false;
+            return connection->IsRelevant(entity);
         };
         EQUALS(sees(0, label), true);
         EQUALS(sees(1, label), true);
@@ -352,9 +342,7 @@ MODULE(text_label, {
 
         // Moved out of range without a refresh: only a player who re-queries stops seeing the prop.
         prop->position.x = 2000.0f;
-        manager->SetInterestRebuildInterval(0);
         manager->RebuildInterest();
-        manager->SetInterestRebuildInterval(kFarInterval);
 
         handle.SetVisibleFor(players[1]->ownerGUID, false);
         EQUALS(sees(1, label), false);
@@ -408,19 +396,12 @@ MODULE(text_label, {
             auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
-            for (unsigned int i = 0; i < create.Size(); ++i) {
-                if (create[i] == entity) {
-                    return true;
-                }
-            }
-            return false;
+            return connection->IsRelevant(entity);
         };
-        // The prop moves without anyone being told: only a player who re-queries notices.
+        // The prop moves without anyone being told: only a player who recomputes notices.
         const auto moveProp = [&](float x) {
             prop->position.x = x;
-            manager->SetInterestRebuildInterval(0);
             manager->RebuildInterest();
-            manager->SetInterestRebuildInterval(kFarInterval);
         };
         EQUALS(sees(0, prop), true);
         EQUALS(sees(1, prop), true);
@@ -448,7 +429,9 @@ MODULE(text_label, {
         onlyFirst.only->insert(players[0]->ownerGUID);
         manager->SetViewerFilter(*label, onlyFirst);
         EQUALS(sees(0, label), true);
-        EQUALS(sees(0, prop), false); // switching only on reaches a player it does not change
+        // Switching only on asks every player about the label alone: one it does not change keeps
+        // the rest of its set, moved prop and all, until its turn.
+        EQUALS(sees(0, prop), true);
         EQUALS(sees(1, label), false);
 
         manager->SetViewerFilter(*label, ViewerFilter {});
@@ -478,12 +461,7 @@ MODULE(text_label, {
             auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
-            for (unsigned int i = 0; i < create.Size(); ++i) {
-                if (create[i] == label) {
-                    return true;
-                }
-            }
-            return false;
+            return connection->IsRelevant(label);
         };
         EQUALS(sees(0), true);
         EQUALS(sees(1), true);

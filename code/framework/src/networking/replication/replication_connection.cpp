@@ -17,7 +17,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <unordered_set>
 
 namespace Framework::Networking::Replication {
     namespace {
@@ -38,57 +37,185 @@ namespace Framework::Networking::Replication {
         return EntityRegistry::Get().Create(typeId);
     }
 
+    NetworkEntity *ReplicationConnection::Viewer() const {
+        return _manager ? _manager->GetViewer(_viewerGUID) : nullptr;
+    }
+
+    bool ReplicationConnection::IsRelevant(const NetworkEntity *entity) const {
+        if (!_manager || !entity) {
+            return false;
+        }
+        const uint32_t slot = _manager->Interest().SlotOf(entity);
+        return slot != InterestGrid::kNoSlot && _relevant.Test(slot);
+    }
+
+    bool ReplicationConnection::InterestUrgent() const {
+        const NetworkEntity *viewer = Viewer();
+        if (!viewer) {
+            return false;
+        }
+        // Dimension changes, ownership changes and lifecycle invalidation bypass the turn; so does
+        // having missed re-evaluations the manager has since discarded.
+        return !_relevantValid || _interestStale || _relevantViewer != viewer || GetVirtualWorld() != viewer->GetVirtualWorld() || _reevaluationsSeen < _manager->ReevaluationBase();
+    }
+
+    void ReplicationConnection::ComputeInterest(InterestGrid::Scratch &scratch) {
+        const NetworkEntity *viewer = Viewer();
+        if (!viewer) {
+            return;
+        }
+        const InterestGrid &interest = _manager->Interest();
+        _interestStale               = false;
+        _computedViewer              = viewer;
+        _computedWorld               = viewer->GetVirtualWorld();
+        interest.CollectVisible(viewer, _viewerGUID, _relevant, scratch, _computedSlots);
+        _computed.clear();
+        for (const uint32_t slot : _computedSlots) {
+            _computed.push_back({slot, interest.GenerationOf(slot)});
+        }
+        _computedReady = true;
+    }
+
+    void ReplicationConnection::ForgetSlot(uint32_t slot) {
+        _relevant.Reset(slot);
+        // A pending result naming the slot is caught by its generation when applied.
+    }
+
     void ReplicationConnection::QueryReplicaList(DataStructures::List<MafiaNet::Replica3 *> &newReplicasToCreate, DataStructures::List<MafiaNet::Replica3 *> &existingReplicasToDestroy) {
         // Only the server decides what exists on a remote system.
         if (!_isServer || !_manager) {
             return;
         }
 
-        const auto viewerGUID = MafiaNet::ToPeerGuid(GetRakNetGUID());
-        NetworkEntity *viewer = _manager->GetViewer(viewerGUID);
+        NetworkEntity *viewer = Viewer();
         if (!viewer) {
             // Connection not yet associated with a controlled entity (still handshaking).
             _relevantValid = false;
+            _computedReady = false;
             return;
         }
-        FW_PROFILE_SCOPE_N("Replication::QueryReplicaList");
 
-        // Dimension changes, ownership changes and lifecycle invalidation bypass the phase delay.
-        const bool worldChanged = GetVirtualWorld() != viewer->GetVirtualWorld();
+        // A result computed earlier this tick is stale if what it was computed for changed since.
+        const bool recompute = _computedReady ? (_interestStale || _computedViewer != viewer || _computedWorld != viewer->GetVirtualWorld()) : InterestUrgent();
         SetVirtualWorld(viewer->GetVirtualWorld());
-        const uint32_t generation       = _manager->InterestGeneration();
-        const uint32_t urgentGeneration = _manager->InterestUrgentGeneration();
-        const bool urgent               = !_relevantValid || _interestStale || _relevantViewer != viewer || worldChanged || _relevantUrgentGeneration != urgentGeneration;
-        if (_interestRefresh.Due(MafiaNet::GetTime(), _manager->InterestRefreshInterval(), GetRakNetGUID().g, urgent, _relevantGeneration != generation)) {
+        if (recompute) {
             FW_PROFILE_SCOPE_N("Replication::CollectInterest");
-            _previousRelevant.swap(_relevant);
-            _relevant.clear();
-            _manager->CollectInterest(viewer, viewerGUID, _previousRelevant, _relevant);
-            _relevantGeneration       = generation;
-            _relevantUrgentGeneration = urgentGeneration;
-            _relevantViewer           = viewer;
-            _relevantValid            = true;
-            _interestStale            = false;
-            for (auto it = _lastTransformSend.begin(); it != _lastTransformSend.end();) {
-                it = _relevant.contains(const_cast<NetworkEntity *>(it->first)) ? std::next(it) : _lastTransformSend.erase(it);
-            }
+            ComputeInterest(_manager->MainScratch());
         }
+        // ReplicaManager3 changed what it holds here outside this diff, as when it drops a replica a
+        // client failed to destroy: put it right now rather than on the viewer's next turn.
+        if (!_computedReady && _relevantValid && constructedReplicaList.Size() != _relevant.Count()) {
+            Resync(newReplicasToCreate, existingReplicasToDestroy);
+        }
+        if (!_computedReady && !ApplyReevaluations(viewer, newReplicasToCreate, false)) {
+            FW_PROFILE_SCOPE_N("Replication::CollectInterest");
+            newReplicasToCreate.Clear(true, _FILE_AND_LINE_);
+            ComputeInterest(_manager->MainScratch());
+        }
+        if (_computedReady) {
+            FW_PROFILE_SCOPE_N("Replication::ApplyInterest");
+            ApplyRefresh(newReplicasToCreate, existingReplicasToDestroy);
+            // An entity created since the spatial index last saw it is still filed where it was made.
+            ApplyReevaluations(viewer, newReplicasToCreate, true);
+            _relevantViewer = viewer;
+            _relevantValid  = true;
+        }
+        _reevaluationsSeen = _manager->ReevaluationEnd();
+    }
 
-        for (NetworkEntity *entity : _relevant) {
-            if (!HasReplicaConstructed(entity)) {
-                newReplicasToCreate.Push(entity, _FILE_AND_LINE_);
-            }
+    void ReplicationConnection::Admit(NetworkEntity *entity, uint32_t slot, DataStructures::List<MafiaNet::Replica3 *> &create) {
+        _relevant.Set(slot);
+        if (!HasReplicaConstructed(entity)) {
+            create.Push(entity, _FILE_AND_LINE_);
         }
+    }
 
-        DataStructures::List<MafiaNet::Replica3 *> constructed;
-        GetConstructedReplicas(constructed);
-        for (unsigned i = 0; i < constructed.Size(); ++i) {
-            auto *entity = static_cast<NetworkEntity *>(constructed[i]);
-            if (entity && !_relevant.contains(entity)) {
-                existingReplicasToDestroy.Push(entity, _FILE_AND_LINE_);
+    void ReplicationConnection::ApplyRefresh(DataStructures::List<MafiaNet::Replica3 *> &create, DataStructures::List<MafiaNet::Replica3 *> &destroy) {
+        const InterestGrid &interest = _manager->Interest();
+        _relevant.Clear();
+        for (const SlotRef &ref : _computed) {
+            NetworkEntity *entity = interest.EntityAt(ref.slot);
+            if (entity != nullptr && interest.GenerationOf(ref.slot) == ref.generation) {
+                Admit(entity, ref.slot, create);
             }
         }
-        FW_PROFILE_VALUE(_relevant.size());
+        _computed.clear();
+        _computedReady = false;
+
+        // Against what ReplicaManager3 holds rather than the previous set: whatever went missing
+        // between the two is put right here.
+        for (unsigned i = 0; i < constructedReplicaList.Size(); ++i) {
+            auto *entity        = static_cast<NetworkEntity *>(constructedReplicaList[i]->replica);
+            const uint32_t slot = interest.SlotOf(entity);
+            if (slot == InterestGrid::kNoSlot || !_relevant.Test(slot)) {
+                destroy.Push(entity, _FILE_AND_LINE_);
+            }
+        }
+    }
+
+    void ReplicationConnection::Resync(DataStructures::List<MafiaNet::Replica3 *> &create, DataStructures::List<MafiaNet::Replica3 *> &destroy) {
+        const InterestGrid &interest = _manager->Interest();
+        _relevant.ForEach([&](uint32_t slot) {
+            NetworkEntity *entity = interest.EntityAt(slot);
+            if (entity != nullptr && !HasReplicaConstructed(entity)) {
+                create.Push(entity, _FILE_AND_LINE_);
+            }
+        });
+        for (unsigned i = 0; i < constructedReplicaList.Size(); ++i) {
+            auto *entity        = static_cast<NetworkEntity *>(constructedReplicaList[i]->replica);
+            const uint32_t slot = interest.SlotOf(entity);
+            if (slot == InterestGrid::kNoSlot || !_relevant.Test(slot)) {
+                destroy.Push(entity, _FILE_AND_LINE_);
+            }
+        }
+    }
+
+    bool ReplicationConnection::ApplyReevaluations(NetworkEntity *viewer, DataStructures::List<MafiaNet::Replica3 *> &create, bool admitOnly) {
+        const uint64_t end = _manager->ReevaluationEnd();
+        if (_reevaluationsSeen >= end) {
+            return true;
+        }
+        const InterestGrid &interest = _manager->Interest();
+        // A connection behind the base (new, or skipped by a pass) has just recomputed: what it missed
+        // is in that result, and the queue no longer holds it.
+        for (uint64_t i = std::max(_reevaluationsSeen, _manager->ReevaluationBase()); i < end; ++i) {
+            const auto [slot, generation] = _manager->ReevaluationAt(i);
+            NetworkEntity *entity         = interest.EntityAt(slot);
+            if (entity == nullptr || interest.GenerationOf(slot) != generation) {
+                continue;
+            }
+            const bool wasRelevant = _relevant.Test(slot);
+            switch (interest.Evaluate(viewer, _viewerGUID, slot, wasRelevant)) {
+            case InterestGrid::Verdict::In: {
+                if (!wasRelevant) {
+                    Admit(entity, slot, create);
+                }
+                // Brought in with what it cannot be shown without, also when it was shown already
+                // and has just come to depend on something.
+                const uint32_t dependency = interest.DependencyOf(slot);
+                if (dependency != InterestGrid::kNoSlot && !_relevant.Test(dependency)) {
+                    NetworkEntity *needed = interest.EntityAt(dependency);
+                    if (needed->streaming.visible && needed->streaming.Admits(_viewerGUID)) {
+                        Admit(needed, dependency, create);
+                    }
+                }
+                break;
+            }
+            case InterestGrid::Verdict::Out:
+                // Leaving is decided with the whole set in view: the entity may still be held as
+                // another one's dependency.
+                if (wasRelevant && !admitOnly) {
+                    return false;
+                }
+                break;
+            case InterestGrid::Verdict::Recompute:
+                if (!admitOnly) {
+                    return false;
+                }
+                break;
+            }
+        }
+        return true;
     }
 
     uint32_t ReplicationConnection::TransformSendIntervalMs(const NetworkEntity *entity) const {
@@ -114,15 +241,21 @@ namespace Framework::Networking::Replication {
         std::memcpy(selected, indicesToSend, sizeof(selected));
         MafiaNet::BitStream &transform = serializationData[kTransformChannel];
         if (selected[kTransformChannel] && transform.GetNumberOfBitsUsed() != 0) {
-            const auto *entity      = static_cast<const NetworkEntity *>(replica);
-            const uint32_t interval = TransformSendIntervalMs(entity);
-            if (interval > 0) {
-                const auto it = _lastTransformSend.find(entity);
-                if (it != _lastTransformSend.end() && curTime >= it->second && curTime - it->second < interval) {
+            const auto *entity           = static_cast<const NetworkEntity *>(replica);
+            const uint32_t interval      = TransformSendIntervalMs(entity);
+            const InterestGrid &interest = _manager->Interest();
+            const uint32_t slot          = interest.SlotOf(entity);
+            if (interval > 0 && slot != InterestGrid::kNoSlot) {
+                if (_lastTransformSend.size() < interest.Capacity()) {
+                    _lastTransformSend.resize(interest.Capacity(), SendStamp {0, 0});
+                }
+                SendStamp &last           = _lastTransformSend[slot];
+                const uint32_t generation = interest.GenerationOf(slot);
+                if (last.generation == generation && last.time != 0 && curTime >= last.time && curTime - last.time < interval) {
                     selected[kTransformChannel] = false;
                 }
                 else {
-                    _lastTransformSend[entity] = curTime;
+                    last = {generation, curTime};
                 }
             }
         }
