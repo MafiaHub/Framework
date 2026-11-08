@@ -14,6 +14,15 @@
 
 #include <vector>
 
+// Rides another entity, which a viewer has to be shown with it.
+class ChurnRider final: public Framework::Networking::Replication::NetworkEntity {
+  public:
+    Framework::Networking::Replication::NetworkEntity *mount = nullptr;
+    Framework::Networking::Replication::NetworkEntity *GetInterestDependency() override {
+        return mount;
+    }
+};
+
 MODULE(network_work, {
     // Players each with a mover that comes into range without anything else happening: a player
     // that sees its mover has had its interest recomputed since.
@@ -179,6 +188,235 @@ MODULE(network_work, {
         EQUALS(viewerConnection->GetVirtualWorld(), 5);
         manager->DestroyEntity(distant);
         manager->DestroyEntity(bystander);
+        manager->DestroyEntity(viewer);
+    });
+
+    IT("adds a creation and drops a destruction without refreshing anyone", {
+        using namespace Framework::Networking::Replication;
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        manager->ConfigureGrid(100, -4096, 4096);
+        constexpr uint32_t kFarInterval = 1000000;
+        manager->SetInterestRebuildInterval(kFarInterval);
+        const auto type      = EntityRegistry::Get().Register<NetworkEntity>("Test::InterestChurn");
+        const auto budgeted  = EntityRegistry::Get().Register<NetworkEntity>("Test::InterestChurnBudgeted");
+        const auto riderType = EntityRegistry::Get().Register<ChurnRider>("Test::InterestChurnRider");
+        manager->SetInterestBudget(budgeted, 4);
+        auto *viewer            = manager->CreateEntity(type);
+        auto *mover             = manager->CreateEntity(type);
+        auto *rider             = static_cast<ChurnRider *>(manager->CreateEntity(riderType));
+        viewer->streaming.range = 100;
+        mover->position.x       = 50;
+        rider->position.x       = 30;
+        const MafiaNet::RakNetGUID viewerGuid(91);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->RebuildInterest();
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+        auto sees        = [connection](NetworkEntity *entity) {
+            DataStructures::List<MafiaNet::Replica3 *> create, destroy;
+            connection->QueryReplicaList(create, destroy);
+            return connection->IsRelevant(entity);
+        };
+        EQUALS(sees(mover), true);
+        EQUALS(sees(rider), true);
+
+        // The mover leaves quietly, so a recompute would show by dropping it.
+        mover->position.x = 2000;
+        manager->RebuildInterest();
+
+        auto *spawned       = manager->CreateEntity(type);
+        auto *farAway       = manager->CreateEntity(type);
+        spawned->position.x = 20;
+        farAway->position.x = 3000;
+        manager->RebuildInterest();
+        EQUALS(sees(spawned), true);
+        EQUALS(sees(farAway), false);
+        EQUALS(sees(mover), true);
+
+        // Something already shown that comes to ride a creation brings it, however far it is.
+        auto *mount       = manager->CreateEntity(type);
+        mount->position.x = 3000;
+        rider->mount      = mount;
+        manager->RebuildInterest();
+        EQUALS(sees(mount), true);
+        EQUALS(sees(mover), true);
+
+        // Gone before the rebuild that would have handed it out.
+        manager->DestroyEntity(manager->CreateEntity(type));
+        manager->RebuildInterest();
+        EQUALS(sees(mover), true);
+
+        manager->DestroyEntity(spawned);
+        EQUALS(sees(spawned), false);
+        EQUALS(sees(mover), true);
+
+        // A budgeted creation in reach has to be ranked: that viewer recomputes, and the quiet move shows.
+        auto *npc       = manager->CreateEntity(budgeted);
+        npc->position.x = 10;
+        manager->RebuildInterest();
+        EQUALS(sees(npc), true);
+        EQUALS(sees(mover), false);
+
+        rider->mount = nullptr;
+        manager->DestroyEntity(npc);
+        manager->DestroyEntity(mount);
+        manager->DestroyEntity(rider);
+        manager->DestroyEntity(farAway);
+        manager->DestroyEntity(mover);
+        manager->DestroyEntity(viewer);
+    });
+
+    IT("re-runs the replica diff after a change it did not make", {
+        using namespace Framework::Networking::Replication;
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        manager->ConfigureGrid(100, -4096, 4096);
+        // Only urgent refreshes run.
+        constexpr uint32_t kFarInterval = 1000000;
+        manager->SetInterestRebuildInterval(kFarInterval);
+        const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::QueryDiff");
+        auto *viewer            = manager->CreateEntity(type);
+        auto *nearby            = manager->CreateEntity(type);
+        viewer->streaming.range = 100;
+        const MafiaNet::RakNetGUID viewerGuid(93);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->RebuildInterest();
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+        // Query and apply, as ReplicaManager3::Update does.
+        auto pass = [&] {
+            connection->AutoConstructByQuery(manager, 0);
+        };
+
+        pass();
+        pass();
+        EQUALS(connection->HasReplicaConstructed(nearby), true);
+
+        // A refused client destruction drops it outside the diff.
+        manager->Dereference(nearby);
+        manager->Reference(nearby);
+        pass();
+        EQUALS(connection->HasReplicaConstructed(nearby), true);
+        pass();
+
+        // Settled, and a refresh still applies.
+        nearby->position.x = 1000;
+        manager->SetInterestRebuildInterval(0);
+        manager->RebuildInterest();
+        pass();
+        EQUALS(connection->HasReplicaConstructed(nearby), false);
+
+        manager->DestroyEntity(nearby);
+        manager->DestroyEntity(viewer);
+    });
+
+    IT("swaps one replica for another in a single refresh", {
+        using namespace Framework::Networking::Replication;
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        manager->ConfigureGrid(100, -4096, 4096);
+        const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::QueryDiffSwap");
+        auto *viewer            = manager->CreateEntity(type);
+        auto *leaving           = manager->CreateEntity(type);
+        auto *arriving          = manager->CreateEntity(type);
+        viewer->streaming.range = 100;
+        arriving->position.x    = 1000;
+        const MafiaNet::RakNetGUID viewerGuid(95);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->RebuildInterest();
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+
+        connection->AutoConstructByQuery(manager, 0);
+        EQUALS(connection->HasReplicaConstructed(leaving), true);
+        EQUALS(connection->HasReplicaConstructed(arriving), false);
+
+        // The constructed count matches the new interest set, but its members differ.
+        leaving->position.x  = 1000;
+        arriving->position.x = 0;
+        manager->RebuildInterest();
+        connection->AutoConstructByQuery(manager, 0);
+        EQUALS(connection->HasReplicaConstructed(leaving), false);
+        EQUALS(connection->HasReplicaConstructed(arriving), true);
+
+        manager->DestroyEntity(arriving);
+        manager->DestroyEntity(leaving);
+        manager->DestroyEntity(viewer);
+    });
+
+    IT("refuses replica constructions from a client", {
+        using namespace Framework::Networking::Replication;
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        manager->ConfigureGrid(100, -4096, 4096);
+        const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::ClientConstruction");
+        auto *viewer            = manager->CreateEntity(type);
+        auto *distant           = manager->CreateEntity(type);
+        viewer->streaming.range = 100;
+        distant->position.x     = 1000;
+        const MafiaNet::RakNetGUID viewerGuid(94);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->RebuildInterest();
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+
+        // Claims the client already holds an entity outside its interest.
+        MafiaNet::BitStream bs;
+        bs.Write(static_cast<MafiaNet::MessageID>(ID_REPLICA_MANAGER_CONSTRUCTION));
+        bs.Write(static_cast<MafiaNet::WorldId>(0));
+        bs.Write(static_cast<uint16_t>(1));
+        const MafiaNet::BitSize_t entry = bs.GetWriteOffset();
+        bs.Write(entry);
+        bs.Write(distant->GetNetworkID());
+        bs.Write(true);
+        bs.AlignWriteToByteBoundary();
+        bs.Write(viewerGuid);
+        bs.Write(bs.GetWriteOffset());
+        const MafiaNet::BitSize_t end = bs.GetWriteOffset();
+        bs.SetWriteOffset(entry);
+        bs.Write(end);
+        bs.SetWriteOffset(end);
+        bs.Write(false);
+        bs.AlignWriteToByteBoundary();
+        bs.Write(static_cast<uint16_t>(0));
+
+        MafiaNet::Packet packet {};
+        packet.data   = bs.GetData();
+        packet.length = bs.GetNumberOfBytesUsed();
+        packet.guid   = viewerGuid;
+        manager->OnReceive(&packet);
+        EQUALS(connection->HasReplicaConstructed(distant), false);
+
+        manager->DestroyEntity(distant);
         manager->DestroyEntity(viewer);
     });
 });
