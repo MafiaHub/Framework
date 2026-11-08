@@ -9,11 +9,17 @@
 #pragma once
 
 #include "networking/channels.h"
+#include "networking/network_server.h"
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
 
 #include <mafianet/bit_stream.h>
 #include <mafianet/replica_manager3.h>
+
+#include <chrono>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
 // Transform channel rate rules: distance bands, idle refresh, and per-entity ordering.
 MODULE(replication_rate, {
@@ -257,5 +263,73 @@ MODULE(replication_rate, {
         deliver(target, glm::vec3(-1.0f, 0.0f, 0.0f), 250);
         EQUALS(target.position.x, 2.0f);
         EQUALS(target.sampledAt, MafiaNet::Time(300));
+    });
+
+    IT("resends a stopped pose to a viewer its band withheld it from once the slowest band is due", {
+        using Framework::Networking::Replication::EntityRegistry;
+        struct PoseProbe: NetworkEntity {
+            std::unordered_map<const MafiaNet::Connection_RM3 *, int> poseSends;
+            void OnSerializeTransmission(MafiaNet::BitStream *, MafiaNet::Connection_RM3 *to, MafiaNet::BitSize_t bits[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::Time) override {
+                if (bits[0] > 0) {
+                    ++poseSends[to];
+                }
+            }
+        };
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        manager->SetAutoSerializeInterval(0);
+        manager->ConfigureGrid(100, -4096, 4096);
+        const uint32_t viewerType = EntityRegistry::Get().Register<NetworkEntity>("Test::SettleViewer");
+        const uint32_t moverType  = EntityRegistry::Get().Register<PoseProbe>("Test::SettleMover");
+        constexpr uint32_t kFarMs = 300;
+        manager->SetSerializeRateBands(moverType, SerializeRateBands {50.0f, 50.0f, 0, kFarMs});
+        std::vector<NetworkEntity *> viewers;
+        const auto connect = [&](uint64_t id, float x) {
+            const MafiaNet::RakNetGUID guid(id);
+            auto *viewer            = manager->CreateEntity(viewerType);
+            viewer->position.x      = x;
+            viewer->streaming.range = 1000;
+            viewer->ownerGUID       = MafiaNet::ToPeerGuid(guid);
+            viewers.push_back(viewer);
+            manager->SetViewer(MafiaNet::ToPeerGuid(guid), viewer);
+            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+            MafiaNet::Connection_RM3 *connection = manager->GetConnectionByGUID(guid);
+            connection->isValidated              = true;
+            return connection;
+        };
+        const MafiaNet::Connection_RM3 *nearConnection = connect(301, 0.0f);
+        const MafiaNet::Connection_RM3 *farConnection  = connect(302, 500.0f);
+        auto *mover = static_cast<PoseProbe *>(manager->CreateEntity(moverType));
+        manager->RebuildInterest();
+        manager->Update();
+        manager->Update();
+        mover->poseSends.clear();
+
+        // Inside the far interval of the construction pass's send.
+        mover->position.x = 1.0f;
+        manager->Update();
+        EQUALS(mover->poseSends[nearConnection], 1);
+        EQUALS(mover->poseSends[farConnection], 0);
+        manager->Update();
+        EQUALS(mover->poseSends[farConnection], 0);
+
+        // Well short of the 500 ms idle refresh.
+        std::this_thread::sleep_for(std::chrono::milliseconds(kFarMs + 20));
+        manager->Update();
+        EQUALS(mover->poseSends[farConnection], 1);
+        manager->Update();
+        EQUALS(mover->poseSends[farConnection], 1);
+
+        manager->DestroyEntity(mover);
+        for (auto *viewer : viewers) {
+            manager->DestroyEntity(viewer);
+        }
     });
 });

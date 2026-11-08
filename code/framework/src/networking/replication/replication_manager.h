@@ -107,6 +107,10 @@ namespace Framework::Networking::Replication {
             _networkUpdateActive = false;
         }
         void Update() override;
+        // Server: a replica was constructed, seeded with values no pass has compared yet. Makes the
+        // pass serialize even if it is not due, so they are what the next delta is taken against;
+        // otherwise a value that changed back before then would never reach that viewer.
+        void SerializeThisPass();
         // Decodes transform batches and hands everything else to ReplicaManager3.
         MafiaNet::PluginReceiveResult OnReceive(MafiaNet::Packet *packet) override;
 
@@ -264,8 +268,9 @@ namespace Framework::Networking::Replication {
         }
 
         // Threads that do replication work alongside the server thread, which waits for them:
-        // recomputing viewers' interest, each independent of the others. 0 keeps it on the server
-        // thread. Defaults to a few, fewer on a small machine.
+        // recomputing viewers' interest and serving connections their share of the serialize pass,
+        // each independent of the others. 0 keeps it all on the server thread. Defaults to a few,
+        // fewer on a small machine.
         void SetReplicationWorkerThreads(uint32_t workers);
 
         // The per-tick interest step. Server only; call once per tick before ReplicaManager3
@@ -365,11 +370,22 @@ namespace Framework::Networking::Replication {
         void ForgetSlot(uint32_t slot);
         // Recomputes the viewers RebuildInterest found due, across the worker pool when it pays.
         void ComputeDueInterest();
+        // The worker pool, started on first use, for `work` independent items; null when that is too
+        // little to share out or workers are off.
+        Utils::ForkJoinPool *Workers(size_t work);
+
+        // ReplicaManager3's serialize pass on the same workers.
+        struct SerializeExecutor final: MafiaNet::RM3SerializeExecutor {
+            ReplicationManager *manager = nullptr;
+            void ParallelFor(unsigned int count, void (*fn)(void *context, unsigned int index), void *context) override;
+        };
+        SerializeExecutor _serializeExecutor;
         friend class NetworkEntity;
 
         bool _isServer                 = false;
         bool _batchTransforms          = false;
         bool _networkUpdateActive      = false;
+        bool _serializeForced          = false;
         bool _updatedThisNetworkUpdate = false;
         MafiaNet::PeerGuid _myGUID     = MafiaNet::UNASSIGNED_PEER_GUID;
         // Server-side monotonic NetworkID allocator. Starts at 1 (0 reads as "none" in game code) and
