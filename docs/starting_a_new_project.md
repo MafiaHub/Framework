@@ -8,6 +8,8 @@ This guide is about **sequence** - what to build first, and what not to build at
 
 ## 0. Before you write anything
 
+Using the Framework for a new project requires written permission from MafiaHub under [LICENSE.txt](../LICENSE.txt). An existing project license may already grant that permission. Otherwise, contact us on [Discord](https://discord.gg/c6gW9yRXZH) before you start. The SDK and this guide do not grant permission to release a separate multiplayer platform or custom launcher.
+
 Three properties of the target game decide the whole shape of the project. Answer them first, because they are expensive to change later.
 
 **Architecture.** Is the game 32- or 64-bit? The client is a DLL loaded into the game, so it inherits that. The server is a standalone executable and is normally 64-bit. M2O's client is 32-bit and its server 64-bit; M3O is 64-bit on both. This decides the guards in `code/CMakeLists.txt` and it means client and server can never share a compiled object - only `shared/` source.

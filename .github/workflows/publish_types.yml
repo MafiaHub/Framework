@@ -5,6 +5,7 @@ on:
     branches: [develop]
     paths:
       - 'types/**'
+      - 'LICENSE.txt'
 
 permissions:
   id-token: write

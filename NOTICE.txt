@@ -1,15 +1,15 @@
 C/C++ Code Form:
 /*
- * MafiaHub OSS license
+ * MafiaHub source-available license
  * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
- * See LICENSE file in the source repository for information regarding licensing.
+ * See LICENSE.txt file in the source repository for information regarding licensing.
  */
 
 Text Form:
-MafiaHub OSS license
+MafiaHub source-available license
 Copyright (c) 2021-2022, MafiaHub. All rights reserved.
 
 This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
-See LICENSE file in the source repository for information regarding licensing.
+See LICENSE.txt file in the source repository for information regarding licensing.
