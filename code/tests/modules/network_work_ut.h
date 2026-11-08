@@ -13,6 +13,7 @@
 #include "networking/replication/replication_connection.h"
 #include "networking/replication/replication_manager.h"
 
+#include <algorithm>
 #include <array>
 
 MODULE(network_work, {
@@ -37,9 +38,77 @@ MODULE(network_work, {
             GREATER(bucket, 0);
             LESSER(bucket, 100);
         }
+        // The stall's missed periods coalesce into one refresh each, spread over the two passes after it.
+        int afterStall = 0;
         for (unsigned int i = 0; i < viewers.size(); ++i) {
-            EQUALS(viewers[i].Due(1000, 100, i, false, true), true);
+            afterStall += viewers[i].Due(1000, 100, i, false, true);
+        }
+        GREATER(afterStall, 192);
+        LESSER(afterStall, 320);
+        for (unsigned int i = 0; i < viewers.size(); ++i) {
+            afterStall += viewers[i].Due(1000, 100, i, false, true);
+        }
+        EQUALS(afterStall, 512);
+        for (unsigned int i = 0; i < viewers.size(); ++i) {
             EQUALS(viewers[i].Due(1000, 100, i, false, true), false);
+        }
+    });
+
+    IT("keeps each viewer on its phase while passes are short", {
+        using Framework::Networking::Replication::InterestRefresh;
+        std::array<InterestRefresh, 512> viewers;
+        std::array<int, 512> last {};
+        int shortest = 1000, longest = 0, busiest = 0;
+        for (unsigned int i = 0; i < viewers.size(); ++i) {
+            viewers[i].Due(0, 100, i, true, true);
+        }
+        for (int pass = 1; pass <= 120; ++pass) {
+            int refreshed = 0;
+            for (unsigned int i = 0; i < viewers.size(); ++i) {
+                if (viewers[i].Due(static_cast<uint64_t>(pass) * 16, 100, i, false, false)) {
+                    if (last[i] != 0) {
+                        shortest = std::min(shortest, pass - last[i]);
+                        longest  = std::max(longest, pass - last[i]);
+                    }
+                    last[i] = pass;
+                    ++refreshed;
+                }
+            }
+            busiest = std::max(busiest, refreshed);
+        }
+        // Once per 100 ms at 16 ms passes: six or seven passes apart, about a sixth of them per pass.
+        EQUALS(shortest, 6);
+        EQUALS(longest, 7);
+        LESSER(busiest, 160);
+    });
+
+    IT("spreads refreshes over two passes when the passes outlast the interval", {
+        using Framework::Networking::Replication::InterestRefresh;
+        std::array<InterestRefresh, 512> viewers;
+        std::array<int, 512> last {};
+        int fewest = 512, most = 0, longest = 0;
+        // Everyone refreshed at once, as after a burst of creations.
+        for (unsigned int i = 0; i < viewers.size(); ++i) {
+            viewers[i].Due(0, 100, i, true, true);
+        }
+        for (int pass = 1; pass <= 40; ++pass) {
+            int refreshed = 0;
+            for (unsigned int i = 0; i < viewers.size(); ++i) {
+                if (viewers[i].Due(static_cast<uint64_t>(pass) * 300, 100, i, false, false)) {
+                    longest = std::max(longest, pass - last[i]);
+                    last[i] = pass;
+                    ++refreshed;
+                }
+            }
+            fewest = std::min(fewest, refreshed);
+            most   = std::max(most, refreshed);
+        }
+        GREATER(fewest, 192);
+        LESSER(most, 320);
+        EQUALS(longest, 2);
+        // An urgent change still goes out on the pass it happens.
+        for (unsigned int i = 0; i < viewers.size(); ++i) {
+            EQUALS(viewers[i].Due(41 * 300, 100, i, true, false), true);
         }
     });
 
@@ -52,7 +121,11 @@ MODULE(network_work, {
         EQUALS(refresh.Due(1000, 0, 7, false, true), true);
         EQUALS(refresh.Due(1000, 100, 7, false, false), true);
         // Still refresh on the next phase even if the grid generation is unchanged.
-        EQUALS(refresh.Due(1100, 100, 7, false, false), true);
+        int phases = 0;
+        for (uint64_t now = 1010; now <= 1100; now += 10) {
+            phases += refresh.Due(now, 100, 7, false, false);
+        }
+        EQUALS(phases, 1);
         EQUALS(refresh.Due(0, 100, 7, false, false), true);
     });
 
