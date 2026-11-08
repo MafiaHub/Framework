@@ -107,13 +107,19 @@ set(_mafianet_root "${CMAKE_BINARY_DIR}/mafianet/${_mafianet_name}")
 # A MafiaNet installed from a checkout (cmake --install, Release, the /MD runtime) instead of the
 # pinned archive, for a change that spans both repositories. Its version still has to satisfy the
 # pin, and whatever it is built from ships in the SDK, so never release with it set.
-set(FW_MAFIANET_ROOT "$ENV{FW_MAFIANET_ROOT}" CACHE PATH "MafiaNet install prefix to use instead of the pinned archive")
-if(FW_MAFIANET_ROOT)
-    if(NOT EXISTS "${FW_MAFIANET_ROOT}/lib/cmake/MafiaNet/MafiaNetConfig.cmake")
-        message(FATAL_ERROR "FW_MAFIANET_ROOT=${FW_MAFIANET_ROOT} holds no MafiaNet package (lib/cmake/MafiaNet)")
+# -DFW_MAFIANET_ROOT wins; the environment variable is read afresh on every configure and never
+# cached, so unsetting it goes back to the archive.
+set(FW_MAFIANET_ROOT "" CACHE PATH "MafiaNet install prefix to use instead of the pinned archive")
+set(_mafianet_override "${FW_MAFIANET_ROOT}")
+if(NOT _mafianet_override)
+    file(TO_CMAKE_PATH "$ENV{FW_MAFIANET_ROOT}" _mafianet_override)
+endif()
+if(_mafianet_override)
+    if(NOT EXISTS "${_mafianet_override}/lib/cmake/MafiaNet/MafiaNetConfig.cmake")
+        message(FATAL_ERROR "FW_MAFIANET_ROOT=${_mafianet_override} holds no MafiaNet package (lib/cmake/MafiaNet)")
     endif()
-    message(WARNING "Building against the MafiaNet installed in ${FW_MAFIANET_ROOT}, not the pinned ${MAFIANET_PIN_VERSION} archive")
-    set(_mafianet_root "${FW_MAFIANET_ROOT}")
+    message(WARNING "Building against the MafiaNet installed in ${_mafianet_override}, not the pinned ${MAFIANET_PIN_VERSION} archive")
+    set(_mafianet_root "${_mafianet_override}")
 endif()
 # find_package caches where it found the package; switching between the archive and an install
 # has to look again, or the build keeps the one it found first.
