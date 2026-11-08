@@ -37,6 +37,14 @@ namespace Framework::Networking::Replication {
 
         void QueryReplicaList(DataStructures::List<MafiaNet::Replica3 *> &newReplicasToCreate, DataStructures::List<MafiaNet::Replica3 *> &existingReplicasToDestroy) override;
 
+        // Server: AutoConstructByQuery, then the same constructions and destructions applied to each
+        // entity's audience (see ReplicationManager::UpdateServer).
+        void AutoConstruct(MafiaNet::WorldId worldId);
+
+        MafiaNet::WorldId GetWorldId() const {
+            return _worldId;
+        }
+
         // Withholds the transform channel per viewer by distance band (server) and, with batching
         // enabled, queues it into this connection's batch; the reliable state channel always passes.
         MafiaNet::SendSerializeIfChangedResult SendSerialize(MafiaNet::Replica3 *replica, bool indicesToSend[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::BitStream serializationData[MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS], MafiaNet::Time timestamp,
@@ -58,6 +66,7 @@ namespace Framework::Networking::Replication {
 
         ReplicationManager *_manager = nullptr;
         bool _isServer               = false;
+        MafiaNet::WorldId _worldId   = 0;
         TransformBatch _transformBatch;
         // GetMTUSize scans every peer slot, so the budget is read once per pass; 0 = not read yet.
         std::size_t _packetBudget      = 0;

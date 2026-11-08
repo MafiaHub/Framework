@@ -9,6 +9,7 @@
 #include "network_entity.h"
 
 #include "../channels.h"
+#include "replication_connection.h"
 #include "replication_manager.h"
 
 #include <mafianet/get_time.h>
@@ -57,6 +58,14 @@ namespace Framework::Networking::Replication {
         }
         if (viewers->Empty()) {
             viewers.reset();
+        }
+    }
+
+    NetworkEntity::~NetworkEntity() {
+        if (!_audience.empty()) {
+            if (auto *manager = Manager()) {
+                manager->DropAudience(this);
+            }
         }
     }
 
@@ -172,6 +181,11 @@ namespace Framework::Networking::Replication {
         // destruction from the entity's current owner; fail closed on a missing connection. Returning
         // false keeps the entity alive. Clients still accept the server's authoritative destructions.
         if (IsServerPeer() && (!sourceConnection || MafiaNet::ToPeerGuid(sourceConnection->GetRakNetGUID()) != ownerGUID || !CanOwnerDestroy())) {
+            // ReplicaManager3 still un-constructs a refused entity on the sender alone, so the sender
+            // leaves its audience too; its next query constructs it there again.
+            if (sourceConnection) {
+                Manager()->LeaveAudience(this, static_cast<ReplicationConnection *>(sourceConnection));
+            }
             return false;
         }
         return true;

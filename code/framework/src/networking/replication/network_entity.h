@@ -26,6 +26,7 @@
 
 namespace Framework::Networking::Replication {
     class ReplicationManager;
+    class ReplicationConnection;
     class EntityRegistry;
     struct NametagState;
     struct DelegationPolicy;
@@ -230,7 +231,7 @@ namespace Framework::Networking::Replication {
         NetworkEntity() {
             state.Bind(this);
         }
-        ~NetworkEntity() override = default;
+        ~NetworkEntity() override;
 
         // The bag points back at its entity, so a copy would raise the original's changes. Nothing
         // legitimately copies an entity; this makes the mistake a compile error.
@@ -514,6 +515,11 @@ namespace Framework::Networking::Replication {
 
         // Owning client: the flag the last forced-state RPC carried. Written by the manager.
         bool _poseForced = false;
+
+        // Server: the connections this entity is constructed on, in step with ReplicaManager3's lists,
+        // and its place in the manager's list of entities that have any. Kept by ReplicationManager.
+        std::vector<ReplicationConnection *> _audience;
+        std::size_t _audienceSlot = 0;
         friend class ReplicationManager;
     };
 } // namespace Framework::Networking::Replication

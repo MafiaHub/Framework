@@ -332,6 +332,21 @@ namespace Framework::Networking::Replication {
         // Makes the connection of this peer, if any, refresh its interest on its next query.
         void InvalidateInterestOf(MafiaNet::PeerGuid guid);
 
+        // Server: ReplicaManager3::Update with its serialize pass replaced. That pass walks every
+        // constructed replica on every connection; this one serializes each entity once and sends it
+        // only to the connections it is constructed on, and only when it changed.
+        void UpdateServer();
+        void SerializeToAudience(NetworkEntity &entity, MafiaNet::SerializeParameters &sp);
+
+        // An entity's audience follows ReplicaManager3's constructed lists: joined and left as a
+        // connection constructs and destroys it, dropped with the connection or the entity.
+        void JoinAudience(NetworkEntity *entity, ReplicationConnection *connection);
+        void LeaveAudience(NetworkEntity *entity, ReplicationConnection *connection);
+        void DropAudience(NetworkEntity *entity);
+        void ForgetConnection(ReplicationConnection *connection);
+        friend class NetworkEntity;
+        friend class ReplicationConnection;
+
         bool _isServer                 = false;
         bool _batchTransforms          = false;
         bool _networkUpdateActive      = false;
@@ -356,6 +371,8 @@ namespace Framework::Networking::Replication {
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
         // By NetworkID, not pointer: an entity can be destroyed between dirtying and the flush.
         std::unordered_set<uint64_t> _dirtyStateBags;
+        // Every entity with a non-empty audience, at its _audienceSlot.
+        std::vector<NetworkEntity *> _audienced;
 
         struct StateChangeSubscription {
             StateChangeFilter filter;

@@ -15,11 +15,14 @@
 #include "entity_registry.h"
 #include "replication_connection.h"
 
+#include <mafianet/get_time.h>
 #include <utils/profiler.h>
 #include <utils/time.h>
 
 #include <algorithm>
 #include <cstddef>
+#include <cstring>
+#include <vector>
 
 namespace Framework::Networking::Replication {
     namespace {
@@ -63,7 +66,10 @@ namespace Framework::Networking::Replication {
         if (_networkUpdateActive && std::exchange(_updatedThisNetworkUpdate, true)) {
             return;
         }
-        {
+        if (_isServer) {
+            UpdateServer();
+        }
+        else {
             FW_PROFILE_SCOPE_N("Replication::RM3Update");
             MafiaNet::ReplicaManager3::Update();
         }
@@ -74,6 +80,127 @@ namespace Framework::Networking::Replication {
             for (unsigned int i = 0; i < GetConnectionCount(worldId); ++i) {
                 static_cast<ReplicationConnection *>(GetConnectionAtIndex(i, worldId))->FlushTransforms(GetRakPeerInterface());
             }
+        }
+    }
+
+    void ReplicationManager::UpdateServer() {
+        const MafiaNet::Time time = MafiaNet::GetTime();
+        {
+            FW_PROFILE_SCOPE_N("Replication::Construct");
+            for (unsigned int world = 0; world < worldsList.Size(); ++world) {
+                const auto &connections = worldsList[world]->connectionList;
+                for (unsigned int i = 0; i < connections.Size(); ++i) {
+                    if (connections[i]->isValidated) {
+                        static_cast<ReplicationConnection *>(connections[i])->AutoConstruct(worldsList[world]->worldId);
+                    }
+                }
+            }
+        }
+        if (time - lastAutoSerializeOccurance < autoSerializeInterval) {
+            return;
+        }
+        FW_PROFILE_SCOPE_N("Replication::Serialize");
+        for (unsigned int world = 0; world < worldsList.Size(); ++world) {
+            const auto &replicas = worldsList[world]->userReplicaList;
+            for (unsigned int i = 0; i < replicas.Size(); ++i) {
+                replicas[i]->forceSendUntilNextUpdate = false;
+                replicas[i]->OnUserReplicaPreSerializeTick();
+            }
+        }
+        MafiaNet::SerializeParameters sp;
+        for (MafiaNet::PRO &pro : sp.pro) {
+            pro = defaultSendParameters;
+        }
+        sp.messageTimestamp = 0;
+        sp.bitsWrittenSoFar = 0;
+        sp.curTime          = time;
+        // Never a first send, as in ReplicaManager3: SendConstruction made that one.
+        sp.whenLastSerialized = time;
+        for (NetworkEntity *entity : _audienced) {
+            SerializeToAudience(*entity, sp);
+        }
+        lastAutoSerializeOccurance = time;
+    }
+
+    void ReplicationManager::SerializeToAudience(NetworkEntity &entity, MafiaNet::SerializeParameters &sp) {
+        const std::vector<ReplicationConnection *> &audience = entity._audience;
+        // As in ReplicaManager3, only a connection the entity asks to be sent to counts: the owner and
+        // a viewer in another virtual world do not, and an entity with neither is not compared at all.
+        std::size_t first = 0;
+        while (first < audience.size() && entity.QuerySerialization(audience[first]) != MafiaNet::RM3QSR_CALL_SERIALIZE) {
+            ++first;
+        }
+        if (first == audience.size()) {
+            return;
+        }
+        sp.destinationConnection = audience[first];
+        for (int z = 0; z < MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS; ++z) {
+            sp.outputBitstream[z].Reset();
+            sp.lastSentBitstream[z] = &entity.lastSentSerialization.bitStream[z];
+        }
+        const bool force = entity.Serialize(&sp) == MafiaNet::RM3SR_BROADCAST_IDENTICALLY_FORCE_SERIALIZATION;
+
+        // ReplicaManager3's broadcast-identically rule: a channel goes out when forced or when its bytes
+        // differ from the last broadcast, which every connection in the audience has.
+        bool changed = false;
+        for (int z = 0; z < MafiaNet::RM3_NUM_OUTPUT_BITSTREAM_CHANNELS; ++z) {
+            MafiaNet::BitStream &out  = sp.outputBitstream[z];
+            MafiaNet::BitStream &last = entity.lastSentSerialization.bitStream[z];
+            bool &send                = entity.lastSentSerialization.indicesToSend[z];
+            out.ResetReadPointer();
+            send = out.GetNumberOfBitsUsed() > 0 && (force || out.GetNumberOfBitsUsed() != last.GetNumberOfBitsUsed() || std::memcmp(out.GetData(), last.GetData(), out.GetNumberOfBytesUsed()) != 0);
+            if (send) {
+                last.Reset();
+                last.Write(&out);
+                changed = true;
+            }
+        }
+        entity.forceSendUntilNextUpdate = true;
+        if (!changed) {
+            return;
+        }
+        for (std::size_t i = first; i < audience.size(); ++i) {
+            ReplicationConnection *connection = audience[i];
+            if (i == first || entity.QuerySerialization(connection) == MafiaNet::RM3QSR_CALL_SERIALIZE) {
+                connection->SendSerialize(&entity, entity.lastSentSerialization.indicesToSend, entity.lastSentSerialization.bitStream, sp.messageTimestamp, sp.pro, GetRakPeerInterface(), connection->GetWorldId(), sp.curTime);
+            }
+        }
+    }
+
+    void ReplicationManager::JoinAudience(NetworkEntity *entity, ReplicationConnection *connection) {
+        if (entity->_audience.empty()) {
+            entity->_audienceSlot = _audienced.size();
+            _audienced.push_back(entity);
+        }
+        entity->_audience.push_back(connection);
+    }
+
+    void ReplicationManager::LeaveAudience(NetworkEntity *entity, ReplicationConnection *connection) {
+        std::vector<ReplicationConnection *> &audience = entity->_audience;
+
+        const auto it = std::find(audience.begin(), audience.end(), connection);
+        if (it == audience.end()) {
+            return;
+        }
+        *it = audience.back();
+        audience.pop_back();
+        if (audience.empty()) {
+            DropAudience(entity);
+        }
+    }
+
+    void ReplicationManager::DropAudience(NetworkEntity *entity) {
+        entity->_audience.clear();
+        NetworkEntity *moved             = _audienced.back();
+        moved->_audienceSlot             = entity->_audienceSlot;
+        _audienced[moved->_audienceSlot] = moved;
+        _audienced.pop_back();
+    }
+
+    void ReplicationManager::ForgetConnection(ReplicationConnection *connection) {
+        // Backwards, so the entity DropAudience moves into a freed slot has been visited already.
+        for (std::size_t i = _audienced.size(); i-- > 0;) {
+            LeaveAudience(_audienced[i], connection);
         }
     }
 
@@ -736,6 +863,8 @@ namespace Framework::Networking::Replication {
     }
 
     void ReplicationManager::DeallocConnection(MafiaNet::Connection_RM3 *connection) const {
+        // Const upstream like AllocConnection; the audiences that name this connection are the manager's.
+        const_cast<ReplicationManager *>(this)->ForgetConnection(static_cast<ReplicationConnection *>(connection));
         delete connection;
     }
 } // namespace Framework::Networking::Replication
