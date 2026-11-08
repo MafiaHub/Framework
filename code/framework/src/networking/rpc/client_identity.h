@@ -15,6 +15,7 @@
 
 #include <mafianet/BitStream.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -34,8 +35,9 @@ namespace Framework::Networking::RPC {
         std::string steamId;
         std::string discordId;
         std::string hardwareId;
-        // Client-reported Epic account id, not authenticated by the server; empty when absent.
-        // Ordered to match Decode(), which refuses a payload missing any field.
+        // Client-reported Epic account id, not authenticated by the server; empty when absent, else
+        // 32 lowercase hex chars once sanitized. Ordered to match Decode(), which refuses a payload
+        // missing any field.
         std::string epicId;
 
         // Opaque string the client was launched with (a launcher-issued join ticket, typically).
@@ -70,6 +72,35 @@ namespace Framework::Networking::RPC {
                 return std::nullopt;
             }
             return identity;
+        }
+
+        // What the server does to a received identity before retaining it or showing it to scripts:
+        // nickname length-capped, decimal ids kept only as digit strings, the Epic id kept only as 32
+        // hex chars and lowercased, a ticket too long to be one dropped rather than cut. Returns true
+        // when the ticket was dropped.
+        bool Sanitize() {
+            if (name.size() > 64) {
+                name.resize(64);
+            }
+            const auto digits = [](std::string &value, std::size_t max) {
+                if (value.size() > max || value.find_first_not_of("0123456789") != std::string::npos) {
+                    value.clear();
+                }
+            };
+            digits(steamId, 32);
+            digits(discordId, 32);
+            digits(hardwareId, 128);
+            if (!epicId.empty() && (epicId.size() != 32 || epicId.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)) {
+                epicId.clear();
+            }
+            std::ranges::transform(epicId, epicId.begin(), [](char c) {
+                return (c >= 'A' && c <= 'F') ? static_cast<char>(c - 'A' + 'a') : c;
+            });
+            if (ticket.size() > kMaxTicketLength) {
+                ticket.clear();
+                return true;
+            }
+            return false;
         }
     };
 } // namespace Framework::Networking::RPC

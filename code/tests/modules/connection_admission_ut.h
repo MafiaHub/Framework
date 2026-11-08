@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "test_identities.h"
+
 #include "networking/connection.h"
 #include "networking/network_client.h"
 #include "networking/network_server.h"
@@ -20,6 +22,7 @@
 #include <random>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 // The admission handshake end to end over loopback, through the framework's own NetworkServer and
@@ -139,18 +142,44 @@ MODULE(connection_admission, {
     IT("hands the server the identity and ticket the client connected with, before any connection", {
         Rig rig;
         EQUALS(rig.StartServer(true), true);
-        EQUALS(rig.Connect(Rig::IdentityPayload("Jan", "tkt-abc+123", "0123456789abcdef0123456789abcdef")), true);
+        EQUALS(rig.Connect(Rig::IdentityPayload("Jan", "tkt-abc+123", TestIdentities::kEpicId)), true);
 
         EQUALS(rig.PumpUntil([&] { return !rig.seen.requests.empty(); }), true);
         EQUALS(rig.seen.requests[0].has_value(), true);
         STREQUALS(rig.seen.requests[0]->name.c_str(), "Jan");
         STREQUALS(rig.seen.requests[0]->ticket.c_str(), "tkt-abc+123");
-        STREQUALS(rig.seen.requests[0]->epicId.c_str(), "0123456789abcdef0123456789abcdef");
+        STREQUALS(rig.seen.requests[0]->epicId.c_str(), TestIdentities::kEpicId);
 
         // Waiting: nobody is connected on either side, and the player count says so.
         rig.PumpFor(300);
         EQUALS(rig.seen.clientConnected, false);
         EQUALS(rig.server->GetPlayerCount(), 0u);
+    });
+
+    // What the server keeps of a reported Epic id, the only check it makes on one.
+    const auto sanitizedEpicId = [](std::string reported) {
+        Framework::Networking::RPC::ClientIdentity identity;
+        identity.epicId = std::move(reported);
+        identity.Sanitize();
+        return identity.epicId;
+    };
+
+    IT("keeps a well-formed Epic ID and an absent one as they are", {
+        STREQUALS(sanitizedEpicId(TestIdentities::kEpicId).c_str(), TestIdentities::kEpicId);
+        STREQUALS(sanitizedEpicId("").c_str(), "");
+    });
+
+    IT("lowercases an uppercase or mixed-case Epic ID", {
+        STREQUALS(sanitizedEpicId("0123456789ABCDEF0123456789ABCDEF").c_str(), TestIdentities::kEpicId);
+        STREQUALS(sanitizedEpicId("0123456789AbCdEf0123456789aBcDeF").c_str(), TestIdentities::kEpicId);
+    });
+
+    IT("drops an Epic ID that is not exactly 32 hex characters", {
+        STREQUALS(sanitizedEpicId("0123456789abcdef0123456789abcdef0").c_str(), "");
+        STREQUALS(sanitizedEpicId("0123456789abcdef0123456789abcde").c_str(), "");
+        STREQUALS(sanitizedEpicId("abc").c_str(), "");
+        STREQUALS(sanitizedEpicId("0123456789abcdef0123456789abcdeg").c_str(), "");
+        STREQUALS(sanitizedEpicId("0123456789abcdef-123456789abcdef").c_str(), "");
     });
 
     IT("reports a request that carried no identity as unidentified", {

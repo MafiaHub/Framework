@@ -709,27 +709,10 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        // Sanitize before retention: nickname length-capped, ids digit strings or dropped, a ticket too
-        // long to be one dropped rather than cut.
-        auto identity = *request;
-        if (identity.name.size() > 64) {
-            identity.name.resize(64);
-        }
-        const auto digits = [](std::string &value, size_t max) {
-            if (value.size() > max || value.find_first_not_of("0123456789") != std::string::npos) {
-                value.clear();
-            }
-        };
-        digits(identity.steamId, 32);
-        digits(identity.discordId, 32);
-        digits(identity.hardwareId, 128);
-        // The Epic account id is hex, not decimal, so it needs its own charset check.
-        if (identity.epicId.size() > 32 || identity.epicId.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
-            identity.epicId.clear();
-        }
-        if (identity.ticket.size() > Framework::Networking::RPC::ClientIdentity::kMaxTicketLength) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropping a {} byte ticket from {}", identity.ticket.size(), guid.g);
-            identity.ticket.clear();
+        auto identity            = *request;
+        const size_t ticketBytes = identity.ticket.size();
+        if (identity.Sanitize()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropping a {} byte ticket from {}", ticketBytes, guid.g);
         }
         net->SetPeerIdentity(guid, identity);
 
