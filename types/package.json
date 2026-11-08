@@ -13,7 +13,10 @@
         "url": "git+https://github.com/MafiaHub/Framework.git",
         "directory": "types"
     },
-    "license": "SEE LICENSE IN ../LICENSE",
+    "license": "SEE LICENSE IN LICENSE.txt",
+    "scripts": {
+        "prepack": "node -e \"require('node:fs').copyFileSync('../LICENSE.txt', 'LICENSE.txt')\""
+    },
     "publishConfig": {
         "access": "public"
     }
