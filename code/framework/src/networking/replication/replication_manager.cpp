@@ -91,6 +91,36 @@ namespace Framework::Networking::Replication {
         _workers.reset();
     }
 
+    Utils::ForkJoinPool *ReplicationManager::Workers(size_t work) {
+        if (work < kParallelMin) {
+            return nullptr;
+        }
+        if (!_workers) {
+            if (!_workersSet) {
+                const uint32_t cores = std::thread::hardware_concurrency();
+                _workerThreads       = std::min(kDefaultWorkerThreads, cores > 2 ? cores - 2 : 0);
+                _workersSet          = true;
+            }
+            if (_workerThreads > 0) {
+                _workers = std::make_unique<Utils::ForkJoinPool>(_workerThreads);
+            }
+        }
+        return _workers.get();
+    }
+
+    void ReplicationManager::SerializeExecutor::ParallelFor(unsigned int count, void (*fn)(void *context, unsigned int index), void *context) {
+        Utils::ForkJoinPool *workers = manager->Workers(count);
+        if (!workers) {
+            for (unsigned int i = 0; i < count; ++i) {
+                fn(context, i);
+            }
+            return;
+        }
+        workers->Run(count, [fn, context](uint32_t index, uint32_t) {
+            fn(context, index);
+        });
+    }
+
     void ReplicationManager::Update() {
         if (_networkUpdateActive && std::exchange(_updatedThisNetworkUpdate, true)) {
             return;
@@ -168,6 +198,13 @@ namespace Framework::Networking::Replication {
         SetDefaultOrderingChannel(ToOrderingChannel(Channel::Construction));
         owner->GetPeer()->AttachPlugin(this);
         _delegation.Init(this, isServer);
+        // Every entity broadcasts identically (NetworkEntity::BroadcastsIdentically), so once each is
+        // serialized a connection's share of the pass is its own: the server serves them on the
+        // replication workers. A client has the one connection.
+        if (_isServer) {
+            _serializeExecutor.manager = this;
+            SetSerializeExecutor(&_serializeExecutor);
+        }
 
         // Client-only: these are server->owner pushes, so the server must never accept them inbound.
         if (!_isServer && !_clientRPCsRegistered) {
@@ -783,25 +820,16 @@ namespace Framework::Networking::Replication {
 
     void ReplicationManager::ComputeDueInterest() {
         FW_PROFILE_SCOPE_N("Replication::CollectInterest");
-        if (_dueConnections.size() >= kParallelMin && !_workers) {
-            if (!_workersSet) {
-                const uint32_t cores = std::thread::hardware_concurrency();
-                _workerThreads       = std::min(kDefaultWorkerThreads, cores > 2 ? cores - 2 : 0);
-                _workersSet          = true;
-            }
-            if (_workerThreads > 0) {
-                _workers = std::make_unique<Utils::ForkJoinPool>(_workerThreads);
-            }
-        }
-        const uint32_t lanes = _workers ? _workers->Lanes() : 1;
+        Utils::ForkJoinPool *workers = Workers(_dueConnections.size());
+        const uint32_t lanes         = workers ? workers->Lanes() : 1;
         if (_scratch.size() < lanes) {
             _scratch.resize(lanes);
         }
         const auto compute = [this](uint32_t index, uint32_t lane) {
             _dueConnections[index]->ComputeInterest(_scratch[lane]);
         };
-        if (_workers && _dueConnections.size() >= kParallelMin) {
-            _workers->Run(static_cast<uint32_t>(_dueConnections.size()), compute);
+        if (workers) {
+            workers->Run(static_cast<uint32_t>(_dueConnections.size()), compute);
         }
         else {
             for (uint32_t i = 0; i < _dueConnections.size(); ++i) {

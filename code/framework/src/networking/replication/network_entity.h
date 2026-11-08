@@ -444,6 +444,14 @@ namespace Framework::Networking::Replication {
         void Deserialize(MafiaNet::DeserializeParameters *deserializeParameters) final;
 
         bool QueryRemoteConstruction(MafiaNet::Connection_RM3 *sourceConnection) final;
+
+        // Serialize writes the same bytes for every connection (per-connection choices are made in
+        // QuerySerializationWithinWorld and ReplicationConnection::SendSerialize), so ReplicaManager3
+        // serializes each entity once per pass and can serve connections in parallel. Construction
+        // carries the full state, so the pass's deltas lose nothing for a connection that just got it.
+        bool BroadcastsIdentically() const final {
+            return true;
+        }
         MafiaNet::RM3ActionOnPopConnection QueryActionOnPopConnection(MafiaNet::Connection_RM3 *droppedConnection) const final;
 
       protected:

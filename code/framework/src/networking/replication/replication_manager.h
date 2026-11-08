@@ -264,8 +264,9 @@ namespace Framework::Networking::Replication {
         }
 
         // Threads that do replication work alongside the server thread, which waits for them:
-        // recomputing viewers' interest, each independent of the others. 0 keeps it on the server
-        // thread. Defaults to a few, fewer on a small machine.
+        // recomputing viewers' interest and serving connections their share of the serialize pass,
+        // each independent of the others. 0 keeps it all on the server thread. Defaults to a few,
+        // fewer on a small machine.
         void SetReplicationWorkerThreads(uint32_t workers);
 
         // The per-tick interest step. Server only; call once per tick before ReplicaManager3
@@ -365,6 +366,16 @@ namespace Framework::Networking::Replication {
         void ForgetSlot(uint32_t slot);
         // Recomputes the viewers RebuildInterest found due, across the worker pool when it pays.
         void ComputeDueInterest();
+        // The worker pool, started on first use, for `work` independent items; null when that is too
+        // little to share out or workers are off.
+        Utils::ForkJoinPool *Workers(size_t work);
+
+        // ReplicaManager3's serialize pass on the same workers.
+        struct SerializeExecutor final: MafiaNet::RM3SerializeExecutor {
+            ReplicationManager *manager = nullptr;
+            void ParallelFor(unsigned int count, void (*fn)(void *context, unsigned int index), void *context) override;
+        };
+        SerializeExecutor _serializeExecutor;
         friend class NetworkEntity;
 
         bool _isServer                 = false;
