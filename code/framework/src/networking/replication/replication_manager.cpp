@@ -19,6 +19,7 @@
 #include <utils/time.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <thread>
 
@@ -80,6 +81,19 @@ namespace Framework::Networking::Replication {
         // Enough to take a crowd's refresh off the server thread without competing with the network
         // thread and the scripts' own threads for the rest of the machine.
         constexpr uint32_t kDefaultWorkerThreads = 3;
+
+        // Writes the milliseconds from construction to destruction into `into`, however the scope ends.
+        class ElapsedMs final {
+          public:
+            explicit ElapsedMs(double &into): _into(into), _start(std::chrono::steady_clock::now()) {}
+            ~ElapsedMs() {
+                _into = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - _start).count();
+            }
+
+          private:
+            double &_into;
+            std::chrono::steady_clock::time_point _start;
+        };
     } // namespace
 
     ReplicationManager::ReplicationManager()  = default;
@@ -125,6 +139,7 @@ namespace Framework::Networking::Replication {
         if (_networkUpdateActive && std::exchange(_updatedThisNetworkUpdate, true)) {
             return;
         }
+        const ElapsedMs elapsed(_lastPassMs);
         {
             FW_PROFILE_SCOPE_N("Replication::RM3Update");
             MafiaNet::ReplicaManager3::Update();
@@ -785,6 +800,7 @@ namespace Framework::Networking::Replication {
         if (!_isServer) {
             return;
         }
+        const ElapsedMs elapsed(_lastInterestMs);
         FW_PROFILE_SCOPE_N("Replication::RebuildInterest");
         {
             FW_PROFILE_SCOPE_N("Replication::SyncInterest");

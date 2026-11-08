@@ -263,6 +263,14 @@ namespace Framework::Networking::Replication {
         void SetInterestRebuildInterval(uint32_t intervalMs) {
             _interestRebuildInterval = intervalMs;
         }
+        // How long the last RebuildInterest and the last replication pass (Update) took, in
+        // milliseconds: what the server's tick breakdown reports as replication.
+        double LastInterestMs() const {
+            return _lastInterestMs;
+        }
+        double LastPassMs() const {
+            return _lastPassMs;
+        }
         uint32_t InterestRefreshInterval() const {
             return _interestRebuildInterval;
         }
@@ -411,6 +419,8 @@ namespace Framework::Networking::Replication {
         std::unique_ptr<Utils::ForkJoinPool> _workers;
         uint32_t _workerThreads = 0;
         bool _workersSet        = false;
+        double _lastInterestMs  = 0.0;
+        double _lastPassMs      = 0.0;
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
         // By NetworkID, not pointer: an entity can be destroyed between dirtying and the flush.
         std::unordered_set<uint64_t> _dirtyStateBags;

@@ -1479,6 +1479,14 @@ namespace Framework::Integrations::Server {
         const auto start = std::chrono::steady_clock::now();
         if (_nextTick <= start) {
             FW_PROFILE_SCOPE_N("Server::Tick");
+            TickBreakdown tick;
+            // Charges the time since the last lap to `into`.
+            auto lapStart  = start;
+            const auto lap = [&lapStart](double &into) {
+                const auto now = std::chrono::steady_clock::now();
+                into += std::chrono::duration<double, std::milli>(now - lapStart).count();
+                lapStart = now;
+            };
 
             // One monitor frame per server tick, so a resource's RPC handlers, timers and events in it add up together.
             if (auto *engine = _scriptingModule ? _scriptingModule->GetEngine() : nullptr; engine != nullptr && engine->IsInitialized()) {
@@ -1499,11 +1507,20 @@ namespace Framework::Integrations::Server {
                 FW_PROFILE_SCOPE_N("Server::TextLabels");
                 Framework::Scripting::Builtins::TextLabel::FollowTargets(*replication);
             }
+            lap(tick.otherMs);
 
             if (_networkingEngine) {
                 FW_PROFILE_SCOPE_N("Server::Networking");
                 _networkingEngine->Update();
             }
+            // The packet pump runs the replication pass; report it apart from the packets themselves.
+            double pumpMs = 0.0;
+            lap(pumpMs);
+            if (replication) {
+                tick.replicationInterestMs = replication->LastInterestMs();
+                tick.replicationPassMs     = replication->LastPassMs();
+            }
+            tick.packetsMs = std::max(0.0, pumpMs - tick.replicationInterestMs - tick.replicationPassMs);
 
             if (replication) {
                 FW_PROFILE_SCOPE_N("Server::Voice");
@@ -1514,11 +1531,13 @@ namespace Framework::Integrations::Server {
                 FW_PROFILE_SCOPE_N("Server::VoiceChanges");
                 DispatchVoiceChanges();
             }
+            lap(tick.packetsMs);
 
             if (_scriptingModule) {
                 FW_PROFILE_SCOPE_N("Server::Scripting");
                 _scriptingModule->Update();
             }
+            lap(tick.scriptsMs);
 
             if (_networkingEngine) {
                 FW_PROFILE_SCOPE_N("Server::Admission");
@@ -1545,19 +1564,23 @@ namespace Framework::Integrations::Server {
 
             // Game services read the world through CoreModules without checking it; ticking them
             // with no replication manager is a null dereference in whichever one looks first.
+            lap(tick.otherMs);
             if (replication) {
                 FW_PROFILE_SCOPE_N("Server::PostUpdate");
                 PostUpdate();
             }
+            lap(tick.gameMs);
 
             FW_PROFILE_FRAME();
 
             const auto end      = std::chrono::steady_clock::now();
             const double tickMs = std::chrono::duration<double, std::milli>(end - start).count();
+            tick.totalMs        = tickMs;
+            _lastTick           = tick;
             if (tickMs >= kTickHitchWarnMs) {
                 ++_suppressedHitches;
                 if (std::chrono::duration<double, std::milli>(end - _lastHitchWarnAt).count() >= kTickHitchWarnIntervalMs) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server tick took {:.0f} ms against a {:.0f} ms budget ({} slow tick(s) since the last warning)", tickMs, Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval), _suppressedHitches);
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server tick took {:.0f} ms against a {:.0f} ms budget ({} slow tick(s) since the last warning): {}", tickMs, Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval), _suppressedHitches, tick.Describe());
                     _lastHitchWarnAt   = end;
                     _suppressedHitches = 0;
                 }

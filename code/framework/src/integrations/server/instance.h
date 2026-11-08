@@ -23,6 +23,7 @@
 #include "logging/logger.h"
 #include "networking/engine.h"
 #include "scripting/module.h"
+#include "tick_breakdown.h"
 #include "voice/server/voice_server.h"
 
 #include <external/sentry/wrapper.h>
@@ -206,6 +207,7 @@ namespace Framework::Integrations::Server {
         std::chrono::steady_clock::time_point _nextTick {};
         std::chrono::steady_clock::time_point _lastHitchWarnAt {};
         uint32_t _suppressedHitches = 0;
+        TickBreakdown _lastTick;
         // Script work run between ticks that came back past the tick's due time; warned about like a slow tick.
         std::chrono::steady_clock::time_point _lastLateTickWarnAt {};
         uint32_t _suppressedLateTicks = 0;
@@ -299,6 +301,11 @@ namespace Framework::Integrations::Server {
 
         [[nodiscard]] Utils::Result<void, Error> Init(InstanceOptions &);
         void Shutdown() override;
+
+        // Where the last tick's time went, by phase. The slow-tick warning prints it.
+        const TickBreakdown &GetLastTickBreakdown() const {
+            return _lastTick;
+        }
 
         // Override what you need; this is the whole extension surface (no Set*Callback setters).
         // Order: Init -> PostInit -> PostScriptInit; tick: Update -> PostUpdate; Shutdown -> PreShutdown.
