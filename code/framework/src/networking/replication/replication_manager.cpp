@@ -129,6 +129,7 @@ namespace Framework::Networking::Replication {
             FW_PROFILE_SCOPE_N("Replication::RM3Update");
             MafiaNet::ReplicaManager3::Update();
         }
+        _serializeForced = false;
         {
             FW_PROFILE_SCOPE_N("Replication::FlushTransforms");
             // Flush in the same pass that queued the poses, never on the next tick.
@@ -143,6 +144,14 @@ namespace Framework::Networking::Replication {
         // with a full recompute.
         _reevaluationBase += _reevaluations.size();
         _reevaluations.clear();
+    }
+
+    void ReplicationManager::SerializeThisPass() {
+        // ReplicaManager3 constructs before it checks whether a serialize is due, against the time it
+        // read on entry: moving the last pass back one interval makes it due, wrap-around included.
+        if (!std::exchange(_serializeForced, true)) {
+            lastAutoSerializeOccurance -= autoSerializeInterval;
+        }
     }
 
     MafiaNet::PluginReceiveResult ReplicationManager::OnReceive(MafiaNet::Packet *packet) {

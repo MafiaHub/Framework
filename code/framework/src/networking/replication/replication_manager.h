@@ -107,6 +107,10 @@ namespace Framework::Networking::Replication {
             _networkUpdateActive = false;
         }
         void Update() override;
+        // Server: a replica was constructed, seeded with values no pass has compared yet. Makes the
+        // pass serialize even if it is not due, so they are what the next delta is taken against;
+        // otherwise a value that changed back before then would never reach that viewer.
+        void SerializeThisPass();
         // Decodes transform batches and hands everything else to ReplicaManager3.
         MafiaNet::PluginReceiveResult OnReceive(MafiaNet::Packet *packet) override;
 
@@ -381,6 +385,7 @@ namespace Framework::Networking::Replication {
         bool _isServer                 = false;
         bool _batchTransforms          = false;
         bool _networkUpdateActive      = false;
+        bool _serializeForced          = false;
         bool _updatedThisNetworkUpdate = false;
         MafiaNet::PeerGuid _myGUID     = MafiaNet::UNASSIGNED_PEER_GUID;
         // Server-side monotonic NetworkID allocator. Starts at 1 (0 reads as "none" in game code) and

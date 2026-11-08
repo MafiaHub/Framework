@@ -129,6 +129,9 @@ namespace Framework::Networking::Replication {
     }
 
     void NetworkEntity::SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) {
+        if (IsServerPeer()) {
+            Manager()->SerializeThisPass();
+        }
         constructionBitstream->Write(stateEpoch);
         FieldSerializer seed(constructionBitstream, true);
         SerializeBaseFields(seed);
