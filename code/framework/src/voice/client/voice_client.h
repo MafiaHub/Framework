@@ -335,12 +335,12 @@ namespace Framework::Voice {
         void RemoveSpeaker(uint64_t speaker);
 
         // Ignores the push-to-talk key, cutting the release delay short. Set by the client Instance
-        // while its chat box has the caret or a web view holds focus. Voice activation is unaffected:
-        // a UI taking the keyboard is no reason to stop hearing the player.
+        // only while the player types (Instance::IsTextInputActive), so a bound letter cannot also
+        // transmit. Voice activation is unaffected: typing is no reason to stop hearing the player.
         void SetInputSuppressed(bool suppressed);
 
-        // The mod-owned half of the same key block: window focus, a game menu, locked controls. Ored
-        // with the framework's, so neither side clears the other's.
+        // The host's half of the same key block, for what only it knows: a text field or key
+        // capture of its own. Ored with the framework's, so neither side clears the other's.
         void SetPushToTalkBlocked(bool blocked);
 
         // Blocks transmission in every mode: no local player, or a gamemode muting the player.

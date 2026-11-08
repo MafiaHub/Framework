@@ -95,6 +95,8 @@ namespace Framework::GUI {
         void CleanupViews();
         bool IsAnyViewFocused() const;
         bool IsAnyGCViewFocused() const;
+        // Narrower than IsAnyViewFocused: a focused panel of buttons takes keys but types nothing.
+        bool IsAnyViewTextInputFocused() const;
 
         std::vector<GUI::View *> GetAllViews() const;
         std::vector<GUI::View *> GetGCViews() const;

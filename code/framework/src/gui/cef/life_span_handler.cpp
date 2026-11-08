@@ -129,6 +129,14 @@ namespace Framework::GUI::CEF {
         const auto url    = browser && browser->GetMainFrame() ? browser->GetMainFrame()->GetURL().ToString() : std::string();
         logger->error("Render process for '{}' terminated: status {}, error {} ({})", url, static_cast<int>(status), errorCode, errorString.ToString());
 
+        // The page's caret died with it and nothing else will report it gone: without this a view
+        // given up on below would hold push-to-talk off for as long as it stays focused.
+        if (_onViewEvent) {
+            ViewEventData blur;
+            blur.event = ViewEvent::InputFocusChange;
+            _onViewEvent(blur);
+        }
+
         // A page that kills its renderer every time must not reload forever
         if (!browser || _renderProcessReloads >= kMaxRenderProcessReloads) {
             logger->error("Render process for '{}' not restarted: {} reloads already", url, _renderProcessReloads);

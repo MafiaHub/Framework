@@ -45,6 +45,11 @@ namespace Framework::GUI {
         // CEF raises Created inside Init, before any caller can subscribe.
         bool _created = false;
 
+        // What the page's focused element is, as its renderer last reported. Kept through a blur:
+        // the element stays the page's active one and takes the keys again on refocus.
+        bool _formControlFocused = false;
+        bool _textInputFocused   = false;
+
       protected:
         CefRefPtr<CefBrowser> _browser;
         CefRefPtr<CEF::Client> _cefClient;
@@ -125,6 +130,12 @@ namespace Framework::GUI {
 
         bool HasFocus() const {
             return _hasFocus;
+        }
+
+        // Whether a key pressed now types into the page: focused, shown, and a text field holds
+        // the page's own focus.
+        bool HasTextInputFocus() const {
+            return _hasFocus && _shouldDisplay && _textInputFocused;
         }
 
         void Display(bool enable) {

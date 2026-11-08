@@ -349,6 +349,16 @@ namespace Framework::Integrations::Client {
 #endif
     }
 
+    bool Instance::IsTextInputActive() const {
+        if (_chatBox.IsInputActive()) {
+            return true;
+        }
+        if (_webManager && _webManager->IsAnyViewTextInputFocused()) {
+            return true;
+        }
+        return External::ImGUI::Wrapper::WantsTextInput();
+    }
+
     void Instance::InitProtocolHandler() {
 #ifdef _WIN32
         char urlBuffer[2048] = {};
@@ -535,9 +545,10 @@ namespace Framework::Integrations::Client {
         {
             FW_PROFILE_SCOPE_N("Client::Voice");
 
-            // The chat box and web views belong to the framework, so it enforces this itself
-            // rather than trusting every mod to remember.
-            _voiceClient.SetInputSuppressed(_chatBox.IsInputActive() || (_webManager && _webManager->IsAnyViewFocused()));
+            // The chat box, web views and ImGui belong to the framework, so it enforces this itself
+            // rather than trusting every mod to remember. Typing only: a focused panel of buttons
+            // takes keys but types nothing, so push-to-talk keeps working over it.
+            _voiceClient.SetInputSuppressed(IsTextInputActive());
 
             // Speaker positions come from each player's avatar, as the server's voice router gets
             // them. Done here so a mod only has to supply the listener transform.

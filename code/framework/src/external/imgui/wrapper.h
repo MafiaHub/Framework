@@ -100,6 +100,8 @@ namespace Framework::External::ImGUI {
 
         InputState ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;
         static void ShowCursor(bool show);
+        // An ImGui text field has the keyboard, as of the last Update; read it on Update's thread.
+        static bool WantsTextInput();
 
         void Update() override;
         Utils::Result<void, Framework::Error> Render();

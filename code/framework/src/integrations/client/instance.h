@@ -488,9 +488,14 @@ namespace Framework::Integrations::Client {
         }
 
         // True while the player is driving the game rather than typing at it. Scripted keybinds
-        // dispatch behind this and push-to-talk wants the same answer; mods override to AND in
-        // their own input owners instead of restating the baseline.
+        // dispatch behind this; mods override to AND in their own input owners instead of
+        // restating the baseline.
         virtual bool IsLocalInputAvailable() const;
+
+        // A keystroke is going into text: the chat box caret, a text field in a focused web view,
+        // or an ImGui one. What push-to-talk is suppressed by, so a bound letter cannot type AND
+        // transmit; a UI that merely holds focus does not count.
+        bool IsTextInputActive() const;
 
         AssetDownloadStatus &GetAssetDownloadStatus() {
             return _downloadStatus;
