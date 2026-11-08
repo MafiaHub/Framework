@@ -344,37 +344,48 @@ namespace Framework::Networking::Replication {
         }
     }
 
-    void InterestGrid::CollectCreated(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::vector<NetworkEntity *> &created, EntitySet &out) {
-        if (!viewer || !_ready || created.empty()) {
-            return;
+    bool InterestGrid::CollectCreated(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const InterestCreations &creations, EntitySet &out) {
+        if (!viewer || !_ready) {
+            return false;
         }
         SetFocus(viewer);
-        // CollectVisible's rule for an entity that was relevant to nobody before.
-        const auto admits = [&](const NetworkEntity *entity) {
-            if (!_live.contains(entity) || !entity->streaming.visible || !entity->streaming.Admits(viewerGUID)) {
-                return false;
-            }
-            if (entity == viewer || entity->ownerGUID == viewerGUID) {
-                return true;
-            }
-            if (entity->streaming.targetGUID == MafiaNet::UNASSIGNED_PEER_GUID && !MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), viewer->GetVirtualWorld())) {
-                return false;
-            }
-            if (entity->streaming.alwaysVisible) {
-                return true;
-            }
-            const float range = RangeFor(entity, viewer->streaming.range);
-            return BudgetFor(entity->GetTypeId()) == 0 && NearestFocusDistSq(entity->position) <= range * range;
+        const auto shown = [&](const NetworkEntity *entity) {
+            return _live.contains(entity) && entity->streaming.visible && entity->streaming.Admits(viewerGUID);
         };
-        for (NetworkEntity *entity : created) {
-            if (!admits(entity)) {
-                continue;
-            }
-            out.insert(entity);
-            NetworkEntity *dependency = entity->GetInterestDependency();
-            if (dependency && _live.contains(dependency) && dependency->streaming.visible && dependency->streaming.Admits(viewerGUID)) {
+        const auto drag = [&](NetworkEntity *dependency) {
+            if (dependency && shown(dependency)) {
                 out.insert(dependency);
             }
+        };
+        // CollectVisible's rule for an entity that was relevant to nobody before.
+        bool rerank = false;
+        for (NetworkEntity *entity : creations.created) {
+            if (!shown(entity)) {
+                continue;
+            }
+            if (entity != viewer && entity->ownerGUID != viewerGUID) {
+                if (entity->streaming.targetGUID == MafiaNet::UNASSIGNED_PEER_GUID && !MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), viewer->GetVirtualWorld())) {
+                    continue;
+                }
+                if (!entity->streaming.alwaysVisible) {
+                    const float range = RangeFor(entity, viewer->streaming.range);
+                    if (NearestFocusDistSq(entity->position) > range * range) {
+                        continue;
+                    }
+                    if (BudgetFor(entity->GetTypeId()) != 0) {
+                        rerank = true;
+                        continue;
+                    }
+                }
+            }
+            out.insert(entity);
+            drag(entity->GetInterestDependency());
         }
+        for (const auto &[dependent, dependency] : creations.dependents) {
+            if (out.contains(dependent)) {
+                drag(dependency);
+            }
+        }
+        return rerank;
     }
 } // namespace Framework::Networking::Replication

@@ -560,7 +560,7 @@ namespace Framework::Networking::Replication {
         Reference(entity);
         _interestDirty = true;
         if (_isServer) {
-            _createdSinceRebuild.push_back(entity);
+            _creations.created.insert(entity);
         }
         if (_onEntityCreated) {
             _onEntityCreated(entity->GetNetworkID());
@@ -585,7 +585,7 @@ namespace Framework::Networking::Replication {
         }
         // Scrub the interest indices and every cached set so this delete can't dangle.
         _interest.Remove(entity);
-        std::erase(_createdSinceRebuild, entity);
+        _creations.created.erase(entity);
         for (unsigned i = 0; i < GetConnectionCount(); ++i) {
             static_cast<ReplicationConnection *>(GetConnectionAtIndex(i))->ForgetEntity(entity);
         }
@@ -683,16 +683,24 @@ namespace Framework::Networking::Replication {
         FW_PROFILE_SCOPE_N("Replication::RebuildInterest");
         _lastInterestRebuild = now;
         _interestDirty       = false;
+        const bool admit     = !_creations.created.empty() && GetConnectionCount() != 0;
         _interest.BeginRebuild();
-        ForEachEntity([this](NetworkEntity *entity) {
+        ForEachEntity([this, admit](NetworkEntity *entity) {
             _interest.Insert(entity);
-        });
-        if (!_createdSinceRebuild.empty()) {
-            for (unsigned i = 0; i < GetConnectionCount(); ++i) {
-                static_cast<ReplicationConnection *>(GetConnectionAtIndex(i))->AdmitCreated(_createdSinceRebuild);
+            if (admit) {
+                NetworkEntity *dependency = entity->GetInterestDependency();
+                if (dependency && _creations.created.contains(dependency)) {
+                    _creations.dependents.emplace_back(entity, dependency);
+                }
             }
-            _createdSinceRebuild.clear();
+        });
+        if (admit) {
+            for (unsigned i = 0; i < GetConnectionCount(); ++i) {
+                static_cast<ReplicationConnection *>(GetConnectionAtIndex(i))->AdmitCreated(_creations);
+            }
         }
+        _creations.created.clear();
+        _creations.dependents.clear();
     }
 
     void ReplicationManager::CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const EntitySet &previous, EntitySet &out) {

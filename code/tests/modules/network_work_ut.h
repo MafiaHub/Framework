@@ -16,6 +16,16 @@
 #include <algorithm>
 #include <array>
 
+// Rides another entity, which a viewer has to be shown with it.
+class ChurnRider final: public Framework::Networking::Replication::NetworkEntity {
+  public:
+    Framework::Networking::Replication::NetworkEntity *mount = nullptr;
+
+    Framework::Networking::Replication::NetworkEntity *GetInterestDependency() override {
+        return mount;
+    }
+};
+
 MODULE(network_work, {
     IT("distributes viewer work and does not catch up missed periods after a stall", {
         using Framework::Networking::Replication::InterestRefresh;
@@ -38,7 +48,8 @@ MODULE(network_work, {
             GREATER(bucket, 0);
             LESSER(bucket, 100);
         }
-        // The stall's missed periods coalesce into one refresh each, spread over the two passes after it.
+        // The stall's missed periods coalesce into one refresh each: about half on the long pass after
+        // it, the rest on a short one right behind.
         int afterStall = 0;
         for (unsigned int i = 0; i < viewers.size(); ++i) {
             afterStall += viewers[i].Due(1000, 100, i, false, true);
@@ -226,10 +237,15 @@ MODULE(network_work, {
         constexpr uint32_t kFarInterval = 1000000;
         manager->SetInterestRebuildInterval(kFarInterval);
         const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::InterestChurn");
+        const auto budgeted     = EntityRegistry::Get().Register<NetworkEntity>("Test::InterestChurnBudgeted");
+        const auto riderType    = EntityRegistry::Get().Register<ChurnRider>("Test::InterestChurnRider");
+        manager->SetInterestBudget(budgeted, 4);
         auto *viewer            = manager->CreateEntity(type);
         auto *mover             = manager->CreateEntity(type);
+        auto *rider             = static_cast<ChurnRider *>(manager->CreateEntity(riderType));
         viewer->streaming.range = 100;
         mover->position.x       = 50;
+        rider->position.x       = 30;
         const MafiaNet::RakNetGUID viewerGuid(91);
         manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
         manager->RebuildInterest();
@@ -262,10 +278,34 @@ MODULE(network_work, {
         EQUALS(sees(farAway), false);
         EQUALS(sees(mover), true);
 
+        // Something already shown that comes to ride a creation brings it, however far it is.
+        auto *mount       = manager->CreateEntity(type);
+        mount->position.x = 3000;
+        rider->mount      = mount;
+        manager->RebuildInterest();
+        EQUALS(sees(mount), true);
+        EQUALS(sees(mover), true);
+
+        // Gone before the rebuild that would have handed it out.
+        manager->DestroyEntity(manager->CreateEntity(type));
+        manager->RebuildInterest();
+        EQUALS(sees(mover), true);
+
         manager->DestroyEntity(spawned);
         EQUALS(sees(spawned), false);
         EQUALS(sees(mover), true);
 
+        // A budgeted creation in reach has to be ranked: that viewer refreshes, and the quiet move shows.
+        auto *npc       = manager->CreateEntity(budgeted);
+        npc->position.x = 10;
+        manager->RebuildInterest();
+        EQUALS(sees(npc), true);
+        EQUALS(sees(mover), false);
+
+        rider->mount = nullptr;
+        manager->DestroyEntity(npc);
+        manager->DestroyEntity(mount);
+        manager->DestroyEntity(rider);
         manager->DestroyEntity(farAway);
         manager->DestroyEntity(mover);
         manager->DestroyEntity(viewer);

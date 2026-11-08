@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace Framework::Networking::Replication {
@@ -39,6 +40,12 @@ namespace Framework::Networking::Replication {
                 }
             }
         }
+    };
+
+    // Entities created since the last rebuild, and each live entity that depends on one of them.
+    struct InterestCreations {
+        EntitySet created;
+        std::vector<std::pair<NetworkEntity *, NetworkEntity *>> dependents; // the dependent, its new dependency
     };
 
     // Server-side spatial interest index, split out of ReplicationManager so the relevance data and
@@ -125,9 +132,10 @@ namespace Framework::Networking::Replication {
         // compared, never dereferenced, so a stale entry is harmless.
         void CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const EntitySet &previous, EntitySet &out);
 
-        // Add to `out` the entities of `created` that CollectVisible would admit, with what they drag
-        // in. A budgeted type is left for the viewer's next refresh, which ranks it against the rest.
-        void CollectCreated(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::vector<NetworkEntity *> &created, EntitySet &out);
+        // Add to `out` the creations CollectVisible would admit, with what they drag in, and the new
+        // dependency of anything `out` holds. A budgeted creation in reach needs a refresh to be ranked
+        // against the rest: returns true if there is one.
+        bool CollectCreated(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const InterestCreations &creations, EntitySet &out);
 
       private:
         // An in-range candidate and its budget-ranking distance (sticky discount folded in).

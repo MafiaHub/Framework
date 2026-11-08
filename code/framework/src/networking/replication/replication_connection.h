@@ -16,11 +16,11 @@
 
 #include <cstdint>
 #include <unordered_map>
-#include <vector>
 
 namespace Framework::Networking::Replication {
     class NetworkEntity;
     class ReplicationManager;
+    struct InterestCreations;
 
     // Per-remote-system state. On the client it constructs incoming replicas (AllocReplica); on the
     // server it decides which replicas should exist on this connection (QueryReplicaList). It runs in
@@ -55,7 +55,7 @@ namespace Framework::Networking::Replication {
         }
         // A creation joins the cached set it belongs in and a destruction leaves every one, both at
         // once, so neither costs a viewer its refresh.
-        void AdmitCreated(const std::vector<NetworkEntity *> &created);
+        void AdmitCreated(const InterestCreations &creations);
         void ForgetEntity(const NetworkEntity *entity);
 
       private:

@@ -91,10 +91,10 @@ namespace Framework::Networking::Replication {
         FW_PROFILE_VALUE(_relevant.size());
     }
 
-    void ReplicationConnection::AdmitCreated(const std::vector<NetworkEntity *> &created) {
+    void ReplicationConnection::AdmitCreated(const InterestCreations &creations) {
         // An invalid set is recomputed whole on the next query.
-        if (_relevantValid) {
-            _manager->CollectCreated(_relevantViewer, _viewerGUID, created, _relevant);
+        if (_relevantValid && _manager->CollectCreated(_relevantViewer, _viewerGUID, creations, _relevant)) {
+            _interestStale = true;
         }
     }
 

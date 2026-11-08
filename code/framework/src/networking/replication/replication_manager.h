@@ -246,8 +246,8 @@ namespace Framework::Networking::Replication {
         }
         // Minimum milliseconds between spatial-index rebuilds (0 = every tick, the default). Viewer
         // queries are staggered across the same interval. Entity creation and destruction still force
-        // an immediate rebuild, and reach the viewers they concern with it; an ownership change
-        // refreshes its two owners.
+        // an immediate rebuild and reach every viewer on the next pass, but only a budgeted creation
+        // refreshes the viewers it reaches; an ownership change refreshes its two owners.
         void SetInterestRebuildInterval(uint32_t intervalMs) {
             _interestRebuildInterval = intervalMs;
         }
@@ -255,8 +255,8 @@ namespace Framework::Networking::Replication {
         // before ReplicaManager3 serializes (driven from NetworkPeer::Update). Honours the interval.
         void RebuildInterest();
         void CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const EntitySet &previous, EntitySet &out);
-        void CollectCreated(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::vector<NetworkEntity *> &created, EntitySet &out) {
-            _interest.CollectCreated(viewer, viewerGUID, created, out);
+        bool CollectCreated(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const InterestCreations &creations, EntitySet &out) {
+            return _interest.CollectCreated(viewer, viewerGUID, creations, out);
         }
         // Change counter for the interest index (see InterestGrid::Generation).
         uint32_t InterestGeneration() const {
@@ -357,7 +357,7 @@ namespace Framework::Networking::Replication {
         // Entity set changed since the last rebuild; forces one regardless of the interval.
         bool _interestDirty = true;
         // Created since the last rebuild, which hands them to every connection's cached set.
-        std::vector<NetworkEntity *> _createdSinceRebuild;
+        InterestCreations _creations;
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
         // By NetworkID, not pointer: an entity can be destroyed between dirtying and the flush.
         std::unordered_set<uint64_t> _dirtyStateBags;
