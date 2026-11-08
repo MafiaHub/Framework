@@ -115,6 +115,8 @@ error-stop, or the transient stop within a reload), the server broadcasts a
 `ResourceStop` RPC and clients stop it — no files transfer. A reload therefore
 mirrors as stop-then-start on the client.
 A failed start and a runtime error with `errorBehavior` `stop` or `restart` notify the same way as a clean stop.
+Such a runtime error is a stop like any other: its dependents stop first, every resource receives `resourceStop`,
+and `restart` starts the dependents again once the resource runs. With `continue` the resource keeps running.
 
 Clients that haven't finished connecting ignore `ResourceRefresh`/`ResourceStop`
 — their initial asset sync already fetches the current files.

@@ -1475,7 +1475,10 @@ MODULE(resource_manager_callbacks, {
         manager.HandleResourceRuntimeError("keep-on-error", "continue policy");
         EQUALS(stopped.empty(), true);
         EQUALS(engine.GetResourceRuntime("keep-on-error") == runtime, true);
+        EQUALS(manager.IsResourceRunning("keep-on-error"), true);
 
+        // Still running, so stop it while `stopped` is alive: the manager's destructor would stop it after.
+        manager.StopAll();
         engine.Shutdown();
         TestManagerHelper::Cleanup();
     });

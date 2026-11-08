@@ -496,12 +496,15 @@ MODULE(resource_isolation, {
         auto *continuedRuntime = engine.GetResourceRuntime("continuing");
         manager.HandleResourceRuntimeError("continuing", "continue policy fixture");
         EQUALS(engine.GetResourceRuntime("continuing") == continuedRuntime, true);
+        // Still running to the rest of the server, not an errored resource whose runtime happens to live on.
+        EQUALS(manager.IsResourceRunning("continuing"), true);
         for (int i = 0; i < 10; ++i) {
             engine.Tick();
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         EQUALS(TestManagerHelper::RecordedValue("stoppedBeats"), stoppedBeats);
         EQUALS(TestManagerHelper::RecordedValue("continueBeats") > continueBeats, true);
+        manager.StopAll();
         engine.Shutdown();
         TestManagerHelper::Cleanup();
     });
@@ -568,6 +571,108 @@ MODULE(resource_isolation, {
         EQUALS(TestManagerHelper::RecordedValue("awaitedFailures"), 2);
         EQUALS(errors.size(), 0u);
         EQUALS(manager.IsResourceRunning("announcer"), true);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+    IT("stops a resource's dependents with it when its error stops it, and tells every resource", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("base", R"({"name":"base","version":"1.0.0","mafiahub":{"server":"main.js","exports":["api"]}})");
+        TestManagerHelper::CreateTestScript("base", "main.js", R"(
+            Exports.register('api', { ping() { return 1; } });
+            Events.on('resourceStop', (name) => { if (name === 'base') __record('baseCleanedUp', 1); });
+            setTimeout(() => { throw new Error('base fixture'); }, 1);
+        )");
+        TestManagerHelper::CreateTestResource("dependent", R"({"name":"dependent","version":"1.0.0","mafiahub":{"server":"main.js","resourceDependencies":[{"name":"base"}]}})");
+        // As in a clean stop, the dependent can still reach what it depends on while it cleans up.
+        TestManagerHelper::CreateTestScript("dependent", "main.js", R"(
+            Events.on('resourceStop', (name) => {
+                if (name === 'dependent') __record('dependentCleanedUp', Exports.get('base', 'api').ping());
+            });
+        )");
+        ResourceIsolationTest::WriteResource("watcher", "Events.on('resourceStop', (name) => __record('watcherSaw_' + name, 1));");
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        std::vector<std::string> stopped;
+        manager.AddOnResourceStopped([&](const std::string &name) {
+            stopped.push_back(name);
+        });
+        EQUALS(manager.DiscoverResources(), 3u);
+        EQUALS((bool)manager.StartResource("watcher"), true);
+        EQUALS((bool)manager.StartResource("dependent"), true);
+
+        std::vector<NodeEngine::PendingUncaughtError> errors;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (errors.empty() && std::chrono::steady_clock::now() < deadline) {
+            engine.Tick();
+            errors = engine.DrainPendingErrors();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(errors.size(), 1u);
+        STREQUALS(errors[0].resourceName.c_str(), "base");
+        manager.HandleResourceRuntimeError(errors[0].resourceName, errors[0].errorMessage);
+
+        EQUALS(manager.GetResourceState("base") == ResourceState::Error, true);
+        EQUALS(engine.GetResourceRuntime("base") == nullptr, true);
+        EQUALS(manager.GetResourceState("dependent") == ResourceState::Stopped, true);
+        EQUALS(manager.IsResourceRunning("watcher"), true);
+        // Every resource heard both stops, so none keeps references into them; both cleaned up after themselves.
+        EQUALS(TestManagerHelper::RecordedValue("watcherSaw_dependent"), 1);
+        EQUALS(TestManagerHelper::RecordedValue("watcherSaw_base"), 1);
+        EQUALS(TestManagerHelper::RecordedValue("dependentCleanedUp"), 1);
+        EQUALS(TestManagerHelper::RecordedValue("baseCleanedUp"), 1);
+        EQUALS(stopped.size(), 2u);
+        STREQUALS(stopped[0].c_str(), "dependent");
+        STREQUALS(stopped[1].c_str(), "base");
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+    IT("starts the dependents a restarting resource's error stopped once it runs again", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("flaky", R"({"name":"flaky","version":"1.0.0","mafiahub":{"server":"main.js","errorBehavior":"restart"}})");
+        TestManagerHelper::CreateTestScript("flaky", "main.js", R"(
+            __record('flakyLoads', __recorded('flakyLoads') + 1);
+            if (__recorded('flakyLoads') === 0) setTimeout(() => { throw new Error('restart fixture'); }, 1);
+        )");
+        TestManagerHelper::CreateTestResource("rider", R"({"name":"rider","version":"1.0.0","mafiahub":{"server":"main.js","resourceDependencies":[{"name":"flaky"}]}})");
+        TestManagerHelper::CreateTestScript("rider", "main.js", "__record('riderLoads', __recorded('riderLoads') + 1);");
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 2u);
+        EQUALS((bool)manager.StartResource("rider"), true);
+
+        std::vector<NodeEngine::PendingUncaughtError> errors;
+        const auto errorDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (errors.empty() && std::chrono::steady_clock::now() < errorDeadline) {
+            engine.Tick();
+            errors = engine.DrainPendingErrors();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(errors.size(), 1u);
+        manager.HandleResourceRuntimeError(errors[0].resourceName, errors[0].errorMessage);
+        EQUALS(manager.IsResourceRunning("rider"), false);
+
+        const auto restartDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!manager.IsResourceRunning("rider") && std::chrono::steady_clock::now() < restartDeadline) {
+            manager.ProcessScheduledRestarts();
+            engine.Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(manager.IsResourceRunning("flaky"), true);
+        EQUALS(manager.IsResourceRunning("rider"), true);
+        EQUALS(TestManagerHelper::RecordedValue("flakyLoads"), 1);
+        EQUALS(TestManagerHelper::RecordedValue("riderLoads"), 1);
 
         manager.StopAll();
         engine.Shutdown();
