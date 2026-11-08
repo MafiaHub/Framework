@@ -67,6 +67,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/streamed_assets_ut.h"
 #include "modules/string_utils_ut.h"
 #include "modules/text_label_ut.h"
+#include "modules/tick_breakdown_ut.h"
 #include "modules/transform_batch_ut.h"
 #include "modules/url_protocol_ut.h"
 #include "modules/voice_activity_ut.h"
@@ -111,6 +112,7 @@ int main() {
     UNIT_MODULE(string_utils);
     UNIT_MODULE(world_text);
     UNIT_MODULE(text_label);
+    UNIT_MODULE(tick_breakdown);
     UNIT_MODULE(interpolator);
     UNIT_MODULE(result);
     UNIT_MODULE(network_packets);

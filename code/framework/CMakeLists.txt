@@ -80,6 +80,7 @@ set(FRAMEWORK_SERVER_SRC
 
     src/integrations/server/instance.cpp
     src/integrations/server/connection_gate.cpp
+    src/integrations/server/tick_breakdown.cpp
     src/integrations/server/asset_paks/asset_pak_builder.cpp
     src/integrations/server/asset_file_server.cpp
     src/integrations/server/networking/engine.cpp
