@@ -189,6 +189,7 @@ namespace Framework::Networking::Replication {
         _maxOwnRange    = 0.0f;
         _alwaysVisible.clear();
         _dropped.clear();
+        _dependencyChanges.clear();
     }
 
     void InterestGrid::Sync(NetworkEntity *entity) {
@@ -232,9 +233,6 @@ namespace Framework::Networking::Replication {
         if (entity->streaming.alwaysVisible) {
             _alwaysVisible.push_back(slot);
         }
-        const NetworkEntity *dependency = entity->GetInterestDependency();
-        entry.dependency                = dependency ? dependency->_interestSlot : kNoSlot;
-        entry.dependencyGeneration      = entry.dependency != kNoSlot ? _entries[entry.dependency].generation : 0;
     }
 
     uint32_t InterestGrid::DependencyOf(uint32_t slot) const {
@@ -256,6 +254,21 @@ namespace Framework::Networking::Replication {
                 // Gone without a Remove: the pointer may already be freed, so it is not touched.
                 Release(slot);
                 _dropped.push_back(slot);
+            }
+        }
+        // After the releases, so a dependency that left this pass resolves to nothing.
+        for (uint32_t slot = 0; slot < _entries.size(); ++slot) {
+            Entry &entry = _entries[slot];
+            if (entry.entity == nullptr) {
+                continue;
+            }
+            const uint32_t before           = DependencyOf(slot);
+            const NetworkEntity *dependency = entry.entity->GetInterestDependency();
+            entry.dependency                = dependency ? dependency->_interestSlot : kNoSlot;
+            entry.dependencyGeneration      = entry.dependency != kNoSlot ? _entries[entry.dependency].generation : 0;
+            const uint32_t after            = DependencyOf(slot);
+            if (after != kNoSlot && after != before) {
+                _dependencyChanges.push_back(slot);
             }
         }
         return _dropped;

@@ -12,6 +12,7 @@
 
 #include <glm/glm.hpp>
 
+#include <bit>
 #include <cstdint>
 #include <limits>
 #include <unordered_map>
@@ -49,6 +50,21 @@ namespace Framework::Networking::Replication {
             const size_t words = (static_cast<size_t>(slots) + 63) / 64;
             if (_words.size() < words) {
                 _words.resize(words, 0);
+            }
+        }
+        size_t Count() const {
+            size_t count = 0;
+            for (const uint64_t word : _words) {
+                count += static_cast<size_t>(std::popcount(word));
+            }
+            return count;
+        }
+        template <typename Fn>
+        void ForEach(Fn &&fn) const {
+            for (size_t word = 0; word < _words.size(); ++word) {
+                for (uint64_t bits = _words[word]; bits != 0; bits &= bits - 1) {
+                    fn(static_cast<uint32_t>(word * 64 + std::countr_zero(bits)));
+                }
             }
         }
 
@@ -134,8 +150,14 @@ namespace Framework::Networking::Replication {
         // catches anything that stopped being replicated without it).
         void BeginSync();
         void Sync(NetworkEntity *entity);
-        // Hands back the slots that left without a Remove, for the caller to forget.
+        // Hands back the slots that left without a Remove, for the caller to forget. Dependencies are
+        // resolved here, once every entity of the pass has a slot, whatever order they were synced in.
         const std::vector<uint32_t> &EndSync();
+        // Slots whose dependency became another live entity at the last EndSync: a viewer already
+        // showing one has to be handed what it now depends on.
+        const std::vector<uint32_t> &DependencyChanges() const {
+            return _dependencyChanges;
+        }
 
         // Drop an entity now. Its slot is free for the next entity once this returns.
         void Remove(NetworkEntity *entity);
@@ -253,6 +275,7 @@ namespace Framework::Networking::Replication {
         std::vector<uint32_t> _freeSlots;
         uint32_t _syncStamp = 0;
         std::vector<uint32_t> _dropped;
+        std::vector<uint32_t> _dependencyChanges;
 
         std::unordered_map<uint32_t, uint32_t> _budgets;
         std::unordered_set<uint32_t> _entityRangeTypes;

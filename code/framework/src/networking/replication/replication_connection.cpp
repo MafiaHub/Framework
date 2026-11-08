@@ -102,6 +102,11 @@ namespace Framework::Networking::Replication {
             FW_PROFILE_SCOPE_N("Replication::CollectInterest");
             ComputeInterest(_manager->MainScratch());
         }
+        // ReplicaManager3 changed what it holds here outside this diff, as when it drops a replica a
+        // client failed to destroy: put it right now rather than on the viewer's next turn.
+        if (!_computedReady && _relevantValid && constructedReplicaList.Size() != _relevant.Count()) {
+            Resync(newReplicasToCreate, existingReplicasToDestroy);
+        }
         if (!_computedReady && !ApplyReevaluations(viewer, newReplicasToCreate, false)) {
             FW_PROFILE_SCOPE_N("Replication::CollectInterest");
             newReplicasToCreate.Clear(true, _FILE_AND_LINE_);
@@ -148,6 +153,23 @@ namespace Framework::Networking::Replication {
         }
     }
 
+    void ReplicationConnection::Resync(DataStructures::List<MafiaNet::Replica3 *> &create, DataStructures::List<MafiaNet::Replica3 *> &destroy) {
+        const InterestGrid &interest = _manager->Interest();
+        _relevant.ForEach([&](uint32_t slot) {
+            NetworkEntity *entity = interest.EntityAt(slot);
+            if (entity != nullptr && !HasReplicaConstructed(entity)) {
+                create.Push(entity, _FILE_AND_LINE_);
+            }
+        });
+        for (unsigned i = 0; i < constructedReplicaList.Size(); ++i) {
+            auto *entity        = static_cast<NetworkEntity *>(constructedReplicaList[i]->replica);
+            const uint32_t slot = interest.SlotOf(entity);
+            if (slot == InterestGrid::kNoSlot || !_relevant.Test(slot)) {
+                destroy.Push(entity, _FILE_AND_LINE_);
+            }
+        }
+    }
+
     bool ReplicationConnection::ApplyReevaluations(NetworkEntity *viewer, DataStructures::List<MafiaNet::Replica3 *> &create, bool admitOnly) {
         const uint64_t end = _manager->ReevaluationEnd();
         if (_reevaluationsSeen >= end) {
@@ -162,19 +184,21 @@ namespace Framework::Networking::Replication {
             }
             const bool wasRelevant = _relevant.Test(slot);
             switch (interest.Evaluate(viewer, _viewerGUID, slot, wasRelevant)) {
-            case InterestGrid::Verdict::In:
+            case InterestGrid::Verdict::In: {
                 if (!wasRelevant) {
                     Admit(entity, slot, create);
-                    // Brought in with what it cannot be shown without.
-                    const uint32_t dependency = interest.DependencyOf(slot);
-                    if (dependency != InterestGrid::kNoSlot && !_relevant.Test(dependency)) {
-                        NetworkEntity *needed = interest.EntityAt(dependency);
-                        if (needed->streaming.visible && needed->streaming.Admits(_viewerGUID)) {
-                            Admit(needed, dependency, create);
-                        }
+                }
+                // Brought in with what it cannot be shown without, also when it was shown already
+                // and has just come to depend on something.
+                const uint32_t dependency = interest.DependencyOf(slot);
+                if (dependency != InterestGrid::kNoSlot && !_relevant.Test(dependency)) {
+                    NetworkEntity *needed = interest.EntityAt(dependency);
+                    if (needed->streaming.visible && needed->streaming.Admits(_viewerGUID)) {
+                        Admit(needed, dependency, create);
                     }
                 }
                 break;
+            }
             case InterestGrid::Verdict::Out:
                 // Leaving is decided with the whole set in view: the entity may still be held as
                 // another one's dependency.

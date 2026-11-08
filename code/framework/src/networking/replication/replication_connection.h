@@ -87,6 +87,8 @@ namespace Framework::Networking::Replication {
 
         NetworkEntity *Viewer() const;
         void ApplyRefresh(DataStructures::List<MafiaNet::Replica3 *> &create, DataStructures::List<MafiaNet::Replica3 *> &destroy);
+        // Brings what ReplicaManager3 has constructed here back in line with the current set.
+        void Resync(DataStructures::List<MafiaNet::Replica3 *> &create, DataStructures::List<MafiaNet::Replica3 *> &destroy);
         // False when a verdict needs the whole set recomputed. `admitOnly` right after a recompute:
         // what it decided stands, and only entities filed too late for it to find are let in.
         bool ApplyReevaluations(NetworkEntity *viewer, DataStructures::List<MafiaNet::Replica3 *> &create, bool admitOnly);

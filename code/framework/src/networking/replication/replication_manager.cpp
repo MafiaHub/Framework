@@ -727,6 +727,9 @@ namespace Framework::Networking::Replication {
             for (const uint32_t slot : _interest.EndSync()) {
                 ForgetSlot(slot);
             }
+            for (const uint32_t slot : _interest.DependencyChanges()) {
+                _reevaluations.emplace_back(slot, _interest.GenerationOf(slot));
+            }
         }
 
         _dueConnections.clear();
