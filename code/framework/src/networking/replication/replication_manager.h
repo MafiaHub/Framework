@@ -253,7 +253,7 @@ namespace Framework::Networking::Replication {
         // Rebuild the spatial index from current entity positions. Server only; call once per tick
         // before ReplicaManager3 serializes (driven from NetworkPeer::Update). Honours the interval.
         void RebuildInterest();
-        void CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::unordered_set<NetworkEntity *> &previous, std::unordered_set<NetworkEntity *> &out);
+        void CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const EntitySet &previous, EntitySet &out);
         // Change counter for the interest index (see InterestGrid::Generation).
         uint32_t InterestGeneration() const {
             return _interest.Generation();

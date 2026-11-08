@@ -686,7 +686,7 @@ namespace Framework::Networking::Replication {
         });
     }
 
-    void ReplicationManager::CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::unordered_set<NetworkEntity *> &previous, std::unordered_set<NetworkEntity *> &out) {
+    void ReplicationManager::CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const EntitySet &previous, EntitySet &out) {
         _interest.CollectVisible(viewer, viewerGUID, previous, out);
     }
 

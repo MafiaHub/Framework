@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "entity_set.h"
 #include "interest_refresh.h"
 #include "transform_batch.h"
 
@@ -15,7 +16,6 @@
 
 #include <cstdint>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace Framework::Networking::Replication {
     class NetworkEntity;
@@ -71,11 +71,11 @@ namespace Framework::Networking::Replication {
         InterestRefresh _interestRefresh;
         uint32_t _relevantUrgentGeneration = 0;
         bool _interestStale                = false;
-        std::unordered_set<NetworkEntity *> _relevant;
+        EntitySet _relevant;
         // The previous _relevant, swapped aside on each recompute: the hysteresis state the grid
         // needs for the stream-out margin and the sticky budget ranking. Membership only — entries
         // are compared, never dereferenced.
-        std::unordered_set<NetworkEntity *> _previousRelevant;
+        EntitySet _previousRelevant;
         NetworkEntity *_relevantViewer = nullptr;
         uint32_t _relevantGeneration   = 0;
         bool _relevantValid            = false;

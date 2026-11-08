@@ -76,9 +76,20 @@ namespace Framework::Networking::Replication {
             _ownRangeEntries = 0;
         }
         _maxOwnRange = 0.0f;
-        _ownedByGuid.clear();
+        // Buckets are emptied in place; one left empty by the whole previous rebuild belongs to a peer
+        // that owns nothing any more.
+        for (auto it = _ownedByGuid.begin(); it != _ownedByGuid.end();) {
+            if (it->second.empty()) {
+                it = _ownedByGuid.erase(it);
+            }
+            else {
+                it->second.clear();
+                ++it;
+            }
+        }
         _alwaysVisible.clear();
         _live.clear();
+        _removed.clear();
         _maxEntityRange = 0.0f;
         ++_generation;
     }
@@ -104,6 +115,7 @@ namespace Framework::Networking::Replication {
             _maxEntityRange = std::max(_maxEntityRange, entity->streaming.range);
         }
         _live.insert(entity);
+        _removed.erase(entity);
         if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
             _ownedByGuid[entity->ownerGUID].insert(entity);
         }
@@ -113,9 +125,10 @@ namespace Framework::Networking::Replication {
     }
 
     void InterestGrid::Remove(NetworkEntity *entity) {
-        // The stale grid entry stays until the next rebuild; dropping the entity from _live is what
+        // The stale grid entry stays until the next rebuild; recording the entity in _removed is what
         // makes the queries skip it (see class comment).
         _live.erase(entity);
+        _removed.insert(entity);
         ++_generation;
         // Fast path: the index was keyed on ownerGUID at the last rebuild, so the bucket is directly
         // addressable — unless game code rewrote ownerGUID since then, in which case sweep them all.
@@ -139,24 +152,22 @@ namespace Framework::Networking::Replication {
         _alwaysVisible.erase(entity);
     }
 
-    void InterestGrid::GatherCandidates(GridSectorizer &grid, const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out) {
+    void InterestGrid::GatherCandidates(const InterestCells &grid, const glm::vec3 &center, float radius, EntitySet &out) {
         if (!_ready) {
             return;
         }
-        const float centerV = GroundV(center);
-        _queryHits.Clear(true, _FILE_AND_LINE_);
-        grid.GetEntries(_queryHits, center.x - radius, centerV - radius, center.x + radius, centerV + radius);
-
-        for (unsigned i = 0; i < _queryHits.Size(); ++i) {
-            auto *entity = static_cast<NetworkEntity *>(_queryHits[i]);
+        const float centerV   = GroundV(center);
+        const bool anyRemoved = !_removed.empty();
+        grid.ForEachEntry(center.x - radius, centerV - radius, center.x + radius, centerV + radius, [&](void *entry) {
+            auto *entity = static_cast<NetworkEntity *>(entry);
             // The grid can hold entries for entities destroyed since the last rebuild; only _live
             // pointers are safe to dereference.
-            if (!entity || !_live.contains(entity)) {
-                continue;
+            if (!entity || (anyRemoved && _removed.contains(entity))) {
+                return;
             }
             // Multi-cell entries and overlapping focus points repeat; the set dedupes.
             out.insert(entity);
-        }
+        });
     }
 
     float InterestGrid::NearestFocusDistSq(const glm::vec3 &p) const {
@@ -195,12 +206,12 @@ namespace Framework::Networking::Replication {
         ++_generation;
     }
 
-    const std::unordered_set<NetworkEntity *> *InterestGrid::OwnedBy(MafiaNet::PeerGuid guid) const {
+    const EntitySet *InterestGrid::OwnedBy(MafiaNet::PeerGuid guid) const {
         const auto it = _ownedByGuid.find(guid);
         return it != _ownedByGuid.end() ? &it->second : nullptr;
     }
 
-    void InterestGrid::CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::unordered_set<NetworkEntity *> &previous, std::unordered_set<NetworkEntity *> &out) {
+    void InterestGrid::CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const EntitySet &previous, EntitySet &out) {
         if (!viewer) {
             return;
         }
@@ -252,7 +263,10 @@ namespace Framework::Networking::Replication {
 
         // Owned and always-visible entities are skipped here and added unconditionally below: they
         // bypass range culling anyway, and counting them would let one player's cars evict others'.
-        _ranked.clear();
+        // Emptied in place, so each budgeted type keeps its buffer.
+        for (auto &[typeId, ranked] : _ranked) {
+            ranked.clear();
+        }
         for (NetworkEntity *entity : _candidates) {
             if (entity == viewer || entity->ownerGUID == viewerGUID || entity->streaming.alwaysVisible) {
                 continue;
@@ -313,11 +327,10 @@ namespace Framework::Networking::Replication {
             out.insert(viewer);
         }
 
-        // A survivor drags in the entity it cannot be shown without, uncounted. Snapshotted first:
-        // inserting into `out` while iterating it would invalidate the iteration.
-        _dependencyScan.assign(out.begin(), out.end());
-        for (NetworkEntity *entity : _dependencyScan) {
-            NetworkEntity *dependency = entity->GetInterestDependency();
+        // A survivor drags in the entity it cannot be shown without, uncounted. Walked by index up to
+        // the survivors alone: inserting appends, so it neither moves them nor scans what it adds.
+        for (size_t i = 0, survivors = out.size(); i < survivors; ++i) {
+            NetworkEntity *dependency = out[i]->GetInterestDependency();
             if (!dependency || !_live.contains(dependency)) {
                 continue;
             }

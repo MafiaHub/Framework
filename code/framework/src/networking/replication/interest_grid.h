@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "entity_set.h"
 #include "network_entity.h"
 
 #include <mafianet/ds_list.h>
@@ -21,6 +22,25 @@
 #include <vector>
 
 namespace Framework::Networking::Replication {
+    // GridSectorizer::GetEntries copies its hits into a list it clears itself, which frees any list
+    // past 512 entries, so every wide query grew one from scratch. This walks the same cells in place.
+    class InterestCells final: public GridSectorizer {
+      public:
+        template <typename Visit>
+        void ForEachEntry(float minX, float minY, float maxX, float maxY, Visit &&visit) const {
+            const int xEnd = WorldToCellXOffsetAndClamped(maxX);
+            const int yEnd = WorldToCellYOffsetAndClamped(maxY);
+            for (int x = WorldToCellXOffsetAndClamped(minX); x <= xEnd; ++x) {
+                for (int y = WorldToCellYOffsetAndClamped(minY); y <= yEnd; ++y) {
+                    const DataStructures::List<void *> &cell = grid[y * gridCellWidthCount + x];
+                    for (unsigned i = 0; i < cell.Size(); ++i) {
+                        visit(cell[i]);
+                    }
+                }
+            }
+        }
+    };
+
     // Server-side spatial interest index, split out of ReplicationManager so the relevance data and
     // the queries over it live in one place. GridSectorizer has no incremental removal, so it is
     // rebuilt from scratch each tick: BeginRebuild() then Insert() per live entity. The owned-by-guid
@@ -29,8 +49,8 @@ namespace Framework::Networking::Replication {
     //
     // The grid itself cannot drop an entry between rebuilds (the vendored GridSectorizer compiles
     // without removal support), so a parallel live-entity set is the deletion authority: Remove()
-    // drops the entity there and every query filters grid hits through it, which is what keeps an
-    // intra-tick DestroyEntity from handing out a dangling pointer.
+    // drops the entity there and records it as removed, and every query filters grid hits through
+    // the removals, which is what keeps an intra-tick DestroyEntity from handing out a dangling pointer.
     class InterestGrid final {
       public:
         // Spatial index extent. Defaults cover a 20km² map at 100m cells (~40k cells). Pick bounds
@@ -103,7 +123,7 @@ namespace Framework::Networking::Replication {
         // `previous` is the viewer's relevant set from the last computation and drives both
         // hysteresis rules (stream-out margin, sticky ranking). Membership only — the pointers are
         // compared, never dereferenced, so a stale entry is harmless.
-        void CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const std::unordered_set<NetworkEntity *> &previous, std::unordered_set<NetworkEntity *> &out);
+        void CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const EntitySet &previous, EntitySet &out);
 
       private:
         // An in-range candidate and its budget-ranking distance (sticky discount folded in).
@@ -114,7 +134,7 @@ namespace Framework::Networking::Replication {
 
         // Live entities whose cell overlaps the query box. No exact distance test: CollectVisible
         // applies each candidate's own range.
-        void GatherCandidates(GridSectorizer &grid, const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out);
+        void GatherCandidates(const InterestCells &grid, const glm::vec3 &center, float radius, EntitySet &out);
 
         // Second ground-plane axis (the first is always X): Y when _groundXY, else Z.
         float GroundV(const glm::vec3 &p) const {
@@ -129,8 +149,8 @@ namespace Framework::Networking::Replication {
         // Streaming radius of one candidate for this viewer, before the stream-out margin.
         float RangeFor(const NetworkEntity *entity, float viewerRange) const;
 
-        const std::unordered_set<NetworkEntity *> *OwnedBy(MafiaNet::PeerGuid guid) const;
-        const std::unordered_set<NetworkEntity *> &AlwaysVisible() const {
+        const EntitySet *OwnedBy(MafiaNet::PeerGuid guid) const;
+        const EntitySet &AlwaysVisible() const {
             return _alwaysVisible;
         }
 
@@ -150,25 +170,26 @@ namespace Framework::Networking::Replication {
         // Widest per-entity range in the current rebuild; the grid query must reach that far.
         float _maxEntityRange = 0.0f;
         uint32_t _generation  = 0;
-        GridSectorizer _grid;
+        InterestCells _grid;
         // Entities of the types that use their own range, and the widest of those ranges; see
         // SetUsesEntityRange. Initialised and cleared only once a project files anything here.
-        GridSectorizer _ownRangeGrid;
+        InterestCells _ownRangeGrid;
         bool _ownRangeReady     = false;
         size_t _ownRangeEntries = 0;
         float _maxOwnRange      = 0.0f;
         std::unordered_map<uint32_t, uint32_t> _budgets;
         std::unordered_set<uint32_t> _entityRangeTypes;
-        std::unordered_map<MafiaNet::PeerGuid, std::unordered_set<NetworkEntity *>> _ownedByGuid;
-        std::unordered_set<NetworkEntity *> _alwaysVisible;
-        // Entities currently in the index; grid hits are filtered through it (see class comment).
-        std::unordered_set<NetworkEntity *> _live;
+        std::unordered_map<MafiaNet::PeerGuid, EntitySet> _ownedByGuid;
+        EntitySet _alwaysVisible;
+        // Entities currently in the index.
+        EntitySet _live;
+        // Removed since the rebuild; grid hits are filtered through it (see class comment). The grid
+        // holds only inserts, so this short list stands in for a lookup among every live entity.
+        EntitySet _removed;
         // Scratch containers reused across queries so the per-connection-per-tick hot path performs
         // no steady-state allocations (clear() keeps the buckets/capacity).
-        DataStructures::List<void *> _queryHits;
-        std::unordered_set<NetworkEntity *> _candidates;
+        EntitySet _candidates;
         std::vector<glm::vec3> _focus;
         std::unordered_map<uint32_t, std::vector<Ranked>> _ranked;
-        std::vector<NetworkEntity *> _dependencyScan;
     };
 } // namespace Framework::Networking::Replication

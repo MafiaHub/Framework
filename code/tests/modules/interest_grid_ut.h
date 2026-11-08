@@ -9,15 +9,20 @@
 #pragma once
 
 #include "networking/replication/entity_registry.h"
+#include "networking/replication/entity_set.h"
 #include "networking/replication/interest_grid.h"
 #include "networking/replication/network_entity.h"
 
 #include <glm/glm.hpp>
 #include <mafianet/types.h>
+#include <mafianet/virtual_world.h>
 
+#include <algorithm>
 #include <memory>
+#include <random>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 // The server's relevance rule: per-entity streaming range, the stream-out margin, the velocity
@@ -34,6 +39,7 @@ class InterestDependentEntity final : public Framework::Networking::Replication:
 
 MODULE(interest_grid, {
     using Framework::Networking::Replication::EntityRegistry;
+    using Framework::Networking::Replication::EntitySet;
     using Framework::Networking::Replication::InterestGrid;
     using Framework::Networking::Replication::NetworkEntity;
 
@@ -53,7 +59,7 @@ MODULE(interest_grid, {
 
     const MafiaNet::PeerGuid viewerGuid   = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(7));
     const MafiaNet::PeerGuid strangerGuid = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(9));
-    const std::unordered_set<NetworkEntity *> nothingBefore;
+    const EntitySet nothingBefore;
 
     // Measure on XY, leaving Z as height, as m2o does.
     auto freshGrid = [](InterestGrid &grid) {
@@ -75,7 +81,7 @@ MODULE(interest_grid, {
         grid.Insert(nearby);
         grid.Insert(distant);
 
-        std::unordered_set<NetworkEntity *> out;
+        EntitySet out;
         grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
 
         EQUALS(out.contains(nearby), true);
@@ -99,7 +105,7 @@ MODULE(interest_grid, {
         grid.Insert(farCar);
         grid.Insert(farPed);
 
-        std::unordered_set<NetworkEntity *> out;
+        EntitySet out;
         grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
 
         EQUALS(out.contains(farCar), true);
@@ -136,8 +142,8 @@ MODULE(interest_grid, {
         grid.Insert(otherType);
         grid.Insert(leaving);
 
-        const std::unordered_set<NetworkEntity *> before {leaving};
-        std::unordered_set<NetworkEntity *> out;
+        const EntitySet before {leaving};
+        EntitySet out;
         grid.CollectVisible(viewer, viewerGuid, before, out);
 
         EQUALS(out.contains(nearChest), true);
@@ -171,14 +177,14 @@ MODULE(interest_grid, {
         grid.Insert(pacing);
 
         // Not previously relevant: the margin must not pull it in early.
-        std::unordered_set<NetworkEntity *> cold;
+        EntitySet cold;
         grid.CollectVisible(viewer, viewerGuid, nothingBefore, cold);
         EQUALS(cold.contains(pacing), false);
 
         // Previously relevant: it holds.
-        std::unordered_set<NetworkEntity *> previous;
+        EntitySet previous;
         previous.insert(pacing);
-        std::unordered_set<NetworkEntity *> warm;
+        EntitySet warm;
         grid.CollectVisible(viewer, viewerGuid, previous, warm);
         EQUALS(warm.contains(pacing), true);
 
@@ -187,7 +193,7 @@ MODULE(interest_grid, {
         grid.BeginRebuild();
         grid.Insert(viewer);
         grid.Insert(pacing);
-        std::unordered_set<NetworkEntity *> gone;
+        EntitySet gone;
         grid.CollectVisible(viewer, viewerGuid, previous, gone);
         EQUALS(gone.contains(pacing), false);
     });
@@ -210,7 +216,7 @@ MODULE(interest_grid, {
         grid.Insert(ahead);
         grid.Insert(behind);
 
-        std::unordered_set<NetworkEntity *> out;
+        EntitySet out;
         grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
 
         EQUALS(out.contains(ahead), true);
@@ -240,7 +246,7 @@ MODULE(interest_grid, {
         grid.Insert(b110);
         grid.Insert(b120);
 
-        std::unordered_set<NetworkEntity *> out;
+        EntitySet out;
         grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
 
         EQUALS(out.contains(a10), true);
@@ -268,9 +274,9 @@ MODULE(interest_grid, {
         grid.Insert(incumbent);
         grid.Insert(challenger);
 
-        std::unordered_set<NetworkEntity *> previous;
+        EntitySet previous;
         previous.insert(incumbent);
-        std::unordered_set<NetworkEntity *> out;
+        EntitySet out;
         grid.CollectVisible(viewer, viewerGuid, previous, out);
 
         EQUALS(out.contains(incumbent), true);
@@ -282,7 +288,7 @@ MODULE(interest_grid, {
         grid.Insert(viewer);
         grid.Insert(incumbent);
         grid.Insert(challenger);
-        std::unordered_set<NetworkEntity *> swapped;
+        EntitySet swapped;
         grid.CollectVisible(viewer, viewerGuid, previous, swapped);
         EQUALS(swapped.contains(challenger), true);
         EQUALS(swapped.contains(incumbent), false);
@@ -308,7 +314,7 @@ MODULE(interest_grid, {
         grid.Insert(viewer);
         grid.Insert(granted);
 
-        std::unordered_set<NetworkEntity *> before;
+        EntitySet before;
         grid.CollectVisible(viewer, viewerGuid, nothingBefore, before);
         EQUALS(before.contains(granted), false);
 
@@ -319,7 +325,7 @@ MODULE(interest_grid, {
         granted->ownerGUID = viewerGuid;
         grid.Reown(granted, MafiaNet::UNASSIGNED_PEER_GUID);
 
-        std::unordered_set<NetworkEntity *> after;
+        EntitySet after;
         grid.CollectVisible(viewer, viewerGuid, before, after);
         EQUALS(after.contains(granted), true);
         // Viewers cache their relevant set against the generation, so it has to move or nobody
@@ -340,14 +346,14 @@ MODULE(interest_grid, {
         grid.Insert(viewer);
         grid.Insert(released);
 
-        std::unordered_set<NetworkEntity *> owned;
+        EntitySet owned;
         grid.CollectVisible(viewer, viewerGuid, nothingBefore, owned);
         EQUALS(owned.contains(released), true);
 
         released->ownerGUID = MafiaNet::UNASSIGNED_PEER_GUID;
         grid.Reown(released, viewerGuid);
 
-        std::unordered_set<NetworkEntity *> handedBack;
+        EntitySet handedBack;
         grid.CollectVisible(viewer, viewerGuid, owned, handedBack);
         EQUALS(handedBack.contains(released), false);
     });
@@ -372,7 +378,7 @@ MODULE(interest_grid, {
         grid.Insert(global);
         grid.Insert(stranger);
 
-        std::unordered_set<NetworkEntity *> out;
+        EntitySet out;
         grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
 
         EQUALS(out.contains(mine), true);
@@ -402,7 +408,7 @@ MODULE(interest_grid, {
         grid.Insert(farCar);
         grid.Insert(rider);
 
-        std::unordered_set<NetworkEntity *> out;
+        EntitySet out;
         grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
 
         EQUALS(out.contains(rider), true);
@@ -423,7 +429,7 @@ MODULE(interest_grid, {
         grid.Insert(doomed);
         grid.Remove(doomed);
 
-        std::unordered_set<NetworkEntity *> out;
+        EntitySet out;
         grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
         EQUALS(out.contains(doomed), false);
     });
@@ -445,7 +451,7 @@ MODULE(interest_grid, {
         grid.Insert(global);
 
         const auto sees = [&](NetworkEntity *entity) {
-            std::unordered_set<NetworkEntity *> out;
+            EntitySet out;
             grid.CollectVisible(viewer, viewerGuid, nothingBefore, out);
             return out.contains(entity);
         };
@@ -476,5 +482,194 @@ MODULE(interest_grid, {
         EQUALS(nearby->streaming.viewers->only->empty(), true);
         EQUALS(global->streaming.viewers == nullptr, true);
         EQUALS(sees(global), true);
+    });
+
+    IT("keeps an entity set's members through inserts, erases and clears", {
+        std::vector<NetworkEntity *> pool;
+        for (int i = 0; i < 300; ++i) {
+            pool.push_back(make(typeA, 0.0f, 0.0f));
+        }
+        EntitySet set;
+        std::unordered_set<NetworkEntity *> model;
+        std::mt19937 rng(99);
+        int mismatches = 0;
+        for (int step = 0; step < 20000; ++step) {
+            NetworkEntity *entity = pool[rng() % pool.size()];
+            const unsigned op     = rng() % 100;
+            if (op < 50) {
+                mismatches += set.insert(entity) != model.insert(entity).second;
+            }
+            else if (op < 80) {
+                mismatches += set.erase(entity) != (model.erase(entity) != 0);
+            }
+            else if (op < 81 && rng() % 20 == 0) {
+                set.clear();
+                model.clear();
+            }
+            else {
+                mismatches += set.contains(entity) != model.contains(entity);
+            }
+            mismatches += set.size() != model.size();
+        }
+        for (NetworkEntity *entity : set) {
+            mismatches += !model.contains(entity);
+        }
+        // Grown wide, then cleared while nearly empty.
+        for (NetworkEntity *entity : pool) {
+            set.insert(entity);
+        }
+        for (size_t i = 10; i < pool.size(); ++i) {
+            set.erase(pool[i]);
+        }
+        set.clear();
+        for (NetworkEntity *entity : pool) {
+            mismatches += set.contains(entity);
+        }
+        EQUALS(mismatches, 0);
+        EQUALS(set.empty(), true);
+    });
+
+    // The grid only narrows the search: what it returns must be the relevance rule applied to every
+    // live entity directly, through hysteresis, budgets, removals, worlds and dependencies.
+    IT("returns what the relevance rule gives by brute force", {
+        const uint32_t typeOwnRange = EntityRegistry::Get().Register<NetworkEntity>("Test::InterestOwnRange");
+        constexpr float kMargin     = 20.0f;
+        constexpr uint32_t kBudget  = 3;
+        InterestGrid grid;
+        freshGrid(grid);
+        grid.SetBudget(typeB, kBudget);
+        grid.SetUsesEntityRange(typeOwnRange, true);
+        grid.SetStreamOutMargin(kMargin);
+        grid.SetLookaheadSeconds(1.0f);
+
+        std::mt19937 rng(1234);
+        std::uniform_real_distribution<float> coord(-600.0f, 600.0f);
+        std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+        NetworkEntity *viewer   = make(typeA, 0.0f, 0.0f);
+        viewer->streaming.range = 200.0f;
+        std::vector<NetworkEntity *> world;
+        for (int i = 0; i < 400; ++i) {
+            const float kind           = unit(rng);
+            NetworkEntity *e           = make(kind < 0.1f ? typeHolder : kind < 0.4f ? typeA : kind < 0.7f ? typeB : typeOwnRange, coord(rng), coord(rng));
+            e->streaming.range         = unit(rng) < 0.5f ? 0.0f : 50.0f + unit(rng) * 250.0f;
+            e->streaming.visible       = unit(rng) > 0.05f;
+            e->streaming.alwaysVisible = unit(rng) < 0.03f;
+            const float owner          = unit(rng);
+            e->ownerGUID               = owner < 0.05f ? viewerGuid : owner < 0.1f ? strangerGuid : MafiaNet::UNASSIGNED_PEER_GUID;
+            if (unit(rng) < 0.05f) {
+                e->streaming.targetGUID = unit(rng) < 0.5f ? viewerGuid : strangerGuid;
+            }
+            if (unit(rng) < 0.1f) {
+                e->SetVirtualWorld(1);
+            }
+            world.push_back(e);
+        }
+        for (NetworkEntity *e : world) {
+            if (e->GetTypeId() == typeHolder) {
+                static_cast<InterestDependentEntity *>(e)->dependency = world[rng() % world.size()];
+            }
+        }
+
+        const auto admits = [&](const NetworkEntity *e) {
+            return e->streaming.Admits(viewerGuid);
+        };
+        const auto targeted = [](const NetworkEntity *e) {
+            return e->streaming.targetGUID != MafiaNet::UNASSIGNED_PEER_GUID;
+        };
+        const auto sameWorld = [&](const NetworkEntity *e) {
+            return MafiaNet::VirtualWorldsCanSee(e->GetVirtualWorld(), viewer->GetVirtualWorld());
+        };
+        const auto bruteForce = [&](const std::unordered_set<NetworkEntity *> &live, const EntitySet &previous) {
+            std::vector<glm::vec2> focus {glm::vec2(viewer->position)};
+            const glm::vec2 lean = glm::vec2(viewer->velocity);
+            if (glm::dot(lean, lean) > 25.0f) {
+                focus.push_back(glm::vec2(viewer->position) + lean);
+            }
+            const auto distSq = [&](const NetworkEntity *e) {
+                float best = 1e30f;
+                for (const glm::vec2 &f : focus) {
+                    const glm::vec2 d = glm::vec2(e->position) - f;
+                    best              = std::min(best, glm::dot(d, d));
+                }
+                return best;
+            };
+            std::unordered_set<NetworkEntity *> out;
+            std::vector<std::pair<float, NetworkEntity *>> ranked;
+            for (NetworkEntity *e : live) {
+                if (e == viewer || e->ownerGUID == viewerGuid || e->streaming.alwaysVisible || !e->streaming.visible || !admits(e)) {
+                    continue;
+                }
+                if (!targeted(e) && !sameWorld(e)) {
+                    continue;
+                }
+                const bool was = previous.contains(e);
+                float range    = e->GetTypeId() == typeOwnRange ? e->streaming.range : std::max(viewer->streaming.range, e->streaming.range);
+                range += was ? kMargin : 0.0f;
+                const float d = distSq(e);
+                if (d > range * range) {
+                    continue;
+                }
+                if (e->GetTypeId() == typeB) {
+                    ranked.push_back({was ? d * 0.72f : d, e});
+                }
+                else {
+                    out.insert(e);
+                }
+            }
+            std::sort(ranked.begin(), ranked.end());
+            for (size_t i = 0; i < ranked.size() && i < kBudget; ++i) {
+                out.insert(ranked[i].second);
+            }
+            for (NetworkEntity *e : live) {
+                const bool always = e->streaming.alwaysVisible && (targeted(e) || sameWorld(e));
+                if ((e->ownerGUID == viewerGuid || always) && e->streaming.visible && admits(e)) {
+                    out.insert(e);
+                }
+            }
+            out.insert(viewer);
+            const std::vector<NetworkEntity *> survivors(out.begin(), out.end());
+            for (NetworkEntity *e : survivors) {
+                NetworkEntity *dependency = e->GetInterestDependency();
+                if (dependency && live.contains(dependency) && dependency->streaming.visible && admits(dependency)) {
+                    out.insert(dependency);
+                }
+            }
+            return out;
+        };
+
+        EntitySet previous;
+        int mismatches = 0;
+        size_t seen    = 0;
+        for (int step = 0; step < 30; ++step) {
+            viewer->velocity = glm::vec3(coord(rng) * 0.1f, coord(rng) * 0.1f, 0.0f);
+            viewer->position += glm::vec3(coord(rng) * 0.05f, coord(rng) * 0.05f, 0.0f);
+            for (NetworkEntity *e : world) {
+                e->position += glm::vec3(coord(rng) * 0.02f, coord(rng) * 0.02f, 0.0f);
+            }
+            std::unordered_set<NetworkEntity *> live {viewer};
+            grid.BeginRebuild();
+            grid.Insert(viewer);
+            for (NetworkEntity *e : world) {
+                grid.Insert(e);
+                live.insert(e);
+            }
+            for (NetworkEntity *e : world) {
+                if (unit(rng) < 0.03f) {
+                    grid.Remove(e);
+                    live.erase(e);
+                }
+            }
+            EntitySet out;
+            grid.CollectVisible(viewer, viewerGuid, previous, out);
+            const std::unordered_set<NetworkEntity *> expected = bruteForce(live, previous);
+            mismatches += out.size() != expected.size();
+            for (NetworkEntity *e : expected) {
+                mismatches += !out.contains(e);
+            }
+            seen += out.size();
+            previous = out;
+        }
+        EQUALS(mismatches, 0);
+        GREATER(seen, size_t {30 * 40});
     });
 })
