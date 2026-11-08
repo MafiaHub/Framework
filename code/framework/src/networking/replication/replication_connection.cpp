@@ -78,18 +78,22 @@ namespace Framework::Networking::Replication {
             return;
         }
 
-        for (NetworkEntity *entity : _relevant) {
-            if (!HasReplicaConstructed(entity)) {
-                newReplicasToCreate.Push(entity, _FILE_AND_LINE_);
+        std::size_t constructedRelevant = 0;
+        for (unsigned i = 0; i < constructedReplicaList.Size(); ++i) {
+            auto *entity = static_cast<NetworkEntity *>(constructedReplicaList[i]->replica);
+            if (_relevant.contains(entity)) {
+                ++constructedRelevant;
+            }
+            else if (entity) {
+                existingReplicasToDestroy.Push(entity, _FILE_AND_LINE_);
             }
         }
-
-        DataStructures::List<MafiaNet::Replica3 *> constructed;
-        GetConstructedReplicas(constructed);
-        for (unsigned i = 0; i < constructed.Size(); ++i) {
-            auto *entity = static_cast<NetworkEntity *>(constructed[i]);
-            if (entity && !_relevant.contains(entity)) {
-                existingReplicasToDestroy.Push(entity, _FILE_AND_LINE_);
+        // Every relevant entity was found constructed, so none needs the lookup.
+        if (constructedRelevant != _relevant.size()) {
+            for (NetworkEntity *entity : _relevant) {
+                if (!HasReplicaConstructed(entity)) {
+                    newReplicasToCreate.Push(entity, _FILE_AND_LINE_);
+                }
             }
         }
         _diffSettled = newReplicasToCreate.Size() == 0 && existingReplicasToDestroy.Size() == 0;

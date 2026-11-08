@@ -189,6 +189,47 @@ MODULE(network_work, {
         manager->DestroyEntity(viewer);
     });
 
+    IT("swaps one replica for another in a single refresh", {
+        using namespace Framework::Networking::Replication;
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        manager->ConfigureGrid(100, -4096, 4096);
+        const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::QueryDiffSwap");
+        auto *viewer            = manager->CreateEntity(type);
+        auto *leaving           = manager->CreateEntity(type);
+        auto *arriving          = manager->CreateEntity(type);
+        viewer->streaming.range = 100;
+        arriving->position.x    = 1000;
+        const MafiaNet::RakNetGUID viewerGuid(95);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->RebuildInterest();
+        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+
+        connection->AutoConstructByQuery(manager, 0);
+        EQUALS(connection->HasReplicaConstructed(leaving), true);
+        EQUALS(connection->HasReplicaConstructed(arriving), false);
+
+        // The constructed count matches the new interest set, but its members differ.
+        leaving->position.x  = 1000;
+        arriving->position.x = 0;
+        manager->RebuildInterest();
+        connection->AutoConstructByQuery(manager, 0);
+        EQUALS(connection->HasReplicaConstructed(leaving), false);
+        EQUALS(connection->HasReplicaConstructed(arriving), true);
+
+        manager->DestroyEntity(arriving);
+        manager->DestroyEntity(leaving);
+        manager->DestroyEntity(viewer);
+    });
+
     IT("refuses replica constructions from a client", {
         using namespace Framework::Networking::Replication;
         Framework::Networking::NetworkServer peer;
