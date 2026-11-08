@@ -529,6 +529,7 @@ namespace Framework::Scripting::Builtins {
 
                 // Wrap non-promise values in resolved promise
                 if (result->IsPromise()) {
+                    ReportHandlerRejection(isolate, context, result.As<v8::Promise>(), logContext, eventName);
                     promises->Set(context, static_cast<uint32_t>(i), result).Check();
                 }
                 else {
@@ -546,6 +547,41 @@ namespace Framework::Scripting::Builtins {
         }
 
         return promises;
+    }
+
+    void Events::ReportHandlerRejection(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Promise> promise, const std::string &resourceName, const std::string &eventName) {
+        // Built packed, so an indexed accessor a script put on Array.prototype cannot reach it.
+        v8::Local<v8::Value> parts[] = {v8pp::to_v8(isolate, resourceName), v8pp::to_v8(isolate, eventName)};
+        v8::Local<v8::Array> names   = v8::Array::New(isolate, parts, 2);
+        v8::Local<v8::Function> report;
+        if (v8::Function::New(context, LogHandlerRejection, names).ToLocal(&report)) {
+            (void)promise->Catch(context, report);
+        }
+    }
+
+    void Events::LogHandlerRejection(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate = info.GetIsolate();
+        // A reason's stack getter or toString can throw; this reaction must not, or its own promise rejects.
+        v8::TryCatch tryCatch(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        v8::Local<v8::Array> names     = info.Data().As<v8::Array>();
+        v8::Local<v8::Value> reason    = info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>();
+
+        // As the runtime's own unhandled-rejection report reads it: the stack of an error, else the value as text.
+        std::string text;
+        v8::Local<v8::Value> stack;
+        if (reason->IsObject() && reason.As<v8::Object>()->Get(context, v8pp::to_v8(isolate, "stack")).ToLocal(&stack) && stack->IsString()) {
+            text = ToUtf8(isolate, stack);
+        }
+        if (text.empty()) {
+            text = ToUtf8(isolate, reason);
+        }
+
+        v8::Local<v8::Value> resource;
+        v8::Local<v8::Value> event;
+        if (names->Get(context, 0).ToLocal(&resource) && names->Get(context, 1).ToLocal(&event)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Event '{}' handler error: {}", ToUtf8(isolate, resource), ToUtf8(isolate, event), text.empty() ? "Unknown error in event handler" : text);
+        }
     }
 
     void Events::RemovePendingCallback(AllSettledCallbackData *data) {
@@ -582,6 +618,10 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Events::AggregateWithAllSettled(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Array> promises, v8::Local<v8::Promise::Resolver> resolver, const std::string &aggregateErrorMessage) {
+        // Each handler's failure was logged under its own resource. An emitter that awaits still gets the
+        // AggregateError; one that does not must not have it raised as its own unhandled rejection.
+        resolver->GetPromise()->MarkAsHandled();
+
         // Get Promise.allSettled
         v8::MaybeLocal<v8::Value> maybePromiseCtor = context->Global()->Get(context, v8pp::to_v8(isolate, "Promise"));
         if (maybePromiseCtor.IsEmpty() || !maybePromiseCtor.ToLocalChecked()->IsObject()) {
@@ -845,6 +885,10 @@ namespace Framework::Scripting::Builtins {
             v8::Local<v8::Value> result;
             if (maybeResult.ToLocal(&result) && result->IsBoolean() && !result->IsTrue()) {
                 proceed = false;
+            }
+            // Nothing waits on an async handler here: its failure is still its own, not an unhandled rejection.
+            else if (!result.IsEmpty() && result->IsPromise()) {
+                ReportHandlerRejection(isolate, context, result.As<v8::Promise>(), logContext, eventName);
             }
         }
 

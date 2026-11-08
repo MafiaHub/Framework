@@ -222,6 +222,10 @@ namespace Framework::Scripting::Builtins {
         // handler running past the resource monitor's threshold is reported under `eventName`.
         v8::MaybeLocal<v8::Value> InvokeHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, std::optional<std::vector<TransferredValue>> &copied, std::string_view eventName);
 
+        // Logs a rejection of the promise a handler returned under the handler's resource, as a throw is logged.
+        static void ReportHandlerRejection(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Promise> promise, const std::string &resourceName, const std::string &eventName);
+        static void LogHandlerRejection(const v8::FunctionCallbackInfo<v8::Value> &info);
+
         // Forward declaration for callback data tracking
         struct AllSettledCallbackData;
 

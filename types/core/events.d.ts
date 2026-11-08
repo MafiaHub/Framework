@@ -32,7 +32,9 @@ declare const Events: {
     /**
      * Emit an event globally. Reserved events cannot be emitted.
      * Resolves when all handlers complete; rejects with
-     * `AggregateError` if any handler fails.
+     * `AggregateError` if any handler fails. Each failure is also logged under
+     * its handler's resource, so an emission left unawaited is not an unhandled
+     * rejection; a `.then` or `.finally` chained on it without a rejection handler still is.
      * @param eventName Shared event name; framework-reserved names cannot be emitted by scripts.
      * @param args Arguments delivered to every matching handler.
      */

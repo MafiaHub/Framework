@@ -160,7 +160,8 @@ An event or message handler in another resource is called for its outcome
 only: what it returns is never copied back, so returning an object that cannot
 cross (a timer, a socket) is not an error. A returned `false` still vetoes a
 cancellable event, a returned promise is still waited on, and a throw or
-rejection still reaches the emitter.
+rejection still reaches the emitter. It is also logged under the handler's
+resource, and an emission nobody awaits is not the emitter's unhandled rejection.
 
 Shared memory cannot be shared between resources. Each environment frees its
 array buffers through its own allocator, which dies with the resource, so a

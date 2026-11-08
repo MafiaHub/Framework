@@ -529,6 +529,50 @@ MODULE(resource_isolation, {
         engine.Shutdown();
         TestManagerHelper::Cleanup();
     });
+    IT("keeps a failed handler's error out of an emitter that does not await the emission", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("listener", R"(
+            Events.on('left', () => { throw new Error('listener fixture'); });
+            Events.on('left', async () => { throw new Error('async listener fixture'); });
+        )");
+        ResourceIsolationTest::WriteResource("announcer", R"(
+            setTimeout(() => {
+                Events.emit('left', 1);
+                Events.emit('left', 2).catch((error) => __record('awaitedFailures', error instanceof AggregateError ? error.errors.length : -2));
+            }, 1);
+        )");
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 2u);
+        EQUALS((bool)manager.StartResource("listener"), true);
+        EQUALS((bool)manager.StartResource("announcer"), true);
+
+        // Settle both emissions, then give an unhandled rejection the ticks it would take to surface.
+        std::vector<NodeEngine::PendingUncaughtError> errors;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        for (int settledTicks = 0; settledTicks < 50 && std::chrono::steady_clock::now() < deadline;) {
+            engine.Tick();
+            // Handled as the server does, so an error raised against the emitter would stop it.
+            for (auto &error : engine.DrainPendingErrors()) {
+                manager.HandleResourceRuntimeError(error.resourceName, error.errorMessage);
+                errors.push_back(std::move(error));
+            }
+            settledTicks += TestManagerHelper::Recorded().contains("awaitedFailures") ? 1 : 0;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        // An emitter that waits still learns that both handlers failed.
+        EQUALS(TestManagerHelper::RecordedValue("awaitedFailures"), 2);
+        EQUALS(errors.size(), 0u);
+        EQUALS(manager.IsResourceRunning("announcer"), true);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
     IT("stops only the resource that calls process.exit(), not the server", {
         TestManagerHelper::Cleanup();
         ResourceIsolationTest::WriteResource("quitter", "setTimeout(() => { process.exit(3); __record('afterExit', 1); }, 1);");
