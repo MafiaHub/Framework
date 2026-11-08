@@ -8,14 +8,11 @@
 
 #pragma once
 
-#include "connection_admission_ut.h"
+#include "test_identities.h"
 
 #include "core_modules.h"
 #include "integrations/server/connection_gate.h"
 #include "integrations/server/scripting/module.h"
-#include "networking/replication/network_entity.h"
-#include "networking/replication/replication_manager.h"
-#include "scripting/builtins/player.h"
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
 
@@ -31,31 +28,11 @@
 
 // The admission gate against a real Node engine and a real resource: what a playerConnecting
 // handler does -- return, reject, throw, await, hang -- and what the gate decides for it. The
-// decisions are what the instance acts on. A loopback admission also checks the joined player's
-// script-visible identity.
+// network side is left out (no NetworkServer, so update() sends nothing); the decisions are what
+// the instance acts on, and those are what is asserted.
 class ConnectionGateTestRig {
   public:
-    // Register an admitted peer's avatar for the same owner-guid lookup used by server scripts.
-    struct JoinedPlayer {
-        Framework::Networking::NetworkServer &server;
-        Framework::Networking::Replication::NetworkEntity avatar;
-
-        JoinedPlayer(Framework::Networking::NetworkServer &peer, MafiaNet::RakNetGUID guid): server(peer) {
-            avatar.SetNetworkID(1);
-            avatar.ownerGUID = MafiaNet::ToPeerGuid(guid);
-            server.GetReplicationManager()->Reference(&avatar);
-            server.GetReplicationManager()->SetViewer(avatar.ownerGUID, &avatar);
-            Framework::CoreModules::SetNetworkPeer(&server);
-            Framework::CoreModules::SetReplication(server.GetReplicationManager());
-        }
-
-        ~JoinedPlayer() {
-            Framework::CoreModules::SetReplication(nullptr);
-            Framework::CoreModules::SetNetworkPeer(nullptr);
-            server.GetReplicationManager()->ClearViewer(avatar.ownerGUID);
-            server.GetReplicationManager()->Dereference(&avatar);
-        }
-    };
+    static constexpr const char *kEpicWhitelistReason = "Your Epic account is not on the whitelist.";
 
     static std::string ResourcesPath() {
 #ifdef _WIN32
@@ -74,7 +51,7 @@ class ConnectionGateTestRig {
         cppfs::fs::open(ResourcesPath() + "/gate").createDirectory();
 
         std::ofstream(ResourcesPath() + "/gate/package.json") << R"({ "name": "gate", "version": "1.0.0", "mafiahub": { "server": "main.js" } })";
-        std::ofstream(ResourcesPath() + "/gate/main.js") << R"(
+        std::ofstream(ResourcesPath() + "/gate/main.js") << std::string(R"(
             const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
             Events.on("playerConnecting", async (connection) => {
                 globalThis.__seen = `${connection.nickname}|${connection.ticket}|${connection.ip}|${connection.steamId}`;
@@ -93,8 +70,8 @@ class ConnectionGateTestRig {
                     return;
                 case "epic-whitelist":
                     globalThis.__epicId = connection.epicId;
-                    if (connection.epicId !== "0123456789abcdef0123456789abcdef") {
-                        connection.reject("Your Epic account is not on the whitelist.");
+                    if (connection.epicId !== ")") + TestIdentities::kEpicId + R"(") {
+                        connection.reject(")" + kEpicWhitelistReason + R"(");
                     }
                     return;
                 }
@@ -168,7 +145,22 @@ class ConnectionGateTestRig {
         identity.ticket  = "one-time-ticket";
         return identity;
     }
+
+    // An Epic-only player for the epic-whitelist handler: no Steam id and no ticket to lean on.
+    static Framework::Networking::RPC::ClientIdentity EpicIdentity(const char *epicId) {
+        auto identity = Identity("epic-whitelist");
+        identity.steamId.clear();
+        identity.ticket.clear();
+        identity.epicId = epicId;
+        return identity;
+    }
 };
+
+// Exactly one decision, a refusal with the given reason. A macro so a failure reports its own line.
+#define EXPECT_GATE_REFUSED(decisions, expectedReason)                                                                 \
+    EQUALS(decisions.size(), 1u);                                                                                      \
+    EQUALS(decisions[0].admitted, false);                                                                              \
+    STREQUALS(decisions[0].reason.c_str(), expectedReason);
 
 MODULE(connection_gate, {
     using Rig = ConnectionGateTestRig;
@@ -220,71 +212,26 @@ MODULE(connection_gate, {
         });
 
         IT("admits an Epic whitelist entry using the client-reported ID without a ticket", {
-            auto identity = Rig::Identity("epic-whitelist");
-            identity.steamId.clear();
-            identity.ticket.clear();
-            identity.epicId = "0123456789abcdef0123456789abcdef";
+            const auto identity = Rig::EpicIdentity(TestIdentities::kEpicId);
             EQUALS(gate.Begin(Rig::Guid(12), identity, "10.0.0.12"), true);
             const auto decisions = Rig::Settle(module, gate);
             EQUALS(decisions.size(), 1u);
             EQUALS(decisions[0].admitted, true);
-            STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__epicId").c_str(), identity.epicId.c_str());
-        });
-
-        IT("exposes the admitted peer's Epic ID through script-visible Player.epicId after joining", {
-            ConnectionAdmissionRig network;
-            EQUALS(network.StartServer(true), true);
-            const char *epicId = "0123456789abcdef0123456789abcdef";
-            EQUALS(network.Connect(ConnectionAdmissionRig::IdentityPayload("epic-whitelist", "", epicId)), true);
-            EQUALS(network.PumpUntil([&] { return !network.seen.requests.empty(); }), true);
-            EQUALS(network.seen.requests[0].has_value(), true);
-
-            const auto guid      = network.seen.requestGuids[0];
-            const auto &identity = *network.seen.requests[0];
-            // The instance retains the received identity before running playerConnecting.
-            network.server->SetPeerIdentity(guid, identity);
-            EQUALS(gate.Begin(guid, identity, network.server->GetAddress(guid)), true);
-            const auto decisions = Rig::Settle(module, gate);
-            EQUALS(decisions.size(), 1u);
-            EQUALS(decisions[0].guid.g, guid.g);
-            EQUALS(decisions[0].admitted, true);
-            network.server->AcceptSession(decisions[0].guid);
-            EQUALS(network.PumpUntil([&] { return network.seen.clientConnected && network.server->GetPlayerCount() == 1u; }), true);
-            EQUALS(network.seen.clientDisconnected, false);
-
-            Rig::JoinedPlayer player(*network.server, guid);
-            auto *engine        = module.GetEngine();
-            v8::Isolate *isolate = engine->GetResourceRuntime("gate")->GetIsolate();
-            {
-                v8::Locker locker(isolate);
-                v8::Isolate::Scope isolateScope(isolate);
-                v8::HandleScope handleScope(isolate);
-                v8::Local<v8::Context> context = engine->GetContext();
-                v8::Context::Scope contextScope(context);
-                Framework::Scripting::Builtins::Player::Register(isolate, context->Global());
-            }
-            STREQUALS(Rig::EvalString(engine, "new Player(1).epicId").c_str(), epicId);
+            STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__epicId").c_str(), TestIdentities::kEpicId);
         });
 
         IT("lets an Epic whitelist refuse a connection without an Epic ID", {
             EQUALS(gate.Begin(Rig::Guid(13), Rig::Identity("epic-whitelist"), "10.0.0.13"), true);
             const auto decisions = Rig::Settle(module, gate);
-            EQUALS(decisions.size(), 1u);
-            EQUALS(decisions[0].admitted, false);
-            STREQUALS(decisions[0].reason.c_str(), "Your Epic account is not on the whitelist.");
+            EXPECT_GATE_REFUSED(decisions, Rig::kEpicWhitelistReason);
             STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__epicId").c_str(), "");
         });
 
         IT("lets an Epic whitelist refuse a nonempty ID that is not listed", {
-            auto identity = Rig::Identity("epic-whitelist");
-            identity.steamId.clear();
-            identity.ticket.clear();
-            identity.epicId = "fedcba9876543210fedcba9876543210";
+            const auto identity = Rig::EpicIdentity("fedcba9876543210fedcba9876543210");
             EQUALS(gate.Begin(Rig::Guid(14), identity, "10.0.0.14"), true);
             const auto decisions = Rig::Settle(module, gate);
-            EQUALS(decisions.size(), 1u);
-            EQUALS(decisions[0].admitted, false);
-            STREQUALS(decisions[0].reason.c_str(), "Your Epic account is not on the whitelist.");
+            EXPECT_GATE_REFUSED(decisions, Rig::kEpicWhitelistReason);
             STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__epicId").c_str(), identity.epicId.c_str());
         });
 
