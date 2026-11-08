@@ -14,6 +14,7 @@
 #include <mafianet/get_time.h>
 #include <utils/time.h>
 
+#include <algorithm>
 #include <cstring>
 
 namespace Framework::Networking::Replication {
@@ -24,6 +25,15 @@ namespace Framework::Networking::Replication {
         // because their PacketReliability differs (see Connection_RM3::SendSerialize).
         constexpr int kTransformChannel = 0;
         constexpr int kStateChannel     = 1;
+
+        // The longest a rate band can withhold this type's pose from a viewer; 0 when none applies.
+        uint32_t SlowestBandMs(const ReplicationManager *manager, uint32_t typeId) {
+            if (manager == nullptr || !manager->IsServer() || !manager->HasSerializeRateBands()) {
+                return 0;
+            }
+            const SerializeRateBands &bands = manager->GetSerializeRateBands(typeId);
+            return std::max({bands.nearIntervalMs, bands.midIntervalMs, bands.farIntervalMs});
+        }
 
         bool SameBytes(const MafiaNet::BitStream *last, const MafiaNet::BitStream &current) {
             if (!last || last->GetNumberOfBitsUsed() != current.GetNumberOfBitsUsed()) {
@@ -336,8 +346,15 @@ namespace Framework::Networking::Replication {
             if (lastTransform && lastTransform->GetNumberOfBitsUsed() > 0) {
                 _transformMoved      = true;
                 _lastTransformChange = now;
+                _transformSettleMs   = SlowestBandMs(Manager(), _typeId);
             }
             _lastTransformSend = now;
+        }
+        else if (_transformSettleMs != 0 && now >= _lastTransformChange && now - _lastTransformChange >= _transformSettleMs) {
+            // A band may have withheld the last pose from a far viewer; it is due there by now.
+            _transformSettleMs = 0;
+            _lastTransformSend = now;
+            refreshTransform   = true;
         }
         else if (_transformMoved && now >= _lastTransformSend) {
             const bool inBurst          = now >= _lastTransformChange && now - _lastTransformChange < kTransformRefreshBurstMs;
