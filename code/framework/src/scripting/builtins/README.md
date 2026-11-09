@@ -80,6 +80,60 @@ what it needs, and nothing else diverges:
 It is the counterpart to `UnregisterAll`, which additionally drops the handle
 types' cached class wrappers on isolate disposal.
 
+## Declaring a class once for every language
+
+A handle type a language other than JavaScript should reach (C#, see
+`docs/scripting_csharp.md`) is declared through `Api::ClassBinding<T>`
+(`scripting/api/binding.h`) instead of a hand-written `v8pp::class_` chain.
+`Entity` and `Player` are the reference:
+
+```cpp
+const Api::ClassBinding<Player> &Player::Binding() {
+    static const Api::ClassBinding<Player> &binding = *[] {
+        auto *b = new Api::ClassBinding<Player>("Player", "...");
+        b->Inherits<Entity>()
+            .Method<&Player::Kick>("kick", docs(...), Api::Side::Server)
+            .Property<&Player::GetPing>("ping", property_docs(...), Api::Side::Server);
+        return b;
+    }();
+    return binding;
+}
+
+v8pp::class_<Player> &Player::GetClass(v8::Isolate *isolate) {
+    return _classes.Get(isolate, [isolate] { return Binding().Build(isolate); });
+}
+```
+
+- One declaration feeds the JavaScript class (and the TypeScript metadata, in
+  declaration order) and the native thunks the generated C# API calls.
+- `Api::Side::Server` replaces the `if (IsClientScripting(isolate))` early
+  return.
+- A member written against V8 directly (union-typed setter, callback taking
+  `FunctionCallbackInfo`) goes in a `JavaScript(...)` hook, in place. If C#
+  should have it too, declare a typed equivalent with `Api::Target::Native`
+  (`Entity.rotation` does).
+- The type of every member bound for C# needs an `Api::NativeTraits`
+  specialisation; anything else fails at startup naming the member.
+- Add a class C# should see to `Builtins::GetNativeBindingClasses()` and
+  regenerate the C# API: `FW_UPDATE_GENERATED=1 FW_TEST_FILTER=script_bindings build/bin/FrameworkTests`.
+  A test fails while the committed file is stale.
+
+### Throwing from a declared binding
+
+The C++ body throws instead of touching an isolate: `Api::ThrowArgumentError`
+for the TypeError row of the table above, `Api::ThrowStateError` for the Error
+row. Each language maps the kind:
+
+| Kind | JavaScript | C# |
+|---|---|---|
+| `Api::ErrorKind::Argument` | `TypeError` | `ArgumentException` |
+| `Api::ErrorKind::State` | `Error` | `InvalidOperationException` |
+| stale receiver | silent no-op | silent no-op (default result) |
+
+Argument conversion errors are argument errors, named after the documented
+parameter (`"Player.kick: argument 'reason' must be string"`). A trailing
+`std::string` or `std::optional` parameter may be left out and reads as empty.
+
 ## Color representations
 
 Color is not stored one way across the surface — there are four representations,

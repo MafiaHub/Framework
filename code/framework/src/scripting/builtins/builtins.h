@@ -24,6 +24,10 @@
 #include <exception>
 #include <vector>
 
+namespace Framework::Scripting::Api {
+    struct NativeClass;
+} // namespace Framework::Scripting::Api
+
 // Conventions every builtin here follows — namespace, throw idiom, registration
 // shape — are documented in README.md next to this file. Match them when adding
 // or editing a builtin.
@@ -53,6 +57,13 @@ namespace Framework::Scripting::Builtins {
     // than as plain objects. Process-wide and idempotent; it must run before a project registers its own handle types,
     // which the server scripting module's constructor sees to.
     void RegisterTransferTypes();
+
+    // Puts the builtin classes declared through Api::ClassBinding into the NativeCatalog, so a language other than
+    // JavaScript can call them before any isolate has built them. Process-wide and idempotent.
+    void RegisterNativeBindings();
+
+    // The builtin classes a language other than JavaScript sees, bases first: what the C# API is generated from.
+    std::vector<const Api::NativeClass *> GetNativeBindingClasses();
 
     /**
      * Teach ValueTransfer a handle class that wraps a network id (T::GetId(), T::GetClass(isolate), constructible from

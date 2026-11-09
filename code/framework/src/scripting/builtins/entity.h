@@ -25,6 +25,11 @@
 #include <string>
 #include <unordered_map>
 
+namespace Framework::Scripting::Api {
+    template <typename T>
+    class ClassBinding;
+} // namespace Framework::Scripting::Api
+
 namespace Framework::Scripting::Builtins {
     // Base scripting handle for a replicated entity, reusable across mods. Wraps the entity's
     // NetworkID and resolves the live NetworkEntity on demand through the world engine, so a stale JS
@@ -60,6 +65,9 @@ namespace Framework::Scripting::Builtins {
         void SetVisibleTo(Networking::Replication::NetworkEntity *targetEntity);
 
         virtual std::string ToString() const;
+
+        // The declaration every language binds from (docs/scripting_csharp.md).
+        static const Api::ClassBinding<Entity> &Binding();
 
         static v8pp::class_<Entity> &GetClass(v8::Isolate *isolate);
 

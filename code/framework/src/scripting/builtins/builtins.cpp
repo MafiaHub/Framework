@@ -8,6 +8,8 @@
 
 #include "builtins.h"
 
+#include "../api/binding.h"
+
 #include "entity.h"
 #include "player.h"
 #include "state_bag.h"
@@ -66,6 +68,14 @@ namespace Framework::Scripting::Builtins {
         RegisterHandleTransfer<Player>("Player");
         RegisterHandleTransfer<TextLabel>("TextLabel");
         RegisterHandleTransfer<StateBag>("StateBag");
+    }
+
+    void RegisterNativeBindings() {
+        GetNativeBindingClasses();
+    }
+
+    std::vector<const Api::NativeClass *> GetNativeBindingClasses() {
+        return {&Entity::Binding().GetNative(), &Player::Binding().GetNative()};
     }
 
     void UnregisterAll(v8::Isolate *isolate) {
