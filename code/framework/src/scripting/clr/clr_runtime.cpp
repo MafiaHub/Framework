@@ -12,6 +12,9 @@
 
 #include "../api/native_catalog.h"
 #include "../builtins/builtins.h"
+#include "../engine_helpers.h"
+#include "../engine_scope.h"
+#include "../function_references.h"
 #include "../resource/resource.h"
 #include "../resource/resource_manager.h"
 
@@ -22,8 +25,10 @@
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <sstream>
 #include <string_view>
+#include <utility>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -156,6 +161,7 @@ namespace Framework::Scripting::Clr {
         struct ProcessHost {
             InitializeFn initialize = nullptr;
             ClrRuntime *attached    = nullptr;
+            uint64_t generations    = 0;
         };
 
         ProcessHost &Process() {
@@ -219,7 +225,33 @@ namespace Framework::Scripting::Clr {
         }
     } // namespace
 
-    ClrRuntime::ClrRuntime(ResourceManager *manager, ClrRuntimeConfig config): _manager(manager), _config(std::move(config)) {}
+    // A C# delegate as JavaScript sees it: a function in the main runtime that calls it. Weak, so JavaScript decides
+    // how long it lives; the export it crossed under keeps it alive while any runtime holds it.
+    struct ClrRuntime::DelegateWrapper {
+        struct Data {
+            uint64_t generation;
+            uint64_t id;
+        };
+
+        v8::Global<v8::Function> function;
+        Data *data = nullptr; // owned by the function's weak callback, or leaked with a runtime that is gone
+    };
+
+    namespace {
+        CallStatus Fail(Buffer *out, const std::string &message) {
+            *out = HandText(message);
+            return kCallError;
+        }
+    } // namespace
+
+    ClrRuntime::ClrRuntime(ResourceManager *manager, ClrRuntimeConfig config): _manager(manager), _config(std::move(config)) {
+        _functions.encode = [this](const TransferredValue &function, std::vector<uint8_t> &out) {
+            return EncodeFunction(function, out);
+        };
+        _functions.decode = [this](uint8_t tag, uint64_t id) {
+            return DecodeFunction(tag, id);
+        };
+    }
 
     ClrRuntime::~ClrRuntime() {
         Shutdown();
@@ -291,18 +323,24 @@ namespace Framework::Scripting::Clr {
         _host               = {};
         _host.version       = kInteropVersion;
         _host.context       = this;
+        _host.stopGraceMs   = _config.stopGraceMs;
+        _host.unloadCheckMs = _config.unloadCheckMs;
         _host.resolveNative = [](uint32_t id) {
             return Api::NativeCatalog::Get().Find(id);
         };
-        _host.log            = &ClrRuntime::HostLog;
-        _host.emitEvent      = &ClrRuntime::HostEmitEvent;
-        _host.callExport     = &ClrRuntime::HostCallExport;
-        _managed             = {};
-        const int32_t status = process.initialize(&_host, &_managed);
+        _host.log             = &ClrRuntime::HostLog;
+        _host.emitEvent       = &ClrRuntime::HostEmitEvent;
+        _host.callExport      = &ClrRuntime::HostCallExport;
+        _host.callFunction    = &ClrRuntime::HostCallFunction;
+        _host.releaseFunction = &ClrRuntime::HostReleaseFunction;
+        _host.settle          = &ClrRuntime::HostSettle;
+        _managed              = {};
+        const int32_t status  = process.initialize(&_host, &_managed);
         if (status != 0) {
             return Result::Err(fmt::format("the C# host refused to start (status {}); its version must match the server's", status));
         }
         process.attached = this;
+        _generation      = ++process.generations;
         _attached        = true;
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("C# scripting started");
         return Result::Ok();
@@ -347,19 +385,58 @@ namespace Framework::Scripting::Clr {
     }
 
     void ClrRuntime::Tick() {
-        if (_attached) {
-            _managed.tick();
+        if (!_attached) {
+            return;
         }
+        // Wrappers JavaScript let go of since the last tick: their delegates can go too.
+        for (const uint64_t id : std::exchange(_collectedDelegates, {})) {
+            _delegates.erase(id);
+            _managed.releaseFunction(id);
+        }
+        _managed.tick();
     }
 
     void ClrRuntime::Shutdown() {
         if (!_attached) {
             return;
         }
+        // Whatever C# still owed fails rather than leaving its callers waiting.
+        for (auto &[token, done] : std::exchange(_pending, {})) {
+            done(CallResult::Err("C# scripting stopped"));
+        }
         _managed.shutdown();
         _loaded.clear();
+        _scriptFunctions.clear();
+        _collectedDelegates.clear();
+        if (Engine *engine = _manager->GetJSEngine(); engine && engine->IsInitialized()) {
+            EngineScope scope(engine, EngineScope::Target::Host);
+            for (auto &[id, wrapper] : _delegates) {
+                wrapper->function.Reset();
+                delete wrapper->data;
+            }
+        }
+        _delegates.clear();
         _attached          = false;
         Process().attached = nullptr;
+    }
+
+    std::vector<UnloadingResource> ClrRuntime::GetUnloadingResources() const {
+        std::vector<UnloadingResource> result;
+        if (!_attached) {
+            return result;
+        }
+        Buffer out;
+        _managed.unloading(&out);
+        auto entries = ValueCodec::DecodeList(out.data, static_cast<size_t>(out.length));
+        if (!entries) {
+            return result;
+        }
+        for (const auto &entry : entries.GetValue()) {
+            if (entry.kind == TransferredValue::Kind::Array && entry.items.size() == 2) {
+                result.push_back({entry.items[0].text, entry.items[1].boolean});
+            }
+        }
+        return result;
     }
 
     bool ClrRuntime::WantsEvent(EventScope scope, std::string_view eventName) const {
@@ -370,7 +447,7 @@ namespace Framework::Scripting::Clr {
         if (!_attached) {
             return true;
         }
-        auto payload = ValueCodec::EncodeList(args);
+        auto payload = ValueCodec::EncodeList(args, &_functions);
         if (!payload) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Event '{}' did not reach C# handlers: {}", eventName, payload.GetError());
             return true;
@@ -383,57 +460,297 @@ namespace Framework::Scripting::Clr {
         return _attached && _managed.hasExport(Bytes(resourceName), static_cast<int32_t>(resourceName.size()), Bytes(exportName), static_cast<int32_t>(exportName.size())) != 0;
     }
 
-    Utils::Result<TransferredValue, std::string> ClrRuntime::CallExport(const std::string &resourceName, const std::string &exportName, const std::vector<TransferredValue> &args) {
-        using Result = Utils::Result<TransferredValue, std::string>;
+    void ClrRuntime::CallExport(const std::string &resourceName, const std::string &exportName, const std::vector<TransferredValue> &args, Completion done) {
         if (!_attached) {
-            return Result::Err("C# is not running");
+            done(CallResult::Err("C# is not running"));
+            return;
         }
-        auto payload = ValueCodec::EncodeList(args);
+        auto payload = ValueCodec::EncodeList(args, &_functions);
         if (!payload) {
-            return Result::Err(payload.GetError());
+            done(CallResult::Err(payload.GetError()));
+            return;
         }
         const auto &bytes = payload.GetValue();
         Buffer out;
-        if (_managed.callExport(Bytes(resourceName), static_cast<int32_t>(resourceName.size()), Bytes(exportName), static_cast<int32_t>(exportName.size()), bytes.data(), static_cast<int32_t>(bytes.size()), &out) != 0) {
-            return Result::Err(Utf8(out));
+        uint64_t token       = 0;
+        const int32_t status = _managed.callExport(Bytes(resourceName), static_cast<int32_t>(resourceName.size()), Bytes(exportName), static_cast<int32_t>(exportName.size()), bytes.data(), static_cast<int32_t>(bytes.size()), &out, &token);
+        Answer(status, out, token, std::move(done));
+    }
+
+    void ClrRuntime::Answer(int32_t status, const Buffer &out, uint64_t token, Completion done) {
+        switch (status) {
+        case kCallOk: done(ValueCodec::Decode(out.data, static_cast<size_t>(out.length), &_functions)); return;
+        case kCallPending: _pending[token] = std::move(done); return;
+        default: done(CallResult::Err(Utf8(out))); return;
         }
-        return ValueCodec::Decode(out.data, static_cast<size_t>(out.length));
+    }
+
+    void ClrRuntime::SettleManaged(uint64_t token, const CallResult &result) {
+        if (!_attached) {
+            return;
+        }
+        if (result) {
+            std::vector<uint8_t> encoded;
+            if (auto written = ValueCodec::Encode(result.GetValue(), encoded, &_functions); written) {
+                _managed.settle(token, kCallOk, encoded.data(), static_cast<int32_t>(encoded.size()));
+                return;
+            }
+            else {
+                const std::string message = "the answer cannot cross into C#: " + written.GetError();
+                _managed.settle(token, kCallError, Bytes(message), static_cast<int32_t>(message.size()));
+                return;
+            }
+        }
+        const std::string &message = result.GetError();
+        _managed.settle(token, kCallError, Bytes(message), static_cast<int32_t>(message.size()));
+    }
+
+    int32_t ClrRuntime::AnswerManaged(fu2::function_view<void(Completion)> call, Buffer *out, uint64_t *token) {
+        // Answered before `call` returns: hand it back now. Otherwise C# waits on a token we settle later.
+        struct Answer {
+            bool synchronous = true;
+            std::optional<CallResult> result;
+        };
+        auto answer       = std::make_shared<Answer>();
+        const uint64_t id = ++_nextHostToken;
+        call([this, answer, id](CallResult result) {
+            if (answer->synchronous) {
+                answer->result = std::move(result);
+                return;
+            }
+            SettleManaged(id, result);
+        });
+        answer->synchronous = false;
+
+        if (!answer->result) {
+            *token = id;
+            return kCallPending;
+        }
+        if (!*answer->result) {
+            return Fail(out, answer->result->GetError());
+        }
+        std::vector<uint8_t> encoded;
+        if (auto written = ValueCodec::Encode(answer->result->GetValue(), encoded, &_functions); !written) {
+            return Fail(out, "the answer cannot cross into C#: " + written.GetError());
+        }
+        *out = Hand(std::move(encoded));
+        return kCallOk;
+    }
+
+    Utils::Result<void, std::string> ClrRuntime::EncodeFunction(const TransferredValue &function, std::vector<uint8_t> &out) {
+        uint64_t id = 0;
+        uint8_t tag = ValueCodec::kScriptFunctionTag;
+        if (const auto delegate = DelegateOf(function)) {
+            // A C# delegate coming home: C# gets the delegate itself.
+            tag = ValueCodec::kManagedFunctionTag;
+            id  = *delegate;
+        }
+        else {
+            id                   = ++_nextScriptFunction;
+            _scriptFunctions[id] = function;
+        }
+        out.push_back(tag);
+        const auto *raw = reinterpret_cast<const uint8_t *>(&id);
+        out.insert(out.end(), raw, raw + sizeof(id));
+        return Utils::Result<void, std::string>::Ok();
+    }
+
+    namespace {
+        // Marks a delegate wrapper with its Data, so the wrapper is recognised however many times it crossed.
+        v8::Local<v8::Private> DelegateKey(v8::Isolate *isolate) {
+            return v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.clrDelegate"));
+        }
+    } // namespace
+
+    std::optional<uint64_t> ClrRuntime::DelegateOf(const TransferredValue &function) {
+        Engine *engine = _manager->GetJSEngine();
+        if (_delegates.empty() || !engine || !engine->IsInitialized()) {
+            return std::nullopt;
+        }
+        // A wrapper exported from the host comes back there as itself.
+        EngineScope scope(engine, EngineScope::Target::Host);
+        v8::Isolate *isolate           = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
+        v8::TryCatch tryCatch(isolate);
+        v8::Local<v8::Value> value;
+        v8::Local<v8::Value> mark;
+        if (!ValueTransfer::Rebuild(isolate, context, function, _manager->GetMainTransferFunctions()).ToLocal(&value) || !value->IsFunction() || !value.As<v8::Function>()->GetPrivate(context, DelegateKey(isolate)).ToLocal(&mark) || !mark->IsExternal()) {
+            return std::nullopt;
+        }
+        const auto *data = static_cast<DelegateWrapper::Data *>(mark.As<v8::External>()->Value());
+        return data->generation == _generation ? std::optional<uint64_t>(data->id) : std::nullopt;
+    }
+
+    Utils::Result<TransferredValue, std::string> ClrRuntime::DecodeFunction(uint8_t tag, uint64_t id) {
+        using Result = Utils::Result<TransferredValue, std::string>;
+        if (tag == ValueCodec::kManagedFunctionTag) {
+            return WrapDelegate(id);
+        }
+        const auto it = _scriptFunctions.find(id);
+        if (it == _scriptFunctions.end()) {
+            return Result::Err("a JavaScript function C# had released");
+        }
+        return Result::Ok(it->second);
+    }
+
+    Utils::Result<TransferredValue, std::string> ClrRuntime::WrapDelegate(uint64_t id) {
+        using Result     = Utils::Result<TransferredValue, std::string>;
+        Engine *engine   = _manager->GetJSEngine();
+        const auto cross = _manager->GetMainTransferFunctions();
+        if (!engine || !engine->IsInitialized() || !cross.exportFunction) {
+            return Result::Err("a C# function can only reach JavaScript when resources run in runtimes of their own");
+        }
+        EngineScope scope(engine, EngineScope::Target::Host);
+        v8::Isolate *isolate           = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
+
+        auto &wrapper = _delegates[id];
+        if (!wrapper) {
+            wrapper = std::make_unique<DelegateWrapper>();
+        }
+        v8::Local<v8::Function> function;
+        if (!wrapper->function.IsEmpty()) {
+            function = wrapper->function.Get(isolate);
+        }
+        else {
+            wrapper->data = new DelegateWrapper::Data {_generation, id};
+            function      = v8::Function::New(context, &ClrRuntime::DelegateCallback, v8::External::New(isolate, wrapper->data)).ToLocalChecked();
+            function->SetPrivate(context, DelegateKey(isolate), v8::External::New(isolate, wrapper->data)).Check();
+            wrapper->function.Reset(isolate, function);
+            wrapper->function.SetWeak(
+                wrapper->data,
+                [](const v8::WeakCallbackInfo<DelegateWrapper::Data> &info) {
+                    DelegateWrapper::Data *data = info.GetParameter();
+                    ProcessHost &process        = Process();
+                    if (process.attached && process.attached->_generation == data->generation) {
+                        ClrRuntime *runtime = process.attached;
+                        if (auto it = runtime->_delegates.find(data->id); it != runtime->_delegates.end()) {
+                            it->second->function.Reset();
+                            it->second->data = nullptr;
+                        }
+                        runtime->_collectedDelegates.push_back(data->id);
+                    }
+                    delete data;
+                },
+                v8::WeakCallbackType::kParameter);
+        }
+
+        v8::TryCatch tryCatch(isolate);
+        auto copied = ValueTransfer::Copy(isolate, context, function, cross);
+        if (!copied) {
+            return Result::Err(copied.GetError());
+        }
+        return Result::Ok(std::move(copied).GetValue());
+    }
+
+    void ClrRuntime::DelegateCallback(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate           = info.GetIsolate();
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        const auto *data               = static_cast<DelegateWrapper::Data *>(info.Data().As<v8::External>()->Value());
+        ProcessHost &process           = Process();
+        ClrRuntime *self               = process.attached;
+        if (!self || self->_generation != data->generation) {
+            isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8Literal(isolate, "this C# function belongs to a C# scripting run that has stopped")));
+            return;
+        }
+
+        const TransferFunctions functions = self->_manager->GetMainTransferFunctions();
+        std::vector<TransferredValue> args;
+        for (int i = 0; i < info.Length(); ++i) {
+            auto value = ValueTransfer::Copy(isolate, context, info[i], functions);
+            if (!value) {
+                ThrowTypeError(isolate, ("argument " + std::to_string(i + 1) + " cannot cross into C#: " + value.GetError()).c_str());
+                return;
+            }
+            args.push_back(std::move(value).GetValue());
+        }
+        auto payload = ValueCodec::EncodeList(args, &self->_functions);
+        if (!payload) {
+            ThrowTypeError(isolate, payload.GetError().c_str());
+            return;
+        }
+
+        const uint64_t id = data->id;
+        v8::Local<v8::Value> answer;
+        const bool answered = self->_manager
+                                  ->AwaitInJavaScript(isolate, context,
+                                      [&](Completion done) {
+                                          Buffer out;
+                                          uint64_t token       = 0;
+                                          const auto &bytes    = payload.GetValue();
+                                          const int32_t status = self->_managed.invokeFunction(id, bytes.data(), static_cast<int32_t>(bytes.size()), &out, &token);
+                                          self->Answer(status, out, token, std::move(done));
+                                      })
+                                  .ToLocal(&answer);
+        if (answered) {
+            info.GetReturnValue().Set(answer);
+        }
     }
 
     int32_t ClrRuntime::HostEmitEvent(void *context, const uint8_t *name, int32_t nameLength, const uint8_t *target, int32_t targetLength, const uint8_t *payload, int32_t payloadLength, Buffer *out) {
         auto *self = static_cast<ClrRuntime *>(context);
-        auto args  = ValueCodec::DecodeList(payload, static_cast<size_t>(payloadLength));
+        auto args  = ValueCodec::DecodeList(payload, static_cast<size_t>(payloadLength), &self->_functions);
         if (!args) {
-            *out = HandText(args.GetError());
-            return 1;
+            return Fail(out, args.GetError());
         }
         auto emitted = self->_manager->EmitFromRuntime(Utf8(name, nameLength), Utf8(target, targetLength), args.GetValue());
         if (!emitted) {
-            *out = HandText(emitted.GetError());
-            return 1;
+            return Fail(out, emitted.GetError());
         }
-        return 0;
+        return kCallOk;
     }
 
-    int32_t ClrRuntime::HostCallExport(void *context, const uint8_t *resource, int32_t resourceLength, const uint8_t *name, int32_t nameLength, const uint8_t *payload, int32_t payloadLength, Buffer *out) {
+    int32_t ClrRuntime::HostCallExport(void *context, const uint8_t *resource, int32_t resourceLength, const uint8_t *name, int32_t nameLength, const uint8_t *payload, int32_t payloadLength, Buffer *out, uint64_t *token) {
         auto *self = static_cast<ClrRuntime *>(context);
-        auto args  = ValueCodec::DecodeList(payload, static_cast<size_t>(payloadLength));
+        auto args  = ValueCodec::DecodeList(payload, static_cast<size_t>(payloadLength), &self->_functions);
         if (!args) {
-            *out = HandText(args.GetError());
-            return 1;
+            return Fail(out, args.GetError());
         }
-        auto result = self->_manager->CallExport(Utf8(resource, resourceLength), Utf8(name, nameLength), args.GetValue());
-        if (!result) {
-            *out = HandText(result.GetError());
-            return 1;
+        const std::string resourceName = Utf8(resource, resourceLength);
+        const std::string exportName   = Utf8(name, nameLength);
+        return self->AnswerManaged(
+            [&](Completion done) {
+                self->_manager->CallExport(resourceName, exportName, args.GetValue(), std::move(done));
+            },
+            out, token);
+    }
+
+    int32_t ClrRuntime::HostCallFunction(void *context, uint64_t handle, const uint8_t *payload, int32_t payloadLength, Buffer *out, uint64_t *token) {
+        auto *self          = static_cast<ClrRuntime *>(context);
+        const auto function = self->_scriptFunctions.find(handle);
+        if (function == self->_scriptFunctions.end()) {
+            return Fail(out, "the JavaScript function was released");
         }
-        std::vector<uint8_t> encoded;
-        if (auto written = ValueCodec::Encode(result.GetValue(), encoded); !written) {
-            *out = HandText("the result cannot cross into C#: " + written.GetError());
-            return 1;
+        auto args = ValueCodec::DecodeList(payload, static_cast<size_t>(payloadLength), &self->_functions);
+        if (!args) {
+            return Fail(out, args.GetError());
         }
-        *out = Hand(std::move(encoded));
-        return 0;
+        const TransferredValue callee = function->second;
+        return self->AnswerManaged(
+            [&](Completion done) {
+                self->_manager->CallFunction(callee, args.GetValue(), std::move(done));
+            },
+            out, token);
+    }
+
+    void ClrRuntime::HostReleaseFunction(void *context, uint64_t handle) {
+        static_cast<ClrRuntime *>(context)->_scriptFunctions.erase(handle);
+    }
+
+    void ClrRuntime::HostSettle(void *context, uint64_t token, int32_t status, const uint8_t *payload, int32_t payloadLength) {
+        auto *self    = static_cast<ClrRuntime *>(context);
+        const auto it = self->_pending.find(token);
+        if (it == self->_pending.end()) {
+            return;
+        }
+        Completion done = std::move(it->second);
+        self->_pending.erase(it);
+        if (status == kCallOk) {
+            done(ValueCodec::Decode(payload, static_cast<size_t>(payloadLength), &self->_functions));
+        }
+        else {
+            done(CallResult::Err(Utf8(payload, payloadLength)));
+        }
     }
 
     void ClrRuntime::HostLog(void *, int32_t level, const uint8_t *resource, int32_t resourceLength, const uint8_t *message, int32_t messageLength) {

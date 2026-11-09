@@ -34,7 +34,7 @@ namespace TestResource
             });
             Exports.Register("pending", async () =>
             {
-                await Task.Delay(1000);
+                await Task.Delay(1000, Stopping);
                 return 1;
             });
 
@@ -81,8 +81,72 @@ namespace TestResource
                 Events.Emit("cs:workerRefused", _workerRefused ? 1 : 0);
             });
 
+            // Functions crossing both ways, and answers that come later.
+            Exports.Register("applyTwice", (ScriptFunction f, double x) => f.Invoke<double>(f.Invoke<double>(x)));
+            Exports.Register("makeAdder", (double n) => new Func<double, double>(x => x + n));
+            Exports.Register("isDelegate", (object? value) => value is Delegate);
+            Exports.Register("slow", async (double v) =>
+            {
+                await Task.Delay(5);
+                return v * 2;
+            });
+            Exports.Register("slowFail", new Func<Task<int>>(async () =>
+            {
+                await Task.Delay(5);
+                throw new InvalidOperationException("late failure");
+            }));
+            Exports.Register("asyncAdder", (double n) => new Func<double, Task<double>>(async x =>
+            {
+                await Task.Delay(5);
+                return x + n;
+            }));
+            Events.On("js:withCallback", (ScriptFunction callback) => callback.Invoke("from C#"));
+            Events.On("js:withTypedCallback", (Func<double, double> f) => Events.Emit("cs:typed", f(20)));
+            Events.On("js:requestCallback", () => Events.Emit("cs:giveCallback", new Func<double, double>(x => x * 4)));
+            Events.On("js:callJsLater", async () => Events.Emit("cs:later", await Exports.CallAsync<double>("jsres", "later", 4)));
+            Events.On("js:callAsyncFunction", async (ScriptFunction f) => Events.Emit("cs:asyncFunction", await f.InvokeAsync<double>(3)));
+            Events.On("js:holdCallback", (ScriptFunction callback) => _held = callback);
+            Events.On("js:callHeld", () =>
+            {
+                try
+                {
+                    _held?.Invoke(1);
+                    Events.Emit("cs:heldCalled", 1);
+                }
+                catch (InvalidOperationException)
+                {
+                    Events.Emit("cs:heldCalled", 0);
+                }
+            });
+
+            // What a stop has to end.
+            Track(new Disposer(() => Events.Emit("cs:disposed", 1)));
+            Background("loop", async token =>
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    await Task.Delay(2, token);
+                }
+            });
+            Timers.Every(TimeSpan.FromMilliseconds(1), () =>
+            {
+                if (++_timerFires == 3)
+                {
+                    Events.Emit("cs:timer", _timerFires);
+                }
+            });
+            Timers.After(TimeSpan.FromMilliseconds(1), () => Events.Emit("cs:after", 1));
+
             _threadId = Environment.CurrentManagedThreadId;
             Events.Emit("cs:started", ResourceName.Length);
+        }
+
+        private ScriptFunction? _held;
+        private int _timerFires;
+
+        private sealed class Disposer(Action dispose) : IDisposable
+        {
+            public void Dispose() => dispose();
         }
 
         private int _threadId;
@@ -98,6 +162,7 @@ namespace TestResource
 
         protected override void OnStop()
         {
+            Events.Emit("cs:stoppingCancelled", Stopping.IsCancellationRequested ? 1 : 0);
             Events.Emit("cs:stopped", ResourceName.Length);
         }
     }

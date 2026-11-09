@@ -13,6 +13,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Threading;
+using System.Threading.Tasks;
 using MafiaHub.Framework.Scripting.Interop;
 
 namespace MafiaHub.Framework.Scripting.Runtime
@@ -113,6 +114,12 @@ namespace MafiaHub.Framework.Scripting.Runtime
         public Dictionary<string, Delegate> Exports { get; } = new Dictionary<string, Delegate>();
         public bool Stopped { get; set; }
 
+        // What the resource started that its stop has to end: cancelled, disposed, awaited, cleared.
+        public CancellationTokenSource Stopping { get; } = new CancellationTokenSource();
+        public List<object> Tracked { get; } = new List<object>();
+        public List<(string Name, Task Task)> Background { get; } = new List<(string, Task)>();
+        public List<ScriptTimer> Timers { get; } = new List<ScriptTimer>();
+
         public Dictionary<string, List<EventHandlerEntry>> Handlers(EventScope scope) => scope == EventScope.Client ? ClientHandlers : GlobalHandlers;
     }
 
@@ -121,5 +128,29 @@ namespace MafiaHub.Framework.Scripting.Runtime
     internal static class PostQueue
     {
         public static readonly ConcurrentQueue<PostedWork> Items = new ConcurrentQueue<PostedWork>();
+    }
+
+    /// <summary>A timer of <see cref="Timers"/>: run on the scripting thread from the tick, cleared with its resource.</summary>
+    internal sealed class ScriptTimer : IDisposable
+    {
+        public ScriptTimer(ResourceContext owner, long dueTimestamp, long intervalTicks, Action action)
+        {
+            Owner = owner;
+            DueTimestamp = dueTimestamp;
+            IntervalTicks = intervalTicks;
+            Action = action;
+        }
+
+        public ResourceContext Owner { get; }
+        public long DueTimestamp { get; set; }
+        public long IntervalTicks { get; }
+        public Action Action { get; }
+        public bool Disposed { get; private set; }
+
+        public void Dispose()
+        {
+            Disposed = true;
+            Owner.Timers.Remove(this);
+        }
     }
 }

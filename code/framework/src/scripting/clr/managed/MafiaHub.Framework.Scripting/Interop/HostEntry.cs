@@ -8,9 +8,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
 using MafiaHub.Framework.Scripting.Runtime;
 
 namespace MafiaHub.Framework.Scripting.Interop
@@ -22,12 +22,19 @@ namespace MafiaHub.Framework.Scripting.Interop
     /// </summary>
     public static unsafe class HostEntry
     {
-        private const uint InteropVersion = 1;
+        private const uint InteropVersion = 2;
 
         private static HostApi s_host;
         private static bool s_attached;
         private static int s_scriptingThread = -1;
         private static IntPtr s_out;
+
+        // Which attach the server is on: handles from an earlier one name nothing now.
+        internal static ulong Generation { get; private set; }
+
+        internal static TimeSpan StopGrace => TimeSpan.FromMilliseconds(s_host.StopGraceMs);
+
+        internal static TimeSpan UnloadCheck => TimeSpan.FromMilliseconds(s_host.UnloadCheckMs);
 
         internal static bool IsScriptingThread => Environment.CurrentManagedThreadId == s_scriptingThread;
 
@@ -56,10 +63,11 @@ namespace MafiaHub.Framework.Scripting.Interop
                     return 1;
                 }
                 ScriptHost.Shutdown();
-                Native.Reset();
+                ResetTables();
                 s_host = *host;
                 s_scriptingThread = Environment.CurrentManagedThreadId;
                 s_attached = true;
+                Generation++;
 
                 managed->StartResource = &StartResource;
                 managed->StopResource = &StopResource;
@@ -67,13 +75,28 @@ namespace MafiaHub.Framework.Scripting.Interop
                 managed->WantsEvent = &WantsEvent;
                 managed->DispatchEvent = &DispatchEvent;
                 managed->HasExport = &HasExport;
-                managed->CallExport = &CallExport;
+                managed->CallExport = &CallExportEntry;
+                managed->InvokeFunction = &InvokeFunction;
+                managed->ReleaseFunction = &ReleaseFunction;
+                managed->Settle = &Settle;
+                managed->Unloading = &Unloading;
                 managed->Shutdown = &Shutdown;
                 return 0;
             }
             catch
             {
                 return 2;
+            }
+        }
+
+        private static void ResetTables()
+        {
+            Native.Reset();
+            DelegateTable.Clear();
+            ServerAnswers.Clear();
+            ManagedAnswers.Clear();
+            while (ReleasedFunctions.Queue.TryDequeue(out _))
+            {
             }
         }
 
@@ -113,31 +136,96 @@ namespace MafiaHub.Framework.Scripting.Interop
             {
                 status = s_host.EmitEvent(s_host.Context, namePtr, name.Length, targetPtr, targetBytes.Length, payloadPtr, payload.Length, &error);
             }
-            if (status != 0)
+            if (status != CallStatus.Ok)
             {
                 throw new InvalidOperationException($"Events.Emit('{eventName}'): {error.Text()}");
             }
         }
 
-        internal static object? CallExport(string resourceName, string exportName, object?[] args)
+        private delegate int OutCall(IntPtr context, HostBuffer* result, ulong* token);
+
+        // A call into the server: its value now, or the token of an answer still to come.
+        private static (object? Value, ulong Token) CallOut(string label, OutCall call)
         {
             EnsureScriptingThread();
+            HostBuffer result;
+            ulong token = 0;
+            int status = call(s_host.Context, &result, &token);
+            switch (status)
+            {
+                case CallStatus.Ok:
+                    return (ValueCodec.Decode(result.Span), 0);
+                case CallStatus.Pending:
+                    return (null, token);
+                default:
+                    throw new InvalidOperationException($"{label}: {result.Text()}");
+            }
+        }
+
+        private static (object? Value, ulong Token) CallExportOut(string resourceName, string exportName, object?[] args)
+        {
             byte[] payload = ValueCodec.EncodeList(args ?? Array.Empty<object?>());
             byte[] resource = Encoding.UTF8.GetBytes(resourceName ?? string.Empty);
             byte[] name = Encoding.UTF8.GetBytes(exportName ?? string.Empty);
-            HostBuffer result;
-            int status;
-            fixed (byte* resourcePtr = resource)
-            fixed (byte* namePtr = name)
+            return CallOut($"Exports.Call('{resourceName}', '{exportName}')", (context, result, token) =>
+            {
+                fixed (byte* resourcePtr = resource)
+                fixed (byte* namePtr = name)
+                fixed (byte* payloadPtr = payload)
+                {
+                    return s_host.CallExport(context, resourcePtr, resource.Length, namePtr, name.Length, payloadPtr, payload.Length, result, token);
+                }
+            });
+        }
+
+        private static (object? Value, ulong Token) CallFunctionOut(ScriptFunction function, object?[] args)
+        {
+            if (!function.IsCurrent)
+            {
+                throw new InvalidOperationException("this JavaScript function belongs to a C# scripting run that has stopped");
+            }
+            byte[] payload = ValueCodec.EncodeList(args ?? Array.Empty<object?>());
+            ulong handle = function.Handle;
+            GC.KeepAlive(function);
+            return CallOut("Calling a JavaScript function", (context, result, token) =>
+            {
+                fixed (byte* payloadPtr = payload)
+                {
+                    return s_host.CallFunction(context, handle, payloadPtr, payload.Length, result, token);
+                }
+            });
+        }
+
+        private static object? Now((object? Value, ulong Token) answer, string label)
+        {
+            if (answer.Token != 0)
+            {
+                // The server settles it later and finds no one waiting.
+                throw new InvalidOperationException($"{label} answered with a promise that has not settled; await the async variant instead");
+            }
+            return answer.Value;
+        }
+
+        private static Task<object?> Later((object? Value, ulong Token) answer) => answer.Token != 0 ? ServerAnswers.Wait(answer.Token, ScriptHost.Current) : Task.FromResult(answer.Value);
+
+        internal static object? CallExport(string resourceName, string exportName, object?[] args) => Now(CallExportOut(resourceName, exportName, args), $"Export '{resourceName}.{exportName}'");
+
+        internal static Task<object?> CallExportAsync(string resourceName, string exportName, object?[] args) => Later(CallExportOut(resourceName, exportName, args));
+
+        internal static object? CallFunction(ScriptFunction function, object?[] args) => Now(CallFunctionOut(function, args), "The JavaScript function");
+
+        internal static Task<object?> CallFunctionAsync(ScriptFunction function, object?[] args) => Later(CallFunctionOut(function, args));
+
+        internal static void SettleHost(ulong token, int status, byte[] payload)
+        {
+            if (!s_attached)
+            {
+                return;
+            }
             fixed (byte* payloadPtr = payload)
             {
-                status = s_host.CallExport(s_host.Context, resourcePtr, resource.Length, namePtr, name.Length, payloadPtr, payload.Length, &result);
+                s_host.Settle(s_host.Context, token, status, payloadPtr, payload.Length);
             }
-            if (status != 0)
-            {
-                throw new InvalidOperationException($"Exports.Call('{resourceName}', '{exportName}'): {result.Text()}");
-            }
-            return ValueCodec.Decode(new ReadOnlySpan<byte>(result.Data, result.Length));
         }
 
         private static string Utf8(byte* data, int length) => data == null || length <= 0 ? string.Empty : Encoding.UTF8.GetString(data, length);
@@ -157,6 +245,37 @@ namespace MafiaHub.Framework.Scripting.Interop
         }
 
         private static void HandText(HostBuffer* output, string text) => Hand(output, Encoding.UTF8.GetBytes(text));
+
+        private static int HandError(HostBuffer* output, Exception error)
+        {
+            Exception cause = ScriptHost.Unwrap(error);
+            HandText(output, $"{cause.GetType().Name}: {cause.Message}");
+            return CallStatus.Error;
+        }
+
+        // Runs C# code the server called and answers for it: the value, or a token settled when its task completes.
+        private static int Answer(ResourceContext owner, string where, Func<object?> call, HostBuffer* output, ulong* token)
+        {
+            ulong pending = 0;
+            byte[]? encoded = null;
+            ScriptHost.RunIn(owner, () =>
+            {
+                object? result = call();
+                if (result is Task task && !task.IsCompleted)
+                {
+                    pending = ManagedAnswers.Track(owner, task, where);
+                    return;
+                }
+                encoded = ValueCodec.Encode(ValueConverter.Settled(result, where), owner);
+            });
+            if (pending != 0)
+            {
+                *token = pending;
+                return CallStatus.Pending;
+            }
+            Hand(output, encoded!);
+            return CallStatus.Ok;
+        }
 
         [UnmanagedCallersOnly]
         private static int StartResource(byte* name, int nameLength, byte* scripts, int scriptsLength, HostBuffer* output)
@@ -202,6 +321,13 @@ namespace MafiaHub.Framework.Scripting.Interop
         {
             try
             {
+                while (ReleasedFunctions.Queue.TryDequeue(out (ulong Generation, ulong Handle) released))
+                {
+                    if (released.Generation == Generation)
+                    {
+                        s_host.ReleaseFunction(s_host.Context, released.Handle);
+                    }
+                }
                 ScriptHost.Tick();
             }
             catch (Exception error)
@@ -253,20 +379,74 @@ namespace MafiaHub.Framework.Scripting.Interop
         }
 
         [UnmanagedCallersOnly]
-        private static int CallExport(byte* resource, int resourceLength, byte* name, int nameLength, byte* payload, int payloadLength, HostBuffer* output)
+        private static int CallExportEntry(byte* resource, int resourceLength, byte* name, int nameLength, byte* payload, int payloadLength, HostBuffer* output, ulong* token)
         {
             try
             {
+                string resourceName = Utf8(resource, resourceLength);
+                string exportName = Utf8(name, nameLength);
+                (Delegate export, ResourceContext owner) = ScriptHost.FindExport(resourceName, exportName);
                 object?[] args = ValueCodec.DecodeList(new ReadOnlySpan<byte>(payload, payloadLength));
-                object? result = ScriptHost.CallExport(Utf8(resource, resourceLength), Utf8(name, nameLength), args);
-                Hand(output, ValueCodec.Encode(result));
-                return 0;
+                string where = $"Export '{resourceName}.{exportName}'";
+                return Answer(owner, where, () => ScriptHost.Invoke(export, args, where), output, token);
             }
             catch (Exception error)
             {
-                Exception cause = ScriptHost.Unwrap(error);
-                HandText(output, $"{cause.GetType().Name}: {cause.Message}");
-                return 1;
+                return HandError(output, error);
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        private static int InvokeFunction(ulong id, byte* payload, int payloadLength, HostBuffer* output, ulong* token)
+        {
+            try
+            {
+                (Delegate function, ResourceContext owner) = DelegateTable.Get(id);
+                object?[] args = ValueCodec.DecodeList(new ReadOnlySpan<byte>(payload, payloadLength));
+                string where = $"A function of resource '{owner.Name}'";
+                return Answer(owner, where, () => ScriptHost.Invoke(function, args, where), output, token);
+            }
+            catch (Exception error)
+            {
+                return HandError(output, error);
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        private static void ReleaseFunction(ulong id)
+        {
+            DelegateTable.Release(id);
+        }
+
+        [UnmanagedCallersOnly]
+        private static void Settle(ulong token, int status, byte* payload, int payloadLength)
+        {
+            try
+            {
+                ServerAnswers.Settle(token, status, new ReadOnlySpan<byte>(payload, payloadLength));
+            }
+            catch (Exception error)
+            {
+                Console.Error.WriteLine(error);
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        private static void Unloading(HostBuffer* output)
+        {
+            try
+            {
+                var entries = new List<object?>();
+                foreach ((string name, bool overdue) in ScriptHost.Unloading())
+                {
+                    entries.Add(new object?[] { name, overdue });
+                }
+                Hand(output, ValueCodec.EncodeList(entries));
+            }
+            catch (Exception error)
+            {
+                Console.Error.WriteLine(error);
+                Hand(output, ValueCodec.EncodeList(Array.Empty<object?>()));
             }
         }
 
@@ -284,7 +464,7 @@ namespace MafiaHub.Framework.Scripting.Interop
             finally
             {
                 s_attached = false;
-                Native.Reset();
+                ResetTables();
             }
         }
     }

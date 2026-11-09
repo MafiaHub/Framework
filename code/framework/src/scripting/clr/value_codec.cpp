@@ -73,7 +73,7 @@ namespace Framework::Scripting::Clr {
             return EncodeResult::Err((where.empty() ? "value" : where) + ": " + what);
         }
 
-        EncodeResult EncodeAt(const TransferredValue &value, std::vector<uint8_t> &out, const std::string &where, size_t depth) {
+        EncodeResult EncodeAt(const TransferredValue &value, std::vector<uint8_t> &out, const std::string &where, size_t depth, const ValueCodec::FunctionHooks *functions) {
             using Kind = TransferredValue::Kind;
             if (depth > ValueCodec::kMaxDepth) {
                 return Fail(where, "nested too deeply");
@@ -98,7 +98,7 @@ namespace Framework::Scripting::Clr {
                 out.push_back(kArray);
                 Put<uint32_t>(out, static_cast<uint32_t>(value.items.size()));
                 for (size_t i = 0; i < value.items.size(); ++i) {
-                    if (auto result = EncodeAt(value.items[i], out, where + "[" + std::to_string(i) + "]", depth + 1); !result) {
+                    if (auto result = EncodeAt(value.items[i], out, where + "[" + std::to_string(i) + "]", depth + 1, functions); !result) {
                         return result;
                     }
                 }
@@ -110,7 +110,7 @@ namespace Framework::Scripting::Clr {
                 Put<uint32_t>(out, static_cast<uint32_t>(value.properties.size()));
                 for (const auto &[key, property] : value.properties) {
                     PutText(out, key);
-                    if (auto result = EncodeAt(property, out, where.empty() ? key : where + "." + key, depth + 1); !result) {
+                    if (auto result = EncodeAt(property, out, where.empty() ? key : where + "." + key, depth + 1, functions); !result) {
                         return result;
                     }
                 }
@@ -127,7 +127,7 @@ namespace Framework::Scripting::Clr {
                 for (size_t i = 0; i + 1 < value.items.size(); i += 2) {
                     const std::string &key = value.items[i].text;
                     PutText(out, key);
-                    if (auto result = EncodeAt(value.items[i + 1], out, where + ".get(" + key + ")", depth + 1); !result) {
+                    if (auto result = EncodeAt(value.items[i + 1], out, where + ".get(" + key + ")", depth + 1, functions); !result) {
                         return result;
                     }
                 }
@@ -173,14 +173,22 @@ namespace Framework::Scripting::Clr {
                 return EncodeResult::Ok();
             }
             case Kind::BigInt: return Fail(where, "a BigInt cannot cross into C#; send it as a string or a number");
-            case Kind::Function: return Fail(where, "a function cannot cross into C#; register it as an export instead");
+            case Kind::Function: {
+                if (!functions || !functions->encode) {
+                    return Fail(where, "a function cannot cross into C# here");
+                }
+                if (auto written = functions->encode(value, out); !written) {
+                    return Fail(where, written.GetError());
+                }
+                return EncodeResult::Ok();
+            }
             }
             return Fail(where, "unknown value kind");
         }
 
         class Reader final {
           public:
-            Reader(const uint8_t *data, size_t length): _data(data), _length(length) {}
+            Reader(const uint8_t *data, size_t length, const ValueCodec::FunctionHooks *functions): _data(data), _length(length), _functions(functions) {}
 
             bool AtEnd() const {
                 return _offset == _length;
@@ -292,6 +300,17 @@ namespace Framework::Scripting::Clr {
                     _offset += length;
                     return Result::Ok(std::move(value));
                 }
+                case ValueCodec::kScriptFunctionTag:
+                case ValueCodec::kManagedFunctionTag: {
+                    uint64_t id = 0;
+                    if (!Read(id)) {
+                        return Truncated();
+                    }
+                    if (!_functions || !_functions->decode) {
+                        return Result::Err("a function cannot cross from C# here");
+                    }
+                    return _functions->decode(tag, id);
+                }
                 default: return Result::Err("unknown value tag " + std::to_string(tag));
                 }
             }
@@ -342,33 +361,34 @@ namespace Framework::Scripting::Clr {
 
             const uint8_t *_data;
             size_t _length;
+            const ValueCodec::FunctionHooks *_functions;
             size_t _offset = 0;
         };
     } // namespace
 
-    Utils::Result<void, std::string> ValueCodec::Encode(const TransferredValue &value, std::vector<uint8_t> &out) {
-        return EncodeAt(value, out, "", 0);
+    Utils::Result<void, std::string> ValueCodec::Encode(const TransferredValue &value, std::vector<uint8_t> &out, const FunctionHooks *functions) {
+        return EncodeAt(value, out, "", 0, functions);
     }
 
-    Utils::Result<std::vector<uint8_t>, std::string> ValueCodec::EncodeList(const std::vector<TransferredValue> &values) {
+    Utils::Result<std::vector<uint8_t>, std::string> ValueCodec::EncodeList(const std::vector<TransferredValue> &values, const FunctionHooks *functions) {
         using Result = Utils::Result<std::vector<uint8_t>, std::string>;
         std::vector<uint8_t> out;
         out.push_back(kArray);
         Put<uint32_t>(out, static_cast<uint32_t>(values.size()));
         for (size_t i = 0; i < values.size(); ++i) {
-            if (auto result = EncodeAt(values[i], out, "argument " + std::to_string(i + 1), 1); !result) {
+            if (auto result = EncodeAt(values[i], out, "argument " + std::to_string(i + 1), 1, functions); !result) {
                 return Result::Err(result.GetError());
             }
         }
         return Result::Ok(std::move(out));
     }
 
-    Utils::Result<TransferredValue, std::string> ValueCodec::Decode(const uint8_t *data, size_t length) {
+    Utils::Result<TransferredValue, std::string> ValueCodec::Decode(const uint8_t *data, size_t length, const FunctionHooks *functions) {
         using Result = Utils::Result<TransferredValue, std::string>;
         if (data == nullptr || length == 0) {
             return Result::Err("no value data");
         }
-        Reader reader(data, length);
+        Reader reader(data, length, functions);
         auto value = reader.Value(0);
         if (value && !reader.AtEnd()) {
             return Result::Err("value data has trailing bytes");
@@ -376,9 +396,9 @@ namespace Framework::Scripting::Clr {
         return value;
     }
 
-    Utils::Result<std::vector<TransferredValue>, std::string> ValueCodec::DecodeList(const uint8_t *data, size_t length) {
+    Utils::Result<std::vector<TransferredValue>, std::string> ValueCodec::DecodeList(const uint8_t *data, size_t length, const FunctionHooks *functions) {
         using Result = Utils::Result<std::vector<TransferredValue>, std::string>;
-        auto value   = Decode(data, length);
+        auto value   = Decode(data, length, functions);
         if (!value) {
             return Result::Err(value.GetError());
         }

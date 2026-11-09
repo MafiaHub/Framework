@@ -165,6 +165,59 @@ exchange:
 - **Encoding.** Between C++ and C#, values are encoded by `Clr::ValueCodec`,
   mirrored in `Interop/ValueCodec.cs`.
 
+### Functions and answers that come later
+
+Functions cross in both directions, and so do calls that answer later.
+Everything meets in the server's own JavaScript runtime (the host). There,
+the existing `FunctionReferences` carry a function or a promise to any
+resource's runtime.
+
+- **JavaScript function to C#.** The server keeps the function's copy under a
+  handle, and C# gets a `ScriptFunction` for it. A parameter typed as a
+  delegate (`Func<double, double>`, `Func<int, Task<string>>`) gets one
+  converted. C# releases the handle when the `ScriptFunction` is collected.
+- **C# delegate to JavaScript.** The delegate gets an id in the C# host. The
+  server wraps it in a host function, which crosses like any other. The
+  wrapper is weak, and when JavaScript lets go of it the delegate is released.
+  A wrapper that comes back to C# is recognised by a V8 private mark and
+  arrives as the original delegate.
+- **Answers that come later.** Every call between the languages answers
+  with a value, an error, or a pending token (`clr_interop.h`). The side that
+  answered pending settles the token later.
+  - A promise in the host settles its token when it settles.
+  - A C# task settles its token from the resource's scripting context.
+  - `ResourceManager::AwaitInJavaScript` turns a pending answer into a promise
+    in the host, which reaches the caller through its stand-in.
+  - `Exports.CallAsync` and `ScriptFunction.InvokeAsync` turn one into a
+    `Task` in C#.
+- **Stopping.** A C# resource that stops rejects what it still owed
+  (`"resource 'x' stopped before answering"`), and its delegates stop
+  answering. A JavaScript resource that stops makes its functions throw.
+
+### Stopping a C# resource
+
+CoreCLR cannot end another thread, and .NET cannot list the sockets a
+resource opened. Running each resource in its own process could, but every
+binding call would then cross processes, which a per-tick game API cannot
+afford. So the stop is cooperative, and the server checks that it worked:
+
+1. `ServerScript.Stopping` is cancelled.
+2. `OnStop` runs.
+3. Everything passed to `Track` / `TrackAsync` is disposed, newest first.
+4. `Background` work gets `stopGraceMs` (1 s by default) to see the
+   cancellation and end; whatever is still running is named in a warning.
+5. The resource's timers, handlers, exports, delegates and queued
+   continuations are dropped. Its pending answers are rejected.
+6. Its `AssemblyLoadContext` is unloaded. The host collects until the
+   assemblies are gone. If they are still loaded after `unloadCheckMs`
+   (10 s by default), it logs a warning naming the resource and its
+   unfinished work. `ClrRuntime::GetUnloadingResources()` lists such
+   resources.
+
+Leftover code cannot act on the server either:
+- Its continuations, timers and functions are gone.
+- A worker thread cannot call the scripting API.
+
 ### Hosting
 
 - **Starting .NET.** `Clr::ClrRuntime` finds hostfxr (`DOTNET_ROOT`, then the
@@ -215,10 +268,19 @@ public sealed class Bank : ServerScript
 - Event handlers and exports are any delegate. Their parameters are filled
   from the arguments and converted: a number arrives as `double` and converts
   to any numeric type, an array to an array or a `List<T>`, an object to a
-  `Dictionary<string, T>`.
+  `Dictionary<string, T>`, a function to a `ScriptFunction` or a delegate
+  type.
 - `Events.On` returns an `IDisposable`.
-- A resource's handlers and exports go away when it stops.
-- An export must answer synchronously. A completed task counts.
+- An export may return a `Task`: JavaScript gets a promise.
+  - `Exports.CallAsync` awaits another resource's promise or task.
+  - `Exports.Call` throws when the answer is not ready.
+- Timers that end with the resource: `Timers.After` and `Timers.Every`, the
+  counterparts of `setTimeout` and `setInterval`.
+- Work off the scripting thread goes through `Background(name, token =>
+  ...)`, and what needs disposing goes through `Track(...)`. Both are ended
+  by the stop.
+- Delays and I/O should take `Stopping`. Without it they keep the resource's
+  code loaded until they end, and the server reports that.
 
 ## Plan
 
@@ -234,25 +296,26 @@ public sealed class Bank : ServerScript
    kept current by a test. *(done)*
 6. **Cross-runtime service APIs.** Events and exports both ways over
    `TransferredValue`. *(done)*
+7. **Functions and later answers.** Functions in both directions, and
+   promises and tasks settling across languages. *(done)*
+8. **Stopping C# resources.** Cooperative stop, enforcement, and unload
+   verification. *(done)*
 
 Tests: `script_bindings`, `clr_value_codec`, `script_runtime` (a fake runtime
 drives the routing) and `csharp_scripting` (the real CoreCLR beside Node,
-built when the .NET SDK is present).
+built when the .NET SDK is present). The last one includes a resource that
+leaves a thread running, to check the unload warning.
 
 ## Open questions
 
-- **Unloading.** Node frees everything a resource started when its
-  environment is freed (`scripting_resource_isolation.md`). Unloading an
-  `AssemblyLoadContext` is cooperative: threads, sockets and timers a C#
-  resource started outlive it. Continuations it posted are dropped, but the
-  framework does not yet track anything else it starts.
-- **Functions across languages.** A delegate or a JavaScript function cannot
-  be passed as a value; the codec refuses it, naming where. Calls go through
-  exports. A `GCHandle`-backed reference, the counterpart of
-  `FunctionReferences`, would lift this.
-- **Asynchronous exports.** An export called from the other language must
-  answer synchronously. Settling a promise or a task across languages needs
-  the reference above.
+- **Stopping is cooperative.** A thread or socket a C# resource opened
+  without `Stopping`, `Track` or `Background` outlives its stop. The server
+  reports it, but cannot end it (see "Stopping a C# resource"). Only one
+  process per resource would. That is not planned, given what it costs every
+  binding call.
+- **Functions need isolated resources.** Functions cross through the host's
+  `FunctionReferences`, which a server always has. An engine whose resources
+  share one runtime refuses functions, naming where.
 - **The rest of the surface.** State bags, `Chat`, `Messages`, text labels and
   the other service APIs are JavaScript only. Handle types reach C# as they
   are declared through `ClassBinding`. Service APIs need a C# layer each, as

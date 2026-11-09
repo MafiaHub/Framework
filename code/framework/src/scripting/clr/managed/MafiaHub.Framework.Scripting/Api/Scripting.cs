@@ -8,6 +8,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 using MafiaHub.Framework.Scripting.Interop;
 using MafiaHub.Framework.Scripting.Runtime;
 
@@ -17,10 +20,60 @@ namespace MafiaHub.Framework.Scripting
     /// A server script. The server creates one of every non-abstract subclass in a resource's assemblies when the
     /// resource starts. Everything a script does runs on the scripting thread; <c>await</c> resumes there too.
     /// </summary>
+    /// <remarks>
+    /// Stopping a resource cannot kill what it started: .NET has no way to end another thread or find a socket. A stop
+    /// cancels <see cref="Stopping"/>, runs <see cref="OnStop"/>, disposes what was passed to <see cref="Track{T}"/>,
+    /// waits briefly for <see cref="Background"/> work, and drops the resource's timers, handlers, exports and pending
+    /// continuations. Anything left running keeps the resource's assemblies loaded, and the server reports it.
+    /// </remarks>
     public abstract class ServerScript
     {
         /// <summary>The resource this script belongs to.</summary>
         public string ResourceName { get; internal set; } = string.Empty;
+
+        internal ResourceContext Context { get; set; } = null!;
+
+        /// <summary>Cancelled when the resource starts stopping, before <see cref="OnStop"/>.</summary>
+        protected CancellationToken Stopping => Context.Stopping.Token;
+
+        /// <summary>Disposes <paramref name="disposable"/> when the resource stops, after <see cref="OnStop"/>; newest first.</summary>
+        protected T Track<T>(T disposable) where T : IDisposable
+        {
+            ArgumentNullException.ThrowIfNull(disposable);
+            Context.Tracked.Add(disposable);
+            return disposable;
+        }
+
+        /// <summary>Disposes <paramref name="disposable"/> when the resource stops; the stop waits for it like background work.</summary>
+        protected T TrackAsync<T>(T disposable) where T : IAsyncDisposable
+        {
+            ArgumentNullException.ThrowIfNull(disposable);
+            Context.Tracked.Add(disposable);
+            return disposable;
+        }
+
+        /// <summary>
+        /// Runs <paramref name="work"/> on the thread pool with the <see cref="Stopping"/> token. The stop waits for it to
+        /// end, briefly, and names it if it does not. It cannot use the scripting API directly: post back with
+        /// <c>await</c> from the script instead.
+        /// </summary>
+        protected Task Background(string name, Func<CancellationToken, Task> work)
+        {
+            ArgumentNullException.ThrowIfNull(work);
+            ResourceContext context = Context;
+            CancellationToken token = context.Stopping.Token;
+            Task task = Task.Run(() => work(token), CancellationToken.None);
+            context.Background.Add((name, task));
+            task.ContinueWith(completed =>
+            {
+                Exception? error = completed.Exception?.InnerException;
+                if (error != null && !(error is OperationCanceledException && token.IsCancellationRequested))
+                {
+                    Log.Write(LogLevel.Error, context.Name, $"Background work '{name}' failed: {error}");
+                }
+            }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, SynchronizationContext.Current != null ? TaskScheduler.FromCurrentSynchronizationContext() : TaskScheduler.Default);
+            return task;
+        }
 
         /// <summary>The resource is starting: register event handlers and exports here.</summary>
         protected internal virtual void OnStart()
@@ -123,7 +176,9 @@ namespace MafiaHub.Framework.Scripting
     /// <remarks>
     /// Values are copied between resources. A number arrives as <see cref="double"/>, an array as <c>object?[]</c>,
     /// an object as <c>Dictionary&lt;string, object?&gt;</c>; a parameter of another type is converted to it.
-    /// Functions do not cross: an export must answer synchronously (a completed task counts).
+    /// A function crosses as a <see cref="ScriptFunction"/> (or the original delegate, when it came from C#). An
+    /// export may answer later: <see cref="CallAsync(string, string, object[])"/> awaits it, and one registered here may
+    /// return a task.
     /// </remarks>
     public static class Exports
     {
@@ -147,6 +202,48 @@ namespace MafiaHub.Framework.Scripting
             object? result = HostEntry.CallExport(resourceName, exportName, args);
             return (T?)ValueConverter.To(result, typeof(T), $"Export '{resourceName}.{exportName}' result");
         }
+
+        /// <summary>Calls another resource's export; the task completes when a promise or task it returned settles.</summary>
+        public static Task<object?> CallAsync(string resourceName, string exportName, params object?[] args) => HostEntry.CallExportAsync(resourceName, exportName, args);
+
+        /// <summary>Calls another resource's export and converts what it settles with.</summary>
+        public static async Task<T?> CallAsync<T>(string resourceName, string exportName, params object?[] args)
+        {
+            object? result = await HostEntry.CallExportAsync(resourceName, exportName, args);
+            return (T?)ValueConverter.To(result, typeof(T), $"Export '{resourceName}.{exportName}' result");
+        }
+    }
+
+    /// <summary>
+    /// Timers that run on the scripting thread, from the server tick, and end with the resource that made them. The
+    /// counterpart of <c>setTimeout</c> and <c>setInterval</c>.
+    /// </summary>
+    public static class Timers
+    {
+        /// <summary>Runs <paramref name="action"/> once after <paramref name="delay"/>. Dispose the result to cancel it.</summary>
+        public static IDisposable After(TimeSpan delay, Action action) => Add(delay, TimeSpan.Zero, action, "Timers.After");
+
+        /// <summary>Runs <paramref name="action"/> every <paramref name="interval"/>, at most once per tick. Dispose the result to stop it.</summary>
+        public static IDisposable Every(TimeSpan interval, Action action)
+        {
+            if (interval <= TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(nameof(interval), "an interval must be positive");
+            }
+            return Add(interval, interval, action, "Timers.Every");
+        }
+
+        private static IDisposable Add(TimeSpan delay, TimeSpan interval, Action action, string api)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            ResourceContext resource = ScriptHost.RequireCurrent(api);
+            long due = Stopwatch.GetTimestamp() + Ticks(delay);
+            var timer = new ScriptTimer(resource, due, Ticks(interval), action);
+            resource.Timers.Add(timer);
+            return timer;
+        }
+
+        private static long Ticks(TimeSpan span) => (long)(Math.Max(span.TotalSeconds, 0) * Stopwatch.Frequency);
     }
 
     /// <summary>Log levels of <see cref="Log"/>.</summary>

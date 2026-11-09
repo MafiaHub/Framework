@@ -874,10 +874,11 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
+        const TransferFunctions functions = _foreign.functions ? _foreign.functions(isolate) : TransferFunctions {};
         std::vector<TransferredValue> copied;
         copied.reserve(args.size());
         for (size_t i = 0; i < args.size(); ++i) {
-            auto value = ValueTransfer::Copy(isolate, context, args[i]);
+            auto value = ValueTransfer::Copy(isolate, context, args[i], functions);
             if (!value) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Event '{}' did not reach handlers outside JavaScript: argument {} cannot cross ({})", eventName, i + 1, value.GetError());
                 return true;

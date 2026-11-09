@@ -12,6 +12,8 @@
 
 #include <utils/result.h>
 
+#include <function2/function2.hpp>
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -39,6 +41,12 @@ namespace Framework::Scripting {
      */
     class ScriptRuntime {
       public:
+        using CallResult = Utils::Result<TransferredValue, std::string>;
+
+        // What a call answers, called once: before the call returns when the answer is ready, or later, from the
+        // scripting thread, when it settles (a JavaScript promise, a C# task).
+        using Completion = fu2::unique_function<void(CallResult)>;
+
         virtual ~ScriptRuntime() = default;
 
         // The manifest's "serverRuntime" value that selects this runtime.
@@ -72,7 +80,7 @@ namespace Framework::Scripting {
 
         virtual bool HasExport(const std::string &resourceName, const std::string &exportName) const = 0;
 
-        // Call a resource's export with copied arguments; a value export ignores them and returns itself.
-        virtual Utils::Result<TransferredValue, std::string> CallExport(const std::string &resourceName, const std::string &exportName, const std::vector<TransferredValue> &args) = 0;
+        // Call a resource's export with copied arguments; a value export ignores them and answers itself.
+        virtual void CallExport(const std::string &resourceName, const std::string &exportName, const std::vector<TransferredValue> &args, Completion done) = 0;
     };
 } // namespace Framework::Scripting

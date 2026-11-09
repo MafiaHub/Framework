@@ -24,15 +24,25 @@ namespace Framework::Scripting {
     // null engine or one with no isolate yet; whether it must also be initialized is the caller's call.
     class EngineScope final {
       public:
-        explicit EngineScope(Engine *engine) {
-            if (engine == nullptr || engine->GetIsolate() == nullptr) {
+        // Which runtime to enter: the engine's runtime entered now (a resource's, inside its call), or the engine's own.
+        enum class Target {
+            Current,
+            Host,
+        };
+
+        explicit EngineScope(Engine *engine, Target target = Target::Current) {
+            if (engine == nullptr) {
                 return;
             }
-            _isolate = engine->GetIsolate();
+            const bool host = target == Target::Host;
+            _isolate        = host ? engine->GetHostIsolate() : engine->GetIsolate();
+            if (_isolate == nullptr) {
+                return;
+            }
             _locker.emplace(_isolate);
             _isolateScope.emplace(_isolate);
             _handleScope.emplace(_isolate);
-            _context = engine->GetContext();
+            _context = host ? engine->GetHostContext() : engine->GetContext();
             _contextScope.emplace(_context);
             _callbackScope = OpenCallbackScope(_isolate);
         }

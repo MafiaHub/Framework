@@ -24,6 +24,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <set>
 #include <stack>
 #include <thread>
@@ -209,6 +210,11 @@ namespace Framework::Scripting {
                 }
                 return proceed;
             },
+            [this](v8::Isolate *isolate) {
+                FunctionReferences *references = GetFunctionReferences();
+                const uint32_t runtime         = references ? references->FindRuntime(isolate) : 0;
+                return runtime != 0 ? references->For(runtime) : TransferFunctions {};
+            },
         });
     }
 
@@ -276,7 +282,7 @@ namespace Framework::Scripting {
             return Utils::Result<void, std::string>::Ok();
         }
 
-        EngineScope scope(_jsEngine);
+        EngineScope scope(_jsEngine, EngineScope::Target::Host);
         v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
         v8::TryCatch tryCatch(isolate);
@@ -285,7 +291,7 @@ namespace Framework::Scripting {
         values.reserve(args.size());
         for (size_t i = 0; i < args.size(); ++i) {
             v8::Local<v8::Value> value;
-            if (!ValueTransfer::Rebuild(isolate, context, args[i]).ToLocal(&value)) {
+            if (!ValueTransfer::Rebuild(isolate, context, args[i], GetMainTransferFunctions()).ToLocal(&value)) {
                 return Utils::Result<void, std::string>::Err("argument " + std::to_string(i + 1) + " cannot be delivered: " + FormatV8Exception(isolate, tryCatch, "unknown error"));
             }
             values.push_back(value);
@@ -297,95 +303,257 @@ namespace Framework::Scripting {
     }
 
     Utils::Result<TransferredValue, std::string> ResourceManager::CallExport(const std::string &resourceName, const std::string &exportName, const std::vector<TransferredValue> &args) {
-        using CallResult       = Utils::Result<TransferredValue, std::string>;
+        // Shared, not on this stack: a promise the export returned may settle long after this returns.
+        auto answer = std::make_shared<std::optional<ScriptRuntime::CallResult>>();
+        CallExport(resourceName, exportName, args, [answer](ScriptRuntime::CallResult result) {
+            if (!*answer) {
+                *answer = std::move(result);
+            }
+        });
+        if (!*answer) {
+            // Settles later, when nobody is left to hear it.
+            return ScriptRuntime::CallResult::Err("export '" + exportName + "' did not answer synchronously");
+        }
+        return std::move(**answer);
+    }
+
+    void ResourceManager::CallExport(const std::string &resourceName, const std::string &exportName, const std::vector<TransferredValue> &args, ScriptRuntime::Completion done) {
+        using CallResult       = ScriptRuntime::CallResult;
         const Resource *target = GetResource(resourceName);
         if (!target) {
-            return CallResult::Err("resource '" + resourceName + "' not found");
+            done(CallResult::Err("resource '" + resourceName + "' not found"));
+            return;
         }
         if (!target->IsRunning()) {
-            return CallResult::Err("resource '" + resourceName + "' is not running");
+            done(CallResult::Err("resource '" + resourceName + "' is not running"));
+            return;
         }
         const std::string notFound = "export '" + exportName + "' not found in resource '" + resourceName + "'";
 
         if (ScriptRuntime *runtime = GetRuntimeOf(resourceName)) {
             if (!runtime->HasExport(resourceName, exportName)) {
-                return CallResult::Err(notFound);
+                done(CallResult::Err(notFound));
+                return;
             }
-            return runtime->CallExport(resourceName, exportName, args);
+            runtime->CallExport(resourceName, exportName, args, std::move(done));
+            return;
         }
 
         v8::Isolate *owner = target->GetIsolate();
         if (!_jsEngine || !_jsEngine->IsInitialized() || owner == nullptr) {
-            return CallResult::Err(notFound);
+            done(CallResult::Err(notFound));
+            return;
         }
 
-        EngineScope scope(_jsEngine);
+        EngineScope scope(_jsEngine, EngineScope::Target::Host);
         v8::Isolate *isolate           = scope.Isolate();
         v8::Local<v8::Context> context = scope.Context();
-        FunctionReferences *references = GetFunctionReferences();
         v8::TryCatch tryCatch(isolate);
 
-        // Runs inside the export's runtime: the value, or what the function returns for these arguments.
-        auto produce = [&](v8::Isolate *iso, v8::Local<v8::Context> ctx) -> v8::MaybeLocal<v8::Value> {
-            v8::Local<v8::Value> value = target->GetExportValue(exportName);
-            if (value.IsEmpty()) {
-                iso->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(iso, notFound.c_str()).ToLocalChecked()));
-                return {};
-            }
-            if (!value->IsFunction()) {
-                return value;
-            }
-
-            const TransferFunctions functions = references ? references->For(references->FindRuntime(iso)) : TransferFunctions {};
-            std::vector<v8::Local<v8::Value>> rebuilt;
-            rebuilt.reserve(args.size());
-            for (const auto &arg : args) {
-                v8::Local<v8::Value> local;
-                if (!ValueTransfer::Rebuild(iso, ctx, arg, functions).ToLocal(&local)) {
-                    return {};
-                }
-                rebuilt.push_back(local);
-            }
-
-            v8::Local<v8::Value> result;
-            if (!value.As<v8::Function>()->Call(ctx, v8::Undefined(iso), static_cast<int>(rebuilt.size()), rebuilt.data()).ToLocal(&result)) {
-                return {};
-            }
-            // An async export that finished without awaiting has already settled; one still waiting cannot be
-            // answered without blocking the caller.
-            if (result->IsPromise()) {
-                const auto promise = result.As<v8::Promise>();
-                switch (promise->State()) {
-                case v8::Promise::kFulfilled: return promise->Result();
-                case v8::Promise::kRejected: iso->ThrowException(promise->Result()); return {};
-                case v8::Promise::kPending:
-                    iso->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(iso, ("export '" + exportName + "' returned a promise that has not settled; exports called from another language must answer synchronously").c_str()).ToLocalChecked()));
-                    return {};
-                }
-            }
-            return result;
-        };
-
-        v8::Local<v8::Value> local;
-        bool produced = false;
+        // The export, brought into the main runtime: a function arrives as a stand-in that runs in its owner, and a
+        // promise it returns settles here when the original does.
+        v8::Local<v8::Value> exportValue;
         if (owner == isolate) {
-            produced = produce(isolate, context).ToLocal(&local);
+            exportValue = target->GetExportValue(exportName);
         }
-        else if (references != nullptr) {
-            produced = references->Fetch(isolate, owner, produce).ToLocal(&local);
+        else if (FunctionReferences *references = GetFunctionReferences()) {
+            const bool fetched = references
+                                     ->Fetch(isolate, owner,
+                                         [&](v8::Isolate *iso, v8::Local<v8::Context>) -> v8::MaybeLocal<v8::Value> {
+                                             v8::Local<v8::Value> value = target->GetExportValue(exportName);
+                                             if (value.IsEmpty()) {
+                                                 iso->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(iso, notFound.c_str()).ToLocalChecked()));
+                                             }
+                                             return value;
+                                         })
+                                     .ToLocal(&exportValue);
+            if (!fetched) {
+                done(CallResult::Err(FormatV8Exception(isolate, tryCatch, "export call failed")));
+                return;
+            }
         }
         else {
-            return CallResult::Err("resource '" + resourceName + "' is not reachable from here");
+            done(CallResult::Err("resource '" + resourceName + "' is not reachable from here"));
+            return;
         }
-        if (!produced) {
-            return CallResult::Err(FormatV8Exception(isolate, tryCatch, "export call failed"));
+        if (exportValue.IsEmpty()) {
+            done(CallResult::Err(notFound));
+            return;
+        }
+        if (!exportValue->IsFunction()) {
+            SettleFromJavaScript(isolate, context, exportValue, std::move(done));
+            return;
+        }
+        CallInJavaScript(isolate, context, exportValue.As<v8::Function>(), args, std::move(done));
+    }
+
+    void ResourceManager::CallFunction(const TransferredValue &function, const std::vector<TransferredValue> &args, ScriptRuntime::Completion done) {
+        using CallResult = ScriptRuntime::CallResult;
+        if (!_jsEngine || !_jsEngine->IsInitialized()) {
+            done(CallResult::Err("JavaScript is not running"));
+            return;
+        }
+        EngineScope scope(_jsEngine, EngineScope::Target::Host);
+        v8::Isolate *isolate           = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
+        v8::TryCatch tryCatch(isolate);
+        v8::Local<v8::Value> callee;
+        if (!ValueTransfer::Rebuild(isolate, context, function, GetMainTransferFunctions()).ToLocal(&callee) || !callee->IsFunction()) {
+            done(CallResult::Err(tryCatch.HasCaught() ? FormatV8Exception(isolate, tryCatch, "the function is gone") : std::string("not a function")));
+            return;
+        }
+        CallInJavaScript(isolate, context, callee.As<v8::Function>(), args, std::move(done));
+    }
+
+    TransferFunctions ResourceManager::GetMainTransferFunctions() const {
+        FunctionReferences *references = GetFunctionReferences();
+        if (!references || !_jsEngine || !_jsEngine->GetHostIsolate()) {
+            return {};
+        }
+        const uint32_t runtime = references->FindRuntime(_jsEngine->GetHostIsolate());
+        return runtime != 0 ? references->For(runtime) : TransferFunctions {};
+    }
+
+    void ResourceManager::CallInJavaScript(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Function> function, const std::vector<TransferredValue> &args, ScriptRuntime::Completion done) {
+        using CallResult = ScriptRuntime::CallResult;
+        v8::TryCatch tryCatch(isolate);
+        const TransferFunctions functions = GetMainTransferFunctions();
+        std::vector<v8::Local<v8::Value>> rebuilt;
+        rebuilt.reserve(args.size());
+        for (size_t i = 0; i < args.size(); ++i) {
+            v8::Local<v8::Value> value;
+            if (!ValueTransfer::Rebuild(isolate, context, args[i], functions).ToLocal(&value)) {
+                done(CallResult::Err("argument " + std::to_string(i + 1) + " cannot be delivered: " + FormatV8Exception(isolate, tryCatch, "unknown error")));
+                return;
+            }
+            rebuilt.push_back(value);
+        }
+        v8::Local<v8::Value> result;
+        if (!function->Call(context, v8::Undefined(isolate), static_cast<int>(rebuilt.size()), rebuilt.data()).ToLocal(&result)) {
+            done(CallResult::Err(FormatV8Exception(isolate, tryCatch, "the call failed")));
+            return;
+        }
+        SettleFromJavaScript(isolate, context, result, std::move(done));
+    }
+
+    namespace {
+        // A pending promise's answer, waiting for one of its two reactions.
+        struct PromiseReaction {
+            ResourceManager *manager;
+            ScriptRuntime::Completion done;
+        };
+
+        std::string DescribeRejection(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> reason) {
+            if (reason->IsObject()) {
+                v8::Local<v8::Value> message;
+                if (reason.As<v8::Object>()->Get(context, v8::String::NewFromUtf8Literal(isolate, "message")).ToLocal(&message) && message->IsString()) {
+                    return ToUtf8(isolate, message);
+                }
+            }
+            return ToUtf8(isolate, reason);
         }
 
-        auto copied = ValueTransfer::Copy(isolate, context, local);
-        if (!copied) {
-            return CallResult::Err("the result of export '" + exportName + "' cannot cross: " + copied.GetError());
+        // Only one of the two runs, once: it frees the shared state.
+        void ReactToPromise(const v8::FunctionCallbackInfo<v8::Value> &info, bool fulfilled) {
+            auto *state = static_cast<PromiseReaction *>(info.Data().As<v8::External>()->Value());
+            if (!state->done) {
+                return;
+            }
+            v8::Isolate *isolate           = info.GetIsolate();
+            v8::Local<v8::Context> context = isolate->GetCurrentContext();
+            ScriptRuntime::Completion done = std::move(state->done);
+            ResourceManager *manager       = state->manager;
+            delete state;
+            if (!fulfilled) {
+                done(ScriptRuntime::CallResult::Err(DescribeRejection(isolate, context, info[0])));
+                return;
+            }
+            auto copied = ValueTransfer::Copy(isolate, context, info[0], manager->GetMainTransferFunctions());
+            done(copied ? ScriptRuntime::CallResult::Ok(std::move(copied).GetValue()) : ScriptRuntime::CallResult::Err("the answer cannot cross: " + copied.GetError()));
         }
-        return CallResult::Ok(std::move(copied).GetValue());
+
+        void OnPromiseFulfilled(const v8::FunctionCallbackInfo<v8::Value> &info) {
+            ReactToPromise(info, true);
+        }
+
+        void OnPromiseRejected(const v8::FunctionCallbackInfo<v8::Value> &info) {
+            ReactToPromise(info, false);
+        }
+
+        // A completion settled from another language, waiting to settle a promise in the main runtime.
+        struct AwaitedAnswer {
+            bool synchronous = true;
+            std::optional<ScriptRuntime::CallResult> result;
+            v8::Global<v8::Promise::Resolver> resolver;
+        };
+    } // namespace
+
+    void ResourceManager::SettleFromJavaScript(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> result, ScriptRuntime::Completion done) {
+        using CallResult = ScriptRuntime::CallResult;
+        if (result->IsPromise()) {
+            const auto promise = result.As<v8::Promise>();
+            switch (promise->State()) {
+            case v8::Promise::kFulfilled: result = promise->Result(); break;
+            case v8::Promise::kRejected:
+                promise->MarkAsHandled();
+                done(CallResult::Err(DescribeRejection(isolate, context, promise->Result())));
+                return;
+            case v8::Promise::kPending: {
+                v8::Local<v8::External> data = v8::External::New(isolate, new PromiseReaction {this, std::move(done)});
+                promise->Then(context, v8::Function::New(context, OnPromiseFulfilled, data).ToLocalChecked(), v8::Function::New(context, OnPromiseRejected, data).ToLocalChecked()).ToLocalChecked()->MarkAsHandled();
+                return;
+            }
+            }
+        }
+        auto copied = ValueTransfer::Copy(isolate, context, result, GetMainTransferFunctions());
+        if (!copied) {
+            done(CallResult::Err("the answer cannot cross: " + copied.GetError()));
+            return;
+        }
+        done(CallResult::Ok(std::move(copied).GetValue()));
+    }
+
+    v8::MaybeLocal<v8::Value> ResourceManager::AwaitInJavaScript(v8::Isolate *isolate, v8::Local<v8::Context> context, fu2::function_view<void(ScriptRuntime::Completion)> start) {
+        auto answer = std::make_shared<AwaitedAnswer>();
+        start([this, answer](ScriptRuntime::CallResult result) {
+            if (answer->synchronous) {
+                answer->result = std::move(result);
+                return;
+            }
+            if (answer->resolver.IsEmpty() || !_jsEngine || !_jsEngine->IsInitialized()) {
+                return;
+            }
+            // The continuations of the awaiting code run as this scope closes.
+            EngineScope scope(_jsEngine, EngineScope::Target::Host);
+            v8::Isolate *iso                          = scope.Isolate();
+            v8::Local<v8::Context> ctx                = scope.Context();
+            v8::Local<v8::Promise::Resolver> resolver = answer->resolver.Get(iso);
+            answer->resolver.Reset();
+            if (!result) {
+                resolver->Reject(ctx, v8::Exception::Error(v8::String::NewFromUtf8(iso, result.GetError().c_str()).ToLocalChecked())).Check();
+                return;
+            }
+            v8::TryCatch tryCatch(iso);
+            v8::Local<v8::Value> value;
+            if (ValueTransfer::Rebuild(iso, ctx, result.GetValue(), GetMainTransferFunctions()).ToLocal(&value)) {
+                resolver->Resolve(ctx, value).Check();
+            }
+            else {
+                resolver->Reject(ctx, tryCatch.Exception()).Check();
+            }
+        });
+        answer->synchronous = false;
+
+        if (answer->result) {
+            if (!*answer->result) {
+                isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, answer->result->GetError().c_str()).ToLocalChecked()));
+                return {};
+            }
+            return ValueTransfer::Rebuild(isolate, context, answer->result->GetValue(), GetMainTransferFunctions());
+        }
+        v8::Local<v8::Promise::Resolver> resolver = v8::Promise::Resolver::New(context).ToLocalChecked();
+        answer->resolver.Reset(isolate, resolver);
+        return resolver->GetPromise();
     }
 
     const ResourceManagerConfig &ResourceManager::GetConfig() const {

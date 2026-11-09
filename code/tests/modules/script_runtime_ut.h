@@ -31,6 +31,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -191,8 +192,22 @@ namespace ScriptRuntimeTest {
         bool HasExport(const std::string &, const std::string &exportName) const override {
             return exports.contains(exportName);
         }
-        Framework::Utils::Result<TransferredValue, std::string> CallExport(const std::string &, const std::string &exportName, const std::vector<TransferredValue> &args) override {
-            return exports.at(exportName)(args);
+        void CallExport(const std::string &, const std::string &exportName, const std::vector<TransferredValue> &args, Completion done) override {
+            auto result = exports.at(exportName)(args);
+            if (deferExports) {
+                deferred.push_back([result, done = std::move(done)]() mutable {
+                    done(result);
+                });
+                return;
+            }
+            done(std::move(result));
+        }
+
+        // Answer every deferred export call now, as a runtime does when its tasks complete.
+        void SettleDeferred() {
+            for (auto &settle : std::exchange(deferred, {})) {
+                settle();
+            }
         }
 
         std::vector<std::string> started;
@@ -204,6 +219,8 @@ namespace ScriptRuntimeTest {
         std::string veto;
         std::vector<Dispatched> dispatched;
         std::map<std::string, std::function<Framework::Utils::Result<TransferredValue, std::string>(const std::vector<TransferredValue> &)>> exports;
+        bool deferExports = false;
+        std::vector<fu2::unique_function<void()>> deferred;
         int ticks     = 0;
         int shutdowns = 0;
     };
@@ -694,22 +711,110 @@ MODULE(script_runtime, {
         Setup setup;
         EQUALS(setup.Start(), true);
         EQUALS((bool)setup.manager->StartResource("exporter"), true);
-
         auto product = setup.manager->CallExport("exporter", "mul", {Number(6), Number(7)});
         EQUALS((bool)product, true);
         EQUALS(product.GetValue().number, 42.0);
         EQUALS(setup.manager->CallExport("exporter", "answer", {}).GetValue().number, 7.0);
         EQUALS(setup.manager->CallExport("exporter", "settled", {}).GetValue().number, 5.0);
-
         auto never = setup.manager->CallExport("exporter", "never", {});
         EQUALS((bool)never, false);
-        EQUALS(never.GetError().find("has not settled") != std::string::npos, true);
+        EQUALS(never.GetError().find("did not answer synchronously") != std::string::npos, true);
         auto boom = setup.manager->CallExport("exporter", "boom", {});
         EQUALS((bool)boom, false);
         EQUALS(boom.GetError().find("exploded") != std::string::npos, true);
         auto missing = setup.manager->CallExport("exporter", "nothing", {});
         EQUALS(missing.GetError().find("not found") != std::string::npos, true);
         EQUALS(setup.manager->CallExport("nobody", "mul", {}).GetError().find("not found") != std::string::npos, true);
+    });
+
+    IT("waits for a JavaScript export that answers later", {
+        TestManagerHelper::Cleanup();
+        WriteJs("exporter", R"(
+            Exports.register('later', (v) => new Promise((resolve) => setTimeout(() => resolve(v * 2), 5)));
+            Exports.register('refuses', () => new Promise((_, reject) => setTimeout(() => reject(new Error('no thanks')), 5)));
+        )",
+            R"("later","refuses")");
+        Setup setup;
+        EQUALS(setup.Start(), true);
+        EQUALS((bool)setup.manager->StartResource("exporter"), true);
+
+        std::optional<ScriptRuntime::CallResult> later;
+        std::optional<ScriptRuntime::CallResult> refused;
+        setup.manager->CallExport("exporter", "later", {Number(21)}, [&](ScriptRuntime::CallResult result) {
+            later = std::move(result);
+        });
+        setup.manager->CallExport("exporter", "refuses", {}, [&](ScriptRuntime::CallResult result) {
+            refused = std::move(result);
+        });
+        EQUALS(later.has_value(), false);
+        EQUALS(TickUntil(setup.engine, *setup.manager,
+                   [&] {
+                       return later.has_value() && refused.has_value();
+                   }),
+            true);
+        EQUALS(later->GetValue().number, 42.0);
+        EQUALS(refused->GetError().find("no thanks") != std::string::npos, true);
+    });
+
+    IT("lets JavaScript await a runtime export that answers later", {
+        TestManagerHelper::Cleanup();
+        WriteForeign("foreign", "fake", "A.dll");
+        TestManagerHelper::CreateTestScript("foreign", "A.dll", "");
+        WriteJs("caller", R"(
+            Events.on('go', () => {
+                Exports.get('foreign', 'sum')(20, 22).then((v) => __record('deferred', v));
+                Exports.get('foreign', 'fails')().catch((e) => __record('deferredFailed', e.message.includes('declined') ? 1 : 0));
+            });
+        )");
+        Setup setup;
+        setup.runtime->deferExports   = true;
+        setup.runtime->exports["sum"] = [](const std::vector<TransferredValue> &args) {
+            return Framework::Utils::Result<TransferredValue, std::string>::Ok(Number(args[0].number + args[1].number));
+        };
+        setup.runtime->exports["fails"] = [](const std::vector<TransferredValue> &) {
+            return Framework::Utils::Result<TransferredValue, std::string>::Err("declined");
+        };
+        EQUALS(setup.Start(), true);
+        EQUALS((bool)setup.manager->StartResource("foreign"), true);
+        EQUALS((bool)setup.manager->StartResource("caller"), true);
+        EQUALS((bool)setup.manager->EmitFromRuntime("go", "", {}), true);
+        EQUALS(setup.runtime->deferred.size(), 2u);
+        EQUALS(Recorded("deferred", -1), true);
+        setup.runtime->SettleDeferred();
+        EQUALS(TickUntil(setup.engine, *setup.manager,
+                   [] {
+                       return Recorded("deferred", 42) && Recorded("deferredFailed", 1);
+                   }),
+            true);
+    });
+
+    IT("passes functions between JavaScript and the runtime", {
+        TestManagerHelper::Cleanup();
+        WriteForeign("foreign", "fake", "A.dll");
+        TestManagerHelper::CreateTestScript("foreign", "A.dll", "");
+        WriteJs("caller", "__record('function', Exports.get('foreign', 'kind')(() => 1));");
+        Setup setup;
+        setup.runtime->exports["kind"] = [](const std::vector<TransferredValue> &args) {
+            return Framework::Utils::Result<TransferredValue, std::string>::Ok(Number(args[0].kind == TransferredValue::Kind::Function ? 1 : 0));
+        };
+        EQUALS(setup.Start(), true);
+        EQUALS((bool)setup.manager->StartResource("foreign"), true);
+        EQUALS((bool)setup.manager->StartResource("caller"), true);
+        EQUALS(Recorded("function", 1), true);
+
+        // A JavaScript function the runtime holds, called back from it: here, one exporter returns.
+        WriteJs("maker", "Exports.register('make', () => (v) => v + 41);", R"("make")");
+        EQUALS(setup.manager->DiscoverResource(TestManagerHelper::GetTestResourcePath() + "/maker"), true);
+        EQUALS((bool)setup.manager->StartResource("maker"), true);
+        auto made = setup.manager->CallExport("maker", "make", {});
+        EQUALS((bool)made, true);
+        EQUALS(made.GetValue().kind, TransferredValue::Kind::Function);
+        std::optional<ScriptRuntime::CallResult> called;
+        setup.manager->CallFunction(made.GetValue(), {Number(1)}, [&](ScriptRuntime::CallResult result) {
+            called = std::move(result);
+        });
+        EQUALS(called.has_value(), true);
+        EQUALS(called->GetValue().number, 42.0);
     });
 
     IT("gives JavaScript a callable stand-in for the runtime's exports", {
@@ -721,7 +826,6 @@ MODULE(script_runtime, {
             __record('sum', sum(20, 22));
             try { Exports.get('foreign', 'fails')(); } catch (e) { __record('failed', e.message.includes('declined') ? 1 : 0); }
             try { Exports.get('foreign', 'missing'); } catch (e) { __record('missing', e.message.includes('not found') ? 1 : 0); }
-            try { sum(() => 1); } catch (e) { __record('function', e instanceof TypeError ? 1 : 0); }
         )");
         Setup setup;
         setup.runtime->exports["sum"] = [](const std::vector<TransferredValue> &args) {
@@ -740,7 +844,6 @@ MODULE(script_runtime, {
         EQUALS(Recorded("sum", 42), true);
         EQUALS(Recorded("failed", 1), true);
         EQUALS(Recorded("missing", 1), true);
-        EQUALS(Recorded("function", 1), true);
     });
 
     IT("shuts its runtimes down with the manager", {
@@ -773,6 +876,7 @@ MODULE(csharp_scripting, {
             Exports.register('mul', (a, b) => a * b);
             Exports.register('settled', async () => 5);
             Exports.register('unsettled', () => new Promise(() => {}));
+            Exports.register('later', (v) => new Promise((resolve) => setTimeout(() => resolve(v * 10), 5)));
             const keep = (event, key) => Events.on(event, (v) => __record(key, v));
             keep('cs:started', 'started');
             keep('cs:stopped', 'stopped');
@@ -784,11 +888,20 @@ MODULE(csharp_scripting, {
             keep('cs:fromClient', 'fromClient');
             keep('cs:workerRefused', 'workerRefused');
             keep('cs:counted', 'counted');
+            keep('cs:typed', 'typed');
+            keep('cs:later', 'later');
+            keep('cs:asyncFunction', 'asyncFunction');
+            keep('cs:heldCalled', 'heldCalled');
+            keep('cs:disposed', 'disposed');
+            keep('cs:stoppingCancelled', 'stoppingCancelled');
+            keep('cs:timer', 'timer');
+            keep('cs:after', 'after');
+            Events.on('cs:giveCallback', (f) => __record('given', f(5)));
             Events.on('cs:pong', (text, n) => __record('pong', text === 'hi!' ? n : -n));
             Events.on('cs:once', () => __record('onceCalls', __recorded('onceCalls') + 1));
             Events.on('cs:entity', (state) => __record('entity', state));
         )",
-            R"("mul","settled","unsettled")");
+            R"("mul","settled","unsettled","later")");
         TestManagerHelper::CreateTestResource("csres", R"({"name":"csres","version":"1.0.0","mafiahub":{"serverRuntime":"csharp","serverScripts":["TestResource.dll"],"resourceDependencies":["jsres"]}})");
         std::filesystem::copy_file(std::filesystem::path(FW_TEST_CSHARP_RESOURCE_DIR) / "TestResource.dll", std::filesystem::path(TestManagerHelper::GetTestResourcePath()) / "csres" / "TestResource.dll", std::filesystem::copy_options::overwrite_existing);
     };
@@ -806,7 +919,8 @@ MODULE(csharp_scripting, {
             ResourceManagerConfig config;
             config.resourcesPath = TestManagerHelper::GetTestResourcePath();
             manager              = std::make_unique<ResourceManager>(&engine, config);
-            runtime              = std::make_shared<Clr::ClrRuntime>(manager.get(), Clr::ClrRuntimeConfig {FW_TEST_CSHARP_HOST_DIR, ""});
+            // Short stop grace and unload check, so the cases that wait on them stay quick.
+            runtime = std::make_shared<Clr::ClrRuntime>(manager.get(), Clr::ClrRuntimeConfig {FW_TEST_CSHARP_HOST_DIR, "", 200, 400});
             manager->AddRuntime(runtime);
             TestManagerHelper::RegisterEvents(engine, *manager);
             TestManagerHelper::Recorded()["onceCalls"] = 0;
@@ -863,7 +977,6 @@ MODULE(csharp_scripting, {
         EQUALS(setup.Eval("Exports.get('csres', 'describe')({ x: 1, y: 2 }, [10, 20, 30]) === '2:3:30' ? 1 : 0"), 1);
         EQUALS(setup.Eval("Exports.get('csres', 'ready')()"), 42);
         EQUALS(setup.Eval("try { Exports.get('csres', 'fail')(); 0 } catch (e) { e.message.includes('refused on purpose') ? 1 : 0 }"), 1);
-        EQUALS(setup.Eval("try { Exports.get('csres', 'pending')(); 0 } catch (e) { e.message.includes('has not completed') ? 1 : 0 }"), 1);
         EQUALS(setup.Eval("try { Exports.get('csres', 'add')('x', 1); 0 } catch (e) { e.message.includes('cannot become a Double') ? 1 : 0 }"), 1);
     });
 
@@ -951,6 +1064,123 @@ MODULE(csharp_scripting, {
         EQUALS((bool)setup.manager->StartResource("csres"), true);
         EQUALS(Recorded("started", 5), true);
         EQUALS(setup.Eval("Exports.get('csres', 'add')(1, 2)"), 3);
+    });
+
+    IT("passes JavaScript functions to C# and C# functions to JavaScript", {
+        writeResources();
+        Setup setup;
+        EQUALS(setup.Start(), true);
+        EQUALS(setup.Eval("Exports.get('csres', 'applyTwice')((v) => v * 3, 2)"), 18);
+        EQUALS(setup.Eval("Exports.get('csres', 'makeAdder')(5)(10)"), 15);
+        // A C# function coming back to C# arrives as the delegate it was.
+        EQUALS(setup.Eval("Exports.get('csres', 'isDelegate')(Exports.get('csres', 'makeAdder')(1)) ? 1 : 0"), 1);
+        setup.Eval("Events.emit('js:withCallback', (s) => __record('callback', s.length)); 0");
+        EQUALS(Recorded("callback", 7), true);
+        setup.Eval("Events.emit('js:withTypedCallback', (x) => x + 1); 0");
+        EQUALS(Recorded("typed", 21), true);
+        setup.Eval("Events.emit('js:requestCallback'); 0");
+        EQUALS(Recorded("given", 20), true);
+    });
+
+    IT("awaits answers that come later, in both directions", {
+        writeResources();
+        Setup setup;
+        EQUALS(setup.Start(), true);
+        setup.Eval(R"(
+            Exports.get('csres', 'slow')(21).then((v) => __record('slow', v));
+            Exports.get('csres', 'slowFail')().catch((e) => __record('slowFail', e.message.includes('late failure') ? 1 : 0));
+            Exports.get('csres', 'asyncAdder')(1)(2).then((v) => __record('asyncAdder', v));
+            Events.emit('js:callJsLater');
+            Events.emit('js:callAsyncFunction', async (v) => v * 5);
+            0)");
+        EQUALS(setup.Until([] {
+            return Recorded("slow", 42) && Recorded("slowFail", 1) && Recorded("asyncAdder", 3) && Recorded("later", 40) && Recorded("asyncFunction", 15);
+        }),
+            true);
+    });
+
+    IT("refuses a JavaScript function whose resource stopped", {
+        writeResources();
+        WriteJs("giver", "Events.on('give', () => Events.emit('js:holdCallback', () => 1));");
+        Setup setup;
+        EQUALS(setup.Start(), true);
+        EQUALS((bool)setup.manager->StartResource("giver"), true);
+        setup.Eval("Events.emit('give'); Events.emit('js:callHeld'); 0");
+        EQUALS(Recorded("heldCalled", 1), true);
+        EQUALS((bool)setup.manager->StopResource("giver"), true);
+        setup.Eval("Events.emit('js:callHeld'); 0");
+        EQUALS(Recorded("heldCalled", 0), true);
+    });
+
+    IT("rejects what a stopping C# resource still owed", {
+        writeResources();
+        Setup setup;
+        EQUALS(setup.Start(), true);
+        setup.Eval("Exports.get('csres', 'pending')().catch((e) => __record('pendingStopped', e.message.includes('stopped before answering') ? 1 : 0)); 0");
+        EQUALS((bool)setup.manager->StopResource("csres"), true);
+        EQUALS(setup.Until([] {
+            return Recorded("pendingStopped", 1);
+        }),
+            true);
+    });
+
+    IT("ends what a stopping resource started and unloads its code", {
+        writeResources();
+        Setup setup;
+        EQUALS(setup.Start(), true);
+        const auto unloading = [&setup](const std::string &name) {
+            const auto entries = setup.runtime->GetUnloadingResources();
+            return std::find_if(entries.begin(), entries.end(), [&](const Clr::UnloadingResource &entry) {
+                return entry.name == name;
+            }) != entries.end();
+        };
+        EQUALS(setup.Until([] {
+            return Recorded("timer", 3) && Recorded("after", 1);
+        }),
+            true);
+        // Earlier cases' instances of the resource unload first, so only this one is left to watch.
+        EQUALS(setup.Until([&] {
+            return !unloading("csres");
+        }),
+            true);
+        EQUALS((bool)setup.manager->StopResource("csres"), true);
+        EQUALS(Recorded("stoppingCancelled", 1), true);
+        EQUALS(Recorded("disposed", 1), true);
+        EQUALS(setup.Until([&] {
+            return !unloading("csres");
+        }),
+            true);
+    });
+
+    IT("reports a C# resource whose code stays loaded after its stop", {
+        writeResources();
+        TestManagerHelper::CreateTestResource("leaky", R"({"name":"leaky","version":"1.0.0","mafiahub":{"serverRuntime":"csharp","serverScripts":["LeakyResource.dll"]}})");
+        std::filesystem::copy_file(std::filesystem::path(FW_TEST_CSHARP_RESOURCE_DIR) / "LeakyResource.dll", std::filesystem::path(TestManagerHelper::GetTestResourcePath()) / "leaky" / "LeakyResource.dll", std::filesystem::copy_options::overwrite_existing);
+        Setup setup;
+        EQUALS(setup.Start(), true);
+        EQUALS((bool)setup.manager->StartResource("leaky"), true);
+        EQUALS((bool)setup.manager->StopResource("leaky"), true);
+        const auto state = [&setup]() -> int {
+            for (const auto &entry : setup.runtime->GetUnloadingResources()) {
+                if (entry.name == "leaky") {
+                    return entry.overdue ? 2 : 1;
+                }
+            }
+            return 0;
+        };
+        EQUALS(state(), 1);
+        EQUALS(setup.Until([&] {
+            return state() == 2;
+        }),
+            true);
+        // Once what it left running ends, it unloads after all.
+        EQUALS(TickUntil(
+                   setup.engine, *setup.manager,
+                   [&] {
+                       return state() == 0;
+                   },
+                   5000),
+            true);
     });
 
     IT("reports why a C# resource could not start", {

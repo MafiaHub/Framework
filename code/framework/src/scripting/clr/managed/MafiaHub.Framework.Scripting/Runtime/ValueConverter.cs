@@ -10,6 +10,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
 
@@ -37,6 +39,11 @@ namespace MafiaHub.Framework.Scripting.Runtime
             if (target.IsInstanceOfType(value))
             {
                 return value;
+            }
+
+            if (value is ScriptFunction function && typeof(Delegate).IsAssignableFrom(target) && target != typeof(Delegate) && target != typeof(MulticastDelegate))
+            {
+                return ToDelegate(function, target);
             }
 
             if (value is double number)
@@ -138,6 +145,42 @@ namespace MafiaHub.Framework.Scripting.Runtime
             }
             return null;
         }
+
+        // A delegate of the target's shape that calls the JavaScript function: its result converted to the return type,
+        // a Task or Task<T> return awaiting the promise.
+        private static Delegate ToDelegate(ScriptFunction function, Type delegateType)
+        {
+            MethodInfo invoke = delegateType.GetMethod("Invoke")!;
+            ParameterExpression[] parameters = invoke.GetParameters().Select(p => Expression.Parameter(p.ParameterType, p.Name)).ToArray();
+            NewArrayExpression args = Expression.NewArrayInit(typeof(object), parameters.Select(p => Expression.Convert(p, typeof(object))));
+            ConstantExpression callee = Expression.Constant(function);
+            Type returnType = invoke.ReturnType;
+
+            Expression body;
+            if (returnType == typeof(void))
+            {
+                body = Expression.Block(typeof(void), Expression.Call(callee, nameof(ScriptFunction.Invoke), null, args));
+            }
+            else if (returnType == typeof(Task))
+            {
+                body = Expression.Convert(Expression.Call(callee, nameof(ScriptFunction.InvokeAsync), null, args), typeof(Task));
+            }
+            else if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>))
+            {
+                MethodInfo convert = typeof(ValueConverter).GetMethod(nameof(ConvertTask), BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(returnType.GetGenericArguments()[0]);
+                body = Expression.Call(convert, Expression.Call(callee, nameof(ScriptFunction.InvokeAsync), null, args));
+            }
+            else
+            {
+                MethodInfo convert = typeof(ValueConverter).GetMethod(nameof(ConvertResult), BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(returnType);
+                body = Expression.Call(convert, Expression.Call(callee, nameof(ScriptFunction.Invoke), null, args));
+            }
+            return Expression.Lambda(delegateType, body, parameters).Compile();
+        }
+
+        private static T ConvertResult<T>(object? value) => (T)To(value, typeof(T), "Function result")!;
+
+        private static async Task<T> ConvertTask<T>(Task<object?> task) => (T)To(await task, typeof(T), "Function result")!;
 
         private static bool IsListLike(Type definition) => definition == typeof(List<>) || definition == typeof(IList<>) || definition == typeof(IEnumerable<>) || definition == typeof(IReadOnlyList<>) || definition == typeof(ICollection<>) || definition == typeof(IReadOnlyCollection<>);
 

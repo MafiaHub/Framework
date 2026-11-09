@@ -65,7 +65,9 @@ if(FW_SCRIPTING_CSHARP)
     add_custom_target(FrameworkTestsCSharpResource
         COMMAND "${FW_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/csharp/TestResource/TestResource.csproj" -c Release --nologo -v quiet
             -p:UseArtifactsOutput=true "-p:ArtifactsPath=${FW_CSHARP_ARTIFACTS_DIR}" -o "${FW_CSHARP_TEST_RESOURCE_DIR}"
-        COMMENT "Building the C# test resource"
+        COMMAND "${FW_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/csharp/LeakyResource/LeakyResource.csproj" -c Release --nologo -v quiet
+            -p:UseArtifactsOutput=true "-p:ArtifactsPath=${FW_CSHARP_ARTIFACTS_DIR}" -o "${FW_CSHARP_TEST_RESOURCE_DIR}"
+        COMMENT "Building the C# test resources"
         VERBATIM)
     add_dependencies(FrameworkTestsCSharpResource FrameworkScriptingCSharp)
     add_dependencies(FrameworkTests FrameworkTestsCSharpResource)

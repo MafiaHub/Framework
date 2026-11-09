@@ -12,6 +12,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using MafiaHub.Framework.Scripting.Runtime;
 
 namespace MafiaHub.Framework.Scripting.Interop
 {
@@ -22,8 +23,9 @@ namespace MafiaHub.Framework.Scripting.Interop
     /// <remarks>
     /// What arrives: null, <see cref="bool"/>, <see cref="double"/>, <see cref="string"/>, <c>object?[]</c>,
     /// <c>Dictionary&lt;string, object?&gt;</c>, the value structs, entity handles and <c>byte[]</c>.
-    /// What can be sent: those, any other number type, any <see cref="IDictionary"/> with string keys and any
-    /// other <see cref="IEnumerable"/>.
+    /// What can be sent: those, any other number type, any <see cref="IDictionary"/> with string keys, any other
+    /// <see cref="IEnumerable"/>, a delegate and a <see cref="ScriptFunction"/>. Functions arrive as
+    /// <see cref="ScriptFunction"/>, or as the delegate itself when it was C#'s to begin with.
     /// </remarks>
     internal static class ValueCodec
     {
@@ -31,8 +33,10 @@ namespace MafiaHub.Framework.Scripting.Interop
 
         private const byte Null = 0, False = 1, True = 2, Number = 3, String = 4, Array = 5, Object = 6;
         private const byte Vec2 = 7, Vec3 = 8, Vec4 = 9, Quat = 10, Rgba = 11, Handle = 12, Bytes = 13;
+        private const byte ScriptFn = 14, ManagedFn = 15;
 
-        public static byte[] EncodeList(IReadOnlyList<object?> values)
+        // `owner` is the resource a delegate among the values belongs to; by default, the one running now.
+        public static byte[] EncodeList(IReadOnlyList<object?> values, ResourceContext? owner = null)
         {
             using var stream = new MemoryStream();
             using var writer = new BinaryWriter(stream, Encoding.UTF8);
@@ -40,17 +44,17 @@ namespace MafiaHub.Framework.Scripting.Interop
             writer.Write((uint)values.Count);
             for (int i = 0; i < values.Count; ++i)
             {
-                Write(writer, values[i], $"argument {i + 1}", 1);
+                Write(writer, values[i], $"argument {i + 1}", 1, owner);
             }
             writer.Flush();
             return stream.ToArray();
         }
 
-        public static byte[] Encode(object? value)
+        public static byte[] Encode(object? value, ResourceContext? owner = null)
         {
             using var stream = new MemoryStream();
             using var writer = new BinaryWriter(stream, Encoding.UTF8);
-            Write(writer, value, "value", 0);
+            Write(writer, value, "value", 0, owner);
             writer.Flush();
             return stream.ToArray();
         }
@@ -79,7 +83,7 @@ namespace MafiaHub.Framework.Scripting.Interop
             writer.Write(bytes);
         }
 
-        private static void Write(BinaryWriter writer, object? value, string where, int depth)
+        private static void Write(BinaryWriter writer, object? value, string where, int depth, ResourceContext? owner)
         {
             if (depth > MaxDepth)
             {
@@ -143,6 +147,21 @@ namespace MafiaHub.Framework.Scripting.Interop
                     WriteText(writer, entity.GetType().Name);
                     writer.Write(entity.Id);
                     return;
+                case ScriptFunction function:
+                    if (!function.IsCurrent)
+                    {
+                        throw new ArgumentException($"{where}: this JavaScript function belongs to a C# scripting run that has stopped");
+                    }
+                    writer.Write(ScriptFn);
+                    writer.Write(function.Handle);
+                    return;
+                case Delegate function:
+                {
+                    ResourceContext resource = owner ?? ScriptHost.Current ?? throw new ArgumentException($"{where}: a function can only be sent from a resource's script");
+                    writer.Write(ManagedFn);
+                    writer.Write(DelegateTable.Register(function, resource));
+                    return;
+                }
                 case byte[] bytes:
                     writer.Write(Bytes);
                     writer.Write((uint)bytes.Length);
@@ -159,7 +178,7 @@ namespace MafiaHub.Framework.Scripting.Interop
                             throw new ArgumentException($"{where}: only dictionaries with string keys can be sent");
                         }
                         WriteText(writer, key);
-                        Write(writer, entry.Value, $"{where}.{key}", depth + 1);
+                        Write(writer, entry.Value, $"{where}.{key}", depth + 1, owner);
                     }
                     return;
                 }
@@ -174,7 +193,7 @@ namespace MafiaHub.Framework.Scripting.Interop
                     writer.Write((uint)items.Count);
                     for (int i = 0; i < items.Count; ++i)
                     {
-                        Write(writer, items[i], $"{where}[{i}]", depth + 1);
+                        Write(writer, items[i], $"{where}[{i}]", depth + 1, owner);
                     }
                     return;
                 }
@@ -272,6 +291,10 @@ namespace MafiaHub.Framework.Scripting.Interop
                     int length = checked((int)ReadUInt32(data, ref offset));
                     return Take(data, ref offset, length).ToArray();
                 }
+                case ScriptFn:
+                    return new ScriptFunction(BinaryPrimitives.ReadUInt64LittleEndian(Take(data, ref offset, 8)));
+                case ManagedFn:
+                    return DelegateTable.Get(BinaryPrimitives.ReadUInt64LittleEndian(Take(data, ref offset, 8))).Function;
                 default:
                     throw new InvalidDataException($"unknown value tag {tag}");
             }

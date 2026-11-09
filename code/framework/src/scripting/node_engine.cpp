@@ -604,6 +604,14 @@ namespace Framework::Scripting {
         return _runtime->GetIsolate();
     }
 
+    v8::Isolate *NodeEngine::GetHostIsolate() const {
+        return _runtime ? _runtime->GetIsolate() : nullptr;
+    }
+
+    v8::Local<v8::Context> NodeEngine::GetHostContext() const {
+        return _runtime ? _runtime->GetContext() : v8::Local<v8::Context>();
+    }
+
     v8::Local<v8::Context> NodeEngine::GetContext() const {
         if (!_runtime) {
             return v8::Local<v8::Context>();

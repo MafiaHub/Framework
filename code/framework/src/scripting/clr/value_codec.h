@@ -12,6 +12,8 @@
 
 #include <utils/result.h>
 
+#include <function2/function2.hpp>
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -29,24 +31,37 @@ namespace Framework::Scripting::Clr {
      *   10 Quaternion: w x y z f32    11 Color: r g b a f32 in [0, 1]
      *   12 handle: u32 length + UTF-8 registered type name, u64 network id
      *   13 bytes: u32 length + bytes
+     *   14 JavaScript function: u64 handle the server keeps it under while C# holds it
+     *   15 C# function: u64 id the C# host keeps the delegate under
      *
      * What JavaScript has and C# does not is converted or refused: a Date arrives as its milliseconds, a RegExp as its
      * source, a Set as an array, a Map with string keys as an object, an Error as an object of its name, message and
-     * stack, an ArrayBuffer or typed array as bytes; a BigInt, a Map with other keys, a function and an unknown host
-     * type fail the copy, naming where.
+     * stack, an ArrayBuffer or typed array as bytes; a BigInt, a Map with other keys and an unknown host type fail the
+     * copy, naming where. Functions cross through FunctionHooks; without them they fail too.
      */
     class ValueCodec final {
       public:
         static constexpr size_t kMaxDepth = 64;
 
-        static Utils::Result<void, std::string> Encode(const TransferredValue &value, std::vector<uint8_t> &out);
+        static constexpr uint8_t kScriptFunctionTag  = 14;
+        static constexpr uint8_t kManagedFunctionTag = 15;
+
+        // How functions cross: the runtime keeps what the other side holds, and hands out ids for it.
+        struct FunctionHooks {
+            // Write a JavaScript function (kind Function), tag included.
+            fu2::function<Utils::Result<void, std::string>(const TransferredValue &, std::vector<uint8_t> &) const> encode;
+            // The value a tag 14 or 15 id stands for.
+            fu2::function<Utils::Result<TransferredValue, std::string>(uint8_t tag, uint64_t id) const> decode;
+        };
+
+        static Utils::Result<void, std::string> Encode(const TransferredValue &value, std::vector<uint8_t> &out, const FunctionHooks *functions = nullptr);
 
         // Several values as one array, as call arguments travel.
-        static Utils::Result<std::vector<uint8_t>, std::string> EncodeList(const std::vector<TransferredValue> &values);
+        static Utils::Result<std::vector<uint8_t>, std::string> EncodeList(const std::vector<TransferredValue> &values, const FunctionHooks *functions = nullptr);
 
-        static Utils::Result<TransferredValue, std::string> Decode(const uint8_t *data, size_t length);
+        static Utils::Result<TransferredValue, std::string> Decode(const uint8_t *data, size_t length, const FunctionHooks *functions = nullptr);
 
         // The array EncodeList wrote, as its values.
-        static Utils::Result<std::vector<TransferredValue>, std::string> DecodeList(const uint8_t *data, size_t length);
+        static Utils::Result<std::vector<TransferredValue>, std::string> DecodeList(const uint8_t *data, size_t length, const FunctionHooks *functions = nullptr);
     };
 } // namespace Framework::Scripting::Clr

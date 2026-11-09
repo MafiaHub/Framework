@@ -134,6 +134,8 @@ namespace Framework::Scripting::Builtins {
         struct ForeignListener {
             fu2::function<bool(EventScope, std::string_view) const> wants;
             fu2::function<bool(EventScope, const std::string &, const std::string &, const std::vector<TransferredValue> &) const> dispatch;
+            // How functions among the arguments leave the emitter's runtime; empty refuses them.
+            fu2::function<TransferFunctions(v8::Isolate *) const> functions;
         };
         void SetForeignListener(ForeignListener listener);
 
