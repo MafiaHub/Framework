@@ -70,7 +70,17 @@ a worker thread; what changes is that the worker now dies with its resource.
 - The tick's own work goes to the runtimes with work too. V8 reports every
   outermost call into an isolate as it completes
   (`AddCallCompletedCallback`), so a runtime entered since its last tick, by
-  any path, is ticked to run what that call queued.
+  any path, is ticked to run what that call queued. Script that runs in a
+  tick marks the runtime again, so it gets one more tick for what the loop
+  does not show, such as an unreferenced immediate.
+- Finding the runtimes with work costs nothing per idle runtime either. A
+  busy loop wakes the server thousands of times a second, and asking every
+  loop for its next timer on each wake-up cost more than the loop's own work
+  (beside 200 idle resources, a third of the round trips were left). Runtimes
+  report to a `RuntimeSchedule` instead: their watcher names the loop with a
+  completion, and a runtime's due time is read from its loop again only after
+  something ran in it or entered it, which is all that can change it. On
+  Linux and macOS each wait still polls every loop's fd.
 - The engine's first environment is created with the default flags and owns
   the inspector and the process state (working directory, title, signals).
   Every further environment is created with `kNoCreateInspector`: Node allows

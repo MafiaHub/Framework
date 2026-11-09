@@ -13,6 +13,7 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <unordered_map>
 
 namespace {
@@ -21,9 +22,16 @@ namespace {
     // by handle, so the caller's handle scope must outlive this, which every entry's does.
     class NodeCallbackScope final: public Framework::Scripting::CallbackScope {
       public:
-        NodeCallbackScope(node::Environment *env, v8::Isolate *isolate): _scope(env, v8::Object::New(isolate), {0, 0}) {}
+        NodeCallbackScope(node::Environment *env, v8::Isolate *isolate, Framework::Scripting::NodeRuntime *runtime): _ran {runtime}, _scope(env, v8::Object::New(isolate), {0, 0}) {}
 
       private:
+        // Told once the scope has closed: the microtasks it runs then are script V8 reports no completed call for.
+        struct TellOnExit {
+            Framework::Scripting::NodeRuntime *runtime;
+            ~TellOnExit() {
+                runtime->ScheduleChanged();
+            }
+        } _ran;
         node::CallbackScope _scope;
     };
 } // anonymous namespace
@@ -67,8 +75,8 @@ namespace Framework::Scripting {
 
         // From here every entry into the runtime (a script, an event handler, another runtime's call) runs inside
         // Node's scope, as its own callbacks do.
-        RegisterCallbackScope(runtime->_isolate, [env = runtime->_env, isolate = runtime->_isolate] {
-            return std::make_unique<NodeCallbackScope>(env, isolate);
+        RegisterCallbackScope(runtime->_isolate, [env = runtime->_env, isolate = runtime->_isolate, self = runtime.get()] {
+            return std::make_unique<NodeCallbackScope>(env, isolate, self);
         });
 
         v8::Locker locker(runtime->_isolate);
@@ -130,6 +138,7 @@ namespace Framework::Scripting {
         // First: the watcher waits on the loop's port, which closes with the loop.
         StopWatching();
 #endif
+        LeaveSchedule();
         UnregisterCallbackScope(_isolate);
         RuntimesByIsolate().erase(_isolate);
 
@@ -178,6 +187,10 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(_isolate);
         v8::Context::Scope contextScope(_setup->context());
 
+        // Cleared first: script that runs in this tick sets it again, so the runtime is ticked once more for what
+        // that script queued where the loop does not show it, such as an unreferenced immediate.
+        _entered = false;
+
         // Run what the calls since the last tick left queued
         DrainTaskQueues();
 
@@ -197,9 +210,7 @@ namespace Framework::Scripting {
         // Node's own callbacks and the platform's tasks drain on their way out; this catches what native code with no
         // scope of its own queued meanwhile, such as an addon settling a promise from a libuv callback
         DrainTaskQueues();
-
-        // Everything the calls before this left queued has run, and what ran here drained on its way out.
-        _entered = false;
+        ScheduleChanged();
     }
 
     void NodeRuntime::DrainTaskQueues() {
@@ -223,8 +234,13 @@ namespace Framework::Scripting {
 #ifdef _WIN32
         // Taken before the run: a completion that arrives during it is the watcher's to report next.
         const bool signaled = _signaled.exchange(false, std::memory_order_acq_rel);
+        if (signaled) {
+            std::lock_guard lock(_schedule->_signaledMutex);
+            std::erase(_schedule->_signaled, this);
+        }
 #endif
         uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
+        ScheduleChanged();
 #ifdef _WIN32
         if (signaled) {
             ReleaseSemaphore(_resume, 1, nullptr);
@@ -236,6 +252,7 @@ namespace Framework::Scripting {
         const auto it = RuntimesByIsolate().find(isolate);
         if (it != RuntimesByIsolate().end()) {
             it->second->_entered = true;
+            it->second->ScheduleChanged();
         }
     }
 
@@ -243,22 +260,101 @@ namespace Framework::Scripting {
         return uv_backend_fd(_setup->event_loop());
     }
 
-    int64_t NodeRuntime::MsUntilDue() {
-        uv_loop_t *loop = _setup->event_loop();
-        // Counted on the loop's own clock, which uv_run reads to decide which timers are due.
-        uv_update_time(loop);
-        return uv_backend_timeout(loop);
+    std::chrono::steady_clock::time_point NodeRuntime::DueAt() {
+        if (_dueAtStale) {
+            uv_loop_t *loop = _setup->event_loop();
+            // Counted on the loop's own clock, which uv_run reads to decide which timers are due.
+            uv_update_time(loop);
+            const int ms = uv_backend_timeout(loop);
+            _dueAt       = ms < 0 ? std::chrono::steady_clock::time_point::max() : std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+            _dueAtStale  = false;
+        }
+        return _dueAt;
+    }
+
+    void NodeRuntime::ScheduleChanged() {
+        _dueAtStale = true;
+        if (_schedule != nullptr && !_changeListed) {
+            _changeListed = true;
+            _schedule->_changed.push_back(this);
+        }
+    }
+
+    void NodeRuntime::JoinSchedule(RuntimeSchedule &schedule) {
+        if (_schedule != nullptr) {
+            return;
+        }
+        _schedule = &schedule;
+        schedule._runtimes.push_back(this);
+        schedule._dueAt.push_back(RuntimeSchedule::Clock::time_point::min());
+        ScheduleChanged();
+#ifdef _WIN32
+        StartWatching();
+#endif
+    }
+
+    void NodeRuntime::LeaveSchedule() {
+        if (_schedule == nullptr) {
+            return;
+        }
+        const auto index = std::find(_schedule->_runtimes.begin(), _schedule->_runtimes.end(), this) - _schedule->_runtimes.begin();
+        _schedule->_runtimes.erase(_schedule->_runtimes.begin() + index);
+        _schedule->_dueAt.erase(_schedule->_dueAt.begin() + index);
+        std::erase(_schedule->_changed, this);
+#ifdef _WIN32
+        {
+            std::lock_guard lock(_schedule->_signaledMutex);
+            std::erase(_schedule->_signaled, this);
+        }
+#endif
+        _schedule = nullptr;
+    }
+
+    RuntimeSchedule::RuntimeSchedule() {
+#ifdef _WIN32
+        _wake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+#endif
+    }
+
+    RuntimeSchedule::~RuntimeSchedule() {
+#ifdef _WIN32
+        CloseHandle(_wake);
+#endif
+    }
+
+    RuntimeSchedule::Clock::time_point RuntimeSchedule::Collect(Clock::time_point now, std::vector<NodeRuntime *> &ready) {
+        for (NodeRuntime *runtime : _changed) {
+            runtime->_changeListed                                                             = false;
+            _dueAt[std::find(_runtimes.begin(), _runtimes.end(), runtime) - _runtimes.begin()] = runtime->DueAt();
+        }
+        _changed.clear();
+
+        auto next = Clock::time_point::max();
+        for (size_t i = 0; i < _dueAt.size(); ++i) {
+            if (_dueAt[i] <= now) {
+                ready.push_back(_runtimes[i]);
+            }
+            else {
+                next = std::min(next, _dueAt[i]);
+            }
+        }
+#ifdef _WIN32
+        std::lock_guard lock(_signaledMutex);
+        for (NodeRuntime *runtime : _signaled) {
+            if (std::find(ready.begin(), ready.end(), runtime) == ready.end()) {
+                ready.push_back(runtime);
+            }
+        }
+#endif
+        return next;
     }
 
 #ifdef _WIN32
-    void NodeRuntime::WatchLoop(HANDLE wake) {
-        if (_watcher.joinable()) {
-            return;
-        }
-        _wake       = wake;
+    void NodeRuntime::StartWatching() {
         _resume     = CreateSemaphoreW(nullptr, 0, 1, nullptr);
         HANDLE port = _setup->event_loop()->iocp;
-        _watcher    = std::thread([this, port] {
+        HANDLE wake = _schedule->_wake;
+        _watcher    = std::thread([this, port, wake] {
             SetThreadDescription(GetCurrentThread(), L"Scripting loop watcher");
             for (;;) {
                 DWORD bytes            = 0;
@@ -278,11 +374,15 @@ namespace Framework::Scripting {
                 if (_stopWatching.load(std::memory_order_acquire)) {
                     return;
                 }
+                {
+                    std::lock_guard lock(_schedule->_signaledMutex);
+                    _schedule->_signaled.push_back(this);
+                }
                 _signaled.store(true, std::memory_order_release);
                 // Signalling and parking in one step leaves this thread waiting by the time the loop runs. A port admits
                 // one running thread at a time (libuv creates it so), and a watcher still running at that moment would
                 // keep the loop's own dequeue from seeing the packet (electron/electron#14319).
-                SignalObjectAndWait(_wake, _resume, INFINITE, FALSE);
+                SignalObjectAndWait(wake, _resume, INFINITE, FALSE);
                 if (_stopWatching.load(std::memory_order_acquire)) {
                     return;
                 }

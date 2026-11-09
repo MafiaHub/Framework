@@ -273,6 +273,9 @@ MODULE(run_until, {
         }
         // Visiting every live loop each millisecond and ticking every runtime cost 60 such resources about 90 ms a
         // second; a resource with nothing due costs nothing now, whatever it holds.
+        if (idle - bare >= std::chrono::milliseconds(10)) {
+            fprintf(stderr, "A second of serving cost %lld us alone and %lld us with 60 idle resources\n", static_cast<long long>(bare.count()), static_cast<long long>(idle.count()));
+        }
         EQUALS(idle - bare < std::chrono::milliseconds(10), true);
     });
 
@@ -289,6 +292,71 @@ MODULE(run_until, {
         rig.engine.RunUntil(Clock::now() + std::chrono::milliseconds(100));
         // Polled every millisecond, a round trip took about 3 ms on Windows: 32 in this window.
         EQUALS(TestManagerHelper::RecordedValue("trips") - before >= 100, true);
+    });
+
+    IT("asks nothing of idle runtimes while it serves a busy one", {
+        TestManagerHelper::Cleanup();
+        std::vector<std::string> names {"sockets"};
+        ResourceIsolationTest::WriteResource("sockets", RunUntilTest::kRoundTrips);
+        for (int i = 0; i < 100; ++i) {
+            names.push_back("timer-" + std::to_string(i));
+            ResourceIsolationTest::WriteResource(names.back(), "setInterval(() => {}, 60000);");
+        }
+        RunUntilTest::Rig rig;
+        EQUALS(rig.Start(names), true);
+        EQUALS(ResourceIsolationTest::TickUntilRecorded(rig.engine, "ready"), true);
+        // Fresh runtimes still post themselves work for a while.
+        for (int tick = 0; tick < 60; ++tick) {
+            rig.TickAndWait(16);
+        }
+
+        // Asking a loop what it has due moves its clock on, so the clock tells which loops were asked.
+        const auto clocks = [&] {
+            std::vector<uint64_t> out;
+            for (size_t i = 1; i < names.size(); ++i) {
+                NodeRuntime *runtime = rig.engine.GetResourceRuntime(names[i]);
+                v8::Isolate *isolate = runtime->GetIsolate();
+                v8::Locker locker(isolate);
+                v8::Isolate::Scope isolateScope(isolate);
+                v8::HandleScope handleScope(isolate);
+                v8::Context::Scope contextScope(runtime->GetContext());
+                out.push_back(uv_now(node::GetCurrentEventLoop(isolate)));
+            }
+            return out;
+        };
+
+        TestManagerHelper::EvalIntIn(rig.engine, "sockets", "trips(10000000); 0");
+        rig.engine.Tick();
+        const int tripsBefore = TestManagerHelper::RecordedValue("trips");
+        const auto before     = clocks();
+        rig.engine.RunUntil(Clock::now() + std::chrono::milliseconds(300));
+        const auto after = clocks();
+        EQUALS(TestManagerHelper::RecordedValue("trips") - tripsBefore >= 100, true);
+
+        int asked = 0;
+        for (size_t i = 0; i < before.size(); ++i) {
+            asked += before[i] != after[i] ? 1 : 0;
+        }
+        // Every wake-up asked every loop: beside 200 idle resources the busy one made a third of its round trips.
+        // A few may still wake for work of their own.
+        EQUALS(asked <= 10, true);
+    });
+
+    IT("runs at the next tick an unreferenced immediate queued during a tick", {
+        TestManagerHelper::Cleanup();
+        // Nothing on the loop shows an unreferenced immediate: only the runtime having run says a tick is owed.
+        ResourceIsolationTest::WriteResource("late", "globalThis.arm = () => setImmediate(() => { setImmediate(() => __record('late', 1)).unref(); });");
+        RunUntilTest::Rig rig;
+        EQUALS(rig.Start({"late"}), true);
+        for (int i = 0; i < 5; ++i) {
+            rig.TickAndWait(5);
+        }
+
+        TestManagerHelper::EvalIntIn(rig.engine, "late", "arm(); 0");
+        // The first tick runs the outer immediate, which queues the inner one for the loop's next pass.
+        rig.engine.Tick();
+        rig.engine.Tick();
+        EQUALS(TestManagerHelper::RecordedValue("late"), 1);
     });
 
     IT("runs a platform task an idle resource posted without waiting for a tick", {
