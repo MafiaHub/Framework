@@ -29,6 +29,14 @@
 namespace RunUntilTest {
     using Clock = std::chrono::steady_clock;
 
+    // What 60 idle resources may add to a second of serving. macOS charges about a microsecond for each loop's
+    // kqueue in a poll(), and every tick and every wait polls them all: 11 ms on its CI runner.
+#ifdef __APPLE__
+    constexpr auto kIdleBudget = std::chrono::milliseconds(30);
+#else
+    constexpr auto kIdleBudget = std::chrono::milliseconds(10);
+#endif
+
     // Script that echoes over a local TCP connection to itself and counts the round trips of a chain started on demand.
     constexpr const char *kRoundTrips = R"(
         const net = require('node:net');
@@ -273,10 +281,10 @@ MODULE(run_until, {
         }
         // Visiting every live loop each millisecond and ticking every runtime cost 60 such resources about 90 ms a
         // second; a resource with nothing due costs nothing now, whatever it holds.
-        if (idle - bare >= std::chrono::milliseconds(10)) {
+        if (idle - bare >= RunUntilTest::kIdleBudget) {
             fprintf(stderr, "A second of serving cost %lld us alone and %lld us with 60 idle resources\n", static_cast<long long>(bare.count()), static_cast<long long>(idle.count()));
         }
-        EQUALS(idle - bare < std::chrono::milliseconds(10), true);
+        EQUALS(idle - bare < RunUntilTest::kIdleBudget, true);
     });
 
     IT("wakes for a socket's I/O as soon as it completes", {
