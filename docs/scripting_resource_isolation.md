@@ -43,13 +43,34 @@ a worker thread; what changes is that the worker now dies with its resource.
 ## The model
 
 - `NodeRuntime` is one environment. The engine initialises the process-wide
-  platform once; every runtime is created against it and ticked on the
+  platform once; every runtime is created against it and run on the
   scripting thread.
-- Between ticks the server runs a runtime as soon as it has work: I/O, or a
-  due timer or immediate (`NodeEngine::RunUntil`). It starts nothing in the
-  last millisecond before the tick. On Linux and macOS it waits on every loop's backend fd at once; a
-  Windows loop is a completion port, which cannot be waited on that way, so
-  live loops are visited every millisecond instead.
+- A runtime runs only when it has work, in a tick or between two: I/O on its
+  loop, a due timer or immediate, or a call into it whose queues wait for the
+  tick. A resource with nothing due costs nothing, whatever it holds, so the
+  idle cost of a server does not grow with its resources. Between ticks the
+  server runs a runtime as soon as it has work (`NodeEngine::RunUntil`), and
+  starts nothing in the last millisecond before the tick.
+- Each runtime keeps a referenced handle of its own on its loop, as Electron
+  does for the loop it embeds, so the loop is always alive and `uv_run` runs
+  whatever reaches it. That includes the platform's tasks: V8 posts them to
+  the isolate's loop (`uv_async_send`), and its delayed ones become
+  unreferenced timers there, which never ran on a loop nothing else kept
+  alive (an `Atomics.waitAsync` timeout, for one).
+- How the server learns a loop has I/O depends on the platform. On Linux and
+  macOS it polls every loop's backend fd at once, libuv's own embedding API.
+  A Windows loop is a completion port, which libuv offers no way to wait on
+  from outside, so each runtime has a watcher thread blocked on its port, as
+  Electron's `NodeBindingsWin` does. The watcher takes a completion, gives it
+  back unchanged (libuv reads a completion from its `OVERLAPPED`), signals
+  the server and parks until the loop has run. It signals and parks in one
+  step (`SignalObjectAndWait`): libuv creates the port for one running
+  thread, and a watcher still running when the loop dequeues would hide the
+  packet from it (electron/electron#14319).
+- The tick's own work goes to the runtimes with work too. V8 reports every
+  outermost call into an isolate as it completes
+  (`AddCallCompletedCallback`), so a runtime entered since its last tick, by
+  any path, is ticked to run what that call queued.
 - The engine's first environment is created with the default flags and owns
   the inspector and the process state (working directory, title, signals).
   Every further environment is created with `kNoCreateInspector`: Node allows
@@ -260,9 +281,13 @@ It runs on the main thread only.
   Node's worker-style inspector parent handles.
 - **Cost per runtime.** Each environment pays for an isolate and Node's
   bootstrap. Measured on Apple Silicon (release build, 30 trivial resources):
-  about 15 ms to start a resource, 6.4 MB of resident memory each, 0.2 ms to
-  stop one, and 0.015 ms to tick all 30 when idle. A server with 200 resources
-  would spend about 3 s starting them and 1.3 GB holding them. Starting from a
+  about 15 ms to start a resource, 6.4 MB of resident memory each, and 0.2 ms
+  to stop one. Idle, a resource costs nothing: on Windows (RelWithDebInfo),
+  60 resources holding a timer or nothing add under 3 ms of scripting-thread
+  time a second, where ticking every runtime and visiting every live loop each
+  millisecond cost about 90 ms. On Windows each runtime also has a watcher
+  thread, blocked on its loop's port while there is no I/O. A server with 200
+  resources would spend about 3 s starting them and 1.3 GB holding them. Starting from a
   Node snapshot could cut the bootstrap: node.h has the embedder API for it
   (`CommonEnvironmentSetup::CreateFromSnapshot`, `EmbedderSnapshotData`),
   marked experimental, and it is not measured yet. Still to measure on Windows

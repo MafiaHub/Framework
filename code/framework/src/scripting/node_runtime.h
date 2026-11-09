@@ -18,10 +18,12 @@
 
 #include "runtime_sample.h"
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace Framework::Scripting {
@@ -35,6 +37,10 @@ namespace Framework::Scripting {
      *
      * The process-wide platform is not owned here; every runtime is created against the one the
      * engine initialised, and they all run on the thread that ticks them.
+     *
+     * The runtime holds a referenced handle of its own on its loop, as Electron does for the loop it embeds, so the
+     * loop is always alive: uv_run then runs whatever reaches it, the platform's tasks and their delayed timers
+     * included, and a runtime with nothing due can be left alone until its loop says otherwise.
      */
     class NodeRuntime final {
       public:
@@ -75,6 +81,14 @@ namespace Framework::Scripting {
          */
         void Tick();
 
+        /**
+         * Whether a call has entered the runtime since its last Tick(): what a call made through raw V8 queued waits
+         * for that tick. V8 reports every outermost call that completes, Node's own callbacks included.
+         */
+        bool WasEntered() const {
+            return _entered;
+        }
+
         // Names the runtime in profiler zones and GC messages (the resource, or "server").
         void SetName(std::string name) {
             _name = std::move(name);
@@ -99,16 +113,31 @@ namespace Framework::Scripting {
         int GetBackendFd() const;
 
         /**
-         * Whether the loop has referenced handles or requests that can still produce work. uv_run does nothing for
-         * one that has not.
-         */
-        bool IsAlive() const;
-
-        /**
-         * Milliseconds until a live loop has a timer, immediate or pending callback to run (0: now), or -1 for none.
-         * Only meaningful while IsAlive(): libuv answers 0 for a loop with nothing to run.
+         * Milliseconds until the loop has a timer, immediate or pending callback to run (0: now), or -1 for none. I/O
+         * is not counted: it is what GetBackendFd() or the watcher reports.
          */
         int64_t MsUntilDue();
+
+        /**
+         * Whether the loop has a completion its watcher saw and gave back since the loop last ran. Always false
+         * without a watcher.
+         */
+        bool IsSignaled() const {
+#ifdef _WIN32
+            return _signaled.load(std::memory_order_acquire);
+#else
+            return false;
+#endif
+        }
+
+#ifdef _WIN32
+        /**
+         * Wait on the loop's completion port from a thread of the runtime's own, and signal `wake` when a completion
+         * arrives, as Electron's embedding does: a port can neither be waited on together with others nor checked
+         * without taking a packet, so the watcher takes it, gives it back, and stays parked until the loop has run.
+         */
+        void WatchLoop(HANDLE wake);
+#endif
 
       private:
         NodeRuntime() = default;
@@ -119,6 +148,16 @@ namespace Framework::Scripting {
         // The caller holds the locker and the isolate, handle and context scopes.
         void DrainTaskQueues();
 
+        // uv_run(UV_RUN_NOWAIT), then lets the watcher wait for the loop's next completion. The caller holds the
+        // locker and the isolate, handle and context scopes.
+        void RunLoopOnce();
+
+        static void OnCallCompleted(v8::Isolate *isolate);
+
+#ifdef _WIN32
+        void StopWatching();
+#endif
+
         node::MultiIsolatePlatform *_platform = nullptr;
         std::unique_ptr<node::CommonEnvironmentSetup> _setup;
         node::Environment *_env = nullptr;
@@ -128,6 +167,19 @@ namespace Framework::Scripting {
         std::chrono::steady_clock::time_point _gcStart;
         uint64_t _gcPauses = 0;
         double _gcPauseMs  = 0.0;
+
+        // Keeps the loop alive; closed before the environment is freed, whose teardown runs the loop that frees it.
+        uv_async_t *_keepAlive = nullptr;
+        // Starts set, so the first tick drains what the bootstrap queued.
+        bool _entered = true;
+
+#ifdef _WIN32
+        std::thread _watcher;
+        HANDLE _wake   = nullptr; // the engine's, signalled when the loop has a completion
+        HANDLE _resume = nullptr; // released once the loop has run what the watcher saw
+        std::atomic<bool> _signaled {false};
+        std::atomic<bool> _stopWatching {false};
+#endif
     };
 
 } // namespace Framework::Scripting
