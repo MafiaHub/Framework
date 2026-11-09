@@ -448,7 +448,8 @@ MODULE(run_until, {
         const auto returned = Clock::now();
         EQUALS(returned >= deadline, true);
         EQUALS(returned - deadline < std::chrono::milliseconds(20), true);
-        EQUALS(TestManagerHelper::RecordedValue("spins") - before > 10, true);
+        // One immediate a millisecond, which a wait of any length between them comes to, would be 19 at most.
+        EQUALS(TestManagerHelper::RecordedValue("spins") - before > 40, true);
     });
 
     IT("returns early with an uncaught error waiting", {

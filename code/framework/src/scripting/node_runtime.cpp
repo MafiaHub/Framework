@@ -266,8 +266,18 @@ namespace Framework::Scripting {
             // Counted on the loop's own clock, which uv_run reads to decide which timers are due.
             uv_update_time(loop);
             const int ms = uv_backend_timeout(loop);
-            _dueAt       = ms < 0 ? std::chrono::steady_clock::time_point::max() : std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
-            _dueAtStale  = false;
+            if (ms < 0) {
+                _dueAt = std::chrono::steady_clock::time_point::max();
+            }
+            else if (ms == 0) {
+                // Not the time of asking: the caller's own reading of the clock is older, and would find this still to
+                // come.
+                _dueAt = std::chrono::steady_clock::time_point::min();
+            }
+            else {
+                _dueAt = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+            }
+            _dueAtStale = false;
         }
         return _dueAt;
     }
