@@ -805,12 +805,14 @@ namespace Framework::Scripting::Builtins {
         auto handlersToCall = CollectHandlers(eventName, targetResource, scope);
 
         if (handlersToCall.empty()) {
+            DispatchForeign(isolate, context, scope, eventName, targetResource, args);
             resolver->Resolve(context, v8::Undefined(isolate)).Check();
             return handleScope.Escape(promise);
         }
 
         // Invoke handlers and collect results as promises
         v8::Local<v8::Array> promises = InvokeHandlersToPromiseArray(isolate, context, handlersToCall, args, eventName);
+        DispatchForeign(isolate, context, scope, eventName, targetResource, args);
 
         // Aggregate results using Promise.allSettled
         AggregateWithAllSettled(isolate, context, promises, resolver, "One or more event handlers failed");
@@ -852,7 +854,37 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
+        if (!DispatchForeign(isolate, context, HandlerScope::Global, eventName, "", args)) {
+            proceed = false;
+        }
         return proceed;
+    }
+
+    void Events::SetForeignListener(ForeignListener listener) {
+        std::scoped_lock lock(_handlersMutex);
+        _foreign = std::move(listener);
+    }
+
+    bool Events::DispatchForeign(v8::Isolate *isolate, v8::Local<v8::Context> context, HandlerScope scope, const std::string &eventName, const std::string &targetResource, const std::vector<v8::Local<v8::Value>> &args) {
+        const EventScope eventScope = scope == HandlerScope::Client ? EventScope::Client : EventScope::Global;
+        {
+            std::scoped_lock lock(_handlersMutex);
+            if (!_foreign.wants || !_foreign.dispatch || !_foreign.wants(eventScope, eventName)) {
+                return true;
+            }
+        }
+
+        std::vector<TransferredValue> copied;
+        copied.reserve(args.size());
+        for (size_t i = 0; i < args.size(); ++i) {
+            auto value = ValueTransfer::Copy(isolate, context, args[i]);
+            if (!value) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Event '{}' did not reach handlers outside JavaScript: argument {} cannot cross ({})", eventName, i + 1, value.GetError());
+                return true;
+            }
+            copied.push_back(std::move(value).GetValue());
+        }
+        return _foreign.dispatch(eventScope, eventName, targetResource, copied);
     }
 
     v8::Local<v8::Promise> Events::EmitReservedTo(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &resourceName) {

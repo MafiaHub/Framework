@@ -11,7 +11,10 @@
 #include <v8.h>
 #include <v8pp/convert.hpp>
 
+#include "../script_runtime.h"
 #include "../value_transfer.h"
+
+#include <function2/function2.hpp>
 
 #include <atomic>
 #include <map>
@@ -123,6 +126,18 @@ namespace Framework::Scripting::Builtins {
         void CancelPendingEmission(v8::Isolate *isolate, v8::Local<v8::Promise> promise);
 
         /**
+         * Handlers outside JavaScript (a ScriptRuntime), installed by the resource manager. Every emission on the
+         * global and client buses also reaches them, with the arguments copied out of the emitter: `wants` is asked
+         * first, so nothing is copied for an event no handler there listens to. A `dispatch` returning false vetoes a
+         * synchronous emission, like a JavaScript handler returning false.
+         */
+        struct ForeignListener {
+            fu2::function<bool(EventScope, std::string_view) const> wants;
+            fu2::function<bool(EventScope, const std::string &, const std::string &, const std::vector<TransferredValue> &) const> dispatch;
+        };
+        void SetForeignListener(ForeignListener listener);
+
+        /**
          * Clean up all handlers for a resource (called on resource stop).
          */
         void CleanupResource(std::string_view resourceName);
@@ -200,6 +215,9 @@ namespace Framework::Scripting::Builtins {
         static void OnceImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope);
         static void OffImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope);
 
+        // Hands an emission to the foreign listener, if it wants it. False when it vetoed.
+        bool DispatchForeign(v8::Isolate *isolate, v8::Local<v8::Context> context, HandlerScope scope, const std::string &eventName, const std::string &targetResource, const std::vector<v8::Local<v8::Value>> &args);
+
         // Returns the handler table backing the given scope.
         std::map<std::string, std::vector<EventHandler>, std::less<>> &HandlerTable(HandlerScope scope);
 
@@ -245,6 +263,8 @@ namespace Framework::Scripting::Builtins {
         std::map<std::string, std::map<std::string, std::vector<EventHandler>, std::less<>>, std::less<>> _localHandlers;
 
         mutable std::mutex _handlersMutex;
+
+        ForeignListener _foreign;
 
         // Callback context passed to V8 via Externals. Allocated once and reused, never
         // reallocated — its address outlives individual Register() calls. See Events::Register.

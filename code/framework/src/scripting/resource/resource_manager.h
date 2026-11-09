@@ -255,6 +255,36 @@ namespace Framework::Scripting {
         /**
          * Get the JavaScript engine used by this manager.
          */
+        /**
+         * A language other than JavaScript that server resources can select with "serverRuntime"
+         * (docs/scripting_csharp.md). Add every runtime before starting resources; it lives as long as the manager,
+         * which shuts it down on destruction.
+         */
+        void AddRuntime(std::shared_ptr<ScriptRuntime> runtime);
+
+        // The runtime of this name, or nullptr.
+        ScriptRuntime *GetRuntime(std::string_view runtimeName) const;
+
+        // The runtime a resource's server scripts run in, or nullptr when they are JavaScript.
+        ScriptRuntime *GetRuntimeOf(std::string_view resourceName) const;
+
+        // Once per server tick: each runtime's deferred work.
+        void TickRuntimes();
+
+        /**
+         * For a runtime: raise an event on the bus, as Events.emit would (to one resource's handlers when
+         * `targetResource` is set). JavaScript handlers receive the values rebuilt in their own runtime; handlers in
+         * other runtimes receive the copies.
+         */
+        Utils::Result<void, std::string> EmitFromRuntime(const std::string &eventName, const std::string &targetResource, const std::vector<TransferredValue> &args);
+
+        /**
+         * For a runtime: call another resource's export, whatever language it is in. A JavaScript function export is
+         * called with the arguments rebuilt in its runtime and must return synchronously (a settled promise counts);
+         * any other export value is returned as is.
+         */
+        Utils::Result<TransferredValue, std::string> CallExport(const std::string &resourceName, const std::string &exportName, const std::vector<TransferredValue> &args);
+
         Engine *GetJSEngine() const;
 
         /**
@@ -399,6 +429,9 @@ namespace Framework::Scripting {
         // Execute entry point script for a resource
         bool ExecuteResourceScript(Resource &resource, std::string &outError);
 
+        // The resource's scripts for this side, as absolute paths checked to lie inside it.
+        bool ResolveResourceScripts(const Resource &resource, std::vector<std::string> &outScripts, std::string &outError) const;
+
         // Fire resource lifecycle events
         void FireOnResourceStarted(const std::string &name);
         void FireOnResourceStopped(const std::string &name);
@@ -455,6 +488,9 @@ namespace Framework::Scripting {
 
         // Events instance owned by this manager
         Builtins::Events _events;
+
+        // Runtimes for server resources not written in JavaScript.
+        std::vector<std::shared_ptr<ScriptRuntime>> _runtimes;
     };
 
 } // namespace Framework::Scripting

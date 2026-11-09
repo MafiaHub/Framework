@@ -11,7 +11,11 @@
 #include "../builtins/events.h"
 #include "../builtins/messages.h"
 #include "../builtins/state_bag.h"
+#include "../engine_helpers.h"
 #include "../engine_scope.h"
+#include "../function_references.h"
+#include "../script_runtime.h"
+#include "../value_transfer.h"
 
 #include <utils/vfs.h>
 
@@ -184,13 +188,204 @@ namespace Framework::Scripting {
         if (_jsEngine) {
             _jsEngine->SetResourceManager(this);
         }
+
+        // Events raised on the bus reach the runtimes' handlers too.
+        _events.SetForeignListener({
+            [this](EventScope scope, std::string_view eventName) {
+                return std::any_of(_runtimes.begin(), _runtimes.end(), [&](const auto &runtime) {
+                    return runtime->WantsEvent(scope, eventName);
+                });
+            },
+            [this](EventScope scope, const std::string &eventName, const std::string &targetResource, const std::vector<TransferredValue> &args) {
+                ScriptRuntime *target = targetResource.empty() ? nullptr : GetRuntimeOf(targetResource);
+                bool proceed          = true;
+                for (const auto &runtime : _runtimes) {
+                    if (!targetResource.empty() && runtime.get() != target) {
+                        continue;
+                    }
+                    if (runtime->WantsEvent(scope, eventName) && !runtime->DispatchEvent(scope, eventName, targetResource, args)) {
+                        proceed = false;
+                    }
+                }
+                return proceed;
+            },
+        });
     }
 
     ResourceManager::~ResourceManager() {
         StopAll();
+        for (const auto &runtime : _runtimes) {
+            runtime->Shutdown();
+        }
         if (_jsEngine) {
             _jsEngine->SetResourceManager(nullptr);
         }
+    }
+
+    void ResourceManager::AddRuntime(std::shared_ptr<ScriptRuntime> runtime) {
+        if (!runtime || GetRuntime(runtime->GetName()) != nullptr || runtime->GetName() == "js") {
+            throw std::invalid_argument("ResourceManager::AddRuntime: a runtime needs a unique name other than 'js'");
+        }
+        _runtimes.push_back(std::move(runtime));
+    }
+
+    ScriptRuntime *ResourceManager::GetRuntime(std::string_view runtimeName) const {
+        for (const auto &runtime : _runtimes) {
+            if (runtime->GetName() == runtimeName) {
+                return runtime.get();
+            }
+        }
+        return nullptr;
+    }
+
+    ScriptRuntime *ResourceManager::GetRuntimeOf(std::string_view resourceName) const {
+        if (_config.isClient || _runtimes.empty()) {
+            return nullptr;
+        }
+        std::string runtimeName;
+        {
+            std::scoped_lock lock(_resourcesMutex);
+            const auto it = _resources.find(resourceName);
+            if (it == _resources.end() || !it->second) {
+                return nullptr;
+            }
+            runtimeName = it->second->GetManifest().GetMafiaHubConfig().serverRuntime;
+        }
+        return runtimeName == "js" ? nullptr : GetRuntime(runtimeName);
+    }
+
+    void ResourceManager::TickRuntimes() {
+        for (const auto &runtime : _runtimes) {
+            runtime->Tick();
+        }
+    }
+
+    Utils::Result<void, std::string> ResourceManager::EmitFromRuntime(const std::string &eventName, const std::string &targetResource, const std::vector<TransferredValue> &args) {
+        if (eventName.empty()) {
+            return Utils::Result<void, std::string>::Err("event name must not be empty");
+        }
+
+        // Without JavaScript the bus is only the runtimes.
+        if (!_jsEngine || !_jsEngine->IsInitialized()) {
+            ScriptRuntime *target = targetResource.empty() ? nullptr : GetRuntimeOf(targetResource);
+            for (const auto &runtime : _runtimes) {
+                if ((targetResource.empty() || runtime.get() == target) && runtime->WantsEvent(EventScope::Global, eventName)) {
+                    runtime->DispatchEvent(EventScope::Global, eventName, targetResource, args);
+                }
+            }
+            return Utils::Result<void, std::string>::Ok();
+        }
+
+        EngineScope scope(_jsEngine);
+        v8::Isolate *isolate           = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
+        v8::TryCatch tryCatch(isolate);
+
+        std::vector<v8::Local<v8::Value>> values;
+        values.reserve(args.size());
+        for (size_t i = 0; i < args.size(); ++i) {
+            v8::Local<v8::Value> value;
+            if (!ValueTransfer::Rebuild(isolate, context, args[i]).ToLocal(&value)) {
+                return Utils::Result<void, std::string>::Err("argument " + std::to_string(i + 1) + " cannot be delivered: " + FormatV8Exception(isolate, tryCatch, "unknown error"));
+            }
+            values.push_back(value);
+        }
+
+        v8::Local<v8::Promise> emitted = targetResource.empty() ? _events.EmitReserved(isolate, context, eventName, values) : _events.EmitReservedTo(isolate, context, eventName, values, targetResource);
+        emitted->MarkAsHandled();
+        return Utils::Result<void, std::string>::Ok();
+    }
+
+    Utils::Result<TransferredValue, std::string> ResourceManager::CallExport(const std::string &resourceName, const std::string &exportName, const std::vector<TransferredValue> &args) {
+        using CallResult       = Utils::Result<TransferredValue, std::string>;
+        const Resource *target = GetResource(resourceName);
+        if (!target) {
+            return CallResult::Err("resource '" + resourceName + "' not found");
+        }
+        if (!target->IsRunning()) {
+            return CallResult::Err("resource '" + resourceName + "' is not running");
+        }
+        const std::string notFound = "export '" + exportName + "' not found in resource '" + resourceName + "'";
+
+        if (ScriptRuntime *runtime = GetRuntimeOf(resourceName)) {
+            if (!runtime->HasExport(resourceName, exportName)) {
+                return CallResult::Err(notFound);
+            }
+            return runtime->CallExport(resourceName, exportName, args);
+        }
+
+        v8::Isolate *owner = target->GetIsolate();
+        if (!_jsEngine || !_jsEngine->IsInitialized() || owner == nullptr) {
+            return CallResult::Err(notFound);
+        }
+
+        EngineScope scope(_jsEngine);
+        v8::Isolate *isolate           = scope.Isolate();
+        v8::Local<v8::Context> context = scope.Context();
+        FunctionReferences *references = GetFunctionReferences();
+        v8::TryCatch tryCatch(isolate);
+
+        // Runs inside the export's runtime: the value, or what the function returns for these arguments.
+        auto produce = [&](v8::Isolate *iso, v8::Local<v8::Context> ctx) -> v8::MaybeLocal<v8::Value> {
+            v8::Local<v8::Value> value = target->GetExportValue(exportName);
+            if (value.IsEmpty()) {
+                iso->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(iso, notFound.c_str()).ToLocalChecked()));
+                return {};
+            }
+            if (!value->IsFunction()) {
+                return value;
+            }
+
+            const TransferFunctions functions = references ? references->For(references->FindRuntime(iso)) : TransferFunctions {};
+            std::vector<v8::Local<v8::Value>> rebuilt;
+            rebuilt.reserve(args.size());
+            for (const auto &arg : args) {
+                v8::Local<v8::Value> local;
+                if (!ValueTransfer::Rebuild(iso, ctx, arg, functions).ToLocal(&local)) {
+                    return {};
+                }
+                rebuilt.push_back(local);
+            }
+
+            v8::Local<v8::Value> result;
+            if (!value.As<v8::Function>()->Call(ctx, v8::Undefined(iso), static_cast<int>(rebuilt.size()), rebuilt.data()).ToLocal(&result)) {
+                return {};
+            }
+            // An async export that finished without awaiting has already settled; one still waiting cannot be
+            // answered without blocking the caller.
+            if (result->IsPromise()) {
+                const auto promise = result.As<v8::Promise>();
+                switch (promise->State()) {
+                case v8::Promise::kFulfilled: return promise->Result();
+                case v8::Promise::kRejected: iso->ThrowException(promise->Result()); return {};
+                case v8::Promise::kPending:
+                    iso->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(iso, ("export '" + exportName + "' returned a promise that has not settled; exports called from another language must answer synchronously").c_str()).ToLocalChecked()));
+                    return {};
+                }
+            }
+            return result;
+        };
+
+        v8::Local<v8::Value> local;
+        bool produced = false;
+        if (owner == isolate) {
+            produced = produce(isolate, context).ToLocal(&local);
+        }
+        else if (references != nullptr) {
+            produced = references->Fetch(isolate, owner, produce).ToLocal(&local);
+        }
+        else {
+            return CallResult::Err("resource '" + resourceName + "' is not reachable from here");
+        }
+        if (!produced) {
+            return CallResult::Err(FormatV8Exception(isolate, tryCatch, "export call failed"));
+        }
+
+        auto copied = ValueTransfer::Copy(isolate, context, local);
+        if (!copied) {
+            return CallResult::Err("the result of export '" + exportName + "' cannot cross: " + copied.GetError());
+        }
+        return CallResult::Ok(std::move(copied).GetValue());
     }
 
     const ResourceManagerConfig &ResourceManager::GetConfig() const {
@@ -531,27 +726,50 @@ namespace Framework::Scripting {
             return ResourceOperationResult("Invalid state transition for resource: " + std::string(name));
         }
 
-        // A plain stop/start (including client refresh notifications) must run
-        // the scripts again, not reuse exports from the previous execution.
-        if (_jsEngine) {
-            _jsEngine->EvictModulesUnderPath(resource->GetPath());
-        }
-
-        // An engine that isolates resources gives this one a fresh runtime; a shared engine has nothing to create.
-        if (_jsEngine && !_jsEngine->CreateResourceRuntime(std::string(name))) {
-            const std::string error = "Failed to create the resource's runtime: " + _jsEngine->GetLastError();
-            resource->SetError(error);
-            FireOnResourceError(std::string(name), error);
-            return ResourceOperationResult(error);
-        }
-
-        // Execute the entry point script
         std::string error;
-        if (!ExecuteResourceScript(*resource, error)) {
-            CleanupResourceRuntime(*resource, name);
-            resource->SetError(error);
-            FireOnResourceError(std::string(name), error);
-            return ResourceOperationResult(error);
+        const auto &mafiahub = resource->GetManifest().GetMafiaHubConfig();
+        if (!_config.isClient && !mafiahub.IsJavaScriptServer()) {
+            // Server scripts in another language: its runtime loads them and runs their start.
+            ScriptRuntime *runtime = GetRuntime(mafiahub.serverRuntime);
+            std::vector<std::string> scripts;
+            if (!runtime) {
+                error = "Resource uses serverRuntime '" + mafiahub.serverRuntime + "', which this server does not have";
+            }
+            else if (ResolveResourceScripts(*resource, scripts, error)) {
+                auto started = runtime->StartResource(*resource, scripts);
+                if (!started) {
+                    error = started.GetError();
+                }
+            }
+            if (!error.empty()) {
+                CleanupResourceRuntime(*resource, name);
+                resource->SetError(error);
+                FireOnResourceError(std::string(name), error);
+                return ResourceOperationResult(error);
+            }
+        }
+        else {
+            // A plain stop/start (including client refresh notifications) must run
+            // the scripts again, not reuse exports from the previous execution.
+            if (_jsEngine) {
+                _jsEngine->EvictModulesUnderPath(resource->GetPath());
+            }
+
+            // An engine that isolates resources gives this one a fresh runtime; a shared engine has nothing to create.
+            if (_jsEngine && !_jsEngine->CreateResourceRuntime(std::string(name))) {
+                error = "Failed to create the resource's runtime: " + _jsEngine->GetLastError();
+                resource->SetError(error);
+                FireOnResourceError(std::string(name), error);
+                return ResourceOperationResult(error);
+            }
+
+            // Execute the entry point script
+            if (!ExecuteResourceScript(*resource, error)) {
+                CleanupResourceRuntime(*resource, name);
+                resource->SetError(error);
+                FireOnResourceError(std::string(name), error);
+                return ResourceOperationResult(error);
+            }
         }
 
         // Emit resourceStart event (bypass running check since resource is still Loading)
@@ -897,13 +1115,34 @@ namespace Framework::Scripting {
             return false;
         }
 
+        std::vector<std::string> resolvedScripts;
+        if (!ResolveResourceScripts(resource, resolvedScripts, outError)) {
+            return false;
+        }
+
+        const std::string resourceName = resource.GetName();
+        for (const auto &resolved : resolvedScripts) {
+            // Set resource context so Events.on() etc. know which resource is executing.
+            SetCurrentResourceContext(resourceName);
+            const bool ok = _jsEngine->ExecuteResourceFile(resourceName, resolved);
+            SetCurrentResourceContext("");
+
+            if (!ok) {
+                outError = _jsEngine->GetLastError();
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ResourceManager::ResolveResourceScripts(const Resource &resource, std::vector<std::string> &outScripts, std::string &outError) const {
         const auto scripts = _config.isClient ? resource.GetClientScripts() : resource.GetServerScripts();
         if (scripts.empty()) {
             return true;
         }
 
-        const std::string resourceName = resource.GetName();
-        const bool virtualRoot         = Utils::Vfs::IsVirtualPath(resource.GetPath());
+        const bool virtualRoot = Utils::Vfs::IsVirtualPath(resource.GetPath());
 
         std::filesystem::path resourceRoot = std::filesystem::path(resource.GetPath());
         std::error_code ec;
@@ -949,15 +1188,7 @@ namespace Framework::Scripting {
                 resolved = candidate.string();
             }
 
-            // Set resource context so Events.on() etc. know which resource is executing.
-            SetCurrentResourceContext(resourceName);
-            const bool ok = _jsEngine->ExecuteResourceFile(resourceName, resolved);
-            SetCurrentResourceContext("");
-
-            if (!ok) {
-                outError = _jsEngine->GetLastError();
-                return false;
-            }
+            outScripts.push_back(std::move(resolved));
         }
 
         return true;
@@ -1003,6 +1234,9 @@ namespace Framework::Scripting {
     }
 
     void ResourceManager::CleanupResourceRuntime(Resource &resource, std::string_view resourceName) {
+        if (ScriptRuntime *runtime = GetRuntimeOf(resourceName)) {
+            runtime->StopResource(std::string(resourceName));
+        }
         CallResourceStop(resourceName);
         if (_jsEngine) {
             _jsEngine->ClearResourceTimers(std::string(resourceName));

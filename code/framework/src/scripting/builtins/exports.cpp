@@ -148,9 +148,30 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
+        const std::string notFound = "Exports.get: export '" + exportName + "' not found in resource '" + resourceName + "'";
+
+        // A resource in another language: its exports are functions, reached through a stand-in that copies the
+        // arguments across and the result back.
+        if (manager->GetRuntimeOf(resourceName) != nullptr) {
+            if (!manager->GetRuntimeOf(resourceName)->HasExport(resourceName, exportName)) {
+                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, notFound)));
+                return;
+            }
+            v8::Local<v8::Context> context = isolate->GetCurrentContext();
+            v8::Local<v8::Array> data      = v8::Array::New(isolate, 3);
+            data->Set(context, 0, v8pp::to_v8(isolate, resourceName)).Check();
+            data->Set(context, 1, v8pp::to_v8(isolate, exportName)).Check();
+            data->Set(context, 2, v8::External::New(isolate, manager)).Check();
+            v8::Local<v8::Function> standIn;
+            if (v8::Function::New(context, ForeignExportCallback, data).ToLocal(&standIn)) {
+                standIn->SetName(v8pp::to_v8(isolate, exportName));
+                args.GetReturnValue().Set(standIn);
+            }
+            return;
+        }
+
         // Export values are bound to their resource's isolate; nothing registered yet means none.
         v8::Isolate *resourceIsolate = resource->GetIsolate();
-        const std::string notFound   = "Exports.get: export '" + exportName + "' not found in resource '" + resourceName + "'";
         if (resourceIsolate == nullptr) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, notFound)));
             return;
@@ -189,6 +210,39 @@ namespace Framework::Scripting::Builtins {
                                  .ToLocal(&copied);
         if (fetched) {
             args.GetReturnValue().Set(copied);
+        }
+    }
+
+    void Exports::ForeignExportCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate           = args.GetIsolate();
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        v8::HandleScope handleScope(isolate);
+
+        const auto data                = args.Data().As<v8::Array>();
+        const std::string resourceName = v8pp::from_v8<std::string>(isolate, data->Get(context, 0).ToLocalChecked());
+        const std::string exportName   = v8pp::from_v8<std::string>(isolate, data->Get(context, 1).ToLocalChecked());
+        auto *manager                  = static_cast<ResourceManager *>(data->Get(context, 2).ToLocalChecked().As<v8::External>()->Value());
+        const std::string label        = "Exports '" + resourceName + "." + exportName + "'";
+
+        std::vector<TransferredValue> copied;
+        copied.reserve(args.Length());
+        for (int i = 0; i < args.Length(); ++i) {
+            auto value = ValueTransfer::Copy(isolate, context, args[i]);
+            if (!value) {
+                ThrowTypeError(isolate, (label + ": argument " + std::to_string(i + 1) + " cannot cross into another language: " + value.GetError()).c_str());
+                return;
+            }
+            copied.push_back(std::move(value).GetValue());
+        }
+
+        auto result = manager->CallExport(resourceName, exportName, copied);
+        if (!result) {
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, label + ": " + result.GetError())));
+            return;
+        }
+        v8::Local<v8::Value> rebuilt;
+        if (ValueTransfer::Rebuild(isolate, context, result.GetValue()).ToLocal(&rebuilt)) {
+            args.GetReturnValue().Set(rebuilt);
         }
     }
 

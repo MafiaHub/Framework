@@ -99,6 +99,19 @@ namespace Framework::Scripting {
             readList("clientFiles", _mafiahubConfig.files);
             _mafiahubConfig.priority      = mh.value("priority", 0);
             _mafiahubConfig.errorBehavior = mh.value("errorBehavior", "stop");
+            if (const auto runtimeIt = mh.find("serverRuntime"); runtimeIt != mh.end()) {
+                if (!runtimeIt->is_string() || runtimeIt->get<std::string>().empty()) {
+                    _error = "mafiahub.serverRuntime must be a non-empty string";
+                    _valid = false;
+                    return false;
+                }
+                _mafiahubConfig.serverRuntime = runtimeIt->get<std::string>();
+                if (!_mafiahubConfig.IsJavaScriptServer() && !_mafiahubConfig.sharedScripts.empty()) {
+                    _error = "mafiahub.sharedScripts are JavaScript and run on the server too; a resource whose serverRuntime is '" + _mafiahubConfig.serverRuntime + "' lists its client scripts as clientScripts";
+                    _valid = false;
+                    return false;
+                }
+            }
 
             // Exports
             if (mh.contains("exports") && mh["exports"].is_array()) {
