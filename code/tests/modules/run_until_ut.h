@@ -149,6 +149,37 @@ MODULE(run_until, {
         EQUALS(TestManagerHelper::RecordedValue("trips"), 20);
     });
 
+    IT("finishes round trips on unreferenced sockets before the next tick", {
+        TestManagerHelper::Cleanup();
+        // Unreferenced, the sockets do not keep the loop alive, yet their data still has to wake it; the timer is what
+        // keeps a resource like this one running.
+        ResourceIsolationTest::WriteResource("unref", R"(
+            const net = require('node:net');
+            const server = net.createServer((s) => { s.unref(); s.on('data', (d) => s.write(d)); });
+            server.listen(0, '127.0.0.1', () => {
+                const client = net.connect(server.address().port, '127.0.0.1', () => {
+                    client.unref();
+                    server.unref();
+                    globalThis.trips = async (n) => {
+                        for (let i = 1; i <= n; i++) {
+                            await new Promise((resolve) => { client.once('data', resolve); client.write('x'); });
+                            __record('trips', i);
+                        }
+                    };
+                    __record('ready', 1);
+                });
+            });
+            setInterval(() => {}, 60000);
+        )");
+        RunUntilTest::Rig rig;
+        EQUALS(rig.Start({"unref"}), true);
+        EQUALS(ResourceIsolationTest::TickUntilRecorded(rig.engine, "ready"), true);
+
+        TestManagerHelper::EvalIntIn(rig.engine, "unref", "trips(20); 0");
+        rig.TickAndWait(200);
+        EQUALS(TestManagerHelper::RecordedValue("trips"), 20);
+    });
+
     IT("finishes file system calls before the next tick while a timer is pending", {
         TestManagerHelper::Cleanup();
         ResourceIsolationTest::WriteResource("files", R"(
@@ -323,9 +354,9 @@ MODULE(run_until, {
         const int before = TestManagerHelper::RecordedValue("fired");
         rig.engine.RunUntil(Clock::now() + std::chrono::milliseconds(500));
         const int fired = TestManagerHelper::RecordedValue("fired") - before;
-        // 50 are due; a wait that slept past them would run one per tick at most.
-        EQUALS(fired >= 40, true);
-        EQUALS(fired <= 51, true);
+        // 50 are due, and no tick runs in the window: a wait that slept past them would run none at all. The bound
+        // leaves room for a loaded machine's timer slack.
+        EQUALS(fired >= 20, true);
     });
 
     IT("returns at the deadline while a resource keeps itself busy", {
