@@ -59,6 +59,25 @@ target_compile_definitions(FrameworkValueTransferBench PRIVATE NODE_WANT_INTERNA
 # Tests use Node.js APIs through the scripting engine
 target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
 
+# C# resources beside JavaScript ones, on an installed .NET (code/tests/modules/script_runtime_ut.h).
+if(FW_SCRIPTING_CSHARP)
+    set(FW_CSHARP_TEST_RESOURCE_DIR "${CMAKE_BINARY_DIR}/bin/dotnet-tests/TestResource")
+    add_custom_target(FrameworkTestsCSharpResource
+        COMMAND "${FW_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/csharp/TestResource/TestResource.csproj" -c Release --nologo -v quiet
+            -p:UseArtifactsOutput=true "-p:ArtifactsPath=${FW_CSHARP_ARTIFACTS_DIR}" -o "${FW_CSHARP_TEST_RESOURCE_DIR}"
+        COMMENT "Building the C# test resource"
+        VERBATIM)
+    add_dependencies(FrameworkTestsCSharpResource FrameworkScriptingCSharp)
+    add_dependencies(FrameworkTests FrameworkTestsCSharpResource)
+    target_compile_definitions(FrameworkTests PRIVATE FW_TEST_CSHARP=1
+        "FW_TEST_CSHARP_HOST_DIR=\"${FW_CSHARP_HOST_DIR}\""
+        "FW_TEST_CSHARP_RESOURCE_DIR=\"${FW_CSHARP_TEST_RESOURCE_DIR}\"")
+endif()
+
+# The C# API generated from the bindings, which a test keeps in step with them (docs/scripting_csharp.md).
+target_compile_definitions(FrameworkTests PRIVATE
+        "FW_CSHARP_GENERATED_FILE=\"${Framework_SOURCE_DIR}/code/framework/src/scripting/clr/managed/MafiaHub.Framework.Scripting/Generated/Bindings.g.cs\"")
+
 add_custom_target(RunFrameworkTests
         COMMAND $<TARGET_FILE:FrameworkTests>
         COMMAND $<TARGET_FILE:FrameworkClientScriptingTests>

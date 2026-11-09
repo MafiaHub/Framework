@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The C# scripting API and host for MafiaHub Framework servers (docs/scripting_csharp.md).
+    The server loads this assembly through hostfxr; resources reference it to compile.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Operators, conversions and overrides explain themselves; the API's types and members carry docs. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <RootNamespace>MafiaHub.Framework.Scripting</RootNamespace>
+    <AssemblyName>MafiaHub.Framework.Scripting</AssemblyName>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>

@@ -212,7 +212,7 @@ Other agents do not run these hooks; the rules still apply to them as written.
 1. **CoreModules** (`core_modules.h`) - Central singleton registry coupling all modules together
 2. **Replication** (`networking/replication/`) - Native MafiaNet entity replication (ReplicaManager3 + RPC4) with an interest grid for streaming
 3. **Networking** (`networking/network_peer.h`) - Client-server communication via MafiaNet
-4. **Scripting** (`scripting/`) - JavaScript/TypeScript scripting for game logic (Server: libnode, Client: V8)
+4. **Scripting** (`scripting/`) - JavaScript/TypeScript scripting for game logic (Server: libnode, Client: V8), and C# server resources on CoreCLR (`scripting/clr/`, docs/scripting_csharp.md). A class declared through `Api::ClassBinding` feeds both; after changing one, regenerate the committed C# API with `FW_UPDATE_GENERATED=1 FW_TEST_FILTER=script_bindings build/bin/FrameworkTests`
 5. **GUI Manager** (`gui/manager.h`) - UI using CEF and Dear ImGui
 6. **Job System** (`jobs/job_system.h`) - Opt-in fiber-based task scheduling using FTL
 7. **Voice** (`voice/`) - Proximity voice chat; the server relays opaque Opus frames (RakVoice) without decoding, routed by `VoiceRouter`
@@ -264,3 +264,4 @@ Format: `Module: Brief commit description`
 - **Tracy** - Frame profiler (wrapped by `utils/profiler.h` FW_PROFILE_* macros; toggle with `FW_PROFILING`)
 - **spdlog** - Logging
 - **nlohmann/json** - JSON parsing
+- **.NET 10 SDK** (optional) - builds the C# scripting host and its tests when installed (`FW_SCRIPTING_CSHARP`)

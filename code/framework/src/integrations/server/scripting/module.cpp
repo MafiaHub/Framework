@@ -20,6 +20,8 @@
 #include <scripting/builtins/events.h>
 #include <scripting/builtins/execution_environment.h>
 #include <scripting/builtins/exports.h>
+#include <scripting/clr/clr_runtime.h>
+#include <utils/path.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/messages.h>
 #include <scripting/engine_scope.h>
@@ -72,6 +74,10 @@ namespace Framework::Integrations::Server::Scripting {
         config.devMode               = _devMode;
 
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_nodeEngine.get(), config);
+
+        // Resources written in C# ("serverRuntime": "csharp", docs/scripting_csharp.md). The host ships in dotnet/
+        // beside the server; .NET itself starts with the first C# resource, so a server without one never loads it.
+        _resourceManager->AddRuntime(std::make_shared<Framework::Scripting::Clr::ClrRuntime>(_resourceManager.get(), Framework::Scripting::Clr::ClrRuntimeConfig {Utils::GetAbsolutePathA("dotnet"), ""}));
 
         // Register Framework SDK bindings
         RegisterFrameworkBindings();
@@ -180,6 +186,12 @@ namespace Framework::Integrations::Server::Scripting {
             _resourceManager->ProcessScheduledRestarts();
             // Dev-mode: poll resource files and hot-reload on change
             _resourceManager->ProcessFileWatch();
+        }
+
+        if (_resourceManager) {
+            FW_PROFILE_SCOPE_N("Scripting::Runtimes");
+            // Continuations and ticks of resources in other languages.
+            _resourceManager->TickRuntimes();
         }
 
         // Process pending message responses

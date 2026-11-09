@@ -91,6 +91,10 @@ set(FRAMEWORK_SERVER_SRC
     src/integrations/server/scripting/builtins/voice.cpp
     src/integrations/server/scripting/builtins/pending_connection.cpp
 
+    # C# scripting on CoreCLR (server only)
+    src/scripting/clr/clr_runtime.cpp
+    src/scripting/clr/value_codec.cpp
+
     src/voice/server/voice_router.cpp
     src/voice/server/voice_server.cpp
 )
@@ -392,7 +396,7 @@ endif()
 
 if(LIBNODE_AVAILABLE)
     link_shared_deps(FrameworkServer)
-    target_link_libraries(FrameworkServer v8 v8pp MafiaHubServices libsig libnode)
+    target_link_libraries(FrameworkServer v8 v8pp MafiaHubServices libsig libnode ${CMAKE_DL_LIBS})
     target_compile_definitions(FrameworkServer PRIVATE
         $<$<OR:$<BOOL:${FW_NODE_INSPECTOR}>,$<CONFIG:Debug>>:FW_NODE_INSPECTOR>)
 
@@ -567,4 +571,39 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/" DESTINATION "${FW_SDK_INCLU
 if(WIN32)
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/launcher.manifest" DESTINATION "${FW_SDK_SHARE_ARCH_DIR}")
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/game_reserve.cpp" DESTINATION "${FW_SDK_SHARE_DIR}")
+endif()
+
+# C# scripting host (docs/scripting_csharp.md). Built with the .NET SDK when one is installed; the server starts it
+# from bin/dotnet with whatever .NET runtime it finds, so the native build never links against .NET.
+# The host targets net10.0, so an older SDK leaves it off by default rather than failing the build.
+set(FW_DOTNET_MIN_MAJOR 10)
+find_program(FW_DOTNET_EXECUTABLE dotnet)
+set(_fw_csharp_default OFF)
+if(FW_DOTNET_EXECUTABLE)
+    execute_process(COMMAND "${FW_DOTNET_EXECUTABLE}" --version OUTPUT_VARIABLE _fw_dotnet_version OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET RESULT_VARIABLE _fw_dotnet_result)
+    if(_fw_dotnet_result EQUAL 0 AND _fw_dotnet_version MATCHES "^([0-9]+)\\.")
+        if(CMAKE_MATCH_1 GREATER_EQUAL FW_DOTNET_MIN_MAJOR)
+            set(_fw_csharp_default ON)
+        else()
+            message(STATUS "C# scripting host: .NET SDK ${_fw_dotnet_version} is older than ${FW_DOTNET_MIN_MAJOR}; not building it")
+        endif()
+    endif()
+endif()
+option(FW_SCRIPTING_CSHARP "Build the C# scripting host (needs the .NET ${FW_DOTNET_MIN_MAJOR} SDK)" ${_fw_csharp_default})
+
+if(FW_SCRIPTING_CSHARP)
+    if(NOT FW_DOTNET_EXECUTABLE)
+        message(FATAL_ERROR "FW_SCRIPTING_CSHARP needs the .NET SDK (dotnet) on PATH")
+    endif()
+    set(FW_CSHARP_HOST_DIR "${CMAKE_BINARY_DIR}/bin/dotnet" CACHE INTERNAL "Where the C# scripting host is built")
+    set(FW_CSHARP_ARTIFACTS_DIR "${CMAKE_BINARY_DIR}/dotnet-artifacts" CACHE INTERNAL "Intermediate output of the .NET builds")
+    set(FW_CSHARP_HOST_PROJECT "${CMAKE_CURRENT_SOURCE_DIR}/src/scripting/clr/managed/MafiaHub.Framework.Scripting/MafiaHub.Framework.Scripting.csproj" CACHE INTERNAL "The C# scripting host project")
+    # Always run: dotnet decides what is out of date, and is quick when nothing is.
+    add_custom_target(FrameworkScriptingCSharp ALL
+        COMMAND "${FW_DOTNET_EXECUTABLE}" build "${FW_CSHARP_HOST_PROJECT}" -c Release --nologo -v quiet
+            -p:UseArtifactsOutput=true "-p:ArtifactsPath=${FW_CSHARP_ARTIFACTS_DIR}" -o "${FW_CSHARP_HOST_DIR}"
+        COMMENT "Building the C# scripting host"
+        VERBATIM)
+    # Servers ship it as dotnet/ beside the binary, where the C# runtime looks for it.
+    fw_sdk_runtime(SERVER "${FW_CSHARP_HOST_DIR}")
 endif()
