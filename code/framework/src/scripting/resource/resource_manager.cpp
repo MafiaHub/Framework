@@ -495,6 +495,22 @@ namespace Framework::Scripting {
             return ResourceOperationResult::Ok({std::string(name)});
         }
 
+        if (std::find(_startChain.begin(), _startChain.end(), name) != _startChain.end()) {
+            std::string chain;
+            for (const auto &link : _startChain) {
+                chain += link + " -> ";
+            }
+            return ResourceOperationResult("Dependency cycle: " + chain + std::string(name));
+        }
+        _startChain.emplace_back(name);
+        // Unwinds on every return below, and there are many.
+        struct ChainGuard {
+            std::vector<std::string> &chain;
+            ~ChainGuard() {
+                chain.pop_back();
+            }
+        } chainGuard {_startChain};
+
         // Start dependencies first
         auto deps = GetDependencies(name);
         for (const auto &depName : deps) {

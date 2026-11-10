@@ -425,6 +425,11 @@ namespace Framework::Scripting {
         // True if the dependency graph has a cycle (can't fully topo-sort).
         bool HasDependencyCycle() const;
 
+        // Names on the current StartResource call chain. A dependency that leads back to one of
+        // them is a cycle: a resource only becomes Loading after its dependencies have started, so
+        // its state cannot stop the recursion.
+        std::vector<std::string> _startChain;
+
         // Configuration
         ResourceManagerConfig _config;
 

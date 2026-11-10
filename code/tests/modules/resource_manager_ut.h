@@ -775,6 +775,151 @@ MODULE(resource_manager, {
         TestManagerHelper::Cleanup();
     });
 
+    IT("refuses to start a resource that depends on itself", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("selfdep", R"({
+            "name": "selfdep",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "selfdep"}]
+            }
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        auto result = manager.StartResource("selfdep");
+        EQUALS(static_cast<bool>(result), false);
+        EQUALS(result.GetError().find("cycle") != std::string::npos, true);
+        EQUALS(manager.IsResourceRunning("selfdep"), false);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("refuses to start a resource on a two-resource dependency cycle", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("cycle-a", R"({
+            "name": "cycle-a",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "cycle-b"}]
+            }
+        })");
+        TestManagerHelper::CreateTestResource("cycle-b", R"({
+            "name": "cycle-b",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "cycle-a"}]
+            }
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        auto result = manager.StartResource("cycle-a");
+        EQUALS(static_cast<bool>(result), false);
+        EQUALS(result.GetError().find("cycle") != std::string::npos, true);
+        EQUALS(manager.IsResourceRunning("cycle-a"), false);
+        EQUALS(manager.IsResourceRunning("cycle-b"), false);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("still starts a healthy resource while an unrelated cycle exists", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("cycle-a", R"({
+            "name": "cycle-a",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "cycle-b"}]
+            }
+        })");
+        TestManagerHelper::CreateTestResource("cycle-b", R"({
+            "name": "cycle-b",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "cycle-a"}]
+            }
+        })");
+        TestManagerHelper::CreateTestResource("healthy", R"({
+            "name": "healthy",
+            "version": "1.0.0"
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        auto result = manager.StartResource("healthy");
+        EQUALS(static_cast<bool>(result), true);
+        EQUALS(manager.IsResourceRunning("healthy"), true);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("starts again after a refused cycle", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("cycle-a", R"({
+            "name": "cycle-a",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "cycle-b"}]
+            }
+        })");
+        TestManagerHelper::CreateTestResource("cycle-b", R"({
+            "name": "cycle-b",
+            "version": "1.0.0",
+            "mafiahub": {
+                "resourceDependencies": [{"name": "cycle-a"}]
+            }
+        })");
+
+        NodeEngine engine;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        auto first = manager.StartResource("cycle-a");
+        EQUALS(static_cast<bool>(first), false);
+
+        // The chain must have been unwound, or this would report something other than a cycle.
+        auto second = manager.StartResource("cycle-a");
+        EQUALS(static_cast<bool>(second), false);
+        EQUALS(second.GetError().find("cycle") != std::string::npos, true);
+        EQUALS(manager.IsResourceRunning("cycle-a"), false);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
     IT("a mistyped optional flag keeps the resource and treats the dependency as required", {
         TestManagerHelper::Cleanup();
         TestManagerHelper::CreateTestResource("badflag-user", R"({
