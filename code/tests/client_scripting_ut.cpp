@@ -141,6 +141,49 @@ MODULE(client_scripting, {
         vfs.Unmount("promise-failure.zip");
         vfs.Unmount("healthy.zip");
     });
+    IT("keeps a module's require valid after its resource is restarted", {
+        auto &vfs = Framework::Utils::Vfs::Get();
+        EQUALS(vfs.Init(nullptr), true);
+
+        const auto mount = [&](int version) {
+            Framework::Utils::Package::Writer writer;
+            writer.Add("package.json", "{\"name\":\"stale\",\"version\":\"1.0.0\",\"mafiahub\":{\"clientScripts\":[\"client.js\"]}}");
+            writer.Add("client.js", "globalThis.staleRequire ||= require; globalThis.staleLoads = (globalThis.staleLoads || 0) + 1; require('./helper');");
+            writer.Add("helper.js", "module.exports = " + std::to_string(version) + ";");
+            std::string blob, zip, error;
+            if (!writer.Build(nullptr, blob) || !Framework::Utils::Package::Open(blob, nullptr, zip, error)) {
+                return false;
+            }
+            vfs.Unmount("stale.zip");
+            return vfs.MountMemory(std::move(zip), "stale.zip", Framework::Utils::Vfs::ResourcePath("stale"), error);
+        };
+
+        EQUALS(mount(1), true);
+
+        Framework::Scripting::V8Engine engine;
+        engine.SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        {
+            Framework::Scripting::ResourceManagerConfig config;
+            config.resourcesPath = Framework::Utils::Vfs::kResourceMountRoot;
+            config.isClient      = true;
+            Framework::Scripting::ResourceManager manager(&engine, config);
+            EQUALS(manager.DiscoverResources(), 1u);
+            EQUALS(static_cast<bool>(manager.StartAll()), true);
+            EQUALS(engine.Execute("if (typeof staleRequire !== 'function' || staleLoads !== 1) throw Error('setup');"), true);
+
+            EQUALS(static_cast<bool>(manager.StopResource("stale")), true);
+            EQUALS(mount(2), true);
+            EQUALS(static_cast<bool>(manager.StartResource("stale")), true);
+
+            // Churn allocations so a dangling record would likely be overwritten.
+            EQUALS(engine.Execute("for (let i = 0; i < 2000; ++i) { try { require('./missing-' + i); } catch (e) {} }"), true);
+            EQUALS(engine.Execute("if (staleRequire('./helper') !== 2) throw Error('stale require did not load the current helper');"), true);
+            manager.StopAll();
+        }
+        engine.Shutdown();
+        vfs.Unmount("stale.zip");
+    });
 
 });
 

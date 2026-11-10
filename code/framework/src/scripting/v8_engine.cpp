@@ -61,9 +61,7 @@ namespace Framework::Scripting {
 
     void V8Engine::ClearModuleCache() {
         // Must only be called after stopping resources.
-        // RequireData stores backing pointers for module-scoped require().
         _moduleCache.clear();
-        _requireDataStore.clear();
     }
 
     bool V8Engine::ResetContext() {
@@ -162,12 +160,6 @@ namespace Framework::Scripting {
                 ++it;
             }
         }
-
-        _requireDataStore.erase(std::remove_if(_requireDataStore.begin(), _requireDataStore.end(),
-                                    [&](const std::unique_ptr<RequireData> &d) {
-                                        return d && insideRoot(d->currentDir);
-                                    }),
-            _requireDataStore.end());
     }
 
     void V8Engine::ClearResourceTimers(const std::string &resourceName) {
@@ -331,13 +323,9 @@ namespace Framework::Scripting {
         v8::Local<v8::Object> global   = context->Global();
 
         // Default require uses cwd as the reference directory
-        std::string cwd = std::filesystem::current_path().string();
-        auto data       = std::make_unique<RequireData>(RequireData {this, cwd});
-        auto *dataPtr   = data.get();
-        _requireDataStore.push_back(std::move(data));
-        v8::Local<v8::External> external = v8::External::New(_isolate, dataPtr);
-
-        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, external);
+        const std::string cwd                       = std::filesystem::current_path().string();
+        v8::Local<v8::String> requireDir            = v8::String::NewFromUtf8(_isolate, cwd.c_str(), v8::NewStringType::kNormal, static_cast<int>(cwd.size())).ToLocalChecked();
+        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, requireDir);
         global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "require"), requireTmpl->GetFunction(context).ToLocalChecked()).Check();
     }
 
@@ -600,12 +588,10 @@ namespace Framework::Scripting {
         provisionalExports.Reset(_isolate, exportsObj);
         _moduleCache[resolvedPath] = std::move(provisionalExports);
 
-        // Create a require function bound to this module's directory (owned by engine)
-        auto requireData     = std::make_unique<RequireData>(RequireData {this, moduleDir});
-        auto *requireDataPtr = requireData.get();
-        _requireDataStore.push_back(std::move(requireData));
-        v8::Local<v8::External> requireExternal     = v8::External::New(_isolate, requireDataPtr);
-        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, requireExternal);
+        // A require function bound to this module's directory. The directory is the function's
+        // own data, so the function stays valid however long script keeps it.
+        v8::Local<v8::String> requireDir            = v8::String::NewFromUtf8(_isolate, moduleDir.c_str(), v8::NewStringType::kNormal, static_cast<int>(moduleDir.size())).ToLocalChecked();
+        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, requireDir);
         v8::Local<v8::Function> requireFn           = requireTmpl->GetFunction(context).ToLocalChecked();
 
         // Wrap source in CommonJS function

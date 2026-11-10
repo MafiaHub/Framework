@@ -89,7 +89,7 @@ namespace Framework::Scripting {
          */
         [[nodiscard]] bool ResetContext();
 
-        // Evict cached modules (and require() backing data) under rootPath.
+        // Evict cached modules under rootPath.
         void EvictModulesUnderPath(const std::string &rootPath) override;
 
         // Cancel all timers created by the named resource.
@@ -124,12 +124,7 @@ namespace Framework::Scripting {
             return found == _resourceGenerations.end() ? 0 : found->second;
         }
 
-        // Data structs for V8 callbacks (public for anonymous-namespace callbacks)
-        struct RequireData {
-            V8Engine *engine;
-            std::string currentDir;
-        };
-
+        // Data struct for V8 callbacks (public for anonymous-namespace callbacks)
         struct TimerCallbackData {
             V8Engine *engine;
             bool isInterval;
@@ -172,9 +167,6 @@ namespace Framework::Scripting {
 
         // Module cache (keyed by resolved absolute path)
         std::map<std::string, v8::Global<v8::Value>> _moduleCache;
-
-        // RequireData instances (owned, cleaned up in Shutdown)
-        std::vector<std::unique_ptr<RequireData>> _requireDataStore;
     };
 
 } // namespace Framework::Scripting
