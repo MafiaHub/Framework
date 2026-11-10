@@ -13,6 +13,7 @@
 #include <utils/crypto.h>
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <filesystem>
@@ -20,6 +21,48 @@
 
 namespace Framework::Utils::StreamedAssets {
     namespace {
+        std::string Lower(std::string_view text) {
+            std::string out(text);
+            for (char &c : out) {
+                if (c >= 'A' && c <= 'Z') {
+                    c = static_cast<char>(c - 'A' + 'a');
+                }
+            }
+            return out;
+        }
+
+        // Four decimal parts, each 0-255, nothing else.
+        bool ParseIpv4(std::string_view host, std::array<unsigned, 4> &parts) {
+            std::size_t begin = 0;
+            for (std::size_t i = 0; i < 4; ++i) {
+                const auto end = i < 3 ? host.find('.', begin) : host.size();
+                if (end == std::string_view::npos || end == begin || end - begin > 3) {
+                    return false;
+                }
+                unsigned value = 0;
+                for (std::size_t k = begin; k < end; ++k) {
+                    if (host[k] < '0' || host[k] > '9') {
+                        return false;
+                    }
+                    value = value * 10 + static_cast<unsigned>(host[k] - '0');
+                }
+                if (value > 255) {
+                    return false;
+                }
+                parts[i] = value;
+                begin    = end + 1;
+            }
+            return begin == host.size() + 1;
+        }
+
+        bool IsPrivateIpv4(const std::array<unsigned, 4> &p) {
+            return p[0] == 0 || p[0] == 10 || p[0] == 127 || (p[0] == 100 && p[1] >= 64 && p[1] <= 127) || (p[0] == 169 && p[1] == 254) || (p[0] == 172 && p[1] >= 16 && p[1] <= 31) || (p[0] == 192 && p[1] == 168);
+        }
+
+        bool StartsWith(std::string_view text, std::string_view prefix) {
+            return text.substr(0, prefix.size()) == prefix;
+        }
+
         std::int64_t WriteTimeTicks(const std::string &path, std::error_code &code) {
             const auto time = std::filesystem::last_write_time(path, code);
             return code ? 0 : static_cast<std::int64_t>(time.time_since_epoch().count());
@@ -149,6 +192,66 @@ namespace Framework::Utils::StreamedAssets {
         }
         flush();
         return urls;
+    }
+
+    bool IsAllowedMirrorUrl(std::string_view url, std::string_view serverHost) {
+        std::size_t schemeEnd = 0;
+        if (url.size() >= 8 && Lower(url.substr(0, 8)) == "https://") {
+            schemeEnd = 8;
+        }
+        else if (url.size() >= 7 && Lower(url.substr(0, 7)) == "http://") {
+            schemeEnd = 7;
+        }
+        else {
+            return false;
+        }
+        if (url.find('?') != std::string_view::npos || url.find('#') != std::string_view::npos) {
+            return false;
+        }
+        const auto rest      = url.substr(schemeEnd);
+        const auto authority = rest.substr(0, rest.find('/'));
+        if (authority.empty() || authority.find('@') != std::string_view::npos) {
+            return false;
+        }
+        std::string_view hostText = authority;
+        if (authority.front() == '[') {
+            const auto close = authority.find(']');
+            if (close == std::string_view::npos) {
+                return false;
+            }
+            hostText = authority.substr(1, close - 1);
+        }
+        else {
+            const auto colon = authority.rfind(':');
+            if (colon != std::string_view::npos) {
+                const auto port = authority.substr(colon + 1);
+                if (!port.empty() && std::all_of(port.begin(), port.end(), [](char c) {
+                        return c >= '0' && c <= '9';
+                    })) {
+                    hostText = authority.substr(0, colon);
+                }
+            }
+        }
+        if (hostText.empty()) {
+            return false;
+        }
+        const std::string host = Lower(hostText);
+        if (host == Lower(serverHost)) {
+            return true;
+        }
+        if (host == "localhost" || (host.size() > 10 && host.compare(host.size() - 10, 10, ".localhost") == 0)) {
+            return false;
+        }
+        if (host.find(':') != std::string::npos) {
+            return !(host == "::" || host == "::1" || StartsWith(host, "fc") || StartsWith(host, "fd") || StartsWith(host, "fe8") || StartsWith(host, "fe9") || StartsWith(host, "fea") || StartsWith(host, "feb") || StartsWith(host, "::ffff:"));
+        }
+        if (std::all_of(host.begin(), host.end(), [](char c) {
+                return (c >= '0' && c <= '9') || c == '.';
+            })) {
+            std::array<unsigned, 4> parts {};
+            return ParseIpv4(host, parts) && !IsPrivateIpv4(parts);
+        }
+        return true;
     }
 
     bool IsVerified(const std::string &path, std::string_view sha256) {
