@@ -2,7 +2,7 @@ name: Test Build
 
 on:
     push:
-         branches: [ 'master' ]
+         branches: [ 'develop' ]
     pull_request:
          branches: [ 'develop' ]
          # Skip PRs that cannot change the build. This is a denylist on purpose: a file nobody
@@ -30,8 +30,14 @@ on:
            - '!VERSION'
            - '!mise.toml'
     workflow_dispatch:
+    workflow_call:
+        inputs:
+            ref:
+                description: "Git ref to test (defaults to the triggering ref)"
+                required: false
+                type: string
 
-# A new push to a PR supersedes the run already testing it. Pushes to master each keep their run.
+# A new push to a PR supersedes the run already testing it. Pushes to develop each keep their run.
 concurrency:
     group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -59,16 +65,17 @@ jobs:
             cmake_generator: "Visual Studio 17 2022"
             build_type: "Debug"
           - os: ubuntu-latest
-            cmake_generator: "Unix Makefiles"
+            cmake_generator: "Ninja"
             build_type: "Debug"
             extra_cmake_args: "-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++"
           - os: macos-latest
-            cmake_generator: "Unix Makefiles"
+            cmake_generator: "Ninja"
             build_type: "Debug"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.ref }}
           submodules: ${{ secrets.FW_SERVICES_PAT != '' && 'recursive' || 'false' }}
           token: ${{ secrets.FW_SERVICES_PAT || github.token }}
                               
