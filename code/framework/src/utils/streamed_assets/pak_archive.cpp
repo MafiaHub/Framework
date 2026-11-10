@@ -323,6 +323,27 @@ namespace Framework::Utils::StreamedAssets {
         return ok;
     }
 
+    std::vector<std::size_t> PakArchive::FindRefused(const std::vector<Candidate> &paks, const Policy &policy, std::vector<std::string> &errors) {
+        std::vector<std::size_t> refused;
+        errors.clear();
+        for (std::size_t i = 0; i < paks.size(); ++i) {
+            const Candidate &pak = paks[i];
+            std::string error;
+            if (!policy.HasLane(pak.lane)) {
+                error = "lane '" + pak.lane + "' is not one this mod declares";
+            }
+            else {
+                std::vector<PakEntry> entries;
+                if (Validate(pak.path, policy, pak.lane, pak.resource, entries, error)) {
+                    continue;
+                }
+            }
+            refused.push_back(i);
+            errors.push_back(std::move(error));
+        }
+        return refused;
+    }
+
     bool PakArchive::EntryOffsets(const std::string &pakPath, std::vector<std::uint64_t> &offsets) {
         offsets.clear();
 

@@ -10,6 +10,7 @@
 
 #include "policy.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -58,6 +59,20 @@ namespace Framework::Utils::StreamedAssets {
          * in normalised form -- a pak that needs normalising was not written by a server.
          */
         static bool Validate(const std::string &pakPath, const Policy &policy, std::string_view lane, std::string_view resource, std::vector<PakEntry> &entries, std::string &error);
+
+        /** One pak to check: where it is on disk and what it was announced as. */
+        struct Candidate {
+            std::string path;
+            std::string resource;
+            std::string lane;
+        };
+
+        /**
+         * Validates each pak against the policy and returns the indices of those it refuses, with the
+         * reason for each in `errors` (same order). A lane the policy does not name is refused: a
+         * server cannot introduce a lane the mod never declared.
+         */
+        static std::vector<std::size_t> FindRefused(const std::vector<Candidate> &paks, const Policy &policy, std::vector<std::string> &errors);
 
         /**
          * Where each entry begins and, last, where the central directory does, in file order: the

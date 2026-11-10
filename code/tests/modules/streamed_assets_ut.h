@@ -30,7 +30,7 @@
 // .fwpak and announced in its ResourceInfo. A test policy stands in for a mod's. The HTTP transfer is
 // tested in asset_http_ut.h.
 namespace StreamedAssetsTest {
-    class TestPolicy final: public Framework::Utils::StreamedAssets::Policy {
+    class TestPolicy: public Framework::Utils::StreamedAssets::Policy {
       public:
         const std::vector<std::string> &GetLanes() const override {
             static const std::vector<std::string> lanes = {"stream"};
@@ -51,6 +51,15 @@ namespace StreamedAssetsTest {
 
         bool PrefersStore(std::string_view normalized) const override {
             return normalized.size() > 4 && normalized.substr(normalized.size() - 4) == ".bin";
+        }
+    };
+
+    // Accepts what TestPolicy refuses, so a test can write a pak the strict policy must then refuse.
+    class LenientPolicy final: public TestPolicy {
+      public:
+        bool NormalizeEntry(std::string_view, std::string_view, std::string_view raw, std::string &out, std::string &) const override {
+            out.assign(raw);
+            return true;
         }
     };
 
@@ -97,6 +106,85 @@ MODULE(streamed_assets, {
         EQUALS(Framework::Utils::StreamedAssets::PakArchive::Validate((root / "one.pak").string(), policy, "stream", "demo", listed, error), true);
         UEQUALS(listed.size(), 2u);
         EQUALS(listed[0].path == "a.txt" && listed[0].size == 5000 && listed[0].crc32 != 0, true);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("finds no refused pak among valid ones", {
+        using Framework::Utils::StreamedAssets::PakArchive;
+        TestPolicy policy;
+        const auto root = Scratch("fw_pak_refused_none");
+        WriteBytes(root / "a.txt", 500, 1);
+        WriteBytes(root / "b.txt", 600, 2);
+        std::string error;
+        EQUALS(PakArchive::Write((root / "one.pak").string(), {{"a.txt", (root / "a.txt").string()}}, policy, error), true);
+        EQUALS(PakArchive::Write((root / "two.pak").string(), {{"b.txt", (root / "b.txt").string()}}, policy, error), true);
+        std::vector<std::string> errors;
+        const auto refused = PakArchive::FindRefused({{(root / "one.pak").string(), "demo", "stream"}, {(root / "two.pak").string(), "demo", "stream"}}, policy, errors);
+        UEQUALS(refused.size(), 0u);
+        UEQUALS(errors.size(), 0u);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("refuses a pak announced under a lane the policy does not declare", {
+        using Framework::Utils::StreamedAssets::PakArchive;
+        TestPolicy policy;
+        const auto root = Scratch("fw_pak_refused_lane");
+        WriteBytes(root / "a.txt", 500, 1);
+        std::string error;
+        EQUALS(PakArchive::Write((root / "one.pak").string(), {{"a.txt", (root / "a.txt").string()}}, policy, error), true);
+        std::vector<std::string> errors;
+        const auto refused = PakArchive::FindRefused({{(root / "one.pak").string(), "demo", "notalane"}}, policy, errors);
+        UEQUALS(refused.size(), 1u);
+        EQUALS(refused[0], 0u);
+        UEQUALS(errors.size(), 1u);
+        EQUALS(errors[0].find("notalane") != std::string::npos, true);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("refuses a pak whose entries the lane does not accept", {
+        using Framework::Utils::StreamedAssets::PakArchive;
+        TestPolicy policy;
+        StreamedAssetsTest::LenientPolicy lenient;
+        const auto root = Scratch("fw_pak_refused_entries");
+        WriteBytes(root / "a.txt", 500, 1);
+        std::string error;
+        EQUALS(PakArchive::Write((root / "bad.pak").string(), {{"forbidden/a.txt", (root / "a.txt").string()}}, lenient, error), true);
+        std::vector<std::string> errors;
+        const auto refused = PakArchive::FindRefused({{(root / "bad.pak").string(), "demo", "stream"}}, policy, errors);
+        UEQUALS(refused.size(), 1u);
+        EQUALS(refused[0], 0u);
+        UEQUALS(errors.size(), 1u);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("refuses a file that is not a zip", {
+        using Framework::Utils::StreamedAssets::PakArchive;
+        TestPolicy policy;
+        const auto root = Scratch("fw_pak_refused_garbage");
+        WriteBytes(root / "junk.pak", 64, 3);
+        std::vector<std::string> errors;
+        const auto refused = PakArchive::FindRefused({{(root / "junk.pak").string(), "demo", "stream"}}, policy, errors);
+        UEQUALS(refused.size(), 1u);
+        EQUALS(refused[0], 0u);
+        UEQUALS(errors.size(), 1u);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("reports refused paks by index, leaving valid ones out", {
+        using Framework::Utils::StreamedAssets::PakArchive;
+        TestPolicy policy;
+        StreamedAssetsTest::LenientPolicy lenient;
+        const auto root = Scratch("fw_pak_refused_index");
+        WriteBytes(root / "a.txt", 500, 1);
+        std::string error;
+        EQUALS(PakArchive::Write((root / "ok1.pak").string(), {{"a.txt", (root / "a.txt").string()}}, policy, error), true);
+        EQUALS(PakArchive::Write((root / "bad.pak").string(), {{"forbidden/a.txt", (root / "a.txt").string()}}, lenient, error), true);
+        EQUALS(PakArchive::Write((root / "ok2.pak").string(), {{"b/a.txt", (root / "a.txt").string()}}, policy, error), true);
+        std::vector<std::string> errors;
+        const auto refused = PakArchive::FindRefused({{(root / "ok1.pak").string(), "demo", "stream"}, {(root / "bad.pak").string(), "demo", "stream"}, {(root / "ok2.pak").string(), "demo", "stream"}}, policy, errors);
+        UEQUALS(refused.size(), 1u);
+        EQUALS(refused[0], 1u);
+        UEQUALS(errors.size(), 1u);
         std::filesystem::remove_all(root);
     });
 
