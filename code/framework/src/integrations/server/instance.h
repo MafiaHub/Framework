@@ -286,6 +286,9 @@ namespace Framework::Integrations::Server {
         bool PackageClientResource(const std::string &resourceName, const std::string &stagingDir, size_t &packagedFiles);
         // Builds (or forgets) one resource's asset paks and records what is served.
         void PublishResourceAssetPaks(const std::string &resourceName);
+        // After one resource (re)started at runtime: repackage it alone when nothing else can have
+        // changed, the whole set otherwise.
+        void RepublishClientResource(const std::string &name);
         // Directory the built .fwpak containers are staged in for the streamer to upload.
         std::string GetPackageStagingDir() const;
         // Re-sync a hot-reloaded/started client resource to connected clients.

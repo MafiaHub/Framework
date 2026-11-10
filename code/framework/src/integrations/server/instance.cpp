@@ -1045,6 +1045,38 @@ namespace Framework::Integrations::Server {
         }
     }
 
+    void Instance::RepublishClientResource(const std::string &name) {
+        const auto scripting       = GetScriptingModule();
+        const auto resourceManager = scripting ? scripting->GetResourceManager() : nullptr;
+        // A manifest edit that moved a resource in or out of the server-only set changes what other
+        // packages may depend on; so does a first publish that never happened.
+        if (!resourceManager || !_packageKeyReady || CollectServerOnlyResources() != _serverOnlyResources) {
+            PublishClientAssets();
+            return;
+        }
+
+        const std::string stagingDir = GetPackageStagingDir();
+
+        // Drop what the resource served before; it is rebuilt below or it is gone.
+        _servedFiles.erase(name + Framework::Utils::Package::kExtension);
+        _packageHashes.erase(name);
+        _packageSizes.erase(name);
+        if (const auto paks = _assetPaks.find(name); paks != _assetPaks.end()) {
+            for (const auto &pak : paks->second) {
+                _servedFiles.erase(Framework::Utils::StreamedAssets::PakFileName(name, pak.lane, pak.sha256));
+            }
+            _assetPaks.erase(paks);
+        }
+
+        size_t packagedFiles = 0;
+        PackageClientResource(name, stagingDir, packagedFiles);
+        if (_opts.assetPakPolicy) {
+            PublishResourceAssetPaks(name);
+        }
+        _assetFileServer.Publish(_servedFiles);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Republished client resource '{}' ({} files); {} packages and {} resource(s) shipping asset paks are served", name, packagedFiles, _packageHashes.size(), _assetPaks.size());
+    }
+
     Framework::Networking::RPC::ResourceInfo Instance::DescribeResource(const std::string &name, const std::string &version) const {
         Framework::Networking::RPC::ResourceInfo info;
         info.name    = name;
@@ -1100,8 +1132,9 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        // Republish so changed files are announced with fresh hashes. See docs/resource_hot_reload.md.
-        PublishClientAssets();
+        // Republish this resource so its changed files are announced with fresh hashes; the whole set only
+        // when the change could reach other packages. See docs/resource_hot_reload.md.
+        RepublishClientResource(resource->GetName());
 
         // Only resources with a client entry point or asset paks need a client-side refresh.
         const bool scripts = resource->GetManifest().GetMafiaHubConfig().HasClientContent();
