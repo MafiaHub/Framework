@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     // The outputs keep up: fewer lines than the queue holds, a little apart.
     Run("outputs keep up", *logger, 5000, std::chrono::microseconds(100));
 
-    // The caller outruns the outputs: ten queues' worth as fast as it can.
+    // The caller outruns the outputs: several queues' worth as fast as it can.
     Run("burst of 100k lines", *logger, 100000, std::chrono::microseconds(0));
 
     // An output stalls for two seconds, as a journal or a disk that stopped taking writes does, and the caller logs on.
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
     while (!stalled.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    Run("output stalled for 2 s, 15k lines", *logger, 15000, std::chrono::microseconds(0));
+    Run("output stalled for 2 s, 50k lines", *logger, 50000, std::chrono::microseconds(0));
     logging->SetLogForwarder(nullptr);
 
     logging->Shutdown();

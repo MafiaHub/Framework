@@ -61,7 +61,9 @@ namespace Framework::Logging {
 
         // Support for async logging. A single worker keeps messages in order; more
         // workers may dequeue and write them out of order.
-        spdlog::init_thread_pool(10000, 1); // queue with 10K items and 1 backing thread.
+        // The queue is what a stalled output or a burst can cost before lines are dropped; its slots are allocated
+        // up front, about 256 bytes each.
+        spdlog::init_thread_pool(kQueuedLines, 1);
 
         _forwardingSink = std::make_shared<ForwardingSink>(this);
         _forwardingSink->set_level(spdlog::level::off); // opened by SetLogForwarder

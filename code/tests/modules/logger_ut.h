@@ -58,7 +58,8 @@ MODULE(logger, {
         // More lines than the queue holds, so the queue fills while the output is stalled.
         const uint64_t droppedBefore = logging->GetDroppedLineCount();
         const auto start             = Clock::now();
-        for (int i = 0; i < 15000; ++i) {
+        const int lines              = static_cast<int>(Framework::Logging::Logger::kQueuedLines) + 5000;
+        for (int i = 0; i < lines; ++i) {
             logger->info("Line {}", i);
         }
         const double callerMs = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
@@ -79,6 +80,7 @@ MODULE(logger, {
         // The stall lasts a second: a caller that waited for the queue would be held for most of it.
         LESSER(callerMs, 500.0);
         GREATER(dropped, uint64_t {1000});
+        LESSER(dropped, static_cast<uint64_t>(lines));
         EQUALS(log.find("Last line") != std::string::npos, true);
         EQUALS(log.find(std::to_string(dropped) + " log line(s) were dropped") != std::string::npos, true);
     });

@@ -34,6 +34,10 @@ namespace Framework::Logging {
     using LogForwarder = std::function<void(int level, const std::string &name, const std::string &message)>;
 
     class Logger final {
+      public:
+        // Lines the outputs can fall behind by before the oldest are dropped.
+        static constexpr size_t kQueuedLines = 32768;
+
       private:
         [[maybe_unused]] std::chrono::time_point<std::chrono::system_clock> _sessionStart;
         // Serializes logger/sink creation; the fast path (already-registered logger) never takes it.
