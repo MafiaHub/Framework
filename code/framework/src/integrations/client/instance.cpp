@@ -681,6 +681,9 @@ namespace Framework::Integrations::Client {
             _assetPaksDownloaded = false;
             _assetConsentBytes   = 0;
             AnnounceAssetPaks(_pendingServerResources, true);
+            if (!_opts.assetPakPolicy && !(_assetPaks.empty() && _deferredPaks.empty())) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("The server ships asset paks and InstanceOptions::assetPakPolicy is not set: their contents are not checked by the framework");
+            }
 
             // A server that predates encrypted resource packages writes a different layout, so the
             // key lands on whatever followed it and the rest of the stream is garbage. Fail here
@@ -1039,8 +1042,8 @@ namespace Framework::Integrations::Client {
             _assetPaks.erase(std::remove_if(_assetPaks.begin(), _assetPaks.end(), ofResource), _assetPaks.end());
             _deferredPaks.erase(std::remove_if(_deferredPaks.begin(), _deferredPaks.end(), ofResource), _deferredPaks.end());
             for (const auto &info : resource.assetPaks) {
-                // Untrusted: a lane or hash that could not name a cache file is dropped, and the
-                // mod's own validation decides what the rest may carry.
+                // Untrusted: a lane or hash that could not name a cache file is dropped here; what the
+                // rest may carry is checked against InstanceOptions::assetPakPolicy once downloaded.
                 if (!info.IsSane() || !Framework::Utils::StreamedAssets::IsSha256(info.sha256) || !Framework::Utils::StreamedAssets::IsValidResourceName(resource.name)) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Ignoring a malformed asset pak of '{}'", resource.name);
                     continue;
@@ -1157,6 +1160,7 @@ namespace Framework::Integrations::Client {
             _deferredStatus.failure = "Some of the server's deferred assets could not be downloaded.";
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("{} deferred asset pak(s) did not land; the session runs without them", _deferredPaks.size());
         }
+        RefuseInvalidAssetPaks(landed);
         if (!landed.empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("{} deferred asset pak(s) landed", landed.size());
             _assetPaks.insert(_assetPaks.end(), std::make_move_iterator(landed.begin()), std::make_move_iterator(landed.end()));
@@ -1174,6 +1178,28 @@ namespace Framework::Integrations::Client {
             }
         }
         return true;
+    }
+
+    size_t Instance::RefuseInvalidAssetPaks(std::vector<ResourceAssetPak> &paks) const {
+        if (!_opts.assetPakPolicy) {
+            return 0;
+        }
+        std::vector<Framework::Utils::StreamedAssets::PakArchive::Candidate> candidates;
+        candidates.reserve(paks.size());
+        for (const auto &pak : paks) {
+            candidates.push_back({pak.path, pak.resource, pak.info.lane});
+        }
+        std::vector<std::string> errors;
+        const auto refused = Framework::Utils::StreamedAssets::PakArchive::FindRefused(candidates, *_opts.assetPakPolicy, errors);
+        // Descending, so erasing one leaves the indices of the rest valid.
+        for (size_t i = refused.size(); i-- > 0;) {
+            const size_t index = refused[i];
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Refusing asset pak '{}' {}: {}", paks[index].resource, paks[index].info.lane, errors[i]);
+            std::error_code code;
+            std::filesystem::remove(paks[index].path, code);
+            paks.erase(paks.begin() + static_cast<std::ptrdiff_t>(index));
+        }
+        return refused.size();
     }
 
     void Instance::PruneAssetPaks(const std::string &cacheDir) const {
@@ -1460,6 +1486,7 @@ namespace Framework::Integrations::Client {
             if (scriptingModule && scriptingModule->GetScriptingEngine() && scriptingModule->GetScriptingEngine()->IsInitialized() && !_pendingRefreshResources.empty()) {
                 AnnounceAssetPaks(_pendingRefreshResources, false);
                 if (VerifyAssetPaks()) {
+                    RefuseInvalidAssetPaks(_assetPaks);
                     OnResourceAssetPaksChanged();
                 }
                 if (auto *rm = scriptingModule->GetResourceManager()) {
@@ -1496,6 +1523,12 @@ namespace Framework::Integrations::Client {
 
             if (!_resumingDeferredInitialAssetProcessing) {
                 if (!VerifyAssetPaks()) {
+                    (void)net->Disconnect();
+                    return false;
+                }
+                if (RefuseInvalidAssetPaks(_assetPaks) > 0) {
+                    // A blocking pak the mod's policy refuses: the session cannot be what the server
+                    // intended, and running without it is not this client's call to make.
                     (void)net->Disconnect();
                     return false;
                 }

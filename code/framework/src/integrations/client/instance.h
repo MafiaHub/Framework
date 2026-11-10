@@ -28,6 +28,7 @@
 #include "networking/engine.h"
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/server_resources.h"
+#include "utils/streamed_assets/policy.h"
 #include "voice/client/voice_client.h"
 
 #include <cstdint>
@@ -62,6 +63,12 @@ namespace Framework::Integrations::Client {
 
         // A first download whose missing asset paks exceed this waits for GrantAssetConsent().
         uint64_t assetConsentThreshold = ~0ull;
+
+        // What a server's asset paks may carry, the same policy the mod's server builds them with.
+        // The server is the threat model: with a policy set, a downloaded pak that fails it is never
+        // announced. Left null, paks are announced unchecked and the mod must validate them itself
+        // (Utils::StreamedAssets::PakArchive::Validate) before mounting.
+        std::shared_ptr<const Utils::StreamedAssets::Policy> assetPakPolicy;
 
         // A download that does nothing observable for this long (no request, no answer, no byte, no
         // pause it is sitting out) is given up as stalled. Waiting in a busy server's queue is not
@@ -236,6 +243,8 @@ namespace Framework::Integrations::Client {
         void PollDeferredDownload();
         // Every announced asset pak is on disk at its announced size.
         bool VerifyAssetPaks() const;
+        // Drops from `paks` every pak the mod's policy refuses, deleting its file. Returns how many.
+        size_t RefuseInvalidAssetPaks(std::vector<ResourceAssetPak> &paks) const;
         // Removes cached paks the server no longer announces, and the partials of files no transfer will
         // come back for; one still mounted stays until the next session. Nothing while a transfer runs.
         void PruneAssetPaks(const std::string &cacheDir) const;

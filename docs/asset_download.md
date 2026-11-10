@@ -130,6 +130,15 @@ behind the join. Anything the level load must see stays blocking. The
 default is blocking for every lane, so a mod that does nothing keeps today's
 behaviour.
 
+## Checking paks on the client
+
+The client takes the same policy the server builds with through
+`Integrations::Client::InstanceOptions::assetPakPolicy`. With it set, a pak
+that fails validation is deleted and never announced: a blocking pak at the
+first connect ends the connection, a refreshed or deferred one is skipped.
+Without it the framework does not look inside a pak, and the mod must call
+`PakArchive::Validate` itself before mounting one.
+
 ## Downloading beside the player slots
 
 `max-downloading` (config and command line; `InstanceOptions::maxDownloading`)
