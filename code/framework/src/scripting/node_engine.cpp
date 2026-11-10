@@ -411,7 +411,13 @@ namespace Framework::Scripting {
             }
         }
         // One poll over every loop instead of a run of each; RunUntil reports a failing poll.
-        if (poll(fds.data(), static_cast<nfds_t>(fds.size()), 0) > 0) {
+        const int ready = poll(fds.data(), static_cast<nfds_t>(fds.size()), 0);
+        if (ready < 0) {
+            // Which loops have I/O is unknown, so the tick runs them all.
+            _ioReady = std::move(owners);
+            return;
+        }
+        if (ready > 0) {
             for (size_t i = 0; i < fds.size(); ++i) {
                 if (fds[i].revents != 0) {
                     _ioReady.push_back(owners[i]);
