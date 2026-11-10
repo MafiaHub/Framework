@@ -66,6 +66,19 @@ MODULE(network_packets, {
         EQUALS(NetworkPeer::IsReplicationPacket(ID_CONNECTION_LOST), false);
     });
 
+    IT("lets only replication and application ids sit behind a timestamp", {
+        EQUALS(NetworkPeer::IsAllowedBehindTimestamp(ID_REPLICA_MANAGER_SERIALIZE), true);
+        EQUALS(NetworkPeer::IsAllowedBehindTimestamp(ID_USER_PACKET_ENUM), true);
+        EQUALS(NetworkPeer::IsAllowedBehindTimestamp(ID_USER_PACKET_ENUM + 5), true);
+        EQUALS(NetworkPeer::IsAllowedBehindTimestamp(ID_NEW_INCOMING_CONNECTION), false);
+        EQUALS(NetworkPeer::IsAllowedBehindTimestamp(ID_CONNECTION_LOST), false);
+        EQUALS(NetworkPeer::IsAllowedBehindTimestamp(ID_DISCONNECTION_NOTIFICATION), false);
+        EQUALS(NetworkPeer::IsAllowedBehindTimestamp(ID_SESSION_CONFIG_REQUEST), false);
+        EQUALS(NetworkPeer::IsAllowedBehindTimestamp(ID_SESSION_CONFIG_ABANDONED), false);
+        EQUALS(NetworkPeer::IsAllowedBehindTimestamp(ID_TWO_WAY_AUTHENTICATION_INCOMING_CHALLENGE_SUCCESS), false);
+        EQUALS(NetworkPeer::IsAllowedBehindTimestamp(ID_READY_EVENT_SET), false);
+    });
+
     IT("dispatches voice frames without unknown-packet spam and logs unclaimed packets", {
         Framework::Networking::NetworkServer server;
         struct Shutdown {

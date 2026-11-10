@@ -190,6 +190,13 @@ namespace Framework::Networking {
         // ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE) can still claim it in its HandlePacket switch.
         static bool IsReplicationPacket(uint8_t packetID);
 
+        // Whether a packet whose id sits behind an ID_TIMESTAMP prefix may be dispatched. MafiaNet
+        // refuses the ids it generates locally (connection, session, authentication and ready
+        // events) from a remote peer only when they are the first byte, so behind a prefix they
+        // would reach HandlePacket as if the library had raised them. Nothing legitimate
+        // timestamps one: only replication and application-defined packets carry a prefix.
+        static bool IsAllowedBehindTimestamp(uint8_t packetID);
+
         // Server-only; base no-op lets shared code kick through a NetworkPeer* without a cast.
         virtual void KickPlayer(MafiaNet::RakNetGUID, DisconnectionReason, const std::string & = "") {}
 

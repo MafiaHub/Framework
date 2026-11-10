@@ -13,6 +13,9 @@
 #include "networking/network_server.h"
 #include "networking/rpc/client_identity.h"
 
+#include <mafianet/bit_stream.h>
+#include <mafianet/get_time.h>
+
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -250,5 +253,43 @@ MODULE(connection_admission, {
         EQUALS(reason == DisconnectionReason::NO_FREE_SLOT, true);
         EQUALS(rig.seen.requests.size(), 1u);
         second.reset();
+    });
+
+    // What a hostile connected client would send: a timestamp header, then a library control id.
+    auto sendForged = [](Rig &rig, MafiaNet::MessageID controlId, const std::string &payload) {
+        MafiaNet::BitStream forged;
+        forged.Write(static_cast<MafiaNet::MessageID>(ID_TIMESTAMP));
+        forged.Write(MafiaNet::GetTime());
+        forged.Write(controlId);
+        forged.Write(payload.data(), static_cast<unsigned int>(payload.size()));
+        rig.client->GetPeer()->Send(&forged, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+    };
+
+    IT("ignores a session abandonment a connected client sends behind a timestamp", {
+        Rig rig;
+        EQUALS(rig.StartServer(true), true);
+        EQUALS(rig.Connect(Rig::IdentityPayload("alice", "")), true);
+        EQUALS(rig.PumpUntil([&] { return !rig.seen.requestGuids.empty(); }), true);
+        rig.server->AcceptSession(rig.seen.requestGuids[0]);
+        EQUALS(rig.PumpUntil([&] { return rig.seen.clientConnected && rig.server->GetPlayerCount() == 1u; }), true);
+
+        sendForged(rig, ID_SESSION_CONFIG_ABANDONED, "");
+
+        rig.PumpFor(300);
+        EQUALS(rig.seen.abandoned.size(), 0u);
+    });
+
+    IT("ignores a session request a connected client sends behind a timestamp", {
+        Rig rig;
+        EQUALS(rig.StartServer(true), true);
+        EQUALS(rig.Connect(Rig::IdentityPayload("alice", "")), true);
+        EQUALS(rig.PumpUntil([&] { return !rig.seen.requestGuids.empty(); }), true);
+        rig.server->AcceptSession(rig.seen.requestGuids[0]);
+        EQUALS(rig.PumpUntil([&] { return rig.seen.clientConnected && rig.server->GetPlayerCount() == 1u; }), true);
+
+        sendForged(rig, ID_SESSION_CONFIG_REQUEST, Rig::IdentityPayload("mallory", ""));
+
+        rig.PumpFor(300);
+        EQUALS(rig.seen.requests.size(), 1u);
     });
 });
