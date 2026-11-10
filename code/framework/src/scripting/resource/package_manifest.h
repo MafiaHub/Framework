@@ -64,6 +64,14 @@ namespace Framework::Scripting {
         std::vector<std::string> exports;
         int priority              = 0;
         std::string errorBehavior = "stop"; // stop, restart, continue
+
+        // The language the server scripts are written in: "js", or the name of a ScriptRuntime the server has
+        // (docs/scripting_csharp.md). Client and shared scripts are always JavaScript.
+        std::string serverRuntime = "js";
+
+        bool IsJavaScriptServer() const {
+            return serverRuntime == "js";
+        }
     };
 
     /**

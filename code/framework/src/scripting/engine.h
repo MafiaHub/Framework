@@ -98,6 +98,15 @@ namespace Framework::Scripting {
             return ExecuteFile(filepath);
         }
 
+        // The engine's own runtime, whichever runtime is entered now: where other languages meet JavaScript
+        // (docs/scripting_csharp.md). GetIsolate() names the runtime entered now, when it is one of the engine's.
+        virtual v8::Isolate *GetHostIsolate() const {
+            return GetIsolate();
+        }
+        virtual v8::Local<v8::Context> GetHostContext() const {
+            return GetContext();
+        }
+
         // The resource an isolate was created for, or empty for a runtime every resource shares.
         virtual std::string GetResourceForIsolate(v8::Isolate *isolate) const {
             return {};

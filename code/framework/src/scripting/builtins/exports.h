@@ -25,6 +25,9 @@ namespace Framework::Scripting::Builtins {
       private:
         static void RegisterCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void GetCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+
+        // A stand-in for an export of a resource in another language.
+        static void ForeignExportCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
     };
 
 } // namespace Framework::Scripting::Builtins

@@ -148,9 +148,41 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
+        const std::string notFound = "Exports.get: export '" + exportName + "' not found in resource '" + resourceName + "'";
+
+        // A resource in another language: its exports are functions, reached through a stand-in that lives in the main
+        // runtime. A call that answers later settles a promise there, and the stand-in reaches this runtime the way any
+        // function from another runtime does.
+        if (ScriptRuntime *runtime = manager->GetRuntimeOf(resourceName)) {
+            if (!runtime->HasExport(resourceName, exportName)) {
+                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, notFound)));
+                return;
+            }
+            const auto makeStandIn = [&](v8::Isolate *iso, v8::Local<v8::Context> ctx) -> v8::MaybeLocal<v8::Value> {
+                v8::Local<v8::Array> data = v8::Array::New(iso, 3);
+                data->Set(ctx, 0, v8pp::to_v8(iso, resourceName)).Check();
+                data->Set(ctx, 1, v8pp::to_v8(iso, exportName)).Check();
+                data->Set(ctx, 2, v8::External::New(iso, manager)).Check();
+                v8::Local<v8::Function> standIn;
+                if (!v8::Function::New(ctx, ForeignExportCallback, data).ToLocal(&standIn)) {
+                    return {};
+                }
+                standIn->SetName(v8pp::to_v8(iso, exportName));
+                return standIn;
+            };
+            Engine *engine           = manager->GetJSEngine();
+            v8::Isolate *main        = engine ? engine->GetHostIsolate() : isolate;
+            FunctionReferences *refs = manager->GetFunctionReferences();
+            v8::Local<v8::Value> standIn;
+            const bool made = main == isolate || refs == nullptr ? makeStandIn(isolate, isolate->GetCurrentContext()).ToLocal(&standIn) : refs->Fetch(isolate, main, makeStandIn).ToLocal(&standIn);
+            if (made) {
+                args.GetReturnValue().Set(standIn);
+            }
+            return;
+        }
+
         // Export values are bound to their resource's isolate; nothing registered yet means none.
         v8::Isolate *resourceIsolate = resource->GetIsolate();
-        const std::string notFound   = "Exports.get: export '" + exportName + "' not found in resource '" + resourceName + "'";
         if (resourceIsolate == nullptr) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, notFound)));
             return;
@@ -189,6 +221,44 @@ namespace Framework::Scripting::Builtins {
                                  .ToLocal(&copied);
         if (fetched) {
             args.GetReturnValue().Set(copied);
+        }
+    }
+
+    void Exports::ForeignExportCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate           = args.GetIsolate();
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        v8::HandleScope handleScope(isolate);
+
+        const auto data                = args.Data().As<v8::Array>();
+        const std::string resourceName = v8pp::from_v8<std::string>(isolate, data->Get(context, 0).ToLocalChecked());
+        const std::string exportName   = v8pp::from_v8<std::string>(isolate, data->Get(context, 1).ToLocalChecked());
+        auto *manager                  = static_cast<ResourceManager *>(data->Get(context, 2).ToLocalChecked().As<v8::External>()->Value());
+        const std::string label        = "Exports '" + resourceName + "." + exportName + "'";
+
+        const TransferFunctions functions = manager->GetMainTransferFunctions();
+        std::vector<TransferredValue> copied;
+        copied.reserve(args.Length());
+        for (int i = 0; i < args.Length(); ++i) {
+            auto value = ValueTransfer::Copy(isolate, context, args[i], functions);
+            if (!value) {
+                ThrowTypeError(isolate, (label + ": argument " + std::to_string(i + 1) + " cannot cross into another language: " + value.GetError()).c_str());
+                return;
+            }
+            copied.push_back(std::move(value).GetValue());
+        }
+
+        // Answers now, or with a promise the export settles; an error rejects or throws with the export's message.
+        v8::Local<v8::Value> answer;
+        const bool answered = manager
+                                  ->AwaitInJavaScript(isolate, context,
+                                      [&](ScriptRuntime::Completion done) {
+                                          manager->CallExport(resourceName, exportName, copied, [label, done = std::move(done)](ScriptRuntime::CallResult result) mutable {
+                                              done(result ? std::move(result) : ScriptRuntime::CallResult::Err(label + ": " + result.GetError()));
+                                          });
+                                      })
+                                  .ToLocal(&answer);
+        if (answered) {
+            args.GetReturnValue().Set(answer);
         }
     }
 

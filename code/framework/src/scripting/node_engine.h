@@ -166,6 +166,8 @@ namespace Framework::Scripting {
          * resource's isolate.
          */
         v8::Isolate *GetIsolate() const override;
+        v8::Isolate *GetHostIsolate() const override;
+        v8::Local<v8::Context> GetHostContext() const override;
 
         /**
          * The context of the runtime GetIsolate() names.

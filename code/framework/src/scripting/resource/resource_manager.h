@@ -255,6 +255,56 @@ namespace Framework::Scripting {
         /**
          * Get the JavaScript engine used by this manager.
          */
+        /**
+         * A language other than JavaScript that server resources can select with "serverRuntime"
+         * (docs/scripting_csharp.md). Add every runtime before starting resources; it lives as long as the manager,
+         * which shuts it down on destruction.
+         */
+        void AddRuntime(std::shared_ptr<ScriptRuntime> runtime);
+
+        // The runtime of this name, or nullptr.
+        ScriptRuntime *GetRuntime(std::string_view runtimeName) const;
+
+        // The runtime a resource's server scripts run in, or nullptr when they are JavaScript.
+        ScriptRuntime *GetRuntimeOf(std::string_view resourceName) const;
+
+        // Once per server tick: each runtime's deferred work.
+        void TickRuntimes();
+
+        /**
+         * For a runtime: raise an event on the bus, as Events.emit would (to one resource's handlers when
+         * `targetResource` is set). JavaScript handlers receive the values rebuilt in their own runtime; handlers in
+         * other runtimes receive the copies.
+         */
+        Utils::Result<void, std::string> EmitFromRuntime(const std::string &eventName, const std::string &targetResource, const std::vector<TransferredValue> &args);
+
+        /**
+         * For a runtime: call another resource's export, whatever language it is in. `done` runs before this returns
+         * when the answer is ready, or later, from the scripting thread, when a promise or task the export returned
+         * settles. A value export answers itself.
+         */
+        void CallExport(const std::string &resourceName, const std::string &exportName, const std::vector<TransferredValue> &args, ScriptRuntime::Completion done);
+
+        // As above, for a caller that cannot wait: an answer that is not ready yet is an error.
+        Utils::Result<TransferredValue, std::string> CallExport(const std::string &resourceName, const std::string &exportName, const std::vector<TransferredValue> &args);
+
+        // For a runtime: call a JavaScript function it was handed (a TransferredValue of kind Function).
+        void CallFunction(const TransferredValue &function, const std::vector<TransferredValue> &args, ScriptRuntime::Completion done);
+
+        // How functions cross into and out of the main runtime, the one other languages meet JavaScript in. Empty
+        // when resources share one runtime: then functions do not cross.
+        TransferFunctions GetMainTransferFunctions() const;
+
+        /**
+         * In the main runtime, whose scopes the caller holds: run `start`, and answer what its completion reports -
+         * the value when it completes before `start` returns, a promise settled later otherwise, a thrown Error for
+         * an error.
+         */
+        v8::MaybeLocal<v8::Value> AwaitInJavaScript(v8::Isolate *isolate, v8::Local<v8::Context> context, fu2::function_view<void(ScriptRuntime::Completion)> start);
+
+        // In the main runtime: report what a call answered to `done`, after the promise it returned settles.
+        void SettleFromJavaScript(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> result, ScriptRuntime::Completion done);
+
         Engine *GetJSEngine() const;
 
         /**
@@ -399,6 +449,12 @@ namespace Framework::Scripting {
         // Execute entry point script for a resource
         bool ExecuteResourceScript(Resource &resource, std::string &outError);
 
+        // Calls a function in the main runtime with the arguments rebuilt there, and reports what it answers.
+        void CallInJavaScript(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Function> function, const std::vector<TransferredValue> &args, ScriptRuntime::Completion done);
+
+        // The resource's scripts for this side, as absolute paths checked to lie inside it.
+        bool ResolveResourceScripts(const Resource &resource, std::vector<std::string> &outScripts, std::string &outError) const;
+
         // Fire resource lifecycle events
         void FireOnResourceStarted(const std::string &name);
         void FireOnResourceStopped(const std::string &name);
@@ -455,6 +511,9 @@ namespace Framework::Scripting {
 
         // Events instance owned by this manager
         Builtins::Events _events;
+
+        // Runtimes for server resources not written in JavaScript.
+        std::vector<std::shared_ptr<ScriptRuntime>> _runtimes;
     };
 
 } // namespace Framework::Scripting

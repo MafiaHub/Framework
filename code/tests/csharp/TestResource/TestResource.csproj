@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A C# resource the Framework tests start next to JavaScript ones (code/tests/modules/csharp_scripting_ut.h). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The server supplies the API at run time: do not copy it next to the resource. -->
+    <ProjectReference Include="../../../framework/src/scripting/clr/managed/MafiaHub.Framework.Scripting/MafiaHub.Framework.Scripting.csproj" Private="false" />
+  </ItemGroup>
+</Project>

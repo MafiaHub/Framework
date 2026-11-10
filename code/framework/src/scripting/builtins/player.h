@@ -72,6 +72,9 @@ namespace Framework::Scripting::Builtins {
 
         std::string ToString() const override;
 
+        // The declaration every language binds from (docs/scripting_csharp.md).
+        static const Api::ClassBinding<Player> &Binding();
+
         static v8pp::class_<Player> &GetClass(v8::Isolate *isolate);
 
         // Publish the Player constructor on a target object, like Entity::Register /
