@@ -1385,6 +1385,8 @@ namespace Framework::Scripting {
 
         const std::string errorBehavior = resource->GetManifest().GetMafiaHubConfig().errorBehavior;
         v8::Isolate *failedIsolate      = resource->GetIsolate();
+        // Several errors can be queued for one resource; the first one already retired it.
+        const bool alreadyFailed = resource->GetState() == ResourceState::Error;
         resource->SetError(error);
         FireOnResourceError(resourceName, error);
 
@@ -1393,6 +1395,9 @@ namespace Framework::Scripting {
         // reference after such a callback.
         Resource *current = GetResourceMutable(resourceName);
         if (current != resource || current->GetState() != ResourceState::Error || current->GetIsolate() != failedIsolate) {
+            return;
+        }
+        if (alreadyFailed) {
             return;
         }
         if (errorBehavior == "restart" || errorBehavior == "stop") {

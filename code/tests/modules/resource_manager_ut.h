@@ -1440,6 +1440,10 @@ MODULE(resource_manager_callbacks, {
         manager.HandleResourceRuntimeError("stop-on-error", "boom");
         EQUALS(stopped.size(), 1u);
 
+        // A second error queued behind the first finds the resource already retired.
+        manager.HandleResourceRuntimeError("stop-on-error", "boom again");
+        EQUALS(stopped.size(), 1u);
+
         // No longer running, so there is nothing further to notify.
         manager.StopResource("stop-on-error");
         EQUALS(stopped.size(), 1u);
