@@ -28,10 +28,10 @@
 # tree, so bumping the pin here and reconfiguring incrementally would silently
 # keep the old release. This file is the single source of truth, and there is no
 # reason to let -D override the wire format of the protocol.
-set(MAFIANET_PIN_VERSION "0.25.0") # ReplicaManager3 serializes broadcasts once per pass and can serve connections in parallel (Replica3/Connection_RM3 ABI change, wire-compatible)
+set(MAFIANET_PIN_VERSION "0.25.1") # RakPeer only delivers a remote's library ids where a conforming peer sends them (patch, wire-compatible)
 
-set(MAFIANET_PIN_SHA256_linux-x86_64 "3e95f9fdf93394649d5672b12037d7aaa2f6a84515940f3a9462cc5246d53e88")
-set(MAFIANET_PIN_SHA256_macos-arm64 "c4a8ec4422724728ee43d70afb818c72b7a01450f14c6b9083747ac54d4569b3")
-set(MAFIANET_PIN_SHA256_macos-x86_64 "5e5fba88dd5f8c7a5ee8cb462ed20688352620301cf074d40d60a21778d13ee8")
-set(MAFIANET_PIN_SHA256_windows-x64 "e2b74bd11a9c97193173962ddaabd223e7c644cda20a1e285427970cdf2dfc1d")
-set(MAFIANET_PIN_SHA256_windows-x86 "5beea4a205c3c02e3e23bd4db71993f900815c9e92d7f20a355d2003c0b5bfeb")
+set(MAFIANET_PIN_SHA256_linux-x86_64 "ebd9833762083b382302e8860e8d3fc1501b8ea1b010163030344f4a5e688505")
+set(MAFIANET_PIN_SHA256_macos-arm64 "c384d68115090675d1232991963acb308763b3f2a9e3a104b080cb99315b4c17")
+set(MAFIANET_PIN_SHA256_macos-x86_64 "25991952c6128b1c7371d3f31d2f1b70b2674d0178b6d9c185d46dd27435a792")
+set(MAFIANET_PIN_SHA256_windows-x64 "9a6c54b112d82742b83fe17c0cc4d764e4dc7174942c4902698cc56deb6b70b5")
+set(MAFIANET_PIN_SHA256_windows-x86 "f8a44c2430ae4326a224847109be76c11dc0fb8161160db46be85cf3f70b9662")
