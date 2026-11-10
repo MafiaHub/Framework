@@ -6,6 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
+#include "alloc_counter.h"
 #include "logging/logger.h"
 #include "scripting/resource/resource_manager.h"
 #include "scripting/v8_engine.h"
@@ -14,11 +15,32 @@
 #include "utils/vfs.h"
 
 #include <chrono>
+#include <cstdlib>
+#include <new>
 #include <thread>
 
 #ifdef _WIN32
 #include "modules/keybinds_ut.h"
 #endif
+
+// Feeds FrameworkTests::AllocationScope. Every other form of new and delete defaults onto these two.
+void *operator new(std::size_t size) {
+    if (FrameworkTests::g_countAllocations) {
+        ++FrameworkTests::g_allocations;
+    }
+    if (void *block = std::malloc(size == 0 ? 1 : size)) {
+        return block;
+    }
+    throw std::bad_alloc();
+}
+
+void operator delete(void *block) noexcept {
+    std::free(block);
+}
+
+void operator delete(void *block, std::size_t) noexcept {
+    std::free(block);
+}
 
 MODULE(client_scripting, {
     IT("restarts packaged client scripts and timers without restarting other resources", {
@@ -183,6 +205,48 @@ MODULE(client_scripting, {
         }
         engine.Shutdown();
         vfs.Unmount("stale.zip");
+    });
+    IT("attributes promises to their resource without re-reading the stack", {
+        auto &vfs = Framework::Utils::Vfs::Get();
+        EQUALS(vfs.Init(nullptr), true);
+        {
+            Framework::Utils::Package::Writer writer;
+            writer.Add("package.json", "{\"name\":\"spinner\",\"version\":\"1.0.0\",\"mafiahub\":{\"clientScripts\":[\"client.js\"]}}");
+            writer.Add("client.js", "globalThis.spin = async (n) => { for (let i = 0; i < n; ++i) { await null; } return n; }; globalThis.spun = 0;");
+            std::string blob, zip, error;
+            EQUALS(writer.Build(nullptr, blob), true);
+            EQUALS(Framework::Utils::Package::Open(blob, nullptr, zip, error), true);
+            EQUALS(vfs.MountMemory(std::move(zip), "spinner.zip", Framework::Utils::Vfs::ResourcePath("spinner"), error), true);
+        }
+
+        Framework::Scripting::V8Engine engine;
+        engine.SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        {
+            Framework::Scripting::ResourceManagerConfig config;
+            config.resourcesPath = Framework::Utils::Vfs::kResourceMountRoot;
+            config.isClient      = true;
+            Framework::Scripting::ResourceManager manager(&engine, config);
+            EQUALS(manager.DiscoverResources(), 1u);
+            EQUALS(static_cast<bool>(manager.StartAll()), true);
+
+            // Warm up: first use of a script fills whatever is cached.
+            EQUALS(engine.Execute("spin(10).then(n => { spun += n; });", "/resources/spinner/client.js"), true);
+            engine.Tick();
+
+            uint64_t allocations = 0;
+            {
+                FrameworkTests::AllocationScope scope;
+                EQUALS(engine.Execute("spin(1000).then(n => { spun += n; });", "/resources/spinner/client.js"), true);
+                engine.Tick();
+                allocations = scope.Count();
+            }
+            EQUALS(engine.Execute("if (spun !== 1010) throw Error('promises did not settle: ' + spun);"), true);
+            printf("promise attribution: %llu allocations for ~2000 promises\n", static_cast<unsigned long long>(allocations));
+            manager.StopAll();
+        }
+        engine.Shutdown();
+        vfs.Unmount("spinner.zip");
     });
 
 });
