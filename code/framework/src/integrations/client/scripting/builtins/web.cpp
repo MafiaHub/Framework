@@ -894,7 +894,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         (void)events.EmitReservedTo(isolate, context, eventName, args, owner);
     }
 
-    void Web::DispatchPageEvent(int viewId, const std::string &eventName, const std::string &payload) {
+    void Web::DispatchPageEvent(int viewId, std::string eventName, std::string payload) {
         auto *manager = _resourceManager;
         if (!manager) {
             return;

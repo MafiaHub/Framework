@@ -90,7 +90,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static void GetScreenSizeCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
 
         static bool DestroyViewInternal(int viewId);
-        static void DispatchPageEvent(int viewId, const std::string &eventName, const std::string &payload);
+        static void DispatchPageEvent(int viewId, std::string eventName, std::string payload);
         static Framework::GUI::View *GetOwnedView(int viewId);
 
         static void AttachViewEvents(Framework::GUI::View *view, int viewId);

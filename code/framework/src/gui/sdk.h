@@ -47,10 +47,15 @@ namespace Framework::GUI {
         }
 
         inline void BroadcastEvent(const std::string &eventName, const std::string &eventPayload) {
-            if (!_eventListeners.contains(eventName)) {
+            const auto it = _eventListeners.find(eventName);
+            if (it == _eventListeners.end()) {
                 return;
             }
-            _eventListeners[eventName](eventPayload);
+            // A listener may remove itself, or destroy the view and this SDK with it, from inside the
+            // call. Run a copy so what is executing outlives whatever it erases, and touch nothing
+            // of this object afterwards.
+            const EventCallback listener = it->second;
+            listener(eventPayload);
         }
     };
 } // namespace Framework::GUI
