@@ -208,6 +208,8 @@ namespace Framework::Scripting {
         // Dispose the isolate
         _isolate->Dispose();
         _isolate = nullptr;
+        _promiseOwnerKey      = {};
+        _promiseGenerationKey = {};
 
         // Free the array buffer allocator (V8 docs: caller is responsible)
         delete _createParams.array_buffer_allocator;
@@ -244,11 +246,15 @@ namespace Framework::Scripting {
 
         // Install promise rejection callback
         _isolate->SetPromiseRejectCallback(PromiseRejectCallback);
-        _isolate->SetPromiseHook(PromiseHook);
 
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolateScope(_isolate);
         v8::HandleScope handleScope(_isolate);
+
+        // Before the hook, which reads them for every promise.
+        _promiseOwnerKey.Set(_isolate, v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseOwner")));
+        _promiseGenerationKey.Set(_isolate, v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseGeneration")));
+        _isolate->SetPromiseHook(PromiseHook);
 
         // Create context
         v8::Local<v8::Context> context = v8::Context::New(_isolate);
@@ -256,6 +262,8 @@ namespace Framework::Scripting {
             _lastError = "Failed to create V8 context";
             _isolate->Dispose();
             _isolate = nullptr;
+            _promiseOwnerKey      = {};
+            _promiseGenerationKey = {};
             delete _createParams.array_buffer_allocator;
             _createParams.array_buffer_allocator = nullptr;
             return false;
@@ -679,7 +687,7 @@ namespace Framework::Scripting {
         if (message.GetEvent() != v8::kPromiseRejectWithNoHandler)
             return;
         auto context = GetContext();
-        auto key     = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseOwner"));
+        auto key     = PromiseOwnerKey();
         v8::Local<v8::Value> value;
         std::string owner;
         if (promise->GetPrivate(context, key).ToLocal(&value) && value->IsString()) {
@@ -692,7 +700,7 @@ namespace Framework::Scripting {
         if (owner.empty() && _resourceManager)
             owner = _resourceManager->GetCurrentResourceContext();
         auto generation    = GetResourceGeneration(owner);
-        auto generationKey = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseGeneration"));
+        auto generationKey = PromiseGenerationKey();
         if (promise->GetPrivate(context, generationKey).ToLocal(&value) && value->IsUint32()) {
             generation = value.As<v8::Uint32>()->Value();
         }

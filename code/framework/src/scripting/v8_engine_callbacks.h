@@ -58,7 +58,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
         auto *manager = engine ? engine->GetResourceManager() : nullptr;
         if (!manager)
             return;
-        auto key          = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.promiseOwner"));
+        auto key          = engine->PromiseOwnerKey();
         std::string owner = manager->GetResourceContextFromStack(isolate);
         if (owner.empty())
             owner = manager->GetCurrentResourceContext();
@@ -72,7 +72,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
         }
         if (!value.IsEmpty() && value->IsString()) {
             (void)promise->SetPrivate(context, key, value).FromMaybe(false);
-            auto generationKey = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.promiseGeneration"));
+            auto generationKey = engine->PromiseGenerationKey();
             v8::Local<v8::Value> generation;
             if (owner.empty() && parent->IsPromise()) {
                 if (!parent.As<v8::Promise>()->GetPrivate(context, generationKey).ToLocal(&generation))

@@ -119,6 +119,13 @@ namespace Framework::Scripting {
         void OnPromiseReject(v8::PromiseRejectMessage message);
         static V8Engine *FromContext(v8::Local<v8::Context> context);
 
+        v8::Local<v8::Private> PromiseOwnerKey() const {
+            return _promiseOwnerKey.Get(_isolate);
+        }
+        v8::Local<v8::Private> PromiseGenerationKey() const {
+            return _promiseGenerationKey.Get(_isolate);
+        }
+
         uint32_t GetResourceGeneration(const std::string &resource) const {
             auto found = _resourceGenerations.find(resource);
             return found == _resourceGenerations.end() ? 0 : found->second;
@@ -156,6 +163,11 @@ namespace Framework::Scripting {
         v8::Isolate *_isolate = nullptr;
         v8::Isolate::CreateParams _createParams;
         v8::Global<v8::Context> _context;
+
+        // Created once: Private::ForApi looks a key up by name each time it is called, and the
+        // promise hook runs for every promise.
+        v8::Eternal<v8::Private> _promiseOwnerKey;
+        v8::Eternal<v8::Private> _promiseGenerationKey;
 
         // Timer queue
         std::vector<std::unique_ptr<TimerEntry>> _timers;
