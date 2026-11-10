@@ -1107,6 +1107,13 @@ namespace Framework::Integrations::Client {
         // The server's download URLs first, without the token (it is only the game port's), then the game port.
         std::vector<AssetDownloader::Source> sources;
         for (const std::string &url : Framework::Utils::StreamedAssets::SplitUrlList(_downloadUrl)) {
+            if (sources.size() >= Framework::Utils::StreamedAssets::kMaxDownloadMirrors) {
+                break;
+            }
+            if (!_opts.allowPrivateDownloadMirrors && !Framework::Utils::StreamedAssets::IsAllowedMirrorUrl(url, _currentState.host)) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Skipping the download mirror '{}': not a public host or this server", url);
+                continue;
+            }
             sources.push_back({url, {}});
         }
         sources.push_back({fmt::format("http://{}:{}/files", _currentState.host, _currentState.port), _downloadToken});

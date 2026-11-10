@@ -156,6 +156,14 @@ at start which files to copy there from its staging directory; copy the
 `.chunks` lists with them. A mirror that fails, serves wrong bytes or cannot
 serve ranges falls back per file.
 
+A client uses at most 8 of the announced mirrors (`kMaxDownloadMirrors`) and
+skips the others it cannot trust: a mirror must be plain `http(s)` without
+credentials, query or fragment, and its host must not be loopback, private,
+link-local or unspecified, judged on the URL text alone. The host the player
+connected to is always accepted, so a LAN server may mirror itself. A mod
+that mirrors from another machine on its LAN sets
+`InstanceOptions::allowPrivateDownloadMirrors`.
+
 ## What the log says
 
 Each file logs its size, elapsed time, rate, how many bytes came from older

@@ -64,6 +64,11 @@ namespace Framework::Integrations::Client {
         // A first download whose missing asset paks exceed this waits for GrantAssetConsent().
         uint64_t assetConsentThreshold = ~0ull;
 
+        // A server's download mirrors on loopback, private or link-local hosts other than the server
+        // itself are skipped: the list is the server's, and a player's own network is not its to aim
+        // at. Set for a development setup that mirrors from another machine on the LAN.
+        bool allowPrivateDownloadMirrors = false;
+
         // What a server's asset paks may carry, the same policy the mod's server builds them with.
         // The server is the threat model: with a policy set, a downloaded pak that fails it is never
         // announced. Left null, paks are announced unchecked and the mod must validate them itself
