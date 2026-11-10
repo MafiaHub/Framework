@@ -31,12 +31,13 @@ namespace Framework::Utils::StreamedAssets {
             return out;
         }
 
-        // Four decimal parts, each 0-255, nothing else.
+        // Four decimal parts, each 0-255 with no leading zero, nothing else: a leading zero reads as
+        // octal to some resolvers.
         bool ParseIpv4(std::string_view host, std::array<unsigned, 4> &parts) {
             std::size_t begin = 0;
             for (std::size_t i = 0; i < 4; ++i) {
                 const auto end = i < 3 ? host.find('.', begin) : host.size();
-                if (end == std::string_view::npos || end == begin || end - begin > 3) {
+                if (end == std::string_view::npos || end == begin || end - begin > 3 || (end - begin > 1 && host[begin] == '0')) {
                     return false;
                 }
                 unsigned value = 0;
@@ -57,6 +58,74 @@ namespace Framework::Utils::StreamedAssets {
 
         bool IsPrivateIpv4(const std::array<unsigned, 4> &p) {
             return p[0] == 0 || p[0] == 10 || p[0] == 127 || (p[0] == 100 && p[1] >= 64 && p[1] <= 127) || (p[0] == 169 && p[1] == 254) || (p[0] == 172 && p[1] >= 16 && p[1] <= 31) || (p[0] == 192 && p[1] == 168);
+        }
+
+        // Colon-separated groups of one to four hex digits appended to `groups`; the last one may be a
+        // dotted IPv4 address when `ipv4Tail` allows it. An empty text is no groups.
+        bool ParseIpv6Groups(std::string_view text, bool ipv4Tail, std::vector<unsigned> &groups) {
+            std::size_t begin = 0;
+            while (begin < text.size()) {
+                auto end = text.find(':', begin);
+                if (end == std::string_view::npos) {
+                    end = text.size();
+                }
+                else if (end + 1 == text.size()) {
+                    return false;
+                }
+                const auto piece = text.substr(begin, end - begin);
+                if (piece.find('.') != std::string_view::npos) {
+                    std::array<unsigned, 4> v4 {};
+                    if (!ipv4Tail || end != text.size() || !ParseIpv4(piece, v4)) {
+                        return false;
+                    }
+                    groups.push_back(v4[0] << 8 | v4[1]);
+                    groups.push_back(v4[2] << 8 | v4[3]);
+                }
+                else {
+                    if (piece.empty() || piece.size() > 4) {
+                        return false;
+                    }
+                    unsigned value = 0;
+                    for (const char c : piece) {
+                        const bool digit = c >= '0' && c <= '9';
+                        if (!digit && (c < 'a' || c > 'f')) {
+                            return false;
+                        }
+                        value = value * 16 + static_cast<unsigned>(digit ? c - '0' : c - 'a' + 10);
+                    }
+                    groups.push_back(value);
+                }
+                begin = end + 1;
+            }
+            return true;
+        }
+
+        // A lowercase IPv6 literal, without brackets or zone, as its eight groups.
+        bool ParseIpv6(std::string_view host, std::array<unsigned, 8> &groups) {
+            std::vector<unsigned> head, tail;
+            const auto gap = host.find("::");
+            if (gap == std::string_view::npos) {
+                if (!ParseIpv6Groups(host, true, head) || head.size() != 8) {
+                    return false;
+                }
+            }
+            else {
+                const auto after = host.substr(gap + 2);
+                if (after.find("::") != std::string_view::npos || !ParseIpv6Groups(host.substr(0, gap), false, head) || !ParseIpv6Groups(after, true, tail) || head.size() + tail.size() > 7) {
+                    return false;
+                }
+            }
+            groups.fill(0);
+            std::copy(head.begin(), head.end(), groups.begin());
+            std::copy(tail.begin(), tail.end(), groups.end() - static_cast<std::ptrdiff_t>(tail.size()));
+            return true;
+        }
+
+        // Unspecified, loopback, IPv4-compatible and IPv4-mapped (::/95 and ::ffff:0:0/96), unique
+        // local (fc00::/7) and link local (fe80::/10).
+        bool IsPrivateIpv6(const std::array<unsigned, 8> &g) {
+            const bool embedsIpv4 = g[0] == 0 && g[1] == 0 && g[2] == 0 && g[3] == 0 && g[4] == 0 && (g[5] == 0 || g[5] == 0xffff);
+            return embedsIpv4 || (g[0] & 0xfe00) == 0xfc00 || (g[0] & 0xffc0) == 0xfe80;
         }
 
         bool StartsWith(std::string_view text, std::string_view prefix) {
@@ -219,7 +288,8 @@ namespace Framework::Utils::StreamedAssets {
             });
         };
         std::string_view hostText = authority;
-        if (authority.front() == '[') {
+        const bool bracketed      = authority.front() == '[';
+        if (bracketed) {
             const auto close = authority.find(']');
             if (close == std::string_view::npos) {
                 return false;
@@ -242,18 +312,32 @@ namespace Framework::Utils::StreamedAssets {
         if (hostText.empty()) {
             return false;
         }
-        const std::string host = Lower(hostText);
+        std::string host = Lower(hostText);
         if (host == Lower(serverHost)) {
             return true;
+        }
+        // Everything below accepts only what it can read: a form it does not know is refused, since
+        // another parser may read it as a private address.
+        if (bracketed) {
+            std::array<unsigned, 8> groups {};
+            return ParseIpv6(host, groups) && !IsPrivateIpv6(groups);
+        }
+        if (host.back() == '.') {
+            host.pop_back();
+        }
+        if (host.empty() || !std::all_of(host.begin(), host.end(), [](char c) {
+                return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-';
+            })) {
+            return false;
         }
         if (host == "localhost" || (host.size() > 10 && host.compare(host.size() - 10, 10, ".localhost") == 0)) {
             return false;
         }
-        if (host.find(':') != std::string::npos) {
-            return !(host == "::" || host == "::1" || StartsWith(host, "fc") || StartsWith(host, "fd") || StartsWith(host, "fe8") || StartsWith(host, "fe9") || StartsWith(host, "fea") || StartsWith(host, "feb") || StartsWith(host, "::ffff:"));
-        }
-        if (std::all_of(host.begin(), host.end(), [](char c) {
-                return (c >= '0' && c <= '9') || c == '.';
+        // A last label that is a number, decimal or hex, makes the host an address to a resolver.
+        const auto dot              = host.rfind('.');
+        const std::string_view last = std::string_view(host).substr(dot == std::string::npos ? 0 : dot + 1);
+        if (StartsWith(last, "0x") || std::all_of(last.begin(), last.end(), [](char c) {
+                return c >= '0' && c <= '9';
             })) {
             std::array<unsigned, 4> parts {};
             return ParseIpv4(host, parts) && !IsPrivateIpv4(parts);
