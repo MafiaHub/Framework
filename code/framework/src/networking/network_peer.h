@@ -12,6 +12,7 @@
 #include "connection.h"
 #include "rpc/rpc.h"
 
+#include <chrono>
 #include <cstdint>
 #include <logging/logger.h>
 #include <mafianet/message_identifiers.h>
@@ -44,6 +45,10 @@ namespace Framework::Networking {
         MafiaNet::RakPeerInterface *_peer = nullptr;
         MafiaNet::Packet *_packet         = nullptr;
         int _packetDataOffset             = 0; // Offset to skip timestamp prefix if present
+        // Control packets dropped behind a timestamp since the last warning, which is written at most
+        // once a second: a peer can send them as fast as it likes.
+        uint64_t _droppedBehindTimestamp = 0;
+        std::chrono::steady_clock::time_point _nextTimestampDropWarning {};
         fu2::function<bool(MafiaNet::Packet *) const> _onUnknownPacketCallback;
 
         // RPC4 dispatches remote-procedure calls by identifier to C handlers. NetworkIDManager hands
