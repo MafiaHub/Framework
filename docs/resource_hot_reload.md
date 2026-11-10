@@ -97,7 +97,7 @@ auto-restart, or a newly started resource — the server notifies connected
 clients so they re-sync and apply it in place:
 
 1. Any `StartResource` after the initial boot fires
-   `ResourceManager::SetOnResourceStarted`; the server `Instance` reacts (boot
+   `ResourceManager::AddOnResourceStarted`; the server `Instance` reacts (boot
    starts are skipped — clients get the full list on connect).
 2. The server repackages and republishes the client files
    (`PublishClientAssets`), so the refresh announces their new hashes.
@@ -114,6 +114,7 @@ Symmetrically, when a client resource **stops** at runtime (operator `stop`,
 error-stop, or the transient stop within a reload), the server broadcasts a
 `ResourceStop` RPC and clients stop it — no files transfer. A reload therefore
 mirrors as stop-then-start on the client.
+A failed start and a runtime error with `errorBehavior` `stop` or `restart` notify the same way as a clean stop.
 
 Clients that haven't finished connecting ignore `ResourceRefresh`/`ResourceStop`
 — their initial asset sync already fetches the current files.

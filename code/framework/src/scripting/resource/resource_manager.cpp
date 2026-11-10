@@ -551,6 +551,7 @@ namespace Framework::Scripting {
             CleanupResourceRuntime(*resource, name);
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
+            NotifyStoppedIfStillFailed(resource, std::string(name));
             return ResourceOperationResult(error);
         }
 
@@ -578,6 +579,7 @@ namespace Framework::Scripting {
             CleanupResourceRuntime(*resource, name);
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
+            NotifyStoppedIfStillFailed(resource, std::string(name));
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start JS resource '{}': {}", name, error);
             return ResourceOperationResult(error);
         }
@@ -1017,6 +1019,18 @@ namespace Framework::Scripting {
         }
     }
 
+    void ResourceManager::RetireFailedResource(Resource &resource, const std::string &resourceName) {
+        CleanupResourceRuntime(resource, resourceName);
+        FireOnResourceStopped(resourceName);
+    }
+
+    void ResourceManager::NotifyStoppedIfStillFailed(const Resource *failed, const std::string &resourceName) {
+        const Resource *current = GetResourceMutable(resourceName);
+        if (current == failed && current->GetState() == ResourceState::Error) {
+            FireOnResourceStopped(resourceName);
+        }
+    }
+
     std::vector<std::string> ResourceManager::GetAllResourceNames() const {
         std::scoped_lock lock(_resourcesMutex);
         std::vector<std::string> names;
@@ -1355,7 +1369,7 @@ namespace Framework::Scripting {
             // Error is already non-running, so StopResource would skip this.
             // Drop exports, handlers and runtime-owned work after error owners
             // have been notified. Node defers disposal while callbacks unwind.
-            CleanupResourceRuntime(*current, resourceName);
+            RetireFailedResource(*current, resourceName);
         }
         if (errorBehavior == "restart") {
             ScheduleAutoRestart(resourceName);

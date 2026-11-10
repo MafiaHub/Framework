@@ -386,6 +386,16 @@ namespace Framework::Scripting {
         // settle (or time out) before this is called.
         void CleanupResourceRuntime(Resource &resource, std::string_view resourceName);
 
+        // Tears down a resource that failed while running and tells its owners the way a clean
+        // stop does. Native state created on a resource's behalf (web views, key binds, the client
+        // half of the resource) is released from those callbacks, so a teardown that skipped them
+        // would leave it behind.
+        void RetireFailedResource(Resource &resource, const std::string &resourceName);
+        // The same notification for a start that failed after its runtime was already torn down.
+        // An error callback may have recovered or replaced the resource in between; then there is
+        // nothing stopped to announce.
+        void NotifyStoppedIfStillFailed(const Resource *failed, const std::string &resourceName);
+
         // Build dependency graph from discovered resources
         void BuildDependencyGraph();
 

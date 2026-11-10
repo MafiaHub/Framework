@@ -1211,6 +1211,168 @@ MODULE(resource_manager_callbacks, {
         TestManagerHelper::Cleanup();
     });
 
+    IT("fires OnResourceStopped when the entry script throws", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("stop-on-throw", R"({"name":"stop-on-throw","version":"1.0.0","mafiahub":{"server":"main.js"}})");
+        TestManagerHelper::CreateTestScript("stop-on-throw", "main.js", "throw new Error('boom');");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+
+        std::vector<std::string> stopped;
+        manager.AddOnResourceStopped([&stopped](const std::string &name) {
+            stopped.push_back(name);
+        });
+        EQUALS(manager.DiscoverResources(), 1u);
+
+        const auto result = manager.StartResource("stop-on-throw");
+        EQUALS(static_cast<bool>(result), false);
+        EQUALS(stopped.size(), 1u);
+        STREQUALS(stopped[0].c_str(), "stop-on-throw");
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("fires OnResourceStopped when resourceStart rejects", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("stop-on-reject", R"({"name":"stop-on-reject","version":"1.0.0","mafiahub":{"server":"main.js"}})");
+        TestManagerHelper::CreateTestScript("stop-on-reject", "main.js", R"(
+            Events.on("resourceStart", async (name) => {
+                if (name !== "stop-on-reject") return;
+                await Promise.resolve();
+                throw new Error("migration failed");
+            });
+        )");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath          = TestManagerHelper::GetTestResourcePath();
+        config.resourceStartTimeoutMs = 250;
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+
+        std::vector<std::string> stopped;
+        manager.AddOnResourceStopped([&stopped](const std::string &name) {
+            stopped.push_back(name);
+        });
+        EQUALS(manager.DiscoverResources(), 1u);
+
+        const auto result = manager.StartResource("stop-on-reject");
+        EQUALS(static_cast<bool>(result), false);
+        EQUALS(stopped.size(), 1u);
+        STREQUALS(stopped[0].c_str(), "stop-on-reject");
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("fires OnResourceStopped once when a running resource errors", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("stop-on-error", R"({"name":"stop-on-error","version":"1.0.0","mafiahub":{"server":"main.js"}})");
+        TestManagerHelper::CreateTestScript("stop-on-error", "main.js", "// empty script");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+
+        std::vector<std::string> stopped;
+        manager.AddOnResourceStopped([&stopped](const std::string &name) {
+            stopped.push_back(name);
+        });
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS(static_cast<bool>(manager.StartResource("stop-on-error")), true);
+        EQUALS(stopped.empty(), true);
+
+        manager.HandleResourceRuntimeError("stop-on-error", "boom");
+        EQUALS(stopped.size(), 1u);
+
+        // No longer running, so there is nothing further to notify.
+        manager.StopResource("stop-on-error");
+        EQUALS(stopped.size(), 1u);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("does not fire OnResourceStopped for errorBehavior continue", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("keep-on-error", R"({"name":"keep-on-error","version":"1.0.0","mafiahub":{"server":"main.js","errorBehavior":"continue"}})");
+        TestManagerHelper::CreateTestScript("keep-on-error", "main.js", "// empty script");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+
+        std::vector<std::string> stopped;
+        manager.AddOnResourceStopped([&stopped](const std::string &name) {
+            stopped.push_back(name);
+        });
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS(static_cast<bool>(manager.StartResource("keep-on-error")), true);
+
+        auto *runtime = engine.GetResourceRuntime("keep-on-error");
+        manager.HandleResourceRuntimeError("keep-on-error", "continue policy");
+        EQUALS(stopped.empty(), true);
+        EQUALS(engine.GetResourceRuntime("keep-on-error") == runtime, true);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
+    IT("notifies once for a restart error and then reports the start", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("stop-then-restart", R"({"name":"stop-then-restart","version":"1.0.0","mafiahub":{"server":"main.js","errorBehavior":"restart"}})");
+        TestManagerHelper::CreateTestScript("stop-then-restart", "main.js", "// empty script");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+
+        std::vector<std::string> events;
+        manager.AddOnResourceStopped([&events](const std::string &) {
+            events.emplace_back("stopped");
+        });
+        manager.AddOnResourceStarted([&events](const std::string &) {
+            events.emplace_back("started");
+        });
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS(static_cast<bool>(manager.StartResource("stop-then-restart")), true);
+        events.clear();
+
+        manager.HandleResourceRuntimeError("stop-then-restart", "restart fixture");
+        EQUALS(events.size(), 1u);
+
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!manager.IsResourceRunning("stop-then-restart") && std::chrono::steady_clock::now() < deadline) {
+            manager.ProcessScheduledRestarts();
+            engine.Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(manager.IsResourceRunning("stop-then-restart"), true);
+        EQUALS(events.size(), 2u);
+        STREQUALS(events[0].c_str(), "stopped");
+        STREQUALS(events[1].c_str(), "started");
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
     // ==================== Current Resource Context ====================
 
     IT("SetCurrentResourceContext and GetCurrentResourceContext work correctly", {
