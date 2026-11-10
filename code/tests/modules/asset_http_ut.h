@@ -1467,12 +1467,12 @@ MODULE(asset_http, {
     IT("accepts a download mirror only on a public host or the server's own", {
         using Framework::Utils::StreamedAssets::IsAllowedMirrorUrl;
         const std::string server = "203.0.113.7";
-        for (const char *url : {"https://cdn.example/files", "http://cdn.example:8080/files/", "https://CDN.Example/files", "http://203.0.113.7:9000/files", "http://[2001:db8::1]/files", "http://172.15.0.1/x", "http://172.32.0.1/x", "http://11.0.0.1/x", "http://100.128.0.1/x"}) {
+        for (const char *url : {"https://cdn.example/files", "http://cdn.example:8080/files/", "https://CDN.Example/files", "http://203.0.113.7:9000/files", "http://[2001:db8::1]/files", "http://[2001:db8::1]:8080/files", "https://cdn.example:443/files", "http://172.15.0.1/x", "http://172.32.0.1/x", "http://11.0.0.1/x", "http://100.128.0.1/x"}) {
             EQUALS(IsAllowedMirrorUrl(url, server), true);
         }
         EQUALS(IsAllowedMirrorUrl("http://192.168.1.20/files", "192.168.1.20"), true);
         for (const char *url : {"ftp://cdn.example/files", "cdn.example/files", "http://", "https:///files", "http://user:pw@cdn.example/files", "https://cdn.example/files?x=1", "https://cdn.example/files#frag", "http://localhost/x", "http://LOCALHOST:8080/x", "http://a.localhost/x", "http://127.0.0.1/x", "http://127.1/x", "http://2130706433/x", "http://10.1.2.3/x",
-                                "http://172.16.0.1/x", "http://172.31.255.255/x", "http://192.168.0.1/x", "http://169.254.169.254/x", "http://100.64.0.1/x", "http://0.0.0.0/x", "http://192.168.1.20/files", "http://[::1]/x", "http://[fd00::1]/x", "http://[fe80::1]/x", "http://[::ffff:127.0.0.1]/x"}) {
+                                "http://172.16.0.1/x", "http://172.31.255.255/x", "http://192.168.0.1/x", "http://169.254.169.254/x", "http://100.64.0.1/x", "http://0.0.0.0/x", "http://192.168.1.20/files", "http://[::1]/x", "http://[fd00::1]/x", "http://[fe80::1]/x", "http://[::ffff:127.0.0.1]/x", "http://127.0.0.1:abc/x", "http://127.0.0.1:/x", "http://cdn.example:/x", "http://cdn.example:80a/x", "http://fe80::1/x", "http://[::1]x/y", "http://[2001:db8::1]:abc/y"}) {
             EQUALS(IsAllowedMirrorUrl(url, server), false);
         }
     });

@@ -213,10 +213,19 @@ namespace Framework::Utils::StreamedAssets {
         if (authority.empty() || authority.find('@') != std::string_view::npos) {
             return false;
         }
+        const auto isPort = [](std::string_view port) {
+            return !port.empty() && std::all_of(port.begin(), port.end(), [](char c) {
+                return c >= '0' && c <= '9';
+            });
+        };
         std::string_view hostText = authority;
         if (authority.front() == '[') {
             const auto close = authority.find(']');
             if (close == std::string_view::npos) {
+                return false;
+            }
+            const auto tail = authority.substr(close + 1);
+            if (!tail.empty() && (tail.front() != ':' || !isPort(tail.substr(1)))) {
                 return false;
             }
             hostText = authority.substr(1, close - 1);
@@ -224,11 +233,9 @@ namespace Framework::Utils::StreamedAssets {
         else {
             const auto colon = authority.rfind(':');
             if (colon != std::string_view::npos) {
-                const auto port = authority.substr(colon + 1);
-                if (!port.empty() && std::all_of(port.begin(), port.end(), [](char c) {
-                        return c >= '0' && c <= '9';
-                    })) {
-                    hostText = authority.substr(0, colon);
+                hostText = authority.substr(0, colon);
+                if (!isPort(authority.substr(colon + 1)) || hostText.find(':') != std::string_view::npos) {
+                    return false;
                 }
             }
         }
