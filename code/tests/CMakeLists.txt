@@ -55,6 +55,12 @@ target_include_directories(FrameworkValueTransferBench PRIVATE ../framework/src)
 target_link_libraries(FrameworkValueTransferBench Framework FrameworkServer libnode)
 target_compile_definitions(FrameworkValueTransferBench PRIVATE NODE_WANT_INTERNALS=1)
 
+# Not a test: what a log call costs its caller while the outputs keep up, fall behind and stall (see the
+# file). Build it in RelWithDebInfo or Release.
+add_executable(FrameworkLoggingBench bench/logging_bench.cpp)
+target_include_directories(FrameworkLoggingBench PRIVATE ../framework/src)
+target_link_libraries(FrameworkLoggingBench Framework)
+
 
 # Tests use Node.js APIs through the scripting engine
 target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
