@@ -281,6 +281,7 @@ MODULE(state_bag_routing, {
         LESSER(three, uint64_t(2 * 20 + 40));
         // Twice the viewers must not cost a copy of each change more: sending to a connection costs a
         // fixed handful of allocations (the stream and the RPC signal), whatever the changes are.
-        LESSER(six, three + 3 * 8);
+        // 9 per connection with MSVC, 6 with libc++; a copy of each change would be 2 * 20.
+        LESSER(six, three + 3 * 16);
     });
 });
