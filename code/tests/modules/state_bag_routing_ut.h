@@ -275,8 +275,10 @@ MODULE(state_bag_routing, {
         const uint64_t three = flushAllocations(3);
         const uint64_t six   = flushAllocations(6);
         NEQUALS(three, uint64_t(0));
-        // One copy of the key and of the value per change into the shared pool, plus fixed overhead.
-        LESSER(three, uint64_t(2 * 20 + 16));
+        // One copy of the key and of the value per change into the shared pool, plus overhead that
+        // depends on the standard library (58 in all with MSVC, 46 with libc++). A copy per viewer
+        // would be 2 * 20 * 3 on its own.
+        LESSER(three, uint64_t(2 * 20 + 40));
         // Twice the viewers must not cost a copy of each change more: sending to a connection costs a
         // fixed handful of allocations (the stream and the RPC signal), whatever the changes are.
         LESSER(six, three + 3 * 8);
