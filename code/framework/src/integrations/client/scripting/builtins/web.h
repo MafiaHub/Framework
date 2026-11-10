@@ -92,6 +92,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static bool DestroyViewInternal(int viewId);
         static void DispatchPageEvent(int viewId, std::string eventName, std::string payload);
         static Framework::GUI::View *GetOwnedView(int viewId);
+        // The view, if the calling resource is the one that created it. Script-facing calls use this;
+        // GetOwnedView is for teardown, which acts whoever the owner was.
+        static Framework::GUI::View *GetCallerView(v8::Isolate *isolate, int viewId);
 
         static void AttachViewEvents(Framework::GUI::View *view, int viewId);
         static void QueueViewEvent(int viewId, const Framework::GUI::ViewEventData &data);
