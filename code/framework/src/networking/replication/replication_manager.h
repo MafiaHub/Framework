@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../rpc/state_bag_sync.h"
 #include "delegation.h"
 #include "entity_registry.h"
 #include "interest_grid.h"
@@ -424,6 +425,10 @@ namespace Framework::Networking::Replication {
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
         // By NetworkID, not pointer: an entity can be destroyed between dirtying and the flush.
         std::unordered_set<uint64_t> _dirtyStateBags;
+        // FlushStateBags scratch, kept between flushes to reuse their capacity: the changes built once
+        // per flush, and per connection the indices of the ones it is sent.
+        std::vector<RPC::StateBagSync::Change> _stateBagFlushPool;
+        std::vector<std::vector<uint32_t>> _stateBagFlushIndices;
 
         struct StateChangeSubscription {
             StateChangeFilter filter;

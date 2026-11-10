@@ -17,6 +17,7 @@
 #include <mafianet/bit_stream.h>
 #include <mafianet/types.h>
 
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -739,6 +740,59 @@ MODULE(state_bag, {
         StateBagSync in;
         in.Serialize(&bs, false);
         EQUALS(in.changes.size(), size_t(0));
+    });
+
+    IT("writes the same bytes from shared changes as from an owned payload", {
+        StateBagSync owned;
+        const auto add = [&](StateValue::Type type, const std::string &key, bool removed) {
+            StateBagSync::Change change;
+            change.networkId = 100 + owned.changes.size();
+            change.key       = key;
+            change.removed   = removed;
+            change.value.type = type;
+            switch (type) {
+            case StateValue::Type::Boolean: change.value.boolean = true; break;
+            case StateValue::Type::Number: change.value.number = 12.5; break;
+            case StateValue::Type::String: change.value.text = "hello"; break;
+            case StateValue::Type::Json: change.value.text = "{\"a\":[1,2]}"; break;
+            case StateValue::Type::Null: break;
+            }
+            owned.changes.push_back(change);
+        };
+        add(StateValue::Type::Null, "null", false);
+        add(StateValue::Type::Boolean, "bool", false);
+        add(StateValue::Type::Number, "num", false);
+        add(StateValue::Type::String, "str", false);
+        add(StateValue::Type::Json, "json", false);
+        add(StateValue::Type::Null, "gone", true);
+
+        MafiaNet::BitStream fromOwned;
+        owned.Serialize(&fromOwned, true);
+
+        // The pool holds the same changes in another order; the indices put them back.
+        const size_t order[] = {3, 5, 0, 4, 1, 2};
+        std::vector<StateBagSync::Change> pool(6);
+        uint32_t indices[6];
+        for (size_t slot = 0; slot < 6; ++slot) {
+            pool[slot]            = owned.changes[order[slot]];
+            indices[order[slot]]  = static_cast<uint32_t>(slot);
+        }
+
+        MafiaNet::BitStream fromShared;
+        StateBagSync::WriteChanges(&fromShared, pool, indices, 6);
+
+        EQUALS(fromShared.GetNumberOfBitsUsed(), fromOwned.GetNumberOfBitsUsed());
+        EQUALS(memcmp(fromShared.GetData(), fromOwned.GetData(), static_cast<size_t>(fromOwned.GetNumberOfBytesUsed())), 0);
+
+        StateBagSync decoded;
+        decoded.Serialize(&fromShared, false);
+        EQUALS(decoded.changes.size(), owned.changes.size());
+        for (size_t i = 0; i < owned.changes.size(); ++i) {
+            EQUALS(decoded.changes[i].networkId == owned.changes[i].networkId, true);
+            EQUALS(decoded.changes[i].key == owned.changes[i].key, true);
+            EQUALS(decoded.changes[i].removed == owned.changes[i].removed, true);
+            EQUALS(decoded.changes[i].value == owned.changes[i].value, true);
+        }
     });
 
     IT("reads an unknown value tag as null instead of trusting it", {

@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "alloc_counter.h"
 #include "networking/network_server.h"
 #include "networking/replication/replication_manager.h"
 #include "networking/replication/state_bag.h"
@@ -253,5 +254,31 @@ MODULE(state_bag_routing, {
             }
             return true;
         }), true);
+    });
+
+    // The allocations one flush of 20 broadcast keys makes, 0 when the rig did not come up.
+    const auto flushAllocations = [&](int clientCount) -> uint64_t {
+        Rig rig;
+        if (!rig.Setup(clientCount, "Test::StateBagRouting")) {
+            return 0;
+        }
+        for (int n = 0; n < 20; ++n) {
+            rig.npc->state.Set("key" + std::to_string(n), text(std::string(200, static_cast<char>('a' + n))), StateScope::Broadcast);
+        }
+
+        FrameworkTests::AllocationScope scope;
+        rig.manager->FlushStateBags();
+        return scope.Count();
+    };
+
+    IT("flushes a broadcast change without allocating per viewer", {
+        const uint64_t three = flushAllocations(3);
+        const uint64_t six   = flushAllocations(6);
+        NEQUALS(three, uint64_t(0));
+        // One copy of the key and of the value per change into the shared pool, plus fixed overhead.
+        LESSER(three, uint64_t(2 * 20 + 16));
+        // Twice the viewers must not cost a copy of each change more: sending to a connection costs a
+        // fixed handful of allocations (the stream and the RPC signal), whatever the changes are.
+        LESSER(six, three + 3 * 8);
     });
 });

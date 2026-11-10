@@ -41,6 +41,9 @@ namespace Framework::Networking::Replication {
 
         void Serialize(MafiaNet::BitStream *bs, bool write);
 
+        // The write half of Serialize, for a value that is shared and must not be touched.
+        void Write(MafiaNet::BitStream *bs) const;
+
         // Only the text varies; the tag and scalars are fixed width.
         size_t ByteSize() const {
             return text.size();

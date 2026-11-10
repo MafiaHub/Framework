@@ -13,19 +13,33 @@
 #include <algorithm>
 
 namespace Framework::Networking::Replication {
+    void StateValue::Write(MafiaNet::BitStream *bs) const {
+        bs->Write(static_cast<uint8_t>(type));
+        switch (type) {
+        case Type::Boolean: bs->Write(boolean); break;
+        case Type::Number: bs->Write(number); break;
+        case Type::String:
+        case Type::Json: bs->Write(text); break;
+        case Type::Null: break;
+        }
+    }
+
     void StateValue::Serialize(MafiaNet::BitStream *bs, bool write) {
-        auto tag = static_cast<uint8_t>(type);
-        bs->Serialize(write, tag);
-        if (!write) {
-            // An unknown tag degrades to Null instead of aliasing some other case.
-            type = tag <= static_cast<uint8_t>(Type::Json) ? static_cast<Type>(tag) : Type::Null;
+        if (write) {
+            Write(bs);
+            return;
         }
 
+        uint8_t tag = 0;
+        bs->Serialize(false, tag);
+        // An unknown tag degrades to Null instead of aliasing some other case.
+        type = tag <= static_cast<uint8_t>(Type::Json) ? static_cast<Type>(tag) : Type::Null;
+
         switch (type) {
-        case Type::Boolean: bs->Serialize(write, boolean); break;
-        case Type::Number: bs->Serialize(write, number); break;
+        case Type::Boolean: bs->Serialize(false, boolean); break;
+        case Type::Number: bs->Serialize(false, number); break;
         case Type::String:
-        case Type::Json: bs->Serialize(write, text); break;
+        case Type::Json: bs->Serialize(false, text); break;
         case Type::Null: break;
         }
     }
