@@ -23,6 +23,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 // Forward declaration for V8
@@ -439,6 +440,12 @@ namespace Framework::Scripting {
         // Resource registry
         std::map<std::string, std::unique_ptr<Resource>, std::less<>> _resources;
         mutable std::mutex _resourcesMutex;
+
+        // Which resource a script belongs to, by V8 script id, including "none" (empty). A script's
+        // id never changes or gets reused within an isolate, and resolving a path costs string and
+        // path work that a promise hook would otherwise repeat for every promise. Only consulted
+        // for a runtime every resource shares; cleared whenever the set of resources changes.
+        mutable std::unordered_map<int, std::string> _scriptOwners;
 
         // Dependency graph: resource -> set of dependencies
         std::map<std::string, std::set<std::string, std::less<>>, std::less<>> _dependencies;

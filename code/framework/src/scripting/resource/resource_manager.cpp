@@ -199,6 +199,7 @@ namespace Framework::Scripting {
 
     void ResourceManager::SetConfig(const ResourceManagerConfig &config) {
         _config = config;
+        _scriptOwners.clear();
     }
 
     size_t ResourceManager::DiscoverResources() {
@@ -271,6 +272,7 @@ namespace Framework::Scripting {
             }
 
             _resources[name] = std::move(resource);
+            _scriptOwners.clear();
         }
 
         // Discovery keeps the graph current: mounted-package discovery and the client's hot-reload
@@ -472,6 +474,7 @@ namespace Framework::Scripting {
             _dependencies.clear();
             _dependents.clear();
             _resources.clear();
+            _scriptOwners.clear();
         }
         {
             std::scoped_lock lock(_contextMutex);
@@ -775,6 +778,7 @@ namespace Framework::Scripting {
                 _resources.erase(oldName);
             }
             _resources[newName] = std::move(reparsed);
+            _scriptOwners.clear();
         }
         BuildDependencyGraph();
 
@@ -841,6 +845,7 @@ namespace Framework::Scripting {
                 renamed[name] = newName;
             }
             _resources[newName] = std::move(reparsed);
+            _scriptOwners.clear();
         }
 
         // Pick up brand-new resource directories, then rebuild the graph once.
@@ -1276,31 +1281,40 @@ namespace Framework::Scripting {
             return owner;
         }
 
-        // Get stack trace with up to 20 frames
-        v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(isolate, 20);
-        if (stackTrace.IsEmpty()) {
-            return "";
+        // The creating frame is nearly always the top one, so ask for that alone before paying for
+        // a deep trace.
+        for (const int depth : {1, 20}) {
+            v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(isolate, depth);
+            if (stackTrace.IsEmpty()) {
+                return "";
+            }
+            for (int i = 0; i < stackTrace->GetFrameCount(); ++i) {
+                v8::Local<v8::StackFrame> frame = stackTrace->GetFrame(isolate, i);
+                const int scriptId              = frame->GetScriptId();
+                if (const auto known = _scriptOwners.find(scriptId); known != _scriptOwners.end()) {
+                    if (!known->second.empty()) {
+                        return known->second;
+                    }
+                    continue;
+                }
+
+                std::string owner;
+                v8::Local<v8::String> scriptName = frame->GetScriptName();
+                if (!scriptName.IsEmpty()) {
+                    v8::String::Utf8Value scriptPath(isolate, scriptName);
+                    if (*scriptPath) {
+                        owner = GetResourceNameFromScriptPath(*scriptPath);
+                    }
+                }
+                _scriptOwners.emplace(scriptId, owner);
+                if (!owner.empty()) {
+                    return owner;
+                }
+            }
+            if (stackTrace->GetFrameCount() < depth) {
+                break; // The whole stack was shorter than what was asked for: nothing deeper to see.
+            }
         }
-
-        // Look for the first frame with a file path in the resources directory
-        for (int i = 0; i < stackTrace->GetFrameCount(); ++i) {
-            v8::Local<v8::StackFrame> frame  = stackTrace->GetFrame(isolate, i);
-            v8::Local<v8::String> scriptName = frame->GetScriptName();
-            if (scriptName.IsEmpty()) {
-                continue;
-            }
-
-            v8::String::Utf8Value scriptPath(isolate, scriptName);
-            if (!*scriptPath) {
-                continue;
-            }
-
-            std::string result = GetResourceNameFromScriptPath(*scriptPath);
-            if (!result.empty()) {
-                return result;
-            }
-        }
-
         return "";
     }
 
