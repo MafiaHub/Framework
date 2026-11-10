@@ -50,7 +50,16 @@ namespace Framework::GUI::CEF {
         auto args = msg->GetArgumentList();
         args->SetString(0, eventName);
         args->SetString(1, payload);
-        _browser->GetMainFrame()->SendProcessMessage(PID_BROWSER, msg);
+        // From the frame whose script called: the browser process checks that frame's origin
+        // against the view's. Sending from the main frame would vouch for every embedded frame,
+        // and in a cross-origin child frame's process there is no main frame to send from.
+        CefRefPtr<CefV8Context> caller = CefV8Context::GetCurrentContext();
+        CefRefPtr<CefFrame> frame      = caller ? caller->GetFrame() : nullptr;
+        if (!frame) {
+            exception = "callEvent is not available in this frame";
+            return true;
+        }
+        frame->SendProcessMessage(PID_BROWSER, msg);
 
         retval = CefV8Value::CreateBool(true);
         return true;
@@ -131,7 +140,7 @@ namespace Framework::GUI::CEF {
 
     void RendererApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) {
         CefRefPtr<CefV8Value> global    = context->GetGlobal();
-        CefRefPtr<CefV8Handler> handler = new CallEventHandler(browser);
+        CefRefPtr<CefV8Handler> handler = new CallEventHandler();
         CefRefPtr<CefV8Value> func      = CefV8Value::CreateFunction("callEvent", handler);
         global->SetValue("callEvent", func, V8_PROPERTY_ATTRIBUTE_NONE);
 
