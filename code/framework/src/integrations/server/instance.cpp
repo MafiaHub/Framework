@@ -664,8 +664,16 @@ namespace Framework::Integrations::Server {
             }
             _joinedGuids.insert(guid.g);
 
-            // Only a request carrying an identity is ever accepted, so a connection has one.
-            const Framework::Networking::RPC::ClientIdentity &identity = *net->GetPeerIdentity(guid);
+            // An accepted request always carried an identity, but what is stored for a connection
+            // is only as trustworthy as every packet since: refuse rather than dereference.
+            const Framework::Networking::RPC::ClientIdentity *storedIdentity = net->GetPeerIdentity(guid);
+            if (storedIdentity == nullptr) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Refusing the join of guid {}: it has no stored identity", guid.g);
+                _joinedGuids.erase(guid.g);
+                net->KickPlayer(guid, Framework::Networking::DisconnectionReason::KICKED_INVALID_PACKET, "");
+                return;
+            }
+            const Framework::Networking::RPC::ClientIdentity &identity = *storedIdentity;
 
             // The game builds the avatar and registers it as this connection's viewer; hand it the
             // metadata so it spawns with the real nickname/slot.
