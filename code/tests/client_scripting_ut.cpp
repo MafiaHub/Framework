@@ -242,7 +242,9 @@ MODULE(client_scripting, {
                 allocations = scope.Count();
             }
             EQUALS(engine.Execute("if (spun !== 1010) throw Error('promises did not settle: ' + spun);"), true);
-            printf("promise attribution: %llu allocations for ~2000 promises\n", static_cast<unsigned long long>(allocations));
+            // Measured about 22000 before the script-owner cache and about 4000 after: the bound sits between
+            // the two, so a return to resolving the script path for every promise fails it.
+            EQUALS(allocations < 8000, true);
             manager.StopAll();
         }
         engine.Shutdown();
