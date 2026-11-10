@@ -110,7 +110,11 @@ namespace Framework::Networking::Replication {
         };
     } // namespace
 
-    ReplicationManager::ReplicationManager()  = default;
+    struct ReplicationManager::StateBagFlushPool {
+        std::vector<RPC::StateBagSync::Change> changes;
+    };
+
+    ReplicationManager::ReplicationManager(): _stateBagFlushPool(std::make_unique<StateBagFlushPool>()) {}
     ReplicationManager::~ReplicationManager() = default;
 
     void ReplicationManager::SetReplicationWorkerThreads(uint32_t workers) {
@@ -595,7 +599,7 @@ namespace Framework::Networking::Replication {
         // it should get, so a change for many viewers is not copied per viewer. Placement asks the
         // connection whether it has the entity constructed — the question interest, virtual worlds
         // and budgets have already answered, so none of it is repeated here.
-        _stateBagFlushPool.clear();
+        _stateBagFlushPool->changes.clear();
         _stateBagFlushIndices.resize(connectionCount);
         for (auto &indices : _stateBagFlushIndices) {
             indices.clear();
@@ -609,8 +613,8 @@ namespace Framework::Networking::Replication {
             for (const auto &[key, dirty] : entity->state.Dirty()) {
                 const StateValue *current = entity->state.Get(key);
 
-                const auto updateIndex            = static_cast<uint32_t>(_stateBagFlushPool.size());
-                RPC::StateBagSync::Change &update = _stateBagFlushPool.emplace_back();
+                const auto updateIndex            = static_cast<uint32_t>(_stateBagFlushPool->changes.size());
+                RPC::StateBagSync::Change &update = _stateBagFlushPool->changes.emplace_back();
                 update.networkId                  = entity->GetNetworkID();
                 update.key                        = key;
                 update.removed                    = current == nullptr;
@@ -625,8 +629,8 @@ namespace Framework::Networking::Replication {
                 std::optional<uint32_t> revokeIndex;
                 const auto revoke = [&]() {
                     if (!revokeIndex.has_value()) {
-                        revokeIndex                       = static_cast<uint32_t>(_stateBagFlushPool.size());
-                        RPC::StateBagSync::Change &change = _stateBagFlushPool.emplace_back();
+                        revokeIndex                       = static_cast<uint32_t>(_stateBagFlushPool->changes.size());
+                        RPC::StateBagSync::Change &change = _stateBagFlushPool->changes.emplace_back();
                         change.networkId                  = entity->GetNetworkID();
                         change.key                        = key;
                         change.removed                    = true;
@@ -675,7 +679,7 @@ namespace Framework::Networking::Replication {
             for (size_t offset = 0; offset < indices.size(); offset += RPC::StateBagSync::kMaxChanges) {
                 const size_t end = std::min(offset + RPC::StateBagSync::kMaxChanges, indices.size());
                 StateBagSyncView view;
-                view.pool    = &_stateBagFlushPool;
+                view.pool    = &_stateBagFlushPool->changes;
                 view.indices = indices.data() + offset;
                 view.count   = static_cast<uint16_t>(end - offset);
                 _owner->SendRPC(view, connection->GetRakNetGUID());
