@@ -217,6 +217,7 @@ namespace Framework::Scripting {
             uint64_t serial    = 0;       // Tells this runtime from a later one of the same resource.
             NodeEngine *engine = nullptr; // What the runtime's error sink reports to.
             bool exited        = false;   // It called process.exit(): stopped, and no longer ticked.
+            bool retired       = false;   // Its resource stopped: it waits to be freed, and no longer runs.
             bool closed        = false;   // Since then cut off from other runtimes and from the builtins.
         };
 
@@ -253,13 +254,32 @@ namespace Framework::Scripting {
         // Run these runtimes' loops (null is the engine's own) until `stopAt`, unless script started or stopped resources.
         void RunReady(const std::vector<ResourceRuntime *> &ready, uint64_t generation, std::chrono::steady_clock::time_point stopAt);
 
+        // Whether a tick has anything to run in `runtime`: a completion on its loop, a timer, immediate or callback
+        // due, or a call into it whose queues wait for the tick. A runtime without is left alone, so an idle resource
+        // costs a tick nothing.
+        bool HasWork(NodeRuntime &runtime) const;
+
         void SleepUntil(std::chrono::steady_clock::time_point until);
+
+#ifdef _WIN32
+        // Sleep until a loop's watcher signals a completion or `until`, whichever is first.
+        void WaitForWork(std::chrono::steady_clock::time_point until);
+
+        // The runtimes the schedule has work for that can run now, as RunReady() takes them.
+        void CollectReady(std::chrono::steady_clock::time_point now, std::vector<ResourceRuntime *> &due, std::chrono::steady_clock::time_point &next);
+#else
+        // Which loops have I/O to run, read in one poll over every backend fd, for the tick to run those alone.
+        void PollReadyLoops();
+#endif
 
         NodeEngineOptions _options;
 
         static std::unique_ptr<node::MultiIsolatePlatform> _platform;
         static std::shared_ptr<node::InitializationResult> _initResult;
         static bool _platformInitialized;
+
+        // Before the runtimes, which report to it until they are destroyed.
+        RuntimeSchedule _schedule;
 
         std::unique_ptr<NodeRuntime> _runtime;
 
@@ -285,9 +305,13 @@ namespace Framework::Scripting {
 #ifdef _WIN32
         // std::this_thread::sleep_until can be held to the 15.6 ms system timer, most of a tick.
         HANDLE _waitTimer = nullptr;
+        // What the schedule reported ready, kept between RunUntil()'s rounds.
+        std::vector<NodeRuntime *> _ready;
 #else
         // RunUntil's poll() over the loops failed with something other than EINTR, which is said once.
         bool _pollFailed = false;
+        // The loops this tick's poll found I/O ready in.
+        std::vector<NodeRuntime *> _ioReady;
 #endif
 
         // Cached JS function that calls setImmediate(()=>{}) each tick.

@@ -124,15 +124,15 @@ namespace Framework::Scripting {
             return ScriptingError::SCRIPTING_PLATFORM_INIT_FAILED;
         }
 
-        if (!CreateEnvironment()) {
-            return ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
-        }
-
 #ifdef _WIN32
         if (_waitTimer == nullptr) {
             _waitTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
         }
 #endif
+
+        if (!CreateEnvironment()) {
+            return ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
+        }
 
         _initialized = true;
         return ScriptingError::SCRIPTING_NONE;
@@ -247,6 +247,7 @@ namespace Framework::Scripting {
             return false;
         }
         _runtime->SetName("server");
+        _runtime->JoinSchedule(_schedule);
         _monitor.Track(_runtime->GetIsolate(), _runtime->GetName());
         ResourceMonitor::SetCurrent(&_monitor);
 
@@ -319,9 +320,13 @@ namespace Framework::Scripting {
             _references->ReleaseCollected();
         }
 
+#ifndef _WIN32
+        PollReadyLoops();
+#endif
+
         // A runtime that is executing further up this thread's stack is not ticked from inside itself: uv_run does
         // not nest.
-        if (!_runtime->GetIsolate()->IsInUse()) {
+        if (!_runtime->GetIsolate()->IsInUse() && HasWork(*_runtime)) {
             FW_PROFILE_SCOPE_N("Scripting::Runtime");
             FW_PROFILE_TEXT(_runtime->GetName().c_str(), _runtime->GetName().size());
             ResourceMonitor::Scope charged(_monitor, _runtime->GetIsolate());
@@ -358,7 +363,7 @@ namespace Framework::Scripting {
         for (auto it = _resourceRuntimes.begin(); it != _resourceRuntimes.end();) {
             ResourceRuntime &entry    = *it->second;
             const uint64_t generation = _runtimesGeneration;
-            if (!entry.exited && !entry.runtime->GetIsolate()->IsInUse()) {
+            if (!entry.exited && !entry.runtime->GetIsolate()->IsInUse() && HasWork(*entry.runtime)) {
                 FW_PROFILE_SCOPE_N("Scripting::Runtime");
                 FW_PROFILE_TEXT(entry.resourceName.c_str(), entry.resourceName.size());
                 v8::Isolate *isolate = entry.runtime->GetIsolate();
@@ -379,44 +384,100 @@ namespace Framework::Scripting {
         }
     }
 
+    bool NodeEngine::HasWork(NodeRuntime &runtime) const {
+        if (runtime.WasEntered() || runtime.IsSignaled() || runtime.DueAt() <= std::chrono::steady_clock::now()) {
+            return true;
+        }
+#ifdef _WIN32
+        return false;
+#else
+        return std::find(_ioReady.begin(), _ioReady.end(), &runtime) != _ioReady.end();
+#endif
+    }
+
+#ifndef _WIN32
+    void NodeEngine::PollReadyLoops() {
+        _ioReady.clear();
+        std::vector<pollfd> fds;
+        std::vector<NodeRuntime *> owners;
+        const auto add = [&](NodeRuntime &runtime) {
+            fds.push_back({runtime.GetBackendFd(), POLLIN, 0});
+            owners.push_back(&runtime);
+        };
+        add(*_runtime);
+        for (const auto &[name, entry] : _resourceRuntimes) {
+            if (!entry->exited) {
+                add(*entry->runtime);
+            }
+        }
+        // One poll over every loop instead of a run of each; RunUntil reports a failing poll.
+        const int ready = poll(fds.data(), static_cast<nfds_t>(fds.size()), 0);
+        if (ready < 0) {
+            // Which loops have I/O is unknown, so the tick runs them all.
+            _ioReady = std::move(owners);
+            return;
+        }
+        if (ready > 0) {
+            for (size_t i = 0; i < fds.size(); ++i) {
+                if (fds[i].revents != 0) {
+                    _ioReady.push_back(owners[i]);
+                }
+            }
+        }
+    }
+#endif
+
     void NodeEngine::RunUntil(std::chrono::steady_clock::time_point deadline) {
         using Clock       = std::chrono::steady_clock;
         const auto stopAt = deadline - kRunMargin;
-        // Which runtimes have a timer, immediate or callback due now, and which loops to wait on for I/O until one
-        // does. Kept across rounds: on Windows there is one every millisecond.
+        // Which runtimes have work now: a completion on their loop, or a timer, immediate or callback due. Kept across
+        // rounds.
         std::vector<ResourceRuntime *> due;
-        std::vector<ResourceRuntime *> watched;
 #ifdef _WIN32
-        auto visited = Clock::now();
+        while (_initialized && _runtime && _pendingErrors.empty()) {
+            const auto now = Clock::now();
+            if (now >= stopAt) {
+                break;
+            }
+            const uint64_t generation = _runtimesGeneration;
+            auto next                 = stopAt;
+            CollectReady(now, due, next);
+            // Each loop's watcher signals the schedule when a completion reaches the loop's port, so the wait is for
+            // that or the next timer. What woke it is found on the next round.
+            if (due.empty()) {
+                WaitForWork(next);
+                continue;
+            }
+            RunReady(due, generation, stopAt);
+        }
 #else
+        // Every loop's backend fd, readable while the loop has I/O to run.
+        std::vector<ResourceRuntime *> watched;
         std::vector<pollfd> fds;
-#endif
         while (_initialized && _runtime && _pendingErrors.empty() && Clock::now() < stopAt) {
             const uint64_t generation = _runtimesGeneration;
+            const auto now            = Clock::now();
             // How long until the next runtime has something due, if nothing has now.
-            int64_t waitMs = std::max<int64_t>(0, std::chrono::ceil<std::chrono::milliseconds>(stopAt - Clock::now()).count());
+            int64_t waitMs = std::max<int64_t>(0, std::chrono::ceil<std::chrono::milliseconds>(stopAt - now).count());
             due.clear();
             watched.clear();
-#ifndef _WIN32
             fds.clear();
-#endif
+            // Every loop's fd is polled on every wait here, so each runtime is asked in turn; one with nothing new
+            // answers from what its loop last said.
             const auto consider = [&](ResourceRuntime *entry, NodeRuntime &runtime) {
-                // uv_run does nothing for a loop with nothing referenced, whatever its timers or its fd say.
-                if (runtime.GetIsolate()->IsInUse() || !runtime.IsAlive()) {
+                if (runtime.GetIsolate()->IsInUse()) {
                     return;
                 }
-                const int64_t ms = runtime.MsUntilDue();
-                if (ms == 0) {
+                const auto dueAt = runtime.DueAt();
+                if (dueAt <= now) {
                     due.push_back(entry);
                     return;
                 }
-                if (ms > 0) {
-                    waitMs = std::min(waitMs, ms);
+                if (dueAt != Clock::time_point::max()) {
+                    waitMs = std::min<int64_t>(waitMs, std::chrono::ceil<std::chrono::milliseconds>(dueAt - now).count());
                 }
                 watched.push_back(entry);
-#ifndef _WIN32
                 fds.push_back({runtime.GetBackendFd(), POLLIN, 0});
-#endif
             };
             consider(nullptr, *_runtime);
             for (const auto &[name, entry] : _resourceRuntimes) {
@@ -427,17 +488,6 @@ namespace Framework::Scripting {
 
             // Wait only while nothing is ready; I/O is still picked up between rounds of a runtime that stays busy.
             const bool idle = due.empty();
-#ifdef _WIN32
-            // A Windows loop is a completion port, which cannot be waited on together with others or checked without
-            // taking its completions: visit the live loops every millisecond instead.
-            if (idle) {
-                SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(watched.empty() ? waitMs : std::min<int64_t>(waitMs, 1)), stopAt));
-            }
-            if (Clock::now() - visited >= std::chrono::milliseconds(1)) {
-                visited = Clock::now();
-                due.insert(due.end(), watched.begin(), watched.end());
-            }
-#else
             // A loop's backend fd is readable while the loop has I/O to run, and polling it consumes nothing. With no
             // fd to wait on, sleep instead: some macOS releases return from poll() at once for zero fds.
             if (fds.empty()) {
@@ -468,9 +518,9 @@ namespace Framework::Scripting {
                     }
                 }
             }
-#endif
             RunReady(due, generation, stopAt);
         }
+#endif
         if (_pendingErrors.empty()) {
             SleepUntil(deadline);
         }
@@ -489,8 +539,8 @@ namespace Framework::Scripting {
             if ((entry == nullptr || !entry->exited) && !runtime.GetIsolate()->IsInUse()) {
                 FW_PROFILE_SCOPE_N("Scripting::RunLoop");
                 FW_PROFILE_TEXT(runtime.GetName().c_str(), runtime.GetName().size());
-                // Charged as the tick's own loop run is. A live loop is visited every millisecond on Windows, so the
-                // charge is read back only when the visit itself lasted the slow threshold.
+                // Charged as the tick's own loop run is. A busy loop runs many times a tick, so the charge is read back
+                // only when the run itself lasted the slow threshold.
                 v8::Isolate *isolate = runtime.GetIsolate();
                 const auto start     = ResourceMonitor::Clock::now();
                 const double charged = _monitor.ChargedMs(isolate, start);
@@ -520,6 +570,46 @@ namespace Framework::Scripting {
 #endif
         std::this_thread::sleep_until(until);
     }
+
+#ifdef _WIN32
+    void NodeEngine::WaitForWork(std::chrono::steady_clock::time_point until) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= until) {
+            return;
+        }
+        LARGE_INTEGER due;
+        due.QuadPart = -static_cast<LONGLONG>(std::max<int64_t>(1, std::chrono::duration_cast<std::chrono::nanoseconds>(until - now).count() / 100));
+        if (!SetWaitableTimer(_waitTimer, &due, 0, nullptr, nullptr, FALSE)) {
+            WaitForSingleObject(_schedule.GetWakeEvent(), static_cast<DWORD>(std::chrono::ceil<std::chrono::milliseconds>(until - now).count()));
+            return;
+        }
+        const HANDLE handles[] = {_schedule.GetWakeEvent(), _waitTimer};
+        if (WaitForMultipleObjects(2, handles, FALSE, INFINITE) == WAIT_FAILED) {
+            // Not a wait the caller can loop on.
+            std::this_thread::sleep_until(until);
+        }
+    }
+
+    void NodeEngine::CollectReady(std::chrono::steady_clock::time_point now, std::vector<ResourceRuntime *> &due, std::chrono::steady_clock::time_point &next) {
+        _ready.clear();
+        next = std::min(next, _schedule.Collect(now, _ready));
+        due.clear();
+        for (NodeRuntime *runtime : _ready) {
+            ResourceRuntime *entry = nullptr;
+            if (runtime != _runtime.get()) {
+                const auto it = _runtimeByIsolate.find(runtime->GetIsolate());
+                if (it == _runtimeByIsolate.end() || it->second->exited || it->second->retired) {
+                    continue;
+                }
+                entry = it->second;
+            }
+            // One executing further up the stack cannot run its loop, and is not waited on either.
+            if (!runtime->GetIsolate()->IsInUse()) {
+                due.push_back(entry);
+            }
+        }
+    }
+#endif
 
     void NodeEngine::StopExitedResources() {
         std::vector<PendingExit> exits;
@@ -636,6 +726,7 @@ namespace Framework::Scripting {
             return false;
         }
         entry->runtime->SetName(resourceName);
+        entry->runtime->JoinSchedule(_schedule);
 
         ResourceRuntime *runtime = entry.get();
         v8::Isolate *isolate     = runtime->runtime->GetIsolate();
@@ -693,6 +784,7 @@ namespace Framework::Scripting {
         // its handlers. It is freed at the next tick, from the top. The name is free at once, so a restart can
         // create its next runtime.
         if (!CanTeardownNow(*runtime)) {
+            runtime->retired = true;
             _retiredRuntimes.push_back(std::move(runtime));
             return;
         }
