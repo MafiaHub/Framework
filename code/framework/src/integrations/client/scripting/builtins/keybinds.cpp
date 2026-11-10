@@ -258,6 +258,17 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
         }
 
+        // Only the caller's own bindings may go; resolved like Key.bind so the owner names match.
+        if (!_resourceManager) {
+            ThrowError(isolate, "Key.unbind: resource manager not available");
+            return;
+        }
+        const std::string caller = ResolveResourceName(isolate, _resourceManager, handler);
+        if (caller.empty()) {
+            args.GetReturnValue().Set(false);
+            return;
+        }
+
         bool removed = false;
         {
             std::scoped_lock lock(_mutex);
@@ -267,6 +278,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 const auto before = handlers.size();
                 handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
                                    [&](const Handler &h) {
+                                       if (h.resourceName != caller) {
+                                           return false;
+                                       }
                                        if (hasStateFilter && h.state != stateFilter) {
                                            return false;
                                        }
