@@ -35,7 +35,7 @@ namespace Framework::Logging {
             Logger *_owner;
         };
 
-        // Only touches an atomic, so no locking is needed.
+        // Only touches atomics, so no locking is needed.
         class CountingSink final: public spdlog::sinks::base_sink<spdlog::details::null_mutex> {
           public:
             explicit CountingSink(Logger *owner): _owner(owner) {}
@@ -43,6 +43,7 @@ namespace Framework::Logging {
           protected:
             void sink_it_(const spdlog::details::log_msg &) override {
                 _owner->CountLogEvent();
+                _owner->ReportDroppedLines();
             }
 
             void flush_() override {}
@@ -72,7 +73,7 @@ namespace Framework::Logging {
         }
 
         const auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-        consoleSink->set_level(spdlog::level::debug);
+        consoleSink->set_level(_consoleLevel);
         consoleSink->set_pattern("[%H:%M:%S] [%^%l%$] [%n] %v");
         _consoleSink = consoleSink;
 
@@ -118,7 +119,10 @@ namespace Framework::Logging {
         // pool is gone, so late loggers silently fall back to synchronous.
         const auto threadPool = spdlog::thread_pool();
         if (async && threadPool) {
-            spdLogger = std::make_shared<spdlog::async_logger>(logName, sinks.begin(), sinks.end(), threadPool, spdlog::async_overflow_policy::block);
+            // A full queue drops its oldest line instead of making the caller wait: an output that stalls, a journal
+            // or a disk, would otherwise hold the server tick for as long as it does. ReportDroppedLines says how
+            // many lines that cost.
+            spdLogger = std::make_shared<spdlog::async_logger>(logName, sinks.begin(), sinks.end(), threadPool, spdlog::async_overflow_policy::overrun_oldest);
         }
         else {
             spdLogger = std::make_shared<spdlog::logger>(logName, sinks.begin(), sinks.end());
@@ -137,6 +141,41 @@ namespace Framework::Logging {
         }
 
         return spdLogger;
+    }
+
+    void Logger::SetConsoleLevel(spdlog::level::level_enum level) {
+        std::lock_guard lock(_creationMutex);
+        _consoleLevel = level;
+        if (_consoleSink) {
+            _consoleSink->set_level(level);
+        }
+    }
+
+    uint64_t Logger::GetDroppedLineCount() const {
+        const auto pool = spdlog::thread_pool();
+        return pool ? pool->overrun_counter() : 0;
+    }
+
+    void Logger::ReportDroppedLines() {
+        // Once a second at most: reading the count takes the queue's lock.
+        const int64_t now = std::chrono::steady_clock::now().time_since_epoch().count();
+        int64_t next      = _nextDropCheck.load(std::memory_order_relaxed);
+        if (now < next || !_nextDropCheck.compare_exchange_strong(next, now + std::chrono::steady_clock::duration(std::chrono::seconds(1)).count(), std::memory_order_relaxed)) {
+            return;
+        }
+        const uint64_t dropped  = GetDroppedLineCount();
+        const uint64_t reported = _reportedDrops.exchange(dropped, std::memory_order_relaxed);
+        if (dropped <= reported) {
+            return;
+        }
+        // Written to the outputs directly: a line sent through the queue could be dropped as well.
+        const std::string text = fmt::format("{} log line(s) were dropped: the log outputs could not keep up", dropped - reported);
+        const spdlog::details::log_msg msg("Logging", spdlog::level::warn, text);
+        for (const auto &sink : {_consoleSink, _fileSink, std::static_pointer_cast<spdlog::sinks::sink>(_ringbufferSink)}) {
+            if (sink && sink->should_log(msg.level)) {
+                sink->log(msg);
+            }
+        }
     }
 
     void Logger::Shutdown() {
