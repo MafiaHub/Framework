@@ -22,11 +22,10 @@
 
 // Entity state bags: storage rules, limits, the construction seed, and the wire payload.
 //
-// Not covered: the per-connection routing in ReplicationManager::FlushStateBags. It asks
-// Connection_RM3::HasReplicaConstructed, which the base ReplicaManager3 only knows after a real
-// construction handshake over a bound socket, so a test here could only assert against a stub of the
-// thing under test. What feeds that routing is pinned instead — which keys are dirty, the scope each
-// carries, and what a seed writes for an owner versus for everyone else.
+// The per-connection routing in ReplicationManager::FlushStateBags needs a real construction
+// handshake (Connection_RM3::HasReplicaConstructed), so it is covered over loopback in
+// state_bag_routing_ut.h. What feeds that routing is pinned here instead: which keys are dirty, the
+// scope each carries, and what a seed writes for an owner versus for everyone else.
 MODULE(state_bag, {
     using Framework::Networking::NetworkServer;
     using Framework::Networking::Replication::NetworkEntity;

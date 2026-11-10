@@ -60,6 +60,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/server_config_ut.h"
 #include "modules/snapshot_buffer_ut.h"
 #include "modules/spsc_ring_ut.h"
+#include "modules/state_bag_routing_ut.h"
 #include "modules/state_bag_scripting_ut.h"
 #include "modules/state_bag_ut.h"
 #include "modules/state_machine_ut.h"
@@ -129,6 +130,7 @@ int main() {
     UNIT_MODULE(delegation);
     UNIT_MODULE(entity_registry);
     UNIT_MODULE(state_bag);
+    UNIT_MODULE(state_bag_routing);
     UNIT_MODULE(state_bag_scripting);
     UNIT_MODULE(scripting_catalog);
     UNIT_MODULE(rpc_identifier);
