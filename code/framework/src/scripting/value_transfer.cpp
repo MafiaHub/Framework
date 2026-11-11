@@ -625,6 +625,12 @@ namespace Framework::Scripting {
         types.push_back({std::move(name), std::move(copy), std::move(rebuild)});
     }
 
+    void ValueTransfer::UnregisterHostType(std::string_view name) {
+        std::erase_if(HostTypes(), [&](const HostType &type) {
+            return type.name == name;
+        });
+    }
+
     Utils::Result<TransferredValue, std::string> ValueTransfer::Copy(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> value, const TransferFunctions &functions) {
         FW_PROFILE_SCOPE_N("Scripting::CopyValue");
         // Getters run during the copy; one that throws fails the copy rather than leaking the exception to the caller.

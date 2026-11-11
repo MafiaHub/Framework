@@ -156,13 +156,12 @@ namespace Framework::Scripting::Bind {
                 return Top();
             }
 
-            Value FromTransfer(const TransferredValue &value) override {
+            Utils::Result<Value, std::string> FromTransfer(const TransferredValue &value) override {
                 std::string error;
                 if (!LuaTransfer::Rebuild(_L, value, error)) {
-                    ThrowError(std::move(error));
-                    return At(0);
+                    return Utils::Result<Value, std::string>::Err(std::move(error));
                 }
-                return Top();
+                return Utils::Result<Value, std::string>::Ok(Top());
             }
 
             Utils::Result<Value, std::string> ParseJson(std::string_view text) override {

@@ -557,6 +557,12 @@ namespace Framework::Scripting::Bind {
             _record->registerTransfer();
         }
 
+        // Undoes RegisterTransfer in both transfers: for a test whose class no later copy should be asked about.
+        void UnregisterTransfer() const {
+            ValueTransfer::UnregisterHostType(_record->desc.name);
+            LuaTransfer::UnregisterHostType(_record->desc.name);
+        }
+
         const ClassDesc &Describe() const {
             return _record->desc;
         }

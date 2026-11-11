@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -55,6 +56,9 @@ namespace Framework::Scripting {
          * it: the framework registers its own types first, and a project's derived entities come after.
          */
         static void RegisterHostType(std::string name, HostCopy copy, HostRebuild rebuild);
+
+        // Forgets a host type: for a test that registered one of its own, which no later copy should be asked about.
+        static void UnregisterHostType(std::string_view name);
 
         // A copy holds at most this many values and this many bytes of strings and binary data. An object reached twice
         // is copied twice, so without a bound a few kilobytes of nested references would expand without end.

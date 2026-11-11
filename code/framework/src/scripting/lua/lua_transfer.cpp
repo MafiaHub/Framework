@@ -79,7 +79,7 @@ namespace Framework::Scripting {
 
         class Copier final: public Walk {
           public:
-            explicit Copier(lua_State *L): Walk(L) {}
+            Copier(lua_State *L, const LuaValueLimits &limits): Walk(L), _limits(limits), _valuesLeft(limits.values), _bytesLeft(limits.bytes) {}
 
             // Copies the value at the absolute index `index`. The stack is not left as it was when it fails.
             bool Copy(int index, TransferredValue &out) {
@@ -87,7 +87,19 @@ namespace Framework::Scripting {
                     return Fail(kTooLarge);
                 }
                 --_valuesLeft;
+                return CopyCounted(index, out);
+            }
 
+            size_t GetCopiedCount() const {
+                return _limits.values - _valuesLeft;
+            }
+
+          private:
+            static constexpr const char *kTooLarge = "it is too large to copy";
+
+            // Copies a value that was counted against the bound already: the root by Copy, anything else with the
+            // table that holds it.
+            bool CopyCounted(int index, TransferredValue &out) {
                 switch (lua_type(_L, index)) {
                 case LUA_TNIL: out.kind = Kind::Undefined; return true;
                 case LUA_TBOOLEAN:
@@ -107,13 +119,6 @@ namespace Framework::Scripting {
                 }
             }
 
-            size_t GetCopiedCount() const {
-                return ValueTransfer::kMaxValues - _valuesLeft;
-            }
-
-          private:
-            static constexpr const char *kTooLarge = "it is too large to copy";
-
             // An integer JavaScript holds exactly is a Number, as a float is. Beyond that it is a BigInt, which
             // keeps every bit of it.
             bool CopyNumber(int index, TransferredValue &out) {
@@ -129,28 +134,33 @@ namespace Framework::Scripting {
                     return true;
                 }
                 const uint64_t magnitude = integer < 0 ? uint64_t {0} - static_cast<uint64_t>(integer) : static_cast<uint64_t>(integer);
-                out.kind                 = Kind::BigInt;
-                out.boolean              = integer < 0;
+                if (!Spend(sizeof(magnitude))) {
+                    return false;
+                }
+                out.kind    = Kind::BigInt;
+                out.boolean = integer < 0;
                 out.bytes.resize(sizeof(magnitude));
                 std::memcpy(out.bytes.data(), &magnitude, sizeof(magnitude));
-                return Spend(sizeof(magnitude));
+                return true;
             }
 
+            // The string is on the stack, which keeps it where `text` points until it is copied.
             bool CopyString(int index, TransferredValue &out) {
                 size_t length    = 0;
                 const char *text = lua_tolstring(_L, index, &length);
-                if (length > _bytesLeft) {
-                    return Fail(kTooLarge);
+                if (!Spend(length)) {
+                    return false;
                 }
                 if (!LuaValues::IsValidUtf8({text, length})) {
                     return Fail("string is not valid UTF-8");
                 }
                 out.kind = Kind::String;
                 out.text.assign(text, length);
-                return Spend(length);
+                return true;
             }
 
             bool CopyTable(int index, TransferredValue &out) {
+                // Compared and never read through. An ancestor is on the stack, so no other table has its address.
                 const void *table = lua_topointer(_L, index);
                 if (std::find(_ancestors.begin(), _ancestors.end(), table) != _ancestors.end()) {
                     return Fail("it refers back to itself");
@@ -164,10 +174,17 @@ namespace Framework::Scripting {
                 }
 
                 LuaValues::TableShape shape;
-                LuaValues::ReadShape(_L, index, shape);
+                LuaValues::ReadShape(_L, index, shape, _valuesLeft, _bytesLeft);
                 if (shape.foreignKey) {
                     return Fail("it has a key that is neither a string nor an integer");
                 }
+                if (shape.tooLarge) {
+                    return Fail(kTooLarge);
+                }
+                // What the table holds is counted here, with its keys in hand and before any of it is copied, so
+                // that the keys of the tables open at one time never add up to more than the bounds.
+                _valuesLeft -= shape.Count();
+                _bytesLeft -= shape.stringBytes;
 
                 _ancestors.push_back(table);
                 const bool copied = shape.sequence ? CopySequence(index, shape.length, out) : CopyProperties(index, shape, out);
@@ -175,16 +192,14 @@ namespace Framework::Scripting {
                 return copied;
             }
 
+            // An element a weak table lost since its keys were read is nil by now, and is copied as such.
             bool CopySequence(int index, lua_Integer length, TransferredValue &out) {
-                if (static_cast<lua_Unsigned>(length) > _valuesLeft) {
-                    return Fail(kTooLarge);
-                }
                 out.kind = Kind::Array;
                 out.items.resize(static_cast<size_t>(length));
                 for (lua_Integer position = 1; position <= length; ++position) {
                     lua_rawgeti(_L, index, position);
                     _path.EnterIndex(static_cast<size_t>(position));
-                    if (!Copy(lua_gettop(_L), out.items[static_cast<size_t>(position) - 1])) {
+                    if (!CopyCounted(lua_gettop(_L), out.items[static_cast<size_t>(position) - 1])) {
                         return false;
                     }
                     _path.Leave();
@@ -194,31 +209,34 @@ namespace Framework::Scripting {
             }
 
             // In the order Bind::Value::Keys lists them, so that a copy does not depend on where the keys fell in
-            // the table.
-            bool CopyProperties(int index, const LuaValues::TableShape &shape, TransferredValue &out) {
-                const size_t count = shape.integers.size() + shape.strings.size();
-                if (count > _valuesLeft) {
-                    return Fail(kTooLarge);
-                }
+            // the table. An entry a weak table lost since its keys were read is left out.
+            bool CopyProperties(int index, LuaValues::TableShape &shape, TransferredValue &out) {
                 out.kind = Kind::Object;
-                out.properties.reserve(count);
+                out.properties.reserve(shape.Count());
                 for (const lua_Integer key : shape.integers) {
                     std::string name = std::to_string(key);
                     if (LuaValues::HasStringKey(shape, name)) {
                         continue;
                     }
-                    lua_rawgeti(_L, index, key);
-                    if (!CopyProperty(std::move(name), out)) {
+                    if (lua_rawgeti(_L, index, key) == LUA_TNIL) {
+                        lua_pop(_L, 1);
+                        continue;
+                    }
+                    if (!Spend(name.size()) || !CopyProperty(std::move(name), out)) {
                         return false;
                     }
                 }
-                for (const std::string_view key : shape.strings) {
+                // The keys were counted when they were read, and move into the copy.
+                for (std::string &key : shape.strings) {
                     if (!LuaValues::IsValidUtf8(key)) {
                         return Fail("a key is not valid UTF-8");
                     }
                     lua_pushlstring(_L, key.data(), key.size());
-                    lua_rawget(_L, index);
-                    if (!CopyProperty(std::string(key), out)) {
+                    if (lua_rawget(_L, index) == LUA_TNIL) {
+                        lua_pop(_L, 1);
+                        continue;
+                    }
+                    if (!CopyProperty(std::move(key), out)) {
                         return false;
                     }
                 }
@@ -227,12 +245,9 @@ namespace Framework::Scripting {
 
             // Copies the value on top of the stack as the property `name` of `out`, and pops it.
             bool CopyProperty(std::string name, TransferredValue &out) {
-                if (!Spend(name.size())) {
-                    return false;
-                }
                 auto &[key, value] = out.properties.emplace_back(std::move(name), TransferredValue {});
                 _path.EnterProperty(key);
-                if (!Copy(lua_gettop(_L), value)) {
+                if (!CopyCounted(lua_gettop(_L), value)) {
                     return false;
                 }
                 _path.Leave();
@@ -240,6 +255,7 @@ namespace Framework::Scripting {
                 return true;
             }
 
+            // The userdata is on the stack, which keeps the object a host type reads its payload from.
             bool CopyObject(int index, TransferredValue &out) {
                 const LuaClass *definition = Bind::Detail::LuaClassAt(_L, index);
                 if (definition == nullptr) {
@@ -274,9 +290,10 @@ namespace Framework::Scripting {
                 return true;
             }
 
+            const LuaValueLimits _limits;
             std::vector<const void *> _ancestors;
-            size_t _valuesLeft = ValueTransfer::kMaxValues;
-            size_t _bytesLeft  = ValueTransfer::kMaxBytes;
+            size_t _valuesLeft;
+            size_t _bytesLeft;
         };
 
         class Builder final: public Walk {
@@ -469,11 +486,22 @@ namespace Framework::Scripting {
         HostTypes().insert_or_assign(std::move(name), HostType {std::move(copy), std::move(rebuild)});
     }
 
+    void LuaTransfer::UnregisterHostType(std::string_view name) {
+        auto &types = HostTypes();
+        if (const auto type = types.find(name); type != types.end()) {
+            types.erase(type);
+        }
+    }
+
     Utils::Result<TransferredValue, std::string> LuaTransfer::Copy(lua_State *L, int index) {
+        return Copy(L, index, LuaValueLimits {});
+    }
+
+    Utils::Result<TransferredValue, std::string> LuaTransfer::Copy(lua_State *L, int index, const LuaValueLimits &limits) {
         using Result = Utils::Result<TransferredValue, std::string>;
         FW_PROFILE_SCOPE_N("Scripting::CopyLuaValue");
 
-        Copier copier(L);
+        Copier copier(L, limits);
         TransferredValue out;
         std::string unwound;
         const bool copied = LuaValues::Protected(

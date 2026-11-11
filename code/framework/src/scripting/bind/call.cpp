@@ -130,8 +130,11 @@ namespace Framework::Scripting::Bind {
                 else if (answer->outcome.threw) {
                     call.ThrowError(std::move(answer->outcome.error));
                 }
+                else if (auto result = call.FromTransfer(answer->outcome.value)) {
+                    call.Return(std::move(result).GetValue());
+                }
                 else {
-                    call.Return(call.FromTransfer(answer->outcome.value));
+                    call.ThrowError(result.GetError());
                 }
             };
         }

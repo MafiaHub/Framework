@@ -125,6 +125,15 @@ namespace LuaJsonTest {
         return Encode(worlds.lua, expression);
     }
 
+    // The JSON of the global `name` within `limits`, or "<failed> " and why it has none.
+    inline std::string EncodeWithin(Worlds &worlds, const char *name, const Framework::Scripting::LuaValueLimits &limits) {
+        lua_State *L = worlds.lua.State();
+        LuaTransferTest::PushGlobal(L, name);
+        const auto json = LuaJson::Encode(L, -1, limits);
+        lua_pop(L, 1);
+        return json ? json.GetValue() : "<failed> " + json.GetError();
+    }
+
     // Reads `text` into the global `received` of a Lua state. Empty, or why it could not.
     inline std::string Decode(LuaRuntime &runtime, std::string_view text) {
         lua_State *L = runtime.State();
@@ -311,12 +320,147 @@ MODULE(lua_json, {
         EQUALS(refusal.ends_with("[1]: it is nested too deeply"), true);
     });
 
+    // The bounds are lowered for these, to reach them without the memory they stand for.
     IT("refuses a value too large to write instead of expanding it", {
         Worlds worlds;
-        LuaRuntimeTest::Run(worlds.lua, "tree = { 1 } for _ = 1, 40 do tree = { tree, tree } end");
-        const std::string doubled = Encode(worlds, "tree");
+        LuaRuntimeTest::Run(worlds.lua, "tree = { 1 } for _ = 1, 40 do tree = { tree, tree } end four = { 1, { 2 } } five = { 1, { 2, 3 } }");
+        Framework::Scripting::LuaValueLimits few;
+        few.values                = 10000;
+        const std::string doubled = EncodeWithin(worlds, "tree", few);
         EQUALS(doubled.rfind("<failed> Cannot encode value[", 0) == 0, true);
         EQUALS(doubled.ends_with("it is too large to encode"), true);
+
+        few.values = 4;
+        EQUALS(EncodeWithin(worlds, "four", few), "[1,[2]]");
+        EQUALS(EncodeWithin(worlds, "five", few), "<failed> Cannot encode value[2]: it is too large to encode");
+    });
+
+    IT("refuses a table with more keys than it may write before it has gathered them", {
+        Worlds worlds;
+        // Keys too long for a std::string to hold without allocating: gathering them all would allocate for each.
+        LuaRuntimeTest::Run(worlds.lua, "wide = {} for index = 1, 200000 do wide[string.rep('k', 40) .. index] = index end");
+        Framework::Scripting::LuaValueLimits few;
+        few.values = 1000;
+        Framework::Scripting::LuaValueLimits small;
+        small.bytes = 64 * 1024;
+        for (const Framework::Scripting::LuaValueLimits &limits : {few, small}) {
+            std::string json;
+            uint64_t allocations = 0;
+            {
+                const FrameworkTests::AllocationScope scope;
+                json        = EncodeWithin(worlds, "wide", limits);
+                allocations = scope.Count();
+            }
+            EQUALS(json, "<failed> Cannot encode value: it is too large to encode");
+            LESSER(allocations, 5000u);
+        }
+
+        // The keys of the tables open at one time are counted against the one bound.
+        LuaRuntimeTest::Run(worlds.lua, "inner = {} for index = 1, 600 do inner['i' .. index] = index end outer = {} for index = 1, 600 do outer['o' .. index] = index end outer.a = inner");
+        EQUALS(EncodeWithin(worlds, "inner", few).rfind("{\"i1\":1,", 0) == 0, true);
+        EQUALS(EncodeWithin(worlds, "outer", few), "<failed> Cannot encode value.a: it is too large to encode");
+    });
+
+    IT("holds the text to its bound once it is escaped, to the byte", {
+        Worlds worlds;
+        LuaRuntimeTest::Run(worlds.lua, R"lua(
+            controls = string.rep('\1', 100)
+            more = string.rep('\1', 101)
+            quotes = string.rep('"', 300)
+            plain = string.rep('a', 600)
+            keyed = { [string.rep('\1', 100)] = 1 }
+            list = { 1, 2, 3 }
+        )lua");
+        Framework::Scripting::LuaValueLimits limits;
+        // A hundred control characters take six bytes each, and the two quotes.
+        limits.bytes = 602;
+        EQUALS(EncodeWithin(worlds, "controls", limits).size(), 602u);
+        EQUALS(EncodeWithin(worlds, "more", limits), "<failed> Cannot encode value: it is too large to encode");
+        EQUALS(EncodeWithin(worlds, "quotes", limits).size(), 602u);
+        EQUALS(EncodeWithin(worlds, "plain", limits).size(), 602u);
+        limits.bytes = 601;
+        EQUALS(EncodeWithin(worlds, "controls", limits), "<failed> Cannot encode value: it is too large to encode");
+        EQUALS(EncodeWithin(worlds, "quotes", limits), "<failed> Cannot encode value: it is too large to encode");
+        EQUALS(EncodeWithin(worlds, "plain", limits), "<failed> Cannot encode value: it is too large to encode");
+        // A key is escaped as a string is: {"<600 bytes>":1}
+        limits.bytes = 606;
+        EQUALS(EncodeWithin(worlds, "keyed", limits).size(), 606u);
+        limits.bytes = 605;
+        EQUALS(EncodeWithin(worlds, "keyed", limits), "<failed> Cannot encode value: it is too large to encode");
+        // The brackets count.
+        limits.bytes = 7;
+        EQUALS(EncodeWithin(worlds, "list", limits), "[1,2,3]");
+        limits.bytes = 6;
+        EQUALS(EncodeWithin(worlds, "list", limits), "<failed> Cannot encode value: it is too large to encode");
+    });
+
+    IT("spells no more than the start of a long key in what it refuses", {
+        Worlds worlds;
+        EQUALS(Encode(worlds, "{ [string.rep('k', 100000)] = print }"), "<failed> Cannot encode value." + std::string(64, 'k') + "...: a function cannot be encoded as JSON");
+        std::string nested;
+        for (int i = 0; i < 129; ++i) {
+            nested += "{\"" + std::string(100, 'k') + "\":";
+        }
+        const std::string error = Decode(worlds, nested + "1" + std::string(129, '}'));
+        EQUALS(error.rfind("Invalid JSON: value." + std::string(64, 'k') + "....", 0) == 0, true);
+        EQUALS(error.find(std::string(65, 'k')) == std::string::npos, true);
+        EQUALS(error.ends_with("...: it is nested too deeply"), true);
+    });
+
+    IT("writes a weak table whose entries are collected while it is walked", {
+        Worlds worlds;
+        LuaTransferTest::DefineWeakTables(worlds.lua);
+        for (const char *mode : {"v", "kv", "k"}) {
+            const int expected     = std::string(mode) == "v" ? 400 : 100;
+            const std::string json = Encode(worlds, std::string("weak('") + mode + "', " + std::to_string(expected) + ")");
+            EQUALS((json.rfind("<failed>", 0) == 0 ? json : std::string()), "");
+            const nlohmann::json parsed = nlohmann::json::parse(json, nullptr, false);
+            EQUALS(parsed.is_object(), true);
+            int kept  = 0;
+            int fresh = 0;
+            std::string wrong;
+            for (const auto &[name, value] : parsed.items()) {
+                if (LuaTransferTest::WeakKeyNumber(name, 'a') != 0) {
+                    bool whole = value.is_object() && value.size() == 1000;
+                    for (auto member = value.begin(); whole && member != value.end(); ++member) {
+                        whole = member.value().is_number_integer() && member.value().get<int>() == LuaTransferTest::WeakKeyNumber(member.key(), 'k') && member.value().get<int>() >= 1;
+                    }
+                    wrong = whole ? wrong : "a kept key does not hold the kept table";
+                    ++kept;
+                }
+                else if (const int id = LuaTransferTest::WeakKeyNumber(name, 'z')) {
+                    wrong = value == nlohmann::json {{"id", id}} ? wrong : "a fresh key holds what was not set under it";
+                    ++fresh;
+                }
+                else {
+                    wrong = "a key that was never set: " + name.substr(0, 80);
+                }
+            }
+            EQUALS(wrong, "");
+            EQUALS(kept, expected);
+            // A string is never collected out of a table as a key, so with weak keys alone nothing goes.
+            EQUALS((std::string(mode) == "k" ? fresh == 100 : fresh < 100), true);
+        }
+
+        // An element that went is null, and the ones after it stay where they were.
+        const nlohmann::json list = nlohmann::json::parse(Encode(worlds, "weakList(100)"), nullptr, false);
+        EQUALS(list.is_array() && list.size() == 200, true);
+        int gone  = 0;
+        int wrong = 0;
+        for (size_t i = 0; i < list.size(); ++i) {
+            if (i < 100) {
+                wrong += list[i].is_object() && list[i].size() == 1000 ? 0 : 1;
+            }
+            else if (list[i].is_null()) {
+                ++gone;
+            }
+            else {
+                wrong += list[i] == nlohmann::json {{"id", i - 99}} ? 0 : 1;
+            }
+        }
+        EQUALS(wrong, 0);
+        GREATER(gone, 0);
+        EQUALS(lua_gettop(worlds.lua.State()), 0);
     });
 
     IT("leaves the stack as it found it and takes any index", {
@@ -477,17 +621,22 @@ MODULE(lua_json, {
         EQUALS(worlds.Js("Codec.json(new Date(0))"), "\"1970-01-01T00:00:00.000Z\"");
     });
 
-    IT("hands the function why a value has no JSON, and JavaScript its own exception too", {
+    IT("hands the function why a value has no JSON, and throws nothing by itself in either language", {
         Worlds worlds;
         EQUALS(worlds.Lua("Codec.json(print)"), "<failed> Cannot encode value: a function cannot be encoded as JSON");
         EQUALS(worlds.Js("Codec.json(() => 1)"), "<failed> a value of this kind has no JSON form");
         EQUALS(worlds.Js("Codec.json(Symbol('x'))"), "<failed> a value of this kind has no JSON form");
 
+        // What JSON.stringify or a toJSON threw is told to the function, which went on: the script is not thrown at.
+        EQUALS(worlds.Lua("(function() local loop = { inner = {} } loop.inner.back = loop return Codec.json(loop) end)()"), "<failed> Cannot encode value.inner.back: it refers back to itself");
+        EQUALS(worlds.Js("(() => { const loop = {}; loop.back = loop; return Codec.json(loop).slice(0, 46); })()"), "<failed> Converting circular structure to JSON");
+        EQUALS(worlds.Js("Codec.json({ toJSON() { throw new RangeError('mine'); } })"), "<failed> mine");
+        EQUALS(worlds.Js("Codec.json({ toJSON() { throw 'a string'; } })"), "<failed> a string");
+        EQUALS(worlds.Js("Codec.json(10n)"), "<failed> Do not know how to serialize a BigInt");
+
+        // A function that cannot go on throws it under its own name, the same way in both languages.
         EQUALS(worlds.Lua("(function() local loop = { inner = {} } loop.inner.back = loop return select(2, pcall(Codec.jsonOrThrow, loop)) end)()"), "Codec.jsonOrThrow: Cannot encode value.inner.back: it refers back to itself");
-        // The TypeError of JSON.stringify is the one the script catches: the first throw wins.
-        EQUALS(worlds.Js("(() => { const loop = {}; loop.back = loop; try { Codec.jsonOrThrow(loop); return 'no throw'; } catch (error) { return (error instanceof TypeError) + ' ' + error.message.includes('circular'); } })()"), "true true");
-        EQUALS(worlds.Js("(() => { try { Codec.jsonOrThrow({ toJSON() { throw new RangeError('mine'); } }); return 'no throw'; } catch (error) { return error.name + ' ' + error.message; } })()"), "RangeError mine");
-        EQUALS(worlds.Js("(() => { try { Codec.jsonOrThrow(10n); return 'no throw'; } catch (error) { return error.name; } })()"), "TypeError");
+        EQUALS(worlds.Js("(() => { try { Codec.jsonOrThrow({ toJSON() { throw new RangeError('mine'); } }); return 'no throw'; } catch (error) { return error.name + ': ' + error.message; } })()"), "Error: Codec.jsonOrThrow: mine");
     });
 
     IT("stops a script that is terminated while its value is written or copied", {
@@ -521,7 +670,7 @@ MODULE(lua_json, {
         EQUALS(worlds.Lua("tostring(Codec.parse('null'))"), "nil");
         EQUALS(worlds.Js("String(Codec.parse('null'))"), "null");
         EQUALS(worlds.Lua("Codec.parse('{\"a\":}'):sub(1, 23)"), "<failed> Invalid JSON: ");
-        EQUALS(worlds.Js("Codec.parse('{\"a\":}').slice(0, 22)"), "<failed> SyntaxError: ");
+        EQUALS(worlds.Js("Codec.parse('{\"a\":}').slice(0, 26)"), "<failed> Unexpected token ");
         // The function was told, so the script is not thrown at.
         EQUALS(worlds.Js("(() => { try { Codec.parse('nope'); return 'no throw'; } catch (error) { return 'threw'; } })()"), "no throw");
     });

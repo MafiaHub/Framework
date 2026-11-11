@@ -277,10 +277,9 @@ namespace Framework::Scripting::Bind {
         // languages.
         //
         // The error says why a value has no JSON form: a function, a value that refers back to itself, a Lua table
-        // with a key JSON has no form for. In JavaScript whatever was thrown meanwhile, by JSON.stringify or by the
-        // toJSON of the script, is also kept as the error of the call, like what any other read of an object
-        // throws. The first throw wins, so a function that throws the error it was given leaves a JavaScript caller
-        // its own exception and gives a Lua caller the text.
+        // with a key JSON has no form for, or in JavaScript the message of what JSON.stringify or the toJSON of the
+        // script threw. Nothing is thrown to the script, in either language: a function that puts up with a value
+        // it cannot send goes on, and one that does not throws the error under its own name.
         Utils::Result<std::string, std::string> ToJson() const {
             const Target target = Find();
             return target.backend != nullptr ? target.backend->JsonOf(target.slot) : Utils::Result<std::string, std::string>::Ok("null");

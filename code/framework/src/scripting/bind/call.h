@@ -114,14 +114,15 @@ namespace Framework::Scripting::Bind {
         virtual Value NewFunction(NativeFunction function) = 0;
 
         // The value a copy made with Value::ToTransfer holds, built in this runtime: how a value of another
-        // runtime, of either language, arrives. Throws to the script, and gives Nil, for what the language cannot
-        // receive: a RegExp or a host type it does not have in Lua, a host type the runtime lacks in JavaScript.
+        // runtime, of either language, arrives. The error says what the language cannot receive: a RegExp or a host
+        // type it does not have in Lua, a host type the runtime lacks in JavaScript. Nothing is thrown to the
+        // script: the function throws it under its own name, or goes on without the value.
         //
         // A function in it arrives as a function that invokes the original in the runtime that owns it, with
         // copies of its arguments, and gives a copy of its result: the value itself when the original finished at
         // once, and otherwise what Defer gives, a promise in JavaScript and a wait in Lua. In the runtime that owns
         // it, it arrives as the original itself.
-        virtual Value FromTransfer(const TransferredValue &value) = 0;
+        virtual Utils::Result<Value, std::string> FromTransfer(const TransferredValue &value) = 0;
 
         // What JSON text holds, as JSON.parse reads it in JavaScript and LuaJson::Decode in Lua (lua_json.h), where
         // null is nil. The error says what is wrong with text that is not JSON; nothing is thrown to the script,

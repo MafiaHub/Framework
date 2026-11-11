@@ -25,6 +25,10 @@
  * state, and neither lets a Lua error out (lua_transfer.h says how, and which threads `L` may be). A table is read
  * raw: no metamethod runs.
  */
+namespace Framework::Scripting {
+    struct LuaValueLimits; // lua_transfer.h
+} // namespace Framework::Scripting
+
 namespace Framework::Scripting::LuaJson {
     /**
      * Write the value at `index` as JSON. The stack is left as it was.
@@ -40,9 +44,15 @@ namespace Framework::Scripting::LuaJson {
      * Fails, naming where in the value it gave up ("Cannot encode value.items[2].name: ..."), on a function, a
      * coroutine, a userdata or a bound object without a JSON form, a table that refers back to itself or has a key
      * that is neither a string nor an integer, a string that is not UTF-8, tables nested more than 128 deep, and a
-     * value of more than ValueTransfer::kMaxValues values or kMaxBytes of text. An index in that path counts from 1.
+     * value of more values, or of more bytes of text once escaped, than `limits` allow, which are the bounds of
+     * ValueTransfer when none are given. An index in that path counts from 1, and a key in it is cut to its first
+     * 64 bytes.
+     *
+     * A weak table may lose entries to the collector while it is written: an entry that went is left out, or is
+     * null where it was an element of an array.
      */
     Utils::Result<std::string, std::string> Encode(lua_State *L, int index);
+    Utils::Result<std::string, std::string> Encode(lua_State *L, int index, const LuaValueLimits &limits);
 
     /**
      * Read JSON text and push what it holds: one value. On failure nothing is pushed and `error` says why:

@@ -159,22 +159,26 @@ namespace Framework::Scripting::Bind {
                 return Keep(made);
             }
 
-            // What the rebuild throws, an unknown host type or what the constructor of a handle threw, is the
-            // error of the call.
-            Value FromTransfer(const TransferredValue &value) override {
+            // What the rebuild throws, an unknown host type or what the constructor of a handle threw, is told to
+            // the function and not thrown.
+            Utils::Result<Value, std::string> FromTransfer(const TransferredValue &value) override {
+                using Result = Utils::Result<Value, std::string>;
                 if (!CanRun()) {
-                    return At(0);
+                    return Result::Err(kTerminating);
                 }
                 v8::TryCatch tryCatch(_isolate);
                 v8::Local<v8::Value> rebuilt;
                 if (!ValueTransfer::Rebuild(_isolate, _context, value).ToLocal(&rebuilt)) {
-                    Caught(tryCatch);
-                    return At(0);
+                    if (tryCatch.HasTerminated()) {
+                        _thrown = Thrown::Terminated;
+                        return Result::Err(kTerminating);
+                    }
+                    return Result::Err(Told(tryCatch.Exception(), "the value could not be rebuilt"));
                 }
-                return Keep(rebuilt);
+                return Result::Ok(Keep(rebuilt));
             }
 
-            // The SyntaxError of JSON.parse is told to the function and not thrown.
+            // So is the SyntaxError of JSON.parse.
             Utils::Result<Value, std::string> ParseJson(std::string_view text) override {
                 using Result = Utils::Result<Value, std::string>;
                 v8::Local<v8::String> source;
@@ -191,7 +195,7 @@ namespace Framework::Scripting::Bind {
                         _thrown = Thrown::Terminated;
                         return Result::Err(kTerminating);
                     }
-                    return Result::Err(Spell(tryCatch.Exception(), "the text is not JSON"));
+                    return Result::Err(Told(tryCatch.Exception(), "the text is not JSON"));
                 }
                 return Result::Ok(Keep(parsed));
             }
@@ -404,9 +408,7 @@ namespace Framework::Scripting::Bind {
                         _thrown = Thrown::Terminated;
                         return Result::Err(kTerminating);
                     }
-                    const v8::Local<v8::Value> exception = tryCatch.Exception();
-                    Caught(tryCatch);
-                    return Result::Err(Spell(exception, kNoJsonForm));
+                    return Result::Err(Told(tryCatch.Exception(), kNoJsonForm));
                 }
                 // JSON.stringify gives undefined, which V8 spells here, for a function, a symbol and an object
                 // whose toJSON gives one of them. A string would be in quotes.
@@ -472,8 +474,22 @@ namespace Framework::Scripting::Bind {
                 return ToUtf8(_isolate, spelled);
             }
 
-            // What was thrown, spelled, or `fallback` when it has no spelling.
-            std::string Spell(v8::Local<v8::Value> exception, const char *fallback) {
+            // What was thrown, as the function is told of it and may put its own name before: the message of an
+            // Error, the spelling of anything else, `fallback` for what has neither.
+            std::string Told(v8::Local<v8::Value> exception, const char *fallback) {
+                if (!exception.IsEmpty() && exception->IsNativeError() && CanRun()) {
+                    v8::TryCatch tryCatch(_isolate);
+                    v8::Local<v8::Value> message;
+                    if (exception.As<v8::Object>()->Get(_context, v8::String::NewFromUtf8Literal(_isolate, "message")).ToLocal(&message)) {
+                        if (message->IsString() && message.As<v8::String>()->Length() > 0) {
+                            return ToUtf8(_isolate, message);
+                        }
+                    }
+                    else if (tryCatch.HasTerminated()) {
+                        _thrown = Thrown::Terminated;
+                        return kTerminating;
+                    }
+                }
                 std::string text = Spell(exception);
                 return text.empty() ? std::string(fallback) : text;
             }

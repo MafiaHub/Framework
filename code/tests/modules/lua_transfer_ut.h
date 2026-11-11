@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "alloc_counter.h"
 #include "lua_runtime_ut.h"
 #include "lua_test_helpers.h"
 #include "node_test_helpers.h"
@@ -36,6 +37,7 @@ namespace LuaTransferTest {
     using Bind::Side;
     using Framework::Scripting::LuaRuntime;
     using Framework::Scripting::LuaTransfer;
+    using Framework::Scripting::LuaValueLimits;
     using Framework::Scripting::TransferredValue;
     using Framework::Scripting::ValueTransfer;
     using Copied = Framework::Utils::Result<TransferredValue, std::string>;
@@ -123,7 +125,12 @@ namespace LuaTransferTest {
                                                                   call.Return(Failed(copied.GetError()));
                                                                   return;
                                                               }
-                                                              call.Return(call.FromTransfer(copied.GetValue()));
+                                                              const auto built = call.FromTransfer(copied.GetValue());
+                                                              if (!built) {
+                                                                  call.Return(Failed(built.GetError()));
+                                                                  return;
+                                                              }
+                                                              call.Return(built.GetValue());
                                                           },
                                                           Doc("Copies a value and rebuilds it.").Param("value", Type::Any(), "Value to copy.").ReturnType(Type::Any()))
                                                       .Function(
@@ -132,10 +139,15 @@ namespace LuaTransferTest {
                                                               TransferredValue value;
                                                               value.kind = static_cast<TransferredValue::Kind>(call.Arg(0).AsInteger().value_or(0));
                                                               value.text = call.Arg(1).AsString();
-                                                              call.Return(call.FromTransfer(value));
-                                                              call.Return("went on");
+                                                              // As a builtin does: under its own name when it cannot go on without the value.
+                                                              const auto built = call.FromTransfer(value);
+                                                              if (!built && call.Arg(2).AsBoolean()) {
+                                                                  call.ThrowError("Codec.rebuild: " + built.GetError());
+                                                                  return;
+                                                              }
+                                                              call.Return(built ? "rebuilt" : Failed(built.GetError()));
                                                           },
-                                                          Doc("Rebuilds a value of a kind.").Param("kind", TypeOf<int>(), "Kind.").Param("text", TypeOf<std::string>(), "Text.").ReturnType(Type::Any()))
+                                                          Doc("Rebuilds a value of a kind.").Param("kind", TypeOf<int>(), "Kind.").Param("text", TypeOf<std::string>(), "Text.").OptionalParam("strict", TypeOf<bool>(), "Whether to throw.").ReturnType(Type::Any()))
                                                       .Function(
                                                           "json",
                                                           [](Call &call) {
@@ -168,6 +180,14 @@ namespace LuaTransferTest {
         return definition;
     }
 
+    // Pushes the global `name` of the state, read raw.
+    inline void PushGlobal(lua_State *L, const char *name) {
+        lua_pushglobaltable(L);
+        lua_pushstring(L, name);
+        lua_rawget(L, -2);
+        lua_remove(L, -2);
+    }
+
     inline void SetGlobal(lua_State *L, const char *name) {
         lua_pushglobaltable(L);
         lua_pushstring(L, name);
@@ -183,12 +203,9 @@ namespace LuaTransferTest {
             using namespace Framework::Scripting;
             _engine.Init();
             Builtins::RegisterTransferTypes();
-            // After the framework's own, as a project registers its handles.
-            static bool registered = false;
-            if (!registered) {
-                registered = true;
-                TicketDefinition().RegisterTransfer();
-            }
+            // After the framework's own, as a project registers its handles, and until the test is over: no later
+            // copy in the process should be asked whether its object is a ticket.
+            TicketDefinition().RegisterTransfer();
             VipTicketDefinition();
             PlainDefinition();
 
@@ -240,6 +257,7 @@ namespace LuaTransferTest {
         }
 
         ~Worlds() {
+            TicketDefinition().UnregisterTransfer();
             _plain.reset();
             _vip.reset();
             _ticket.reset();
@@ -436,6 +454,84 @@ namespace LuaTransferTest {
     // `depth` tables, each the only element of the one around it.
     inline std::string NestedLua(int depth) {
         return "(function() local nested = {} for _ = 2, " + std::to_string(depth) + " do nested = { nested } end return nested end)()";
+    }
+
+    // Defines weak(mode, kept): a weak table whose entries can go while it is walked. `kept` long keys all hold
+    // one table of a thousand long keys, which a global keeps, then a hundred long keys that sort after them hold
+    // a table of their own each. Those tables are kept until the function returns, so every entry is there when
+    // the walk begins, and by nothing after it: walking the kept table over and over makes garbage enough for the
+    // collector to run many times before the walk reaches them.
+    inline void DefineWeakTables(LuaRuntime &runtime) {
+        LuaRuntimeTest::Run(runtime, R"lua(
+            held = {}
+            for index = 1, 1000 do held[string.rep('k', 60) .. index] = index end
+            function weak(mode, kept)
+                local entries, fresh = setmetatable({}, { __mode = mode }), {}
+                for index = 1, kept do entries[string.rep('a', 60) .. index] = held end
+                for index = 1, 100 do
+                    fresh[index] = { id = index }
+                    entries[string.rep('z', 60) .. index] = fresh[index]
+                end
+                return entries
+            end
+            -- The same as a sequence: `kept` times the kept table, then the hundred tables.
+            function weakList(kept)
+                local entries, fresh = setmetatable({}, { __mode = 'v' }), {}
+                for index = 1, kept do entries[index] = held end
+                for index = 1, 100 do
+                    fresh[index] = { id = index }
+                    entries[kept + index] = fresh[index]
+                end
+                return entries
+            end
+        )lua");
+    }
+
+    // The number a key made of sixty times `letter` and a number ends with, or 0 when `key` is not such a key.
+    inline int WeakKeyNumber(std::string_view key, char letter) {
+        if (key.size() <= 60 || key.size() > 64 || key.find_first_not_of(letter) != 60 || key.find_first_not_of("0123456789", 60) != std::string_view::npos || key[60] == '0') {
+            return 0;
+        }
+        return std::stoi(std::string(key.substr(60)));
+    }
+
+    // What is wrong with a copy of weak(mode), or empty: every property is a key that was set, once, with the value
+    // that was set under it. `kept` and `fresh` count the entries of each kind that are there.
+    inline std::string CheckWeakCopy(const TransferredValue &copy, int &kept, int &fresh) {
+        using Kind = TransferredValue::Kind;
+        kept       = 0;
+        fresh      = 0;
+        if (copy.kind != Kind::Object) {
+            return "the copy is not an Object";
+        }
+        const std::string *previous = nullptr;
+        for (const auto &[name, value] : copy.properties) {
+            if (previous != nullptr && !(*previous < name)) {
+                return "a key comes twice or out of order: " + name.substr(0, 80);
+            }
+            previous = &name;
+            if (const int number = WeakKeyNumber(name, 'a')) {
+                if (value.kind != Kind::Object || value.properties.size() != 1000) {
+                    return "a kept key does not hold the kept table";
+                }
+                for (const auto &[inner, element] : value.properties) {
+                    if (element.kind != Kind::Number || element.number != WeakKeyNumber(inner, 'k') || element.number < 1 || element.number > 1000) {
+                        return "the kept table has a wrong member: " + inner.substr(0, 80);
+                    }
+                }
+                ++kept;
+            }
+            else if (const int id = WeakKeyNumber(name, 'z')) {
+                if (value.kind != Kind::Object || value.properties.size() != 1 || value.properties[0].first != "id" || value.properties[0].second.number != id) {
+                    return "a fresh key holds what was not set under it";
+                }
+                ++fresh;
+            }
+            else {
+                return "a key that was never set: " + name.substr(0, 80);
+            }
+        }
+        return {};
     }
 
     inline TransferredValue NestedArrays(int depth) {
@@ -808,6 +904,9 @@ MODULE(lua_transfer, {
         EQUALS(worlds.Other("received"), "second");
         probe.bytes.clear();
         EQUALS(Worlds::StoreLua(worlds.other, probe), "Cannot copy value: host type 'TransferProbe' could not be rebuilt");
+
+        LuaTransfer::UnregisterHostType("TransferProbe");
+        EQUALS(Worlds::StoreLua(worlds.other, probe), "Cannot copy value: host type 'TransferProbe' is not available in Lua");
     });
 
     IT("fails the copy, with the path, when a host type raises a Lua error", {
@@ -835,6 +934,7 @@ MODULE(lua_transfer, {
         holder.items[1]      = faulty;
         EQUALS(Worlds::StoreLua(worlds.other, holder), "Cannot copy value.<value 0>: the rebuild went wrong");
         EQUALS(lua_gettop(worlds.other.State()), 0);
+        LuaTransfer::UnregisterHostType("TransferFaulty");
     });
 
     IT("declares a transfer once, and registers only what declared one", {
@@ -909,20 +1009,155 @@ MODULE(lua_transfer, {
         EQUALS(rebuilt.ends_with("[0]: it is nested too deeply"), true);
     });
 
+    // The bounds are lowered for these, to reach them without the memory they stand for.
     IT("refuses a value too large to copy instead of expanding it", {
         Worlds worlds;
+        lua_State *L = worlds.lua.State();
+        EQUALS(LuaValueLimits().values == ValueTransfer::kMaxValues && LuaValueLimits().bytes == ValueTransfer::kMaxBytes, true);
+
         // 40 levels of a table holding the same child twice: a few kilobytes that would copy as 2^40 values.
         LuaRuntimeTest::Run(worlds.lua, "tree = { 1 } for _ = 1, 40 do tree = { tree, tree } end");
-        const std::string doubled = worlds.Refusal("tree");
+        LuaValueLimits few;
+        few.values = 10000;
+        PushGlobal(L, "tree");
+        const std::string doubled = LuaTransfer::Copy(L, -1, few).GetError();
         EQUALS(doubled.rfind("Cannot copy value[", 0) == 0, true);
         EQUALS(doubled.ends_with("it is too large to copy"), true);
+        lua_pop(L, 1);
 
-        // One byte more of text than a copy may hold.
-        LuaRuntimeTest::Run(worlds.lua, "long = string.rep('a', (256 << 20) + 1)");
-        EQUALS(worlds.Refusal("{ text = long }"), "Cannot copy value.text: it is too large to copy");
+        // A value of exactly as many values as it may hold, and of one more.
+        few.values = 4;
+        LuaRuntimeTest::Run(worlds.lua, "four = { 1, { 2 } } five = { 1, { 2, 3 } }");
+        PushGlobal(L, "four");
+        PushGlobal(L, "five");
+        EQUALS(LuaTransfer::Copy(L, -2, few).IsOk(), true);
+        EQUALS(LuaTransfer::Copy(L, -1, few).GetError(), "Cannot copy value[2]: it is too large to copy");
+        lua_settop(L, 0);
+
+        // The bytes of strings and of keys: exactly what it may hold, and one byte more.
+        LuaValueLimits small;
+        small.bytes = 1024;
+        LuaRuntimeTest::Run(worlds.lua, "fits = { text = string.rep('a', 1020) } long = { text = string.rep('a', 1021) } key = { [string.rep('k', 1025)] = 1 }");
+        PushGlobal(L, "fits");
+        PushGlobal(L, "long");
+        PushGlobal(L, "key");
+        EQUALS(LuaTransfer::Copy(L, -3, small).IsOk(), true);
+        EQUALS(LuaTransfer::Copy(L, -2, small).GetError(), "Cannot copy value.text: it is too large to copy");
+        EQUALS(LuaTransfer::Copy(L, -1, small).GetError(), "Cannot copy value: it is too large to copy");
+        lua_settop(L, 0);
+    });
+
+    IT("refuses a table with more keys than it may copy before it has gathered them", {
+        Worlds worlds;
+        lua_State *L = worlds.lua.State();
+        // Keys too long for a std::string to hold without allocating: gathering them all would allocate for each.
+        LuaRuntimeTest::Run(worlds.lua, "wide = {} for index = 1, 200000 do wide[string.rep('k', 40) .. index] = index end");
+        PushGlobal(L, "wide");
+
+        LuaValueLimits few;
+        few.values = 1000;
+        LuaValueLimits small;
+        small.bytes = 64 * 1024;
+        for (const LuaValueLimits &limits : {few, small}) {
+            std::string error;
+            uint64_t allocations = 0;
+            {
+                const FrameworkTests::AllocationScope scope;
+                error       = LuaTransfer::Copy(L, -1, limits).GetError();
+                allocations = scope.Count();
+            }
+            EQUALS(error, "Cannot copy value: it is too large to copy");
+            LESSER(allocations, 5000u);
+        }
+
+        // A sequence is counted before anything is made for its elements too.
+        LuaRuntimeTest::Run(worlds.lua, "list = {} for index = 1, 200000 do list[index] = index end");
+        PushGlobal(L, "list");
+        uint64_t allocations = 0;
+        {
+            const FrameworkTests::AllocationScope scope;
+            EQUALS(LuaTransfer::Copy(L, -1, few).GetError(), "Cannot copy value: it is too large to copy");
+            allocations = scope.Count();
+        }
+        LESSER(allocations, 100u);
+        lua_settop(L, 0);
+    });
+
+    IT("counts the keys of every table it has open against one bound", {
+        Worlds worlds;
+        lua_State *L = worlds.lua.State();
+        // 600 keys fit the bound, and so would the 600 of the table the first of them holds, were the outer ones
+        // not waiting to be copied.
+        LuaRuntimeTest::Run(worlds.lua, "inner = {} for index = 1, 600 do inner['i' .. index] = index end outer = {} for index = 1, 600 do outer['o' .. index] = index end outer.a = inner");
+        LuaValueLimits limits;
+        limits.values = 1000;
+        PushGlobal(L, "inner");
+        PushGlobal(L, "outer");
+        EQUALS(LuaTransfer::Copy(L, -2, limits).IsOk(), true);
+        EQUALS(LuaTransfer::Copy(L, -1, limits).GetError(), "Cannot copy value.a: it is too large to copy");
+        lua_settop(L, 0);
+    });
+
+    IT("spells no more than the start of a long key in the path of a refusal", {
+        Worlds worlds;
+        EQUALS(worlds.Refusal("{ [string.rep('k', 100000)] = coroutine.create(print) }"), "Cannot copy value." + std::string(64, 'k') + "...: a coroutine cannot be copied");
+        EQUALS(worlds.Refusal("{ [string.rep('k', 64)] = coroutine.create(print) }"), "Cannot copy value." + std::string(64, 'k') + ": a coroutine cannot be copied");
+        // Cut between two characters, not inside one.
+        std::string accents;
+        for (int i = 0; i < 31; ++i) {
+            accents += "\xC3\xA9";
+        }
+        EQUALS(worlds.Refusal("{ ['a' .. string.rep('\u{e9}', 40)] = { coroutine.create(print) } }"), "Cannot copy value.a" + accents + "...[1]: a coroutine cannot be copied");
     });
 
     // --- Protection ---
+
+    IT("copies a weak table whose entries are collected while it is walked", {
+        Worlds worlds;
+        DefineWeakTables(worlds.lua);
+        int kept  = 0;
+        int fresh = 0;
+        // Values held weakly: the keys of the entries that go are freed with them.
+        Copied copied = Worlds::CopyLua(worlds.lua, "weak('v', 400)");
+        EQUALS(copied.IsOk(), true);
+        EQUALS(CheckWeakCopy(copied.GetValue(), kept, fresh), "");
+        EQUALS(kept, 400);
+        LESSER(fresh, 100);
+
+        copied = Worlds::CopyLua(worlds.lua, "weak('kv', 100)");
+        EQUALS(copied.IsOk(), true);
+        EQUALS(CheckWeakCopy(copied.GetValue(), kept, fresh), "");
+        EQUALS(kept, 100);
+        LESSER(fresh, 100);
+
+        // A string is never collected out of a table as a key, so with weak keys alone nothing goes.
+        copied = Worlds::CopyLua(worlds.lua, "weak('k', 100)");
+        EQUALS(copied.IsOk(), true);
+        EQUALS(CheckWeakCopy(copied.GetValue(), kept, fresh), "");
+        EQUALS(kept, 100);
+        EQUALS(fresh, 100);
+
+        // An element that went leaves its place undefined, and the ones after it stay where they were.
+        copied = Worlds::CopyLua(worlds.lua, "weakList(100)");
+        EQUALS(copied.IsOk() && copied.GetValue().kind == Kind::Array && copied.GetValue().items.size() == 200, true);
+        int gone  = 0;
+        int wrong = 0;
+        for (size_t i = 0; i < copied.GetValue().items.size(); ++i) {
+            const TransferredValue &item = copied.GetValue().items[i];
+            if (i < 100) {
+                wrong += item.kind == Kind::Object && item.properties.size() == 1000 ? 0 : 1;
+            }
+            else if (item.kind == Kind::Undefined) {
+                ++gone;
+            }
+            else {
+                wrong += item.kind == Kind::Object && item.properties.size() == 1 && item.properties[0].second.number == static_cast<double>(i - 99) ? 0 : 1;
+            }
+        }
+        EQUALS(wrong, 0);
+        GREATER(gone, 0);
+        EQUALS(lua_gettop(worlds.lua.State()), 0);
+    });
 
     IT("fails to rebuild in a state that is out of memory without raising, and leaves the state usable", {
         Worlds worlds(4u << 20);
@@ -1006,13 +1241,18 @@ MODULE(lua_transfer, {
         EQUALS(worlds.CopyJs("{ on() {} }").GetError(), "Cannot copy value.on: a function cannot be copied here");
     });
 
-    IT("throws to the script what FromTransfer cannot rebuild, once the function has returned", {
+    IT("hands the function what FromTransfer cannot rebuild, and throws nothing by itself", {
         Worlds worlds;
-        const int regExp = static_cast<int>(Kind::RegExp);
-        const int host   = static_cast<int>(Kind::HostObject);
-        EQUALS(worlds.Lua("select(2, pcall(Codec.rebuild, " + std::to_string(regExp) + ", 'x'))"), "Cannot copy value: a RegExp cannot be copied to Lua");
-        EQUALS(worlds.Lua("select(2, pcall(Codec.rebuild, " + std::to_string(host) + ", 'Nope'))"), "Cannot copy value: host type 'Nope' is not available in Lua");
-        EQUALS(worlds.Js("(() => { try { Codec.rebuild(" + std::to_string(host) + ", 'Nope'); return 'no throw'; } catch (error) { return error.message; } })()"), "Unknown host type Nope");
-        EQUALS(worlds.Js("Codec.rebuild(" + std::to_string(static_cast<int>(Kind::String)) + ", 'x')"), "went on");
+        const std::string regExp = std::to_string(static_cast<int>(Kind::RegExp));
+        const std::string host   = std::to_string(static_cast<int>(Kind::HostObject));
+        const std::string text   = std::to_string(static_cast<int>(Kind::String));
+        EQUALS(worlds.Lua("Codec.rebuild(" + regExp + ", 'x')"), "<failed> Cannot copy value: a RegExp cannot be copied to Lua");
+        EQUALS(worlds.Lua("Codec.rebuild(" + host + ", 'Nope')"), "<failed> Cannot copy value: host type 'Nope' is not available in Lua");
+        EQUALS(worlds.Js("Codec.rebuild(" + host + ", 'Nope')"), "<failed> Unknown host type Nope");
+        EQUALS(worlds.Lua("Codec.rebuild(" + text + ", 'x')"), "rebuilt");
+        EQUALS(worlds.Js("Codec.rebuild(" + text + ", 'x')"), "rebuilt");
+        // A function that cannot go on says so under its own name, in both languages.
+        EQUALS(worlds.Lua("select(2, pcall(Codec.rebuild, " + host + ", 'Nope', true))"), "Codec.rebuild: Cannot copy value: host type 'Nope' is not available in Lua");
+        EQUALS(worlds.Js("(() => { try { Codec.rebuild(" + host + ", 'Nope', true); return 'no throw'; } catch (error) { return error.name + ': ' + error.message; } })()"), "Error: Codec.rebuild: Unknown host type Nope");
     });
 });

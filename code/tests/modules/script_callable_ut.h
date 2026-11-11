@@ -213,7 +213,12 @@ namespace ScriptCallableTest {
                                            .Function(
                                                "take",
                                                [](Call &call) {
-                                                   call.Return(call.FromTransfer(Held().value));
+                                                   const auto built = call.FromTransfer(Held().value);
+                                                   if (!built) {
+                                                       call.ThrowError(built.GetError());
+                                                       return;
+                                                   }
+                                                   call.Return(built.GetValue());
                                                },
                                                Doc("Builds the value Stage.give copied.").ReturnType(Type::Any()))
                                            .Function(
@@ -235,8 +240,11 @@ namespace ScriptCallableTest {
                                                    else if (told->threw) {
                                                        call.ThrowError(told->error);
                                                    }
+                                                   else if (const auto built = call.FromTransfer(told->value)) {
+                                                       call.Return(built.GetValue());
+                                                   }
                                                    else {
-                                                       call.Return(call.FromTransfer(told->value));
+                                                       call.ThrowError(built.GetError());
                                                    }
                                                },
                                                Doc("Invokes a function with a value.").Param("handler", Type::Any(), "Function to invoke.").Param("value", Type::Any(), "Its argument.").ReturnType(Type::Any()))

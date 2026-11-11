@@ -90,6 +90,32 @@ namespace Framework::Scripting::LuaValues {
         return true;
     }
 
+    // The most of a key that an error text spells. A script chooses its keys, and one of megabytes must not end
+    // up whole in a message, nor be copied for each step into it.
+    inline constexpr size_t kMaxStepBytes = 64;
+
+    // How much of `name` a path spells: all of it, or its first kMaxStepBytes, less what would cut a UTF-8
+    // character in two.
+    inline size_t StepLength(std::string_view name) {
+        if (name.size() <= kMaxStepBytes) {
+            return name.size();
+        }
+        size_t length = kMaxStepBytes;
+        for (int back = 0; back < 3 && length > 0 && (static_cast<unsigned char>(name[length]) & 0xC0) == 0x80; ++back) {
+            --length;
+        }
+        return length;
+    }
+
+    // Appends `name` as a path spells it: what StepLength keeps of it, and "..." for what it leaves out.
+    inline void AppendStepName(std::string &out, std::string_view name) {
+        const size_t length = StepLength(name);
+        out.append(name.substr(0, length));
+        if (length < name.size()) {
+            out += "...";
+        }
+    }
+
     // Where a walk is inside a value, spelled only when it fails: "value.items[2].name".
     //
     // A step is entered and left by hand and not by a destructor, so that a Lua error or an exception that unwinds
@@ -101,8 +127,11 @@ namespace Framework::Scripting::LuaValues {
             Enter(Step::Index, index);
         }
 
+        // Keeps a copy of what it will spell of `name`, so the name need not outlive the step.
         void EnterProperty(std::string_view name) {
-            Enter(Step::Property, 0).name.assign(name);
+            Entry &entry = Enter(Step::Property, 0);
+            entry.name.clear();
+            AppendStepName(entry.name, name);
         }
 
         void EnterMapKey(size_t index) {
@@ -166,27 +195,48 @@ namespace Framework::Scripting::LuaValues {
     };
 
     // The keys of a table, as the mapping of lua_transfer.h reads them.
+    //
+    // The keys are copies. A view into the string of a key is only good while the table holds the key, and a weak
+    // table (`__mode`, which a script may set) stops holding it in the middle of a walk: the walk allocates, the
+    // collector runs, an entry whose value died is cleared, and the next cycle frees the string of its key.
     struct TableShape final {
         // Keys exactly 1..length, which the empty table has with a length of 0: an array.
         bool sequence      = false;
         lua_Integer length = 0;
-        // Of any other table: its integer keys ascending, then its string keys sorted by their bytes. The views
-        // are into the strings of the table, good while the table holds them.
+        // Of any other table: its integer keys ascending, then its string keys sorted by their bytes.
         std::vector<lua_Integer> integers;
-        std::vector<std::string_view> strings;
+        std::vector<std::string> strings;
+        // The bytes of the string keys together.
+        size_t stringBytes = 0;
         // A key that is neither a string nor an integer was found.
         bool foreignKey = false;
+        // The table has more keys, or more bytes of string keys, than the walk may still take.
+        bool tooLarge = false;
+
+        // The values the table holds: what a walk counts it as.
+        size_t Count() const {
+            return sequence ? static_cast<size_t>(length) : integers.size() + strings.size();
+        }
     };
 
-    // Reads the keys of the table at the absolute index `index`. The caller has room for two values on the stack.
-    inline void ReadShape(lua_State *L, int index, TableShape &shape) {
+    // Reads the keys of the table at the absolute index `index`, which holds at most `maxKeys` of them and
+    // `maxStringBytes` of string keys: past either it stops with `tooLarge`, having kept no more than that, so that
+    // a table of millions of keys costs the host no more than a table the walk accepts. The caller has room for two
+    // values on the stack. Nothing here allocates in the Lua state, so no entry goes while the keys are read.
+    inline void ReadShape(lua_State *L, int index, TableShape &shape, size_t maxKeys, size_t maxStringBytes) {
         // Keys are distinct, so `count` positive integer keys of which the largest is `count` are 1..count.
         lua_Integer count   = 0;
         lua_Integer largest = 0;
         bool positive       = true;
+        size_t keys         = 0;
         lua_pushnil(L);
         while (lua_next(L, index) != 0) {
             lua_pop(L, 1);
+            if (++keys > maxKeys) {
+                shape.tooLarge = true;
+                lua_pop(L, 1);
+                return;
+            }
             // The key stays as it is for lua_next: lua_tolstring would turn a number into a string.
             if (lua_isinteger(L, -1) != 0) {
                 const lua_Integer key = lua_tointegerx(L, -1, nullptr);
@@ -197,6 +247,12 @@ namespace Framework::Scripting::LuaValues {
             else if (lua_type(L, -1) == LUA_TSTRING) {
                 size_t length    = 0;
                 const char *text = lua_tolstring(L, -1, &length);
+                if (length > maxStringBytes - shape.stringBytes) {
+                    shape.tooLarge = true;
+                    lua_pop(L, 1);
+                    return;
+                }
+                shape.stringBytes += length;
                 shape.strings.emplace_back(text, length);
             }
             else {
@@ -230,7 +286,9 @@ namespace Framework::Scripting::LuaValues {
     // Whether the table spells the integer key whose decimal text is `text` as a string key too. The string key is
     // then the one that counts, as it is for Bind::Value::Get.
     inline bool HasStringKey(const TableShape &shape, std::string_view text) {
-        return std::binary_search(shape.strings.begin(), shape.strings.end(), text);
+        return std::binary_search(shape.strings.begin(), shape.strings.end(), text, [](std::string_view left, std::string_view right) {
+            return left < right;
+        });
     }
 
     // Takes the error a failed lua_pcall left on top of the stack, as text. Raises nothing: an error that is not a

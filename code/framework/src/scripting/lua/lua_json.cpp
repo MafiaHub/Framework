@@ -10,8 +10,9 @@
 
 #include "lua_value_walk.h"
 
+#include "lua_transfer.h"
+
 #include "../bind/lua_class.h"
-#include "../value_transfer.h"
 
 #include <nlohmann/json.hpp>
 
@@ -30,14 +31,29 @@ namespace Framework::Scripting::LuaJson {
 
         // Between quotes, escaped as JSON.stringify escapes: the quote, the backslash and the control characters,
         // those with a short form in that form. Everything else is written as it is.
-        void AppendString(std::string &out, std::string_view text) {
+        //
+        // False, with `out` cut short, when the text would grow beyond `limit` bytes. An escape takes up to six
+        // bytes for one, so the room is looked at before each one and not from the length of `text` alone.
+        bool AppendString(std::string &out, std::string_view text, size_t limit) {
             static constexpr char kHex[] = "0123456789abcdef";
+            // What is left of `text` from `from` on takes a byte each at the least, then the closing quote.
+            const auto fits = [&](size_t from, size_t more) {
+                const size_t needed = (text.size() - from) + more + 1;
+                return out.size() <= limit && needed <= limit - out.size();
+            };
+            if (!fits(0, 1)) {
+                return false;
+            }
             out += '"';
             size_t plain = 0; // where the run of characters that need no escape starts
             for (size_t i = 0; i < text.size(); ++i) {
                 const auto byte = static_cast<unsigned char>(text[i]);
                 if (byte >= 0x20 && byte != '"' && byte != '\\') {
                     continue;
+                }
+                const bool brief = byte == '"' || byte == '\\' || byte == '\b' || byte == '\f' || byte == '\n' || byte == '\r' || byte == '\t';
+                if (!fits(plain, brief ? 1 : 5)) {
+                    return false;
                 }
                 out.append(text, plain, i - plain);
                 plain = i + 1;
@@ -58,6 +74,7 @@ namespace Framework::Scripting::LuaJson {
             }
             out.append(text, plain, text.size() - plain);
             out += '"';
+            return true;
         }
 
         void AppendInteger(std::string &out, lua_Integer integer) {
@@ -132,7 +149,7 @@ namespace Framework::Scripting::LuaJson {
 
         class Encoder final {
           public:
-            explicit Encoder(lua_State *L): _L(L) {}
+            Encoder(lua_State *L, const LuaValueLimits &limits): _L(L), _limits(limits), _valuesLeft(limits.values) {}
 
             // Writes the value at the absolute index `index`. The stack is not left as it was when it fails.
             bool Encode(int index) {
@@ -140,37 +157,7 @@ namespace Framework::Scripting::LuaJson {
                     return Fail(kTooLarge);
                 }
                 --_valuesLeft;
-
-                switch (lua_type(_L, index)) {
-                case LUA_TNIL: _out += "null"; break;
-                case LUA_TBOOLEAN: _out += lua_toboolean(_L, index) != 0 ? "true" : "false"; break;
-                case LUA_TNUMBER:
-                    if (lua_isinteger(_L, index) != 0) {
-                        AppendInteger(_out, lua_tointegerx(_L, index, nullptr));
-                    }
-                    else {
-                        AppendFloat(_out, static_cast<double>(lua_tonumberx(_L, index, nullptr)));
-                    }
-                    break;
-                case LUA_TSTRING: {
-                    size_t length    = 0;
-                    const char *text = lua_tolstring(_L, index, &length);
-                    if (!LuaValues::IsValidUtf8({text, length})) {
-                        return Fail("string is not valid UTF-8");
-                    }
-                    if (!HasRoomFor(length)) {
-                        return false;
-                    }
-                    AppendString(_out, {text, length});
-                    break;
-                }
-                case LUA_TTABLE: return EncodeTable(index);
-                case LUA_TUSERDATA: return EncodeObject(index);
-                case LUA_TFUNCTION: return Fail("a function cannot be encoded as JSON");
-                case LUA_TTHREAD: return Fail("a coroutine cannot be encoded as JSON");
-                default: return Fail("a userdata cannot be encoded as JSON");
-                }
-                return HasRoomFor(0);
+                return EncodeCounted(index);
             }
 
             std::string Take() {
@@ -188,7 +175,43 @@ namespace Framework::Scripting::LuaJson {
           private:
             static constexpr const char *kTooLarge = "it is too large to encode";
 
+            // Writes a value that was counted against the bound already: the root by Encode, anything else with
+            // the table or the object that holds it.
+            bool EncodeCounted(int index) {
+                switch (lua_type(_L, index)) {
+                case LUA_TNIL: _out += "null"; break;
+                case LUA_TBOOLEAN: _out += lua_toboolean(_L, index) != 0 ? "true" : "false"; break;
+                case LUA_TNUMBER:
+                    if (lua_isinteger(_L, index) != 0) {
+                        AppendInteger(_out, lua_tointegerx(_L, index, nullptr));
+                    }
+                    else {
+                        AppendFloat(_out, static_cast<double>(lua_tonumberx(_L, index, nullptr)));
+                    }
+                    break;
+                case LUA_TSTRING: {
+                    // The string is on the stack, which keeps it where `text` points while it is written.
+                    size_t length    = 0;
+                    const char *text = lua_tolstring(_L, index, &length);
+                    if (length > Room()) {
+                        return Fail(kTooLarge);
+                    }
+                    if (!LuaValues::IsValidUtf8({text, length})) {
+                        return Fail("string is not valid UTF-8");
+                    }
+                    return Append({text, length});
+                }
+                case LUA_TTABLE: return EncodeTable(index);
+                case LUA_TUSERDATA: return EncodeObject(index);
+                case LUA_TFUNCTION: return Fail("a function cannot be encoded as JSON");
+                case LUA_TTHREAD: return Fail("a coroutine cannot be encoded as JSON");
+                default: return Fail("a userdata cannot be encoded as JSON");
+                }
+                return _out.size() <= _limits.bytes || Fail(kTooLarge);
+            }
+
             bool EncodeTable(int index) {
+                // Compared and never read through. An ancestor is on the stack, so no other table has its address.
                 const void *table = lua_topointer(_L, index);
                 if (std::find(_ancestors.begin(), _ancestors.end(), table) != _ancestors.end()) {
                     return Fail("it refers back to itself");
@@ -198,10 +221,17 @@ namespace Framework::Scripting::LuaJson {
                 }
 
                 LuaValues::TableShape shape;
-                LuaValues::ReadShape(_L, index, shape);
+                LuaValues::ReadShape(_L, index, shape, _valuesLeft, Room());
                 if (shape.foreignKey) {
                     return Fail("it has a key that is neither a string nor an integer");
                 }
+                if (shape.tooLarge) {
+                    return Fail(kTooLarge);
+                }
+                // What the table holds is counted here, with its keys in hand and before any of it is written, so
+                // that the keys of the tables open at one time never add up to more than the bounds.
+                _valuesLeft -= shape.Count();
+                _keyBytesHeld += shape.stringBytes;
 
                 _ancestors.push_back(table);
                 const bool encoded = shape.sequence ? EncodeSequence(index, shape.length) : EncodeProperties(index, shape);
@@ -210,6 +240,7 @@ namespace Framework::Scripting::LuaJson {
                 return encoded;
             }
 
+            // An element a weak table lost since its keys were read is nil by now, and is written as null.
             bool EncodeSequence(int index, lua_Integer length) {
                 _out += '[';
                 for (lua_Integer position = 1; position <= length; ++position) {
@@ -218,16 +249,16 @@ namespace Framework::Scripting::LuaJson {
                     }
                     lua_rawgeti(_L, index, position);
                     _path.EnterIndex(static_cast<size_t>(position));
-                    if (!Encode(lua_gettop(_L))) {
+                    if (!EncodeCounted(lua_gettop(_L))) {
                         return false;
                     }
                     _path.Leave();
                     lua_pop(_L, 1);
                 }
-                _out += ']';
-                return true;
+                return Close(']');
             }
 
+            // An entry a weak table lost since its keys were read is left out.
             bool EncodeProperties(int index, const LuaValues::TableShape &shape) {
                 _out += '{';
                 bool first = true;
@@ -236,29 +267,30 @@ namespace Framework::Scripting::LuaJson {
                     if (LuaValues::HasStringKey(shape, name)) {
                         continue;
                     }
-                    if (!BeginMember(name, first)) {
-                        return false;
+                    if (lua_rawgeti(_L, index, key) == LUA_TNIL) {
+                        lua_pop(_L, 1);
+                        continue;
                     }
-                    lua_rawgeti(_L, index, key);
-                    if (!EndMember()) {
+                    if (!BeginMember(name, first) || !EndMember()) {
                         return false;
                     }
                 }
-                for (const std::string_view key : shape.strings) {
+                for (const std::string &key : shape.strings) {
+                    // Written from here on, or left out: either way no longer held beside the text.
+                    _keyBytesHeld -= key.size();
                     if (!LuaValues::IsValidUtf8(key)) {
                         return Fail("a key is not valid UTF-8");
                     }
-                    if (!BeginMember(key, first)) {
-                        return false;
-                    }
                     lua_pushlstring(_L, key.data(), key.size());
-                    lua_rawget(_L, index);
-                    if (!EndMember()) {
+                    if (lua_rawget(_L, index) == LUA_TNIL) {
+                        lua_pop(_L, 1);
+                        continue;
+                    }
+                    if (!BeginMember(key, first) || !EndMember()) {
                         return false;
                     }
                 }
-                _out += '}';
-                return true;
+                return Close('}');
             }
 
             // An object of a bound class is the object of the properties its class names for JSON.
@@ -275,6 +307,10 @@ namespace Framework::Scripting::LuaJson {
                 if (!Enter()) {
                     return false;
                 }
+                if (getters->size() > _valuesLeft) {
+                    return Fail(kTooLarge);
+                }
+                _valuesLeft -= getters->size();
                 _out += '{';
                 bool first = true;
                 for (const LuaFunction *getter : *getters) {
@@ -286,22 +322,20 @@ namespace Framework::Scripting::LuaJson {
                         return false;
                     }
                 }
-                _out += '}';
                 --_depth;
-                return true;
+                return Close('}');
             }
 
             // Starts the member `name` of the object being written: its key, and its step in the path, so that
-            // what fails to read its value is said to have failed there.
+            // what fails to read or to write its value is said to have failed there.
             bool BeginMember(std::string_view name, bool &first) {
-                if (!HasRoomFor(name.size())) {
-                    return false;
-                }
                 if (!first) {
                     _out += ',';
                 }
                 first = false;
-                AppendString(_out, name);
+                if (!Append(name)) {
+                    return false;
+                }
                 _out += ':';
                 _path.EnterProperty(name);
                 return true;
@@ -309,7 +343,7 @@ namespace Framework::Scripting::LuaJson {
 
             // Writes the value on top of the stack as the member that was started, and pops it.
             bool EndMember() {
-                if (!Encode(lua_gettop(_L))) {
+                if (!EncodeCounted(lua_gettop(_L))) {
                     return false;
                 }
                 _path.Leave();
@@ -330,12 +364,21 @@ namespace Framework::Scripting::LuaJson {
                 return true;
             }
 
-            // Whether the text may grow by `bytes` more.
-            bool HasRoomFor(size_t bytes) {
-                if (_out.size() > ValueTransfer::kMaxBytes || bytes > ValueTransfer::kMaxBytes - _out.size()) {
-                    return Fail(kTooLarge);
-                }
-                return true;
+            // Ends an array or an object, which the brackets and the commas may have taken past the bound.
+            bool Close(char bracket) {
+                _out += bracket;
+                return _out.size() <= _limits.bytes || Fail(kTooLarge);
+            }
+
+            // The bytes the text may still grow by, less those of the keys that wait to be written into it.
+            size_t Room() const {
+                const size_t taken = _out.size() + _keyBytesHeld;
+                return taken < _limits.bytes ? _limits.bytes - taken : 0;
+            }
+
+            // Writes `text` as a JSON string, unless the text would then be larger than it may.
+            bool Append(std::string_view text) {
+                return AppendString(_out, text, _limits.bytes) || Fail(kTooLarge);
             }
 
             // Keeps the innermost reason: an outer level only adds its own when nothing deeper said why.
@@ -347,11 +390,14 @@ namespace Framework::Scripting::LuaJson {
             }
 
             lua_State *_L;
+            const LuaValueLimits _limits;
             std::string _out;
             LuaValues::Path _path;
             std::vector<const void *> _ancestors;
-            size_t _depth      = 0;
-            size_t _valuesLeft = ValueTransfer::kMaxValues;
+            size_t _depth = 0;
+            size_t _valuesLeft;
+            // The bytes of the keys read from the tables being written that are not in the text yet.
+            size_t _keyBytesHeld = 0;
             std::string _error;
         };
 
@@ -485,7 +531,7 @@ namespace Framework::Scripting::LuaJson {
                         size_t length   = 0;
                         const char *key = lua_tolstring(_L, level.table + 1, &length);
                         where += ".";
-                        where.append(key, length);
+                        LuaValues::AppendStepName(where, {key, length});
                     }
                 }
                 return where;
@@ -519,9 +565,13 @@ namespace Framework::Scripting::LuaJson {
     } // namespace
 
     Utils::Result<std::string, std::string> Encode(lua_State *L, int index) {
+        return Encode(L, index, LuaValueLimits {});
+    }
+
+    Utils::Result<std::string, std::string> Encode(lua_State *L, int index, const LuaValueLimits &limits) {
         using Result = Utils::Result<std::string, std::string>;
 
-        Encoder encoder(L);
+        Encoder encoder(L, limits);
         std::string unwound;
         const bool encoded = LuaValues::Protected(
             L,
