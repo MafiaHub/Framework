@@ -8,6 +8,8 @@
 
 #include "lua_runtime.h"
 
+#include "lua_scheduler.h"
+
 #include "logging/logger.h"
 
 #include <lauxlib.h>
@@ -51,7 +53,8 @@ namespace Framework::Scripting {
         // A coroutine starts with a copy of this, so From() reads it on any thread.
         *static_cast<LuaRuntime **>(lua_getextraspace(_state)) = this;
 
-        lua_pushcfunction(_state, OpenSandbox);
+        _scheduler = std::make_unique<LuaScheduler>(*this);
+        lua_pushcfunction(_state, Open);
         if (lua_pcall(_state, 0, 0, 0) != LUA_OK) {
             const std::string error = PopError(_state);
             lua_close(_state);
@@ -65,6 +68,7 @@ namespace Framework::Scripting {
     }
 
     LuaRuntime::~LuaRuntime() {
+        _scheduler.reset();
         lua_close(_state);
     }
 
@@ -78,7 +82,7 @@ namespace Framework::Scripting {
             error = PopError(_state);
             return false;
         }
-        return Execute(0, 0, error);
+        return _scheduler->Begin(0, {}, &error);
     }
 
     bool LuaRuntime::Call(int nargs, int nresults, std::string &error) {
@@ -87,6 +91,16 @@ namespace Framework::Scripting {
 
     void LuaRuntime::SetPrintHandler(PrintHandler handler) {
         _printHandler = std::move(handler);
+    }
+
+    void LuaRuntime::Tick(std::chrono::steady_clock::time_point now) {
+        _scheduler->Tick(now);
+    }
+
+    int LuaRuntime::Open(lua_State *L) {
+        OpenSandbox(L);
+        From(L)->_scheduler->Install(L);
+        return 0;
     }
 
     bool LuaRuntime::Execute(int nargs, int nresults, std::string &error) {

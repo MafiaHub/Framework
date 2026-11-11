@@ -53,6 +53,7 @@ set(FRAMEWORK_SRC
     src/scripting/bind/lua_glm.cpp
     src/scripting/lua/lua_runtime.cpp
     src/scripting/lua/lua_sandbox.cpp
+    src/scripting/lua/lua_scheduler.cpp
     src/scripting/builtins/builtins.cpp
     src/scripting/builtins/vector2.cpp
     src/scripting/builtins/vector3.cpp

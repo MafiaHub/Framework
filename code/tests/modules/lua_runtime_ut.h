@@ -529,8 +529,8 @@ MODULE(lua_runtime, {
 
     IT("offers exactly the allowed globals", {
         LuaRuntime runtime(Options());
-        EQUALS(Keys(runtime, "_G"), "_G,_VERSION,assert,collectgarbage,coroutine,error,getmetatable,ipairs,load,math,next,os,pairs,pcall,print,rawequal,rawget,rawlen,rawset,"
-                                    "select,setmetatable,string,table,tonumber,tostring,type,utf8,warn,xpcall");
+        EQUALS(Keys(runtime, "_G"), "_G,_VERSION,assert,clearInterval,clearTimeout,collectgarbage,coroutine,error,getmetatable,ipairs,load,math,next,os,pairs,pcall,print,rawequal,rawget,"
+                                    "rawlen,rawset,select,setInterval,setTimeout,setmetatable,sleep,spawn,string,table,tonumber,tostring,type,utf8,warn,xpcall");
         EQUALS(Eval(runtime, "_VERSION"), "Lua 5.5");
     });
 
@@ -815,7 +815,16 @@ MODULE(lua_runtime, {
         EQUALS(g_seenRuntime == &runtime, true);
         EQUALS(g_seenOnMainThread, false);
 
+        // A chunk runs in a coroutine of the scheduler, a call on the main thread.
+        g_seenRuntime = nullptr;
         EQUALS(Run(runtime, "probe()"), "");
+        EQUALS(g_seenRuntime == &runtime, true);
+        EQUALS(g_seenOnMainThread, false);
+
+        std::string error;
+        g_seenRuntime = nullptr;
+        lua_getglobal(L, "probe");
+        EQUALS(runtime.Call(0, 0, error), true);
         EQUALS(g_seenRuntime == &runtime, true);
         EQUALS(g_seenOnMainThread, true);
     });

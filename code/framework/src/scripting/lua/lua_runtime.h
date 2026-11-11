@@ -15,10 +15,13 @@
 
 #include <chrono>
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <string_view>
 
 namespace Framework::Scripting {
+    class LuaScheduler;
+
     struct LuaRuntimeOptions {
         std::string resourceName;
         Bind::Side side         = Bind::Side::Server;
@@ -47,6 +50,10 @@ namespace Framework::Scripting {
     // why coroutine.create runs a coroutine's function under a protected call. A thread that host code starts with
     // lua_resume has no such call: if the hook kills it, Lua leaves hooks disabled on it for good, so it must
     // never be resumed or reused, and closing it runs its pending __close handlers without a deadline.
+    //
+    // Coroutines. A chunk runs in a coroutine of the scheduler (lua_scheduler.h), as do the timers and whatever
+    // the host starts through it, so that a script can wait. Those coroutines have the protected call. Call runs
+    // on the main thread, where a script cannot wait.
     //
     // Host code. A Lua error raised outside a protected call throws std::runtime_error; the state must then be
     // considered unusable and the runtime destroyed. Outside an entry, read and write values a script owns with raw
@@ -83,14 +90,16 @@ namespace Framework::Scripting {
             return _options;
         }
 
-        // Compiles `source` as text and runs it on the main thread. False with the message and the traceback in
-        // `error`. `chunkName` is what Lua shows in messages: "@resource/file.lua" for a file, "=name" otherwise.
+        // Compiles `source` as text and runs it in a coroutine of the scheduler, to its end or to where it first
+        // waits. False with the message and the traceback in `error` when it does not compile or fails before
+        // that. A chunk that waits goes on from later ticks, and what it raises then goes to the scheduler's error
+        // handler. `chunkName` is what Lua shows in messages: "@resource/file.lua" for a file, "=name" otherwise.
         bool RunString(std::string_view source, std::string_view chunkName, std::string &error);
 
-        // Protected call of the function and `nargs` arguments on top of the main stack, under the deadline.
-        // Leaves `nresults` results (LUA_MULTRET for all of them, 250 at most otherwise: Lua 5.5 takes no more),
-        // or returns false with the error text popped into `error`. An entry nested in one whose deadline has
-        // passed does not run.
+        // Protected call of the function and `nargs` arguments on top of the main stack, under the deadline, on
+        // the main thread: what it calls cannot wait. Leaves `nresults` results (LUA_MULTRET for all of them, 250
+        // at most otherwise: Lua 5.5 takes no more), or returns false with the error text popped into `error`. An
+        // entry nested in one whose deadline has passed does not run.
         bool Call(int nargs, int nresults, std::string &error);
 
         // Bytes the state holds, as counted by its allocator.
@@ -103,7 +112,16 @@ namespace Framework::Scripting {
         // handler restores, writes "[resource] line" to the scripting logger, kMaxLinesPerSecond at most.
         void SetPrintHandler(PrintHandler handler);
 
+        LuaScheduler &Scheduler() {
+            return *_scheduler;
+        }
+
+        // Fires the timers that are due at `now` and wakes the coroutines whose sleep is over.
+        void Tick(std::chrono::steady_clock::time_point now);
+
       private:
+        friend class LuaScheduler;
+
         // What a script calls in place of Lua's own functions. Defined in lua_sandbox.cpp.
         struct Sandbox;
 
@@ -120,6 +138,9 @@ namespace Framework::Scripting {
         // Opens the libraries and replaces what a script must not have as Lua ships it. Raises on failure, so it
         // runs in a protected call. Defined in lua_sandbox.cpp.
         static int OpenSandbox(lua_State *L);
+
+        // Sets the state up for scripts: the sandbox, then what the scheduler adds to it.
+        static int Open(lua_State *L);
 
         // Every entry into the state goes through here. Takes the function and its `nargs` arguments from the top
         // of the main stack, as Call does.
@@ -160,6 +181,9 @@ namespace Framework::Scripting {
 
         size_t _memoryInUse = 0;
         lua_State *_state   = nullptr;
+
+        // Gone before the state closes: what waits on a coroutine may hold values of the state.
+        std::unique_ptr<LuaScheduler> _scheduler;
 
         // Entries in progress: the outermost one arms the deadline, the ones nested in it run under the same.
         int _entryDepth = 0;
