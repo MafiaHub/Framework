@@ -29,13 +29,11 @@
 namespace RunUntilTest {
     using Clock = std::chrono::steady_clock;
 
-    // What 60 idle resources may add to a second of serving. macOS charges about a microsecond for each loop's
-    // kqueue in a poll(), and every tick and every wait polls them all: 11 ms on its CI runner.
-#ifdef __APPLE__
+    // What 60 idle resources may add to a second of serving. Visiting every loop used to cost about 90 ms, which is
+    // what this guards against; the budget only has to sit well below that. The shared CI runners measure 11 ms on
+    // macOS (about a microsecond for each loop's kqueue in a poll(), and every tick and every wait polls them all)
+    // and 11 to 14 ms on Linux when they are busy, so a tighter budget fails on runner noise alone.
     constexpr auto kIdleBudget = std::chrono::milliseconds(30);
-#else
-    constexpr auto kIdleBudget = std::chrono::milliseconds(10);
-#endif
 
     // Script that echoes over a local TCP connection to itself and counts the round trips of a chain started on demand.
     constexpr const char *kRoundTrips = R"(
