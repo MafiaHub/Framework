@@ -47,7 +47,8 @@ namespace Framework::Scripting::Builtins {
 
     /**
      * Lua counterpart of RegisterValueTypes: publishes the same five classes as globals of the
-     * state, which belongs to a runtime of side `side`.
+     * state, which belongs to a runtime of side `side`. A failure, such as the state running out
+     * of memory, is a Lua error: call it protected, or it is a panic.
      */
     inline void RegisterValueTypesLua(lua_State *L, Bind::Side side) {
         Vector2::RegisterLua(L, side);

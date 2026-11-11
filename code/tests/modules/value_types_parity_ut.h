@@ -687,6 +687,18 @@ MODULE(value_types_parity, {
         EQUALS(LuaTest::Eval(L, "Color.fromHex(255)"), "<error> eval:1: bad argument #1 to 'Color.fromHex' (string expected, got number)");
     });
 
+    IT("needs Vector3 in the state for what a Quaternion gives as one", {
+        LuaTest::State state;
+        lua_State *L = state.L;
+        Builtins::Quaternion::RegisterLua(L, Bind::Side::Server);
+
+        EQUALS(LuaTest::Eval(L, "Quaternion.identity():mul(Quaternion.identity()):toString()"), "Quaternion(1, 0, 0, 0)");
+        EQUALS(LuaTest::Eval(L, "Quaternion.identity():toEuler()"), "<error> eval:1: Vector3 is not available in this Lua state");
+
+        Builtins::Vector3::RegisterLua(L, Bind::Side::Server);
+        EQUALS(LuaTest::Eval(L, "tostring(Quaternion.identity():rotateVector(Vector3.new(1, 2, 3)))"), "Vector3(1, 2, 3)");
+    });
+
     IT("describes each value type once for both languages", {
         const Bind::ClassDesc &vector3 = Builtins::Vector3::Definition().Describe();
         EQUALS(vector3.name, "Vector3");

@@ -31,7 +31,7 @@
 // JavaScript and Lua differences
 //
 // JavaScript gets a class through v8pp, unchanged, so that a binding ported to a definition behaves as it did. In
-// four places that is not what the Lua backend does with the same definition:
+// eight places that is not what the Lua backend does with the same definition:
 //
 // 1. A method that returns a reference or a pointer to another bound object, not its receiver. JavaScript gets
 //    the object that already wraps it (`c.pick(other) === other`); Lua gets a copy.
@@ -46,6 +46,14 @@
 // 4. Errors. A wrong argument is reported in v8pp's words (`Argument count does not match function definition.
 //    Expected 1 but got 0`, `expected Number, typeof=string`), which do not name the function; Lua's name it
 //    (`bad argument #1 to 'Counter:add' (integer expected, got string)`).
+// 5. A parameter that is a string. v8pp also takes a number and spells it (`Color.fromHex(5)` parses "5"); Lua
+//    takes a string only.
+// 6. An assignment to a property without a setter. JavaScript ignores it, or throws a TypeError in strict mode;
+//    Lua raises (`attempt to set 'length' on Vector3`).
+// 7. A class with a V8Constructor. JavaScript constructs through it and Lua through the declared constructor, so
+//    JavaScript may accept what Lua refuses (`new Color()` is a color, `Color.new()` an error).
+// 8. A parameter that is a glm vector or quaternion. JavaScript takes any object and reads the components it
+//    has (`{ x: 1, y: 2, z: 3 }`, v8pp_glm.h); Lua takes the userdata of the value type only (lua_glm.h).
 //
 // Besides, v8pp cannot return an object of a class that cannot be copied, by value or by reference: a class with
 // such a member materialises into Lua only (V8CanReturn).

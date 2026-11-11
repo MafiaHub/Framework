@@ -135,6 +135,9 @@ namespace Framework::Scripting::Builtins {
         static void UnregisterIsolate(v8::Isolate *isolate);
 
         // Lua Registration: publishes the class as a global of the state, which belongs to a runtime of side `side`.
+        // Vector3 has to be registered in the same state: rotateVector, toEuler and fromAxisAngle take or return
+        // one. A failure, such as the state running out of memory, is a Lua error: call it protected, or it is a
+        // panic.
         static void RegisterLua(lua_State *L, Bind::Side side);
 
       private:
