@@ -33,6 +33,8 @@ namespace v8 {
 
 namespace Framework::Scripting {
 
+    class LuaEngine;
+
     /**
      * Configuration for the ResourceManager.
      */
@@ -258,6 +260,21 @@ namespace Framework::Scripting {
          */
         Engine *GetJSEngine() const;
 
+        // Lua Engine Access
+
+        /**
+         * Set the engine that runs resources' `.lua` scripts (not owned; it must outlive the manager, or be taken
+         * away again with null). A resource whose scripts for this side include one gets a Lua runtime next to, or
+         * instead of, its JavaScript one. Without an engine such a resource fails to start with "Lua scripting is
+         * not available". Set it before resources start: a running resource keeps the runtimes it has.
+         */
+        void SetLuaEngine(LuaEngine *engine);
+
+        /**
+         * Get the Lua engine used by this manager, or null.
+         */
+        LuaEngine *GetLuaEngine() const;
+
         /**
          * Calls and values between resources' runtimes, or null when every resource shares one.
          */
@@ -407,8 +424,19 @@ namespace Framework::Scripting {
         // Validate all dependencies can be satisfied
         bool ValidateDependencies(std::string &outError) const;
 
-        // Execute entry point script for a resource
-        bool ExecuteResourceScript(Resource &resource, std::string &outError);
+        // What a resource runs on this side: its scripts in execution order, and the runtimes they run in.
+        struct ScriptPlan {
+            std::vector<std::string> scripts;
+            bool needsJavaScript = false;
+            bool needsLua        = false;
+        };
+        ScriptPlan PlanScripts(const Resource &resource) const;
+
+        // Whether a script runs in the Lua engine. Every other one is JavaScript's.
+        bool IsLuaScript(std::string_view path) const;
+
+        // Execute a resource's scripts, each in the runtime of its language
+        bool ExecuteResourceScript(Resource &resource, const ScriptPlan &plan, std::string &outError);
 
         // Fire resource lifecycle events
         void FireOnResourceStarted(const std::string &name);
@@ -436,6 +464,9 @@ namespace Framework::Scripting {
 
         // JS engine (not owned)
         Engine *_jsEngine = nullptr;
+
+        // Lua engine (not owned), or null
+        LuaEngine *_luaEngine = nullptr;
 
         // Resource registry
         std::map<std::string, std::unique_ptr<Resource>, std::less<>> _resources;

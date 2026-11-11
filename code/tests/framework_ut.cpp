@@ -108,6 +108,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/value_types_parity_ut.h"
 #include "modules/resource_manager_ut.h"
 #include "modules/resource_isolation_ut.h"
+#include "modules/lua_resources_ut.h"
 #include "modules/resource_monitor_ut.h"
 #include "modules/run_until_ut.h"
 #include "modules/resource_ut.h"
@@ -194,6 +195,7 @@ int main() {
     UNIT_MODULE(lua_scheduler);
     UNIT_MODULE(lua_engine);
     UNIT_MODULE(value_types_parity);
+    UNIT_MODULE(lua_resources);
     UNIT_MODULE(timer_context);
     UNIT_MODULE(connection_gate);
     UNIT_MODULE(connection_admission);

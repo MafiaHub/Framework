@@ -12,6 +12,7 @@
 #include "../builtins/messages.h"
 #include "../builtins/state_bag.h"
 #include "../engine_scope.h"
+#include "../lua/lua_engine.h"
 
 #include <utils/vfs.h>
 
@@ -190,6 +191,9 @@ namespace Framework::Scripting {
         StopAll();
         if (_jsEngine) {
             _jsEngine->SetResourceManager(nullptr);
+        }
+        if (_luaEngine) {
+            _luaEngine->SetResourceManager(nullptr);
         }
     }
 
@@ -556,17 +560,40 @@ namespace Framework::Scripting {
             _jsEngine->EvictModulesUnderPath(resource->GetPath());
         }
 
+        const ScriptPlan plan = PlanScripts(*resource);
+
+        // Refused before a runtime is created or a script of the other language has run.
+        if (plan.needsLua && (!_luaEngine || !_luaEngine->IsInitialized())) {
+            const std::string error = "Lua scripting is not available";
+            resource->SetError(error);
+            FireOnResourceError(std::string(name), error);
+            return ResourceOperationResult(error);
+        }
+
         // An engine that isolates resources gives this one a fresh runtime; a shared engine has nothing to create.
-        if (_jsEngine && !_jsEngine->CreateResourceRuntime(std::string(name))) {
+        if (plan.needsJavaScript && _jsEngine && !_jsEngine->CreateResourceRuntime(std::string(name))) {
             const std::string error = "Failed to create the resource's runtime: " + _jsEngine->GetLastError();
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
             return ResourceOperationResult(error);
         }
 
-        // Execute the entry point script
+        // The Lua state goes second, and takes the JavaScript runtime with it when it cannot be created.
+        if (plan.needsLua) {
+            // Where require finds the resource's modules, and what chunk names leave out.
+            _luaEngine->SetResourceRoot(std::string(name), resource->GetPath());
+            if (!_luaEngine->CreateResourceRuntime(std::string(name))) {
+                const std::string error = "Failed to create the resource's Lua runtime: " + _luaEngine->GetLastError();
+                CleanupResourceRuntime(*resource, name);
+                resource->SetError(error);
+                FireOnResourceError(std::string(name), error);
+                return ResourceOperationResult(error);
+            }
+        }
+
+        // Execute the scripts
         std::string error;
-        if (!ExecuteResourceScript(*resource, error)) {
+        if (!ExecuteResourceScript(*resource, plan, error)) {
             CleanupResourceRuntime(*resource, name);
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
@@ -914,13 +941,39 @@ namespace Framework::Scripting {
         return added;
     }
 
-    bool ResourceManager::ExecuteResourceScript(Resource &resource, std::string &outError) {
-        if (!_jsEngine || !_jsEngine->IsInitialized()) {
+    bool ResourceManager::IsLuaScript(std::string_view path) const {
+        // The Lua engine says which files are its own. Without one, they are what the JavaScript engine leaves.
+        if (_luaEngine) {
+            return _luaEngine->HandlesFile(path);
+        }
+        return _jsEngine != nullptr && !_jsEngine->HandlesFile(path);
+    }
+
+    ResourceManager::ScriptPlan ResourceManager::PlanScripts(const Resource &resource) const {
+        ScriptPlan plan;
+        plan.scripts = _config.isClient ? resource.GetClientScripts() : resource.GetServerScripts();
+        for (const auto &script : plan.scripts) {
+            if (IsLuaScript(script)) {
+                plan.needsLua = true;
+            }
+            else {
+                plan.needsJavaScript = true;
+            }
+        }
+        // A resource with nothing to run on this side keeps the JavaScript runtime it has always had.
+        if (plan.scripts.empty()) {
+            plan.needsJavaScript = true;
+        }
+        return plan;
+    }
+
+    bool ResourceManager::ExecuteResourceScript(Resource &resource, const ScriptPlan &plan, std::string &outError) {
+        if (plan.needsJavaScript && (!_jsEngine || !_jsEngine->IsInitialized())) {
             outError = "JavaScript engine not initialized";
             return false;
         }
 
-        const auto scripts = _config.isClient ? resource.GetClientScripts() : resource.GetServerScripts();
+        const auto &scripts = plan.scripts;
         if (scripts.empty()) {
             return true;
         }
@@ -972,13 +1025,16 @@ namespace Framework::Scripting {
                 resolved = candidate.string();
             }
 
+            // By the path the manifest gives, as the runtimes were planned. StartResource has made sure of the engine.
+            ScriptEngine *engine = IsLuaScript(script) ? static_cast<ScriptEngine *>(_luaEngine) : _jsEngine;
+
             // Set resource context so Events.on() etc. know which resource is executing.
             SetCurrentResourceContext(resourceName);
-            const bool ok = _jsEngine->ExecuteResourceFile(resourceName, resolved);
+            const bool ok = engine->ExecuteResourceFile(resourceName, resolved);
             SetCurrentResourceContext("");
 
             if (!ok) {
-                outError = _jsEngine->GetLastError();
+                outError = engine->GetLastError();
                 return false;
             }
         }
@@ -1034,7 +1090,11 @@ namespace Framework::Scripting {
         // The isolate goes with the runtime below, and a later one may reuse its address.
         resource.SetIsolate(nullptr);
 
-        // Last: the handles dropped above belong to the runtime, which takes whatever the resource left running.
+        // Last: the handles dropped above belong to the runtimes, which take whatever the resource left running.
+        // The Lua state first, as it was created second.
+        if (_luaEngine) {
+            _luaEngine->DestroyResourceRuntime(std::string(resourceName));
+        }
         if (_jsEngine) {
             _jsEngine->DestroyResourceRuntime(std::string(resourceName));
         }
@@ -1151,6 +1211,23 @@ namespace Framework::Scripting {
 
     Engine *ResourceManager::GetJSEngine() const {
         return _jsEngine;
+    }
+
+    void ResourceManager::SetLuaEngine(LuaEngine *engine) {
+        if (_luaEngine == engine) {
+            return;
+        }
+        if (_luaEngine) {
+            _luaEngine->SetResourceManager(nullptr);
+        }
+        _luaEngine = engine;
+        if (_luaEngine) {
+            _luaEngine->SetResourceManager(this);
+        }
+    }
+
+    LuaEngine *ResourceManager::GetLuaEngine() const {
+        return _luaEngine;
     }
 
     std::string ResourceManager::ResourceOfIsolate(v8::Isolate *isolate) const {
