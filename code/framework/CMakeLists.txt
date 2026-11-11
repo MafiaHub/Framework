@@ -51,6 +51,7 @@ set(FRAMEWORK_SRC
     src/scripting/bind/descriptors.cpp
     src/scripting/bind/lua_class.cpp
     src/scripting/bind/lua_glm.cpp
+    src/scripting/lua/lua_engine.cpp
     src/scripting/lua/lua_runtime.cpp
     src/scripting/lua/lua_sandbox.cpp
     src/scripting/lua/lua_scheduler.cpp

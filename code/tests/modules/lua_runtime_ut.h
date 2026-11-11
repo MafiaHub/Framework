@@ -530,13 +530,13 @@ MODULE(lua_runtime, {
     IT("offers exactly the allowed globals", {
         LuaRuntime runtime(Options());
         EQUALS(Keys(runtime, "_G"), "_G,_VERSION,assert,clearInterval,clearTimeout,collectgarbage,coroutine,error,getmetatable,ipairs,load,math,next,os,pairs,pcall,print,rawequal,rawget,"
-                                    "rawlen,rawset,select,setInterval,setTimeout,setmetatable,sleep,spawn,string,table,tonumber,tostring,type,utf8,warn,xpcall");
+                                    "rawlen,rawset,require,select,setInterval,setTimeout,setmetatable,sleep,spawn,string,table,tonumber,tostring,type,utf8,warn,xpcall");
         EQUALS(Eval(runtime, "_VERSION"), "Lua 5.5");
     });
 
     IT("has no io, debug, package or file loading", {
         LuaRuntime runtime(Options());
-        for (const char *name : {"io", "debug", "package", "require", "dofile", "loadfile", "string.dump", "os.execute", "os.getenv", "os.exit", "os.remove", "os.rename", "os.tmpname", "os.setlocale"}) {
+        for (const char *name : {"io", "debug", "package", "dofile", "loadfile", "string.dump", "os.execute", "os.getenv", "os.exit", "os.remove", "os.rename", "os.tmpname", "os.setlocale"}) {
             EQUALS(Eval(runtime, std::string("type(") + name + ")"), "nil");
         }
         EQUALS(Eval(runtime, "type(('').dump)"), "nil");

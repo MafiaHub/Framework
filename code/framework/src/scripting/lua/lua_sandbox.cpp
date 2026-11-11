@@ -19,9 +19,10 @@
 // What a script finds in its state. Nothing here reaches a file, a process, the environment or bytecode:
 //
 //   libraries   base, coroutine, table, string, utf8, math, and os cut down to its clock functions. No io, no
-//               debug, no package, so no require until the runtime provides its own.
+//               debug, no package.
 //   removed     dofile, loadfile, string.dump
-//   added       setTimeout, setInterval, clearTimeout, clearInterval, sleep, spawn (lua_scheduler.cpp)
+//   added       require, which reads the files of the resource and nothing else (lua_runtime.cpp)
+//               setTimeout, setInterval, clearTimeout, clearInterval, sleep, spawn (lua_scheduler.cpp)
 //   replaced    load            string chunks only, always compiled as text
 //               collectgarbage  answers "count" only
 //               print           goes to the runtime's print handler, as do warnings

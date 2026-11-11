@@ -272,7 +272,7 @@ namespace Framework::Scripting {
 
     void LuaScheduler::Wake(uint64_t token, Wakeup wakeup) {
         const auto found = _tokens.find(token);
-        if (found == _tokens.end()) {
+        if (_stopped || found == _tokens.end()) {
             return;
         }
         lua_State *thread = found->second;
@@ -486,7 +486,14 @@ namespace Framework::Scripting {
         _coroutines.erase(thread);
     }
 
+    void LuaScheduler::Stop() {
+        _stopped = true;
+    }
+
     void LuaScheduler::Tick(std::chrono::steady_clock::time_point now) {
+        if (_stopped) {
+            return;
+        }
         _now = now;
 
         // What is due as the tick starts. What a callback arms waits for the next tick, so an interval fires once
@@ -496,7 +503,11 @@ namespace Framework::Scripting {
             due.emplace_back(*queued);
         }
         for (const auto &[when, pending] : due) {
-            // A callback that ran before may have cleared it.
+            // A callback that ran before may have stopped the scheduler.
+            if (_stopped) {
+                break;
+            }
+            // Or cleared it.
             if (_queue.erase(when) == 0) {
                 continue;
             }

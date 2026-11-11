@@ -101,6 +101,11 @@ namespace Framework::Scripting {
         // Sets the time to `now`, fires the timers that are due and wakes the coroutines whose sleep is over.
         void Tick(std::chrono::steady_clock::time_point now);
 
+        // For a runtime that is to be destroyed once it has stopped executing: from now on no timer fires and no
+        // coroutine that waits is resumed, by Tick or by Resume. What is running goes on to its end or its next
+        // wait.
+        void Stop();
+
         // Timeouts still to fire and intervals, less the ones a script cleared. A sleep is not one.
         size_t PendingTimers() const {
             return _timers.size();
@@ -204,5 +209,6 @@ namespace Framework::Scripting {
         uint64_t _lastTimer = 0;
         uint64_t _lastArmed = 0;
         std::chrono::steady_clock::time_point _now;
+        bool _stopped = false;
     };
 } // namespace Framework::Scripting

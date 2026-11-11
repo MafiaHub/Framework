@@ -55,6 +55,14 @@ namespace Framework::Scripting {
     // the host starts through it, so that a script can wait. Those coroutines have the protected call. Call runs
     // on the main thread, where a script cannot wait.
     //
+    // Modules. require(name) runs a file of the resource once and gives what it returned, or true, from then on.
+    // The name is made of letters, digits, '_', '-' and the dots between its parts, so it cannot leave the
+    // resource: "a.b" is a/b.lua, or else a/b/init.lua, read through the module loader. The chunk gets the name
+    // as its argument and runs to its end inside the call: it cannot wait, and a sleep() at its top level raises
+    // "sleep: cannot wait here". A module that fails is not kept, so the next require runs it again; one required
+    // again while it loads raises "require: cyclic dependency on '<name>'". What is loaded is kept in the registry,
+    // out of a script's reach.
+    //
     // Host code. A Lua error raised outside a protected call throws std::runtime_error; the state must then be
     // considered unusable and the runtime destroyed. Outside an entry, read and write values a script owns with raw
     // access only (registry references, lua_rawget, lua_rawset): lua_getglobal, lua_getfield and their like run a
@@ -62,6 +70,9 @@ namespace Framework::Scripting {
     class LuaRuntime final {
       public:
         using PrintHandler = fu2::function<void(const std::string &line) const>;
+        // Reads the file of the resource at `relativePath` ("lib/util.lua") into `source`. False when there is no
+        // such file. It must not throw.
+        using ModuleLoader = fu2::function<bool(const std::string &relativePath, std::string &source) const>;
 
         // The most a script gets into one line of output and into one error text. What is longer is cut and ends
         // with " ...(truncated)".
@@ -112,6 +123,15 @@ namespace Framework::Scripting {
         // handler restores, writes "[resource] line" to the scripting logger, kMaxLinesPerSecond at most.
         void SetPrintHandler(PrintHandler handler);
 
+        // Where require finds its files. Without one it raises "require: no module loader".
+        void SetModuleLoader(ModuleLoader loader);
+
+        // Whether an entry into the state is in progress: script is running, or host code it called. The runtime
+        // must not be destroyed then.
+        bool IsExecuting() const {
+            return _entryDepth > 0;
+        }
+
         LuaScheduler &Scheduler() {
             return *_scheduler;
         }
@@ -124,6 +144,9 @@ namespace Framework::Scripting {
 
         // What a script calls in place of Lua's own functions. Defined in lua_sandbox.cpp.
         struct Sandbox;
+
+        // require and what it keeps.
+        struct Modules;
 
         // Instructions a thread runs between two looks at the deadline.
         static constexpr int kHookInterval = 10000;
@@ -139,7 +162,7 @@ namespace Framework::Scripting {
         // runs in a protected call. Defined in lua_sandbox.cpp.
         static int OpenSandbox(lua_State *L);
 
-        // Sets the state up for scripts: the sandbox, then what the scheduler adds to it.
+        // Sets the state up for scripts: the sandbox, then what require and the scheduler add to it.
         static int Open(lua_State *L);
 
         // Every entry into the state goes through here. Takes the function and its `nargs` arguments from the top
@@ -169,6 +192,7 @@ namespace Framework::Scripting {
 
         LuaRuntimeOptions _options;
         PrintHandler _printHandler; // empty: the log
+        ModuleLoader _moduleLoader;
 
         // The second the default handler is counting lines in, and how many it has seen.
         std::chrono::steady_clock::time_point _logSecond;

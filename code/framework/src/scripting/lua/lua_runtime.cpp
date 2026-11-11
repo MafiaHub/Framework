@@ -17,11 +17,48 @@
 #include <algorithm>
 #include <cstdlib>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 namespace Framework::Scripting {
     namespace {
         constexpr const char *kDeadlineMessage = "script ran too long";
+
+        // The registry keeps, under these addresses, what every module that was required gave, by its name, and
+        // the metatable of what marks a module as loading.
+        const char kModules     = 0;
+        const char kLoadingMeta = 0;
+
+        // What the registry holds in place of the value of a module while its chunk runs.
+        const char kLoading = 0;
+
+        // LoadChunk found no file for the module.
+        constexpr int kNoModule = -1;
+
+        void *Loading() {
+            return const_cast<char *>(&kLoading);
+        }
+
+        // Letters, digits, '_' and '-' in parts that dots join: "a.b" names a/b.lua and nothing outside the
+        // resource, since no part is empty and none holds a separator.
+        bool IsModuleName(std::string_view name) {
+            bool partStarts = true;
+            for (const char character : name) {
+                if (character == '.') {
+                    if (partStarts) {
+                        return false;
+                    }
+                    partStarts = true;
+                    continue;
+                }
+                const bool allowed = (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') || character == '_' || character == '-';
+                if (!allowed) {
+                    return false;
+                }
+                partStarts = false;
+            }
+            return !partStarts;
+        }
 
         // The message of an error keeps half of what an error text may hold, which leaves the traceback its room.
         constexpr size_t kMaxTracedMessageBytes = LuaRuntime::kMaxErrorBytes / 2;
@@ -93,12 +130,122 @@ namespace Framework::Scripting {
         _printHandler = std::move(handler);
     }
 
+    void LuaRuntime::SetModuleLoader(ModuleLoader loader) {
+        _moduleLoader = std::move(loader);
+    }
+
+    struct LuaRuntime::Modules final {
+        // Pushes the chunk of the module `name`, compiled as text from the first of its two files that the loader
+        // has, and gives LUA_OK. Otherwise kNoModule, or the status of a chunk that does not compile with its
+        // message pushed. Nothing here raises, so the strings do not stand in the way of an error.
+        static int LoadChunk(lua_State *L, const LuaRuntime &runtime, std::string_view name) {
+            std::string path(name);
+            std::replace(path.begin(), path.end(), '.', '/');
+            std::string source;
+            for (const char *suffix : {".lua", "/init.lua"}) {
+                const std::string file = path + suffix;
+                if (runtime._moduleLoader(file, source)) {
+                    const std::string chunkName = "@" + runtime._options.resourceName + "/" + file;
+                    return luaL_loadbufferx(L, source.data(), source.size(), chunkName.c_str(), "t");
+                }
+            }
+            return kNoModule;
+        }
+
+        static int Require(lua_State *L) {
+            if (lua_type(L, 1) != LUA_TSTRING) {
+                return luaL_error(L, "require: module name must be a string");
+            }
+            lua_settop(L, 1);
+            size_t length    = 0;
+            const char *name = lua_tolstring(L, 1, &length);
+            if (!IsModuleName(std::string_view(name, length))) {
+                return luaL_error(L, "require: invalid module name '%s'", name);
+            }
+            const LuaRuntime *runtime = From(L);
+            if (!runtime->_moduleLoader) {
+                return luaL_error(L, "require: no module loader");
+            }
+
+            lua_rawgetp(L, LUA_REGISTRYINDEX, &kModules);
+            const int modules = lua_gettop(L);
+            lua_pushvalue(L, 1);
+            const int kept = lua_rawget(L, modules);
+            if (kept == LUA_TLIGHTUSERDATA && lua_touserdata(L, -1) == Loading()) {
+                return luaL_error(L, "require: cyclic dependency on '%s'", name);
+            }
+            if (kept != LUA_TNIL) {
+                return 1;
+            }
+            lua_pop(L, 1);
+
+            const int status = LoadChunk(L, *runtime, std::string_view(name, length));
+            if (status == kNoModule) {
+                return luaL_error(L, "module '%s' not found in resource '%s'", name, runtime->_options.resourceName.c_str());
+            }
+            if (status != LUA_OK) {
+                return lua_error(L);
+            }
+            const int chunk = lua_gettop(L);
+
+            // The module is marked as loading for as long as its chunk runs. The mark is taken back by a value
+            // Lua closes however this call is left, so a module that fails can be required again.
+            lua_createtable(L, 1, 0);
+            lua_pushvalue(L, 1);
+            lua_rawseti(L, -2, 1);
+            lua_rawgetp(L, LUA_REGISTRYINDEX, &kLoadingMeta);
+            lua_setmetatable(L, -2);
+            lua_toclose(L, -1);
+            lua_pushvalue(L, 1);
+            lua_pushlightuserdata(L, Loading());
+            lua_rawset(L, modules);
+
+            // Without a continuation, so the chunk cannot yield: a module is loaded or it is not.
+            lua_pushvalue(L, chunk);
+            lua_pushvalue(L, 1);
+            lua_call(L, 1, 1);
+            if (lua_isnil(L, -1)) {
+                lua_pop(L, 1);
+                lua_pushboolean(L, 1);
+            }
+            lua_pushvalue(L, 1);
+            lua_pushvalue(L, -2);
+            lua_rawset(L, modules);
+            return 1;
+        }
+
+        // The __close of what marks a module as loading: takes the mark back when the chunk did not get to its end.
+        static int EndLoading(lua_State *L) {
+            lua_rawgetp(L, LUA_REGISTRYINDEX, &kModules);
+            lua_rawgeti(L, 1, 1);
+            lua_pushvalue(L, -1);
+            if (lua_rawget(L, -3) == LUA_TLIGHTUSERDATA && lua_touserdata(L, -1) == Loading()) {
+                lua_pop(L, 1);
+                lua_pushnil(L);
+                lua_rawset(L, -3);
+            }
+            return 0;
+        }
+
+        static void Install(lua_State *L) {
+            lua_newtable(L);
+            lua_rawsetp(L, LUA_REGISTRYINDEX, &kModules);
+            lua_createtable(L, 0, 1);
+            lua_pushcfunction(L, EndLoading);
+            lua_setfield(L, -2, "__close");
+            lua_rawsetp(L, LUA_REGISTRYINDEX, &kLoadingMeta);
+            lua_pushcfunction(L, Require);
+            lua_setglobal(L, "require");
+        }
+    };
+
     void LuaRuntime::Tick(std::chrono::steady_clock::time_point now) {
         _scheduler->Tick(now);
     }
 
     int LuaRuntime::Open(lua_State *L) {
         OpenSandbox(L);
+        Modules::Install(L);
         From(L)->_scheduler->Install(L);
         return 0;
     }
