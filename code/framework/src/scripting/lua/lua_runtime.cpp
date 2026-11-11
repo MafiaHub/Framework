@@ -350,20 +350,23 @@ namespace Framework::Scripting {
         LuaRuntime *runtime = From(L);
         if (!runtime->_expired) {
             runtime->_expired = true;
-            runtime->_deadlineWhere.clear();
             // The nearest Lua code: a function of the sandbox may have been called by another C function.
-            lua_Debug activation;
-            for (; lua_getstack(L, level, &activation) != 0; ++level) {
-                lua_getinfo(L, "Sl", &activation);
-                if (activation.currentline > 0) {
-                    runtime->_deadlineWhere = std::string(activation.short_src) + ":" + std::to_string(activation.currentline) + ": ";
-                    break;
-                }
-            }
+            runtime->_deadlineWhere = Where(L, level);
         }
         lua_sethook(L, DeadlineHook, LUA_MASKCOUNT, 1);
         lua_pushfstring(L, "%s%s", runtime->_deadlineWhere.c_str(), kDeadlineMessage);
         return lua_error(L);
+    }
+
+    std::string LuaRuntime::Where(lua_State *L, int level) {
+        lua_Debug activation;
+        for (; lua_getstack(L, level, &activation) != 0; ++level) {
+            lua_getinfo(L, "Sl", &activation);
+            if (activation.currentline > 0) {
+                return std::string(activation.short_src) + ":" + std::to_string(activation.currentline) + ": ";
+            }
+        }
+        return {};
     }
 
     bool LuaRuntime::AppendBounded(std::string &text, const char *data, size_t length, size_t limit) {
@@ -395,12 +398,12 @@ namespace Framework::Scripting {
             _printHandler(line);
         }
         else {
-            LogLine(line);
+            LogLine(line, false);
         }
     }
 
-    // A script that prints in a loop would otherwise fill the log as fast as the disk takes it.
-    void LuaRuntime::LogLine(const std::string &line) {
+    // A script that prints or fails in a loop would otherwise fill the log as fast as the disk takes it.
+    void LuaRuntime::LogLine(const std::string &line, bool isError) {
         const auto now = std::chrono::steady_clock::now();
         if (now - _logSecond >= std::chrono::seconds(1)) {
             _logSecond = now;
@@ -411,7 +414,7 @@ namespace Framework::Scripting {
         }
         const auto logger = Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING);
         if (_logLines++ < kMaxLinesPerSecond) {
-            logger->info("[{}] {}", _options.resourceName, line);
+            logger->log(isError ? spdlog::level::err : spdlog::level::info, "[{}] {}", _options.resourceName, line);
         }
         else {
             logger->warn("[{}] output suppressed: more than {} lines in a second", _options.resourceName, kMaxLinesPerSecond);

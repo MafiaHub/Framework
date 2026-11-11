@@ -8,6 +8,8 @@
 
 #include "lua_runtime.h"
 
+#include "lua_scheduler.h"
+
 #include <lauxlib.h>
 #include <lualib.h>
 
@@ -26,6 +28,8 @@
 //   replaced    load            string chunks only, always compiled as text
 //               collectgarbage  answers "count" only
 //               print           goes to the runtime's print handler, as do warnings
+//               coroutine.resume, close
+//                               refuse a coroutine the host started
 //               setmetatable    refuses a metatable with __gc
 //               pcall, xpcall, coroutine.create, wrap, resume, close
 //                               cannot be used to run past the deadline of an entry
@@ -43,8 +47,14 @@
 //     does to the thread it catches (LuaRuntime::RaiseDeadline);
 //   - whenever one coroutine gives control back to another, the clock is read.
 //
-// With no deadline on the state these behave as Lua's own, apart from the finalizer and from one thing the
-// protected call brings: the pending to-be-closed variables of a coroutine that fails are closed at once, not
+// The coroutine a chunk, a handler or a timer callback runs in is the scheduler's (lua_scheduler.h), and to a
+// script it stands for the main thread of plain Lua. coroutine.running() gives it away all the same, so
+// coroutine.resume answers false and "cannot resume a coroutine the host started" for it, and coroutine.close
+// raises "cannot close a coroutine the host started", from the coroutine itself or from another, for as long as
+// the scheduler knows it.
+//
+// With no deadline on the state these behave as Lua's own, apart from that, from the finalizer and from one thing
+// the protected call brings: the pending to-be-closed variables of a coroutine that fails are closed at once, not
 // when the coroutine is closed. pcall, xpcall, setmetatable and the four coroutine functions follow lbaselib.c and
 // lcorolib.c of Lua 5.5 (Copyright (C) 1994-2025 Lua.org, PUC-Rio, MIT license).
 
@@ -292,10 +302,21 @@ namespace Framework::Scripting {
             return From(L)->PastDeadline();
         }
 
+        // Whether `coroutine` is one the scheduler started and has not let go of. It is the host's to resume and
+        // to close.
+        static bool HostStarted(lua_State *coroutine) {
+            return From(coroutine)->Scheduler().Owns(coroutine);
+        }
+
         static int CoroutineResume(lua_State *L) {
             lua_State *coroutine = CheckCoroutine(L);
             if (Aborting(L)) {
                 return Abort(L);
+            }
+            if (HostStarted(coroutine)) {
+                lua_pushboolean(L, 0);
+                lua_pushstring(L, "cannot resume a coroutine the host started");
+                return 2;
             }
             const int nresults = Resume(L, coroutine, lua_gettop(L) - 1);
             if (CameBackTooLate(L)) {
@@ -348,6 +369,9 @@ namespace Framework::Scripting {
             lua_State *coroutine = lua_isnone(L, 1) ? L : CheckCoroutine(L);
             if (Aborting(L)) {
                 return Abort(L);
+            }
+            if (HostStarted(coroutine)) {
+                return luaL_error(L, "cannot close a coroutine the host started");
             }
             switch (StateOf(L, coroutine)) {
             case CoroutineState::Dead:

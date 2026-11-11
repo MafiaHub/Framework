@@ -35,20 +35,24 @@ namespace Framework::Scripting {
     // (coroutine.wrap(function() sleep(10) end)()) it raises "cannot wait here: called inside a coroutine the script
     // created", and where Lua cannot yield, as on the main thread or under table.sort, it raises "cannot wait here".
     // To a script the coroutine it runs in is the main thread of plain Lua: coroutine.yield() with no coroutine of
-    // its own around it ends it with "<position>: attempt to yield from outside a coroutine". A script can still
-    // hand that coroutine (coroutine.running()) to another one and resume or close it from there while it waits.
-    // That harms nothing but the script: a coroutine ended that way never tells its `done`.
+    // its own around it ends it with "<position>: attempt to yield from outside a coroutine". And like that main
+    // thread it is not the script's to resume or to close, though coroutine.running() gives it away: for as long as
+    // the scheduler knows a coroutine, coroutine.resume answers false and "cannot resume a coroutine the host
+    // started" for it and coroutine.close raises "cannot close a coroutine the host started", in the coroutine
+    // itself and in any other (lua_sandbox.cpp).
     //
     // Timers. setTimeout, setInterval, clearTimeout and clearInterval as JavaScript has them, sleep(ms) and
     // spawn(fn, ...). Time is what Tick is given and nothing else: a delay counts from the last tick, or from the
     // creation of the scheduler before the first. A tick fires what is due as it starts, in the order it came due;
     // what a callback arms waits for the next tick, however short its delay. An interval is armed again from the
-    // time it was due, not from the time it ran, so it does not drift, and one that has fallen behind fires once
-    // on each tick until it has caught up.
+    // time it was due, not from the time it ran, so it does not drift. One that has fallen behind fires once and
+    // skips the periods it missed: it is next due at the first of its period boundaries after the tick.
     //
     // Errors. A coroutine that fails tells exactly one party, with the message and the traceback of what it
     // raised: the `done` it was started with, or else the error handler. A coroutine the deadline stops fails the
     // same way; when it was started from inside another entry, by spawn() for one, that entry is stopped as well.
+    // What a __close handler raises while the scheduler closes a coroutine that failed with handlers pending (its
+    // resume was refused, or it yielded as above) goes to the error handler, next to the coroutine's own error.
     //
     // `done`, `push` and the error handler run inside Start, Resume or Tick. They must not throw, and must not
     // destroy the runtime. Destroying the runtime drops what is pending: no timer fires, no coroutine is resumed
@@ -114,8 +118,15 @@ namespace Framework::Scripting {
         // Coroutines that wait for a Tick or a Resume.
         size_t SuspendedCoroutines() const;
 
+        // Whether `thread` is a coroutine the scheduler started and has not let go of yet: from before it first
+        // runs until after its `done` was told.
+        bool Owns(lua_State *thread) const {
+            return _coroutines.contains(thread);
+        }
+
         // Receives the error of a coroutine that was started without a `done`. The default, which an empty handler
-        // restores, writes "[resource] message" to the scripting logger.
+        // restores, writes "[resource] message" to the scripting logger as an error, within the
+        // LuaRuntime::kMaxLinesPerSecond it shares with print.
         void SetErrorHandler(ErrorHandler handler);
 
       private:
@@ -180,6 +191,8 @@ namespace Framework::Scripting {
         static int Deliver(Coroutine &coroutine, lua_State *thread, Wakeup &wakeup);
         void Wake(uint64_t token, Wakeup wakeup);
         void Report(Finished &done, const std::string &message, std::string *error);
+        void Unhandled(const std::string &message);
+        std::string Close(lua_State *thread);
         void Retire(lua_State *thread);
 
         Due Arm(std::chrono::steady_clock::time_point at, Pending pending);

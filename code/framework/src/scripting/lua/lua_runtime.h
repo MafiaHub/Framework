@@ -78,7 +78,8 @@ namespace Framework::Scripting {
         // with " ...(truncated)".
         static constexpr size_t kMaxLineBytes  = 4096;
         static constexpr size_t kMaxErrorBytes = 16384;
-        // Lines the default print handler writes to the log in one second; the rest of that second is dropped.
+        // Lines the default print handler and errors the scheduler's default error handler write to the log in one
+        // second, together; the rest of that second is dropped.
         static constexpr int kMaxLinesPerSecond = 200;
 
         // Throws std::runtime_error when the state cannot be created, as under a memory cap it does not fit.
@@ -176,6 +177,10 @@ namespace Framework::Scripting {
         // Whether the entry in progress has run out of time, by the clock.
         bool PastDeadline() const;
 
+        // "<chunk>:<line>: " for the Lua code nearest to activation `level` of `L` (0: what runs now), going
+        // outwards. Empty when there is none. Allocates nothing in the state.
+        static std::string Where(lua_State *L, int level);
+
         // Aborts the entry in progress from thread `L`: raises "<position>: script ran too long", the position
         // being where the script was when its time was first found to be up, `level` activations above the caller.
         static int RaiseDeadline(lua_State *L, int level);
@@ -188,13 +193,16 @@ namespace Framework::Scripting {
 
         // Hands a line of output to the print handler.
         void WriteLine(std::string line);
-        void LogLine(const std::string &line);
+
+        // Writes "[resource] line" to the scripting logger, as output or as an error, unless this second has had
+        // its share.
+        void LogLine(const std::string &line, bool isError);
 
         LuaRuntimeOptions _options;
         PrintHandler _printHandler; // empty: the log
         ModuleLoader _moduleLoader;
 
-        // The second the default handler is counting lines in, and how many it has seen.
+        // The second the default handlers are counting in, and how much they have written in it.
         std::chrono::steady_clock::time_point _logSecond;
         int _logLines = 0;
 

@@ -10,8 +10,6 @@
 
 #include "lua_runtime.h"
 
-#include "logging/logger.h"
-
 #include <lauxlib.h>
 
 #include <algorithm>
@@ -48,18 +46,6 @@ namespace Framework::Scripting {
             }
             return std::chrono::milliseconds(static_cast<int64_t>(std::min(milliseconds, kMaxDelayMs)));
         }
-
-        // "<chunk>:<line>: " for the Lua code nearest the top of `thread`. Allocates nothing in the state.
-        std::string Where(lua_State *thread) {
-            lua_Debug activation;
-            for (int level = 0; lua_getstack(thread, level, &activation) != 0; ++level) {
-                lua_getinfo(thread, "Sl", &activation);
-                if (activation.currentline > 0) {
-                    return std::string(activation.short_src) + ":" + std::to_string(activation.currentline) + ": ";
-                }
-            }
-            return {};
-        }
     } // namespace
 
     struct LuaScheduler::Entry final {
@@ -81,6 +67,8 @@ namespace Framework::Scripting {
 
         End end = End::Failed;
         std::string error;
+        // What a __close handler raised when the coroutine had to be closed in the entry.
+        std::string closing;
     };
 
     struct LuaScheduler::Globals final {
@@ -277,7 +265,11 @@ namespace Framework::Scripting {
         }
         lua_State *thread = found->second;
         _tokens.erase(found);
-        Coroutine &coroutine = _coroutines.find(thread)->second;
+        const auto record = _coroutines.find(thread);
+        if (record == _coroutines.end()) {
+            return;
+        }
+        Coroutine &coroutine = record->second;
         coroutine.token      = 0;
         if (lua_status(thread) != LUA_YIELD) {
             // The function that suspended it has not yielded yet. Drive hands this over when it does.
@@ -347,6 +339,9 @@ namespace Framework::Scripting {
             done(true, entry.thread, entry.error);
         }
         Retire(entry.thread);
+        if (!entry.closing.empty()) {
+            Unhandled(entry.closing);
+        }
         return finished;
     }
 
@@ -427,8 +422,8 @@ namespace Framework::Scripting {
                 // The script called coroutine.yield() with no coroutine of its own around it, where plain Lua is
                 // on its main thread and raises. The coroutine cannot be made to raise from here: it is closed,
                 // here where the deadline covers its __close handlers. Nothing in this can raise.
-                entry.error = Where(thread) + kStrayYield;
-                lua_closethread(thread, L);
+                entry.error   = LuaRuntime::Where(thread, 0) + kStrayYield;
+                entry.closing = Close(thread);
                 break;
             }
             if (!coroutine.early) {
@@ -464,26 +459,52 @@ namespace Framework::Scripting {
         else if (done) {
             done(false, nullptr, message);
         }
-        else if (_errorHandler) {
-            _errorHandler(message);
-        }
         else {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] {}", _runtime.Options().resourceName, message);
+            Unhandled(message);
         }
     }
 
+    // An error nobody waits on goes to the handler, or to the log at the rate the runtime writes there.
+    void LuaScheduler::Unhandled(const std::string &message) {
+        if (_errorHandler) {
+            _errorHandler(message);
+        }
+        else {
+            _runtime.LogLine(message, true);
+        }
+    }
+
+    // Closes `thread` and gives what a __close handler raised while it did. Only a coroutine that still waits has
+    // such handlers left: one that failed answers with the status it failed with, which is not news.
+    std::string LuaScheduler::Close(lua_State *thread) {
+        const bool waits = lua_status(thread) == LUA_YIELD;
+        if (lua_closethread(thread, _runtime.State()) == LUA_OK || !waits) {
+            return {};
+        }
+        return LuaRuntime::PopError(thread);
+    }
+
     // Lets go of a coroutine that has ended. Closing it runs nothing of the script, unless it still waited: that
-    // one was refused its resume, inside another entry, whose deadline its __close handlers then run under.
+    // one was refused its resume, inside another entry, whose deadline its __close handlers then run under. From
+    // here on a script may hold the thread, as a dead coroutine.
     void LuaScheduler::Retire(lua_State *thread) {
-        lua_State *L = _runtime.State();
-        lua_closethread(thread, L);
+        lua_State *L             = _runtime.State();
+        const std::string raised = Close(thread);
         if (lua_checkstack(L, 2)) {
             lua_rawgetp(L, LUA_REGISTRYINDEX, &kThreads);
             lua_pushnil(L);
             lua_rawsetp(L, -2, thread);
             lua_pop(L, 1);
         }
-        _coroutines.erase(thread);
+        // No token outlives the record it leads to.
+        const auto found = _coroutines.find(thread);
+        if (found->second.token != 0) {
+            _tokens.erase(found->second.token);
+        }
+        _coroutines.erase(found);
+        if (!raised.empty()) {
+            Unhandled(raised);
+        }
     }
 
     void LuaScheduler::Stop() {
@@ -538,7 +559,13 @@ namespace Framework::Scripting {
             _timers.erase(id);
         }
         else {
-            timer.due = Arm(timer.due.first + timer.interval, Pending {id, 0});
+            // From the time it was due, so that it keeps its phase. The periods a late tick missed are skipped:
+            // this firing stands for them.
+            auto next = timer.due.first + timer.interval;
+            if (next <= _now) {
+                next += ((_now - next) / timer.interval + 1) * timer.interval;
+            }
+            timer.due = Arm(next, Pending {id, 0});
         }
         Run(entry, 0, nullptr);
         if (once) {

@@ -82,6 +82,19 @@ namespace LuaSchedulerTest {
         return LuaScheduler::Wait(L);
     }
 
+    // failed(): waits for something that has failed before it gets to wait.
+    inline int Failed(lua_State *L) {
+        LuaScheduler &scheduler = LuaRuntime::From(L)->Scheduler();
+        scheduler.ResumeWithError(scheduler.Suspend(L, "failed"), "failed early");
+        return LuaScheduler::Wait(L);
+    }
+
+    // pending(): the timers the scheduler has pending.
+    inline int Pending(lua_State *L) {
+        lua_pushinteger(L, static_cast<lua_Integer>(LuaRuntime::From(L)->Scheduler().PendingTimers()));
+        return 1;
+    }
+
     // What a `done` was told.
     struct Outcome final {
         int calls = 0;
@@ -95,6 +108,19 @@ namespace LuaSchedulerTest {
 
     static uint64_t g_waiting = 0;
     static std::shared_ptr<Outcome> g_started;
+
+    // resume_waiting(): resumes the coroutine that waits on g_waiting, from inside the entry of its caller.
+    inline int ResumeWaiting(lua_State *L) {
+        LuaRuntime::From(L)->Scheduler().Resume(g_waiting, {});
+        return 0;
+    }
+
+    // Gives the state wait(), and at_depth(n), which calls resume_waiting() with n entries nested in one another.
+    inline void AddNesting(LuaRuntime &runtime) {
+        SetGlobalFunction(runtime, "wait", Wait);
+        SetGlobalFunction(runtime, "resume_waiting", ResumeWaiting);
+        Run(runtime, "function at_depth(target, level) level = level or 1 if level == target then resume_waiting() else spawn(at_depth, target, level + 1) end end", "=nesting");
+    }
 
     // Host code that takes the deadline error of a nested spin() and goes on in the state all the same: it starts
     // note('started') into g_started and resumes the coroutine that waits on g_waiting.
@@ -252,15 +278,34 @@ MODULE(lua_scheduler, {
         EQUALS(Eval(scripted.runtime, "count"), "2");
     });
 
-    IT("fires an interval once on a tick, until it has caught up", {
+    IT("fires an interval that fell behind once, and skips the periods it missed", {
         Scripted scripted;
         EQUALS(scripted.Run("count = 0 setInterval(function() count = count + 1 end, 10)"), "");
-        for (const char *expected : {"1", "2", "3", "3", "3"}) {
-            scripted.At(35);
-            EQUALS(Eval(scripted.runtime, "count"), expected);
+        // Due at 10, 20 and 30 by now: one firing, and the next at 40.
+        for (const int ms : {35, 35, 39}) {
+            scripted.At(ms);
+            EQUALS(Eval(scripted.runtime, "count"), "1");
         }
         scripted.At(40);
+        EQUALS(Eval(scripted.runtime, "count"), "2");
+        // A tick on a period boundary fires for it, and the next is one period on.
+        scripted.At(100);
+        EQUALS(Eval(scripted.runtime, "count"), "3");
+        scripted.At(109);
+        EQUALS(Eval(scripted.runtime, "count"), "3");
+        scripted.At(110);
         EQUALS(Eval(scripted.runtime, "count"), "4");
+    });
+
+    IT("counts a timeout as pending until it fires and an interval until it is cleared", {
+        Scripted scripted;
+        SetGlobalFunction(scripted.runtime, "pending", Pending);
+        EQUALS(scripted.Run("setTimeout(function() note(pending()) end, 10)\n"
+                            "id = setInterval(function() note(pending()) clearInterval(id) note(pending()) end, 10)"),
+            "");
+        EQUALS(scripted.Scheduler().PendingTimers(), 2u);
+        scripted.At(10);
+        EQUALS(scripted.Log(), "1,1,0");
     });
 
     IT("treats an interval shorter than a millisecond as one millisecond", {
@@ -486,6 +531,30 @@ MODULE(lua_scheduler, {
         EQUALS(scripted.Log(), "before,closed,usable");
     });
 
+    IT("hands what a __close handler raises while a coroutine is closed to the error handler", {
+        Scripted scripted;
+        AddNesting(scripted.runtime);
+        // One that is closed for a stray yield: the chunk's own error goes to the caller.
+        const std::string error = scripted.Run("local guard <close> = setmetatable({}, { __close = function() error('in close') end })\n"
+                                               "coroutine.yield()");
+        EQUALS(error, "test:2: attempt to yield from outside a coroutine");
+        EQUALS(scripted.errors->size(), 1u);
+        EQUALS((*scripted.errors)[0], "test:1: in close");
+
+        // One that is closed because its resume was refused: its own error goes to its done.
+        EQUALS(scripted.Run("function waiter() local guard <close> = setmetatable({}, { __close = function() error('in close too') end }) wait() note('unreached') end"), "");
+        const auto waiter = StartGlobal(scripted, "waiter");
+        g_waiting         = g_token;
+        EQUALS(scripted.Run("at_depth(64)"), "");
+        EQUALS(waiter->calls, 1);
+        EQUALS(waiter->ok, false);
+        EQUALS(waiter->error, "too many nested calls into the script (the limit is 64)");
+        EQUALS(scripted.errors->size(), 2u);
+        EQUALS((*scripted.errors)[1], "test:1: in close too");
+        EQUALS(scripted.Log(), "");
+        EQUALS(scripted.Scheduler().SuspendedCoroutines(), 0u);
+    });
+
     // --- spawn ---
 
     IT("runs a spawned function at once, up to where it first waits", {
@@ -537,6 +606,32 @@ MODULE(lua_scheduler, {
         EQUALS((*scripted.errors)[0], "too many nested calls into the script (the limit is 64)");
         EQUALS(scripted.Scheduler().SuspendedCoroutines(), 0u);
         EQUALS(scripted.Run("note('usable')"), "");
+        EQUALS(lua_gettop(scripted.runtime.State()), 0);
+    });
+
+    IT("resumes a coroutine from inside nested entries, up to the limit", {
+        Scripted scripted;
+        AddNesting(scripted.runtime);
+        EQUALS(scripted.Run("function waiter(name) wait() note(name .. ' went on') return name end"), "");
+        for (const int depth : {1, 63}) {
+            const auto resumed = StartGlobal(scripted, "waiter", {depth});
+            g_waiting          = g_token;
+            EQUALS(scripted.Run("at_depth(" + std::to_string(depth) + ")"), "");
+            EQUALS(resumed->calls, 1);
+            EQUALS(resumed->ok, true);
+            EQUALS(resumed->result, std::to_string(depth));
+        }
+        EQUALS(scripted.Log(), "1 went on,63 went on");
+
+        const auto refused = StartGlobal(scripted, "waiter", {64});
+        g_waiting          = g_token;
+        EQUALS(scripted.Run("at_depth(64)"), "");
+        EQUALS(refused->calls, 1);
+        EQUALS(refused->ok, false);
+        EQUALS(refused->error, "too many nested calls into the script (the limit is 64)");
+        EQUALS(scripted.Log(), "1 went on,63 went on");
+        EQUALS(scripted.Scheduler().SuspendedCoroutines(), 0u);
+        EQUALS(scripted.errors->size(), 0u);
         EQUALS(lua_gettop(scripted.runtime.State()), 0);
     });
 
@@ -665,6 +760,19 @@ MODULE(lua_scheduler, {
         EQUALS(CountStartingWith(log.Lines(), "[shop] logged again"), 1u);
     });
 
+    IT("writes the errors nobody takes to the log no faster than it writes lines", {
+        LogCapture log;
+        LuaRuntimeOptions options = Options();
+        options.resourceName      = "noisy";
+        LuaRuntime runtime(options);
+        EQUALS(Run(runtime, "for i = 1, 500 do spawn(error, 'failed ' .. i) end print('a line')"), "");
+        const std::vector<std::string> lines = log.Lines();
+        EQUALS(CountStartingWith(lines, "[noisy] failed "), static_cast<size_t>(LuaRuntime::kMaxLinesPerSecond));
+        EQUALS(CountStartingWith(lines, "[noisy] failed 200\n"), 1u);
+        EQUALS(CountStartingWith(lines, "[noisy] output suppressed"), 1u);
+        EQUALS(CountStartingWith(lines, "[noisy] a line"), 0u);
+    });
+
     // --- Chunks ---
 
     IT("returns from a chunk that waits and hands what it raises later to the error handler", {
@@ -759,6 +867,20 @@ MODULE(lua_scheduler, {
         EQUALS(scripted.Scheduler().SuspendedCoroutines(), 0u);
     });
 
+    IT("keeps an error a coroutine is resumed with before it got to wait", {
+        Scripted scripted;
+        SetGlobalFunction(scripted.runtime, "failed", Failed);
+        // The chunk never got to wait, so its failure is the caller's.
+        const std::string error = scripted.Run("note(select(2, pcall(failed)))\n"
+                                               "note(select(2, pcall(function() return failed() end)))\n"
+                                               "failed()\n"
+                                               "note('unreached')");
+        EQUALS(FirstLine(error), "test:3: failed early");
+        EQUALS(scripted.Log(), "failed early,test:2: failed early");
+        EQUALS(scripted.errors->size(), 0u);
+        EQUALS(scripted.Scheduler().SuspendedCoroutines(), 0u);
+    });
+
     IT("raises in the coroutine what it is resumed with as an error", {
         Scripted scripted;
         SetGlobalFunction(scripted.runtime, "wait", Wait);
@@ -800,30 +922,86 @@ MODULE(lua_scheduler, {
         EQUALS(lua_gettop(scripted.runtime.State()), 0);
     });
 
-    IT("stays sound when a script resumes or closes the coroutine the host started it in", {
+    IT("does not let a script resume or close the coroutine the host started it in", {
         Scripted scripted;
-        SetGlobalFunction(scripted.runtime, "wait", Wait);
-        // The chunk is resumed by its own spawned function, goes on inside it and ends there.
         EQUALS(scripted.Run("local chunk = coroutine.running()\n"
-                            "spawn(function() sleep(10) note(coroutine.resume(chunk, 'resumed by script')) end)\n"
-                            "note(sleep(1000)) sleep(5) note('went on')"),
+                            "note(select(2, coroutine.resume(chunk)))\n"
+                            "spawn(function()\n"
+                            "  sleep(10)\n"
+                            "  note(coroutine.status(chunk))\n"
+                            "  note(coroutine.resume(chunk, 'by script'))\n"
+                            "  note(select(2, coroutine.resume(chunk, 'by script')))\n"
+                            "  note(select(2, pcall(coroutine.close, chunk)))\n"
+                            "  note(select(2, coroutine.wrap(function() return coroutine.resume(chunk) end)()))\n"
+                            "end)\n"
+                            "note(select('#', sleep(20))) note('went on')"),
             "");
         scripted.At(10);
-        scripted.At(15);
-        scripted.At(1000);
-        EQUALS(scripted.Log(), "resumed by script,true,went on");
-
-        // One that waits on the host is closed by another, then the host resumes it.
-        EQUALS(scripted.Run("waiting = coroutine.running() wait() note('unreached')"), "");
-        EQUALS(scripted.Run("note(coroutine.close(waiting)) note(coroutine.status(waiting))"), "");
-        scripted.Scheduler().Resume(g_token, {});
-        scripted.Scheduler().ResumeWithError(g_token, "late");
-        EQUALS(scripted.Log(), "resumed by script,true,went on,true,dead");
+        EQUALS(scripted.Log(), "cannot resume a coroutine the host started,suspended,false,cannot resume a coroutine the host started,cannot close a coroutine the host started,"
+                               "cannot resume a coroutine the host started");
+        scripted.At(20);
+        EQUALS(Eval(scripted.runtime, "log[#log - 1] .. ',' .. log[#log]"), "0,went on");
         EQUALS(scripted.Scheduler().SuspendedCoroutines(), 0u);
         EQUALS(scripted.errors->size(), 0u);
-        EQUALS(scripted.Run("sleep(1) note('usable')"), "");
-        scripted.At(1001);
-        EQUALS(scripted.Log(), "resumed by script,true,went on,true,dead,usable");
+
+        // A coroutine the script made is its own to resume and close.
+        EQUALS(scripted.Run("log = {} local own = coroutine.create(function() coroutine.yield('yielded') end)\n"
+                            "note(select(2, coroutine.resume(own))) note(coroutine.close(own)) note(coroutine.status(own))"),
+            "");
+        EQUALS(scripted.Log(), "yielded,true,dead");
+    });
+
+    IT("does not let a script resume a coroutine the host started while its done runs, or after", {
+        Scripted scripted;
+        lua_State *L = scripted.runtime.State();
+        EQUALS(scripted.Run("function h() me = coroutine.running() return function() sleep(10) note('ran') end end\n"
+                            "function x() note(coroutine.resume(me)) note(select(2, coroutine.resume(me))) note(select(2, pcall(coroutine.close, me))) end"),
+            "");
+        int told = 0;
+        lua_getglobal(L, "h");
+        scripted.Scheduler().Start(0, [&scripted, &told](bool, lua_State *, const std::string &) {
+            ++told;
+            lua_getglobal(scripted.runtime.State(), "x");
+            scripted.Scheduler().Start(0);
+        });
+        EQUALS(told, 1);
+        EQUALS(scripted.Log(), "false,cannot resume a coroutine the host started,cannot close a coroutine the host started");
+        scripted.At(10);
+        scripted.At(20);
+        EQUALS(scripted.Log(), "false,cannot resume a coroutine the host started,cannot close a coroutine the host started");
+        EQUALS(scripted.Scheduler().SuspendedCoroutines(), 0u);
+        EQUALS(scripted.errors->size(), 0u);
+
+        // Once it has ended and the host has let go of it, it is a dead coroutine like any other.
+        EQUALS(scripted.Run("log = {} note(coroutine.status(me)) note(select(2, coroutine.resume(me))) note(coroutine.close(me))"), "");
+        EQUALS(scripted.Log(), "dead,cannot resume dead coroutine,true");
+        EQUALS(lua_gettop(L), 0);
+    });
+
+    IT("does not let a coroutine the host started close itself", {
+        Scripted scripted;
+        EQUALS(scripted.Run("function f()\n"
+                            "  note(select(2, pcall(coroutine.close)))\n"
+                            "  note(select(2, pcall(coroutine.close, coroutine.running())))\n"
+                            "  sleep(10)\n"
+                            "  return 'went on'\n"
+                            "end"),
+            "");
+        const auto outcome = StartGlobal(scripted, "f");
+        EQUALS(scripted.Log(), "cannot close a coroutine the host started,cannot close a coroutine the host started");
+        EQUALS(outcome->calls, 0);
+        scripted.At(10);
+        EQUALS(outcome->calls, 1);
+        EQUALS(outcome->ok, true);
+        EQUALS(outcome->result, "went on");
+        scripted.At(20);
+        EQUALS(outcome->calls, 1);
+
+        EQUALS(FirstLine(scripted.Run("coroutine.close() note('unreached')")), "test:1: cannot close a coroutine the host started");
+        // A coroutine the script made still closes itself.
+        EQUALS(scripted.Run("log = {} coroutine.wrap(function() coroutine.close() note('unreached') end)() note('after')"), "");
+        EQUALS(scripted.Log(), "after");
+        EQUALS(scripted.errors->size(), 0u);
     });
 
     IT("names the function that cannot wait", {
@@ -951,13 +1129,23 @@ MODULE(lua_scheduler, {
         Scripted scripted;
         lua_State *L = scripted.runtime.State();
         EQUALS(scripted.Run("function nap() sleep(1) return 1 end"), "");
-        // Coroutines that end at once, fail, sleep, and are started by a timer.
+        AddNesting(scripted.runtime);
+        // Coroutines that end at once, fail, sleep and are started by a timer; then one that yields with no
+        // coroutine around it, one whose resume values cannot be pushed and one whose resume is refused.
         const auto round = [&scripted](int at) {
             scripted.Run("local t = {} for i = 1, 100 do t[i] = i end");
             scripted.Run("spawn(nap) setTimeout(nap, 1) error('failed')");
             StartGlobal(scripted, "nap");
             scripted.At(at);
             scripted.At(at + 1);
+            scripted.Run("coroutine.yield()");
+            scripted.Run("wait()");
+            scripted.Scheduler().Resume(g_token, [](lua_State *thread) {
+                return luaL_error(thread, "no values");
+            });
+            scripted.Run("wait()");
+            g_waiting = g_token;
+            scripted.Run("at_depth(64)");
         };
         round(10);
         lua_gc(L, LUA_GCCOLLECT);
@@ -966,6 +1154,7 @@ MODULE(lua_scheduler, {
             round(20 + i * 2);
         }
         EQUALS(Eval(scripted.runtime, "#log"), "0");
+        EQUALS(scripted.errors->size(), 402u);
         EQUALS(scripted.Scheduler().SuspendedCoroutines(), 0u);
         EQUALS(scripted.Scheduler().PendingTimers(), 0u);
         lua_gc(L, LUA_GCCOLLECT);
