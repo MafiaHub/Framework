@@ -10,6 +10,8 @@
 
 #include "lua_scheduler.h"
 
+#include "../output_level.h"
+
 #include "logging/logger.h"
 
 #include <lauxlib.h>
@@ -407,13 +409,21 @@ namespace Framework::Scripting {
         return error;
     }
 
-    void LuaRuntime::WriteLine(std::string line) {
+    void LuaRuntime::WriteOutput(std::string_view text, OutputLevel level) {
+        std::string line;
+        if (!AppendBounded(line, text.data(), text.size(), kMaxLineBytes)) {
+            line += kTruncated;
+        }
+        WriteLine(std::move(line), level);
+    }
+
+    void LuaRuntime::WriteLine(std::string line, OutputLevel level) {
         BlankControlCharacters(line);
         if (_printHandler) {
             _printHandler(line);
         }
         else {
-            LogLine(line, false);
+            LogLine(line, level);
         }
     }
 
@@ -431,11 +441,11 @@ namespace Framework::Scripting {
             entry += line;
             start = end + 1;
         }
-        LogLine(entry, true);
+        LogLine(entry, OutputLevel::Error);
     }
 
     // A script that prints or fails in a loop would otherwise fill the log as fast as the disk takes it.
-    void LuaRuntime::LogLine(const std::string &line, bool isError) {
+    void LuaRuntime::LogLine(const std::string &line, OutputLevel level) {
         const auto now = std::chrono::steady_clock::now();
         if (now - _logSecond >= std::chrono::seconds(1)) {
             _logSecond = now;
@@ -446,7 +456,7 @@ namespace Framework::Scripting {
         }
         const auto logger = Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING);
         if (_logLines++ < kMaxLinesPerSecond) {
-            logger->log(isError ? spdlog::level::err : spdlog::level::info, "[{}] {}", _options.resourceName, line);
+            logger->log(LogLevelOf(level), "[{}] {}", _options.resourceName, line);
         }
         else {
             logger->warn("[{}] output suppressed: more than {} lines in a second", _options.resourceName, kMaxLinesPerSecond);

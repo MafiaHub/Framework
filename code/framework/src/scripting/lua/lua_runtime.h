@@ -9,6 +9,7 @@
 #pragma once
 
 #include "../bind/doc.h"
+#include "../script_engine.h"
 
 #include <function2/function2.hpp>
 #include <lua.h>
@@ -120,10 +121,16 @@ namespace Framework::Scripting {
             return _memoryInUse;
         }
 
-        // Receives every line print() writes, and every warning as "warning: <text>": at most kMaxLineBytes of
-        // it, with a space for each control character but the tab. It must not throw. The default, which an empty
-        // handler restores, writes "[resource] line" to the scripting logger, kMaxLinesPerSecond at most.
+        // Receives every line print() and WriteOutput write, and every warning as "warning: <text>": at most
+        // kMaxLineBytes of it, with a space for each control character but the tab. It must not throw. The default,
+        // which an empty handler restores, writes "[resource] line" to the scripting logger, kMaxLinesPerSecond at
+        // most.
         void SetPrintHandler(PrintHandler handler);
+
+        // Writes `text` as a line of output of the script, the way print() writes one and within the same bounds:
+        // what a binding that writes for a script, as its console does, calls. Without a print handler the line is
+        // logged at `level`; a print handler is given the line and not the level.
+        void WriteOutput(std::string_view text, OutputLevel level = OutputLevel::Info);
 
         // Where require finds its files. Without one it raises "require: no module loader".
         void SetModuleLoader(ModuleLoader loader);
@@ -192,12 +199,11 @@ namespace Framework::Scripting {
         // Takes the error off the top of the stack, as text of kMaxErrorBytes at most.
         static std::string PopError(lua_State *L);
 
-        // Hands a line of output to the print handler.
-        void WriteLine(std::string line);
+        // Hands a line of output to the print handler, or to the log at `level`.
+        void WriteLine(std::string line, OutputLevel level = OutputLevel::Info);
 
-        // Writes "[resource] line" to the scripting logger, as output or as an error, unless this second has had
-        // its share.
-        void LogLine(const std::string &line, bool isError);
+        // Writes "[resource] line" to the scripting logger at `level`, unless this second has had its share.
+        void LogLine(const std::string &line, OutputLevel level);
 
         // Writes an error text to the scripting logger as one entry: each of its lines under the name of the
         // resource and with a space for each control character, as a line of output has.

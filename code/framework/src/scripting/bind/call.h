@@ -175,6 +175,12 @@ namespace Framework::Scripting::Bind {
         virtual void ThrowError(std::string message)     = 0;
         virtual bool HasThrown() const                   = 0;
 
+        // Writes `line` to the output of the runtime the script runs in, which is where its console writes. In
+        // JavaScript that is the scripting logger, at `level`: "[resource] line", or the line alone when the
+        // resource cannot be told. In Lua it is where print() writes, within the same bounds
+        // (LuaRuntime::WriteOutput).
+        virtual void WriteOutput(OutputLevel level, std::string_view line) = 0;
+
         // Makes the result of the call one that is settled later, through the Deferred this gives (callable.h),
         // which is the same one each time. What the function returns no longer counts. In JavaScript the script
         // gets a promise. In Lua the coroutine that called waits once the function has returned, unless the

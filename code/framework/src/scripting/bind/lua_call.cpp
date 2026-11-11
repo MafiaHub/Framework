@@ -191,6 +191,10 @@ namespace Framework::Scripting::Bind {
                 return _thrown.has_value();
             }
 
+            void WriteOutput(OutputLevel level, std::string_view line) override {
+                LuaRuntime::From(_L)->WriteOutput(line, level);
+            }
+
             Deferred Defer() override {
                 if (_deferred == nullptr) {
                     _deferred = Detail::LuaDefer(_L);

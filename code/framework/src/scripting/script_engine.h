@@ -23,6 +23,14 @@ namespace Framework::Scripting {
         Lua
     };
 
+    // What the log files a line of a script's output under.
+    enum class OutputLevel : uint8_t {
+        Debug,
+        Info,
+        Warning,
+        Error
+    };
+
     /**
      * What ResourceManager needs of a scripting engine, whatever language its scripts are written in.
      * Engine is the JavaScript one, LuaEngine the Lua one.

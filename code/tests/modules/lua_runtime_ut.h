@@ -225,22 +225,24 @@ namespace LuaRuntimeTest {
         std::thread _thread;
     };
 
-    // The lines the scripting logger writes while this lives, with logging switched on for that long.
+    // The lines the scripting logger writes while this lives, at `threshold` and above, with logging switched on
+    // for that long.
     class LogCapture final {
       public:
-        LogCapture() {
+        explicit LogCapture(spdlog::level::level_enum threshold = spdlog::level::info) {
             auto *logging = Framework::Logging::GetInstance();
             logging->SetLogFolder((std::filesystem::temp_directory_path() / "framework-lua-runtime-ut").string());
             logging->SetConsoleLevel(spdlog::level::off);
             logging->PauseLogging(false);
             logging->SetLogForwarder(
-                [lines = _lines](int, const std::string &name, const std::string &message) {
+                [lines = _lines](int level, const std::string &name, const std::string &message) {
                     if (name == FRAMEWORK_INNER_SCRIPTING) {
                         const std::lock_guard lock(lines->mutex);
                         lines->text.push_back(message);
+                        lines->levels.push_back(level);
                     }
                 },
-                spdlog::level::info);
+                threshold);
         }
 
         ~LogCapture() {
@@ -267,10 +269,22 @@ namespace LuaRuntimeTest {
             return {};
         }
 
+        // The same lines, each as "<level> <line>": "warning [test] low fuel".
+        std::vector<std::string> LeveledLines() {
+            std::vector<std::string> lines = Lines();
+            const std::lock_guard lock(_lines->mutex);
+            for (size_t i = 0; i < lines.size(); ++i) {
+                const auto name = spdlog::level::to_string_view(static_cast<spdlog::level::level_enum>(_lines->levels[i]));
+                lines[i]        = std::string(name.data(), name.size()) + " " + lines[i];
+            }
+            return lines;
+        }
+
       private:
         struct Shared {
             std::mutex mutex;
             std::vector<std::string> text;
+            std::vector<int> levels; // of the line at the same index
         };
 
         std::shared_ptr<Shared> _lines = std::make_shared<Shared>();
@@ -656,6 +670,49 @@ MODULE(lua_runtime, {
         runtime.SetPrintHandler({});
         EQUALS(Run(runtime, "print('to the log again')"), "");
         EQUALS(printed.lines->size(), 0u);
+    });
+
+    IT("writes a line of output where print writes, within the bounds of print", {
+        LuaRuntime runtime(Options());
+        Printed printed(runtime);
+        EQUALS(Run(runtime, "print('printed')"), "");
+        runtime.WriteOutput("written");
+        runtime.WriteOutput("warned", Framework::Scripting::OutputLevel::Warning);
+        runtime.WriteOutput("two\nlines and \x1b[31ma colour\ttabbed");
+        runtime.WriteOutput(std::string(LuaRuntime::kMaxLineBytes, 'y'));
+        runtime.WriteOutput(std::string(LuaRuntime::kMaxLineBytes + 1, 'y'));
+        runtime.WriteOutput("");
+        EQUALS(printed.lines->size(), 7u);
+        EQUALS((*printed.lines)[0], "printed");
+        EQUALS((*printed.lines)[1], "written");
+        EQUALS((*printed.lines)[2], "warned");
+        EQUALS((*printed.lines)[3], "two lines and  [31ma colour\ttabbed");
+        EQUALS((*printed.lines)[4], std::string(LuaRuntime::kMaxLineBytes, 'y'));
+        EQUALS((*printed.lines)[5], std::string(LuaRuntime::kMaxLineBytes, 'y') + std::string(kTruncated));
+        EQUALS((*printed.lines)[6], "");
+    });
+
+    IT("logs a line of output at its level, in the share of the second print has", {
+        LogCapture log(spdlog::level::debug);
+        LuaRuntime runtime(Options());
+        using Framework::Scripting::OutputLevel;
+        runtime.WriteOutput("plain");
+        runtime.WriteOutput("traced", OutputLevel::Debug);
+        runtime.WriteOutput("warned", OutputLevel::Warning);
+        runtime.WriteOutput("failed", OutputLevel::Error);
+        EQUALS(Run(runtime, "for i = 1, 150 do print('printed') end"), "");
+        for (int i = 0; i < 150; ++i) {
+            runtime.WriteOutput("written", OutputLevel::Warning);
+        }
+
+        const std::vector<std::string> lines = log.LeveledLines();
+        EQUALS(CountStartingWith(lines, "info [test] plain"), 1u);
+        EQUALS(CountStartingWith(lines, "debug [test] traced"), 1u);
+        EQUALS(CountStartingWith(lines, "warning [test] warned"), 1u);
+        EQUALS(CountStartingWith(lines, "error [test] failed"), 1u);
+        EQUALS(CountStartingWith(lines, "info [test] printed"), 150u);
+        EQUALS(CountStartingWith(lines, "warning [test] written"), static_cast<size_t>(LuaRuntime::kMaxLinesPerSecond) - 154u);
+        EQUALS(CountStartingWith(lines, "warning [test] output suppressed"), 1u);
     });
 
     IT("hands a warning to the print handler", {

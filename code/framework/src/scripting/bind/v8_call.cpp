@@ -13,6 +13,7 @@
 #include "value.h"
 
 #include "../engine_helpers.h"
+#include "../output_level.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
 #include "../value_transfer.h"
@@ -215,6 +216,17 @@ namespace Framework::Scripting::Bind {
 
             bool HasThrown() const override {
                 return _thrown != Thrown::None;
+            }
+
+            void WriteOutput(OutputLevel level, std::string_view line) override {
+                const auto logger          = Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING);
+                const std::string resource = ResourceName();
+                if (!resource.empty()) {
+                    logger->log(LogLevelOf(level), "[{}] {}", resource, line);
+                }
+                else {
+                    logger->log(LogLevelOf(level), "{}", line);
+                }
             }
 
             // In an isolate that is being terminated there is no promise to make, and nobody to give one to.
