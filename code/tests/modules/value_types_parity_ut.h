@@ -144,10 +144,7 @@ namespace ValueTypesParityTest {
             });
 
             Builtins::RegisterValueTypesLua(_lua.L, Bind::Side::Server);
-            AnchorDefinition().MaterialiseLua(_lua.L, Bind::Side::Server);
-            lua_pushglobaltable(_lua.L);
-            AnchorDefinition().PublishLua(_lua.L, -1);
-            lua_pop(_lua.L, 1);
+            AnchorDefinition().RegisterLuaGlobal(_lua.L, Bind::Side::Server);
         }
 
         ~Runtimes() {

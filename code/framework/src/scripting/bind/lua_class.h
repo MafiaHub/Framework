@@ -134,6 +134,9 @@ namespace Framework::Scripting::Bind {
         // target[name] = class table, raw. Throws std::logic_error when the class is not materialised in the state.
         void LuaPublishClass(lua_State *L, const LuaClass &definition, int targetIndex);
 
+        // LuaMaterialiseClass, then the class table as a global of the state under the name of the class, set raw.
+        void LuaRegisterClassGlobal(lua_State *L, const LuaClass &definition, Side runtime);
+
         // The class of the bound object at `index`, or nullptr when the value is not one.
         const LuaClass *LuaClassAt(lua_State *L, int index);
 

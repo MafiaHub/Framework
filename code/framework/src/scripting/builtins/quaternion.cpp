@@ -138,10 +138,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Quaternion::RegisterLua(lua_State *L, Bind::Side side) {
-        Definition().MaterialiseLua(L, side);
-        lua_pushglobaltable(L);
-        Definition().PublishLua(L, -1);
-        lua_pop(L, 1);
+        Definition().RegisterLuaGlobal(L, side);
     }
 
 } // namespace Framework::Scripting::Builtins

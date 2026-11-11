@@ -1041,6 +1041,33 @@ MODULE(bind_class_lua, {
         EQUALS(lua_gettop(state.L), 1);
     });
 
+    IT("registers a class as a global of the state in one call", {
+        LuaTest::State state;
+        lua_State *L = state.L;
+
+        lua_pushinteger(L, 42);
+        SubCounterDefinition().RegisterLuaGlobal(L, Side::Client);
+        EQUALS(lua_gettop(L), 1);
+
+        // The class is a global under its name, for the side it was given. Its base is materialised and is no global.
+        EQUALS(Eval(L, "SubCounter.new(2):add(1):get()"), "3");
+        EQUALS(Eval(L, "SubCounter.new(1).kick"), "nil");
+        EQUALS(Eval(L, "Counter"), "nil");
+
+        // Again, the class the state already has goes back under its name, whatever the side.
+        EQUALS(Eval(L, "first = SubCounter SubCounter = nil"), "nil");
+        SubCounterDefinition().RegisterLuaGlobal(L, Side::Server);
+        EQUALS(lua_gettop(L), 1);
+        EQUALS(Eval(L, "rawequal(first, SubCounter)"), "true");
+        EQUALS(Eval(L, "SubCounter.new(1).kick"), "nil");
+
+        // It is published raw: globals that refuse a new name do not refuse the class.
+        EQUALS(Eval(L, "setmetatable(_G, { __newindex = function() error('sealed') end }) Tracked = 1"), "<error> eval:1: sealed");
+        BindClassLuaTest::TrackedDefinition().RegisterLuaGlobal(L, Side::Server);
+        EQUALS(lua_gettop(L), 1);
+        EQUALS(Eval(L, "Tracked.new(1):id()"), "1");
+    });
+
     IT("runs a LuaHook on the metatable and the class table", {
         LuaTest::State state;
         lua_State *L = state.L;

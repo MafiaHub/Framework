@@ -424,6 +424,14 @@ namespace Framework::Scripting::Bind {
             Detail::LuaPublishClass(L, *_record, targetIndex);
         }
 
+        // MaterialiseLua, then the class table as a global of the state under the name of the class: what the
+        // RegisterLua of a builtin does. In a state that already has the class, whatever the side, it only puts it
+        // back under its name. The global is set raw, as PublishLua sets it. Runs unprotected, as MaterialiseLua: a
+        // Lua error here panics unless the caller is in a protected call.
+        void RegisterLuaGlobal(lua_State *L, Side runtime) const {
+            Detail::LuaRegisterClassGlobal(L, *_record, runtime);
+        }
+
         // Builds the v8pp class in `isolate` the way a binding written by hand does, with the members that exist in
         // a runtime of side `runtime`, and records it in `catalog`. Every call builds a class, and an isolate takes
         // one per C++ type: the caller keeps what it gets for the isolate (ClassCache). Call with the isolate

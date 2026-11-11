@@ -508,6 +508,14 @@ namespace Framework::Scripting::Bind::Detail {
         lua_rawset(L, targetIndex);
     }
 
+    void LuaRegisterClassGlobal(lua_State *L, const LuaClass &definition, Side runtime) {
+        LuaMaterialiseClass(L, definition, runtime);
+        luaL_checkstack(L, 1, "cannot register a class");
+        lua_pushglobaltable(L);
+        LuaPublishClass(L, definition, -1);
+        lua_pop(L, 1);
+    }
+
     const LuaClass *LuaClassAt(lua_State *L, int index) {
         if (lua_type(L, index) != LUA_TUSERDATA) {
             return nullptr;
