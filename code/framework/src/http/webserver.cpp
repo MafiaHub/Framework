@@ -150,10 +150,13 @@ namespace Framework::HTTP {
                 bool done      = false;
                 bool abandoned = false;
             };
-            auto hop = std::make_shared<Hop>();
-            scheduler->PostToOwner([hop, callback, &req, &res] {
+            auto hop            = std::make_shared<Hop>();
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(_tickTimeoutMs.load());
+            scheduler->PostToOwner([hop, callback, deadline, &req, &res] {
                 std::unique_lock lock(hop->mutex);
-                if (hop->abandoned) {
+                // Past the deadline the worker is about to give up, if it has not yet: the handler must not start
+                // in the gap.
+                if (hop->abandoned || std::chrono::steady_clock::now() >= deadline) {
                     return;
                 }
                 try {
@@ -172,7 +175,6 @@ namespace Framework::HTTP {
                 hop->settled.notify_one();
             });
 
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(_tickTimeoutMs.load());
             std::unique_lock lock(hop->mutex);
             // In slices, so a server shutting down is not held up by requests waiting on a tick that will not come.
             while (!hop->done && _running && std::chrono::steady_clock::now() < deadline) {

@@ -65,8 +65,9 @@ namespace Framework::HTTP {
         // the tick thread has not run it within the scheduler's timeout; a handler that was given up
         // on is never run afterwards. A handler that throws answers 500.
         void RegisterTickThreadRequest(const std::string &path, const RequestCallback &callback) const;
-        // The scheduler whose owner runs tick-thread routes, which must outlive this server or be
-        // taken back with null first, and how long a request waits for it.
+        // The scheduler whose owner runs tick-thread routes, and how long a request waits for it. It must
+        // outlive this server's workers: stop the server (Shutdown) before destroying the scheduler. Taking
+        // it back with null only keeps later requests off it, not one that already read it.
         void SetTickThreadScheduler(Utils::TaskScheduler *scheduler, std::chrono::milliseconds timeout = std::chrono::seconds(5));
         void RegisterPostRequest(const std::string &path, const PostCallback &callback) const;
 
