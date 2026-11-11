@@ -8,6 +8,9 @@
 
 #pragma once
 
+#include "lua_class.h"
+#include "types.h"
+
 #include <lauxlib.h>
 #include <lua.h>
 
@@ -15,10 +18,12 @@
 #include <climits>
 #include <cstddef>
 #include <limits>
+#include <new>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace Framework::Scripting::Bind {
@@ -36,12 +41,35 @@ namespace Framework::Scripting::Bind {
     template <typename T, typename Enable = void>
     struct LuaConvert;
 
-    // The type of the value at `index`, as an argument error names it.
+    // The type of the value at `index`, as an argument error names it: the class of a bound object, the Lua type
+    // of anything else.
     inline const char *LuaTypeNameAt(lua_State *L, int index) {
-        return luaL_typename(L, index);
+        const Detail::LuaClass *definition = Detail::LuaClassAt(L, index);
+        return definition != nullptr ? definition->desc.name.c_str() : luaL_typename(L, index);
     }
 
     namespace Detail {
+        // The converter of a parameter or a return value declared as A. A reference to a bound class keeps its
+        // reference, so that it reaches into the userdata; everything else converts as its value type.
+        template <typename A>
+        using LuaConvertFor = LuaConvert<std::conditional_t<std::is_lvalue_reference_v<A> && HasScriptClassName<std::remove_cvref_t<A>>, A, std::remove_cvref_t<A>>>;
+
+        // The object of class T, or the T part of an object of a class derived from it, in the userdata at
+        // `index`. nullptr for anything else.
+        template <typename T>
+        T *LuaObjectAt(lua_State *L, int index) {
+            return static_cast<T *>(LuaToObject(L, index, LuaClassOf<T>::definition));
+        }
+
+        // Pushes a userdata holding a T built from `args`. Raises a Lua error when the class of T is not
+        // materialised in the state.
+        template <typename T, typename... Args>
+        void LuaNewObject(lua_State *L, Args &&...args) {
+            static_assert(alignof(T) <= alignof(LuaMaxAlign), "Bind: a bound class cannot ask for more alignment than Lua gives a userdata");
+            ::new (LuaAllocateObject(L, LuaClassOf<T>::definition, ScriptClassName<T>::value, sizeof(T))) T(std::forward<Args>(args)...);
+            lua_setmetatable(L, -2);
+        }
+
         // Whether `value` is in the range of the integral type T. A type as wide as lua_Integer takes every value:
         // an unsigned one reads a negative integer as its two's complement.
         template <typename T>
@@ -297,6 +325,83 @@ namespace Framework::Scripting::Bind {
 
         static const char *Expected() {
             return "table";
+        }
+    };
+
+    // A bound class, one named with FW_SCRIPT_CLASS and defined with Bind::Class, crosses as the userdata that
+    // holds the object. An object of a derived class is accepted as its base. Get copies the object out and Push
+    // copies or moves it into a new userdata; a derived object pushed as its base is sliced.
+    template <typename T>
+    struct LuaConvert<T, std::enable_if_t<Detail::HasScriptClassName<T>>> final {
+        static bool Is(lua_State *L, int index) {
+            return Detail::LuaObjectAt<T>(L, index) != nullptr;
+        }
+
+        static T Get(lua_State *L, int index) {
+            return *Detail::LuaObjectAt<T>(L, index);
+        }
+
+        static void Push(lua_State *L, const T &value) {
+            Detail::LuaNewObject<T>(L, value);
+        }
+
+        static void Push(lua_State *L, T &&value) {
+            Detail::LuaNewObject<T>(L, std::move(value));
+        }
+
+        static const char *Expected() {
+            return ScriptClassName<T>::value;
+        }
+    };
+
+    // T & and const T & of a bound class: Get returns the object in the userdata, valid while the userdata is.
+    // Push copies, as for T.
+    template <typename T>
+    struct LuaConvert<T &, std::enable_if_t<Detail::HasScriptClassName<std::remove_const_t<T>>>> final {
+        using Class = std::remove_const_t<T>;
+
+        static bool Is(lua_State *L, int index) {
+            return Detail::LuaObjectAt<Class>(L, index) != nullptr;
+        }
+
+        static T &Get(lua_State *L, int index) {
+            return *Detail::LuaObjectAt<Class>(L, index);
+        }
+
+        static void Push(lua_State *L, const Class &value) {
+            Detail::LuaNewObject<Class>(L, value);
+        }
+
+        static const char *Expected() {
+            return ScriptClassName<Class>::value;
+        }
+    };
+
+    // T * and const T * of a bound class: Get returns the object in the userdata, valid while the userdata is, and
+    // never nullptr, since nil is not an object. Push copies what the pointer designates; nullptr pushes nil.
+    template <typename T>
+    struct LuaConvert<T *, std::enable_if_t<Detail::HasScriptClassName<std::remove_const_t<T>>>> final {
+        using Class = std::remove_const_t<T>;
+
+        static bool Is(lua_State *L, int index) {
+            return Detail::LuaObjectAt<Class>(L, index) != nullptr;
+        }
+
+        static T *Get(lua_State *L, int index) {
+            return Detail::LuaObjectAt<Class>(L, index);
+        }
+
+        static void Push(lua_State *L, const Class *value) {
+            if (value != nullptr) {
+                Detail::LuaNewObject<Class>(L, *value);
+            }
+            else {
+                lua_pushnil(L);
+            }
+        }
+
+        static const char *Expected() {
+            return ScriptClassName<Class>::value;
         }
     };
 } // namespace Framework::Scripting::Bind

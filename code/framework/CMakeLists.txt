@@ -48,6 +48,7 @@ set(FRAMEWORK_SRC
     src/scripting/function_references.cpp
     src/scripting/resource_monitor.cpp
     src/scripting/bind/descriptors.cpp
+    src/scripting/bind/lua_class.cpp
     src/scripting/builtins/builtins.cpp
     src/scripting/builtins/vector2.cpp
     src/scripting/builtins/vector3.cpp
