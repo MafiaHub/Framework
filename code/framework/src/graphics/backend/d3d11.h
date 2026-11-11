@@ -11,6 +11,7 @@
 #include "backend.h"
 
 #include <map>
+#include <mutex>
 
 #ifndef ENABLE_MSAA
 #define ENABLE_MSAA 0
@@ -63,7 +64,14 @@ namespace Framework::Graphics {
         void EnableScissor();
         void DisableScissor();
 
+        // Render thread only: the game can free its swapchain (exit, mode change) and keep ticking.
         IDXGISwapChain *GetSwapChain() const;
+
+        // Render thread only. Reads the back buffer's size off the swapchain for GetBackBufferSize.
+        void RefreshBackBufferSize();
+
+        // Any thread. As of the last Init or RefreshBackBufferSize; never reads the swapchain.
+        bool GetBackBufferSize(UINT &width, UINT &height) const;
 
       private:
         bool LoadCompiledVertexShader(unsigned char *data, unsigned int len, ID3D11VertexShader **ppVertexShader, const D3D11_INPUT_ELEMENT_DESC *pInputElementDescs, UINT NumElements, ID3D11InputLayout **ppInputLayout);
@@ -80,6 +88,9 @@ namespace Framework::Graphics {
 
       protected:
         IDXGISwapChain *_swapChain {};
+        UINT _backBufferWidth  = 0;
+        UINT _backBufferHeight = 0;
+        mutable std::mutex _backBufferSizeMutex;
         ID3D11CommandList *_deviceCommandList {};
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> _deferredContext;
 

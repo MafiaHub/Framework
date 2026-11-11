@@ -295,6 +295,8 @@ namespace Framework::External::ImGUI {
             ImGui_ImplDX9_RenderDrawData(drawData);
         } break;
         case Graphics::RendererBackend::BACKEND_D3D_11: {
+            // The one call every D3D11 project makes inside Present, where the swapchain is alive.
+            _config.renderer->GetD3D11Backend()->RefreshBackBufferSize();
             ImGui_ImplDX11_RenderDrawData(drawData);
         } break;
 #ifdef FW_IMGUI_DX12
