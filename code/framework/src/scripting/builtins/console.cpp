@@ -1,193 +1,117 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
 #include "console.h"
-#include "../resource/resource_manager.h"
+#include "../lua/lua_runtime.h"
 #include "../scripting_catalog.h"
 
-#include <logging/logger.h>
-
-#include <cmath>
-#include <limits>
+#include <memory>
 #include <sstream>
 
 namespace Framework::Scripting::Builtins {
 
-    void Console::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *resourceManager) {
-        v8::Local<v8::Object> consoleObj = v8::Object::New(isolate);
-
-        // Store resource manager as external data for callbacks
-        v8::Local<v8::External> managerData = v8::External::New(isolate, resourceManager);
-
-        // console.log
-        v8::Local<v8::FunctionTemplate> logTmpl = v8::FunctionTemplate::New(isolate, LogCallback, managerData);
-        consoleObj->Set(context, v8pp::to_v8(isolate, "log"), logTmpl->GetFunction(context).ToLocalChecked()).Check();
-
-        // console.info (alias for log)
-        consoleObj->Set(context, v8pp::to_v8(isolate, "info"), logTmpl->GetFunction(context).ToLocalChecked()).Check();
-
-        // console.warn
-        v8::Local<v8::FunctionTemplate> warnTmpl = v8::FunctionTemplate::New(isolate, WarnCallback, managerData);
-        consoleObj->Set(context, v8pp::to_v8(isolate, "warn"), warnTmpl->GetFunction(context).ToLocalChecked()).Check();
-
-        // console.error
-        v8::Local<v8::FunctionTemplate> errorTmpl = v8::FunctionTemplate::New(isolate, ErrorCallback, managerData);
-        consoleObj->Set(context, v8pp::to_v8(isolate, "error"), errorTmpl->GetFunction(context).ToLocalChecked()).Check();
-
-        // console.debug
-        v8::Local<v8::FunctionTemplate> debugTmpl = v8::FunctionTemplate::New(isolate, DebugCallback, managerData);
-        consoleObj->Set(context, v8pp::to_v8(isolate, "debug"), debugTmpl->GetFunction(context).ToLocalChecked()).Check();
-
-        // Set as global console
-        context->Global()->Set(context, v8pp::to_v8(isolate, "console"), consoleObj).Check();
-
-        auto &metadata      = GetScriptingCatalog(isolate).global_object("console", "Resource-aware console that routes output through the Framework logger.");
-        const auto document = [&](const char *name, const char *description) {
-            metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>(name, v8pp::metadata::docs("void", {v8pp::metadata::rest_param("values", "unknown[]", "Values formatted and joined with spaces.")}, description)));
-        };
-        document("log", "Writes an informational log entry prefixed with the current resource name.");
-        document("info", "Alias of console.log for informational output.");
-        document("warn", "Writes a warning log entry prefixed with the current resource name.");
-        document("error", "Writes an error log entry prefixed with the current resource name.");
-        document("debug", "Writes a debug log entry prefixed with the current resource name.");
-    }
-
-    std::string Console::FormatValue(v8::Isolate *isolate, v8::Local<v8::Value> value) {
-        if (value->IsString()) {
-            return v8pp::from_v8<std::string>(isolate, value);
-        }
-        else if (value->IsNumber()) {
-            double num = value->NumberValue(isolate->GetCurrentContext()).FromMaybe(0.0);
-            if (num >= static_cast<double>(std::numeric_limits<int64_t>::min()) && num <= static_cast<double>(std::numeric_limits<int64_t>::max()) && std::trunc(num) == num) {
-                return std::to_string(static_cast<int64_t>(num));
-            }
-            else {
-                std::ostringstream ss;
-                ss << num;
-                return ss.str();
-            }
-        }
-        else if (value->IsBoolean()) {
-            return value->BooleanValue(isolate) ? "true" : "false";
-        }
-        else if (value->IsNull()) {
-            return "null";
-        }
-        else if (value->IsUndefined()) {
-            return "undefined";
-        }
-        else if (value->IsArray()) {
-            v8::Local<v8::Array> arr = value.As<v8::Array>();
-            return "[Array(" + std::to_string(arr->Length()) + ")]";
-        }
-        else if (value->IsFunction()) {
-            return "[Function]";
-        }
-        else if (value->IsObject()) {
-            v8::Local<v8::Object> obj      = value.As<v8::Object>();
-            v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-            // Try to get JSON representation
-            v8::Local<v8::Value> jsonValue;
-            if (context->Global()->Get(context, v8pp::to_v8(isolate, "JSON")).ToLocal(&jsonValue) && jsonValue->IsObject()) {
-                v8::Local<v8::Object> json = jsonValue.As<v8::Object>();
-                v8::Local<v8::Value> stringifyValue;
-                if (json->Get(context, v8pp::to_v8(isolate, "stringify")).ToLocal(&stringifyValue) && stringifyValue->IsFunction()) {
-                    v8::Local<v8::Function> stringify = stringifyValue.As<v8::Function>();
-                    v8::Local<v8::Value> jsonArgs[1]  = {obj};
-
-                    // Use TryCatch to handle circular structures and other stringify errors
-                    v8::TryCatch tryCatch(isolate);
-                    v8::MaybeLocal<v8::Value> jsonResult = stringify->Call(context, json, 1, jsonArgs);
-
-                    if (tryCatch.HasCaught() || jsonResult.IsEmpty()) {
-                        tryCatch.Reset();
-                        return "[Object]";
-                    }
-                    else {
-                        v8::Local<v8::Value> result = jsonResult.ToLocalChecked();
-                        if (result->IsString()) {
-                            return v8pp::from_v8<std::string>(isolate, result);
-                        }
-                        else {
-                            return "[Object]";
-                        }
-                    }
-                }
-            }
-            return "[Object]";
-        }
-        else {
-            v8::String::Utf8Value str(isolate, value);
-            return *str ? *str : "<unknown>";
-        }
-    }
-
-    std::string Console::FormatArgs(v8::Isolate *isolate, const v8::FunctionCallbackInfo<v8::Value> &args) {
-        std::ostringstream ss;
-
-        for (int i = 0; i < args.Length(); ++i) {
-            if (i > 0) {
-                ss << " ";
-            }
-            ss << FormatValue(isolate, args[i]);
-        }
-
-        return ss.str();
-    }
-
     namespace {
-        // Helper to get resource context - uses V8 stack trace as fallback for async ES modules
-        std::string GetResourceContextForConsole(v8::Isolate *isolate, ResourceManager *manager) {
-            if (!manager) {
-                return "";
+        // What every function of the console does: the arguments, formatted and joined with spaces, as one line of
+        // the output of the runtime.
+        void Write(Bind::Call &call, OutputLevel level) {
+            std::string message;
+            for (size_t i = 0; i < call.ArgCount(); ++i) {
+                if (i > 0) {
+                    message += ' ';
+                }
+                message += Console::FormatValue(call.Arg(i));
             }
+            call.WriteOutput(level, message);
+        }
 
-            std::string resourceName = manager->GetCurrentResourceContext();
-            if (!resourceName.empty()) {
-                return resourceName;
-            }
+        Bind::NativeFunction WriteAt(OutputLevel level) {
+            return [level](Bind::Call &call) {
+                Write(call, level);
+            };
+        }
 
-            // Fallback: extract resource name from V8 call stack file paths
-            return manager->GetResourceContextFromStack(isolate);
+        Bind::Doc Document(const char *description) {
+            return Bind::Doc(description).RestParam("values", Bind::Type::Custom("unknown[]", "any"), "Values formatted and joined with spaces.");
         }
     } // namespace
 
-    void Console::LogWithLevel(const v8::FunctionCallbackInfo<v8::Value> &args, spdlog::level::level_enum level) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope handleScope(isolate);
+    const Bind::Namespace &Console::Definition() {
+        static const auto definition = Bind::Namespace("console", "Resource-aware console that routes output through the Framework logger.")
+                                           .Function("log", WriteAt(OutputLevel::Info), Document("Writes an informational log entry prefixed with the current resource name."))
+                                           .Function("info", WriteAt(OutputLevel::Info), Document("Alias of console.log for informational output."))
+                                           .Function("warn", WriteAt(OutputLevel::Warning), Document("Writes a warning log entry prefixed with the current resource name."))
+                                           .Function("error", WriteAt(OutputLevel::Error), Document("Writes an error log entry prefixed with the current resource name."))
+                                           .Function("debug", WriteAt(OutputLevel::Debug), Document("Writes a debug log entry prefixed with the current resource name."));
+        return definition;
+    }
 
-        ResourceManager *manager = static_cast<ResourceManager *>(args.Data().As<v8::External>()->Value());
-        std::string resourceName = GetResourceContextForConsole(isolate, manager);
-        std::string message      = FormatArgs(isolate, args);
-
-        if (!resourceName.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->log(level, "[{}] {}", resourceName, message);
+    void Console::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *resourceManager) {
+        // The functions carry no manager of their own: a call asks the one of its runtime for its resource.
+        if (resourceManager != nullptr) {
+            Bind::SetCallResourceManager(isolate, resourceManager);
         }
-        else {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->log(level, "{}", message);
+        Definition().MaterialiseV8(isolate, context, context->Global(), GetScriptingCatalog(isolate), ScriptingSide(isolate));
+    }
+
+    void Console::RegisterLua(LuaRuntime &runtime) {
+        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
+    }
+
+    std::string Console::FormatValue(const Bind::Value &value) {
+        switch (value.Kind()) {
+        case Bind::ValueKind::String: return value.AsString();
+        case Bind::ValueKind::Number: {
+            if (const auto integer = value.AsInteger()) {
+                return std::to_string(*integer);
+            }
+            std::ostringstream ss;
+            ss << value.AsNumber();
+            return ss.str();
         }
+        case Bind::ValueKind::Boolean: return value.AsBoolean() ? "true" : "false";
+        case Bind::ValueKind::Array: return "[Array(" + std::to_string(value.Length()) + ")]";
+        case Bind::ValueKind::Function: return "[Function]";
+        case Bind::ValueKind::Object:
+        case Bind::ValueKind::Bound: {
+            // A circular structure, or anything else that has no JSON, is only named.
+            const auto json = value.ToJson();
+            return json ? json.GetValue() : "[Object]";
+        }
+        // The language spells what it has for nothing: null and undefined in JavaScript, nil in Lua.
+        case Bind::ValueKind::Nil:
+        case Bind::ValueKind::Other: break;
+        }
+        std::string spelled = value.ToDisplayString();
+        return spelled.empty() ? "<unknown>" : spelled;
     }
 
-    void Console::LogCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        LogWithLevel(args, spdlog::level::info);
+    std::string Console::FormatArgs(v8::Isolate *isolate, const v8::FunctionCallbackInfo<v8::Value> &args) {
+        std::string joined;
+        for (int i = 0; i < args.Length(); ++i) {
+            if (i > 0) {
+                joined += ' ';
+            }
+            joined += FormatValue(isolate, args[i]);
+        }
+        return joined;
     }
 
-    void Console::WarnCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        LogWithLevel(args, spdlog::level::warn);
-    }
-
-    void Console::ErrorCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        LogWithLevel(args, spdlog::level::err);
-    }
-
-    void Console::DebugCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        LogWithLevel(args, spdlog::level::debug);
+    std::string Console::FormatValue(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+        // The formatter reads a value of a call, so the value is handed to a function made for it.
+        v8::HandleScope scope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        const auto formatted           = std::make_shared<std::string>();
+        v8::Local<v8::Function> format = Bind::MakeV8Function(isolate, context, [formatted](Bind::Call &call) {
+            *formatted = FormatValue(call.Arg(0));
+        });
+        v8::TryCatch tryCatch(isolate);
+        (void)format->Call(context, v8::Undefined(isolate), 1, &value);
+        return *formatted;
     }
 
 } // namespace Framework::Scripting::Builtins

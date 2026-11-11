@@ -97,6 +97,35 @@ what it needs, and nothing else diverges:
   `ResourceManager` (which owns the handler tables), so it is called as
   `manager.GetEvents().Register(...)` with the same argument list.
 
+  A service API that is declared once for JavaScript and Lua goes through
+  `Bind::Namespace` (`scripting/bind/namespace.h`). `Console` and
+  `ExecutionEnvironment` are the worked examples. Each keeps its `Register`
+  and has two entry points more:
+
+  ```cpp
+  static const Bind::Namespace &Definition();
+  static void RegisterLua(LuaRuntime &runtime /*, what Register is told */);
+  ```
+
+  - `Definition()` holds the functions, the constants and their
+    documentation. A function is a context function, `void(Bind::Call &)`: one
+    body for both languages, which names neither.
+  - `Register` materialises the definition into the isolate
+    (`Definition().MaterialiseV8(...)`), which sets the global and records the
+    catalog; `RegisterLua` publishes the same definition as a global of a Lua
+    state (`Definition().RegisterLuaGlobal(...)`), and the scripting module
+    calls it for every state it sets up.
+  - A function made from a definition carries no `ResourceManager`. It asks
+    its call: `Call::ResourceName()`, `Call::GetResourceManager()`. So a
+    `Register` that is given a manager tells the binding layer which one the
+    isolate answers with (`Bind::SetCallResourceManager`); the layer forgets
+    it when the isolate is unregistered or the manager is destroyed.
+  - A value that is only known when a runtime is set up (the side, the mod
+    version) is a `RuntimeConstant` of the definition, and `Register` and
+    `RegisterLua` hand its value to the materialisation.
+  - What a script writes goes through `Call::WriteOutput`: the scripting
+    logger in JavaScript, the path of `print()` in Lua.
+
 `RegisterValueTypes` registers **only** the pure value types — its name says so.
 It is the counterpart to `UnregisterAll`, which additionally drops the handle
 types' cached class wrappers on isolate disposal. `RegisterValueTypesLua` has no

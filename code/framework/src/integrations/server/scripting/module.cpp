@@ -180,6 +180,9 @@ namespace Framework::Integrations::Server::Scripting {
     void ServerScriptingModule::RegisterLuaBindings(Framework::Scripting::LuaRuntime &runtime) {
         // As in JavaScript, every builtin is a global (Vector3.new, not Core.Vector3.new).
         Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), Framework::Scripting::Bind::Side::Server);
+
+        Framework::Scripting::Builtins::Console::RegisterLua(runtime);
+        Framework::Scripting::Builtins::ExecutionEnvironment::RegisterLua(runtime, _modVersion);
     }
 
     bool ServerScriptingModule::PreShutdown() {
