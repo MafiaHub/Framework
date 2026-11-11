@@ -27,16 +27,20 @@ namespace Framework::Graphics {
 
         _swapChain    = swapChain;
         _commandQueue = commandQueue;
-        RefreshBackBufferDesc();
 
-        // #2 get count of buffers
+        // #2 get count of buffers and the description the game thread reads
         {
-            DXGI_SWAP_CHAIN_DESC desc {};
-            swapChain->GetDesc(&desc);
+            DXGI_SWAP_CHAIN_DESC1 desc {};
+            if (FAILED(swapChain->GetDesc1(&desc))) {
+                return false;
+            }
             _frameBufferCount = desc.BufferCount;
 
             _frameContext.clear();
             _frameContext.resize(desc.BufferCount);
+
+            std::lock_guard lock(_backBufferDescMutex);
+            _backBufferDesc = {desc.Format, desc.Width, desc.Height};
         }
 
         // #3 create srv heap
