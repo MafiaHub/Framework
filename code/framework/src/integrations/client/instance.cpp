@@ -758,11 +758,9 @@ namespace Framework::Integrations::Client {
                     _assetPaks.erase(paks, _assetPaks.end());
                     OnResourceAssetPaksChanged();
                 }
-                _deferredPaks.erase(std::remove_if(_deferredPaks.begin(), _deferredPaks.end(),
-                                        [&res](const ResourceAssetPak &pak) {
-                                            return pak.resource == res.name;
-                                        }),
-                    _deferredPaks.end());
+                std::erase_if(_deferredPaks, [&res](const ResourceAssetPak &pak) {
+                    return pak.resource == res.name;
+                });
                 if (rm->IsResourceRunning(res.name)) {
                     auto result = rm->StopResource(res.name);
                     if (!result) {
@@ -1039,8 +1037,8 @@ namespace Framework::Integrations::Client {
             if (!holdDeferred && _deferredDownloader.IsRunning()) {
                 std::copy_if(_deferredPaks.begin(), _deferredPaks.end(), std::back_inserter(inFlight), ofResource);
             }
-            _assetPaks.erase(std::remove_if(_assetPaks.begin(), _assetPaks.end(), ofResource), _assetPaks.end());
-            _deferredPaks.erase(std::remove_if(_deferredPaks.begin(), _deferredPaks.end(), ofResource), _deferredPaks.end());
+            std::erase_if(_assetPaks, ofResource);
+            std::erase_if(_deferredPaks, ofResource);
             for (const auto &info : resource.assetPaks) {
                 // Untrusted: a lane or hash that could not name a cache file is dropped here; what the
                 // rest may carry is checked against InstanceOptions::assetPakPolicy once downloaded.
@@ -1499,7 +1497,7 @@ namespace Framework::Integrations::Client {
                 if (auto *rm = scriptingModule->GetResourceManager()) {
                     const auto failed = MountResourcePackages(_pendingRefreshResources);
                     for (const auto &res : _pendingRefreshResources) {
-                        if (std::find(failed.begin(), failed.end(), res.name) != failed.end() || res.packageHash.empty()) {
+                        if (std::ranges::contains(failed, res.name) || res.packageHash.empty()) {
                             continue;
                         }
                         // Newly started server-side: discover from cache first.

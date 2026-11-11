@@ -20,6 +20,7 @@
 #include <utils/time.h>
 
 #include <iterator>
+#include <utility>
 
 namespace Framework::Voice {
     bool VoiceServer::Init(Networking::NetworkServer *server) {
@@ -190,7 +191,7 @@ namespace Framework::Voice {
     }
 
     bool VoiceServer::IsPlayerTalking(uint64_t guid) const {
-        return _talking.find(guid) != _talking.end();
+        return _talking.contains(guid);
     }
 
     void VoiceServer::DrainTalkingChanges(std::vector<TalkingChange> &out) {
@@ -294,7 +295,7 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::OnTierRequest(uint64_t guid, uint8_t tier) {
-        if (tier >= static_cast<uint8_t>(VoiceTier::Count)) {
+        if (tier >= std::to_underlying(VoiceTier::Count)) {
             return;
         }
 

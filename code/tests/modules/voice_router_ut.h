@@ -15,7 +15,7 @@
 
 namespace {
     bool RouterContains(const std::vector<uint64_t> &v, uint64_t id) {
-        return std::find(v.begin(), v.end(), id) != v.end();
+        return std::ranges::contains(v, id);
     }
 
     bool NearlyEqualRange(float a, float b) {

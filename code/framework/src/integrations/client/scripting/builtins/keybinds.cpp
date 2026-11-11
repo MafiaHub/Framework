@@ -276,20 +276,18 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             if (it != _buckets.end()) {
                 auto &handlers    = it->second.handlers;
                 const auto before = handlers.size();
-                handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
-                                   [&](const Handler &h) {
-                                       if (h.resourceName != caller) {
-                                           return false;
-                                       }
-                                       if (hasStateFilter && h.state != stateFilter) {
-                                           return false;
-                                       }
-                                       if (!handler.IsEmpty() && !h.callback.Get(isolate)->StrictEquals(handler)) {
-                                           return false;
-                                       }
-                                       return true;
-                                   }),
-                    handlers.end());
+                std::erase_if(handlers, [&](const Handler &h) {
+                    if (h.resourceName != caller) {
+                        return false;
+                    }
+                    if (hasStateFilter && h.state != stateFilter) {
+                        return false;
+                    }
+                    if (!handler.IsEmpty() && !h.callback.Get(isolate)->StrictEquals(handler)) {
+                        return false;
+                    }
+                    return true;
+                });
                 removed = handlers.size() != before;
                 if (handlers.empty()) {
                     _buckets.erase(it);
@@ -453,11 +451,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         std::scoped_lock lock(_mutex);
         for (auto it = _buckets.begin(); it != _buckets.end();) {
             auto &handlers = it->second.handlers;
-            handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
-                               [&](const Handler &h) {
-                                   return h.resourceName == resourceName;
-                               }),
-                handlers.end());
+            std::erase_if(handlers, [&](const Handler &h) {
+                return h.resourceName == resourceName;
+            });
             if (handlers.empty()) {
                 it = _buckets.erase(it);
             }

@@ -498,7 +498,7 @@ namespace Framework::Scripting {
             return ResourceOperationResult::Ok({std::string(name)});
         }
 
-        if (std::find(_startChain.begin(), _startChain.end(), name) != _startChain.end()) {
+        if (std::ranges::contains(_startChain, name)) {
             std::string chain;
             for (const auto &link : _startChain) {
                 chain += link + " -> ";

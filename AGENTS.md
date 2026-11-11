@@ -241,6 +241,19 @@ Both expose virtual methods (`PostInit`, `PostUpdate`, `PreShutdown`, `ModuleReg
 - Variables: `_` prefix for private members, camelCase naming
 - Classes: PascalCase, mark as `final` when possible
 
+## Language Standard
+
+The tree builds as C++23 (`CMAKE_CXX_STANDARD` in `CMakeLists.txt` and `cmake/FrameworkSetup.cmake`,
+which the SDK ships, so a project inherits it). `cmake/FrameworkAbi.cmake` refuses a project
+configured with another standard.
+
+- Use only what all three toolchains have: MSVC (VS 2022), GCC 13 (the Linux SDK compiler) and
+  Apple clang. That rules out deducing `this`, `std::print`, `std::ranges::to` and `std::flat_map`
+  (GCC 13), and `std::move_only_function`, `std::generator` and `std::stacktrace` (libc++).
+- Keep C++23 standard-library types (`std::expected` and the like) out of headers the SDK installs.
+  MSVC builds C++23 in a preview mode whose library ABI is not frozen, while the SDK promises that
+  a newer MSVC can link an older archive. `Utils::Result` stays the error type at API boundaries.
+
 ## Commit Format
 
 Format: `Module: Brief commit description`

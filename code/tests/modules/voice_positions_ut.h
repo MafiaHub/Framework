@@ -128,7 +128,7 @@ MODULE(voice_positions, {
 
         std::vector<uint64_t> recipients;
         voice.GetRouter().ComputeRecipients(static_cast<uint64_t>(alice), recipients);
-        const bool bobHearsAlice = std::find(recipients.begin(), recipients.end(), static_cast<uint64_t>(bob)) != recipients.end();
+        const bool bobHearsAlice = std::ranges::contains(recipients, static_cast<uint64_t>(bob));
         EQUALS(bobHearsAlice, true);
 
         const std::vector<Reported> reported = avatars(serverManager);
@@ -159,7 +159,7 @@ MODULE(voice_positions, {
         const auto hears = [&voice](MafiaNet::PeerGuid talker, MafiaNet::PeerGuid listener) {
             std::vector<uint64_t> recipients;
             voice.GetRouter().ComputeRecipients(static_cast<uint64_t>(talker), recipients);
-            return std::find(recipients.begin(), recipients.end(), static_cast<uint64_t>(listener)) != recipients.end();
+            return std::ranges::contains(recipients, static_cast<uint64_t>(listener));
         };
 
         voice.SyncAvatars(*serverManager);
@@ -197,7 +197,7 @@ MODULE(voice_positions, {
         const auto hears = [&voice](MafiaNet::PeerGuid talker, MafiaNet::PeerGuid listener) {
             std::vector<uint64_t> recipients;
             voice.GetRouter().ComputeRecipients(static_cast<uint64_t>(talker), recipients);
-            return std::find(recipients.begin(), recipients.end(), static_cast<uint64_t>(listener)) != recipients.end();
+            return std::ranges::contains(recipients, static_cast<uint64_t>(listener));
         };
 
         voice.SyncAvatars(*serverManager);

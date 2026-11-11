@@ -1584,7 +1584,7 @@ MODULE(asset_http, {
         // The list came on a connection of its own; the three chunks shared one.
         std::set<int> chunkPorts;
         for (size_t i = 0; i < scripted.paths.size(); ++i) {
-            if (scripted.paths[i].find(".chunks") == std::string::npos) {
+            if (!scripted.paths[i].contains(".chunks")) {
                 chunkPorts.insert(scripted.ports[i]);
             }
         }

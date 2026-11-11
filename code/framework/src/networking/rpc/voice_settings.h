@@ -13,6 +13,7 @@
 #include <voice/voice_config.h>
 
 #include <cstdint>
+#include <utility>
 
 namespace Framework::Networking::RPC {
     // Server->client: the radius the router culls on, so the client mixer fades a talker out
@@ -40,7 +41,7 @@ namespace Framework::Networking::RPC {
 
         uint64_t player = 0;
         float range     = 0.0f;
-        uint8_t tier    = static_cast<uint8_t>(Framework::Voice::VoiceTier::Normal);
+        uint8_t tier    = std::to_underlying(Framework::Voice::VoiceTier::Normal);
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, player);
@@ -54,7 +55,7 @@ namespace Framework::Networking::RPC {
     struct VoiceTierRequest {
         static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Framework::VoiceTierRequest");
 
-        uint8_t tier = static_cast<uint8_t>(Framework::Voice::VoiceTier::Normal);
+        uint8_t tier = std::to_underlying(Framework::Voice::VoiceTier::Normal);
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, tier);

@@ -371,7 +371,7 @@ MODULE(resource_isolation, {
         }
         EQUALS(errors.size(), 1u);
         STREQUALS(errors[0].resourceName.c_str(), "faulty");
-        EQUALS(errors[0].errorMessage.find("boom") != std::string::npos, true);
+        EQUALS(errors[0].errorMessage.contains("boom"), true);
 
         manager.StopAll();
         engine.Shutdown();

@@ -151,7 +151,7 @@ namespace Framework::Scripting {
         std::vector<std::pair<std::string, std::string>> renames;
 
         for (const auto &symbol : source.symbols()) {
-            if (std::find(skip.begin(), skip.end(), symbol.name) != skip.end()) {
+            if (std::ranges::contains(skip, symbol.name)) {
                 continue;
             }
 
@@ -225,7 +225,7 @@ namespace Framework::Scripting {
         for (const auto &[registered, documented] : renames) {
             std::vector<std::pair<std::string, v8pp::metadata::symbol_kind>> naming;
             for (const auto &candidate : destination.symbols()) {
-                if (candidate.name != documented && std::find(candidate.bases.begin(), candidate.bases.end(), registered) != candidate.bases.end()) {
+                if (candidate.name != documented && std::ranges::contains(candidate.bases, registered)) {
                     naming.emplace_back(candidate.name, candidate.kind);
                 }
             }
@@ -244,7 +244,7 @@ namespace Framework::Scripting {
                     std::replace(target->bases.begin(), target->bases.end(), registered, documented);
                     std::vector<std::string> unique;
                     for (const std::string &base : target->bases) {
-                        if (std::find(unique.begin(), unique.end(), base) == unique.end()) {
+                        if (!std::ranges::contains(unique, base)) {
                             unique.push_back(base);
                         }
                     }

@@ -217,8 +217,8 @@ MODULE(resource, {
         std::string clientEntry = resource.GetClientScripts().empty() ? std::string {} : resource.GetClientScripts().front();
 
         // Should contain the path
-        EQUALS(serverEntry.find("server/main.js") != std::string::npos, true);
-        EQUALS(clientEntry.find("client/main.js") != std::string::npos, true);
+        EQUALS(serverEntry.contains("server/main.js"), true);
+        EQUALS(clientEntry.contains("client/main.js"), true);
 
         TestResourceHelper::Cleanup();
     });

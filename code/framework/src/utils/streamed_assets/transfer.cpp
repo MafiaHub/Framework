@@ -73,7 +73,7 @@ namespace Framework::Utils::StreamedAssets {
                     return false;
                 }
                 const auto piece = text.substr(begin, end - begin);
-                if (piece.find('.') != std::string_view::npos) {
+                if (piece.contains('.')) {
                     std::array<unsigned, 4> v4 {};
                     if (!ipv4Tail || end != text.size() || !ParseIpv4(piece, v4)) {
                         return false;
@@ -111,7 +111,7 @@ namespace Framework::Utils::StreamedAssets {
             }
             else {
                 const auto after = host.substr(gap + 2);
-                if (after.find("::") != std::string_view::npos || !ParseIpv6Groups(host.substr(0, gap), false, head) || !ParseIpv6Groups(after, true, tail) || head.size() + tail.size() > 7) {
+                if (after.contains("::") || !ParseIpv6Groups(host.substr(0, gap), false, head) || !ParseIpv6Groups(after, true, tail) || head.size() + tail.size() > 7) {
                     return false;
                 }
             }
@@ -148,11 +148,9 @@ namespace Framework::Utils::StreamedAssets {
             cuts.push_back(0);
             std::sort(cuts.begin(), cuts.end());
             cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
-            cuts.erase(std::remove_if(cuts.begin(), cuts.end(),
-                           [size](std::uint64_t cut) {
-                               return cut >= size;
-                           }),
-                cuts.end());
+            std::erase_if(cuts, [size](std::uint64_t cut) {
+                return cut >= size;
+            });
             cuts.push_back(size);
 
             std::vector<std::uint64_t> boundaries;
@@ -274,12 +272,12 @@ namespace Framework::Utils::StreamedAssets {
         else {
             return false;
         }
-        if (url.find('?') != std::string_view::npos || url.find('#') != std::string_view::npos) {
+        if (url.contains('?') || url.contains('#')) {
             return false;
         }
         const auto rest      = url.substr(schemeEnd);
         const auto authority = rest.substr(0, rest.find('/'));
-        if (authority.empty() || authority.find('@') != std::string_view::npos) {
+        if (authority.empty() || authority.contains('@')) {
             return false;
         }
         const auto isPort = [](std::string_view port) {
@@ -304,7 +302,7 @@ namespace Framework::Utils::StreamedAssets {
             const auto colon = authority.rfind(':');
             if (colon != std::string_view::npos) {
                 hostText = authority.substr(0, colon);
-                if (!isPort(authority.substr(colon + 1)) || hostText.find(':') != std::string_view::npos) {
+                if (!isPort(authority.substr(colon + 1)) || hostText.contains(':')) {
                     return false;
                 }
             }

@@ -429,11 +429,9 @@ namespace Framework::Scripting {
         }
 
         // Remove cancelled timers
-        _timers.erase(std::remove_if(_timers.begin(), _timers.end(),
-                          [](const std::unique_ptr<TimerEntry> &t) {
-                              return t->cancelled;
-                          }),
-            _timers.end());
+        std::erase_if(_timers, [](const std::unique_ptr<TimerEntry> &t) {
+            return t->cancelled;
+        });
     }
 
     std::string V8Engine::ResolveModulePath(std::string_view requested, std::string_view fromDir) {
@@ -725,7 +723,7 @@ namespace Framework::Scripting {
         std::vector<std::string> reported;
         for (const auto &error : errors) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("{}", error.message);
-            if (!_resourceManager || error.resource.empty() || error.generation != GetResourceGeneration(error.resource) || std::find(reported.begin(), reported.end(), error.resource) != reported.end())
+            if (!_resourceManager || error.resource.empty() || error.generation != GetResourceGeneration(error.resource) || std::ranges::contains(reported, error.resource))
                 continue;
             reported.push_back(error.resource);
             _resourceManager->HandleResourceRuntimeError(error.resource, error.message);

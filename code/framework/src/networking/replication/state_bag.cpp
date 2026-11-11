@@ -11,6 +11,7 @@
 #include "network_entity.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace Framework::Networking::Replication {
     void StateValue::Write(MafiaNet::BitStream *bs) const {
@@ -33,7 +34,7 @@ namespace Framework::Networking::Replication {
         uint8_t tag = 0;
         bs->Serialize(false, tag);
         // An unknown tag degrades to Null instead of aliasing some other case.
-        type = tag <= static_cast<uint8_t>(Type::Json) ? static_cast<Type>(tag) : Type::Null;
+        type = tag <= std::to_underlying(Type::Json) ? static_cast<Type>(tag) : Type::Null;
 
         switch (type) {
         case Type::Boolean: bs->Serialize(false, boolean); break;
@@ -95,7 +96,7 @@ namespace Framework::Networking::Replication {
             if (!dirty.previous.has_value() || *dirty.previous != StateScope::Owner || dirty.scope != StateScope::Server) {
                 continue;
             }
-            if (std::find(keys.begin(), keys.end(), key) == keys.end()) {
+            if (!std::ranges::contains(keys, key)) {
                 keys.push_back(key);
             }
         }

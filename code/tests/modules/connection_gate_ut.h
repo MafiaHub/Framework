@@ -216,7 +216,7 @@ MODULE(connection_gate, {
             EQUALS(decisions.size(), 1u);
             EQUALS(decisions[0].admitted, false);
             // The player is not shown the script's error.
-            EQUALS(decisions[0].reason.find("database") == std::string::npos, true);
+            EQUALS(!decisions[0].reason.contains("database"), true);
         });
 
         IT("waits for an async handler before admitting", {

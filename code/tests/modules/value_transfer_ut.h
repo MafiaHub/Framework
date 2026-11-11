@@ -167,7 +167,7 @@ MODULE(value_transfer, {
         // 40 levels of an array holding the same child twice: a few hundred bytes that would copy as 2^40 values.
         const std::string doubled = ValueTransferTest::Send(pair, "(() => { let tree = [1]; for (let i = 0; i < 40; ++i) tree = [tree, tree]; return tree; })()");
         EQUALS(doubled.rfind("Cannot copy value[", 0) == 0, true);
-        EQUALS(doubled.find("it is too large to copy") != std::string::npos, true);
+        EQUALS(doubled.contains("it is too large to copy"), true);
         STREQUALS(ValueTransferTest::Send(pair, "new Array(1e9)").c_str(), "Cannot copy value: it is too large to copy");
     });
 

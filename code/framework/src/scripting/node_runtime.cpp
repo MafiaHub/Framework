@@ -351,7 +351,7 @@ namespace Framework::Scripting {
 #ifdef _WIN32
         std::lock_guard lock(_signaledMutex);
         for (NodeRuntime *runtime : _signaled) {
-            if (std::find(ready.begin(), ready.end(), runtime) == ready.end()) {
+            if (!std::ranges::contains(ready, runtime)) {
                 ready.push_back(runtime);
             }
         }

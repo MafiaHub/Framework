@@ -13,6 +13,7 @@
 #include <core_modules.h>
 #include <networking/replication/replication_manager.h>
 
+#include <algorithm>
 #include <filesystem>
 
 namespace Framework::Scripting {
@@ -106,7 +107,7 @@ namespace Framework::Scripting {
 
     bool Resource::HasExport(std::string_view exportName) const {
         const auto &exports = _manifest.GetMafiaHubConfig().exports;
-        return std::find(exports.begin(), exports.end(), exportName) != exports.end();
+        return std::ranges::contains(exports, exportName);
     }
 
     bool Resource::DependsOn(std::string_view resourceName) const {
@@ -232,11 +233,9 @@ namespace Framework::Scripting {
 
         // Prune old attempts (older than 10 minutes)
         auto cutoff = std::chrono::system_clock::now() - std::chrono::minutes(10);
-        _restartAttempts.erase(std::remove_if(_restartAttempts.begin(), _restartAttempts.end(),
-                                   [&cutoff](const auto &t) {
-                                       return t < cutoff;
-                                   }),
-            _restartAttempts.end());
+        std::erase_if(_restartAttempts, [&cutoff](const auto &t) {
+            return t < cutoff;
+        });
     }
 
     void Resource::ClearRestartAttempts() {

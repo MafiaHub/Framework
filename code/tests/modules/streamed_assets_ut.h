@@ -38,7 +38,7 @@ namespace StreamedAssetsTest {
         }
 
         bool NormalizeEntry(std::string_view lane, std::string_view, std::string_view raw, std::string &out, std::string &reason) const override {
-            if (lane != "stream" || raw.empty() || raw.find("..") != std::string_view::npos || raw.find("forbidden") != std::string_view::npos) {
+            if (lane != "stream" || raw.empty() || raw.contains("..") || raw.contains("forbidden")) {
                 reason = "refused";
                 return false;
             }
@@ -137,7 +137,7 @@ MODULE(streamed_assets, {
         UEQUALS(refused.size(), 1u);
         EQUALS(refused[0], 0u);
         UEQUALS(errors.size(), 1u);
-        EQUALS(errors[0].find("notalane") != std::string::npos, true);
+        EQUALS(errors[0].contains("notalane"), true);
         std::filesystem::remove_all(root);
     });
 

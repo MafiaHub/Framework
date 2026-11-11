@@ -391,7 +391,7 @@ namespace Framework::Scripting {
 #ifdef _WIN32
         return false;
 #else
-        return std::find(_ioReady.begin(), _ioReady.end(), &runtime) != _ioReady.end();
+        return std::ranges::contains(_ioReady, &runtime);
 #endif
     }
 
