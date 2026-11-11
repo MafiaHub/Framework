@@ -157,7 +157,7 @@ class Call {
     virtual Value NewObject() = 0;
     virtual Value NewArray() = 0;
     virtual Value NewFunction(NativeFunction fn) = 0;  // fu2::function<void(Call &)>
-    virtual Value FromTransfer(const TransferredValue &) = 0;   // throws to the script what cannot be rebuilt
+    virtual Utils::Result<Value, std::string> FromTransfer(const TransferredValue &) = 0;
     virtual Utils::Result<Value, std::string> ParseJson(std::string_view text) = 0;
     template <typename T> Value Wrap(T &&bound);       // a bound class instance
 
@@ -197,12 +197,13 @@ JavaScript `undefined` and `null` are both `Nil`. `Array` is a JavaScript array 
 - `ToTransfer` and `FromTransfer` are `ValueTransfer` in JavaScript and `LuaTransfer` in Lua (§4.1).
   `ToJson` is `JSON.stringify` in JavaScript, so a `toJSON` is asked, and `LuaJson::Encode` in Lua;
   `ParseJson` is `JSON.parse` and `LuaJson::Decode`. `Nil` is `null` in JSON in both languages.
-- `ToTransfer`, `ToJson` and `ParseJson` answer with a result and throw nothing: the function decides what
-  a value that does not cross, or text that does not parse, means. One exception keeps JavaScript as it
-  was: what `JSON.stringify` or a script's `toJSON` threw is also the error of the call, and the first
-  throw wins, so a function that throws the error it was given leaves a JavaScript caller its own
-  exception. A value JavaScript has no JSON for (a function, a symbol) is an error, not the text
-  `undefined`.
+- `ToTransfer`, `FromTransfer`, `ToJson` and `ParseJson` answer with a result and throw nothing, in either
+  language: the function decides what a value that does not cross, or text that does not parse, means.
+  One that puts up with the failure goes on, and one that does not throws the error under its own name
+  (`Events.emit: Cannot copy value.job: a coroutine cannot be copied`). In JavaScript the error is the
+  message of what was thrown meanwhile, by `JSON.stringify`, by a script's `toJSON` or by a rebuild, and
+  that exception is not left pending. A value JavaScript has no JSON for (a function, a symbol) is an
+  error, not the text `undefined`.
 
 `ScriptCallable` is a script function kept beyond a call: an event handler, a key bind, an export.
 
@@ -382,8 +383,17 @@ One value crosses per call result: a Lua function's first return value.
   under the name and with the bytes JavaScript uses; any other is refused, as is a host type Lua has no
   class for (`host type 'Player' is not available in Lua`).
 - The bounds are `ValueTransfer`'s: 128 levels, about a million values, 256 MB of strings and binary
-  data. A refusal names where in the value it happened (`Cannot copy value.items[2].name: a function
-  cannot be copied`), counting from 1 in a value read from Lua and from 0 in one being built.
+  data (`LuaValueLimits`, which a caller may tighten). They bound what the host allocates, not only what
+  it returns: a table is counted, keys and their bytes, as its keys are read, so one with more keys
+  than the copy may still take is refused before they are gathered, and the keys of the tables open at
+  one time count against the one bound.
+- A refusal names where in the value it happened (`Cannot copy value.items[2].job: a coroutine cannot be
+  copied`), counting from 1 in a value read from Lua and from 0 in one being built. A key in that path is
+  cut to its first 64 bytes.
+- The keys of a table are copied before its values are read, and nothing points into the state across an
+  allocation. A weak table (`__mode`), which a script may make, can lose entries to the collector while
+  it is walked: an entry that went is absent, or undefined where it was an element, and every entry that
+  is there is under its own key.
 - Neither direction lets a Lua error out, whether it is called from a script's call or from host code:
   the work is a protected call, and a state out of memory fails the copy.
 
@@ -411,6 +421,8 @@ One value crosses per call result: a Lua function's first return value.
     NaN or an infinity as `null`, strings escaped the same way, an empty table as `[]`. Object keys come
     in the order of §4.1. A bound object is the object of its class's `JsonProperties`; one without is
     refused, as are a function, a cycle, a string that is not UTF-8 and nesting beyond 128 levels.
+    The bounds of §4.1 hold for it, the bytes being those of the text once escaped, and so does what
+    §4.1 says of weak tables.
   - It reads `null` as `nil`, a number with an integral value within ±2^53 as an integer and any other
     as a float, and of two members with one key the last.
 
