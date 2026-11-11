@@ -73,6 +73,13 @@ namespace Framework::Scripting::Bind {
         }
     }
 
+    void ForgetCallResourceManager(const ResourceManager *manager) {
+        std::scoped_lock lock(ManagersMutex());
+        std::erase_if(Managers(), [manager](const auto &registered) {
+            return registered.second == manager;
+        });
+    }
+
     namespace Detail {
         ResourceManager *CallResourceManager(const void *runtime) {
             {

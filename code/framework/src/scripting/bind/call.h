@@ -200,9 +200,14 @@ namespace Framework::Scripting::Bind {
 
     // Tells the calls made in a runtime which resource manager they answer GetResourceManager with, and a
     // JavaScript call which one names its resource. `runtime` is the v8::Isolate * or the LuaRuntime *; a null
-    // manager forgets the runtime, which whoever registered it does before the runtime or the manager goes.
+    // manager forgets the runtime, which whoever registered it does before the runtime or the manager goes. That
+    // is done for an isolate as it is unregistered (Builtins::UnregisterAll) and for a manager as it is destroyed.
     // A runtime nobody registered answers with the manager of the scripting module in CoreModules, if there is one.
     void SetCallResourceManager(const void *runtime, ResourceManager *manager);
+
+    // Forgets every runtime that answers with `manager`, which a manager does as it goes: a builtin registered
+    // with it may have told a runtime that outlives it.
+    void ForgetCallResourceManager(const ResourceManager *manager);
 
     namespace Detail {
         // The manager of `runtime`, as SetCallResourceManager describes it.

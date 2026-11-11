@@ -8,6 +8,7 @@
 
 #include "resource_manager.h"
 
+#include "../bind/call.h"
 #include "../builtins/events.h"
 #include "../builtins/messages.h"
 #include "../builtins/state_bag.h"
@@ -189,6 +190,8 @@ namespace Framework::Scripting {
 
     ResourceManager::~ResourceManager() {
         StopAll();
+        // A runtime a builtin was registered in with this manager may outlive it.
+        Bind::ForgetCallResourceManager(this);
         if (_jsEngine) {
             _jsEngine->SetResourceManager(nullptr);
         }

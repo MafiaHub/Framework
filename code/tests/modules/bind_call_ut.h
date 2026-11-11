@@ -1430,6 +1430,34 @@ MODULE(bind_call, {
         EQUALS(client.Both("Probe.side()", "client"), "");
     });
 
+    IT("forgets the manager of a runtime when the manager or the isolate goes", {
+        Runtimes runtimes;
+        {
+            ResourceManager manager(&runtimes.Engine());
+            Bind::SetCallResourceManager(runtimes.Isolate(), &manager);
+            Bind::SetCallResourceManager(&runtimes.LuaSide(), &manager);
+            expectedManager = &manager;
+            EQUALS(runtimes.Both("Probe.manager()", "registered"), "");
+        }
+        expectedManager = nullptr;
+        EQUALS(runtimes.Both("Probe.manager()", UnregisteredManager()), "");
+
+        // An isolate that is unregistered is not found again under its address.
+        Framework::Scripting::NodeEngine engine;
+        engine.Init();
+        std::string error;
+        std::unique_ptr<Framework::Scripting::NodeRuntime> runtime = engine.CreateRuntime(error);
+        ResourceManager manager(&engine);
+        Bind::SetCallResourceManager(runtime->GetIsolate(), &manager);
+        const bool registered = Bind::Detail::CallResourceManager(runtime->GetIsolate()) == &manager;
+        Framework::Scripting::Builtins::UnregisterAll(runtime->GetIsolate());
+        const bool forgotten = Bind::Detail::CallResourceManager(runtime->GetIsolate()) != &manager;
+        runtime.reset();
+        engine.Shutdown();
+        EQUALS(registered, true);
+        EQUALS(forgotten, true);
+    });
+
     // --- Namespace, materialised ---
 
     IT("publishes constants, and the members of the side only", {
