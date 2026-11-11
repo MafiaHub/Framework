@@ -13,6 +13,7 @@
 #include <atomic>
 #include <bit>
 #include <chrono>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -83,5 +84,26 @@ MODULE(fork_join_pool, {
         }
         EQUALS(wrong, 0);
         EQUALS(innerLeftItsThread.load(), false);
+    });
+
+    IT("still shares work out after an iteration threw on the caller", {
+        ForkJoinPool pool(3);
+        bool threw = false;
+        try {
+            // One iteration runs on the caller alone.
+            pool.Run(1, [](uint32_t, uint32_t) {
+                throw std::runtime_error("iteration failed");
+            });
+        }
+        catch (const std::runtime_error &) {
+            threw = true;
+        }
+        EQUALS(threw, true);
+        std::atomic<uint32_t> lanesSeen {0};
+        pool.Run(64, [&](uint32_t, uint32_t lane) {
+            lanesSeen.fetch_or(1u << lane);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        });
+        GREATER(std::popcount(lanesSeen.load()), 1);
     });
 });

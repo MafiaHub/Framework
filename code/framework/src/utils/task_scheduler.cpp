@@ -55,6 +55,8 @@ namespace Framework::Utils {
         asio::io_context owner;
         // How many of them are queued, so a drain runs what was there when it started and no more.
         std::atomic<size_t> ownerQueued {0};
+        // The owner is inside Drain(). The owner's alone.
+        bool draining = false;
 
         // Background tasks queued or running, and the owner waiting in Flush() for that to change.
         std::mutex mutex;
@@ -106,7 +108,9 @@ namespace Framework::Utils {
 
     void TaskScheduler::PostToOwner(Task task) {
         ++_impl->ownerQueued;
-        asio::post(_impl->owner, [task = std::move(task)]() mutable {
+        asio::post(_impl->owner, [impl = _impl.get(), task = std::move(task)]() mutable {
+            // No longer queued once it runs: a task that waits for the queue to empty is not waiting for itself.
+            --impl->ownerQueued;
             RunGuarded(task, "tick-thread");
         });
         // Under the lock, so a Flush() between its check and its wait cannot miss this.
@@ -120,22 +124,37 @@ namespace Framework::Utils {
     }
 
     size_t TaskScheduler::Drain() {
+        // From inside a task this is already running: Asio does not allow polling a context from one of its own
+        // handlers, and the tasks still queued run when the drain in progress gets to them.
+        if (_impl->draining) {
+            return 0;
+        }
         // What is queued now; a handler posted while these run is counted after this read and waits its turn.
         const size_t queued = _impl->ownerQueued.load();
         if (queued == 0) {
             return 0;
         }
+        _impl->draining = true;
         // An io_context that ran out of handlers stays stopped until it is told there may be more.
         _impl->owner.restart();
         size_t ran = 0;
         while (ran < queued && _impl->owner.poll_one() != 0) {
             ++ran;
         }
-        _impl->ownerQueued -= ran;
+        _impl->draining = false;
         return ran;
     }
 
     void TaskScheduler::Flush() {
+        // From inside one of the owner's tasks only the background half can be waited for: the tasks behind this
+        // one cannot run until it returns.
+        if (_impl->draining) {
+            std::unique_lock lock(_impl->mutex);
+            _impl->event.wait(lock, [this] {
+                return _impl->background == 0;
+            });
+            return;
+        }
         for (;;) {
             Drain();
             std::unique_lock lock(_impl->mutex);

@@ -196,4 +196,29 @@ MODULE(task_scheduler, {
         }
         EQUALS(done.load(), 20);
     });
+
+    IT("lets a task on the owner wait for background work without waiting for itself", {
+        TaskScheduler scheduler(1);
+        std::atomic<bool> worked {false};
+        bool flushedInside   = false;
+        size_t drainedInside = 99;
+        int ranBehind        = 0;
+        scheduler.PostToOwner([&] {
+            scheduler.RunInBackground([&] {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                worked = true;
+            });
+            // Inside one of the owner's own tasks: the ones queued behind it cannot run until it returns.
+            drainedInside = scheduler.Drain();
+            scheduler.Flush();
+            flushedInside = worked.load();
+        });
+        scheduler.PostToOwner([&] {
+            ++ranBehind;
+        });
+        scheduler.Flush();
+        EQUALS(drainedInside, static_cast<size_t>(0));
+        EQUALS(flushedInside, true);
+        EQUALS(ranBehind, 1);
+    });
 });

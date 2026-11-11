@@ -15,6 +15,23 @@ namespace Framework::Utils {
         // The pool whose loop this thread is inside, and the lane it runs there.
         thread_local const ForkJoinPool *tRunning = nullptr;
         thread_local uint32_t tLane               = 0;
+
+        // Marks this thread as inside a pool's loop, and puts back what it was, however the loop ends: an
+        // iteration that throws must not leave the thread looking as if it were still in there.
+        class InLoop final {
+          public:
+            InLoop(const ForkJoinPool *pool, uint32_t lane): _pool(std::exchange(tRunning, pool)), _lane(std::exchange(tLane, lane)) {}
+            ~InLoop() {
+                tRunning = _pool;
+                tLane    = _lane;
+            }
+            InLoop(const InLoop &)            = delete;
+            InLoop &operator=(const InLoop &) = delete;
+
+          private:
+            const ForkJoinPool *_pool;
+            uint32_t _lane;
+        };
     } // namespace
 
     ForkJoinPool::ForkJoinPool(uint32_t workers) {
@@ -51,13 +68,10 @@ namespace Framework::Utils {
         }
         // One iteration, or nobody to share with: waking a thread costs more than it saves.
         if (_threads.empty() || count == 1) {
-            const ForkJoinPool *outer = std::exchange(tRunning, this);
-            const uint32_t outerLane  = std::exchange(tLane, 0u);
+            const InLoop inLoop(this, 0);
             for (uint32_t i = 0; i < count; ++i) {
                 fn(i, 0);
             }
-            tRunning = outer;
-            tLane    = outerLane;
             return;
         }
         {
@@ -78,13 +92,10 @@ namespace Framework::Utils {
     }
 
     void ForkJoinPool::Drain(uint32_t lane) {
-        const ForkJoinPool *outer = std::exchange(tRunning, this);
-        const uint32_t outerLane  = std::exchange(tLane, lane);
+        const InLoop inLoop(this, lane);
         for (uint32_t i = _next.fetch_add(1, std::memory_order_relaxed); i < _count; i = _next.fetch_add(1, std::memory_order_relaxed)) {
             (*_fn)(i, lane);
         }
-        tRunning = outer;
-        tLane    = outerLane;
     }
 
     void ForkJoinPool::Work(uint32_t lane) {

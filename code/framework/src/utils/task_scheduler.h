@@ -83,7 +83,8 @@ namespace Framework::Utils {
         // the next call, so one drain cannot be kept going by the work it starts.
         size_t Drain();
         // Blocks until no background work is left and everything posted to the owner has run. For shutdown, and
-        // for a caller that needs the result now.
+        // for a caller that needs the result now. Called from inside one of the owner's tasks, where the tasks
+        // behind it cannot run, it waits for the background work only; Drain() there runs nothing.
         void Flush();
 
       private:
