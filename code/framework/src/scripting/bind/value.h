@@ -36,9 +36,27 @@ namespace Framework::Scripting::Bind {
     namespace Detail {
         // What a Value forwards to: the values of one call, by slot. Slot 0 is nil. Implemented once per language,
         // by the Call of that language (lua_call.cpp, v8_call.cpp).
+        //
+        // Calls run one inside another on a thread, and a backend lives exactly as long as its call. Each has a
+        // generation no other ever has, which is all a Value keeps of it: a Value never holds a pointer to a
+        // backend, and is led to one only while its call is the innermost one running.
         class ValueBackend {
           public:
-            virtual ValueKind KindOf(size_t slot) const                 = 0;
+            ValueBackend(const ValueBackend &)            = delete;
+            ValueBackend &operator=(const ValueBackend &) = delete;
+
+            // The backend of the innermost call running on this thread, or nullptr outside any.
+            static ValueBackend *Innermost();
+
+            uint64_t Generation() const {
+                return _generation;
+            }
+
+            // The kind of the value. Unless `exact`, a Lua table is an Object without being looked into, which is
+            // all that telling it from a scalar, a function or a bound object needs.
+            virtual ValueKind KindOf(size_t slot, bool exact) const = 0;
+            // Whether the value is an Array, or an Object without a key.
+            virtual bool IsListAt(size_t slot)                          = 0;
             virtual bool BooleanOf(size_t slot) const                   = 0;
             virtual double NumberOf(size_t slot) const                  = 0;
             virtual std::optional<int64_t> IntegerOf(size_t slot) const = 0;
@@ -54,84 +72,112 @@ namespace Framework::Scripting::Bind {
             virtual void AppendTo(size_t slot, const Value &value)                     = 0;
 
           protected:
-            ~ValueBackend() = default;
+            // Becomes the innermost call of the thread, until it is destroyed.
+            ValueBackend();
+            ~ValueBackend();
+
+          private:
+            uint64_t _generation;
+            ValueBackend *_outer;
         };
 
         struct ValueAccess;
     } // namespace Detail
 
-    // A handle to a script value, good until the call it comes from returns: an argument, or what the Call or
-    // another Value made. A copy designates the same value. It names neither language: the same code reads a
-    // JavaScript value and a Lua one.
+    // A handle to a script value: an argument, or what the Call or another Value made. A copy designates the same
+    // value. It names neither language: the same code reads a JavaScript value and a Lua one.
+    //
+    // A handle is good in its own call, until that call returns. Anywhere else it is Nil, and reads, is stored and
+    // is returned as the nil of the call it is used in: once its call has returned, as when a function made with
+    // NewFunction kept one, and in a call nested in its own. Keeping one is a mistake, not a danger.
     //
     // Reading is strict. A value of another kind is not converted: AsString of a number is empty, AsNumber of a
     // string is 0. Reading or writing through a value that is not an object, or not an array, does nothing and gives
     // Nil, nothing or 0.
     //
-    // Objects. A Lua table is read and written raw: no metamethod of the script runs inside the host function, so a
-    // proxy table shows what it holds itself, and a bound object has no keys. A table whose metatable is protected
+    // Objects. Only an Object or an Array has keys: a bound object and a function have none in either language,
+    // whatever a script could read on them. A Lua table is read and written raw: no metamethod of the script runs
+    // inside the host function, so a proxy table shows what it holds itself. A table whose metatable is protected
     // (__metatable), as the table of a class or of a namespace is, is not written to. A JavaScript object is read
     // and written as a script would: a getter, a setter or a proxy runs, and what it throws is thrown by the call
     // once the function has returned.
     class Value final {
       public:
-        // Nil, and of no call.
+        // Nil.
         Value() = default;
 
+        // Of a Lua table this looks at every key, to tell an Array from an Object.
         ValueKind Kind() const {
-            return _backend != nullptr ? _backend->KindOf(_slot) : ValueKind::Nil;
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->KindOf(target.slot, true) : ValueKind::Nil;
         }
 
         bool IsNil() const {
-            return Kind() == ValueKind::Nil;
+            return Scalar() == ValueKind::Nil;
         }
         bool IsBoolean() const {
-            return Kind() == ValueKind::Boolean;
+            return Scalar() == ValueKind::Boolean;
         }
         bool IsNumber() const {
-            return Kind() == ValueKind::Number;
+            return Scalar() == ValueKind::Number;
         }
         bool IsString() const {
-            return Kind() == ValueKind::String;
+            return Scalar() == ValueKind::String;
         }
         bool IsFunction() const {
-            return Kind() == ValueKind::Function;
+            return Scalar() == ValueKind::Function;
         }
+        bool IsBound() const {
+            return Scalar() == ValueKind::Bound;
+        }
+
+        // A JavaScript array, or a Lua table whose keys are exactly 1..n. Not the check for "a list was passed":
+        // the empty table of Lua is an Object, as nothing tells it from one, and so is `{}` where JavaScript has
+        // `[]`. IsList is that check.
         bool IsArray() const {
             return Kind() == ValueKind::Array;
         }
         bool IsObject() const {
             return Kind() == ValueKind::Object;
         }
-        bool IsBound() const {
-            return Kind() == ValueKind::Bound;
+
+        // Whether the value passes for a list: an Array, or an Object without a key, in both languages. Length
+        // and At read any of them.
+        bool IsList() const {
+            const Target target = Find();
+            return target.backend != nullptr && target.backend->IsListAt(target.slot);
         }
 
         // True for the boolean true and for nothing else.
         bool AsBoolean() const {
-            return _backend != nullptr && _backend->BooleanOf(_slot);
+            const Target target = Find();
+            return target.backend != nullptr && target.backend->BooleanOf(target.slot);
         }
 
         // 0 for what is not a number.
         double AsNumber() const {
-            return _backend != nullptr ? _backend->NumberOf(_slot) : 0.0;
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->NumberOf(target.slot) : 0.0;
         }
 
         // A number with an integral value that fits 64 bits. Empty for any other number and any other value.
         std::optional<int64_t> AsInteger() const {
-            return _backend != nullptr ? _backend->IntegerOf(_slot) : std::nullopt;
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->IntegerOf(target.slot) : std::nullopt;
         }
 
         // The bytes of a string: UTF-8 from JavaScript, whatever the script put in it from Lua. Empty for what is
         // not a string.
         std::string AsString() const {
-            return _backend != nullptr ? _backend->StringOf(_slot) : std::string();
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->StringOf(target.slot) : std::string();
         }
 
         // Any value as String(value) or tostring(value) spells it, which may run the script's toString or
-        // __tostring. Empty when that fails.
+        // __tostring. Empty when that fails, and outside any call.
         std::string ToDisplayString() const {
-            return _backend != nullptr ? _backend->DisplayStringOf(_slot) : std::string();
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->DisplayStringOf(target.slot) : std::string();
         }
 
         // The object of the bound class T in the value, or the T part of an object of a class derived from it,
@@ -139,75 +185,99 @@ namespace Framework::Scripting::Bind {
         template <typename T>
         T *AsBound() const {
             static_assert(Detail::HasScriptClassName<T>, "Bind::Value::AsBound: T is a bound class, named with FW_SCRIPT_CLASS");
-            return _backend != nullptr ? static_cast<T *>(_backend->BoundOf(_slot, Detail::LuaClassOf<T>::definition)) : nullptr;
+            const Target target = Find();
+            return target.backend != nullptr ? static_cast<T *>(target.backend->BoundOf(target.slot, Detail::LuaClassOf<T>::definition)) : nullptr;
         }
 
-        // The value under `key`, Nil when there is none. A Lua integer key is found under its decimal text.
-        Value Get(std::string_view key) const;
+        // The value under `key`, Nil when there is none.
+        //
+        // A key that is the decimal text of an integer ("10", not "010") names what Keys lists under it. In an
+        // Array that is the element at that index from zero, in both languages. In any other Lua table it is the
+        // string key if the table has it, and the integer key otherwise.
+        Value Get(std::string_view key) const {
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->GetKey(target.slot, key) : Value();
+        }
 
-        // Nil removes the key in Lua and stores undefined in JavaScript.
-        void Set(std::string_view key, Value value);
+        // Nil removes the key in Lua and stores undefined in JavaScript. A key that is the decimal text of an
+        // integer is written where Get reads it, so what Keys listed is replaced and not doubled; in a Lua table
+        // that has neither key yet it becomes an integer key.
+        void Set(std::string_view key, Value value) {
+            const Target target = Find();
+            if (target.backend != nullptr) {
+                target.backend->SetKey(target.slot, key, value);
+            }
+        }
 
-        // The keys of an object a script enumerates: own enumerable string keys in JavaScript, in the order of the
-        // object; string keys and integer keys, these as decimal text, in Lua, in no order. Those of an array are
-        // its indices as the language counts them.
+        // The keys of an Object a script enumerates. JavaScript: its own enumerable string keys, in the order of
+        // the object, which is integers ascending, then the others as they were added. Lua: integer keys
+        // ascending, as decimal text, then string keys sorted by their bytes; keys of any other type are left out.
+        // The keys of an Array are its indices from zero, "0" to "n-1", in both languages.
         std::vector<std::string> Keys() const {
-            return _backend != nullptr ? _backend->KeysOf(_slot) : std::vector<std::string>();
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->KeysOf(target.slot) : std::vector<std::string>();
         }
 
         // Elements of a JavaScript array; the border of a Lua table, which is its element count when it is an
         // Array. 0 for anything else.
         size_t Length() const {
-            return _backend != nullptr ? _backend->LengthOf(_slot) : 0;
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->LengthOf(target.slot) : 0;
         }
 
         // Indices start at zero in both languages.
-        Value At(size_t zeroBased) const;
+        Value At(size_t zeroBased) const {
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->ElementAt(target.slot, zeroBased) : Value();
+        }
 
         // Adds an element at the end of a JavaScript array or of a Lua table, which NewArray gives empty. A Lua
         // table cannot hold nil: appending Nil leaves it as it was.
-        void Append(Value value);
+        void Append(Value value) {
+            const Target target = Find();
+            if (target.backend != nullptr) {
+                target.backend->AppendTo(target.slot, value);
+            }
+        }
 
       private:
         friend struct Detail::ValueAccess;
 
-        Value(Detail::ValueBackend *backend, size_t slot): _backend(backend), _slot(slot) {}
+        struct Target final {
+            Detail::ValueBackend *backend;
+            size_t slot;
+        };
 
-        Detail::ValueBackend *_backend = nullptr;
-        size_t _slot                   = 0;
+        Value(uint64_t generation, size_t slot): _generation(generation), _slot(slot) {}
+
+        // Where to read the value: in the innermost call, at its slot when the handle is of that call, at the nil
+        // slot otherwise. No backend outside any call.
+        Target Find() const {
+            Detail::ValueBackend *backend = Detail::ValueBackend::Innermost();
+            return {backend, backend != nullptr && backend->Generation() == _generation ? _slot : 0};
+        }
+
+        ValueKind Scalar() const {
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->KindOf(target.slot, false) : ValueKind::Nil;
+        }
+
+        // 0 is the generation of no call.
+        uint64_t _generation = 0;
+        size_t _slot         = 0;
     };
 
     namespace Detail {
         // For a backend: makes the Value of one of its slots, and finds the slot of a Value it is handed back.
         struct ValueAccess final {
-            static Value Make(ValueBackend *backend, size_t slot) {
-                return Value(backend, slot);
+            static Value Make(const ValueBackend &backend, size_t slot) {
+                return Value(backend.Generation(), slot);
             }
 
             // The slot of `value` in `backend`. A value of another call, or of none, is nil: slot 0.
-            static size_t SlotIn(const ValueBackend *backend, const Value &value) {
-                return value._backend == backend ? value._slot : 0;
+            static size_t SlotIn(const ValueBackend &backend, const Value &value) {
+                return value._generation == backend.Generation() ? value._slot : 0;
             }
         };
     } // namespace Detail
-
-    inline Value Value::Get(std::string_view key) const {
-        return _backend != nullptr ? _backend->GetKey(_slot, key) : Value();
-    }
-
-    inline void Value::Set(std::string_view key, Value value) {
-        if (_backend != nullptr) {
-            _backend->SetKey(_slot, key, value);
-        }
-    }
-
-    inline Value Value::At(size_t zeroBased) const {
-        return _backend != nullptr ? _backend->ElementAt(_slot, zeroBased) : Value();
-    }
-
-    inline void Value::Append(Value value) {
-        if (_backend != nullptr) {
-            _backend->AppendTo(_slot, value);
-        }
-    }
 } // namespace Framework::Scripting::Bind

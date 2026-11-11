@@ -12,6 +12,7 @@
 
 #include <core_modules.h>
 
+#include <atomic>
 #include <mutex>
 #include <unordered_map>
 
@@ -28,6 +29,29 @@ namespace Framework::Scripting::Bind {
             return managers;
         }
     } // namespace
+
+    namespace Detail {
+        namespace {
+            // Calls nest on a thread and never move to another, so the innermost one is the thread's own to know.
+            thread_local ValueBackend *innermost = nullptr;
+
+            // Shared by every thread: a generation is never given twice, so a handle that strayed to another
+            // thread finds no call there either. 0 is left for the handle of no call.
+            std::atomic<uint64_t> lastGeneration {0};
+        } // namespace
+
+        ValueBackend::ValueBackend(): _generation(lastGeneration.fetch_add(1, std::memory_order_relaxed) + 1), _outer(innermost) {
+            innermost = this;
+        }
+
+        ValueBackend::~ValueBackend() {
+            innermost = _outer;
+        }
+
+        ValueBackend *ValueBackend::Innermost() {
+            return innermost;
+        }
+    } // namespace Detail
 
     void SetCallResourceManager(const void *runtime, ResourceManager *manager) {
         std::scoped_lock lock(ManagersMutex());

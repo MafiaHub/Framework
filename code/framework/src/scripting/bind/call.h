@@ -51,7 +51,8 @@ namespace Framework::Scripting::Bind {
     // What a context function receives: the arguments of one call from a script, the means to make values and to
     // answer, and who is calling. It names neither language, and neither does a builtin written against it.
     //
-    // A Call and the Values it gives are good until the function returns; neither is kept beyond it.
+    // A Call and the Values it gives are good until the function returns. The Call is not kept beyond it; a Value
+    // that is reads as Nil from then on (value.h).
     //
     // Errors. ThrowTypeError and ThrowError do not leave the function: it runs on to its return, and the script
     // gets the error then, a TypeError or an Error in JavaScript and in Lua a raised string, which Lua prefixes
@@ -78,6 +79,10 @@ namespace Framework::Scripting::Bind {
         // Nil beyond ArgCount.
         virtual Value Arg(size_t index) const = 0;
 
+        // In a method of a class, what it was called on, whatever that is: what a method returns for chaining.
+        // Nil in a function that is not a method.
+        virtual Value This() const = 0;
+
         // In a method of a class, the receiver as a T: the object the method was called on, when it is a T or of a
         // class derived from T. nullptr for any other receiver, for none, and in a function that is not a method;
         // a method then returns without effect, as for a receiver whose object is gone.
@@ -88,7 +93,9 @@ namespace Framework::Scripting::Bind {
         }
 
         // undefined in JavaScript.
-        virtual Value Nil()          = 0;
+        virtual Value Nil() = 0;
+        // null in JavaScript, for an API that answers null; nil in Lua, which has the one. Its kind is Nil.
+        virtual Value Null()         = 0;
         virtual Value Boolean(bool)  = 0;
         virtual Value Number(double) = 0;
         // A Lua integer; a JavaScript number, exact within 2^53.

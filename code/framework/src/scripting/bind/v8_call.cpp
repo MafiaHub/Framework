@@ -27,9 +27,9 @@
 
 // The JavaScript side of Call and Value.
 //
-// A value is a slot of a vector the call keeps: the arguments first, then what the function makes or reads out of
-// an object. The handles live in the scope of the callback, so they are good until the function returns. Slot 0 is
-// undefined.
+// A value is a slot of a vector the call keeps: the receiver of a method, the arguments, then what the function
+// makes or reads out of an object. The handles live in the scope of the callback, so they are good until the
+// function returns. Slot 0 is undefined, and so is any slot the call does not have.
 //
 // An object is read and written as a script would, so a getter, a setter or a proxy may run and throw. What it
 // throws is caught where it happens and kept as the error of the call, unless the function threw before: the
@@ -47,8 +47,11 @@ namespace Framework::Scripting::Bind {
             : public Call
             , public Detail::ValueBackend {
           public:
-            V8Call(const v8::FunctionCallbackInfo<v8::Value> &info, bool method): _info(info), _isolate(info.GetIsolate()), _context(_isolate->GetCurrentContext()), _method(method), _count(static_cast<size_t>(info.Length())) {
-                _values.reserve(_count + 8);
+            V8Call(const v8::FunctionCallbackInfo<v8::Value> &info, bool method): _info(info), _isolate(info.GetIsolate()), _context(_isolate->GetCurrentContext()), _method(method), _first(method ? 2 : 1), _count(static_cast<size_t>(info.Length())) {
+                _values.reserve(_count + 9);
+                if (method) {
+                    _values.push_back(info.This());
+                }
                 for (int i = 0; i < info.Length(); ++i) {
                     _values.push_back(info[i]);
                 }
@@ -93,11 +96,19 @@ namespace Framework::Scripting::Bind {
             }
 
             Value Arg(size_t index) const override {
-                return At(index < _count ? index + 1 : 0);
+                return At(index < _count ? _first + index : 0);
+            }
+
+            Value This() const override {
+                return At(_method ? 1 : 0);
             }
 
             Value Nil() override {
                 return At(0);
+            }
+
+            Value Null() override {
+                return Keep(v8::Null(_isolate));
             }
 
             Value Boolean(bool value) override {
@@ -156,7 +167,7 @@ namespace Framework::Scripting::Bind {
 
             // --- ValueBackend ---
 
-            ValueKind KindOf(size_t slot) const override {
+            ValueKind KindOf(size_t slot, bool) const override {
                 const v8::Local<v8::Value> value = Local(slot);
                 if (value->IsNullOrUndefined()) {
                     return ValueKind::Nil;
@@ -180,6 +191,15 @@ namespace Framework::Scripting::Bind {
                     return IsBound(value) ? ValueKind::Bound : ValueKind::Object;
                 }
                 return ValueKind::Other;
+            }
+
+            bool IsListAt(size_t slot) override {
+                const v8::Local<v8::Value> value = Local(slot);
+                if (value->IsArray()) {
+                    return true;
+                }
+                v8::Local<v8::Array> names;
+                return HasKeys(value) && OwnKeys(value.As<v8::Object>()).ToLocal(&names) && names->Length() == 0;
             }
 
             bool BooleanOf(size_t slot) const override {
@@ -209,9 +229,21 @@ namespace Framework::Scripting::Bind {
                 return value->IsString() ? ToUtf8(_isolate, value) : std::string();
             }
 
-            // v8::String::Utf8Value keeps what a toString throws to itself.
+            // What a toString throws is not the function's to pass on: the value just has no spelling. A
+            // termination is another matter, and v8::String::Utf8Value alone would swallow it.
             std::string DisplayStringOf(size_t slot) override {
-                return CanRun() ? ToUtf8(_isolate, Local(slot)) : std::string();
+                if (!CanRun()) {
+                    return {};
+                }
+                v8::TryCatch tryCatch(_isolate);
+                v8::Local<v8::String> spelled;
+                if (!Local(slot)->ToString(_context).ToLocal(&spelled)) {
+                    if (tryCatch.HasTerminated()) {
+                        _thrown = Thrown::Terminated;
+                    }
+                    return {};
+                }
+                return ToUtf8(_isolate, spelled);
             }
 
             void *BoundOf(size_t slot, const Detail::LuaClass *definition) const override {
@@ -221,7 +253,7 @@ namespace Framework::Scripting::Bind {
             Value GetKey(size_t slot, std::string_view key) override {
                 const v8::Local<v8::Value> object = Local(slot);
                 v8::Local<v8::String> name;
-                if (!object->IsObject() || !CanRun() || !NewString(key).ToLocal(&name)) {
+                if (!HasKeys(object) || !CanRun() || !NewString(key).ToLocal(&name)) {
                     return At(0);
                 }
                 v8::TryCatch tryCatch(_isolate);
@@ -236,7 +268,7 @@ namespace Framework::Scripting::Bind {
             void SetKey(size_t slot, std::string_view key, const Value &value) override {
                 const v8::Local<v8::Value> object = Local(slot);
                 v8::Local<v8::String> name;
-                if (!object->IsObject() || !CanRun() || !NewString(key).ToLocal(&name)) {
+                if (!HasKeys(object) || !CanRun() || !NewString(key).ToLocal(&name)) {
                     return;
                 }
                 v8::TryCatch tryCatch(_isolate);
@@ -248,20 +280,15 @@ namespace Framework::Scripting::Bind {
             std::vector<std::string> KeysOf(size_t slot) override {
                 std::vector<std::string> keys;
                 const v8::Local<v8::Value> object = Local(slot);
-                if (!object->IsObject() || !CanRun()) {
-                    return keys;
-                }
-                v8::TryCatch tryCatch(_isolate);
                 v8::Local<v8::Array> names;
-                if (!object.As<v8::Object>()->GetOwnPropertyNames(_context, static_cast<v8::PropertyFilter>(v8::ONLY_ENUMERABLE | v8::SKIP_SYMBOLS), v8::KeyConversionMode::kConvertToString).ToLocal(&names)) {
-                    Caught(tryCatch);
+                if (!HasKeys(object) || !OwnKeys(object.As<v8::Object>()).ToLocal(&names)) {
                     return keys;
                 }
                 keys.reserve(names->Length());
                 for (uint32_t i = 0; i < names->Length(); ++i) {
+                    // An array of strings V8 has just made: reading it runs no script.
                     v8::Local<v8::Value> name;
                     if (!names->Get(_context, i).ToLocal(&name)) {
-                        Caught(tryCatch);
                         break;
                     }
                     keys.push_back(ToUtf8(_isolate, name));
@@ -305,12 +332,17 @@ namespace Framework::Scripting::Bind {
             }
 
             Value WrapBound(const Detail::LuaClass *definition, const char *name, Detail::BoundBuilder build, void *source) override {
-                v8::Local<v8::Value> wrapped;
-                if (definition != nullptr && definition->v8 != nullptr && CanRun()) {
-                    wrapped = definition->v8->adopt(_isolate, build(nullptr, source));
-                }
-                if (wrapped.IsEmpty()) {
+                // Asked before the object is built, which may move out of `source`.
+                if (definition == nullptr || definition->v8 == nullptr || !definition->v8->has(_isolate)) {
                     ThrowError(std::string(name) + " is not available in this JavaScript runtime");
+                    return At(0);
+                }
+                if (!CanRun()) {
+                    return At(0);
+                }
+                const v8::Local<v8::Value> wrapped = definition->v8->adopt(_isolate, build(nullptr, source));
+                if (wrapped.IsEmpty()) {
+                    ThrowError(std::string(name) + " could not be given to JavaScript");
                     return At(0);
                 }
                 return Keep(wrapped);
@@ -326,7 +358,7 @@ namespace Framework::Scripting::Bind {
             };
 
             Value At(size_t slot) const {
-                return Detail::ValueAccess::Make(const_cast<V8Call *>(this), slot);
+                return Detail::ValueAccess::Make(*this, slot);
             }
 
             // undefined needs no slot.
@@ -339,11 +371,31 @@ namespace Framework::Scripting::Bind {
             }
 
             v8::Local<v8::Value> Local(size_t slot) const {
-                return slot != 0 ? _values[slot - 1] : v8::Undefined(_isolate).As<v8::Value>();
+                return slot != 0 && slot <= _values.size() ? _values[slot - 1] : v8::Undefined(_isolate).As<v8::Value>();
             }
 
             size_t Slot(const Value &value) const {
-                return Detail::ValueAccess::SlotIn(this, value);
+                return Detail::ValueAccess::SlotIn(*this, value);
+            }
+
+            // Whether `value` has keys for the function: an Object or an Array. A function and a bound object have
+            // none, as in Lua, whatever a script reads on them.
+            bool HasKeys(v8::Local<v8::Value> value) const {
+                return value->IsObject() && !value->IsFunction() && !IsBound(value);
+            }
+
+            // The own enumerable string keys of `object`, integers first as V8 orders them. Empty when the trap
+            // of a proxy threw, which the call keeps.
+            v8::MaybeLocal<v8::Array> OwnKeys(v8::Local<v8::Object> object) {
+                if (!CanRun()) {
+                    return {};
+                }
+                v8::TryCatch tryCatch(_isolate);
+                v8::MaybeLocal<v8::Array> names = object->GetOwnPropertyNames(_context, static_cast<v8::PropertyFilter>(v8::ONLY_ENUMERABLE | v8::SKIP_SYMBOLS), v8::KeyConversionMode::kConvertToString);
+                if (names.IsEmpty()) {
+                    Caught(tryCatch);
+                }
+                return names;
             }
 
             v8::MaybeLocal<v8::String> NewString(std::string_view text) const {
@@ -410,6 +462,7 @@ namespace Framework::Scripting::Bind {
             v8::Isolate *_isolate;
             v8::Local<v8::Context> _context;
             bool _method;
+            size_t _first; // the slot of the first argument
             size_t _count;
 
             std::vector<v8::Local<v8::Value>> _values;

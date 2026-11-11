@@ -93,6 +93,12 @@ namespace BindCallTest {
         }
     };
 
+    // What Probe.keep found left in the object it had wrapped with a move.
+    inline size_t leftAfterWrap = 0;
+
+    // Whether Probe.spell had thrown once it had spelled its first argument.
+    inline bool thrownAfterDisplay = false;
+
     inline const char *KindName(ValueKind kind) {
         switch (kind) {
         case ValueKind::Nil: return "Nil";
@@ -111,6 +117,7 @@ namespace BindCallTest {
     inline const Bind::Class<Counter> &CounterDefinition() {
         using Bind::Doc;
         using Bind::TypeOf;
+        namespace Type               = Bind::Type;
         static const auto definition = Bind::Class<Counter>("CallCounter", "Counts, through context functions.")
                                            .Constructor<int>(Doc("Creates a counter.").Param("value", "Initial value."))
                                            .Method("get", &Counter::get, Doc("Reads the counter.").Returns("Current value."))
@@ -125,6 +132,15 @@ namespace BindCallTest {
                                                    call.Return(call.ArgCount());
                                                },
                                                Doc("Adds to the counter.").OptionalParam("amount", TypeOf<int>(), "Amount to add, 1 when absent.").ReturnType(TypeOf<int>()).Returns("How many arguments it was given."))
+                                           .Method(
+                                               "chain",
+                                               [](Call &call) {
+                                                   if (Counter *self = call.Self<Counter>()) {
+                                                       self->set(self->get() + 1);
+                                                   }
+                                                   call.Return(call.This());
+                                               },
+                                               Doc("Adds one.").ReturnType(Type::This()).Returns("This counter."))
                                            .Method(
                                                "serverBump",
                                                [](Call &call) {
@@ -147,12 +163,6 @@ namespace BindCallTest {
         CounterDefinition();
         static const auto definition = Bind::Class<Stepper>("CallStepper", "A counter with a label.").Inherit<Counter>().Constructor<int>(Doc("Creates a stepper.").Param("value", "Initial value."));
         return definition;
-    }
-
-    inline std::vector<std::string> SortedKeys(const Value &value) {
-        std::vector<std::string> keys = value.Keys();
-        std::sort(keys.begin(), keys.end());
-        return keys;
     }
 
     inline std::string Flags(const Value &value) {
@@ -266,12 +276,12 @@ namespace BindCallTest {
                     "keys",
                     [](Call &call) {
                         Value keys = call.NewArray();
-                        for (const std::string &key : SortedKeys(call.Arg(0))) {
+                        for (const std::string &key : call.Arg(0).Keys()) {
                             keys.Append(call.String(key));
                         }
                         call.Return(keys);
                     },
-                    Doc("Lists the keys of an object, sorted.").Param("object", Type::Any(), "Object to list.").ReturnType(TypeOf<std::vector<std::string>>()))
+                    Doc("Lists the keys of an object.").Param("object", Type::Any(), "Object to list.").ReturnType(TypeOf<std::vector<std::string>>()))
                 .Function(
                     "get",
                     [](Call &call) {
@@ -326,6 +336,85 @@ namespace BindCallTest {
                         ++reachedEnd;
                     },
                     Doc("Spells a value.").Param("value", Type::Any(), "Value to spell.").ReturnType(TypeOf<std::string>()))
+                .Function(
+                    "isList",
+                    [](Call &call) {
+                        call.Return(call.Arg(0).IsList());
+                    },
+                    Doc("Tells whether a value passes for a list.").Param("value", Type::Any(), "Value to inspect.").ReturnType(TypeOf<bool>()))
+                .Function(
+                    "null",
+                    [](Call &call) {
+                        call.Return(call.Null());
+                    },
+                    Doc("Returns null.").ReturnType(Type::Any()))
+                .Function(
+                    "nullKind",
+                    [](Call &call) {
+                        Value object = call.NewObject();
+                        object.Set("k", call.Null());
+                        call.Return(std::string(KindName(call.Null().Kind())) + KindName(object.Get("k").Kind()) + std::to_string(object.Keys().size()));
+                    },
+                    Doc("Names the kind of null, alone and stored.").ReturnType(TypeOf<std::string>()))
+                .Function(
+                    "thisKind",
+                    [](Call &call) {
+                        call.Return(KindName(call.This().Kind()));
+                    },
+                    Doc("Names the kind of its receiver.").ReturnType(TypeOf<std::string>()))
+                .Function(
+                    "capture",
+                    [](Call &call) {
+                        // The mistake a handle has to survive: it is kept beyond its call.
+                        call.Return(call.NewFunction([kept = call.Arg(0)](Call &inner) {
+                            inner.Return(kept);
+                        }));
+                    },
+                    Doc("Makes a function that returns a value it should not have kept.").Param("value", Type::Any(), "Value to keep.").ReturnType(Type::Custom("() => unknown", "fun(): any")))
+                .Function(
+                    "stale",
+                    [](Call &call) {
+                        call.Return(call.NewFunction([kept = call.Arg(0)](Call &inner) {
+                            Value object = inner.NewObject();
+                            object.Set("k", inner.Integer(1));
+                            object.Set("k", kept);
+                            Value list = inner.NewArray();
+                            list.Append(kept);
+                            inner.Return(std::string(KindName(kept.Kind())) + "[" + kept.AsString() + kept.ToDisplayString() + "]" + std::to_string(kept.Length()) + std::to_string(kept.Keys().size()) + KindName(kept.Get("a").Kind()) + KindName(kept.At(0).Kind()) + ":"
+                                         + KindName(object.Get("k").Kind()) + KindName(list.At(0).Kind()));
+                        }));
+                    },
+                    Doc("Makes a function that reads a value it should not have kept.").Param("value", Type::Any(), "Value to keep.").ReturnType(Type::Custom("(...args: unknown[]) => string", "fun(...): string")))
+                .Function(
+                    "nested",
+                    [](Call &call) {
+                        // The object spells itself by calling `peek`, which runs inside this call and reads its handle.
+                        const Value outer = call.Arg(1);
+                        call.Arg(0).Set("peek", call.NewFunction([outer](Call &inner) {
+                            inner.Return(KindName(outer.Kind()));
+                        }));
+                        const std::string during = call.Arg(0).ToDisplayString();
+                        call.Return(during + ":" + KindName(outer.Kind()));
+                    },
+                    Doc("Reads a handle of this call from a call nested in it, then from this one.").Param("object", Type::Any(), "Object that spells itself with peek().").Param("value", Type::Any(), "Value to read.").ReturnType(TypeOf<std::string>()))
+                .Function(
+                    "spell",
+                    [](Call &call) {
+                        call.Arg(0).ToDisplayString();
+                        thrownAfterDisplay = call.HasThrown();
+                        call.Arg(1).Get("a");
+                        ++reachedEnd;
+                    },
+                    Doc("Spells a value, then reads a key of another.").Param("value", Type::Any(), "Value to spell.").Param("object", Type::Any(), "Object to read.").ReturnType(TypeOf<std::string>()))
+                .Function(
+                    "keep",
+                    [](Call &call) {
+                        Stepper stepper(1);
+                        stepper.text = std::string(64, 's');
+                        call.Wrap(std::move(stepper));
+                        leftAfterWrap = stepper.text.size();
+                    },
+                    Doc("Wraps a stepper and notes what is left of it."))
                 .Function(
                     "adder",
                     [](Call &call) {
@@ -439,7 +528,10 @@ namespace BindCallTest {
                 .Constant("answer", 42.0, "The answer.")
                 .Constant("ratio", 0.5, "A ratio.")
                 .Constant("label", std::string("probe"), "A label.")
-                .Constant("serverLabel", std::string("server"), "A label of the server.", Side::Server);
+                .Constant("serverLabel", std::string("server"), "A label of the server.", Side::Server)
+                .Constant("enabled", true, "A switch.")
+                .Constant("count", 3, "A count.")
+                .Constant("word", "literal", "A word.");
         return definition;
     }
 
@@ -684,7 +776,10 @@ MODULE(bind_call, {
         });
         EQUALS(serverOnly != desc.functions.end() && serverOnly->side == Side::Server, true);
 
-        EQUALS(desc.properties.size(), 4u);
+        EQUALS(desc.properties.size(), 7u);
+        EQUALS(desc.properties[4].name + ":" + Bind::ToTypeScript(desc.properties[4].type) + ":" + Bind::ToLuaAnnotation(desc.properties[4].type), "enabled:boolean:boolean");
+        EQUALS(desc.properties[5].name + ":" + Bind::ToTypeScript(desc.properties[5].type), "count:number");
+        EQUALS(desc.properties[6].name + ":" + Bind::ToTypeScript(desc.properties[6].type), "word:string");
         EQUALS(desc.properties[0].name + ":" + Bind::ToTypeScript(desc.properties[0].type) + ":" + desc.properties[0].description, "answer:number:The answer.");
         EQUALS(desc.properties[0].readonly && desc.properties[0].isStatic, true);
         EQUALS(desc.properties[2].name + ":" + Bind::ToTypeScript(desc.properties[2].type), "label:string");
@@ -782,6 +877,31 @@ MODULE(bind_call, {
         EQUALS(mismatches, "");
     });
 
+    IT("tells a list from an object with keys", {
+        Runtimes runtimes;
+        std::string mismatches;
+        // The empty table of Lua is an Object, and a list all the same.
+        mismatches += runtimes.Both("Probe.isList([])", "Probe.isList({})", "true");
+        mismatches += runtimes.Both("Probe.isList({})", "true");
+        mismatches += runtimes.Both("Probe.isList(['a', 'b'])", "Probe.isList({ 'a', 'b' })", "true");
+        mismatches += runtimes.Both("Probe.isList([[]])", "Probe.isList({ {} })", "true");
+        mismatches += runtimes.Both("Probe.isList({ a: 1 })", "Probe.isList({ a = 1 })", "false");
+        mismatches += runtimes.Both("Probe.isList({ 0: 'a', 1: 'b' })", "Probe.isList({ [0] = 'a', [1] = 'b' })", "false");
+        mismatches += runtimes.Both("Probe.isList()", "false");
+        mismatches += runtimes.Both("Probe.isList('text')", "false");
+        mismatches += runtimes.Both("Probe.isList(3)", "false");
+        mismatches += runtimes.Both("Probe.isList(Probe.isList)", "false");
+        mismatches += runtimes.Both("Probe.isList(new Vector3(1, 2, 3))", "Probe.isList(Vector3.new(1, 2, 3))", "false");
+        mismatches += runtimes.Both("Probe.length([]) + ':' + Probe.kind(Probe.at([], 0))", "Probe.length({}) .. ':' .. Probe.kind(Probe.at({}, 0))", "0:Nil");
+        EQUALS(mismatches, "");
+
+        // A hole: JavaScript still has an array, Lua a table that is no sequence any more.
+        EQUALS(runtimes.Js("Probe.isList(['a', , 'c']) + Probe.kind(['a', , 'c'])"), "trueArray");
+        EQUALS(runtimes.Lua("tostring(Probe.isList({ 'a', nil, 'c' })) .. Probe.kind({ 'a', nil, 'c' })"), "falseObject");
+        EQUALS(runtimes.Lua("Probe.isList({ [1.5] = 'a' })"), "false");
+        EQUALS(runtimes.Lua("Probe.isList(setmetatable({}, { __index = { 'a' } }))"), "true");
+    });
+
     IT("reads a scalar strictly, without converting it", {
         Runtimes runtimes;
         std::string mismatches;
@@ -847,6 +967,13 @@ MODULE(bind_call, {
         mismatches += runtimes.Both("Probe.twice(21)", "42");
         EQUALS(mismatches, "");
 
+        // null is JavaScript's, and nil in Lua.
+        EQUALS(runtimes.Js("Probe.null() === null"), "true");
+        EQUALS(runtimes.Js("Probe.none() === undefined"), "true");
+        EQUALS(runtimes.Lua("select('#', Probe.null()) .. type(Probe.null())"), "1nil");
+        EQUALS(runtimes.Js("Probe.nullKind()"), "NilNil1");
+        EQUALS(runtimes.Lua("Probe.nullKind()"), "NilNil0");
+
         // Returning nothing is undefined in JavaScript and no value in Lua, where returning nil is one value.
         EQUALS(runtimes.Js("Probe.nothing()"), "undefined");
         EQUALS(runtimes.Js("Probe.none()"), "undefined");
@@ -872,10 +999,9 @@ MODULE(bind_call, {
         Runtimes runtimes;
         reachedEnd = 0;
         std::string mismatches;
-        mismatches += runtimes.Both("Probe.keys({ b: 1, a: 2, c: 3 }).join()", "table.concat(Probe.keys({ b = 1, a = 2, c = 3 }), ',')", "a,b,c");
+        mismatches += runtimes.Both("Probe.keys({ a: 2, b: 1, c: 3 }).join()", "table.concat(Probe.keys({ b = 1, a = 2, c = 3 }), ',')", "a,b,c");
         mismatches += runtimes.Both("Probe.keys({}).length", "#Probe.keys({})", "0");
         mismatches += runtimes.Both("Probe.keys('text').length", "#Probe.keys('text')", "0");
-        mismatches += runtimes.Both("Probe.keys({ 2: 'b', 10: 'j', x: 1 }).join()", "table.concat(Probe.keys({ [2] = 'b', [10] = 'j', x = 1 }), ',')", "10,2,x");
         mismatches += runtimes.Both("Probe.get({ a: 5 }, 'a')", "Probe.get({ a = 5 }, 'a')", "5");
         mismatches += runtimes.Both("Probe.get({ 10: 'j' }, '10')", "Probe.get({ [10] = 'j' }, '10')", "j");
         mismatches += runtimes.Both("Probe.kind(Probe.get({ a: 5 }, 'b'))", "Probe.kind(Probe.get({ a = 5 }, 'b'))", "Nil");
@@ -886,6 +1012,64 @@ MODULE(bind_call, {
         mismatches += runtimes.Both("Probe.set(5, 'k', 9)", "5");
         EQUALS(mismatches, "");
         EQUALS(reachedEnd, 10);
+    });
+
+    IT("lists keys in one order, integers before strings", {
+        Runtimes runtimes;
+        std::string mismatches;
+        // JavaScript keeps the order strings were added in; Lua, which has none, sorts them.
+        mismatches += runtimes.Both("Probe.keys({ x: 1, 10: 'j', y: 2, 2: 'b' }).join()", "table.concat(Probe.keys({ y = 2, [10] = 'j', x = 1, [2] = 'b' }), ',')", "2,10,x,y");
+        mismatches += runtimes.Both("Probe.keys({ 3: 'c', 1: 'a' }).join()", "table.concat(Probe.keys({ [3] = 'c', [1] = 'a' }), ',')", "1,3");
+        EQUALS(mismatches, "");
+        EQUALS(runtimes.Lua("table.concat(Probe.keys({ zeta = 1, alpha = 2, Mid = 3, [true] = 4, [1.5] = 5 }), ',')"), "Mid,alpha,zeta");
+        EQUALS(runtimes.Lua("table.concat(Probe.keys({ [5] = 'e', [-2] = 'm', [0] = 'z' }), ',')"), "-2,0,5");
+    });
+
+    IT("counts the keys of an array from zero", {
+        Runtimes runtimes;
+        std::string mismatches;
+        mismatches += runtimes.Both("Probe.keys(['a', 'b', 'c']).join()", "table.concat(Probe.keys({ 'a', 'b', 'c' }), ',')", "0,1,2");
+        mismatches += runtimes.Both("Probe.get(['a', 'b', 'c'], '0')", "Probe.get({ 'a', 'b', 'c' }, '0')", "a");
+        mismatches += runtimes.Both("Probe.get(['a', 'b', 'c'], '2')", "Probe.get({ 'a', 'b', 'c' }, '2')", "c");
+        mismatches += runtimes.Both("Probe.kind(Probe.get(['a', 'b', 'c'], '3'))", "Probe.kind(Probe.get({ 'a', 'b', 'c' }, '3'))", "Nil");
+        mismatches += runtimes.Both("Probe.set(['a', 'b', 'c'], '0', 'z').join()", "table.concat(Probe.set({ 'a', 'b', 'c' }, '0', 'z'), ',')", "z,b,c");
+        mismatches += runtimes.Both("Probe.set(['a', 'b', 'c'], '3', 'd').join()", "table.concat(Probe.set({ 'a', 'b', 'c' }, '3', 'd'), ',')", "a,b,c,d");
+        // Every key Keys gives reads the element it names.
+        mismatches +=
+            runtimes.Both("{ const a = ['x', 'y']; Probe.keys(a).map((key) => Probe.get(a, key)).join() }", "(function() local a, read = { 'x', 'y' }, {} for i, key in ipairs(Probe.keys(a)) do read[i] = Probe.get(a, key) end return table.concat(read, ',') end)()", "x,y");
+        EQUALS(mismatches, "");
+    });
+
+    IT("writes a Lua integer key under the text Keys gave it", {
+        Runtimes runtimes;
+        const std::string roundTrip =
+            "(function(t) for _, key in ipairs(Probe.keys(t)) do Probe.set(t, key, 'k') end local count, kinds = 0, '' for key, value in pairs(t) do count = count + 1 kinds = kinds .. (math.type(key) or type(key)) .. value end return count .. kinds end)";
+        EQUALS(runtimes.Lua(roundTrip + "({ [10] = 'j' })"), "1integerk");
+        // A key that is the text itself stays one.
+        EQUALS(runtimes.Lua(roundTrip + "({ ['10'] = 'j' })"), "1stringk");
+        EQUALS(runtimes.Lua("(function() local t = Probe.set({}, '10', 'x') return math.type(next(t)) .. t[10] end)()"), "integerx");
+        EQUALS(runtimes.Lua("(function() local t = Probe.set({ a = 1 }, '-3', 'x') return t[-3] end)()"), "x");
+        // What only looks like an integer is a string key.
+        EQUALS(runtimes.Lua("(function() local t = Probe.set({}, '010', 'x') return type(next(t)) .. t['010'] end)()"), "stringx");
+        EQUALS(runtimes.Js("JSON.stringify(Probe.set({}, '10', 'x'))"), R"({"10":"x"})");
+    });
+
+    IT("finds no keys in a bound object or a function", {
+        Runtimes runtimes;
+        std::string mismatches;
+        mismatches += runtimes.Both("Probe.kind(Probe.get(new Vector3(1, 2, 3), 'y'))", "Probe.kind(Probe.get(Vector3.new(1, 2, 3), 'y'))", "Nil");
+        mismatches += runtimes.Both("Probe.kind(Probe.get(new Vector3(1, 2, 3), 'add'))", "Probe.kind(Probe.get(Vector3.new(1, 2, 3), 'add'))", "Nil");
+        mismatches += runtimes.Both("Probe.keys(new Vector3(1, 2, 3)).length", "#Probe.keys(Vector3.new(1, 2, 3))", "0");
+        mismatches += runtimes.Both("{ const v = new Vector3(1, 2, 3); Probe.set(v, 'y', 9); Probe.set(v, 'extra', 9); v.y + ':' + typeof v.extra }",
+            "(function() local v = Vector3.new(1, 2, 3) Probe.set(v, 'y', 9) Probe.set(v, 'extra', 9) return math.tointeger(v.y) .. ':' .. (v.extra == nil and 'undefined' or 'set') end)()", "2:undefined");
+        mismatches += runtimes.Both("Probe.kind(Probe.get(Probe.kind, 'name'))", "Nil");
+        mismatches += runtimes.Both("Probe.keys(Probe.kind).length", "#Probe.keys(Probe.kind)", "0");
+        mismatches += runtimes.Both("{ const f = function () {}; Probe.set(f, 'tag', 9); typeof f.tag }", "(function() local f = function() end Probe.set(f, 'tag', 9) return 'undefined' end)()", "undefined");
+        mismatches += runtimes.Both("Probe.kind(Probe.at(new Vector3(1, 2, 3), 0)) + Probe.length(Probe.kind)", "Probe.kind(Probe.at(Vector3.new(1, 2, 3), 0)) .. Probe.length(Probe.kind)", "Nil0");
+        EQUALS(mismatches, "");
+
+        // What a script put on a function is not a key of it either.
+        EQUALS(runtimes.Js("{ const f = function () {}; f.tag = 5; Probe.kind(Probe.get(f, 'tag')) + Probe.keys(f).length }"), "Nil0");
     });
 
     IT("reads a Lua table raw, and a JavaScript object as a script does", {
@@ -905,9 +1089,8 @@ MODULE(bind_call, {
         // What a getter or a proxy throws is thrown once the function has returned.
         EQUALS(runtimes.Js("Probe.get({ get a() { throw new RangeError('getter ran') } }, 'a')"), "<threw> RangeError: getter ran");
         EQUALS(runtimes.Js("Probe.get({ get a() { return 7 } }, 'a')"), "7");
-        EQUALS(runtimes.Js("Probe.get(new Vector3(1, 2, 3), 'y')"), "2");
         EQUALS(runtimes.Js("Probe.kind(Probe.set(Object.freeze({}), 'a', 1).a)"), "Nil");
-        EQUALS(reachedEnd, 4);
+        EQUALS(reachedEnd, 3);
     });
 
     IT("reads and grows an array from zero", {
@@ -936,6 +1119,31 @@ MODULE(bind_call, {
         mismatches += runtimes.Both("Probe.adder(1) === Probe.adder(1)", "rawequal(Probe.adder(1), Probe.adder(1))", "false");
         mismatches += runtimes.Both("typeof Probe.adder(1)", "type(Probe.adder(1))", "function");
         EQUALS(mismatches, "");
+    });
+
+    IT("reads a handle kept beyond its call as nil", {
+        Runtimes runtimes;
+        EQUALS(runtimes.Js("typeof Probe.capture('old')()"), "undefined");
+        EQUALS(runtimes.Lua("type(Probe.capture('old')())"), "nil");
+        // The call it is read in has another value in the same place.
+        EQUALS(runtimes.Js("typeof Probe.capture('old')('new', 'newer')"), "undefined");
+        EQUALS(runtimes.Lua("type(Probe.capture('old')('new', 'newer'))"), "nil");
+        EQUALS(runtimes.Lua("select('#', Probe.capture('old')())"), "1");
+
+        // It reads as the nil of the call it is read in, and is stored as one.
+        EQUALS(runtimes.Js("Probe.stale('old')()"), "Nil[undefined]00NilNil:NilNil");
+        EQUALS(runtimes.Js("Probe.stale(['a', 'b'])('new', ['c'])"), "Nil[undefined]00NilNil:NilNil");
+        EQUALS(runtimes.Js("Probe.stale({ a: 1 })({ a: 2 })"), "Nil[undefined]00NilNil:NilNil");
+        EQUALS(runtimes.Lua("Probe.stale('old')()"), "Nil[nil]00NilNil:NilNil");
+        EQUALS(runtimes.Lua("Probe.stale({ 'a', 'b' })('new', { 'c' })"), "Nil[nil]00NilNil:NilNil");
+        EQUALS(runtimes.Lua("Probe.stale({ a = 1 })({ a = 2 })"), "Nil[nil]00NilNil:NilNil");
+    });
+
+    IT("reads a handle only in the call it belongs to", {
+        Runtimes runtimes;
+        // The call nested in it sees nil; back in its own call the handle is good again.
+        EQUALS(runtimes.Js("Probe.nested({ toString() { return this.peek() } }, 'text')"), "Nil:String");
+        EQUALS(runtimes.Lua("Probe.nested(setmetatable({}, { __tostring = function(self) return self.peek() end }), 'text')"), "Nil:String");
     });
 
     IT("keeps a native function for as long as the script function lives", {
@@ -1078,6 +1286,18 @@ MODULE(bind_call, {
         });
         EQUALS(runtimes.Js("typeof survived"), "undefined");
         EQUALS(runtimes.Both("Probe.twice(4)", "8"), "");
+
+        // Terminated while it spells a value, the function is told as well, and asks the script for nothing more.
+        reachedEnd         = 0;
+        thrownAfterDisplay = false;
+        EQUALS(runtimes.Js("Probe.spell({ toString() { stop(); for (;;) {} } }, { get a() { globalThis.asked = true; return 1 } })"), "<threw> null");
+        EQUALS(reachedEnd, 1);
+        EQUALS(thrownAfterDisplay, true);
+        runtimes.Enter([](v8::Isolate *isolate, v8::Local<v8::Context>) {
+            isolate->CancelTerminateExecution();
+        });
+        EQUALS(runtimes.Js("typeof asked"), "undefined");
+        EQUALS(runtimes.Both("Probe.twice(4)", "8"), "");
     });
 
     // --- Bound classes ---
@@ -1092,6 +1312,13 @@ MODULE(bind_call, {
         // A class derived from the receiver's passes for it.
         mismatches += runtimes.Both("{ const s = new CallStepper(3); s.bump(4); s.get() }", "(function() local s = CallStepper.new(3) s:bump(4) return s:get() end)()", "7");
         mismatches += runtimes.Both("CallCounter.receiver()", "false");
+        // The receiver as a value, for a method that returns it.
+        mismatches += runtimes.Both("{ const c = new CallCounter(1); c.chain() === c }", "(function() local c = CallCounter.new(1) return rawequal(c:chain(), c) end)()", "true");
+        mismatches += runtimes.Both("new CallCounter(1).chain().chain().get()", "CallCounter.new(1):chain():chain():get()", "3");
+        mismatches += runtimes.Both("{ const s = new CallStepper(1); s.chain() === s }", "(function() local s = CallStepper.new(1) return rawequal(s:chain(), s) end)()", "true");
+        mismatches += runtimes.Both("Probe.thisKind()", "Nil");
+        mismatches += runtimes.Both("Probe.thisKind.call({})", "Probe.thisKind({})", "Nil");
+        mismatches += runtimes.Both("Probe.adder.call({}, 1)(1)", "Probe.adder(1)(1)", "2");
         mismatches += runtimes.Both("{ const c = new CallCounter(1); c.serverBump(); c.get() }", "(function() local c = CallCounter.new(1) c:serverBump() return c:get() end)()", "101");
         EQUALS(mismatches, "");
 
@@ -1141,6 +1368,13 @@ MODULE(bind_call, {
         EQUALS(runtimes.Js("Probe.wrap(5)"), "<threw> Error: CallCounter is not available in this JavaScript runtime");
         EQUALS(runtimes.Lua("Probe.wrap(5)"), "<error> eval:1: CallCounter is not available in this Lua state");
         EQUALS(reachedEnd, 2);
+        // The object it was to move from is left whole.
+        leftAfterWrap = 0;
+        EQUALS(runtimes.Js("Probe.keep()"), "<threw> Error: CallStepper is not available in this JavaScript runtime");
+        EQUALS(leftAfterWrap, 64u);
+        leftAfterWrap = 0;
+        EQUALS(runtimes.Lua("Probe.keep()"), "<error> eval:1: CallStepper is not available in this Lua state");
+        EQUALS(leftAfterWrap, 64u);
         EQUALS(runtimes.Both("Probe.bound({})", "-1"), "");
     });
 
@@ -1188,6 +1422,10 @@ MODULE(bind_call, {
         mismatches += server.Both("Probe.label", "probe");
         mismatches += server.Both("Probe.serverLabel", "server");
         mismatches += server.Both("Probe.serverOnly()", "true");
+        mismatches += server.Both("Probe.enabled === true", "Probe.enabled == true", "true");
+        mismatches += server.Both("typeof Probe.enabled", "type(Probe.enabled)", "boolean");
+        mismatches += server.Both("Probe.count", "3");
+        mismatches += server.Both("Probe.word", "literal");
         EQUALS(mismatches, "");
         EQUALS(server.Js("typeof Probe.clientOnly"), "undefined");
         EQUALS(server.Lua("type(Probe.clientOnly)"), "nil");
@@ -1289,7 +1527,7 @@ MODULE(bind_call, {
                 Doc("Counts persistent and one-shot shared handlers across resources.").Param("eventName", "Shared event name to inspect.").Returns("Number of matching handlers."))
             .Function(
                 "serverOnly", [](Call &) {}, Doc("Exists on the server."), Side::Server)
-            .Constant("isClient", 1.0, "True in the sandboxed client scripting runtime.")
+            .Constant("isClient", true, "True in the sandboxed client scripting runtime.")
             .Constant("frameworkVersion", std::string("1.0"), "Local Framework release version.");
 
         registry byHand;
@@ -1304,7 +1542,7 @@ MODULE(bind_call, {
         expected.record(function_of<v8::FunctionCallback>("emit", docs("Promise<void>", {param("eventName", "string", false, "Shared event name."), rest_param("args", "unknown[]", "Arguments delivered to every matching handler.")},
                                                                       "Invokes every shared handler and waits for all synchronous and asynchronous results.", "Promise rejected with an AggregateError when one or more handlers fail.")));
         expected.record(function_of<v8::FunctionCallback>("count", docs("number", {param("eventName", "string", false, "Shared event name to inspect.")}, "Counts persistent and one-shot shared handlers across resources.", "Number of matching handlers.")));
-        expected.add_property("isClient", "number", "True in the sandboxed client scripting runtime.", true);
+        expected.add_property("isClient", "boolean", "True in the sandboxed client scripting runtime.", true);
         expected.add_property("frameworkVersion", "string", "Local Framework release version.", true);
 
         Runtimes runtimes(Side::Client);

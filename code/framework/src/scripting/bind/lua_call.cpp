@@ -18,15 +18,19 @@
 #include <algorithm>
 #include <charconv>
 #include <exception>
+#include <iterator>
 #include <new>
 #include <optional>
 #include <string>
+#include <vector>
 
 // The Lua side of Call and Value.
 //
 // A value is a slot of the stack of the thread that runs the function, by its absolute index: the arguments are
 // where the script put them, and what the function makes or reads out of a table is pushed above them and stays
-// there until the function returns. Slot 0 is nil, so reading nil costs no stack.
+// there until the function returns. Slot 0 is nil, so reading nil costs no stack, and so is any index above the top.
+// An index means this function's part of the stack only while the function is the one running on the thread, which
+// is when a Value is led here (value.h).
 //
 // Tables are read and written raw. The script called the function, so a metamethod would be script code running
 // inside host code, where it could raise through the function or wait. The one place a script's code does run is
@@ -47,16 +51,6 @@ namespace Framework::Scripting::Bind {
         int Spell(lua_State *L) {
             luaL_tolstring(L, 1, nullptr);
             return 1;
-        }
-
-        // `key` as the integer it is the decimal text of, the way Keys spells an integer key.
-        std::optional<lua_Integer> IntegerKey(std::string_view key) {
-            lua_Integer integer = 0;
-            const auto parsed   = std::from_chars(key.data(), key.data() + key.size(), integer);
-            if (parsed.ec != std::errc() || parsed.ptr != key.data() + key.size() || std::to_string(integer) != key) {
-                return std::nullopt;
-            }
-            return integer;
         }
 
         class LuaCall final
@@ -106,7 +100,15 @@ namespace Framework::Scripting::Bind {
                 return At(index < _count ? _first + static_cast<int>(index) : 0);
             }
 
+            Value This() const override {
+                return At(_method && lua_gettop(_L) >= 1 ? 1 : 0);
+            }
+
             Value Nil() override {
+                return At(0);
+            }
+
+            Value Null() override {
                 return At(0);
             }
 
@@ -170,7 +172,7 @@ namespace Framework::Scripting::Bind {
 
             // --- ValueBackend ---
 
-            ValueKind KindOf(size_t slot) const override {
+            ValueKind KindOf(size_t slot, bool exact) const override {
                 const int index = Index(slot);
                 switch (index != 0 ? lua_type(_L, index) : LUA_TNIL) {
                 case LUA_TNIL: return ValueKind::Nil;
@@ -178,10 +180,23 @@ namespace Framework::Scripting::Bind {
                 case LUA_TNUMBER: return ValueKind::Number;
                 case LUA_TSTRING: return ValueKind::String;
                 case LUA_TFUNCTION: return ValueKind::Function;
-                case LUA_TTABLE: return IsSequence(index) ? ValueKind::Array : ValueKind::Object;
+                case LUA_TTABLE: return exact && IsSequence(index) ? ValueKind::Array : ValueKind::Object;
                 case LUA_TUSERDATA: return Detail::LuaClassAt(_L, index) != nullptr ? ValueKind::Bound : ValueKind::Other;
                 default: return ValueKind::Other;
                 }
+            }
+
+            bool IsListAt(size_t slot) override {
+                if (!Is(slot, LUA_TTABLE)) {
+                    return false;
+                }
+                Reserve(2);
+                lua_pushnil(_L);
+                if (lua_next(_L, Index(slot)) == 0) {
+                    return true;
+                }
+                lua_pop(_L, 2);
+                return IsSequence(Index(slot));
             }
 
             bool BooleanOf(size_t slot) const override {
@@ -238,13 +253,14 @@ namespace Framework::Scripting::Bind {
                 }
                 Reserve(1);
                 lua_pushlstring(_L, key.data(), key.size());
-                if (lua_rawget(_L, Index(slot)) == LUA_TNIL) {
-                    lua_pop(_L, 1);
-                    const std::optional<lua_Integer> integer = IntegerKey(key);
-                    if (!integer || lua_rawgeti(_L, Index(slot), *integer) == LUA_TNIL) {
-                        lua_pop(_L, integer ? 1 : 0);
-                        return At(0);
-                    }
+                if (lua_rawget(_L, Index(slot)) != LUA_TNIL) {
+                    return Top();
+                }
+                lua_pop(_L, 1);
+                const std::optional<lua_Integer> integer = IntegerKey(Index(slot), key);
+                if (!integer || lua_rawgeti(_L, Index(slot), *integer) == LUA_TNIL) {
+                    lua_pop(_L, integer ? 1 : 0);
+                    return At(0);
                 }
                 return Top();
             }
@@ -254,16 +270,28 @@ namespace Framework::Scripting::Bind {
                     return;
                 }
                 Reserve(2);
+                // The string key when the table has it, so that it is replaced; the integer key otherwise.
+                lua_pushlstring(_L, key.data(), key.size());
+                const bool hasString = lua_rawget(_L, Index(slot)) != LUA_TNIL;
+                lua_pop(_L, 1);
+                const std::optional<lua_Integer> integer = hasString ? std::nullopt : IntegerKey(Index(slot), key);
+                if (integer) {
+                    Push(Slot(value));
+                    lua_rawseti(_L, Index(slot), *integer);
+                    return;
+                }
                 lua_pushlstring(_L, key.data(), key.size());
                 Push(Slot(value));
                 lua_rawset(_L, Index(slot));
             }
 
             std::vector<std::string> KeysOf(size_t slot) override {
-                std::vector<std::string> keys;
+                std::vector<std::string> strings;
                 if (!Is(slot, LUA_TTABLE)) {
-                    return keys;
+                    return strings;
                 }
+                std::vector<lua_Integer> integers;
+                bool others = false;
                 Reserve(2);
                 lua_pushnil(_L);
                 while (lua_next(_L, Index(slot)) != 0) {
@@ -272,12 +300,26 @@ namespace Framework::Scripting::Bind {
                     if (lua_type(_L, -1) == LUA_TSTRING) {
                         size_t length    = 0;
                         const char *text = lua_tolstring(_L, -1, &length);
-                        keys.emplace_back(text, length);
+                        strings.emplace_back(text, length);
                     }
                     else if (lua_isinteger(_L, -1) != 0) {
-                        keys.push_back(std::to_string(lua_tointegerx(_L, -1, nullptr)));
+                        integers.push_back(lua_tointegerx(_L, -1, nullptr));
+                    }
+                    else {
+                        others = true;
                     }
                 }
+                std::sort(integers.begin(), integers.end());
+                std::sort(strings.begin(), strings.end());
+
+                // The keys of an Array are 1..n, and are told as the indices from zero they are everywhere else.
+                const bool sequence = !integers.empty() && strings.empty() && !others && integers.front() == 1 && integers.back() == static_cast<lua_Integer>(integers.size());
+                std::vector<std::string> keys;
+                keys.reserve(integers.size() + strings.size());
+                for (const lua_Integer integer : integers) {
+                    keys.push_back(std::to_string(sequence ? integer - 1 : integer));
+                }
+                keys.insert(keys.end(), std::make_move_iterator(strings.begin()), std::make_move_iterator(strings.end()));
                 return keys;
             }
 
@@ -330,23 +372,36 @@ namespace Framework::Scripting::Bind {
 
           private:
             Value At(int index) const {
-                return Detail::ValueAccess::Make(const_cast<LuaCall *>(this), static_cast<size_t>(index));
+                return Detail::ValueAccess::Make(*this, static_cast<size_t>(index));
             }
 
             Value Top() const {
                 return At(lua_gettop(_L));
             }
 
+            // The stack index of `slot`, or 0, which is nil, for a slot the function does not have.
             int Index(size_t slot) const {
-                return static_cast<int>(slot);
+                return slot <= static_cast<size_t>(lua_gettop(_L)) ? static_cast<int>(slot) : 0;
             }
 
             size_t Slot(const Value &value) const {
-                return Detail::ValueAccess::SlotIn(this, value);
+                return Detail::ValueAccess::SlotIn(*this, value);
             }
 
             bool Is(size_t slot, int type) const {
-                return slot != 0 && lua_type(_L, Index(slot)) == type;
+                const int index = Index(slot);
+                return index != 0 && lua_type(_L, index) == type;
+            }
+
+            // The integer key `key` names in the table at `index`, when it is the decimal text of an integer: the
+            // index from 1 of the element it counts from zero in an Array, that integer itself in any other table.
+            std::optional<lua_Integer> IntegerKey(int index, std::string_view key) const {
+                lua_Integer integer = 0;
+                const auto parsed   = std::from_chars(key.data(), key.data() + key.size(), integer);
+                if (parsed.ec != std::errc() || parsed.ptr != key.data() + key.size() || std::to_string(integer) != key) {
+                    return std::nullopt;
+                }
+                return integer >= 0 && integer < LUA_MAXINTEGER && IsSequence(index) ? integer + 1 : integer;
             }
 
             void Reserve(int slots) const {
@@ -355,8 +410,8 @@ namespace Framework::Scripting::Bind {
 
             // Pushes the value of `slot`. The caller has reserved the room.
             void Push(size_t slot) const {
-                if (slot != 0) {
-                    lua_pushvalue(_L, Index(slot));
+                if (const int index = Index(slot)) {
+                    lua_pushvalue(_L, index);
                 }
                 else {
                     lua_pushnil(_L);

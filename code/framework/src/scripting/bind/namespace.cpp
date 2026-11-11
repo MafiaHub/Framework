@@ -28,7 +28,7 @@ namespace Framework::Scripting::Bind {
             size_t described = 0;                        // its index in desc.functions, or in desc.properties for a constant
             std::optional<Detail::LuaFunction> function; // empty for a constant
             V8Maker v8;                                  // of a function
-            std::variant<double, std::string> constant;
+            std::variant<bool, double, std::string> constant;
         };
 
         ClassDesc desc;
@@ -59,9 +59,13 @@ namespace Framework::Scripting::Bind {
             }
         }
 
-        void PushConstant(lua_State *L, const std::variant<double, std::string> &constant) {
+        void PushConstant(lua_State *L, const std::variant<bool, double, std::string> &constant) {
             if (const std::string *text = std::get_if<std::string>(&constant)) {
                 lua_pushlstring(L, text->data(), text->size());
+                return;
+            }
+            if (const bool *flag = std::get_if<bool>(&constant)) {
+                lua_pushboolean(L, *flag ? 1 : 0);
                 return;
             }
             const double number = std::get<double>(constant);
@@ -73,9 +77,12 @@ namespace Framework::Scripting::Bind {
             }
         }
 
-        v8::Local<v8::Value> ConstantToV8(v8::Isolate *isolate, const std::variant<double, std::string> &constant) {
+        v8::Local<v8::Value> ConstantToV8(v8::Isolate *isolate, const std::variant<bool, double, std::string> &constant) {
             if (const std::string *text = std::get_if<std::string>(&constant)) {
                 return v8pp::to_v8(isolate, *text);
+            }
+            if (const bool *flag = std::get_if<bool>(&constant)) {
+                return v8::Boolean::New(isolate, *flag);
             }
             return v8::Number::New(isolate, std::get<double>(constant));
         }
@@ -110,26 +117,27 @@ namespace Framework::Scripting::Bind {
         return *this;
     }
 
-    Namespace &Namespace::Constant(std::string name, double value, std::string description, Side side) {
-        RefuseSecond(_record->desc, name);
-        Record::Member member;
-        member.side      = side;
-        member.described = _record->desc.properties.size();
-        member.constant  = value;
-        _record->members.push_back(std::move(member));
-        _record->desc.properties.push_back({std::move(name), TypeOf<double>(), std::move(description), true, true, side});
-        return *this;
-    }
-
-    Namespace &Namespace::Constant(std::string name, std::string value, std::string description, Side side) {
+    Namespace &Namespace::AddConstant(std::string name, TypeRef type, std::variant<bool, double, std::string> value, std::string description, Side side) {
         RefuseSecond(_record->desc, name);
         Record::Member member;
         member.side      = side;
         member.described = _record->desc.properties.size();
         member.constant  = std::move(value);
         _record->members.push_back(std::move(member));
-        _record->desc.properties.push_back({std::move(name), TypeOf<std::string>(), std::move(description), true, true, side});
+        _record->desc.properties.push_back({std::move(name), std::move(type), std::move(description), true, true, side});
         return *this;
+    }
+
+    Namespace &Namespace::Constant(std::string name, bool value, std::string description, Side side) {
+        return AddConstant(std::move(name), TypeOf<bool>(), value, std::move(description), side);
+    }
+
+    Namespace &Namespace::Constant(std::string name, double value, std::string description, Side side) {
+        return AddConstant(std::move(name), TypeOf<double>(), value, std::move(description), side);
+    }
+
+    Namespace &Namespace::Constant(std::string name, std::string value, std::string description, Side side) {
+        return AddConstant(std::move(name), TypeOf<std::string>(), std::move(value), std::move(description), side);
     }
 
     const ClassDesc &Namespace::Describe() const {

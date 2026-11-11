@@ -23,10 +23,13 @@
 #include <v8pp/function.hpp>
 #include <v8pp/metadata.hpp>
 
+#include <concepts>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace Framework::Scripting::Bind {
     // The definition of a global object of functions and constants, such as a service a script reaches as `Chat`:
@@ -74,9 +77,21 @@ namespace Framework::Scripting::Bind {
             return AddFunction(std::move(desc), Detail::LuaFunctionThunkOf(Signature {}, function), V8Typed(Signature {}, function));
         }
 
-        // A value a script reads and cannot replace. A number that is integral within 2^53 is a Lua integer.
+        // A value a script reads and cannot replace: a boolean, a number or a string. A number that is integral
+        // within 2^53 is a Lua integer.
+        Namespace &Constant(std::string name, bool value, std::string description, Side side = Side::Shared);
         Namespace &Constant(std::string name, double value, std::string description, Side side = Side::Shared);
         Namespace &Constant(std::string name, std::string value, std::string description, Side side = Side::Shared);
+
+        // Without these two an int would be ambiguous and a string literal a boolean.
+        template <typename T>
+            requires((std::is_arithmetic_v<T> && !std::same_as<T, bool> && !std::same_as<T, double>) || std::is_enum_v<T>)
+        Namespace &Constant(std::string name, T value, std::string description, Side side = Side::Shared) {
+            return Constant(std::move(name), static_cast<double>(value), std::move(description), side);
+        }
+        Namespace &Constant(std::string name, const char *value, std::string description, Side side = Side::Shared) {
+            return Constant(std::move(name), std::string(value), std::move(description), side);
+        }
 
         // Described as a class that is a namespace: its functions are static, its constants read-only static
         // properties.
@@ -122,6 +137,7 @@ namespace Framework::Scripting::Bind {
         std::string QualifiedName(const std::string &member) const;
 
         Namespace &AddFunction(FunctionDesc desc, Detail::LuaThunk lua, V8Maker v8);
+        Namespace &AddConstant(std::string name, TypeRef type, std::variant<bool, double, std::string> value, std::string description, Side side);
 
         std::shared_ptr<Record> _record;
     };

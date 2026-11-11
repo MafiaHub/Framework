@@ -82,17 +82,30 @@ namespace Framework::Scripting::Bind {
         // How JavaScript reaches the objects of a bound class without its C++ type, for Value::AsBound, Call::Self
         // and Call::Wrap.
         struct V8ClassAccess final {
+            // Whether the isolate has the class.
+            bool (*has)(v8::Isolate *isolate) = nullptr;
             // The object of the class that `value` wraps, or the part of an object of a class derived from it.
             // nullptr for anything else, and in an isolate that does not have the class.
             void *(*unwrap)(v8::Isolate *isolate, v8::Local<v8::Value> value) = nullptr;
             // Hands `object`, made with new, to a new JavaScript object that owns it. Empty, with `object`
-            // deleted, in an isolate that does not have the class.
+            // deleted, when V8 cannot make that object, and in an isolate that does not have the class.
             v8::Local<v8::Value> (*adopt)(v8::Isolate *isolate, void *object) = nullptr;
         };
 
         template <typename T>
-        void *V8Unwrap(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+        bool V8Has(v8::Isolate *isolate) {
             // v8pp throws for a class the isolate does not have.
+            try {
+                v8pp::detail::classes::find<v8pp::raw_ptr_traits>(isolate, v8pp::detail::type_id<T>());
+                return true;
+            }
+            catch (const std::exception &) {
+                return false;
+            }
+        }
+
+        template <typename T>
+        void *V8Unwrap(v8::Isolate *isolate, v8::Local<v8::Value> value) {
             try {
                 return v8pp::class_<T>::unwrap_object(isolate, value);
             }
@@ -117,7 +130,7 @@ namespace Framework::Scripting::Bind {
         }
 
         template <typename T>
-        inline constexpr V8ClassAccess V8AccessOf = {&V8Unwrap<T>, &V8Adopt<T>};
+        inline constexpr V8ClassAccess V8AccessOf = {&V8Has<T>, &V8Unwrap<T>, &V8Adopt<T>};
 
         // What v8pp::metadata::docs(returns, {param(name, type, optional, description)...}, description,
         // returnsDescription) builds, from a description. A rest parameter is what rest_param(name, type,
