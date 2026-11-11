@@ -342,14 +342,15 @@ namespace Framework::Scripting {
 #else
         // RunUntil's poll() over the loops failed with something other than EINTR, which is said once.
         bool _pollFailed = false;
+        // The loops this tick's poll found I/O ready in.
+        std::vector<NodeRuntime *> _ioReady;
+#endif
+
         RunGate *_runGate = nullptr;
         // The gate turned the engine away during a wait or between runtimes: it no longer has the world.
         bool _gateLost = false;
         void GateRelease();
         void GateAcquire();
-        // The loops this tick's poll found I/O ready in.
-        std::vector<NodeRuntime *> _ioReady;
-#endif
 
         // Cached JS function that calls setImmediate(()=>{}) each tick.
         // This serves two purposes for inspector CDP message processing:
