@@ -215,7 +215,10 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
   - **Libraries:** base, coroutine, table, string, utf8, math, and `os` cut down to `time`, `clock`,
     `date`, `difftime`. Removed from base: `dofile`, `loadfile`; `load` only accepts text and only
     strings; `string.dump` is removed; `collectgarbage` only answers `"count"`. `print` writes to the
-    scripting logger under the resource's name.
+    scripting logger under the resource's name. `pcall`, `xpcall`, `setmetatable` and
+    `coroutine.create`/`wrap`/`resume`/`close` are the runtime's own, on both sides: they behave as
+    Lua's, except that `setmetatable` refuses a metatable carrying `__gc` and that none of them lets
+    a script run past the deadline of an entry.
   - **`require(name)`** resolves `a.b` to `<resource>/a/b.lua`, then `<resource>/a/b/init.lua`, with the
     containment check scripts already get, through the VFS on the client. One cache per state.
   - **No bytecode:** every load goes through mode `"t"`.
@@ -298,8 +301,15 @@ Scripting-layer change: MINOR. Lua (MIT) is added to the third-party list in `LI
 ## 8. Risks
 
 - PUC Lua's sandbox is assembled, not built in. Text-only loading, no `debug`, the memory cap and the
-  deadline are the defence; the hook does not fire inside a C function, so a pathological
-  `string.find` pattern can still stall a client, as a pathological regular expression can today.
+  deadline are the defence. The hook does not fire inside a C function, so any library loop written
+  in C can still stall a client: pattern matching on a pathological pattern, `table.move` over a huge
+  range. A pathological regular expression can do the same today.
+- A script can read addresses of its own process: `string.format("%p", v)` and `tostring` of a
+  table, a function or a userdata print them.
+- Script-defined `__gc` finalizers are not available: Lua runs a finalizer with hooks off, where the
+  deadline cannot reach it.
+- The count hook costs about half the speed of the Lua VM in a state that has a deadline, which by
+  default is every client state.
 - A `uint64_t` id above 2^63 reads as a negative integer in Lua.
 - LuaLS support for the 5.5 dialect is unverified; definitions use only annotations valid for 5.4.
 - A 32-bit Windows build of the Lua port and of the Windows-only client builtins cannot be exercised on
