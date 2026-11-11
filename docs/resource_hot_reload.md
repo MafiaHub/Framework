@@ -105,7 +105,8 @@ clients so they re-sync and apply it in place:
    the new files in place and serves them. See `docs/server_threading.md`.
 3. In that same tick the server broadcasts a `ResourceRefresh` RPC (affected
    resource names/versions and their new hashes), for resources with a client
-   entry point. A resource changed again while it was being built is built
+   entry point or asset paks: a resource that ships assets only hot-reloads
+   too. A resource changed again while it was being built is built
    once more before anything is announced.
 4. The client re-runs a **targeted** HTTP download of the flagged resources
    (files whose cached hash still matches are skipped; unlike the connect-time

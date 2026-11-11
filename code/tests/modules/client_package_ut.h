@@ -128,8 +128,12 @@ MODULE(client_package, {
 
         ClientPackage stale = BuildClientPackage(Resource(root, "console.log('stale')"));
         EQUALS(stale.pending.empty(), false);
+        // Discarding clears the path: keep it to look for the files afterwards.
+        const std::filesystem::path pending = stale.pending;
+        EQUALS(std::filesystem::exists(pending), true);
         DiscardClientPackage(stale);
-        EQUALS(std::filesystem::exists(stale.pending), false);
+        EQUALS(std::filesystem::exists(pending), false);
+        EQUALS(std::filesystem::exists(AssetFileServer::ChunkListPath(pending)), false);
         EQUALS(Framework::Utils::Crypto::Sha256FileHex(first.served.string()) == first.sha256, true);
         std::filesystem::remove_all(root);
     });
@@ -143,6 +147,26 @@ MODULE(client_package, {
         EQUALS(package.error.empty(), false);
         EQUALS(CommitClientPackage(package), false);
         EQUALS(std::filesystem::exists(root / "staging" / "demo.fwpak"), false);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("keeps two builds of one resource that overlap out of each other's file", {
+        const auto root = scratch("fw_client_package_overlap");
+        auto first      = Resource(root, "console.log('one')");
+        first.build     = 1;
+        ClientPackage a = BuildClientPackage(first);
+        auto second     = Resource(root, "console.log('two, and longer')");
+        second.build    = 2;
+        ClientPackage b = BuildClientPackage(second);
+        EQUALS(a.pending.empty() || b.pending.empty(), false);
+        EQUALS(a.pending == b.pending, false);
+        // Each is still the bytes its own hash names, whichever was written last.
+        EQUALS(Framework::Utils::Crypto::Sha256FileHex(a.pending.string()) == a.sha256, true);
+        EQUALS(Framework::Utils::Crypto::Sha256FileHex(b.pending.string()) == b.sha256, true);
+        // The one that lost is dropped; the other is what gets served.
+        DiscardClientPackage(a);
+        EQUALS(CommitClientPackage(b), true);
+        EQUALS(Framework::Utils::Crypto::Sha256FileHex(b.served.string()) == b.sha256, true);
         std::filesystem::remove_all(root);
     });
 });

@@ -27,6 +27,10 @@ namespace Framework::Integrations::Server {
         Utils::Crypto::Key key {};
         std::set<std::string> serverOnlyResources;
         std::filesystem::path stagingDir;
+        // Names the file the build writes before it is committed. Two builds of one resource that may overlap
+        // (a hot reload still building when everything is published again) are given different ones, so
+        // neither writes into the other's file.
+        uint64_t build = 0;
     };
 
     struct ClientPackage {
@@ -46,12 +50,13 @@ namespace Framework::Integrations::Server {
 
     // Packages the resource and writes the container beside the served one, with its chunk list. The
     // served file is not touched, so what the server has announced stays what it serves. Any thread;
-    // one call at a time per resource.
+    // builds of one resource that overlap need different `build` numbers.
     ClientPackage BuildClientPackage(const ClientPackageRequest &request);
 
     // Puts a pending container where it is served from. Tick thread, right before the new hash is
     // announced. False when the package was not built or could not be put in place: it must not be
-    // announced then.
+    // announced then, and when the platform refused to replace the file (Windows, while a download has
+    // it open) the served file may no longer be whole, so it must not be served either.
     bool CommitClientPackage(ClientPackage &package);
 
     // Removes a pending container that will not be committed.

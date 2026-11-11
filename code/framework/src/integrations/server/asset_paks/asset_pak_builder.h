@@ -61,8 +61,8 @@ namespace Framework::Integrations::Server {
         /**
          * The slow half of Build, for a worker thread: writes each changed lane's pak under its new
          * name with its chunk list, and changes nothing the server has announced. The paks being
-         * replaced stay on disk and HasEntry keeps answering for them until Adopt. One call at a time
-         * per resource; the policy's methods are called from that thread, one caller at a time.
+         * replaced stay on disk and HasEntry keeps answering for them until Adopt. Calls from several
+         * threads take turns: the policy's methods are called from the thread whose turn it is.
          */
         Prepared Prepare(const std::string &resource, const std::filesystem::path &folder) const;
 
@@ -80,7 +80,7 @@ namespace Framework::Integrations::Server {
       private:
         bool BuildLane(const std::filesystem::path &laneRoot, const std::string &resource, const std::string &lane, BuiltLane &out, std::vector<std::filesystem::path> &retired) const;
 
-        // Held while a lane is built, so the policy is only ever asked by one thread at a time.
+        // Held for a whole Prepare, so the policy is only ever asked by one thread at a time.
         mutable std::mutex _policyMutex;
         std::shared_ptr<const Utils::StreamedAssets::Policy> _policy;
         std::filesystem::path _stagingDir;

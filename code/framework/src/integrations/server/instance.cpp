@@ -1104,7 +1104,7 @@ namespace Framework::Integrations::Server {
         return serverOnlyResources;
     }
 
-    Instance::ClientPublishJob Instance::PlanClientPublish(const std::string &name, const std::string &stagingDir) const {
+    Instance::ClientPublishJob Instance::PlanClientPublish(const std::string &name, const std::string &stagingDir) {
         ClientPublishJob job;
         job.name            = name;
         const auto resource = GetScriptingModule()->GetResourceManager()->GetResource(name);
@@ -1117,7 +1117,7 @@ namespace Framework::Integrations::Server {
             }
             else {
                 // Copies: the build may run while the tick thread restarts the resource again.
-                job.package = ClientPackageRequest {name, resource->GetPath(), resource->GetManifest(), _packageKey, _serverOnlyResources, stagingDir};
+                job.package = ClientPackageRequest {name, resource->GetPath(), resource->GetManifest(), _packageKey, _serverOnlyResources, stagingDir, ++_publishSerial};
             }
         }
         if (_opts.assetPakPolicy && (!_resourcesBooted || resource->IsRunning())) {
@@ -1180,8 +1180,17 @@ namespace Framework::Integrations::Server {
         // A manifest edit that moved a resource in or out of the server-only set changes what other
         // packages may depend on; so does a first publish that never happened.
         if (!resourceManager || !_packageKeyReady || CollectServerOnlyResources() != _serverOnlyResources) {
+            // Publishing everything again can change packages of resources that did not restart: their manifests
+            // drop or gain dependencies with the server-only set. Clients are told about each one that changed.
+            const std::unordered_map<std::string, std::string> before = _packageHashes;
             PublishClientAssets();
             AnnounceResourceRefresh(name);
+            for (const auto &[other, hash] : _packageHashes) {
+                const auto was = before.find(other);
+                if (other != name && (was == before.end() || was->second != hash)) {
+                    AnnounceResourceRefresh(other);
+                }
+            }
             return;
         }
 
@@ -1192,7 +1201,17 @@ namespace Framework::Integrations::Server {
         }
         _scheduler->Compute(
             [job = PlanClientPublish(name, GetPackageStagingDir()), paks = &std::as_const(_assetPakBuilder)] {
-                return RunClientPublish(job, *paks);
+                // A build that throws still has to come back: the completion is what lets the next one start.
+                try {
+                    return RunClientPublish(job, *paks);
+                }
+                catch (const std::exception &ex) {
+                    ClientPublish failed;
+                    failed.wantsPackage  = job.package.has_value();
+                    failed.package.name  = job.name;
+                    failed.package.error = ex.what();
+                    return failed;
+                }
             },
             [this, name](ClientPublish built) {
                 FinishRepublish(name, std::move(built));
@@ -1674,9 +1693,11 @@ namespace Framework::Integrations::Server {
         // Detach from the peer before the networking engine tears it down.
         _voiceServer.Shutdown();
 
-        // No tick will run a request or a completion from here on. Requests waiting on one are answered
-        // 503 as the web server stops; background work finishes before the objects it reads go.
+        // No tick will run a request or a completion from here on. The web server goes first: its workers
+        // post to the scheduler, so they are stopped and joined before it is destroyed (requests waiting on
+        // a tick are answered 503). Background work then finishes before the objects it reads go.
         if (_webServer) {
+            _webServer->Shutdown();
             _webServer->SetTickThreadScheduler(nullptr);
         }
         CoreModules::SetTaskScheduler(nullptr);

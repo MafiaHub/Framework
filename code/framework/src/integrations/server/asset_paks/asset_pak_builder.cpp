@@ -40,6 +40,9 @@ namespace Framework::Integrations::Server {
         if (!IsActive()) {
             return prepared;
         }
+        // For the whole build, GetLanes included: the policy is promised one caller at a time, and two builds of
+        // one lane would write the same file.
+        const std::lock_guard lock(_policyMutex);
 
         std::error_code code;
         for (const std::string &lane : _policy->GetLanes()) {
@@ -56,7 +59,6 @@ namespace Framework::Integrations::Server {
                 break;
             }
             BuiltLane lanePak;
-            const std::lock_guard lock(_policyMutex);
             if (BuildLane(laneRoot, resource, lane, lanePak, prepared._retired)) {
                 prepared._lanes.push_back(std::move(lanePak));
             }

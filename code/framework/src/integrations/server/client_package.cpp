@@ -14,6 +14,8 @@
 #include <utils/package/package.h>
 
 #include <fstream>
+#include <iterator>
+#include <string>
 
 namespace Framework::Integrations::Server {
     namespace {
@@ -26,13 +28,21 @@ namespace Framework::Integrations::Server {
             if (!code) {
                 return true;
             }
+            // Read whole before the target is opened: a source that cannot be read leaves the target as it was.
+            std::string bytes;
             {
                 std::ifstream in(from, std::ios::binary);
-                std::ofstream out(to, std::ios::binary | std::ios::trunc);
-                if (!in || !out) {
+                if (!in) {
                     return false;
                 }
-                out << in.rdbuf();
+                bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+                if (in.bad()) {
+                    return false;
+                }
+            }
+            {
+                std::ofstream out(to, std::ios::binary | std::ios::trunc);
+                out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
                 if (!out.good()) {
                     return false;
                 }
@@ -68,7 +78,7 @@ namespace Framework::Integrations::Server {
             return package;
         }
 
-        const std::filesystem::path pending = package.served.string() + ".next";
+        const std::filesystem::path pending = package.served.string() + "." + std::to_string(request.build) + ".next";
         {
             std::ofstream out(pending, std::ios::binary | std::ios::trunc);
             out.write(packaged.blob.data(), static_cast<std::streamsize>(packaged.blob.size()));

@@ -316,7 +316,9 @@ namespace Framework::Integrations::Server {
             bool wantsPaks = false;
             AssetPakBuilder::Prepared paks;
         };
-        ClientPublishJob PlanClientPublish(const std::string &name, const std::string &stagingDir) const;
+        ClientPublishJob PlanClientPublish(const std::string &name, const std::string &stagingDir);
+        // Numbers the builds, so two of one resource never share the file they write.
+        uint64_t _publishSerial = 0;
         static ClientPublish RunClientPublish(const ClientPublishJob &job, const AssetPakBuilder &paks);
         void RecordClientPublish(const std::string &name, ClientPublish built, size_t &packagedFiles);
         // After one resource (re)started at runtime: rebuilt alone on a background thread when nothing
