@@ -58,6 +58,9 @@ namespace Framework::Scripting::Bind {
             }
 
             for (size_t i = 0; i < params.size(); ++i) {
+                if (documented[i].rest) {
+                    throw std::logic_error("Bind: '" + name + "' documents the rest parameter '" + documented[i].name + "', which only a context function takes");
+                }
                 ParamDesc &param  = params[i];
                 param.name        = documented[i].name;
                 param.description = documented[i].description;
@@ -72,6 +75,32 @@ namespace Framework::Scripting::Bind {
             desc.description        = doc.Summary();
             desc.params             = std::move(params);
             desc.returns            = doc.ReturnTypeOverride() ? *doc.ReturnTypeOverride() : std::move(returns);
+            desc.returnsDescription = doc.ReturnsDescription();
+            desc.isStatic           = isStatic;
+            desc.side               = side;
+            return desc;
+        }
+
+        FunctionDesc DescribeContextFunction(std::string name, const Doc &doc, bool isStatic, Side side) {
+            FunctionDesc desc;
+            for (const Doc::ParamDoc &documented : doc.Params()) {
+                if (!documented.type) {
+                    throw std::logic_error("Bind: '" + name + "' is a context function, so its Doc gives every parameter a type, and '" + documented.name + "' has none");
+                }
+                ParamDesc param;
+                param.name        = documented.name;
+                param.type        = *documented.type;
+                param.optional    = documented.optional;
+                param.description = documented.description;
+                param.rest        = documented.rest;
+                desc.params.push_back(std::move(param));
+            }
+
+            desc.name        = std::move(name);
+            desc.description = doc.Summary();
+            if (doc.ReturnTypeOverride()) {
+                desc.returns = *doc.ReturnTypeOverride();
+            }
             desc.returnsDescription = doc.ReturnsDescription();
             desc.isStatic           = isStatic;
             desc.side               = side;
@@ -126,14 +155,32 @@ namespace Framework::Scripting::Bind {
 
     Doc::Doc(std::string summary): _summary(std::move(summary)) {}
 
-    Doc &Doc::Param(std::string name, std::string description) {
-        _params.push_back({std::move(name), std::move(description), false, std::nullopt});
+    Doc &Doc::Add(ParamDoc param) {
+        if (!_params.empty() && _params.back().rest) {
+            throw std::logic_error("Bind::Doc: '" + param.name + "' comes after the rest parameter '" + _params.back().name + "', which is the last one");
+        }
+        _params.push_back(std::move(param));
         return *this;
     }
 
+    Doc &Doc::Param(std::string name, std::string description) {
+        return Add({std::move(name), std::move(description), false, std::nullopt, false});
+    }
+
+    Doc &Doc::Param(std::string name, TypeRef type, std::string description) {
+        return Add({std::move(name), std::move(description), false, std::move(type), false});
+    }
+
     Doc &Doc::OptionalParam(std::string name, std::string description) {
-        _params.push_back({std::move(name), std::move(description), true, std::nullopt});
-        return *this;
+        return Add({std::move(name), std::move(description), true, std::nullopt, false});
+    }
+
+    Doc &Doc::OptionalParam(std::string name, TypeRef type, std::string description) {
+        return Add({std::move(name), std::move(description), true, std::move(type), false});
+    }
+
+    Doc &Doc::RestParam(std::string name, TypeRef type, std::string description) {
+        return Add({std::move(name), std::move(description), false, std::move(type), true});
     }
 
     Doc &Doc::ParamType(TypeRef type) {

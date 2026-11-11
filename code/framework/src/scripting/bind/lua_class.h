@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "call.h"
 #include "descriptors.h"
 #include "doc.h"
 
@@ -42,6 +43,11 @@ namespace Framework::Scripting::Bind {
     // the table the fields of the class are read from. What the hook leaves on the stack is dropped.
     using LuaClassHook = fu2::function<void(lua_State *L, int metatableIndex, int classTableIndex) const>;
 
+    // Pushes a Lua function that calls `function`, with a Call of its own. The Lua function keeps `function` until
+    // it is collected, or the state closes. Raises a Lua error when the stack cannot grow or Lua is out of memory.
+    // In a state no LuaRuntime made, `function` cannot ask its Call for the side, the resource or the manager.
+    void PushLuaFunction(lua_State *L, NativeFunction function);
+
     // What Lua needs of a bound class, without its C++ type: Class<T> fills a LuaClass, and everything here works on
     // one. Nothing in it changes once the definition is built.
     namespace Detail {
@@ -49,6 +55,7 @@ namespace Framework::Scripting::Bind {
 
         struct LuaClass;
         struct LuaFunction;
+        struct V8ClassAccess; // v8_backend.h
 
         // What lua_newuserdatauv aligns a block for.
         union LuaMaxAlign final {
@@ -72,6 +79,9 @@ namespace Framework::Scripting::Bind {
             std::vector<LuaParam> params; // without the receiver
             LuaInvoker invoke = nullptr;
             std::shared_ptr<const void> target; // the callable `invoke` casts back to its type
+            // Set for a context function, and nothing else is: it is called with whatever the script passed, and
+            // checks its receiver and its arguments itself.
+            std::shared_ptr<NativeFunction> native;
         };
 
         struct LuaFunction final {
@@ -106,12 +116,8 @@ namespace Framework::Scripting::Bind {
             std::vector<LuaClassHook> hooks;
             void (*destroy)(void *object) = nullptr; // nullptr for a trivially destructible class
             char classTableKey            = 0;       // its address keys the class table in the registry
-        };
-
-        // The definition of the C++ type T, or nullptr until Class<T> is constructed.
-        template <typename T>
-        struct LuaClassOf final {
-            static inline const LuaClass *definition = nullptr;
+            size_t size                   = 0;       // of an object
+            const V8ClassAccess *v8       = nullptr; // how JavaScript reaches the objects of the class
         };
 
         // A member cannot be overloaded: these throw std::logic_error naming <Class>.<member> when the class
@@ -153,5 +159,27 @@ namespace Framework::Scripting::Bind {
         // Raises the error of `function` returning, by reference or pointer, an object of the class `name` that
         // is not its receiver: a script would get a copy, and the class cannot be copied.
         int LuaRaiseNotCopyable(lua_State *L, const LuaFunction &function, const char *name);
+
+        // --- Context functions and namespaces ---
+
+        // The thunk of a context function.
+        LuaThunk LuaNativeThunk(std::shared_ptr<NativeFunction> function);
+
+        // Runs `function` on the values a script passed, which are the whole stack of `L`, and returns as a
+        // lua_CFunction does. `method` says the first of them is the receiver and not an argument. What the
+        // function threw is raised here, once the function has returned and its Call is gone.
+        int LuaInvokeNative(lua_State *L, NativeFunction &function, bool method);
+
+        // A function that is not a member of a class: `owner` is what an error names before it, "Chat" in
+        // "Chat.sendToAll".
+        LuaFunction LuaMakeFunction(const std::string &owner, std::string name, Side side, LuaThunk thunk);
+
+        // Pushes what a script calls for `function`, which takes no receiver. The script keeps a pointer to
+        // `function`, which outlives the state.
+        void LuaPushFunction(lua_State *L, const LuaFunction &function);
+
+        // Pushes an empty table that reads from the table at `fieldsIndex` and refuses every write, as the table of
+        // a class does. `name` is what the error of a write calls it.
+        void LuaPushReadOnlyTable(lua_State *L, int fieldsIndex, const std::string &name);
     } // namespace Detail
 } // namespace Framework::Scripting::Bind

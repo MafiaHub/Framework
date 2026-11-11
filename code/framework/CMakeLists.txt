@@ -48,9 +48,13 @@ set(FRAMEWORK_SRC
     src/scripting/function_references.cpp
     src/scripting/resource_monitor.cpp
     src/scripting/v8pp_glm.cpp
+    src/scripting/bind/call.cpp
     src/scripting/bind/descriptors.cpp
+    src/scripting/bind/lua_call.cpp
     src/scripting/bind/lua_class.cpp
     src/scripting/bind/lua_glm.cpp
+    src/scripting/bind/namespace.cpp
+    src/scripting/bind/v8_call.cpp
     src/scripting/lua/lua_engine.cpp
     src/scripting/lua/lua_runtime.cpp
     src/scripting/lua/lua_sandbox.cpp

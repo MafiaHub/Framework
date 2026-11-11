@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "call.h"
 #include "doc.h"
 #include "types.h"
 
@@ -24,6 +25,7 @@ namespace Framework::Scripting::Bind {
         TypeRef type;
         bool optional = false;
         std::string description;
+        bool rest = false; // the last parameter of a context function, taking every remaining argument
     };
 
     struct FunctionDesc {
@@ -126,8 +128,13 @@ namespace Framework::Scripting::Bind {
         }
 
         // Merges what the signature says (types, std::optional) with what the Doc says (names, descriptions,
-        // overrides). Throws std::logic_error when the two disagree on the number of parameters.
+        // overrides). Throws std::logic_error when the two disagree on the number of parameters, and when the Doc
+        // has a rest parameter, which a signature cannot take.
         FunctionDesc BuildFunctionDesc(std::string name, const Doc &doc, std::vector<ParamDesc> params, TypeRef returns, bool isStatic, Side side);
+
+        // Describes a context function, from its Doc alone: the parameters with the types the Doc gives them, and
+        // the return type it gives, void without one. Throws std::logic_error when a parameter has no type.
+        FunctionDesc DescribeContextFunction(std::string name, const Doc &doc, bool isStatic, Side side);
 
         template <typename Receiver, typename Return, typename... Args>
         FunctionDesc DescribeSignature(Signature<Receiver, Return, Args...>, std::string name, const Doc &doc, bool isStatic, Side side) {
@@ -136,10 +143,14 @@ namespace Framework::Scripting::Bind {
     } // namespace Detail
 
     // Describes a typed callable `F`: a member function pointer (the receiver is not a parameter), a free function
-    // or a lambda (every parameter counts). Types come from the signature, everything else from `doc`.
+    // or a lambda (every parameter counts). Types come from the signature, everything else from `doc`. A context
+    // function, a NativeFunction or what makes one, is described from `doc` alone.
     template <typename F>
     FunctionDesc DescribeFunction(std::string name, const Doc &doc, bool isStatic, Side side) {
-        if constexpr (Detail::HasSignature<std::decay_t<F>>) {
+        if constexpr (Detail::ContextCallable<std::decay_t<F>>) {
+            return Detail::DescribeContextFunction(std::move(name), doc, isStatic, side);
+        }
+        else if constexpr (Detail::HasSignature<std::decay_t<F>>) {
             return Detail::DescribeSignature(typename Detail::SignatureOf<std::decay_t<F>>::Type {}, std::move(name), doc, isStatic, side);
         }
         else {

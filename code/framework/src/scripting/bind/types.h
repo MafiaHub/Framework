@@ -70,6 +70,15 @@ namespace Framework::Scripting::Bind {
 
         TypeRef Scalar(TypeKind kind);
         TypeRef Wrap(TypeKind kind, TypeRef inner);
+
+        // What a runtime needs of a bound class, without its C++ type (lua_class.h).
+        struct LuaClass;
+
+        // The definition of the C++ type T, or nullptr until Class<T> is constructed.
+        template <typename T>
+        struct LuaClassOf final {
+            static inline const LuaClass *definition = nullptr;
+        };
     } // namespace Detail
 
     // The script type of a C++ type, per the type model (spec 1.2). References, cv-qualifiers and a pointer to a

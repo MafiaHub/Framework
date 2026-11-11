@@ -251,6 +251,9 @@ namespace Framework::Scripting::Bind {
     // or T *. A static or an operator takes a function, a static member function or a captureless lambda.
     // Parameter and return types follow the type model (spec 1.2); a trailing std::optional parameter may be
     // omitted by a script.
+    //
+    // A method or a static may be a context function instead, void(Bind::Call &), for what a signature cannot
+    // say: one body, called from both languages (call.h).
     template <typename T>
     class Class final {
         static_assert(std::is_class_v<T> && std::is_same_v<T, std::remove_cv_t<T>>, "Bind::Class: T is a class type, without const or volatile");
@@ -274,7 +277,9 @@ namespace Framework::Scripting::Bind {
             if constexpr (!std::is_trivially_destructible_v<T>) {
                 _record->destroy = &Destroy;
             }
-            _v8 = std::make_shared<Detail::V8Class<T>>();
+            _record->size = sizeof(T);
+            _record->v8   = &Detail::V8AccessOf<T>;
+            _v8           = std::make_shared<Detail::V8Class<T>>();
 
             Detail::LuaClassOf<T>::definition = _record.get();
             // Never deleted: this handle is what keeps the definition alive.
@@ -341,6 +346,7 @@ namespace Framework::Scripting::Bind {
         // Static when it declares a static of that name or the name is `new`. A class may declare again what a
         // base declares.
         template <typename F>
+            requires(!Detail::ContextCallable<F>)
         Class &Method(std::string name, F function, Doc doc, Side side = Side::Shared) {
             static_assert(Detail::CallableOn<T, F>, "Bind::Class::Method: F is a member function of T or of one of its bases, or a function or a lambda that takes the receiver first, as T &, const T & or T *");
             using Shape       = Detail::MethodShapeOf<F>;
@@ -352,11 +358,34 @@ namespace Framework::Scripting::Bind {
         }
 
         template <typename F>
+            requires(!Detail::ContextCallable<F>)
         Class &Static(std::string name, F function, Doc doc, Side side = Side::Shared) {
             static_assert(Detail::FreeCallable<F>, "Bind::Class::Static: F is a function, a static member function or a lambda");
             FunctionDesc desc = DescribeMember(typename Detail::SignatureOf<F>::Type {}, name, doc, true, side);
             Detail::LuaAddStatic(*_record, name, side, Detail::LuaFunctionThunkOf(typename Detail::SignatureOf<F>::Type {}, function));
             _v8->members.push_back(Detail::V8Static<T>(typename Detail::SignatureOf<F>::Type {}, side, _record->desc.name, std::move(name), std::move(function), Detail::V8FunctionOptions(desc)));
+            _record->desc.functions.push_back(std::move(desc));
+            return *this;
+        }
+
+        // A method or a static written as a context function: it is called with whatever the script passed and
+        // checks it itself, and its Doc gives the types. A method finds its receiver with Call::Self<T>(), which
+        // is null when it was called on anything else, in either language; the receiver is not one of its
+        // arguments.
+        Class &Method(std::string name, NativeFunction function, Doc doc, Side side = Side::Shared) {
+            FunctionDesc desc = DescribeContextMember(name, doc, false, side);
+            auto shared       = std::make_shared<NativeFunction>(std::move(function));
+            Detail::LuaAddMethod(*_record, name, side, Detail::LuaNativeThunk(shared));
+            _v8->members.push_back(Detail::V8NativeMethod<T>(side, std::move(name), std::move(shared), Detail::V8FunctionOptions(desc)));
+            _record->desc.functions.push_back(std::move(desc));
+            return *this;
+        }
+
+        Class &Static(std::string name, NativeFunction function, Doc doc, Side side = Side::Shared) {
+            FunctionDesc desc = DescribeContextMember(name, doc, true, side);
+            auto shared       = std::make_shared<NativeFunction>(std::move(function));
+            Detail::LuaAddStatic(*_record, name, side, Detail::LuaNativeThunk(shared));
+            _v8->members.push_back(Detail::V8NativeStatic<T>(side, std::move(name), std::move(shared), Detail::V8FunctionOptions(desc)));
             _record->desc.functions.push_back(std::move(desc));
             return *this;
         }
@@ -464,6 +493,12 @@ namespace Framework::Scripting::Bind {
         template <typename S>
         FunctionDesc DescribeMember(S signature, const std::string &name, const Doc &doc, bool isStatic, Side side) const {
             FunctionDesc desc = Detail::DescribeSignature(signature, _record->desc.name + "." + name, doc, isStatic, side);
+            desc.name         = name;
+            return desc;
+        }
+
+        FunctionDesc DescribeContextMember(const std::string &name, const Doc &doc, bool isStatic, Side side) const {
+            FunctionDesc desc = Detail::DescribeContextFunction(_record->desc.name + "." + name, doc, isStatic, side);
             desc.name         = name;
             return desc;
         }

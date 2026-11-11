@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "call.h"
 #include "descriptors.h"
 #include "doc.h"
 #include "types.h"
@@ -57,13 +58,70 @@
 //
 // Besides, v8pp cannot return an object of a class that cannot be copied, by value or by reference: a class with
 // such a member materialises into Lua only (V8CanReturn).
+//
+// None of this is true of a member written as a context function (call.h): it reads its arguments itself, the
+// same way in both languages. Where the two still differ for it, value.h says.
 
 namespace Framework::Scripting::Bind {
+    // A JavaScript function that calls `function`, with a Call of its own. It has no name, as a function a builtin
+    // makes with v8::Function::New has none. It keeps `function` until it is collected, or until v8pp::cleanup
+    // drops what the isolate still holds (Builtins::UnregisterAll). Call with `context` entered.
+    v8::Local<v8::Function> MakeV8Function(v8::Isolate *isolate, v8::Local<v8::Context> context, NativeFunction function);
+
     // What V8 needs of a bound class: Class<T> fills a V8Class, and materialising it builds the v8pp class a
     // hand-written binding would, with the same records in the catalog.
     namespace Detail {
+        // MakeV8Function, sharing `function` with whoever else holds it, and empty where V8 cannot make a function,
+        // as in an isolate that is being terminated.
+        v8::MaybeLocal<v8::Function> V8NativeFunction(v8::Isolate *isolate, v8::Local<v8::Context> context, std::shared_ptr<NativeFunction> function);
+
+        // The template of a member of a class that calls `function`. `method` says it is a method: its `this` is
+        // the receiver Call::Self looks at.
+        v8::Local<v8::FunctionTemplate> V8NativeTemplate(v8::Isolate *isolate, std::shared_ptr<NativeFunction> function, bool method);
+
+        // How JavaScript reaches the objects of a bound class without its C++ type, for Value::AsBound, Call::Self
+        // and Call::Wrap.
+        struct V8ClassAccess final {
+            // The object of the class that `value` wraps, or the part of an object of a class derived from it.
+            // nullptr for anything else, and in an isolate that does not have the class.
+            void *(*unwrap)(v8::Isolate *isolate, v8::Local<v8::Value> value) = nullptr;
+            // Hands `object`, made with new, to a new JavaScript object that owns it. Empty, with `object`
+            // deleted, in an isolate that does not have the class.
+            v8::Local<v8::Value> (*adopt)(v8::Isolate *isolate, void *object) = nullptr;
+        };
+
+        template <typename T>
+        void *V8Unwrap(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+            // v8pp throws for a class the isolate does not have.
+            try {
+                return v8pp::class_<T>::unwrap_object(isolate, value);
+            }
+            catch (const std::exception &) {
+                return nullptr;
+            }
+        }
+
+        template <typename T>
+        v8::Local<v8::Value> V8Adopt(v8::Isolate *isolate, void *object) {
+            std::unique_ptr<T> owned(static_cast<T *>(object));
+            try {
+                v8::Local<v8::Object> wrapped = v8pp::class_<T>::import_external(isolate, owned.get());
+                if (!wrapped.IsEmpty()) {
+                    owned.release();
+                }
+                return wrapped;
+            }
+            catch (const std::exception &) {
+                return {};
+            }
+        }
+
+        template <typename T>
+        inline constexpr V8ClassAccess V8AccessOf = {&V8Unwrap<T>, &V8Adopt<T>};
+
         // What v8pp::metadata::docs(returns, {param(name, type, optional, description)...}, description,
-        // returnsDescription) builds, from a description.
+        // returnsDescription) builds, from a description. A rest parameter is what rest_param(name, type,
+        // description) is there.
         inline v8pp::metadata::function_options V8FunctionOptions(const FunctionDesc &desc) {
             v8pp::metadata::function_options options = v8pp::metadata::docs(ToTypeScript(desc.returns), {}, desc.description, desc.returnsDescription);
             for (const ParamDesc &param : desc.params) {
@@ -72,6 +130,7 @@ namespace Framework::Scripting::Bind {
                 documented.value_type.name     = ToTypeScript(param.type);
                 documented.value_type.optional = param.optional;
                 documented.description         = param.description;
+                documented.variadic            = param.rest;
                 options.explicit_signature->parameters.push_back(std::move(documented));
             }
             return options;
@@ -248,6 +307,32 @@ namespace Framework::Scripting::Bind {
                     },
                     {}};
             }
+        }
+
+        // A method written as a context function goes on the prototype, and a static on the constructor, each
+        // recorded as the typed one is.
+        template <typename T>
+        V8Member<T> V8NativeMethod(Side side, std::string name, std::shared_ptr<NativeFunction> function, v8pp::metadata::function_options options) {
+            return {side,
+                [name = std::move(name), function = std::move(function), options = std::move(options)](v8pp::class_<T> &cls, v8pp::metadata::symbol &symbol) {
+                    v8::Isolate *isolate = cls.isolate();
+                    v8::HandleScope scope(isolate);
+                    cls.class_function_template()->PrototypeTemplate()->Set(v8pp::to_v8(isolate, name), V8NativeTemplate(isolate, function, true));
+                    symbol.record(v8pp::metadata::function_of<v8::FunctionCallback>(name, options, false));
+                },
+                {}};
+        }
+
+        template <typename T>
+        V8Member<T> V8NativeStatic(Side side, std::string name, std::shared_ptr<NativeFunction> function, v8pp::metadata::function_options options) {
+            return {side,
+                [name = std::move(name), function = std::move(function), options = std::move(options)](v8pp::class_<T> &cls, v8pp::metadata::symbol &symbol) {
+                    v8::Isolate *isolate = cls.isolate();
+                    v8::HandleScope scope(isolate);
+                    cls.js_function_template()->Set(isolate, name.c_str(), V8NativeTemplate(isolate, function, false));
+                    symbol.record(v8pp::metadata::function_of<v8::FunctionCallback>(name, options, true));
+                },
+                {}};
         }
 
         // A getter or a setter as v8pp calls one: a member function as it is. v8pp gives the receiver to a function

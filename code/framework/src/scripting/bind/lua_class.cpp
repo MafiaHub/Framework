@@ -59,18 +59,23 @@ namespace Framework::Scripting::Bind::Detail {
             return *static_cast<const LuaClass *>(lua_touserdata(L, lua_upvalueindex(upvalue)));
         }
 
-        LuaFunction MakeFunction(const LuaClass &owner, std::string name, char separator, Side side, LuaThunk thunk) {
+        LuaFunction MakeFunction(const std::string &owner, std::string name, char separator, Side side, LuaThunk thunk) {
             LuaFunction function;
-            function.label = owner.desc.name + separator + name;
+            function.label = owner + separator + name;
             function.name  = std::move(name);
             function.side  = side;
-            function.owner = &owner;
             for (size_t i = 0; i < thunk.params.size(); ++i) {
                 if (!thunk.params[i].optional) {
                     function.required = static_cast<int>(i) + 1;
                 }
             }
             function.thunk = std::move(thunk);
+            return function;
+        }
+
+        LuaFunction MakeFunction(const LuaClass &owner, std::string name, char separator, Side side, LuaThunk thunk) {
+            LuaFunction function = MakeFunction(owner.desc.name, std::move(name), separator, side, std::move(thunk));
+            function.owner       = &owner;
             return function;
         }
 
@@ -174,15 +179,22 @@ namespace Framework::Scripting::Bind::Detail {
 
         // --- What Lua calls ---
 
+        // A context function is handed the call as it is: it looks for its receiver and reads its arguments itself.
         int CallMethod(lua_State *L) {
             const LuaFunction &function = FunctionUpvalue(L);
-            void *self                  = CheckReceiver(L, function);
+            if (function.thunk.native != nullptr) {
+                return LuaInvokeNative(L, *function.thunk.native, true);
+            }
+            void *self = CheckReceiver(L, function);
             CheckArguments(L, function, 2);
             return Invoke(L, function, self);
         }
 
         int CallStatic(lua_State *L) {
             const LuaFunction &function = FunctionUpvalue(L);
+            if (function.thunk.native != nullptr) {
+                return LuaInvokeNative(L, *function.thunk.native, false);
+            }
             CheckArguments(L, function, 1);
             return Invoke(L, function, nullptr);
         }
@@ -199,6 +211,11 @@ namespace Framework::Scripting::Bind::Detail {
 
         int RefuseClassWrite(lua_State *L) {
             return luaL_error(L, "attempt to set '%s' on class %s", luaL_tolstring(L, 2, nullptr), ClassUpvalue(L, 1).desc.name.c_str());
+        }
+
+        // __newindex of a read-only table that is not a class. Upvalue 1 is its name.
+        int RefuseWrite(lua_State *L) {
+            return luaL_error(L, "attempt to set '%s' on %s", luaL_tolstring(L, 2, nullptr), lua_tostring(L, lua_upvalueindex(1)));
         }
 
         // __index. Upvalue 1 maps a name to a method, which is returned, or to the getter of a property, a light
@@ -550,5 +567,33 @@ namespace Framework::Scripting::Bind::Detail {
 
     int LuaRaiseNotCopyable(lua_State *L, const LuaFunction &function, const char *name) {
         return luaL_error(L, "'%s' cannot return a %s by reference: the class cannot be copied", function.label.c_str(), name);
+    }
+
+    LuaThunk LuaNativeThunk(std::shared_ptr<NativeFunction> function) {
+        LuaThunk thunk;
+        thunk.native = std::move(function);
+        return thunk;
+    }
+
+    LuaFunction LuaMakeFunction(const std::string &owner, std::string name, Side side, LuaThunk thunk) {
+        return MakeFunction(owner, std::move(name), '.', side, std::move(thunk));
+    }
+
+    void LuaPushFunction(lua_State *L, const LuaFunction &function) {
+        PushClosure(L, CallStatic, function);
+    }
+
+    void LuaPushReadOnlyTable(lua_State *L, int fieldsIndex, const std::string &name) {
+        fieldsIndex = lua_absindex(L, fieldsIndex);
+        lua_newtable(L);
+        lua_newtable(L);
+        lua_pushvalue(L, fieldsIndex);
+        lua_setfield(L, -2, "__index");
+        lua_pushlstring(L, name.data(), name.size());
+        lua_pushcclosure(L, RefuseWrite, 1);
+        lua_setfield(L, -2, "__newindex");
+        lua_pushboolean(L, 0);
+        lua_setfield(L, -2, "__metatable");
+        lua_setmetatable(L, -2);
     }
 } // namespace Framework::Scripting::Bind::Detail
