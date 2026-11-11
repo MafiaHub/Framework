@@ -35,9 +35,14 @@ namespace Framework::Scripting::Bind {
     //   static void Push(lua_State *L, const T &value);   // pushes exactly one value
     //   static const char *Expected();                    // what an argument error says was expected
     //
+    // T is the unqualified type: `const bool` has no converter, `bool` has.
+    //
     // `index` is any acceptable index, relative or absent. Is and Get run no script code, convert nothing in place
     // and leave the stack as they found it. The caller keeps room for the one value Push adds; a converter that
     // needs more stack than that reserves it.
+    //
+    // Is, Get and Push can raise a Lua error, when the stack cannot grow or Lua runs out of memory, and Get can
+    // throw std::bad_alloc for a T that allocates.
     template <typename T, typename Enable = void>
     struct LuaConvert;
 
@@ -70,6 +75,24 @@ namespace Framework::Scripting::Bind {
             lua_setmetatable(L, -2);
         }
 
+        template <typename T>
+        inline constexpr bool IsUnqualified = std::is_same_v<T, std::remove_cv_t<T>>;
+
+        // `value` as the floating-point type To. Beyond the range of To it is an infinity of its sign, which the
+        // cast alone leaves undefined.
+        template <typename To, typename From>
+        constexpr To NarrowFloat(From value) {
+            if constexpr (std::numeric_limits<To>::max_exponent < std::numeric_limits<From>::max_exponent) {
+                if (value > static_cast<From>(std::numeric_limits<To>::max())) {
+                    return std::numeric_limits<To>::infinity();
+                }
+                if (value < static_cast<From>(std::numeric_limits<To>::lowest())) {
+                    return -std::numeric_limits<To>::infinity();
+                }
+            }
+            return static_cast<To>(value);
+        }
+
         // Whether `value` is in the range of the integral type T. A type as wide as lua_Integer takes every value:
         // an unsigned one reads a negative integer as its two's complement.
         template <typename T>
@@ -95,6 +118,13 @@ namespace Framework::Scripting::Bind {
         }
     } // namespace Detail
 
+    // A qualified type would otherwise find the wrong converter (`const bool` is integral and is not `bool`) or
+    // none.
+    template <typename T>
+    struct LuaConvert<T, std::enable_if_t<!Detail::IsUnqualified<T>>> final {
+        static_assert(Detail::IsUnqualified<T>, "Bind::LuaConvert: ask for the converter of the unqualified type (std::remove_cv_t<T>), not of a const or volatile one");
+    };
+
     template <>
     struct LuaConvert<bool> final {
         static bool Is(lua_State *L, int index) {
@@ -115,7 +145,7 @@ namespace Framework::Scripting::Bind {
     };
 
     template <typename T>
-    struct LuaConvert<T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>>> final {
+    struct LuaConvert<T, std::enable_if_t<Detail::IsUnqualified<T> && std::is_integral_v<T> && !std::is_same_v<T, bool>>> final {
         static bool Is(lua_State *L, int index) {
             return Detail::IsLuaInteger<T>(L, index);
         }
@@ -135,7 +165,7 @@ namespace Framework::Scripting::Bind {
 
     // An enum crosses as its underlying integer. Whether the integer names an enumerator is not checked.
     template <typename T>
-    struct LuaConvert<T, std::enable_if_t<std::is_enum_v<T>>> final {
+    struct LuaConvert<T, std::enable_if_t<Detail::IsUnqualified<T> && std::is_enum_v<T>>> final {
         using Underlying = std::underlying_type_t<T>;
 
         static bool Is(lua_State *L, int index) {
@@ -155,20 +185,20 @@ namespace Framework::Scripting::Bind {
         }
     };
 
-    // An integer or a float is accepted, a float is pushed. A number beyond the range of `float` narrows as C++
-    // does, to an infinity.
+    // An integer or a float is accepted, a float is pushed. A number beyond the range of `float` is read as an
+    // infinity.
     template <typename T>
-    struct LuaConvert<T, std::enable_if_t<std::is_floating_point_v<T>>> final {
+    struct LuaConvert<T, std::enable_if_t<Detail::IsUnqualified<T> && std::is_floating_point_v<T>>> final {
         static bool Is(lua_State *L, int index) {
             return lua_type(L, index) == LUA_TNUMBER;
         }
 
         static T Get(lua_State *L, int index) {
-            return static_cast<T>(lua_tonumberx(L, index, nullptr));
+            return Detail::NarrowFloat<T>(lua_tonumberx(L, index, nullptr));
         }
 
         static void Push(lua_State *L, const T &value) {
-            lua_pushnumber(L, static_cast<lua_Number>(value));
+            lua_pushnumber(L, Detail::NarrowFloat<lua_Number>(value));
         }
 
         static const char *Expected() {
@@ -270,9 +300,11 @@ namespace Framework::Scripting::Bind {
     };
 
     // A vector is a sequence: a table whose keys are exactly 1..n, read raw. A table with a hole or any other key
-    // is not one, whatever T is.
+    // is not one.
     template <typename T, typename Allocator>
     struct LuaConvert<std::vector<T, Allocator>> final {
+        static_assert(!Detail::IsOptional<T>::value, "Bind::LuaConvert: std::vector<std::optional<T>> has no Lua form, a sequence cannot hold nil");
+
         static bool Is(lua_State *L, int index) {
             if (lua_type(L, index) != LUA_TTABLE) {
                 return false;

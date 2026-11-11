@@ -372,7 +372,7 @@ MODULE(lua_convert, {
         EQUALS(Eval(state.L, "echo('1.5')"), "<error> eval:1: bad argument #1 to 'echo' (number expected, got string)");
     });
 
-    IT("narrows a number to float as C++ does", {
+    IT("converts an integer or a float to float", {
         LuaTest::State state;
         Expose<float>(state.L);
 
@@ -383,12 +383,32 @@ MODULE(lua_convert, {
         EQUALS(Eval(state.L, "echo(1.5)"), "1.5");
         EQUALS(Eval(state.L, "math.type(echo(1))"), "float");
 
-        // Beyond the range of float: accepted, and infinite once narrowed.
+        EQUALS(Eval(state.L, "take('0.5')"), "false");
+    });
+
+    IT("reads a number beyond the range of float as an infinity", {
+        LuaTest::State state;
+        Expose<float>(state.L);
+
         EQUALS(Eval(state.L, "take(1e300)"), "true");
         EQUALS(Slot<float>(), std::numeric_limits<float>::infinity());
+        EQUALS(Eval(state.L, "take(-1e300)"), "true");
+        EQUALS(Slot<float>(), -std::numeric_limits<float>::infinity());
         EQUALS(Eval(state.L, "echo(-1e300) == -math.huge"), "true");
+        // Just past the largest float, where rounding to nearest would still give the largest float.
+        EQUALS(Eval(state.L, "take(0x1.fffffe8p+127)"), "true");
+        EQUALS(Slot<float>(), std::numeric_limits<float>::infinity());
+        EQUALS(Eval(state.L, "take(-0x1.fffffe8p+127)"), "true");
+        EQUALS(Slot<float>(), -std::numeric_limits<float>::infinity());
 
-        EQUALS(Eval(state.L, "take('0.5')"), "false");
+        // The largest float is still itself, and what was not finite stays so.
+        EQUALS(Eval(state.L, "take(0x1.fffffep+127)"), "true");
+        EQUALS(Slot<float>(), std::numeric_limits<float>::max());
+        EQUALS(Eval(state.L, "take(-0x1.fffffep+127)"), "true");
+        EQUALS(Slot<float>(), std::numeric_limits<float>::lowest());
+        EQUALS(Eval(state.L, "echo(math.huge) == math.huge"), "true");
+        EQUALS(Eval(state.L, "echo(-math.huge) == -math.huge"), "true");
+        EQUALS(Eval(state.L, "local nan = echo(0/0) return nan ~= nan"), "true");
     });
 
     // --- Strings ---
@@ -589,14 +609,6 @@ MODULE(lua_convert, {
         EQUALS(Eval(state.L, "echo(nil)"), "nil");
         EQUALS(Eval(state.L, "#echo({ 1, 2 })"), "2");
         EQUALS(Eval(state.L, "echo({ a = 1 })"), "<error> eval:1: bad argument #1 to 'echo' (table expected, got table)");
-    });
-
-    IT("does not take a hole for an empty optional element", {
-        LuaTest::State state;
-        Expose<std::vector<std::optional<int>>>(state.L);
-        EQUALS(Eval(state.L, "take({ 1, 2 })"), "true");
-        EQUALS(Slot<std::vector<std::optional<int>>>().size(), size_t {2});
-        EQUALS(Eval(state.L, "take({ 1, nil, 3 })"), "false");
     });
 
     IT("reads a table without running its metamethods", {
