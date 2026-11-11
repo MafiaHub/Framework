@@ -164,6 +164,20 @@ namespace BindClassLuaTest {
             return *_value;
         }
 
+        Token &touch() {
+            ++*_value;
+            return *this;
+        }
+
+        // A reference to another token, which a script cannot receive: there is no copy to give it.
+        Token &pass(Token &other) {
+            return other;
+        }
+
+        Token *maybe(bool keep) {
+            return keep ? this : nullptr;
+        }
+
       private:
         std::unique_ptr<int> _value;
     };
@@ -190,6 +204,20 @@ namespace BindClassLuaTest {
         explicit Arity(int) {}
     };
 
+    struct Repeated final {
+        int size = 0;
+
+        void go() {}
+
+        int getSize() const {
+            return size;
+        }
+
+        void setSize(int value) {
+            size = value;
+        }
+    };
+
 } // namespace BindClassLuaTest
 
 FW_SCRIPT_CLASS(BindClassLuaTest::Counter, "Counter");
@@ -203,6 +231,7 @@ FW_SCRIPT_CLASS(BindClassLuaTest::Misnamed, "Misnamed");
 FW_SCRIPT_CLASS(BindClassLuaTest::Mismatch, "Mismatch");
 FW_SCRIPT_CLASS(BindClassLuaTest::Twice, "Twice");
 FW_SCRIPT_CLASS(BindClassLuaTest::Arity, "Arity");
+FW_SCRIPT_CLASS(BindClassLuaTest::Repeated, "Repeated");
 
 namespace BindClassLuaTest {
     inline int hookRuns = 0;
@@ -362,7 +391,16 @@ namespace BindClassLuaTest {
                                                [](int value) {
                                                    return Token(value);
                                                },
-                                               Doc("Makes a token.").Param("value", "Its value."));
+                                               Doc("Makes a token.").Param("value", "Its value."))
+                                           .Method("touch", &Token::touch, Doc("Adds one to the value.").Returns("This token."))
+                                           .Method("pass", &Token::pass, Doc("Returns a token.").Param("other", "Token to return."))
+                                           .Method("maybe", &Token::maybe, Doc("Returns this token or nothing.").Param("keep", "Whether to return it."))
+                                           .Static(
+                                               "same",
+                                               [](Token &token) -> Token & {
+                                                   return token;
+                                               },
+                                               Doc("Returns a token.").Param("token", "Token to return."));
         return definition;
     }
 
@@ -485,7 +523,9 @@ MODULE(bind_class_lua, {
         Open(state.L);
 
         EQUALS(Eval(state.L, "Sealed()"), "<error> eval:1: Sealed cannot be constructed from script");
-        EQUALS(Eval(state.L, "Sealed.new"), "nil");
+        EQUALS(Eval(state.L, "Sealed.new()"), "<error> eval:1: Sealed cannot be constructed from script");
+        EQUALS(Eval(state.L, "Sealed.new(1, 2)"), "<error> eval:1: Sealed cannot be constructed from script");
+        EQUALS(Eval(state.L, "type(Sealed.new)"), "function");
         EQUALS(Eval(state.L, "Sealed.make().value"), "3");
     });
 
@@ -534,6 +574,22 @@ MODULE(bind_class_lua, {
         EQUALS(Eval(state.L, "Token.make(4):value()"), "4");
         EQUALS(Eval(state.L, "Token.new(2):value()"), "2");
         EQUALS(Eval(state.L, "Token(3):value()"), "3");
+    });
+
+    IT("returns a reference to the receiver from a class that cannot be copied and refuses any other", {
+        LuaTest::State state;
+        Open(state.L);
+
+        EQUALS(Eval(state.L, "t = Token.new(1)"), "nil");
+        EQUALS(Eval(state.L, "rawequal(t, t:touch())"), "true");
+        EQUALS(Eval(state.L, "t:touch():touch():value()"), "4");
+        EQUALS(Eval(state.L, "rawequal(t, t:pass(t))"), "true");
+        EQUALS(Eval(state.L, "rawequal(t, t:maybe(true))"), "true");
+        EQUALS(Eval(state.L, "t:maybe(false)"), "nil");
+
+        EQUALS(Eval(state.L, "t:pass(Token.new(5))"), "<error> eval:1: 'Token:pass' cannot return a Token by reference: the class cannot be copied");
+        EQUALS(Eval(state.L, "Token.same(t)"), "<error> eval:1: 'Token.same' cannot return a Token by reference: the class cannot be copied");
+        EQUALS(Eval(state.L, "t:value()"), "4");
     });
 
     IT("calls a function or a lambda that takes the receiver first as a method", {
@@ -1165,5 +1221,91 @@ MODULE(bind_class_lua, {
             });
         });
         EQUALS(binary.find("'Arity.__add'") != std::string::npos, true);
+    });
+
+    IT("refuses a member declared twice, since a member cannot be overloaded", {
+        using BindClassLuaTest::Repeated;
+        Class<Repeated> definition("Repeated", "Declares members twice.");
+        definition.Method("go", &Repeated::go, Doc("Goes."));
+        definition.Property("size", &Repeated::getSize, &Repeated::setSize, "Its size.");
+        definition.Static(
+            "make",
+            [] {
+                return Repeated {};
+            },
+            Doc("Makes one."));
+
+        const std::string method = LogicErrorOf([&definition] {
+            definition.Method("go", &Repeated::go, Doc("Goes again."));
+        });
+        EQUALS(method.find("'Repeated.go'") != std::string::npos, true);
+
+        const std::string property = LogicErrorOf([&definition] {
+            definition.Property("size", &Repeated::getSize, &Repeated::setSize, "Its size again.");
+        });
+        EQUALS(property.find("'Repeated.size'") != std::string::npos, true);
+
+        const std::string readOnly = LogicErrorOf([&definition] {
+            definition.Property("size", &Repeated::getSize, "Its size, read-only.");
+        });
+        EQUALS(readOnly.find("'Repeated.size'") != std::string::npos, true);
+
+        const std::string function = LogicErrorOf([&definition] {
+            definition.Static(
+                "make",
+                [] {
+                    return 1;
+                },
+                Doc("Makes another."));
+        });
+        EQUALS(function.find("'Repeated.make'") != std::string::npos, true);
+
+        // A script finds a method and a property under the same key.
+        const std::string methodOverProperty = LogicErrorOf([&definition] {
+            definition.Method("size", &Repeated::getSize, Doc("Reads the size."));
+        });
+        EQUALS(methodOverProperty.find("'Repeated.size'") != std::string::npos, true);
+
+        const std::string propertyOverMethod = LogicErrorOf([&definition] {
+            definition.Property("go", &Repeated::getSize, "Its size.");
+        });
+        EQUALS(propertyOverMethod.find("'Repeated.go'") != std::string::npos, true);
+
+        // `new` is the constructor, declared or not.
+        const std::string constructor = LogicErrorOf([&definition] {
+            definition.Static(
+                "new",
+                [] {
+                    return Repeated {};
+                },
+                Doc("Makes one."));
+        });
+        EQUALS(constructor.find("'Repeated.new'") != std::string::npos, true);
+
+        EQUALS(definition.Describe().functions.size(), 2u);
+        EQUALS(definition.Describe().properties.size(), 1u);
+
+        // A static and a method are found in different places, and an operator may be declared again.
+        EQUALS(LogicErrorOf([&definition] {
+            definition.Static(
+                "go",
+                [] {
+                    return 1;
+                },
+                Doc("Goes, as a static."));
+            definition.LuaMeta(LuaMetaEvent::Len, [](const Repeated &repeated) {
+                return repeated.size;
+            });
+            definition.LuaMeta(LuaMetaEvent::Len, [](const Repeated &repeated) {
+                return repeated.size;
+            });
+        }),
+            "");
+        EQUALS(definition.Describe().functions.size(), 3u);
+
+        LuaTest::State state;
+        BindClassLuaTest::Publish(state.L, definition, Side::Server);
+        EQUALS(Eval(state.L, "Repeated.go()"), "1");
+        EQUALS(Eval(state.L, "local r = Repeated.make() r.size = 4 r:go() return r.size"), "4");
     });
 });

@@ -57,12 +57,35 @@ namespace Framework::Scripting::Bind {
             return false;
         }
 
-        // Runs `call`, which returns R, and pushes the result. The receiver, at index 1, is pushed itself when the
-        // result designates it, so chaining keeps the identity of the object. Any other object goes into a new
-        // userdata: moved when it was returned by value, copied when it was returned by reference or pointer.
-        // `self` is nullptr, as a const void *, for a call without a receiver.
+        // Pushes `result`, which `function` returned as an R and which is not its receiver. An object goes into a
+        // new userdata: moved when it was returned by value, copied when it was returned by reference or pointer.
+        // A class that cannot be copied has no copy to give, so that is a Lua error, except for a null pointer,
+        // which is nil as for any class.
+        template <typename R>
+        void LuaPushResult(lua_State *L, const LuaFunction &function, std::remove_reference_t<R> &result) {
+            using Value   = std::remove_cvref_t<R>;
+            using Pointee = std::remove_cv_t<std::remove_pointer_t<Value>>;
+            if constexpr (std::is_lvalue_reference_v<R> && HasScriptClassName<Value> && !std::is_copy_constructible_v<Value>) {
+                LuaRaiseNotCopyable(L, function, ScriptClassName<Value>::value);
+            }
+            else if constexpr (std::is_pointer_v<Value> && HasScriptClassName<Pointee> && !std::is_copy_constructible_v<Pointee>) {
+                if (result == nullptr) {
+                    lua_pushnil(L);
+                }
+                else {
+                    LuaRaiseNotCopyable(L, function, ScriptClassName<Pointee>::value);
+                }
+            }
+            else {
+                LuaConvertFor<R>::Push(L, std::forward<R>(result));
+            }
+        }
+
+        // Runs `call`, which returns the R of `function`, and pushes the result. The receiver, at index 1, is
+        // pushed itself when the result designates it, so chaining keeps the identity of the object. `self` is
+        // nullptr, as a const void *, for a call without a receiver.
         template <typename R, typename Receiver, typename Call>
-        int LuaReturn(lua_State *L, const Receiver *self, Call &&call) {
+        int LuaReturn(lua_State *L, const LuaFunction &function, const Receiver *self, Call &&call) {
             if constexpr (std::is_void_v<R>) {
                 call();
                 return 0;
@@ -73,7 +96,7 @@ namespace Framework::Scripting::Bind {
                     lua_pushvalue(L, 1);
                 }
                 else {
-                    LuaConvertFor<R>::Push(L, std::forward<R>(result));
+                    LuaPushResult<R>(L, function, result);
                 }
                 return 1;
             }
@@ -95,13 +118,14 @@ namespace Framework::Scripting::Bind {
         template <typename T, typename F, typename First, typename R, typename... Args>
         struct LuaMethodThunk final {
             static int Invoke(lua_State *L, const LuaFunction &function, void *self) {
-                return Call(L, *static_cast<const F *>(function.thunk.target.get()), *static_cast<T *>(self), std::index_sequence_for<Args...> {});
+                return Call(L, function, *static_cast<T *>(self), std::index_sequence_for<Args...> {});
             }
 
           private:
             template <size_t... I>
-            static int Call(lua_State *L, const F &callable, T &object, std::index_sequence<I...>) {
-                return LuaReturn<R>(L, &object, [&]() -> R {
+            static int Call(lua_State *L, const LuaFunction &function, T &object, std::index_sequence<I...>) {
+                const F &callable = *static_cast<const F *>(function.thunk.target.get());
+                return LuaReturn<R>(L, function, &object, [&]() -> R {
                     return std::invoke(callable, LuaReceiverAs<First>(object), LuaConvertFor<Args>::Get(L, 2 + static_cast<int>(I))...);
                 });
             }
@@ -111,13 +135,14 @@ namespace Framework::Scripting::Bind {
         template <typename F, typename R, typename... Args>
         struct LuaFunctionThunk final {
             static int Invoke(lua_State *L, const LuaFunction &function, void *) {
-                return Call(L, *static_cast<const F *>(function.thunk.target.get()), std::index_sequence_for<Args...> {});
+                return Call(L, function, std::index_sequence_for<Args...> {});
             }
 
           private:
             template <size_t... I>
-            static int Call(lua_State *L, const F &callable, std::index_sequence<I...>) {
-                return LuaReturn<R>(L, static_cast<const void *>(nullptr), [&]() -> R {
+            static int Call(lua_State *L, const LuaFunction &function, std::index_sequence<I...>) {
+                const F &callable = *static_cast<const F *>(function.thunk.target.get());
+                return LuaReturn<R>(L, function, static_cast<const void *>(nullptr), [&]() -> R {
                     return callable(LuaConvertFor<Args>::Get(L, 1 + static_cast<int>(I))...);
                 });
             }
@@ -281,8 +306,8 @@ namespace Framework::Scripting::Bind {
         }
 
         // Declares the constructor T(Args...), reached as Name.new(...) and Name(...) in Lua and as new Name(...) in
-        // JavaScript. A class without one cannot be constructed by a script. Throws std::logic_error when the class
-        // already has a constructor.
+        // JavaScript. A class without one cannot be constructed by a script: in Lua both forms raise. Throws
+        // std::logic_error when the class already has a constructor.
         template <typename... Args>
         Class &Constructor(Doc doc) {
             static_assert(std::is_constructible_v<T, Args...>, "Bind::Class::Constructor: T has no constructor taking Args");
@@ -309,7 +334,10 @@ namespace Framework::Scripting::Bind {
             return *this;
         }
 
-        // A method named `toString` is also what tostring() calls.
+        // A method named `toString` is also what tostring() calls. A member cannot be overloaded: Method and
+        // Property throw std::logic_error when the class already declares a method or a property of that name,
+        // Static when it declares a static of that name or the name is `new`. A class may declare again what a
+        // base declares.
         template <typename F>
         Class &Method(std::string name, F function, Doc doc, Side side = Side::Shared) {
             static_assert(Detail::CallableOn<T, F>, "Bind::Class::Method: F is a member function of T or of one of its bases, or a function or a lambda that takes the receiver first, as T &, const T & or T *");

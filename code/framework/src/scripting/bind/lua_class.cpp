@@ -36,6 +36,9 @@ namespace Framework::Scripting::Bind::Detail {
         // Not const, so that no other object can come to share its address.
         char classKey = 0;
 
+        // The field of a class table that constructs an instance.
+        constexpr const char *kConstructorName = "new";
+
         // In the order of LuaMetaEvent.
         constexpr std::array<const char *, kLuaMetaEventCount> kMetaEventNames = {"__add", "__sub", "__mul", "__div", "__unm", "__eq", "__lt", "__le", "__len", "__concat"};
         static_assert(static_cast<size_t>(LuaMetaEvent::Concat) + 1 == kLuaMetaEventCount, "kLuaMetaEventCount is the number of LuaMetaEvent values");
@@ -69,6 +72,23 @@ namespace Framework::Scripting::Bind::Detail {
             }
             function.thunk = std::move(thunk);
             return function;
+        }
+
+        bool Declares(const std::deque<LuaFunction> &functions, const std::string &name) {
+            return std::any_of(functions.begin(), functions.end(), [&name](const LuaFunction &function) {
+                return function.name == name;
+            });
+        }
+
+        // Throws when `definition` itself declares a method or a property named `name`: a script finds both under
+        // the one key of an instance, so a second would hide the first.
+        void RefuseSecondMember(const LuaClass &definition, const std::string &name) {
+            const bool property = std::any_of(definition.properties.begin(), definition.properties.end(), [&name](const LuaProperty &declared) {
+                return declared.getter.name == name;
+            });
+            if (property || Declares(definition.methods, name)) {
+                throw std::logic_error("Bind: '" + definition.desc.name + "." + name + "' is declared twice, and a member cannot be overloaded");
+            }
         }
 
         // --- Calling a C++ function ---
@@ -277,7 +297,7 @@ namespace Framework::Scripting::Bind::Detail {
         }
 
         // Fills the member tables with what `definition` declares for `runtime`, after its bases, so that a class
-        // replaces what it declares again. Within a class a method wins over a property of the same name.
+        // replaces what it declares again. A method that replaces a property of a base drops its setter too.
         void AddMembers(lua_State *L, const LuaClass &definition, Side runtime, int members, int setters) {
             for (const LuaBase &base : definition.bases) {
                 AddMembers(L, *base.definition, runtime, members, setters);
@@ -371,10 +391,15 @@ namespace Framework::Scripting::Bind::Detail {
                     lua_setfield(L, fields, function.name.c_str());
                 }
             }
+            // A class without a constructor still has `new` and can be called: both say why they fail.
             if (definition.constructor) {
                 PushClosure(L, CallStatic, *definition.constructor);
-                lua_setfield(L, fields, definition.constructor->name.c_str());
             }
+            else {
+                PushPointer(L, &definition);
+                lua_pushcclosure(L, RefuseConstruction, 1);
+            }
+            lua_setfield(L, fields, kConstructorName);
 
             lua_newtable(L);
             lua_newtable(L);
@@ -398,14 +423,22 @@ namespace Framework::Scripting::Bind::Detail {
     } // namespace
 
     void LuaAddMethod(LuaClass &definition, std::string name, Side side, LuaThunk thunk) {
+        RefuseSecondMember(definition, name);
         definition.methods.push_back(MakeFunction(definition, std::move(name), ':', side, std::move(thunk)));
     }
 
     void LuaAddStatic(LuaClass &definition, std::string name, Side side, LuaThunk thunk) {
+        if (name == kConstructorName) {
+            throw std::logic_error("Bind: '" + definition.desc.name + "." + name + "' is the constructor and cannot be declared as a static");
+        }
+        if (Declares(definition.statics, name)) {
+            throw std::logic_error("Bind: '" + definition.desc.name + "." + name + "' is declared twice, and a static cannot be overloaded");
+        }
         definition.statics.push_back(MakeFunction(definition, std::move(name), '.', side, std::move(thunk)));
     }
 
     void LuaAddProperty(LuaClass &definition, std::string name, Side side, LuaThunk getter, std::optional<LuaThunk> setter) {
+        RefuseSecondMember(definition, name);
         LuaProperty property;
         if (setter) {
             property.setter = MakeFunction(definition, name, '.', side, std::move(*setter));
@@ -418,7 +451,7 @@ namespace Framework::Scripting::Bind::Detail {
         if (definition.constructor) {
             throw std::logic_error("Bind: '" + definition.desc.name + "' declares a second constructor");
         }
-        definition.constructor = MakeFunction(definition, "new", '.', Side::Shared, std::move(thunk));
+        definition.constructor = MakeFunction(definition, kConstructorName, '.', Side::Shared, std::move(thunk));
     }
 
     void LuaAddMeta(LuaClass &definition, LuaMetaEvent event, LuaThunk thunk) {
@@ -505,5 +538,9 @@ namespace Framework::Scripting::Bind::Detail {
         void *block = lua_newuserdatauv(L, size, 0);
         lua_insert(L, -2);
         return block;
+    }
+
+    int LuaRaiseNotCopyable(lua_State *L, const LuaFunction &function, const char *name) {
+        return luaL_error(L, "'%s' cannot return a %s by reference: the class cannot be copied", function.label.c_str(), name);
     }
 } // namespace Framework::Scripting::Bind::Detail

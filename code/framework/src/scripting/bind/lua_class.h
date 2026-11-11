@@ -51,7 +51,7 @@ namespace Framework::Scripting::Bind {
         struct LuaFunction;
 
         // What lua_newuserdatauv aligns a block for.
-        union LuaMaxAlign {
+        union LuaMaxAlign final {
             LUAI_MAXALIGN;
         };
 
@@ -61,20 +61,20 @@ namespace Framework::Scripting::Bind {
         using LuaInvoker = int (*)(lua_State *L, const LuaFunction &function, void *self);
 
         // How one parameter is checked: the Is and Expected of its LuaConvert.
-        struct LuaParam {
+        struct LuaParam final {
             bool (*is)(lua_State *L, int index) = nullptr;
             const char *(*expected)()           = nullptr;
             bool optional                       = false;
         };
 
         // The part of a function that depends on its C++ signature.
-        struct LuaThunk {
+        struct LuaThunk final {
             std::vector<LuaParam> params; // without the receiver
             LuaInvoker invoke = nullptr;
             std::shared_ptr<const void> target; // the callable `invoke` casts back to its type
         };
 
-        struct LuaFunction {
+        struct LuaFunction final {
             std::string name;  // the key a script finds it under: "add"
             std::string label; // as an error names it: "Counter:add"
             Side side = Side::Shared;
@@ -83,19 +83,19 @@ namespace Framework::Scripting::Bind {
             const LuaClass *owner = nullptr; // the class that declares it
         };
 
-        struct LuaProperty {
+        struct LuaProperty final {
             LuaFunction getter;
             std::optional<LuaFunction> setter;
         };
 
-        struct LuaBase {
+        struct LuaBase final {
             const LuaClass *definition    = nullptr;
             void *(*upcast)(void *object) = nullptr; // from an object of the derived class to its base part
         };
 
         // A script holds pointers into a LuaClass (closure upvalues, the registry), so it lives at one address and
         // outlives every state it was materialised into.
-        struct LuaClass {
+        struct LuaClass final {
             ClassDesc desc;
             std::vector<LuaBase> bases;
             std::deque<LuaFunction> methods;
@@ -114,6 +114,10 @@ namespace Framework::Scripting::Bind {
             static inline const LuaClass *definition = nullptr;
         };
 
+        // A member cannot be overloaded: these throw std::logic_error naming <Class>.<member> when the class
+        // already declares one a script would find under the same name. Methods and properties share the names
+        // of an instance; statics share those of the class table with `new`, which is the constructor. A class
+        // may declare again what a base declares.
         void LuaAddMethod(LuaClass &definition, std::string name, Side side, LuaThunk thunk);
         void LuaAddStatic(LuaClass &definition, std::string name, Side side, LuaThunk thunk);
         void LuaAddProperty(LuaClass &definition, std::string name, Side side, LuaThunk getter, std::optional<LuaThunk> setter);
@@ -142,5 +146,9 @@ namespace Framework::Scripting::Bind {
         // is never finalized. Raises a Lua error when `definition` is nullptr or not materialised in the state;
         // `name` is what the error calls the class.
         void *LuaAllocateObject(lua_State *L, const LuaClass *definition, const char *name, size_t size);
+
+        // Raises the error of `function` returning, by reference or pointer, an object of the class `name` that
+        // is not its receiver: a script would get a copy, and the class cannot be copied.
+        int LuaRaiseNotCopyable(lua_State *L, const LuaFunction &function, const char *name);
     } // namespace Detail
 } // namespace Framework::Scripting::Bind
