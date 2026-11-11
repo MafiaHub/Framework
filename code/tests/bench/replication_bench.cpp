@@ -157,12 +157,16 @@ int main(int argc, char **argv) {
     std::vector<int> workerCounts;
     if (const char *list = std::getenv("FW_BENCH_WORKERS")) {
         for (const char *at = list; *at != '\0';) {
-            char *end = nullptr;
-            workerCounts.push_back(static_cast<int>(std::strtol(at, &end, 10)));
-            at = (*end == ',') ? end + 1 : end;
-            if (end == at && *end != '\0') {
-                break;
+            char *end        = nullptr;
+            const long count = std::strtol(at, &end, 10);
+            // Nothing parsed, or something other than a comma after it: measuring a count nobody asked for
+            // would pass for the one they did.
+            if (end == at || (*end != '\0' && *end != ',')) {
+                std::fprintf(stderr, "FW_BENCH_WORKERS: '%s' is not a list of worker counts such as 0,3,-1\n", list);
+                return 1;
             }
+            workerCounts.push_back(static_cast<int>(count));
+            at = (*end == ',') ? end + 1 : end;
         }
     }
     if (workerCounts.empty()) {

@@ -22,17 +22,39 @@
 #include <fstream>
 #include <random>
 #include <string>
+#include <cstdio>
 #include <thread>
+#include <utility>
 #include <vector>
 
 // A whole server, started on loopback and ticked from this thread as Run() ticks it: what the thread
 // pools are wired to is only visible with all of it up.
 namespace ServerThreadingTest {
+    // A port nothing listens on, as far as a TCP bind on loopback can tell; 0 when eight tries found none. A server
+    // cannot be initialised twice, so the port is settled before Init rather than by retrying it.
+    inline int32_t FreePort() {
+        std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
+        for (int attempt = 0; attempt < 8; ++attempt) {
+            const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
+            httplib::Server probe;
+            if (probe.bind_to_port("127.0.0.1", candidate)) {
+                probe.stop();
+                return candidate;
+            }
+        }
+        return 0;
+    }
+
     struct Server final: Framework::Integrations::Server::Instance {
         std::filesystem::path root;
         int32_t port = 0;
         std::vector<int> squares;
         uint32_t lanesUsed = 0;
+        bool started       = false;
+
+        ~Server() {
+            Stop();
+        }
 
         // A game's own per-tick loop, spread over the replication workers.
         void PostUpdate() override {
@@ -60,33 +82,33 @@ namespace ServerThreadingTest {
 
             static char arg0[] = "server";
             static char *argv[] = {arg0, nullptr};
-            std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
-            for (int attempt = 0; attempt < 8; ++attempt) {
-                Framework::Integrations::Server::InstanceOptions opts;
-                opts.modSlug            = "threading_ut";
-                opts.modName            = "Threading test";
-                opts.modVersion         = "1.0.0";
-                opts.gameName           = "test";
-                opts.gameVersion        = "1";
-                opts.bindHost           = "127.0.0.1";
-                opts.bindPort           = 42000 + static_cast<int32_t>(random() % 20000);
-                opts.maxPlayers         = 8;
-                opts.bindPublicServer   = false;
-                opts.enableSignals      = false;
-                opts.modConfigFile      = (root / "server.json").string();
-                opts.resourcesPath      = (root / "resources").string();
-                opts.replicationThreads = replicationThreads;
-                opts.backgroundThreads  = backgroundThreads;
-                opts.argc               = 1;
-                opts.argv               = argv;
-                if (Init(opts)) {
-                    port = opts.bindPort;
-                    return true;
-                }
+            Framework::Integrations::Server::InstanceOptions opts;
+            opts.modSlug            = "threading_ut";
+            opts.modName            = "Threading test";
+            opts.modVersion         = "1.0.0";
+            opts.gameName           = "test";
+            opts.gameVersion        = "1";
+            opts.bindHost           = "127.0.0.1";
+            opts.bindPort           = FreePort();
+            opts.maxPlayers         = 8;
+            opts.bindPublicServer   = false;
+            opts.enableSignals      = false;
+            opts.modConfigFile      = (root / "server.json").string();
+            opts.resourcesPath      = (root / "resources").string();
+            opts.replicationThreads = replicationThreads;
+            opts.backgroundThreads  = backgroundThreads;
+            opts.argc               = 1;
+            opts.argv               = argv;
+            auto result             = Init(opts);
+            if (!result) {
+                // Logging is paused in the suite: say why here, or a failure on another platform is a guess.
+                fprintf(stderr, "server_threading: Init failed: %s\n", result.GetError().message.c_str());
                 Shutdown();
                 return false;
             }
-            return false;
+            port    = opts.bindPort;
+            started = true;
+            return true;
         }
 
         // Ticks until `done` or the time is up.
@@ -112,6 +134,9 @@ namespace ServerThreadingTest {
         }
 
         void Stop() {
+            if (!std::exchange(started, false)) {
+                return;
+            }
             Shutdown();
             std::error_code code;
             std::filesystem::remove_all(Staging().parent_path(), code);
@@ -125,7 +150,11 @@ MODULE(server_threading, {
 
     IT("starts a server with the thread pools it was asked for and shares them with the game", {
         Server server;
-        EQUALS(server.Start("fw_server_threading_pools", 3, 2), true);
+        const bool up = server.Start("fw_server_threading_pools", 3, 2);
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
         EQUALS(Framework::CoreModules::GetTaskScheduler() == server.GetScheduler(), true);
         EQUALS(Framework::CoreModules::GetTickWorkers() == server.GetTickWorkers(), true);
         EQUALS(server.GetScheduler()->BackgroundWorkers(), 2u);
@@ -145,7 +174,11 @@ MODULE(server_threading, {
 
     IT("runs background work off the tick thread and its completion inside a tick", {
         Server server;
-        EQUALS(server.Start("fw_server_threading_background", 0, 2), true);
+        const bool up = server.Start("fw_server_threading_background", 0, 2);
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
         const auto tickThread = std::this_thread::get_id();
         std::atomic<bool> workedElsewhere {false};
         bool completedInTick = false;
@@ -166,7 +199,11 @@ MODULE(server_threading, {
 
     IT("answers a tick-thread web route from inside the server's tick", {
         Server server;
-        EQUALS(server.Start("fw_server_threading_route", 0, 1), true);
+        const bool up = server.Start("fw_server_threading_route", 0, 1);
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
         const auto tickThread = std::this_thread::get_id();
         std::atomic<bool> onTick {false};
         server.GetWebserver()->RegisterTickThreadRequest("/world", [&](const httplib::Request &, httplib::Response &res) {
@@ -200,7 +237,11 @@ MODULE(server_threading, {
 
     IT("packages every client resource at boot, then a hot reload off the tick thread", {
         Server server;
-        EQUALS(server.Start("fw_server_threading_reload", 3, 2), true);
+        const bool up = server.Start("fw_server_threading_reload", 3, 2);
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
         EQUALS(std::filesystem::exists(server.Package()), true);
         const std::string before = Framework::Utils::Crypto::Sha256FileHex(server.Package().string());
         EQUALS(server.TickUntil([&] {
@@ -218,7 +259,12 @@ MODULE(server_threading, {
             return Framework::Utils::Crypto::Sha256FileHex(server.Package().string()) != before;
         }),
             true);
-        EQUALS(std::filesystem::exists(server.Package().string() + ".next"), false);
+        // Nothing of the build is left beside the served files.
+        bool leftover = false;
+        for (const auto &entry : std::filesystem::directory_iterator(server.Staging())) {
+            leftover = leftover || entry.path().extension() == ".next";
+        }
+        EQUALS(leftover, false);
         EQUALS(server.GetScheduler()->PendingBackground(), static_cast<size_t>(0));
         server.Stop();
     });

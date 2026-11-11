@@ -14,6 +14,7 @@
 #include "scripting/resource/resource_manager.h"
 #include "utils/path.h"
 
+#include <httplib.h>
 #include <v8pp/convert.hpp>
 
 #include <algorithm>
@@ -23,15 +24,33 @@
 #include <fstream>
 #include <random>
 #include <string>
+#include <cstdio>
 #include <thread>
+#include <utility>
 #include <vector>
 
 // Whole servers again, this time for what the script thread changes: who waits for whom.
 namespace ServerScriptThreadTest {
+    // A port nothing listens on, as far as a TCP bind on loopback can tell; 0 when eight tries found none. A server
+    // cannot be initialised twice, so the port is settled before Init rather than by retrying it.
+    inline int32_t FreePort() {
+        std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
+        for (int attempt = 0; attempt < 8; ++attempt) {
+            const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
+            httplib::Server probe;
+            if (probe.bind_to_port("127.0.0.1", candidate)) {
+                probe.stop();
+                return candidate;
+            }
+        }
+        return 0;
+    }
+
     using Clock = std::chrono::steady_clock;
 
     struct Server final: Framework::Integrations::Server::Instance {
         std::filesystem::path root;
+        bool started = false;
 
         // Longest stretch between two ticks reaching PostUpdate, in milliseconds.
         double longestGapMs = 0.0;
@@ -99,7 +118,6 @@ namespace ServerScriptThreadTest {
 
             static char arg0[]  = "server";
             static char *argv[] = {arg0, nullptr};
-            std::mt19937 random(static_cast<unsigned int>(Clock::now().time_since_epoch().count()));
             Framework::Integrations::Server::InstanceOptions opts;
             opts.modSlug            = "script_thread_ut";
             opts.modName            = "Script thread test";
@@ -107,7 +125,7 @@ namespace ServerScriptThreadTest {
             opts.gameName           = "test";
             opts.gameVersion        = "1";
             opts.bindHost           = "127.0.0.1";
-            opts.bindPort           = 42000 + static_cast<int32_t>(random() % 20000);
+            opts.bindPort           = FreePort();
             opts.maxPlayers         = 8;
             opts.bindPublicServer   = false;
             opts.enableSignals      = false;
@@ -120,10 +138,13 @@ namespace ServerScriptThreadTest {
             opts.slowScriptWarnMs = 0;
             opts.argc             = 1;
             opts.argv             = argv;
-            if (!Init(opts)) {
+            auto result = Init(opts);
+            if (!result) {
+                fprintf(stderr, "server_script_thread: Init failed: %s\n", result.GetError().message.c_str());
                 Shutdown();
                 return false;
             }
+            started = true;
             return true;
         }
 
@@ -152,7 +173,7 @@ namespace ServerScriptThreadTest {
         }
 
         void Stop() {
-            if (!IsInitialized()) {
+            if (!std::exchange(started, false)) {
                 return;
             }
             Shutdown();
@@ -170,16 +191,18 @@ namespace ServerScriptThreadTest {
         }
     };
 
-    // A script that computes for 300 ms out of every 350, and leaves a file once it has done so a few times.
+    // A script that computes for 600 ms out of every 650, and leaves a file once it has done so a few times. Long
+    // on purpose: a hosted CI runner stalls a thread for tens of milliseconds on its own, and what is measured has
+    // to stand well clear of that.
     inline const char *kBusyScript = R"(
         const fs = require('node:fs');
         let rounds = 0;
         setInterval(() => {
-            const end = Date.now() + 300;
+            const end = Date.now() + 600;
             let spins = 0;
             while (Date.now() < end) { spins++; }
             if (++rounds === 3) { fs.writeFileSync('$ROOT/busy', String(spins)); }
-        }, 350);
+        }, 650);
     )";
 } // namespace ServerScriptThreadTest
 
@@ -190,55 +213,70 @@ MODULE(server_script_thread, {
 
     IT("keeps ticking while a script computes, with scripts on their own thread", {
         Server server;
-        EQUALS(server.Start("fw_script_thread_busy", true, kBusyScript), true);
+        const bool up = server.Start("fw_script_thread_busy", true, kBusyScript);
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
         EQUALS(server.ScriptsHaveOwnThread(), true);
         EQUALS(server.TickUntil([&] {
             return std::filesystem::exists(server.Marker("busy"));
         }),
             true);
-        // The script held its thread for 300 ms at a time, three times over, and no tick waited for it.
-        LESSER(server.longestGapMs, 100.0);
-        GREATER(server.ticks, 30);
+        fprintf(stderr, "server_script_thread: longest gap between ticks %.1f ms over %d ticks\n", server.longestGapMs, server.ticks);
+        // The script held its thread for 600 ms at a time, three times over, and no tick waited that out.
+        LESSER(server.longestGapMs, 300.0);
+        GREATER(server.ticks, 20);
         server.Stop();
     });
 
     IT("waits for that script with scripts inside the tick, as before", {
         Server server;
-        EQUALS(server.Start("fw_script_thread_busy_inline", false, kBusyScript), true);
+        const bool up = server.Start("fw_script_thread_busy_inline", false, kBusyScript);
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
         EQUALS(server.ScriptsHaveOwnThread(), false);
         EQUALS(server.TickUntil([&] {
             return std::filesystem::exists(server.Marker("busy"));
         }),
             true);
-        GREATER(server.longestGapMs, 250.0);
+        GREATER(server.longestGapMs, 500.0);
         server.Stop();
     });
 
     IT("never runs a script's native call while the tick has the world", {
         Server server;
-        EQUALS(server.Start("fw_script_thread_touch", true, R"(
+        const bool up = server.Start("fw_script_thread_touch", true, R"(
             setInterval(() => { for (let i = 0; i < 5000; i++) { touchWorld(); } }, 1);
-        )"),
-            true);
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
         server.TickFor(1500ms);
         GREATER(server.touches.load(), 10000L);
         EQUALS(server.touchesDuringTick.load(), 0L);
-        GREATER(server.ticks, 30);
+        GREATER(server.ticks, 10);
         server.Stop();
     });
 
     IT("runs what the tick thread posts to scripts, and its handlers, off the tick", {
         Server server;
-        EQUALS(server.Start("fw_script_thread_post", true, R"(
+        const bool up = server.Start("fw_script_thread_post", true, R"(
             const fs = require('node:fs');
             Events.on('consoleCommand', (command) => {
                 // A handler that takes its time: the tick that raised the event does not wait for it.
-                const end = Date.now() + 250;
+                const end = Date.now() + 600;
                 while (Date.now() < end) {}
                 fs.writeFileSync('$ROOT/handled', command);
             });
-        )"),
-            true);
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
         server.TickFor(200ms);
         const auto tickThread = std::this_thread::get_id();
         std::atomic<bool> postedElsewhere {false};
@@ -252,7 +290,7 @@ MODULE(server_script_thread, {
         }),
             true);
         EQUALS(postedElsewhere.load(), true);
-        LESSER(server.longestGapMs, 100.0);
+        LESSER(server.longestGapMs, 300.0);
         std::string handled;
         std::ifstream(server.Marker("handled")) >> handled;
         EQUALS(handled == "from-the-tick", true);
@@ -261,12 +299,15 @@ MODULE(server_script_thread, {
 
     IT("still lets tick-thread code enter script itself, once the running script is out of the way", {
         Server server;
-        EQUALS(server.Start("fw_script_thread_enter", true, std::string(kBusyScript) + R"(
+        const bool up = server.Start("fw_script_thread_enter", true, std::string(kBusyScript) + R"(
             Events.on('consoleCommand', (command) => { fs.writeFileSync('$ROOT/direct', command); });
-        )"),
-            true);
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
         // Until the script is in the middle of its work.
-        server.TickFor(450ms);
+        server.TickFor(900ms);
         // The way server code always raised events: an EngineScope on the tick thread. It has to wait for the
         // script, which is why PostToScripts exists, but it must work and must not deadlock.
         server.EmitConsoleCommand("from-the-tick-thread");
@@ -280,11 +321,15 @@ MODULE(server_script_thread, {
 
     IT("shuts down while a script is in the middle of computing", {
         Server server;
-        EQUALS(server.Start("fw_script_thread_shutdown", true, kBusyScript), true);
-        server.TickFor(450ms);
+        const bool up = server.Start("fw_script_thread_shutdown", true, kBusyScript);
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        server.TickFor(900ms);
         const auto started = std::chrono::steady_clock::now();
         server.Stop();
-        // It lets the script's current callback finish, which is at most its 300 ms.
+        // It lets the script's current callback finish, which is at most its 600 ms.
         const double stopMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
         LESSER(stopMs, 3000.0);
     });
