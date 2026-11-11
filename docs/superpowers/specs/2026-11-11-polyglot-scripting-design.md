@@ -220,7 +220,12 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
     Lua's, except that `setmetatable` refuses a metatable carrying `__gc` and that none of them lets
     a script run past the deadline of an entry.
   - **`require(name)`** resolves `a.b` to `<resource>/a/b.lua`, then `<resource>/a/b/init.lua`, with the
-    containment check scripts already get, through the VFS on the client. One cache per state.
+    containment check scripts already get, through the VFS on the client. One cache per state. A name is
+    letters, digits, `_`, `-` and the dots between its parts, so it names nothing outside the resource. The
+    module runs once, with its name as `...`, and `require` gives what it returned, or `true`. It runs to
+    its end inside the call, so it cannot wait while it loads. One that fails is not kept; one required
+    again while it loads raises `require: cyclic dependency on '<name>'`; one that is not there raises
+    `module '<name>' not found in resource '<resource>'`.
   - **No bytecode:** every load goes through mode `"t"`.
   - **Memory:** a `lua_Alloc` that refuses past the cap. Defaults: 128 MB on the client, 512 MB on the
     server, `0` for no cap.
@@ -242,6 +247,12 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
     a timer armed by a callback waits for the next tick. An interval is armed again from the time it was
     due, and fires once per tick until it has caught up. At most 10 000 timers per state, as in the V8
     engine; one more raises. At most 64 entries nested in one another (a spawned function that spawns).
+- `LuaEngine` owns the runtimes: it creates one with the setup callback run inside it, runs a file as the
+  chunk `@<resource>/<path below the resource root>`, ticks every runtime with one reading of the clock and
+  queues the errors nobody waited for, under their resource. A runtime destroyed from inside its own call
+  is gone for everyone at once, fires no timer and resumes nothing that waits from then on, and is freed
+  at the next tick; its name is free for a restart in between. Disposing listeners hear of every runtime
+  while its state is still open.
 - The Lua engine holds no V8. A server running only Lua resources executes no JavaScript for them.
 
 ## 3. Resources
