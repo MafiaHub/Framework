@@ -72,9 +72,13 @@ namespace Framework::Scripting {
             return Language::Lua;
         }
 
-        // A path that ends in ".lua", in lower case.
-        bool HandlesFile(std::string_view path) const override {
+        // Whether a path names a Lua script: it ends in ".lua", in lower case. For who has no engine to ask.
+        static bool IsLuaFile(std::string_view path) {
             return path.ends_with(".lua");
+        }
+
+        bool HandlesFile(std::string_view path) const override {
+            return IsLuaFile(path);
         }
 
         // Fires the timers that are due in every runtime and wakes the coroutines whose sleep is over. A runtime

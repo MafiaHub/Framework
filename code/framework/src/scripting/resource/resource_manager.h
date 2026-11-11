@@ -77,7 +77,7 @@ namespace Framework::Scripting {
     using ResourceStateCallback = fu2::function<void(const std::string &resourceName, ResourceState oldState, ResourceState newState) const>;
 
     /**
-     * Central manager for JavaScript resources.
+     * Central manager for resources.
      *
      * Responsibilities:
      * - Discovery: Scan directories for valid package.json files
@@ -424,16 +424,19 @@ namespace Framework::Scripting {
         // Validate all dependencies can be satisfied
         bool ValidateDependencies(std::string &outError) const;
 
-        // What a resource runs on this side: its scripts in execution order, and the runtimes they run in.
+        // What a resource runs on this side: its scripts in execution order, each with the engine it runs in, and
+        // the runtimes they need.
+        struct PlannedScript {
+            std::string path;
+            // Null when this manager has no engine for the script's language.
+            ScriptEngine *engine = nullptr;
+        };
         struct ScriptPlan {
-            std::vector<std::string> scripts;
+            std::vector<PlannedScript> scripts;
             bool needsJavaScript = false;
             bool needsLua        = false;
         };
         ScriptPlan PlanScripts(const Resource &resource) const;
-
-        // Whether a script runs in the Lua engine. Every other one is JavaScript's.
-        bool IsLuaScript(std::string_view path) const;
 
         // Execute a resource's scripts, each in the runtime of its language
         bool ExecuteResourceScript(Resource &resource, const ScriptPlan &plan, std::string &outError);

@@ -578,6 +578,29 @@ MODULE(lua_resources, {
         EQUALS(rig.errors.size(), 2u);
     });
 
+    IT("says that Lua scripting is not available whichever engine is missing", {
+        LuaResourcesTest::Files files;
+        files.Resource("lua-only", {{"main.lua", "greeting = 'hello'"}});
+        files.Resource("js-only", {{"main.js", "globalThis.greeting = 'hello';"}});
+        ResourceManagerConfig config;
+        config.resourcesPath = files.root.string();
+
+        // A Lua engine that was never initialised.
+        LuaEngine idle;
+        ResourceManager withIdle(nullptr, config);
+        withIdle.SetLuaEngine(&idle);
+        EQUALS(withIdle.DiscoverResources(), 2u);
+        EQUALS(withIdle.StartResource("lua-only").GetError(), "Lua scripting is not available");
+        EQUALS(withIdle.GetResourceState("lua-only") == ResourceState::Error, true);
+        EQUALS(idle.GetRuntime("lua-only") == nullptr, true);
+
+        // No engine at all: each script still says which one it lacks.
+        ResourceManager bare(nullptr, config);
+        EQUALS(bare.DiscoverResources(), 2u);
+        EQUALS(bare.StartResource("lua-only").GetError(), "Lua scripting is not available");
+        EQUALS(bare.StartResource("js-only").GetError(), "JavaScript engine not initialized");
+    });
+
     IT("destroys the JavaScript runtime of a resource whose Lua runtime cannot be created", {
         Rig rig;
         EQUALS(rig.ready, true);

@@ -339,18 +339,18 @@ namespace Framework::Integrations::Server::Scripting {
         // Discover all resources in the resources path
         size_t discovered = _resourceManager->DiscoverResources();
         if (discovered == 0) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No JS resources discovered in: {}", _resourcesPath);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No resources discovered in: {}", _resourcesPath);
             return true; // Not an error, just no resources
         }
 
         // Start all discovered resources
         auto result = _resourceManager->StartAll();
         if (!result) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start JS resources: {}", result.GetError());
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resources: {}", result.GetError());
             return false;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started {} JS resource(s)", result.GetValue().size());
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started {} resource(s)", result.GetValue().size());
         return true;
     }
 

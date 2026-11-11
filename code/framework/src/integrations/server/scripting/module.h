@@ -90,7 +90,7 @@ namespace Framework::Integrations::Server::Scripting {
         }
 
         /**
-         * Get the JavaScript resource manager.
+         * Get the resource manager.
          */
         Framework::Scripting::ResourceManager *GetResourceManager() const override {
             return _resourceManager.get();
@@ -128,7 +128,7 @@ namespace Framework::Integrations::Server::Scripting {
         std::vector<ClientResourceInfo> GetClientResourceList() const;
 
         /**
-         * Discover and start all JavaScript resources.
+         * Discover and start all resources.
          */
         bool StartAllResources();
 

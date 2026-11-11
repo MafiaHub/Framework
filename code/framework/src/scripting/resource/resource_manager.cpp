@@ -253,7 +253,7 @@ namespace Framework::Scripting {
 
         BuildDependencyGraph();
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered {} JavaScript resources", count);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered {} resources", count);
         return count;
     }
 
@@ -284,7 +284,7 @@ namespace Framework::Scripting {
         // them both dependency ordering.
         BuildDependencyGraph();
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Discovered JS resource: {} v{}", name, version);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Discovered resource: {} v{}", name, version);
         return true;
     }
 
@@ -392,7 +392,7 @@ namespace Framework::Scripting {
 
         // Check for cycles
         if (result.size() != _resources.size()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Dependency cycle detected in JS resources");
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Dependency cycle detected in resources");
             return {};
         }
 
@@ -626,7 +626,7 @@ namespace Framework::Scripting {
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
             NotifyStoppedIfStillFailed(resource, std::string(name));
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start JS resource '{}': {}", name, error);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resource '{}': {}", name, error);
             return ResourceOperationResult(error);
         }
 
@@ -639,7 +639,7 @@ namespace Framework::Scripting {
         resource->ClearRestartAttempts();
 
         FireOnResourceStarted(std::string(name));
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started JS resource: {}", name);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started resource: {}", name);
 
         return ResourceOperationResult::Ok({std::string(name)});
     }
@@ -706,7 +706,7 @@ namespace Framework::Scripting {
 
         stopped.emplace_back(name);
         FireOnResourceStopped(std::string(name));
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Stopped JS resource: {}", name);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Stopped resource: {}", name);
 
         return ResourceOperationResult::Ok(stopped);
     }
@@ -935,29 +935,24 @@ namespace Framework::Scripting {
             }
             if (!exists && DiscoverResource(entry.path().string())) {
                 added.push_back(probe.GetName());
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered new JS resource: {}", added.back());
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered new resource: {}", added.back());
             }
         }
         return added;
     }
 
-    bool ResourceManager::IsLuaScript(std::string_view path) const {
-        // The Lua engine says which files are its own. Without one, they are what the JavaScript engine leaves.
-        if (_luaEngine) {
-            return _luaEngine->HandlesFile(path);
-        }
-        return _jsEngine != nullptr && !_jsEngine->HandlesFile(path);
-    }
-
     ResourceManager::ScriptPlan ResourceManager::PlanScripts(const Resource &resource) const {
         ScriptPlan plan;
-        plan.scripts = _config.isClient ? resource.GetClientScripts() : resource.GetServerScripts();
-        for (const auto &script : plan.scripts) {
-            if (IsLuaScript(script)) {
+        for (auto &path : _config.isClient ? resource.GetClientScripts() : resource.GetServerScripts()) {
+            // The Lua engine says which files are its own. A Lua script is one all the same with no engine here
+            // to ask, and then fails the start.
+            if (_luaEngine ? _luaEngine->HandlesFile(path) : LuaEngine::IsLuaFile(path)) {
                 plan.needsLua = true;
+                plan.scripts.push_back({std::move(path), _luaEngine});
             }
             else {
                 plan.needsJavaScript = true;
+                plan.scripts.push_back({std::move(path), _jsEngine});
             }
         }
         // A resource with nothing to run on this side keeps the JavaScript runtime it has always had.
@@ -973,8 +968,7 @@ namespace Framework::Scripting {
             return false;
         }
 
-        const auto &scripts = plan.scripts;
-        if (scripts.empty()) {
+        if (plan.scripts.empty()) {
             return true;
         }
 
@@ -991,7 +985,7 @@ namespace Framework::Scripting {
             }
         }
 
-        for (const auto &script : scripts) {
+        for (const auto &[script, engine] : plan.scripts) {
             std::string resolved;
 
             if (virtualRoot) {
@@ -1024,9 +1018,6 @@ namespace Framework::Scripting {
                 }
                 resolved = candidate.string();
             }
-
-            // By the path the manifest gives, as the runtimes were planned. StartResource has made sure of the engine.
-            ScriptEngine *engine = IsLuaScript(script) ? static_cast<ScriptEngine *>(_luaEngine) : _jsEngine;
 
             // Set resource context so Events.on() etc. know which resource is executing.
             SetCurrentResourceContext(resourceName);
