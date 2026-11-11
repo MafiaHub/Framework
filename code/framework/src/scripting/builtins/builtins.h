@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -14,8 +14,10 @@
 #include "vector3.h"
 #include "vector4.h"
 
+#include "../bind/doc.h"
 #include "../value_transfer.h"
 
+#include <lua.h>
 #include <v8.h>
 
 #include <algorithm>
@@ -41,6 +43,18 @@ namespace Framework::Scripting::Builtins {
         Vector4::Register(isolate, target);
         Quaternion::Register(isolate, target);
         Color::Register(isolate, target);
+    }
+
+    /**
+     * Lua counterpart of RegisterValueTypes: publishes the same five classes as globals of the
+     * state, which belongs to a runtime of side `side`.
+     */
+    inline void RegisterValueTypesLua(lua_State *L, Bind::Side side) {
+        Vector2::RegisterLua(L, side);
+        Vector3::RegisterLua(L, side);
+        Vector4::RegisterLua(L, side);
+        Quaternion::RegisterLua(L, side);
+        Color::RegisterLua(L, side);
     }
 
     // Drops every builtin type's cached class wrapper for this isolate, then everything v8pp holds for it

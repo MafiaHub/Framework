@@ -53,7 +53,7 @@ capitalized for that reason: `Exports`, not `exports`.
 There are two legitimate `Register` shapes; a builtin uses the one that matches
 what it needs, and nothing else diverges:
 
-- **Value / handle types** — pure v8pp classes attached to a target object:
+- **Value / handle types** — v8pp classes attached to a target object:
 
   ```cpp
   static void Register(v8::Isolate *isolate, v8::Local<v8::Object> target);
@@ -64,6 +64,23 @@ what it needs, and nothing else diverges:
   `Builtins::RegisterValueTypes`. Handle types (`Entity`, `Player`, `TextLabel`)
   register individually because they pull in networking/replication and are
   wired up by the integration layer, not by the value-type helper.
+
+  The value types are declared once for JavaScript and Lua, through the binding
+  layer (`scripting/bind/`), and each has the same three entry points:
+
+  ```cpp
+  static const Bind::Class<T> &Definition();
+  static void Register(v8::Isolate *isolate, v8::Local<v8::Object> target);
+  static void RegisterLua(lua_State *L, Bind::Side side);
+  ```
+
+  `Definition()` holds the members and their documentation. `GetClass(isolate)`
+  builds the v8pp class from it, so `Register` and the catalog follow the
+  definition; `RegisterLua` publishes the same class as a global of a Lua state,
+  and `Builtins::RegisterValueTypesLua` does so for the five. A new member goes
+  in the definition, never in one language's registration. What exists in one
+  language only is declared there too: `toJSON` is JavaScript's (`V8Hook`), the
+  arithmetic and equality operators are Lua's (`LuaMeta`).
 
 - **Service APIs** — need the context and the `ResourceManager`:
 
@@ -78,7 +95,8 @@ what it needs, and nothing else diverges:
 
 `RegisterValueTypes` registers **only** the pure value types — its name says so.
 It is the counterpart to `UnregisterAll`, which additionally drops the handle
-types' cached class wrappers on isolate disposal.
+types' cached class wrappers on isolate disposal. `RegisterValueTypesLua` has no
+such counterpart: closing a Lua state drops everything registered in it.
 
 ## Color representations
 

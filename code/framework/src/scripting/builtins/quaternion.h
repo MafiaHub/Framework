@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,6 +8,10 @@
 
 #pragma once
 
+#include "../bind/class.h"
+#include "../class_cache.h"
+
+#include <lua.h>
 #include <v8pp/class.hpp>
 #include <v8pp/property.hpp>
 
@@ -16,9 +20,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 
-#include <memory>
 #include <string>
-#include <unordered_map>
 
 namespace Framework::Scripting::Builtins {
 
@@ -26,7 +28,7 @@ namespace Framework::Scripting::Builtins {
     class Vector3;
 
     /**
-     * Quaternion wrapper class for V8 bindings using v8pp.
+     * Quaternion wrapper class for the script bindings, JavaScript (through v8pp) and Lua.
      * Provides a clean C++ interface that wraps glm::quat.
      * Uses (w, x, y, z) order internally matching GLM.
      */
@@ -123,15 +125,23 @@ namespace Framework::Scripting::Builtins {
             return _quat;
         }
 
+        // The class as scripts see it, declared once for both languages.
+        static const Bind::Class<Quaternion> &Definition();
+
         // V8 Registration
         static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
         static v8pp::class_<Quaternion> &GetClass(v8::Isolate *isolate);
         static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, const glm::quat &value);
         static void UnregisterIsolate(v8::Isolate *isolate);
 
+        // Lua Registration: publishes the class as a global of the state, which belongs to a runtime of side `side`.
+        static void RegisterLua(lua_State *L, Bind::Side side);
+
       private:
         glm::quat _quat;
-        static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Quaternion>>> _classes;
+        inline static ClassCache<Quaternion> _classes;
     };
 
 } // namespace Framework::Scripting::Builtins
+
+FW_SCRIPT_CLASS(Framework::Scripting::Builtins::Quaternion, "Quaternion");

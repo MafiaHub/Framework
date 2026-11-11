@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,20 +8,22 @@
 
 #pragma once
 
+#include "../bind/class.h"
+#include "../class_cache.h"
+
 #include <cstdint>
 #include <glm/glm.hpp>
-#include <memory>
+#include <lua.h>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <v8pp/class.hpp>
 #include <v8pp/property.hpp>
 
 namespace Framework::Scripting::Builtins {
 
     /**
-     * Color wrapper class for V8 bindings using v8pp.
+     * Color wrapper class for the script bindings, JavaScript (through v8pp) and Lua.
      * Provides a clean C++ interface that wraps glm::vec4 for RGBA colors.
      * Components are stored as floats in range [0, 1].
      */
@@ -122,6 +124,9 @@ namespace Framework::Scripting::Builtins {
         uint32_t toRGBA() const; // 0xRRGGBBAA
         uint32_t toARGB() const; // 0xAARRGGBB
 
+        // The class as scripts see it, declared once for both languages.
+        static const Bind::Class<Color> &Definition();
+
         // V8 Registration
         static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
         static v8pp::class_<Color> &GetClass(v8::Isolate *isolate);
@@ -130,9 +135,14 @@ namespace Framework::Scripting::Builtins {
         static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, const glm::vec4 &value);
         static void UnregisterIsolate(v8::Isolate *isolate);
 
+        // Lua Registration: publishes the class as a global of the state, which belongs to a runtime of side `side`.
+        static void RegisterLua(lua_State *L, Bind::Side side);
+
       private:
         glm::vec4 _color;
-        static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Color>>> _classes;
+        inline static ClassCache<Color> _classes;
     };
 
 } // namespace Framework::Scripting::Builtins
+
+FW_SCRIPT_CLASS(Framework::Scripting::Builtins::Color, "Color");

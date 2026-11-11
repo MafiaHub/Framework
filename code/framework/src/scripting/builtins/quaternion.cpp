@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -14,7 +14,23 @@
 
 namespace Framework::Scripting::Builtins {
 
-    std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Quaternion>>> Quaternion::_classes;
+    namespace {
+        // toJSON method for JSON.stringify support - returns plain JS object
+        void ToJson(const v8::FunctionCallbackInfo<v8::Value> &info) {
+            auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
+            if (!self)
+                return;
+
+            auto iso = info.GetIsolate();
+            auto ctx = iso->GetCurrentContext();
+            auto obj = v8::Object::New(iso);
+            obj->Set(ctx, v8pp::to_v8(iso, "w"), v8::Number::New(iso, self->getW())).Check();
+            obj->Set(ctx, v8pp::to_v8(iso, "x"), v8::Number::New(iso, self->getX())).Check();
+            obj->Set(ctx, v8pp::to_v8(iso, "y"), v8::Number::New(iso, self->getY())).Check();
+            obj->Set(ctx, v8pp::to_v8(iso, "z"), v8::Number::New(iso, self->getZ())).Check();
+            info.GetReturnValue().Set(obj);
+        }
+    } // namespace
 
     Vector3 Quaternion::rotateVector(const Vector3 &v) const {
         glm::vec3 result = _quat * v.vec();
@@ -45,88 +61,65 @@ namespace Framework::Scripting::Builtins {
         return Quaternion(glm::angleAxis(angle, normalizedAxis));
     }
 
+    const Bind::Class<Quaternion> &Quaternion::Definition() {
+        using Bind::Doc;
+        using Bind::LuaMetaEvent;
+        static const auto definition =
+            Bind::Class<Quaternion>("Quaternion", "Mutable quaternion for three-dimensional rotations. Components are scalar-first (w, x, y, z), matching GLM — not the x, y, z, w order some libraries use.")
+                .Constructor<float, float, float, float>(Doc("Creates a quaternion in scalar-first w, x, y, z component order. Watch the trap: the scalar w is the first argument, unlike the x, y, z, w order used by some other libraries.")
+                        .Param("w", "Initial scalar component (comes first — this is not x, y, z, w order).")
+                        .Param("x", "Initial X imaginary component.")
+                        .Param("y", "Initial Y imaginary component.")
+                        .Param("z", "Initial Z imaginary component."))
+                // Instance methods
+                // Named mul for parity with Vector.mul (was multiply).
+                .Method("mul", &Quaternion::multiply, Doc("Composes this rotation with another quaternion in place.").Param("other", "Rotation composed after this quaternion.").Returns("This mutated quaternion for chaining."))
+                .Method("normalize", &Quaternion::normalize, Doc("Normalizes this quaternion in place; a zero quaternion becomes the identity rotation instead of NaN.").Returns("This unit quaternion for chaining."))
+                .Method("conjugate", &Quaternion::conjugate, Doc("Computes the conjugate without changing this quaternion.").Returns("New conjugated quaternion."))
+                .Method("inverse", &Quaternion::inverse, Doc("Computes the inverse rotation without changing this quaternion.").Returns("New inverse quaternion."))
+                .Method("slerp", &Quaternion::slerp,
+                    Doc("Spherically interpolates this quaternion toward a target in place.").Param("target", "Destination rotation.").Param("t", "Interpolation factor; 0 keeps the current rotation and 1 reaches target.").Returns("This mutated quaternion for chaining."))
+                .Method("dot", &Quaternion::dot, Doc("Computes the quaternion dot product.").Param("other", "Quaternion used for the dot product.").Returns("Scalar dot product."))
+                .Method("rotateVector", &Quaternion::rotateVector, Doc("Applies this rotation to a vector without mutating either value.").Param("vector", "Vector to rotate.").Returns("New rotated vector."))
+                .Method("toEuler", &Quaternion::toEuler, Doc("Converts this rotation to Euler angles in radians.").Returns("Pitch, yaw, and roll as a Vector3."))
+                .Method("set", &Quaternion::set,
+                    Doc("Replaces all quaternion components in place.")
+                        .Param("w", "Replacement scalar component.")
+                        .Param("x", "Replacement X imaginary component.")
+                        .Param("y", "Replacement Y imaginary component.")
+                        .Param("z", "Replacement Z imaginary component.")
+                        .Returns("This mutated quaternion for chaining."))
+                .Method("clone", &Quaternion::clone, Doc("Creates an independent copy of this quaternion.").Returns("New quaternion with the same components."))
+                .Method("toString", &Quaternion::toString, Doc("Formats this quaternion for logging and debugging.").Returns("Text in Quaternion(w, x, y, z) form."))
+                .Property("w", &Quaternion::getW, &Quaternion::setW, "Mutable scalar component.")
+                .Property("x", &Quaternion::getX, &Quaternion::setX, "Mutable X imaginary component.")
+                .Property("y", &Quaternion::getY, &Quaternion::setY, "Mutable Y imaginary component.")
+                .Property("z", &Quaternion::getZ, &Quaternion::setZ, "Mutable Z imaginary component.")
+                .Property("length", &Quaternion::getLength, "Read-only magnitude (norm) of this quaternion; 1 for a unit rotation.")
+                .Property("lengthSquared", &Quaternion::getLengthSquared, "Read-only squared magnitude, avoiding a square-root calculation.")
+                // Static factory methods
+                .Static("identity", &Quaternion::identity, Doc("Creates the identity rotation.").Returns("New Quaternion(1, 0, 0, 0)."))
+                .Static("fromEuler", &Quaternion::fromEuler, Doc("Creates a rotation from Euler angles.").Param("pitch", "Pitch angle in radians.").Param("yaw", "Yaw angle in radians.").Param("roll", "Roll angle in radians.").Returns("New rotation quaternion."))
+                .Static("fromAxisAngle", &Quaternion::fromAxisAngle, Doc("Creates a rotation around an axis.").Param("axis", "Rotation axis; it is normalized internally.").Param("angle", "Rotation angle in radians.").Returns("New axis-angle rotation quaternion."))
+                // JavaScript only, until Lua has JSON.
+                .V8Hook([](v8pp::class_<Quaternion> &cls, v8::Isolate *) {
+                    cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ w: number; x: number; y: number; z: number }", {}, "Converts this quaternion to a plain object for JSON.stringify.", "Object containing the current components."));
+                })
+                // Lua operators. The product is a new quaternion and leaves its operands as they were.
+                .LuaMeta(LuaMetaEvent::Mul,
+                    [](const Quaternion &left, const Quaternion &right) {
+                        return Quaternion(left.quat() * right.quat());
+                    })
+                .LuaMeta(LuaMetaEvent::Eq, [](const Quaternion &left, const Quaternion &right) {
+                    return left.quat() == right.quat();
+                });
+        return definition;
+    }
+
     v8pp::class_<Quaternion> &Quaternion::GetClass(v8::Isolate *isolate) {
-        auto it = _classes.find(isolate);
-        if (it != _classes.end()) {
-            return *it->second;
-        }
-
-        auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Quaternion>>(isolate, GetScriptingCatalog(isolate), "Quaternion", "Mutable quaternion for three-dimensional rotations. Components are scalar-first (w, x, y, z), matching GLM — not the x, y, z, w order some libraries use.");
-        cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
-        cls->ctor<float, float, float, float>(v8pp::metadata::docs("void",
-                                                  {
-                                                      v8pp::metadata::param("w", "number", false, "Initial scalar component (comes first — this is not x, y, z, w order)."),
-                                                      v8pp::metadata::param("x", "number", false, "Initial X imaginary component."),
-                                                      v8pp::metadata::param("y", "number", false, "Initial Y imaginary component."),
-                                                      v8pp::metadata::param("z", "number", false, "Initial Z imaginary component."),
-                                                  },
-                                                  "Creates a quaternion in scalar-first w, x, y, z component order. Watch the trap: the scalar w is the first argument, unlike the x, y, z, w order used by some other libraries."))
-            // Instance methods
-            // Named mul for parity with Vector.mul (was multiply).
-            .function("mul", &Quaternion::multiply,
-                v8pp::metadata::docs("this", {v8pp::metadata::param("other", "Quaternion", false, "Rotation composed after this quaternion.")}, "Composes this rotation with another quaternion in place.", "This mutated quaternion for chaining."))
-            .function("normalize", &Quaternion::normalize, v8pp::metadata::docs("this", {}, "Normalizes this quaternion in place; a zero quaternion becomes the identity rotation instead of NaN.", "This unit quaternion for chaining."))
-            .function("conjugate", &Quaternion::conjugate, v8pp::metadata::docs("Quaternion", {}, "Computes the conjugate without changing this quaternion.", "New conjugated quaternion."))
-            .function("inverse", &Quaternion::inverse, v8pp::metadata::docs("Quaternion", {}, "Computes the inverse rotation without changing this quaternion.", "New inverse quaternion."))
-            .function("slerp", &Quaternion::slerp,
-                v8pp::metadata::docs("this", {v8pp::metadata::param("target", "Quaternion", false, "Destination rotation."), v8pp::metadata::param("t", "number", false, "Interpolation factor; 0 keeps the current rotation and 1 reaches target.")},
-                    "Spherically interpolates this quaternion toward a target in place.", "This mutated quaternion for chaining."))
-            .function("dot", &Quaternion::dot, v8pp::metadata::docs("number", {v8pp::metadata::param("other", "Quaternion", false, "Quaternion used for the dot product.")}, "Computes the quaternion dot product.", "Scalar dot product."))
-            .function("rotateVector", &Quaternion::rotateVector, v8pp::metadata::docs("Vector3", {v8pp::metadata::param("vector", "Vector3", false, "Vector to rotate.")}, "Applies this rotation to a vector without mutating either value.", "New rotated vector."))
-            .function("toEuler", &Quaternion::toEuler, v8pp::metadata::docs("Vector3", {}, "Converts this rotation to Euler angles in radians.", "Pitch, yaw, and roll as a Vector3."))
-            .function("set", &Quaternion::set,
-                v8pp::metadata::docs("this",
-                    {v8pp::metadata::param("w", "number", false, "Replacement scalar component."), v8pp::metadata::param("x", "number", false, "Replacement X imaginary component."), v8pp::metadata::param("y", "number", false, "Replacement Y imaginary component."),
-                        v8pp::metadata::param("z", "number", false, "Replacement Z imaginary component.")},
-                    "Replaces all quaternion components in place.", "This mutated quaternion for chaining."))
-            .function("clone", &Quaternion::clone, v8pp::metadata::docs("Quaternion", {}, "Creates an independent copy of this quaternion.", "New quaternion with the same components."))
-            .function("toString", &Quaternion::toString, v8pp::metadata::docs("string", {}, "Formats this quaternion for logging and debugging.", "Text in Quaternion(w, x, y, z) form."));
-
-        auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
-
-        cls->property("w", &Quaternion::getW, &Quaternion::setW, v8pp::metadata::property_docs("number", "Mutable scalar component."));
-        cls->property("x", &Quaternion::getX, &Quaternion::setX, v8pp::metadata::property_docs("number", "Mutable X imaginary component."));
-        cls->property("y", &Quaternion::getY, &Quaternion::setY, v8pp::metadata::property_docs("number", "Mutable Y imaginary component."));
-        cls->property("z", &Quaternion::getZ, &Quaternion::setZ, v8pp::metadata::property_docs("number", "Mutable Z imaginary component."));
-        cls->property("length", &Quaternion::getLength, v8pp::metadata::property_options {"Read-only magnitude (norm) of this quaternion; 1 for a unit rotation.", "number", true, false});
-        cls->property("lengthSquared", &Quaternion::getLengthSquared, v8pp::metadata::property_options {"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
-
-        // toJSON method for JSON.stringify support - returns plain JS object
-        protoTemplate->Set(v8pp::to_v8(isolate, "toJSON"), v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-            auto *self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
-            if (!self)
-                return;
-
-            auto iso = info.GetIsolate();
-            auto ctx = iso->GetCurrentContext();
-            auto obj = v8::Object::New(iso);
-            obj->Set(ctx, v8pp::to_v8(iso, "w"), v8::Number::New(iso, self->getW())).Check();
-            obj->Set(ctx, v8pp::to_v8(iso, "x"), v8::Number::New(iso, self->getX())).Check();
-            obj->Set(ctx, v8pp::to_v8(iso, "y"), v8::Number::New(iso, self->getY())).Check();
-            obj->Set(ctx, v8pp::to_v8(iso, "z"), v8::Number::New(iso, self->getZ())).Check();
-            info.GetReturnValue().Set(obj);
-        }));
-
-        // Static methods need to be added to the js_function_template
-        auto func = cls->js_function_template();
-        func->Set(isolate, "identity", v8pp::wrap_function_template(isolate, &Quaternion::identity));
-        func->Set(isolate, "fromEuler", v8pp::wrap_function_template(isolate, &Quaternion::fromEuler));
-        func->Set(isolate, "fromAxisAngle", v8pp::wrap_function_template(isolate, &Quaternion::fromAxisAngle));
-
-        auto &metadata = GetScriptingCatalog(isolate).constructor("Quaternion");
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("toJSON", v8pp::metadata::docs("{ w: number; x: number; y: number; z: number }", {}, "Converts this quaternion to a plain object for JSON.stringify.", "Object containing the current components.")));
-        metadata.record(v8pp::metadata::function_of<decltype(&Quaternion::identity)>("identity", v8pp::metadata::docs("Quaternion", {}, "Creates the identity rotation.", "New Quaternion(1, 0, 0, 0)."), true));
-        metadata.record(v8pp::metadata::function_of<decltype(&Quaternion::fromEuler)>("fromEuler",
-            v8pp::metadata::docs("Quaternion", {v8pp::metadata::param("pitch", "number", false, "Pitch angle in radians."), v8pp::metadata::param("yaw", "number", false, "Yaw angle in radians."), v8pp::metadata::param("roll", "number", false, "Roll angle in radians.")},
-                "Creates a rotation from Euler angles.", "New rotation quaternion."),
-            true));
-        metadata.record(v8pp::metadata::function_of<decltype(&Quaternion::fromAxisAngle)>("fromAxisAngle",
-            v8pp::metadata::docs("Quaternion", {v8pp::metadata::param("axis", "Vector3", false, "Rotation axis; it is normalized internally."), v8pp::metadata::param("angle", "number", false, "Rotation angle in radians.")}, "Creates a rotation around an axis.",
-                "New axis-angle rotation quaternion."),
-            true));
-
-        return *cls;
+        return _classes.Get(isolate, [isolate]() {
+            return Definition().MaterialiseV8(isolate, GetScriptingCatalog(isolate), ScriptingSide(isolate));
+        });
     }
 
     void Quaternion::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
@@ -141,7 +134,14 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Quaternion::UnregisterIsolate(v8::Isolate *isolate) {
-        _classes.erase(isolate);
+        _classes.Unregister(isolate);
+    }
+
+    void Quaternion::RegisterLua(lua_State *L, Bind::Side side) {
+        Definition().MaterialiseLua(L, side);
+        lua_pushglobaltable(L);
+        Definition().PublishLua(L, -1);
+        lua_pop(L, 1);
     }
 
 } // namespace Framework::Scripting::Builtins

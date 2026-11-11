@@ -330,6 +330,8 @@ if(LIBNODE_AVAILABLE)
     target_link_libraries(FrameworkNodeEngine PUBLIC libnode v8pp spdlog::spdlog fmt::fmt glm::glm nlohmann_json::nlohmann_json function2::function2)
     # Tracy's headers and TRACY_* definitions for the runtime zones; Framework links the client itself.
     target_link_libraries(FrameworkNodeEngine PRIVATE Tracy::TracyClient)
+    # The builtin headers include the binding layer, which includes <lua.h>.
+    target_link_libraries(FrameworkNodeEngine PUBLIC unofficial::lua::lua-cpp)
 
     # Node.js internal APIs require NODE_WANT_INTERNALS
     target_compile_definitions(FrameworkNodeEngine PRIVATE NODE_WANT_INTERNALS=1)
@@ -357,6 +359,8 @@ target_include_directories(FrameworkV8Engine PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 target_link_libraries(FrameworkV8Engine PUBLIC v8 v8pp spdlog::spdlog fmt::fmt glm::glm nlohmann_json::nlohmann_json function2::function2)
+# The builtin headers include the binding layer, which includes <lua.h>.
+target_link_libraries(FrameworkV8Engine PUBLIC unofficial::lua::lua-cpp)
 target_compile_definitions(FrameworkV8Engine PRIVATE MG_ENABLE_LOG=0)
 if(WIN32)
     target_compile_definitions(FrameworkV8Engine PRIVATE _USE_MATH_DEFINES NOMINMAX)

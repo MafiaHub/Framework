@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -13,7 +13,23 @@
 
 namespace Framework::Scripting::Builtins {
 
-    std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Vector4>>> Vector4::_classes;
+    namespace {
+        // toJSON method for JSON.stringify support - returns plain JS object
+        void ToJson(const v8::FunctionCallbackInfo<v8::Value> &info) {
+            auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
+            if (!self)
+                return;
+
+            auto iso = info.GetIsolate();
+            auto ctx = iso->GetCurrentContext();
+            auto obj = v8::Object::New(iso);
+            obj->Set(ctx, v8pp::to_v8(iso, "x"), v8::Number::New(iso, self->getX())).Check();
+            obj->Set(ctx, v8pp::to_v8(iso, "y"), v8::Number::New(iso, self->getY())).Check();
+            obj->Set(ctx, v8pp::to_v8(iso, "z"), v8::Number::New(iso, self->getZ())).Check();
+            obj->Set(ctx, v8pp::to_v8(iso, "w"), v8::Number::New(iso, self->getW())).Check();
+            info.GetReturnValue().Set(obj);
+        }
+    } // namespace
 
     Vector4 &Vector4::normalize() {
         float len = glm::length(_vec);
@@ -28,85 +44,74 @@ namespace Framework::Scripting::Builtins {
         return ss.str();
     }
 
+    const Bind::Class<Vector4> &Vector4::Definition() {
+        using Bind::Doc;
+        using Bind::LuaMetaEvent;
+        static const auto definition =
+            Bind::Class<Vector4>("Vector4", "Mutable four-dimensional vector.")
+                .Constructor<float, float, float, float>(Doc("Creates a vector from four numeric components.").Param("x", "Initial X component.").Param("y", "Initial Y component.").Param("z", "Initial Z component.").Param("w", "Initial W component."))
+                // Instance methods
+                .Method("add", &Vector4::add, Doc("Adds another vector to this vector in place.").Param("other", "Vector to add component-wise.").Returns("This mutated vector for chaining."))
+                .Method("sub", &Vector4::sub, Doc("Subtracts another vector from this vector in place.").Param("other", "Vector to subtract component-wise.").Returns("This mutated vector for chaining."))
+                .Method("mul", &Vector4::mul, Doc("Multiplies this vector by a scalar in place.").Param("scalar", "Multiplier applied to every component.").Returns("This mutated vector for chaining."))
+                .Method("div", &Vector4::div, Doc("Divides this vector by a scalar in place.").Param("scalar", "Divisor applied to every component; must be non-zero.").Returns("This mutated vector for chaining."))
+                .Method("dot", &Vector4::dot, Doc("Computes the dot product without changing either vector.").Param("other", "Vector used for the dot product.").Returns("Scalar dot product."))
+                .Method("distance", &Vector4::distance, Doc("Computes Euclidean distance to another vector.").Param("other", "Vector to measure from this vector.").Returns("Distance between the two vectors."))
+                .Method("normalize", &Vector4::normalize, Doc("Normalizes this vector in place; a zero vector remains unchanged.").Returns("This mutated vector for chaining."))
+                .Method("lerp", &Vector4::lerp,
+                    Doc("Linearly interpolates this vector toward a target in place.").Param("target", "Destination vector.").Param("t", "Interpolation factor; 0 keeps the current value and 1 reaches target.").Returns("This mutated vector for chaining."))
+                .Method("set", &Vector4::set,
+                    Doc("Replaces all components in place.").Param("x", "Replacement X component.").Param("y", "Replacement Y component.").Param("z", "Replacement Z component.").Param("w", "Replacement W component.").Returns("This mutated vector for chaining."))
+                .Method("clone", &Vector4::clone, Doc("Creates an independent copy of this vector.").Returns("New vector with the same components."))
+                .Method("toString", &Vector4::toString, Doc("Formats this vector for logging and debugging.").Returns("Text in Vector4(x, y, z, w) form."))
+                .Property("x", &Vector4::getX, &Vector4::setX, "Mutable X component.")
+                .Property("y", &Vector4::getY, &Vector4::setY, "Mutable Y component.")
+                .Property("z", &Vector4::getZ, &Vector4::setZ, "Mutable Z component.")
+                .Property("w", &Vector4::getW, &Vector4::setW, "Mutable W component.")
+                .Property("length", &Vector4::getLength, "Read-only Euclidean magnitude of this vector.")
+                .Property("lengthSquared", &Vector4::getLengthSquared, "Read-only squared magnitude, avoiding a square-root calculation.")
+                // Static factory methods
+                .Static("zero", &Vector4::zero, Doc("Creates a zero vector.").Returns("New Vector4(0, 0, 0, 0)."))
+                .Static("one", &Vector4::one, Doc("Creates a vector whose components are one.").Returns("New Vector4(1, 1, 1, 1)."))
+                // JavaScript only, until Lua has JSON.
+                .V8Hook([](v8pp::class_<Vector4> &cls, v8::Isolate *) {
+                    cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ x: number; y: number; z: number; w: number }", {}, "Converts this vector to a plain object for JSON.stringify.", "Object containing the current components."));
+                })
+                // Lua operators. Each gives a new vector and leaves its operands as they were.
+                .LuaMeta(LuaMetaEvent::Add,
+                    [](const Vector4 &left, const Vector4 &right) {
+                        return Vector4(left.vec() + right.vec());
+                    })
+                .LuaMeta(LuaMetaEvent::Sub,
+                    [](const Vector4 &left, const Vector4 &right) {
+                        return Vector4(left.vec() - right.vec());
+                    })
+                .LuaMeta(LuaMetaEvent::Mul,
+                    [](const Vector4 &vector, float scalar) {
+                        return Vector4(vector.vec() * scalar);
+                    })
+                .LuaMeta(LuaMetaEvent::Mul,
+                    [](float scalar, const Vector4 &vector) {
+                        return Vector4(scalar * vector.vec());
+                    })
+                .LuaMeta(LuaMetaEvent::Div,
+                    [](const Vector4 &vector, float scalar) {
+                        return Vector4(vector.vec() / scalar);
+                    })
+                .LuaMeta(LuaMetaEvent::Unm,
+                    [](const Vector4 &vector) {
+                        return Vector4(-vector.vec());
+                    })
+                .LuaMeta(LuaMetaEvent::Eq, [](const Vector4 &left, const Vector4 &right) {
+                    return left.vec() == right.vec();
+                });
+        return definition;
+    }
+
     v8pp::class_<Vector4> &Vector4::GetClass(v8::Isolate *isolate) {
-        auto it = _classes.find(isolate);
-        if (it != _classes.end()) {
-            return *it->second;
-        }
-
-        auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Vector4>>(isolate, GetScriptingCatalog(isolate), "Vector4", "Mutable four-dimensional vector.");
-        cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
-        cls->ctor<float, float, float, float>(v8pp::metadata::docs("void",
-                                                  {
-                                                      v8pp::metadata::param("x", "number", false, "Initial X component."),
-                                                      v8pp::metadata::param("y", "number", false, "Initial Y component."),
-                                                      v8pp::metadata::param("z", "number", false, "Initial Z component."),
-                                                      v8pp::metadata::param("w", "number", false, "Initial W component."),
-                                                  },
-                                                  "Creates a vector from four numeric components."))
-            // Instance methods
-            .function("add", &Vector4::add, v8pp::metadata::docs("this", {v8pp::metadata::param("other", "Vector4", false, "Vector to add component-wise.")}, "Adds another vector to this vector in place.", "This mutated vector for chaining."))
-            .function("sub", &Vector4::sub, v8pp::metadata::docs("this", {v8pp::metadata::param("other", "Vector4", false, "Vector to subtract component-wise.")}, "Subtracts another vector from this vector in place.", "This mutated vector for chaining."))
-            .function("mul", &Vector4::mul, v8pp::metadata::docs("this", {v8pp::metadata::param("scalar", "number", false, "Multiplier applied to every component.")}, "Multiplies this vector by a scalar in place.", "This mutated vector for chaining."))
-            .function("div", &Vector4::div, v8pp::metadata::docs("this", {v8pp::metadata::param("scalar", "number", false, "Divisor applied to every component; must be non-zero.")}, "Divides this vector by a scalar in place.", "This mutated vector for chaining."))
-            .function("dot", &Vector4::dot, v8pp::metadata::docs("number", {v8pp::metadata::param("other", "Vector4", false, "Vector used for the dot product.")}, "Computes the dot product without changing either vector.", "Scalar dot product."))
-            .function("distance", &Vector4::distance, v8pp::metadata::docs("number", {v8pp::metadata::param("other", "Vector4", false, "Vector to measure from this vector.")}, "Computes Euclidean distance to another vector.", "Distance between the two vectors."))
-            .function("normalize", &Vector4::normalize, v8pp::metadata::docs("this", {}, "Normalizes this vector in place; a zero vector remains unchanged.", "This mutated vector for chaining."))
-            .function("lerp", &Vector4::lerp,
-                v8pp::metadata::docs("this",
-                    {
-                        v8pp::metadata::param("target", "Vector4", false, "Destination vector."),
-                        v8pp::metadata::param("t", "number", false, "Interpolation factor; 0 keeps the current value and 1 reaches target."),
-                    },
-                    "Linearly interpolates this vector toward a target in place.", "This mutated vector for chaining."))
-            .function("set", &Vector4::set,
-                v8pp::metadata::docs("this",
-                    {
-                        v8pp::metadata::param("x", "number", false, "Replacement X component."),
-                        v8pp::metadata::param("y", "number", false, "Replacement Y component."),
-                        v8pp::metadata::param("z", "number", false, "Replacement Z component."),
-                        v8pp::metadata::param("w", "number", false, "Replacement W component."),
-                    },
-                    "Replaces all components in place.", "This mutated vector for chaining."))
-            .function("clone", &Vector4::clone, v8pp::metadata::docs("Vector4", {}, "Creates an independent copy of this vector.", "New vector with the same components."))
-            .function("toString", &Vector4::toString, v8pp::metadata::docs("string", {}, "Formats this vector for logging and debugging.", "Text in Vector4(x, y, z, w) form."));
-
-        auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
-
-        cls->property("x", &Vector4::getX, &Vector4::setX, v8pp::metadata::property_docs("number", "Mutable X component."));
-        cls->property("y", &Vector4::getY, &Vector4::setY, v8pp::metadata::property_docs("number", "Mutable Y component."));
-        cls->property("z", &Vector4::getZ, &Vector4::setZ, v8pp::metadata::property_docs("number", "Mutable Z component."));
-        cls->property("w", &Vector4::getW, &Vector4::setW, v8pp::metadata::property_docs("number", "Mutable W component."));
-        cls->property("length", &Vector4::getLength, v8pp::metadata::property_options {"Read-only Euclidean magnitude of this vector.", "number", true, false});
-        cls->property("lengthSquared", &Vector4::getLengthSquared, v8pp::metadata::property_options {"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
-
-        // toJSON method for JSON.stringify support - returns plain JS object
-        protoTemplate->Set(v8pp::to_v8(isolate, "toJSON"), v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-            auto *self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
-            if (!self)
-                return;
-
-            auto iso = info.GetIsolate();
-            auto ctx = iso->GetCurrentContext();
-            auto obj = v8::Object::New(iso);
-            obj->Set(ctx, v8pp::to_v8(iso, "x"), v8::Number::New(iso, self->getX())).Check();
-            obj->Set(ctx, v8pp::to_v8(iso, "y"), v8::Number::New(iso, self->getY())).Check();
-            obj->Set(ctx, v8pp::to_v8(iso, "z"), v8::Number::New(iso, self->getZ())).Check();
-            obj->Set(ctx, v8pp::to_v8(iso, "w"), v8::Number::New(iso, self->getW())).Check();
-            info.GetReturnValue().Set(obj);
-        }));
-
-        // Static methods need to be added to the js_function_template
-        auto func = cls->js_function_template();
-        func->Set(isolate, "zero", v8pp::wrap_function_template(isolate, &Vector4::zero));
-        func->Set(isolate, "one", v8pp::wrap_function_template(isolate, &Vector4::one));
-        auto &metadata = GetScriptingCatalog(isolate).constructor("Vector4");
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("toJSON", v8pp::metadata::docs("{ x: number; y: number; z: number; w: number }", {}, "Converts this vector to a plain object for JSON.stringify.", "Object containing the current components.")));
-        metadata.record(v8pp::metadata::function_of<decltype(&Vector4::zero)>("zero", v8pp::metadata::docs("Vector4", {}, "Creates a zero vector.", "New Vector4(0, 0, 0, 0)."), true));
-        metadata.record(v8pp::metadata::function_of<decltype(&Vector4::one)>("one", v8pp::metadata::docs("Vector4", {}, "Creates a vector whose components are one.", "New Vector4(1, 1, 1, 1)."), true));
-
-        return *cls;
+        return _classes.Get(isolate, [isolate]() {
+            return Definition().MaterialiseV8(isolate, GetScriptingCatalog(isolate), ScriptingSide(isolate));
+        });
     }
 
     void Vector4::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
@@ -121,7 +126,14 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Vector4::UnregisterIsolate(v8::Isolate *isolate) {
-        _classes.erase(isolate);
+        _classes.Unregister(isolate);
+    }
+
+    void Vector4::RegisterLua(lua_State *L, Bind::Side side) {
+        Definition().MaterialiseLua(L, side);
+        lua_pushglobaltable(L);
+        Definition().PublishLua(L, -1);
+        lua_pop(L, 1);
     }
 
 } // namespace Framework::Scripting::Builtins
