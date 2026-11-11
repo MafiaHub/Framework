@@ -49,6 +49,7 @@ namespace Framework::Scripting::Bind {
         char linkKey      = 0;
         char callablesKey = 0;
         char standInKey   = 0;
+        char standInsKey  = 0;
 
         struct Link final {
             // nullptr once the runtime is going.
@@ -89,31 +90,47 @@ namespace Framework::Scripting::Bind {
         }
 
         // __gc of what the registry holds the link in, which runs as the state closes: for a runtime that
-        // nobody spoke for.
+        // nobody spoke for. The registry is left saying that the link is gone, and the userdata without its
+        // metatable, so that nothing a later finalizer does reaches the link through either. Putting a value in a
+        // field the registry has allocates nothing.
         int CollectLink(lua_State *L) {
             auto *held = static_cast<std::shared_ptr<Link> *>(lua_touserdata(L, 1));
             Stop(*held);
             held->~shared_ptr();
+            lua_pushnil(L);
+            lua_setmetatable(L, 1);
+            lua_pushboolean(L, 0);
+            lua_rawsetp(L, LUA_REGISTRYINDEX, &linkKey);
             return 0;
         }
 
-        // The link of the runtime of `L`, or nullptr when nothing was kept for it yet. Raises nothing.
-        std::shared_ptr<Link> FindLink(lua_State *L) {
+        // The link of the runtime of `L`, or nullptr when nothing was kept for it yet. `closing` is told whether
+        // the state had one and is closing. Raises nothing.
+        std::shared_ptr<Link> FindLink(lua_State *L, bool *closing = nullptr) {
             if (lua_checkstack(L, 1) == 0) {
                 return nullptr;
             }
             std::shared_ptr<Link> link;
-            if (lua_rawgetp(L, LUA_REGISTRYINDEX, &linkKey) == LUA_TUSERDATA) {
+            const int kept = lua_rawgetp(L, LUA_REGISTRYINDEX, &linkKey);
+            if (kept == LUA_TUSERDATA) {
                 link = *static_cast<std::shared_ptr<Link> *>(lua_touserdata(L, -1));
+            }
+            else if (closing != nullptr) {
+                *closing = kept == LUA_TBOOLEAN;
             }
             lua_pop(L, 1);
             return link;
         }
 
-        // The link of the runtime of `L`, made when it has none.
+        // The link of the runtime of `L`, made when it has none. In a state that is closing it is one that is
+        // dead and that nothing keeps: a state finalizes nothing it is given that late.
         std::shared_ptr<Link> LinkOf(lua_State *L) {
-            if (std::shared_ptr<Link> link = FindLink(L)) {
+            bool closing = false;
+            if (std::shared_ptr<Link> link = FindLink(L, &closing)) {
                 return link;
+            }
+            if (closing) {
+                return std::make_shared<Link>();
             }
             luaL_checkstack(L, 3, "cannot keep a function");
             void *block = lua_newuserdatauv(L, sizeof(std::shared_ptr<Link>), 0);
@@ -145,6 +162,23 @@ namespace Framework::Scripting::Bind {
             lua_setmetatable(L, -2);
             lua_pushvalue(L, -1);
             lua_rawsetp(L, LUA_REGISTRYINDEX, &callablesKey);
+        }
+
+        // Pushes the table of the registry that maps a callable of another runtime, by its address, to the function
+        // that stands for it here. Its values are weak, so an entry goes when the script lets go of the function,
+        // and that is before the function lets go of the callable: no address in it is ever stale.
+        void PushStandIns(lua_State *L) {
+            if (lua_rawgetp(L, LUA_REGISTRYINDEX, &standInsKey) == LUA_TTABLE) {
+                return;
+            }
+            lua_pop(L, 1);
+            lua_createtable(L, 0, 0);
+            lua_createtable(L, 0, 1);
+            lua_pushstring(L, "v");
+            lua_setfield(L, -2, "__mode");
+            lua_setmetatable(L, -2);
+            lua_pushvalue(L, -1);
+            lua_rawsetp(L, LUA_REGISTRYINDEX, &standInsKey);
         }
 
         // What a call whose coroutine ended with its first result on top of `thread` tells its caller.
@@ -457,6 +491,12 @@ namespace Framework::Scripting::Bind {
         }
 
         const std::shared_ptr<Link> link = LinkOf(L);
+        const std::string &resource      = LuaRuntime::From(L)->Options().resourceName;
+        // Of a runtime that is going the callable is dead from the start, and holds nothing.
+        if (link->runtime == nullptr) {
+            return std::make_shared<Function>(link, 0, resource);
+        }
+
         PushCallables(L);
         lua_pushvalue(L, index);
         if (lua_rawget(L, -2) == LUA_TNUMBER) {
@@ -472,7 +512,7 @@ namespace Framework::Scripting::Bind {
 
         // What raises below unwinds the callable, which gives back what it took.
         const uint64_t id = ++link->lastId;
-        auto callable     = std::make_shared<Function>(link, id, LuaRuntime::From(L)->Options().resourceName);
+        auto callable     = std::make_shared<Function>(link, id, resource);
         lua_pushvalue(L, index);
         callable->Hold(L);
         lua_pushvalue(L, index);
@@ -484,11 +524,19 @@ namespace Framework::Scripting::Bind {
     }
 
     void LuaPushCallable(lua_State *L, const std::shared_ptr<ScriptCallable> &callable) {
-        luaL_checkstack(L, 4, "cannot push a function");
+        luaL_checkstack(L, 5, "cannot push a function");
         // A function coming home is itself.
         if (const auto *own = dynamic_cast<const Function *>(callable.get()); own != nullptr && own->PushIn(L)) {
             return;
         }
+
+        // The function that stands for it here already: it arrives as the same function each time.
+        PushStandIns(L);
+        if (lua_rawgetp(L, -1, callable.get()) == LUA_TFUNCTION) {
+            lua_remove(L, -2);
+            return;
+        }
+        lua_pop(L, 1);
 
         void *block = lua_newuserdatauv(L, sizeof(StandIn), 0);
         if (lua_rawgetp(L, LUA_REGISTRYINDEX, &standInKey) == LUA_TNIL) {
@@ -505,6 +553,9 @@ namespace Framework::Scripting::Bind {
         ::new (block) StandIn {callable, Detail::CallableForwarder(callable)};
         lua_setmetatable(L, -2);
         lua_pushcclosure(L, CallStandIn, 1);
+        lua_pushvalue(L, -1);
+        lua_rawsetp(L, -3, callable.get());
+        lua_remove(L, -2);
     }
 
     void LuaRuntimeDisposing(LuaRuntime &runtime) {

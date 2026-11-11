@@ -19,6 +19,7 @@
 #include <new>
 #include <thread>
 
+#include "modules/client_callable_ut.h"
 #ifdef _WIN32
 #include "modules/keybinds_ut.h"
 #endif
@@ -257,6 +258,7 @@ int main() {
     UNIT_CREATE("FrameworkClientScriptingTests");
     Framework::Logging::GetInstance()->PauseLogging(true);
     UNIT_MODULE(client_scripting);
+    UNIT_MODULE(client_callable);
 #ifdef _WIN32
     UNIT_MODULE(keybinds);
 #endif

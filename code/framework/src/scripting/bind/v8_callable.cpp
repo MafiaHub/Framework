@@ -19,8 +19,10 @@
 
 #include <v8pp/convert.hpp>
 
+#include <atomic>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -32,7 +34,12 @@
 // What is kept for an isolate is one Runtime, found by the isolate. A callable and a deferred result share it, so
 // they can tell that the isolate is gone without asking it. A function carries the id of its callable as a private
 // property, which is how the same function is found to have one already; a function made to stand for a callable
-// of another runtime carries an id that leads back to that callable.
+// of another runtime carries an id that leads back to that callable. No id is given twice in the process, so one
+// that outlived what it named names nothing.
+//
+// A runtime ends in two steps. Stopped, its isolate is alive and may be running the script that stopped it, but
+// everything kept for it is dead and stays so: the record remains, and what is made in the isolate from then on is
+// dead from the start. Disposed, the record goes.
 //
 // A V8 callback is handed a key and looks its target up, never a pointer: an isolate can still run code after what
 // was kept for it is gone, and the callback then finds nothing.
@@ -48,19 +55,45 @@ namespace Framework::Scripting::Bind {
             ReturnMode mode = ReturnMode::Value;
         };
 
+        struct Runtime;
+
+        // A function of an isolate that stands for a callable of another runtime. The function keeps the callable
+        // alive, and this goes when the function is collected.
+        struct StandIn final {
+            Runtime *runtime = nullptr;
+            uint64_t id      = 0;
+            // What Runtime::standInOf knows it by: the address of the callable, which is good while the function
+            // holds the callable and is not read once it does not.
+            const ScriptCallable *key = nullptr;
+            std::weak_ptr<ScriptCallable> callable;
+            v8::Global<v8::Function> function; // weak
+        };
+
         struct Runtime final {
-            // nullptr once the isolate is going.
+            // nullptr once the isolate is disposed of.
             v8::Isolate *isolate = nullptr;
+            // The runtime runs no more, though its isolate may still be there.
+            bool stopped = false;
             // By the id the function carries. A callable takes itself out as it goes.
             std::unordered_map<uint64_t, std::weak_ptr<Callable>> callables;
-            // The callables the functions made by V8FunctionOf stand for, by the id such a function carries. The
-            // function keeps its callable, so an entry that has expired is of a function that was collected.
-            std::unordered_map<uint64_t, std::weak_ptr<ScriptCallable>> standIns;
-            size_t standInsAtSweep = 0;
+            // By the id the function carries, and by the callable: a callable has one stand-in in an isolate
+            // while that function lives, so it arrives as the same function each time.
+            std::unordered_map<uint64_t, std::unique_ptr<StandIn>> standIns;
+            std::unordered_map<const ScriptCallable *, StandIn *> standInOf;
             std::map<uint64_t, Waiting> waiting;
             std::unordered_set<DeferredResult *> deferred;
-            uint64_t lastId = 0;
+
+            // Whether script may still be run in it on the host's behalf.
+            bool Alive() const {
+                return isolate != nullptr && !stopped;
+            }
         };
+
+        // Of a callable, of a stand-in or of a call that waits: never 0, and never given twice.
+        uint64_t NextId() {
+            static std::atomic<uint64_t> last {0};
+            return last.fetch_add(1, std::memory_order_relaxed) + 1;
+        }
 
         // Isolates may be set up on different threads.
         std::mutex &RuntimesMutex() {
@@ -130,6 +163,15 @@ namespace Framework::Scripting::Bind {
             return outcome;
         }
 
+        // What a step into V8 that gave nothing tells the caller of an Invoke: `what`, then what the step threw, or
+        // `otherwise` when it threw nothing. In an isolate that is being terminated, that the runtime has stopped.
+        CallOutcome Unfinished(v8::Isolate *isolate, v8::TryCatch &tryCatch, const std::string &what, const char *otherwise) {
+            if (tryCatch.HasTerminated() || isolate->IsExecutionTerminating()) {
+                return Failed(kRuntimeStopped);
+            }
+            return Failed(what + (tryCatch.HasCaught() ? FormatV8Exception(isolate, tryCatch, otherwise) : std::string(otherwise)));
+        }
+
         // What a call that returned `value` tells its caller.
         CallOutcome CopyResult(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> value, ReturnMode mode) {
             CallOutcome outcome;
@@ -194,9 +236,12 @@ namespace Framework::Scripting::Bind {
 
         class Callable final: public V8Callable {
           public:
+            // In a runtime that has stopped it is dead from the start, and holds nothing.
             Callable(std::shared_ptr<Runtime> runtime, uint64_t id, v8::Local<v8::Context> context, v8::Local<v8::Function> function, std::string resource): _runtime(std::move(runtime)), _id(id), _resource(std::move(resource)) {
-                _context.Reset(_runtime->isolate, context);
-                _function.Reset(_runtime->isolate, function);
+                if (_runtime->Alive()) {
+                    _context.Reset(_runtime->isolate, context);
+                    _function.Reset(_runtime->isolate, function);
+                }
             }
 
             // The handles go with it while the isolate lives; Release took them otherwise.
@@ -204,10 +249,15 @@ namespace Framework::Scripting::Bind {
                 _runtime->callables.erase(_id);
             }
 
-            // The isolate is going: nothing is left to call.
+            // The runtime has stopped: nothing is left to call.
             void Release() {
                 _function.Reset();
                 _context.Reset();
+            }
+
+            // The function, when `isolate` is the one that owns it and it is still held.
+            v8::Local<v8::Function> FunctionIn(v8::Isolate *isolate) const {
+                return _runtime->isolate == isolate ? Function() : v8::Local<v8::Function>();
             }
 
             Language GetLanguage() const override {
@@ -219,7 +269,7 @@ namespace Framework::Scripting::Bind {
             }
 
             bool IsAlive() const override {
-                return _runtime->isolate != nullptr;
+                return _runtime->Alive();
             }
 
             bool Equals(const ScriptCallable &other) const override {
@@ -231,7 +281,7 @@ namespace Framework::Scripting::Bind {
             }
 
             v8::Isolate *Isolate() const override {
-                return _runtime->isolate;
+                return _runtime->Alive() ? _runtime->isolate : nullptr;
             }
 
             v8::Local<v8::Function> Function() const override {
@@ -244,11 +294,11 @@ namespace Framework::Scripting::Bind {
                 }
                 // Held: the function, and `done`, may drop the callable.
                 const std::shared_ptr<Runtime> runtime = _runtime;
-                v8::Isolate *isolate                   = runtime->isolate;
-                if (isolate == nullptr) {
+                if (!runtime->Alive()) {
                     done(Failed(kRuntimeStopped));
                     return;
                 }
+                v8::Isolate *isolate = runtime->isolate;
 
                 CallOutcome outcome;
                 bool waits = false;
@@ -268,32 +318,42 @@ namespace Framework::Scripting::Bind {
                     }
 
                     v8::Local<v8::Value> value;
-                    if (arguments.size() != args.size() || !_function.Get(isolate)->Call(entered.context, v8::Undefined(isolate), static_cast<int>(arguments.size()), arguments.data()).ToLocal(&value)) {
-                        // Terminated (the script called process.exit(), say): there is no exception to spell.
-                        outcome = Failed(tryCatch.HasCaught() && !tryCatch.HasTerminated() ? FormatV8Exception(isolate, tryCatch, "The call failed") : std::string(kRuntimeStopped));
+                    if (arguments.size() != args.size()) {
+                        outcome = Unfinished(isolate, tryCatch, "Argument " + std::to_string(arguments.size()) + ": ", "the value could not be built");
+                    }
+                    else if (!_function.Get(isolate)->Call(entered.context, v8::Undefined(isolate), static_cast<int>(arguments.size()), arguments.data()).ToLocal(&value)) {
+                        outcome = Unfinished(isolate, tryCatch, {}, "The call failed");
                     }
                     else if (!value->IsPromise()) {
                         outcome = CopyResult(isolate, entered.context, value, mode);
                     }
-                    else if (runtime->isolate == nullptr) {
-                        // The function had what is kept for its isolate dropped: nothing would hear of the promise.
+                    else if (!runtime->Alive()) {
+                        // The function stopped its own runtime: nothing would hear of the promise.
                         outcome = Failed(kRuntimeStopped);
                     }
                     else {
-                        const uint64_t key        = ++runtime->lastId;
+                        // Waited on before the reactions exist, so that no reaction can come to find nobody
+                        // waiting, however the isolate runs its microtasks.
+                        const uint64_t key = NextId();
+                        runtime->waiting.emplace(key, Waiting {std::move(done), mode});
+                        waits = true;
+
                         v8::Local<v8::Value> data = v8::BigInt::NewFromUnsigned(isolate, key);
                         v8::Local<v8::Function> onFulfilled;
                         v8::Local<v8::Function> onRejected;
-                        if (v8::Function::New(entered.context, OnFulfilled, data).ToLocal(&onFulfilled) && v8::Function::New(entered.context, OnRejected, data).ToLocal(&onRejected) && !value.As<v8::Promise>()->Then(entered.context, onFulfilled, onRejected).IsEmpty()) {
-                            runtime->waiting.emplace(key, Waiting {std::move(done), mode});
-                            waits = true;
-                        }
-                        else {
-                            outcome = Failed(kRuntimeStopped);
+                        if (!v8::Function::New(entered.context, OnFulfilled, data).ToLocal(&onFulfilled) || !v8::Function::New(entered.context, OnRejected, data).ToLocal(&onRejected) || value.As<v8::Promise>()->Then(entered.context, onFulfilled, onRejected).IsEmpty()) {
+                            // Nothing will come for it, unless the runtime stopped meanwhile and said so.
+                            const auto unheard = runtime->waiting.find(key);
+                            if (unheard != runtime->waiting.end()) {
+                                done = std::move(unheard->second.done);
+                                runtime->waiting.erase(unheard);
+                                waits   = false;
+                                outcome = Unfinished(isolate, tryCatch, {}, "The promise of the function could not be waited on");
+                            }
                         }
                     }
-                    // The queues of the runtime drain as it is left: a promise that is settled by then tells
-                    // `done` here.
+                    // The queues of a Node runtime drain as it is left: a promise that is settled by then tells
+                    // `done` here. A bare isolate has none: its promise is told when it next runs its microtasks.
                 }
                 if (!waits) {
                     done(std::move(outcome));
@@ -326,6 +386,10 @@ namespace Framework::Scripting::Bind {
                     SettleIn(isolate, context, _rejected ? nullptr : &_value, _message);
                     _value = {};
                 }
+                // In a runtime that has stopped nothing will settle it later.
+                if (!_runtime->Alive()) {
+                    Drop();
+                }
             }
 
             void Drop() override {
@@ -354,10 +418,10 @@ namespace Framework::Scripting::Bind {
           private:
             // Settles the promise from outside the JavaScript of its runtime, which is entered for it.
             void Settle(const TransferredValue *value, const std::string &message) {
-                v8::Isolate *isolate = _runtime->isolate;
-                if (isolate == nullptr || _resolver.IsEmpty()) {
+                if (!_runtime->Alive() || _resolver.IsEmpty()) {
                     return;
                 }
+                v8::Isolate *isolate = _runtime->isolate;
                 ResourceMonitor::Scope charged(isolate);
                 Entered entered(isolate, _context);
                 SettleIn(isolate, entered.context, value, message);
@@ -408,15 +472,49 @@ namespace Framework::Scripting::Bind {
             return manager != nullptr ? manager->ResolveResourceContext(isolate, function) : std::string();
         }
 
-        // Drops the stand-ins whose functions were collected, once their number has doubled since the last time.
-        void SweepStandIns(Runtime &runtime) {
-            if (runtime.standIns.size() < 2 * runtime.standInsAtSweep + 16) {
-                return;
+        // The function a stand-in was is being collected. A first-pass weak callback: V8 allows nothing of its own
+        // in it but resetting the handle, and nothing else here touches V8. The function held the callable, which
+        // goes with it.
+        void OnStandInCollected(const v8::WeakCallbackInfo<StandIn> &info) {
+            StandIn *standIn = info.GetParameter();
+            standIn->function.Reset();
+            Runtime &runtime = *standIn->runtime;
+            if (const auto known = runtime.standInOf.find(standIn->key); known != runtime.standInOf.end() && known->second == standIn) {
+                runtime.standInOf.erase(known);
             }
-            std::erase_if(runtime.standIns, [](const auto &standIn) {
-                return standIn.second.expired();
-            });
-            runtime.standInsAtSweep = runtime.standIns.size();
+            runtime.standIns.erase(standIn->id);
+        }
+
+        // Everything kept for the runtime is dead from here on. The callables stay known, so that a function is
+        // still found to have the one it had.
+        void Stop(const std::shared_ptr<Runtime> &runtime) {
+            // Dead before anything is told: what `done` invokes in this runtime is answered at once.
+            runtime->stopped = true;
+
+            // Held while they let go: one that goes meanwhile takes itself out of the table.
+            std::vector<std::shared_ptr<Callable>> callables;
+            callables.reserve(runtime->callables.size());
+            for (const auto &[id, weak] : runtime->callables) {
+                if (std::shared_ptr<Callable> callable = weak.lock()) {
+                    callables.push_back(std::move(callable));
+                }
+            }
+            for (const std::shared_ptr<Callable> &callable : callables) {
+                callable->Release();
+            }
+            runtime->standInOf.clear();
+            runtime->standIns.clear();
+
+            const std::vector<DeferredResult *> deferred(runtime->deferred.begin(), runtime->deferred.end());
+            for (DeferredResult *result : deferred) {
+                result->Drop();
+            }
+
+            auto waiting = std::move(runtime->waiting);
+            runtime->waiting.clear();
+            for (auto &[key, call] : waiting) {
+                call.done(Failed(kRuntimeStopped));
+            }
         }
     } // namespace
 
@@ -428,7 +526,7 @@ namespace Framework::Scripting::Bind {
         if (const uint64_t standIn = IdOf(context, function, StandInKey(isolate))) {
             const auto found = runtime->standIns.find(standIn);
             if (found != runtime->standIns.end()) {
-                if (std::shared_ptr<ScriptCallable> original = found->second.lock()) {
+                if (std::shared_ptr<ScriptCallable> original = found->second->callable.lock()) {
                     return original;
                 }
             }
@@ -444,7 +542,7 @@ namespace Framework::Scripting::Bind {
             }
         }
 
-        const uint64_t id = ++runtime->lastId;
+        const uint64_t id = NextId();
         auto callable     = std::make_shared<Callable>(runtime, id, context, function, ResourceOf(isolate, function));
         // A function that takes no private property gets a callable each time, which Equals still tells are one.
         (void)function->SetPrivate(context, key, v8::Number::New(isolate, static_cast<double>(id))).FromMaybe(false);
@@ -454,20 +552,38 @@ namespace Framework::Scripting::Bind {
 
     v8::MaybeLocal<v8::Function> V8FunctionOf(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::shared_ptr<ScriptCallable> &callable) {
         // A function coming home is itself.
-        if (const auto *own = dynamic_cast<const Callable *>(callable.get()); own != nullptr && own->Isolate() == isolate) {
-            return own->Function();
+        if (const auto *own = dynamic_cast<const Callable *>(callable.get())) {
+            const v8::Local<v8::Function> original = own->FunctionIn(isolate);
+            if (!original.IsEmpty()) {
+                return original;
+            }
+        }
+
+        // The one that stands for it here already. Nothing of the tables is held across a call into V8, which may
+        // collect, and so take, any of the others.
+        const std::shared_ptr<Runtime> runtime = RuntimeOf(isolate);
+        if (const auto known = runtime->standInOf.find(callable.get()); known != runtime->standInOf.end() && !known->second->function.IsEmpty()) {
+            return known->second->function.Get(isolate);
         }
 
         v8::Local<v8::Function> function;
         if (!Detail::V8NativeFunction(isolate, context, std::make_shared<NativeFunction>(Detail::CallableForwarder(callable))).ToLocal(&function)) {
             return {};
         }
-        const std::shared_ptr<Runtime> runtime = RuntimeOf(isolate);
-        const uint64_t id                      = ++runtime->lastId;
-        if (function->SetPrivate(context, StandInKey(isolate), v8::Number::New(isolate, static_cast<double>(id))).FromMaybe(false)) {
-            SweepStandIns(*runtime);
-            runtime->standIns[id] = callable;
+        // A function that takes no private property stands for the callable all the same, each time anew.
+        const uint64_t id = NextId();
+        if (!function->SetPrivate(context, StandInKey(isolate), v8::Number::New(isolate, static_cast<double>(id))).FromMaybe(false)) {
+            return function;
         }
+        auto standIn      = std::make_unique<StandIn>();
+        standIn->runtime  = runtime.get();
+        standIn->id       = id;
+        standIn->key      = callable.get();
+        standIn->callable = callable;
+        standIn->function.Reset(isolate, function);
+        standIn->function.SetWeak(standIn.get(), OnStandInCollected, v8::WeakCallbackType::kParameter);
+        runtime->standInOf[callable.get()] = standIn.get();
+        runtime->standIns.emplace(id, std::move(standIn));
         return function;
     }
 
@@ -482,38 +598,34 @@ namespace Framework::Scripting::Bind {
         return functions;
     }
 
+    void V8RuntimeStopped(v8::Isolate *isolate) {
+        // Known from here on even if nothing was kept for it yet: what is made in it later is dead too.
+        const std::shared_ptr<Runtime> runtime = RuntimeOf(isolate);
+        if (!runtime->stopped) {
+            Stop(runtime);
+        }
+    }
+
     void V8RuntimeDisposing(v8::Isolate *isolate) {
         const std::shared_ptr<Runtime> runtime = TakeRuntime(isolate);
         if (runtime == nullptr) {
             return;
         }
-        // Dead before anything is told: what `done` invokes in this runtime is answered at once.
-        runtime->isolate = nullptr;
-
-        // Taken out first, each of them: a callable or a deferred result that goes meanwhile takes itself out.
-        const auto callables = std::move(runtime->callables);
+        // Again for one that had stopped: for what was made in the isolate since.
+        Stop(runtime);
         runtime->callables.clear();
-        for (const auto &[id, weak] : callables) {
-            if (const std::shared_ptr<Callable> callable = weak.lock()) {
-                callable->Release();
-            }
-        }
-        runtime->standIns.clear();
+        runtime->isolate = nullptr;
+    }
 
-        const auto deferred = std::move(runtime->deferred);
-        runtime->deferred.clear();
-        for (DeferredResult *result : deferred) {
-            result->Drop();
-        }
-
-        auto waiting = std::move(runtime->waiting);
-        runtime->waiting.clear();
-        for (auto &[key, call] : waiting) {
-            call.done(Failed(kRuntimeStopped));
-        }
+    size_t V8StandInCount(v8::Isolate *isolate) {
+        const std::shared_ptr<Runtime> runtime = FindRuntime(isolate);
+        return runtime != nullptr ? runtime->standIns.size() : 0;
     }
 
     void WatchRuntimes(Engine &engine) {
+        engine.AddRuntimeStoppedListener([](v8::Isolate *isolate) {
+            V8RuntimeStopped(isolate);
+        });
         engine.AddRuntimeDisposingListener([](v8::Isolate *isolate) {
             V8RuntimeDisposing(isolate);
         });

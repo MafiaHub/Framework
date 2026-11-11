@@ -120,8 +120,9 @@ namespace Framework::Scripting::Bind {
         //
         // A function in it arrives as a function that invokes the original in the runtime that owns it, with
         // copies of its arguments, and gives a copy of its result: the value itself when the original finished at
-        // once, and otherwise what Defer gives, a promise in JavaScript and a wait in Lua. In the runtime that owns
-        // it, it arrives as the original itself.
+        // once, and otherwise what Defer gives, a promise in JavaScript and a wait in Lua. It is the same function
+        // each time it arrives, for as long as the script keeps it. In the runtime that owns it, it arrives as the
+        // original itself.
         virtual Utils::Result<Value, std::string> FromTransfer(const TransferredValue &value) = 0;
 
         // What JSON text holds, as JSON.parse reads it in JavaScript and LuaJson::Decode in Lua (lua_json.h), where

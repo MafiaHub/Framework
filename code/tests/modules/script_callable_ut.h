@@ -78,7 +78,7 @@ namespace ScriptCallableTest {
     // The stage the functions of Stage act on.
     inline Stage *current = nullptr;
 
-    void DestroyLua(const std::string &resource);
+    void DestroyRuntime(const std::string &resource);
 
     inline TransferredValue Number(double number) {
         TransferredValue value;
@@ -251,9 +251,9 @@ namespace ScriptCallableTest {
                                            .Function(
                                                "destroy",
                                                [](Call &call) {
-                                                   DestroyLua(call.Arg(0).AsString());
+                                                   DestroyRuntime(call.Arg(0).AsString());
                                                },
-                                               Doc("Destroys a Lua runtime.").Param("resource", TypeOf<std::string>(), "Its resource."));
+                                               Doc("Destroys the runtime of a resource.").Param("resource", TypeOf<std::string>(), "The resource."));
         return definition;
     }
 
@@ -261,7 +261,7 @@ namespace ScriptCallableTest {
     // runtime they create. JavaScript runs on the real clock, Lua on one the test moves.
     class Stage final {
       public:
-        Stage() {
+        explicit Stage(const Framework::Scripting::LuaEngineOptions &luaOptions = {}): _lua(luaOptions) {
             using namespace Framework::Scripting;
             static int count = 0;
             _catalog         = "script_callable/" + std::to_string(++count);
@@ -336,6 +336,14 @@ namespace ScriptCallableTest {
             return LuaRuntimeTest::Eval(Runtime(resource), expression);
         }
 
+        // Has the collector of a JavaScript runtime take everything nothing holds.
+        void CollectJs(const std::string &resource) {
+            v8::Isolate *isolate = Isolate(resource);
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            isolate->LowMemoryNotification();
+        }
+
         size_t Suspended(const std::string &resource) {
             return Runtime(resource).Scheduler().SuspendedCoroutines();
         }
@@ -368,7 +376,9 @@ namespace ScriptCallableTest {
         Framework::Scripting::LuaEngine _lua;
     };
 
-    inline void DestroyLua(const std::string &resource) {
+    // As a resource that stops does, of either language, also from inside its own script.
+    inline void DestroyRuntime(const std::string &resource) {
+        current->Node().DestroyResourceRuntime(resource);
         current->LuaEngine().DestroyResourceRuntime(resource);
     }
 } // namespace ScriptCallableTest
@@ -611,7 +621,7 @@ MODULE(script_callable, {
         const auto javascript = Invoke(Held().callables.at(0), {Number(1), unknown});
         EQUALS(javascript->calls, 1);
         EQUALS(javascript->threw, true);
-        EQUALS(Contains(javascript->error, "Unknown host type NoSuchType"), true);
+        EQUALS(FirstLine(javascript->error), "Argument 1: Error: Unknown host type NoSuchType");
         EQUALS(stage.Js("alpha", "ran"), "0");
 
         const auto lua = Invoke(Held().callables.at(1), {Number(1), unknown});
@@ -772,6 +782,118 @@ MODULE(script_callable, {
         EQUALS(waiting->calls, 1);
         EQUALS(waiting->error, "runtime stopped");
         EQUALS(callables.at(0)->IsAlive(), false);
+    });
+
+    IT("takes a JavaScript runtime that was stopped from its own script for gone at once", {
+        Stage stage;
+        stage.CreateJs("alpha");
+        stage.CreateLua("gamma");
+        const auto disposed = std::make_shared<int>(0);
+        stage.Node().AddRuntimeDisposingListener([disposed](v8::Isolate *) {
+            ++*disposed;
+        });
+        stage.Js("alpha", "Stage.give(() => 'still here'); Stage.keep(() => 1); Stage.keep(() => new Promise(() => {})); Stage.later()");
+        EQUALS(stage.Lua("gamma", "remote = Stage.take() before = remote()"), "");
+        EQUALS(stage.LuaValue("gamma", "before"), "still here");
+        const std::vector<std::shared_ptr<ScriptCallable>> callables = Held().callables;
+        const auto waiting                                           = Invoke(callables.at(1));
+        EQUALS(waiting->calls, 0);
+
+        // The resource stops itself. Its runtime outlives the script that stopped it, until the engine ticks, but
+        // to everyone who kept a function of it, it is gone now.
+        Held().callables.clear();
+        EQUALS(stage.Js("alpha", "Stage.destroy('alpha'); Stage.keep(() => 2); Stage.later(); typeof Stage.take()"), "function");
+        EQUALS(stage.Node().GetResourceRuntime("alpha") == nullptr, true);
+        EQUALS(*disposed, 0);
+        EQUALS(callables.at(0)->IsAlive(), false);
+        EQUALS(static_cast<const Bind::V8Callable *>(callables.at(0).get())->Isolate() == nullptr, true);
+        EQUALS(waiting->calls, 1);
+        EQUALS(waiting->error, "runtime stopped");
+        EQUALS(Invoke(callables.at(0))->error, "runtime stopped");
+        EQUALS(stage.LuaValue("gamma", "remote()"), "<error> eval:1: runtime stopped");
+
+        // What it kept of itself after it stopped is dead from the start, and what it still owes is not settled.
+        EQUALS(Held().callables.at(0)->IsAlive(), false);
+        EQUALS(Invoke(Held().callables.at(0))->error, "runtime stopped");
+        EQUALS(Held().deferreds.size(), 2u);
+        for (Deferred &deferred : Held().deferreds) {
+            deferred.Resolve(Text("nobody is there"));
+        }
+
+        EQUALS(*disposed, 0);
+        stage.Node().Tick();
+        EQUALS(*disposed, 1);
+        EQUALS(callables.at(0)->IsAlive(), false);
+        EQUALS(Invoke(callables.at(0))->error, "runtime stopped");
+        EQUALS(waiting->calls, 1);
+    });
+
+    IT("answers runtime stopped for a JavaScript function that ends its runtime", {
+        Stage stage;
+        stage.CreateJs("alpha");
+        stage.Js("alpha", "Stage.keep(() => { process.exit(3); }); Stage.keep(() => 1); Stage.keep(() => new Promise(() => {}))");
+        const std::vector<std::shared_ptr<ScriptCallable>> callables = Held().callables;
+        const auto waiting                                           = Invoke(callables.at(2));
+        const auto exited                                            = Invoke(callables.at(0));
+        EQUALS(exited->calls, 1);
+        EQUALS(exited->threw, true);
+        EQUALS(exited->error, "runtime stopped");
+        // Nothing runs in it any more, and what it owed is told, though the engine only stops the resource at its
+        // next tick.
+        EQUALS(stage.Node().GetResourceRuntime("alpha") != nullptr, true);
+        EQUALS(callables.at(1)->IsAlive(), false);
+        EQUALS(Invoke(callables.at(1))->error, "runtime stopped");
+        EQUALS(waiting->calls, 1);
+        EQUALS(waiting->error, "runtime stopped");
+
+        stage.Node().Tick();
+        EQUALS(stage.Node().GetResourceRuntime("alpha") == nullptr, true);
+        EQUALS(callables.at(1)->IsAlive(), false);
+        EQUALS(waiting->calls, 1);
+    });
+
+    IT("tells done of a Lua function the deadline stopped", {
+        Framework::Scripting::LuaEngineOptions options;
+        options.entryDeadline = std::chrono::milliseconds(50);
+        Stage stage(options);
+        stage.CreateLua("gamma");
+        stage.Lua("gamma", "Stage.keep(function() while true do end end) Stage.keep(function() return 'fine' end)");
+        const auto stopped = Invoke(Held().callables.at(0));
+        EQUALS(stopped->calls, 1);
+        EQUALS(stopped->threw, true);
+        EQUALS(Contains(FirstLine(stopped->error), "script ran too long"), true);
+        EQUALS(Spell(stopped->value), "undefined");
+        // The runtime goes on.
+        EQUALS(Held().callables.at(0)->IsAlive(), true);
+        EQUALS(Spell(Invoke(Held().callables.at(1))->value), "\"fine\"");
+        EQUALS(lua_gettop(stage.Runtime("gamma").State()), 0);
+    });
+
+    IT("leaves what outlives its engine harmless", {
+        std::vector<Deferred> deferreds;
+        std::vector<std::shared_ptr<ScriptCallable>> callables;
+        TransferredValue value;
+        {
+            Stage stage;
+            stage.CreateJs("alpha");
+            stage.CreateLua("gamma");
+            stage.Js("alpha", "Stage.later(); Stage.later(); Stage.keep(() => 1); Stage.give({ on: () => 2 })");
+            stage.Lua("gamma", "spawn(function() Stage.later() end) Stage.keep(function() return 1 end) Stage.later()");
+            deferreds = Held().deferreds;
+            callables = Held().callables;
+            value     = Held().value;
+        }
+        EQUALS(deferreds.size(), 4u);
+        deferreds.at(0).Resolve(Text("late"));
+        deferreds.at(2).Reject("late");
+        EQUALS(deferreds.at(0).Settled(), true);
+        EQUALS(deferreds.at(1).Settled(), false);
+        EQUALS(Invoke(callables.at(0))->error, "runtime stopped");
+        EQUALS(Invoke(callables.at(1))->error, "runtime stopped");
+        EQUALS(Invoke(value.properties.at(0).second.callable)->error, "runtime stopped");
+        deferreds.clear();
+        callables.clear();
+        value = {};
     });
 
     IT("lets done destroy the runtime of the function and invoke another", {
@@ -1243,7 +1365,56 @@ MODULE(script_callable, {
 
         stage.Js("alpha", "globalThis.home = 'alpha'; Stage.give((value) => home + ' got ' + value)");
         EQUALS(stage.Js("beta", "globalThis.remote = Stage.take(); remote('from beta')"), "alpha got from beta");
-        EQUALS(stage.Js("beta", "remote === Stage.take()"), "false");
+        EQUALS(stage.Js("beta", "remote === Stage.take()"), "true");
+    });
+
+    IT("gives a runtime one function for a function of another, for as long as it keeps it", {
+        Stage stage;
+        stage.CreateJs("alpha");
+        stage.CreateLua("gamma");
+        stage.CreateLua("delta");
+        v8::Isolate *alpha = stage.Isolate("alpha");
+        stage.Lua("gamma", "Stage.give(function(value) return value + 1 end)");
+        const std::weak_ptr<ScriptCallable> given = Held().value.callable;
+
+        // The same function each time it arrives, in both languages.
+        EQUALS(stage.Js("alpha", "globalThis.first = Stage.take(); first === Stage.take() && Stage.take() === first"), "true");
+        EQUALS(stage.LuaValue("delta", "(function() local first = Stage.take() return rawequal(first, Stage.take()) end)()"), "true");
+        EQUALS(Bind::V8StandInCount(alpha), 1u);
+
+        // Arriving on every frame, with nobody keeping it, it leaves nothing behind: what stood for it goes when it
+        // is collected, though the function itself is still held where it came from.
+        stage.Js("alpha", "globalThis.first = undefined");
+        std::string results;
+        for (int frame = 0; frame < 200; ++frame) {
+            results = stage.Js("alpha", "Stage.take()(" + std::to_string(frame) + ")");
+        }
+        EQUALS(results, "200");
+        EQUALS(Bind::V8StandInCount(alpha) <= 1, true);
+        stage.CollectJs("alpha");
+        EQUALS(Bind::V8StandInCount(alpha), 0u);
+        EQUALS(given.expired(), false);
+        EQUALS(stage.Js("alpha", "globalThis.again = Stage.take(); again(41)"), "42");
+        EQUALS(Bind::V8StandInCount(alpha), 1u);
+        stage.CollectJs("alpha");
+        EQUALS(Bind::V8StandInCount(alpha), 1u);
+
+        // Each function has its own, and each goes with it.
+        stage.Js("alpha", "globalThis.again = undefined");
+        for (int other = 0; other < 50; ++other) {
+            stage.Lua("gamma", "Stage.give(function() return " + std::to_string(other) + " end)");
+            results = stage.Js("alpha", "Stage.take()()");
+        }
+        EQUALS(results, "49");
+        stage.CollectJs("alpha");
+        EQUALS(Bind::V8StandInCount(alpha), 0u);
+        // The last of them is the one copy still held. The first went with what stood for it, here and in Lua,
+        // where the next arrival is a new function.
+        EQUALS(given.expired(), false);
+        lua_gc(stage.Runtime("delta").State(), LUA_GCCOLLECT);
+        EQUALS(given.expired(), true);
+        EQUALS(stage.LuaValue("delta", "(function() local first = Stage.take() return rawequal(first, Stage.take()) and first() end)()"), "49");
+        EQUALS(lua_gettop(stage.Runtime("gamma").State()), 0);
     });
 
     IT("answers for a function whose runtime is gone", {

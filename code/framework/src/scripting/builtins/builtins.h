@@ -63,6 +63,9 @@ namespace Framework::Scripting::Builtins {
     // deferred results of the binding layer that the isolate goes (bind/callable.h). Call once, just before disposal:
     // a leftover entry leaks and, if the isolate address is later reused, resolves to a wrapper bound to
     // the dead isolate. Out-of-line so callers don't pull in the handle types' networking headers.
+    //
+    // Telling the callables completes the calls into the isolate that had not ended, each through its `done`,
+    // which is host code and may run script in other runtimes: call this where that is safe to happen.
     void UnregisterAll(v8::Isolate *isolate);
 
     // Teaches ValueTransfer the builtin value types and handles, so they cross between resources as themselves rather

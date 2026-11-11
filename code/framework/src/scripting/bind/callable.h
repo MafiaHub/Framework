@@ -57,9 +57,12 @@ namespace Framework::Scripting::Bind {
     // has one callable for as long as anyone holds it, so taking it twice gives the same one, and a function that
     // crossed into another runtime and is taken there is the callable of the original.
     //
-    // When its runtime goes the callable is dead: it lets go of the function, IsAlive is false, and every Invoke
-    // that had not ended yet, like every one made from then on, is told `threw` and kRuntimeStopped. The runtime
-    // says so through its engine, which WatchRuntimes listens to.
+    // When its runtime stops the callable is dead: it lets go of the function, IsAlive is false, and every Invoke
+    // that had not ended yet, like every one made from then on, is told `threw` and kRuntimeStopped. That is so
+    // from the moment the runtime is stopped, in both languages, and not only once it is freed: a runtime that
+    // is stopped while script runs, as a resource that stops itself is, outlives that script until its engine
+    // ticks, but to its callables it is gone at once, and one made in it during that time is dead from the start.
+    // The runtime says so through its engine, which WatchRuntimes listens to.
     //
     // Everything here runs on the scripting thread.
     class ScriptCallable {
@@ -83,7 +86,9 @@ namespace Framework::Scripting::Bind {
         // exactly once, on the scripting thread: before Invoke returns when the function finished at once, later
         // when it returned a promise (JavaScript) or waited (Lua), which is when the promise settles or the
         // coroutine ends. A JavaScript promise that settles as the call leaves its runtime has told `done` by the
-        // time Invoke returns.
+        // time Invoke returns, where the runtime drains its queues as it is left, as Node's do. The one isolate of
+        // the client has no such queue: a promise of it is told when the isolate next runs its microtasks, which is
+        // the next call into it or the next tick of its engine.
         //
         // The function is called on nothing: `this` is undefined in JavaScript and Lua gets no receiver, also
         // for a function that was copied as a property of an object. Only the function references of JavaScript
@@ -167,9 +172,11 @@ namespace Framework::Scripting::Bind {
         std::shared_ptr<Detail::DeferredState> _state;
     };
 
-    // Has the callables and the deferred results of the runtimes of `engine` told when one of them is destroyed,
-    // through the one disposing listener this adds to the engine. Call it once for each engine, before a script
-    // runs in it.
+    // Has the callables and the deferred results of the runtimes of `engine` told when one of them stops and when
+    // it is destroyed, through the listeners this adds to the engine: for a JavaScript engine one that hears of a
+    // runtime that stopped ahead of its disposal and one that hears of the disposal, for the Lua engine the
+    // disposing one, as a Lua runtime that was stopped tells by itself. Call it once for each engine, before a
+    // script runs in it.
     //
     // Two runtimes need no such call. An isolate whose engine has no listener for it, the engine's own or the one
     // isolate every resource of a shared engine runs in, is spoken for by Builtins::UnregisterAll, which every

@@ -35,7 +35,8 @@ namespace Framework::Scripting::Bind {
     std::shared_ptr<ScriptCallable> LuaToCallable(lua_State *L, int index);
 
     // Pushes a function that invokes `callable` (Call::FromTransfer says how), or the function itself in the state
-    // that owns it. Raises a Lua error when Lua is out of memory or of stack.
+    // that owns it. The callable has one such function in a state for as long as a script keeps it, so it arrives
+    // as the same function each time. Raises a Lua error when Lua is out of memory or of stack.
     void LuaPushCallable(lua_State *L, const std::shared_ptr<ScriptCallable> &callable);
 
     // Marks dead what is kept for `runtime`: its callables, whose calls that have not ended are told
