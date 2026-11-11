@@ -238,15 +238,19 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
   and `spawn(fn, ...)`. Timers die with the state.
   - Each stretch a coroutine runs, from its start or a resume to its end or its next wait, is one entry
     with its own deadline. A coroutine that fails tells whoever waits on it, or else the resource's error
-    handler, never both.
+    handler, never both. With no handler set the error is logged, at the rate `print` is.
   - A script waits only in a coroutine the scheduler started. `sleep` in a coroutine the script created
     itself raises, as it does where Lua cannot yield (under `table.sort`, in `__tostring`). To a script
     the coroutine it runs in is the main thread of plain Lua: `coroutine.yield()` with no coroutine of
-    its own around it ends it with `attempt to yield from outside a coroutine`.
+    its own around it ends it with `attempt to yield from outside a coroutine`, and it is not the
+    script's to resume or close, from inside or from another coroutine: `coroutine.resume` answers
+    `false, "cannot resume a coroutine the host started"` and `coroutine.close` raises `cannot close a
+    coroutine the host started`.
   - Time is what the host passes to `Tick`. A tick fires what was due when it started, in due order, so
     a timer armed by a callback waits for the next tick. An interval is armed again from the time it was
-    due, and fires once per tick until it has caught up. At most 10 000 timers per state, as in the V8
-    engine; one more raises. At most 64 entries nested in one another (a spawned function that spawns).
+    due; one that fell behind fires once and is next due at the first of its period boundaries after the
+    tick. At most 10 000 timers per state, as in the V8 engine; one more raises. At most 64 entries
+    nested in one another (a spawned function that spawns).
 - `LuaEngine` owns the runtimes: it creates one with the setup callback run inside it, runs a file as the
   chunk `@<resource>/<path below the resource root>`, ticks every runtime with one reading of the clock and
   queues the errors nobody waited for, under their resource. A runtime destroyed from inside its own call
