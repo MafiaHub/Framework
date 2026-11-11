@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "transferred_value.h"
+
 #include <v8.h>
 
 #include <function2/function2.hpp>
@@ -21,63 +23,6 @@
 #include <vector>
 
 namespace Framework::Scripting {
-
-    /**
-     * A JavaScript value copied out of one isolate, ready to be rebuilt in another.
-     *
-     * Server resources run in isolates of their own, so nothing passes between them by reference:
-     * event arguments, export values and call results are copied into one of these on one side and
-     * rebuilt on the other. docs/scripting_resource_isolation.md lists what each kind of value
-     * arrives as.
-     */
-    struct TransferredValue {
-        enum class Kind : uint8_t {
-            Undefined,
-            Null,
-            Boolean,
-            Number,
-            BigInt,
-            String,
-            Array,
-            Object,
-            Date,
-            RegExp,
-            Map,
-            Set,
-            ArrayBuffer,
-            TypedArray,
-            Error,
-            HostObject,
-            Function,
-        };
-
-        Kind kind = Kind::Undefined;
-
-        // Boolean; whether a BigInt is negative.
-        bool boolean = false;
-
-        // Number; Date as milliseconds since the epoch; RegExp flags.
-        double number = 0;
-
-        // String; RegExp source; the view type of a TypedArray; the registered name of a HostObject; the message of an
-        // Error.
-        std::string text;
-
-        // ArrayBuffer and TypedArray contents; a HostObject's payload; a BigInt's magnitude as 64-bit words, least
-        // significant first.
-        std::vector<uint8_t> bytes;
-
-        // Array elements; Map keys and values interleaved; Set members.
-        std::vector<TransferredValue> items;
-
-        // Own enumerable string-keyed properties of an Object, and of an Error beyond its name, message and stack (which
-        // ride in `properties` too, under those names).
-        std::vector<std::pair<std::string, TransferredValue>> properties;
-
-        // Function: the id the exporting side handed out for it, and what keeps it exported while this copy exists.
-        uint64_t reference = 0;
-        std::shared_ptr<void> retainer;
-    };
 
     /**
      * How functions cross. Without these, copying a function fails.
