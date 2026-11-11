@@ -748,6 +748,9 @@ namespace Framework::Scripting {
             if (!runtime->exited) {
                 runtime->exited = true;
                 _pendingExits.push_back({runtime->resourceName, runtime->serial, code});
+                node::Stop(env);
+                TellRuntimeStopped(runtime->runtime->GetIsolate());
+                return;
             }
             node::Stop(env);
         });
@@ -784,11 +787,20 @@ namespace Framework::Scripting {
         // its handlers. It is freed at the next tick, from the top. The name is free at once, so a restart can
         // create its next runtime.
         if (!CanTeardownNow(*runtime)) {
-            runtime->retired = true;
+            v8::Isolate *isolate = runtime->runtime->GetIsolate();
+            runtime->retired     = true;
             _retiredRuntimes.push_back(std::move(runtime));
+            TellRuntimeStopped(isolate);
             return;
         }
         TeardownResourceRuntime(std::move(runtime));
+    }
+
+    void NodeEngine::TellRuntimeStopped(v8::Isolate *isolate) {
+        // By index: a listener may fail a call whose caller stops, and so retires, a further runtime.
+        for (size_t i = 0; i < _runtimeStoppedListeners.size(); ++i) {
+            _runtimeStoppedListeners[i](isolate);
+        }
     }
 
     void NodeEngine::TeardownResourceRuntime(std::unique_ptr<ResourceRuntime> runtime) {

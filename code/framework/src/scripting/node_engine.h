@@ -235,6 +235,9 @@ namespace Framework::Scripting {
         // borrowed handle into it.
         bool CanTeardownNow(const ResourceRuntime &runtime) const;
 
+        // Tell the listeners that a runtime runs no more, ahead of its teardown: it was retired, or it exited.
+        void TellRuntimeStopped(v8::Isolate *isolate);
+
         // Destroy the runtimes whose destruction was deferred because script was running.
         void FlushRetiredRuntimes();
 

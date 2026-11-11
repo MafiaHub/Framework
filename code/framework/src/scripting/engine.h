@@ -135,6 +135,18 @@ namespace Framework::Scripting {
         }
 
         /**
+         * Hear about a resource's runtime that has stopped ahead of its disposal: its resource stopped while script
+         * was running, so the runtime is disposed at a later tick, or it called process.exit(). Its isolate is alive
+         * and may be the one executing, but the engine runs nothing more in it: the place to fail what is still
+         * owed by it. A runtime that is disposed on the spot is told to the disposing listeners alone. Listeners
+         * live as long as the engine. An engine whose resources share one runtime never calls them.
+         */
+        using RuntimeStoppedCallback = fu2::function<void(v8::Isolate *) const>;
+        void AddRuntimeStoppedListener(RuntimeStoppedCallback callback) {
+            _runtimeStoppedListeners.push_back(std::move(callback));
+        }
+
+        /**
          * Register framework SDK bindings.
          * Called after Init() to set up Framework.* APIs.
          */
@@ -159,6 +171,7 @@ namespace Framework::Scripting {
         SDKRegisterCallback _sdkRegisterCallback;
         RuntimeSetupCallback _runtimeSetupCallback;
         std::vector<RuntimeDisposingCallback> _runtimeDisposingListeners;
+        std::vector<RuntimeStoppedCallback> _runtimeStoppedListeners;
     };
 
 } // namespace Framework::Scripting
