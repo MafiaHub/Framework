@@ -234,16 +234,26 @@ settlement counts.
   which `value_transfer.h` includes.
 - A function has one callable while anyone holds it, so `ToCallable()` twice gives the same one, and a
   function that stands for a callable of another runtime gives that callable.
-- A callable is told that its runtime goes: `Bind::WatchRuntimes(engine)` adds the one disposing listener
-  per engine that does it. `Builtins::UnregisterAll` does the same for an isolate no listener speaks for
-  (the engine's own, the one isolate of a shared engine), and a Lua state no engine owns says so as it
-  closes. The callable is then dead, and every `Invoke` it still owed, like every later one, is told
-  `threw` and `runtime stopped`. A Lua runtime destroyed from inside its own call is dead at once,
-  though its state stays open until the engine ticks.
+- A callable is dead once its runtime is stopped: `IsAlive()` is false, and every `Invoke` it still owed,
+  like every later one, is told `threw` and `runtime stopped`. That holds from the moment the runtime is
+  stopped, in both languages, not only once it is freed.
+  - A runtime stopped while script runs, as a resource that stops itself is, outlives that script until
+    its engine ticks. To its callables it is gone at once, what it still owed is told then, a deferred of
+    it is no longer settled, and a callable made in it during that time is dead from the start. A
+    JavaScript runtime that called `process.exit()` is stopped by that call.
+  - `Bind::WatchRuntimes(engine)` adds the listeners that tell: for a JavaScript engine the one that hears
+    of a runtime stopped ahead of its disposal (`Engine::AddRuntimeStoppedListener`) and the disposing
+    one; for the Lua engine the disposing one, as a stopped Lua runtime is told by its scheduler.
+  - `Builtins::UnregisterAll` tells for an isolate no listener speaks for (the engine's own, the one
+    isolate of a shared engine), and a Lua state no engine owns says so as it closes.
+  - The function references between JavaScript runtimes keep their own rule: a retired runtime can be
+    called through them until it is freed.
 - `Invoke` calls the function on nothing: `this` is undefined in JavaScript and Lua gets no receiver, also
   for a function that crossed as a property of an object.
 - `done` is told later for a promise, with one exception: a promise that settles as the call leaves its
-  runtime, where the runtime's queues drain, has told `done` by the time `Invoke` returns.
+  runtime, where the runtime's queues drain, has told `done` by the time `Invoke` returns. That is Node.
+  The client's one isolate has no such queue: a promise of it, and what waits on a deferred of it, is
+  told when the isolate next runs its microtasks, which is the next call into it or `V8Engine::Tick`.
 - A JavaScript callable is a `Bind::V8Callable` (`bind/v8_callable.h`), which gives its isolate and its
   function to a caller that runs in the same isolate and needs no copy.
 - In Lua a deferred that is settled before the function returns makes the call return or raise at once.
@@ -407,6 +417,9 @@ One value crosses per call result: a Lua function's first return value.
     when it is given `Bind::V8CallableTransfer()`, as `Value::ToTransfer` and the results of a
     `ScriptCallable` are. Back in the runtime that owns it the function arrives as itself, and a
     stand-in sent on is the function it stands for, not a stand-in of a stand-in.
+  - A callable has one stand-in in a runtime for as long as a script there keeps it, so a function that
+    crosses twice arrives as the same function (`===`, `rawequal`). Once the stand-in is collected nothing
+    is kept for it, though the callable may live on elsewhere.
   - The function references between JavaScript runtimes are as they were: a value they exported carries
     `reference` and no `callable`, and is rebuilt by their import hook. Where a value has both and the
     caller gave `ValueTransfer::Rebuild` an import hook, the hook wins; a value with a callable alone is
