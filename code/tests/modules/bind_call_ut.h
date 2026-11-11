@@ -149,6 +149,18 @@ namespace BindCallTest {
                                                    }
                                                },
                                                Doc("Adds a hundred."), Side::Server)
+                                           .Method(
+                                               "late",
+                                               [](Call &call) {
+                                                   // What it makes first is where Lua would have put a receiver.
+                                                   const Value made = call.Wrap(Counter(1000));
+                                                   Counter *self    = call.Self<Counter>();
+                                                   if (self != nullptr) {
+                                                       self->set(self->get() + 1);
+                                                   }
+                                                   call.Return(std::string(self != nullptr ? "receiver" : "none") + ":" + KindName(call.This().Kind()) + ":" + KindName(made.Kind()));
+                                               },
+                                               Doc("Makes a counter, then looks for its receiver.").ReturnType(TypeOf<std::string>()))
                                            .Static(
                                                "receiver",
                                                [](Call &call) {
@@ -1329,6 +1341,12 @@ MODULE(bind_call, {
         EQUALS(runtimes.Lua("select('#', CallCounter.new(1).bump(5))"), "0");
         EQUALS(runtimes.Lua("select('#', CallCounter.new(1).bump())"), "0");
         EQUALS(runtimes.Lua("select('#', CallCounter.new(1).bump(Vector3.new(1, 2, 3), 5))"), "0");
+
+        // Nor does it take what it made itself for one, where a Lua script passed nothing at all: the first
+        // value it makes lands where the receiver would have been.
+        EQUALS(runtimes.Both("{ const c = new CallCounter(1); c.late() + ' ' + c.get() }", "(function() local c = CallCounter.new(1) return c:late() .. ' ' .. c:get() end)()", "receiver:Bound:Bound 2"), "");
+        EQUALS(runtimes.Lua("CallCounter.new(1).late()"), "none:Nil:Bound");
+        EQUALS(runtimes.Lua("(function() local c = CallCounter.new(1) return c.late() .. ' ' .. c:get() end)()"), "none:Nil:Bound 1");
     });
 
     IT("leaves a method of another side out", {

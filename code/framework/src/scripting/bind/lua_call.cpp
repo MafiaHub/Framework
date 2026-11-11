@@ -59,7 +59,7 @@ namespace Framework::Scripting::Bind {
             : public Call
             , public Detail::ValueBackend {
           public:
-            LuaCall(lua_State *L, bool method): _L(L), _method(method), _first(method ? 2 : 1), _count(static_cast<size_t>(std::max(lua_gettop(L) - (method ? 1 : 0), 0))) {}
+            LuaCall(lua_State *L, bool method): _L(L), _receiver(method && lua_gettop(L) >= 1), _first(method ? 2 : 1), _count(static_cast<size_t>(std::max(lua_gettop(L) - (method ? 1 : 0), 0))) {}
 
             // What the function leaves the script: the number of results, now on top of the stack, or the message
             // to raise in `error`.
@@ -103,7 +103,7 @@ namespace Framework::Scripting::Bind {
             }
 
             Value This() const override {
-                return At(_method && lua_gettop(_L) >= 1 ? 1 : 0);
+                return At(_receiver ? 1 : 0);
             }
 
             Value Nil() override {
@@ -379,7 +379,7 @@ namespace Framework::Scripting::Bind {
 
           protected:
             void *SelfAs(const Detail::LuaClass *definition) const override {
-                return _method ? Detail::LuaToObject(_L, 1, definition) : nullptr;
+                return _receiver ? Detail::LuaToObject(_L, 1, definition) : nullptr;
             }
 
             Value WrapBound(const Detail::LuaClass *definition, const char *name, Detail::BoundBuilder build, void *source) override {
@@ -484,7 +484,9 @@ namespace Framework::Scripting::Bind {
             }
 
             lua_State *_L;
-            bool _method;
+            // Whether the call is one of a method that was given a receiver: index 1 is then what it was called
+            // on. Told as the call begins, since what the function makes later lands on the same stack.
+            bool _receiver;
             int _first;    // the index of the first argument
             size_t _count; // the arguments, without the receiver
 
