@@ -78,16 +78,21 @@ namespace Framework::Scripting::Bind {
         template <typename T>
         inline constexpr bool IsUnqualified = std::is_same_v<T, std::remove_cv_t<T>>;
 
-        // `value` as the floating-point type To. Beyond the range of To it is an infinity of its sign, which the
-        // cast alone leaves undefined.
+        // `value` as the floating-point type To. Beyond the largest To the cast alone is undefined, so the value is
+        // rounded to nearest here, as IEEE 754 does: it is still the largest To while it is closer to it than to
+        // the power of two after it, and an infinity of its sign from halfway on. The halfway point is the largest
+        // To plus half the gap to the To before it; max / (2 / epsilon - 1) is that gap.
         template <typename To, typename From>
         constexpr To NarrowFloat(From value) {
             if constexpr (std::numeric_limits<To>::max_exponent < std::numeric_limits<From>::max_exponent) {
-                if (value > static_cast<From>(std::numeric_limits<To>::max())) {
-                    return std::numeric_limits<To>::infinity();
+                static_assert(std::numeric_limits<To>::radix == 2 && std::numeric_limits<To>::digits < std::numeric_limits<From>::digits, "Bind: narrowing expects binary types, the wider one holding the halfway point exactly");
+                const From largest = static_cast<From>(std::numeric_limits<To>::max());
+                const From halfway = largest + largest / (From(2) / static_cast<From>(std::numeric_limits<To>::epsilon()) - From(1)) / From(2);
+                if (value > largest) {
+                    return value < halfway ? std::numeric_limits<To>::max() : std::numeric_limits<To>::infinity();
                 }
-                if (value < static_cast<From>(std::numeric_limits<To>::lowest())) {
-                    return -std::numeric_limits<To>::infinity();
+                if (value < -largest) {
+                    return value > -halfway ? std::numeric_limits<To>::lowest() : -std::numeric_limits<To>::infinity();
                 }
             }
             return static_cast<To>(value);

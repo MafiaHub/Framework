@@ -395,10 +395,10 @@ MODULE(lua_convert, {
         EQUALS(Eval(state.L, "take(-1e300)"), "true");
         EQUALS(Slot<float>(), -std::numeric_limits<float>::infinity());
         EQUALS(Eval(state.L, "echo(-1e300) == -math.huge"), "true");
-        // Just past the largest float, where rounding to nearest would still give the largest float.
-        EQUALS(Eval(state.L, "take(0x1.fffffe8p+127)"), "true");
+        // Halfway from the largest float to the power of two after it, where rounding to nearest leaves the range.
+        EQUALS(Eval(state.L, "take(0x1.ffffffp+127)"), "true");
         EQUALS(Slot<float>(), std::numeric_limits<float>::infinity());
-        EQUALS(Eval(state.L, "take(-0x1.fffffe8p+127)"), "true");
+        EQUALS(Eval(state.L, "take(-0x1.ffffffp+127)"), "true");
         EQUALS(Slot<float>(), -std::numeric_limits<float>::infinity());
 
         // The largest float is still itself, and what was not finite stays so.
@@ -409,6 +409,29 @@ MODULE(lua_convert, {
         EQUALS(Eval(state.L, "echo(math.huge) == math.huge"), "true");
         EQUALS(Eval(state.L, "echo(-math.huge) == -math.huge"), "true");
         EQUALS(Eval(state.L, "local nan = echo(0/0) return nan ~= nan"), "true");
+    });
+
+    IT("rounds a number just past the largest float to the largest float", {
+        LuaTest::State state;
+        Expose<float>(state.L);
+
+        // The usual decimal spelling of the largest float is a double slightly above it.
+        EQUALS(Eval(state.L, "3.4028235e38 > 0x1.fffffep+127"), "true");
+        EQUALS(Eval(state.L, "take(3.4028235e38)"), "true");
+        EQUALS(Slot<float>(), std::numeric_limits<float>::max());
+        EQUALS(Eval(state.L, "take(-3.4028235e38)"), "true");
+        EQUALS(Slot<float>(), std::numeric_limits<float>::lowest());
+
+        EQUALS(Eval(state.L, "take(0x1.fffffe8p+127)"), "true");
+        EQUALS(Slot<float>(), std::numeric_limits<float>::max());
+        EQUALS(Eval(state.L, "take(-0x1.fffffe8p+127)"), "true");
+        EQUALS(Slot<float>(), std::numeric_limits<float>::lowest());
+        // The last double before the halfway point.
+        EQUALS(Eval(state.L, "take(0x1.fffffefffffffp+127)"), "true");
+        EQUALS(Slot<float>(), std::numeric_limits<float>::max());
+        EQUALS(Eval(state.L, "take(-0x1.fffffefffffffp+127)"), "true");
+        EQUALS(Slot<float>(), std::numeric_limits<float>::lowest());
+        EQUALS(Eval(state.L, "echo(3.4028235e38) == 0x1.fffffep+127"), "true");
     });
 
     // --- Strings ---
