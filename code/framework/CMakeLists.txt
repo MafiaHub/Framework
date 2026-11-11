@@ -56,9 +56,11 @@ set(FRAMEWORK_SRC
     src/scripting/bind/namespace.cpp
     src/scripting/bind/v8_call.cpp
     src/scripting/lua/lua_engine.cpp
+    src/scripting/lua/lua_json.cpp
     src/scripting/lua/lua_runtime.cpp
     src/scripting/lua/lua_sandbox.cpp
     src/scripting/lua/lua_scheduler.cpp
+    src/scripting/lua/lua_transfer.cpp
     src/scripting/builtins/builtins.cpp
     src/scripting/builtins/vector2.cpp
     src/scripting/builtins/vector3.cpp

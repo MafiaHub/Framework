@@ -161,10 +161,13 @@ namespace Framework::Scripting::Builtins {
                 .Static("cyan", &Color::cyan, Doc("Creates opaque cyan.").Returns("New Color(0, 1, 1, 1)."))
                 .Static("magenta", &Color::magenta, Doc("Creates opaque magenta.").Returns("New Color(1, 0, 1, 1)."))
                 .Static("transparent", &Color::transparent, Doc("Creates fully transparent black.").Returns("New Color(0, 0, 0, 0)."))
-                // JavaScript only, until Lua has JSON.
+                // What JSON.stringify asks a JavaScript object for. Lua writes the same object from JsonProperties.
                 .V8Hook([](v8pp::class_<Color> &cls, v8::Isolate *) {
                     cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ r: number; g: number; b: number; a: number }", {}, "Converts this color to a plain object for JSON.stringify.", "Object containing the current normalized components."));
                 })
+                .JsonProperties({"r", "g", "b", "a"})
+                // Crosses between runtimes as its glm value.
+                .Transfer(&Color::vec)
                 // Lua operator. Two colors are equal when their components are.
                 .LuaMeta(LuaMetaEvent::Eq, [](const Color &left, const Color &right) {
                     return left.vec() == right.vec();

@@ -16,13 +16,20 @@
 #include "types.h"
 #include "v8_backend.h"
 
+#include "../lua/lua_transfer.h"
+#include "../value_transfer.h"
+
 #include <function2/function2.hpp>
 #include <lua.h>
 #include <v8.h>
 #include <v8pp/class.hpp>
 #include <v8pp/metadata.hpp>
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -235,6 +242,75 @@ namespace Framework::Scripting::Bind {
         LuaThunk LuaFunctionThunkOf(Signature<void, R, Args...>, F function) {
             return {LuaParamsOf<Args...>(), &LuaFunctionThunk<F, R, Args...>::Invoke, std::make_shared<const F>(std::move(function))};
         }
+
+        // What crosses of an object that crosses as a Payload: its bytes, as both sides are this process.
+        template <typename Payload>
+        void WritePayload(const Payload &payload, std::vector<uint8_t> &bytes) {
+            bytes.resize(sizeof(Payload));
+            std::memcpy(bytes.data(), &payload, sizeof(Payload));
+        }
+
+        template <typename Payload>
+        Payload ReadPayload(const std::vector<uint8_t> &bytes) {
+            Payload payload {};
+            if (!bytes.empty()) {
+                std::memcpy(&payload, bytes.data(), std::min(bytes.size(), sizeof(Payload)));
+            }
+            return payload;
+        }
+
+        // Registers T with ValueTransfer under `name`: an object crosses as the Payload `get` reads from it and is
+        // built again from that Payload, wrapped the way Call::Wrap wraps one.
+        template <typename T, typename Payload, typename G>
+        void V8RegisterTransfer(const std::string &name, G get) {
+            ValueTransfer::RegisterHostType(
+                name,
+                [get](v8::Isolate *isolate, v8::Local<v8::Object> object, std::vector<uint8_t> &bytes) {
+                    V8EnsureClass<T>(isolate);
+                    const T *wrapped = static_cast<const T *>(V8Unwrap<T>(isolate, object));
+                    if (wrapped == nullptr) {
+                        return false;
+                    }
+                    WritePayload<Payload>(std::invoke(get, *wrapped), bytes);
+                    return true;
+                },
+                [name](v8::Isolate *isolate, v8::Local<v8::Context>, const std::vector<uint8_t> &bytes) -> v8::MaybeLocal<v8::Value> {
+                    V8EnsureClass<T>(isolate);
+                    // The constructor of a handle throws when its entity is gone by the time the value arrives.
+                    std::string error;
+                    try {
+                        const v8::Local<v8::Value> wrapped = V8Adopt<T>(isolate, new T(ReadPayload<Payload>(bytes)));
+                        if (!wrapped.IsEmpty()) {
+                            return wrapped;
+                        }
+                        error = name + " is not available in this JavaScript runtime";
+                    }
+                    catch (const std::exception &exception) {
+                        error = exception.what();
+                    }
+                    isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, error)));
+                    return {};
+                });
+        }
+
+        // The same for LuaTransfer. An object of a class derived from T is read through its T part.
+        template <typename T, typename Payload, typename G>
+        void LuaRegisterTransfer(const std::string &name, G get) {
+            LuaTransfer::RegisterHostType(
+                name,
+                [get](lua_State *L, int index, std::vector<uint8_t> &bytes) {
+                    const T *object = LuaObjectAt<T>(L, index);
+                    if (object == nullptr) {
+                        return false;
+                    }
+                    WritePayload<Payload>(std::invoke(get, *object), bytes);
+                    return true;
+                },
+                [](lua_State *L, const std::vector<uint8_t> &bytes) {
+                    LuaNewObject<T>(L, ReadPayload<Payload>(bytes));
+                    return true;
+                });
+        }
     } // namespace Detail
 
     // The definition of a script class bound to the C++ class T: declared once in C++, described for the catalog
@@ -434,6 +510,51 @@ namespace Framework::Scripting::Bind {
         Class &V8Hook(fu2::function<void(v8pp::class_<T> &, v8::Isolate *) const> hook) {
             _v8->hooks.push_back(std::move(hook));
             return *this;
+        }
+
+        // Names the properties an object of the class is written to JSON with from Lua, in the order they are
+        // written (LuaJson::Encode): the keys and values its toJSON gives in JavaScript, where toJSON stays what a
+        // V8Hook adds. Each is a property the class or one of its bases declared before this call. A class that
+        // names none is the first of its bases that does, and an object of a class without any has no JSON form in
+        // Lua. Throws std::logic_error for a name that is not such a property, for no name, and when called twice.
+        Class &JsonProperties(const std::vector<std::string> &names) {
+            Detail::LuaSetJsonProperties(*_record, names);
+            return *this;
+        }
+
+        // Lets an object of the class cross between runtimes as itself, in both languages: it crosses as the bytes
+        // of the Payload `get` reads from it, and is built again as T(payload) in the runtime it arrives in. A
+        // value type crosses as its value (`&Vector3::vec`), a handle as its id (`&Player::GetId`); a constructor
+        // that throws, as that of a handle whose entity is gone, fails the copy with what(). `get` is a member
+        // function of T or of one of its bases, or anything else callable with a const T &.
+        //
+        // This only declares it. RegisterTransfer registers, at the time the caller chooses. Throws
+        // std::logic_error when called twice.
+        template <typename G>
+            requires std::is_invocable_v<G, const T &>
+        Class &Transfer(G get) {
+            using Payload = std::remove_cvref_t<std::invoke_result_t<G, const T &>>;
+            static_assert(std::is_trivially_copyable_v<Payload> && std::is_default_constructible_v<Payload>, "Bind::Class::Transfer: what the object crosses as is copied byte for byte");
+            static_assert(std::is_constructible_v<T, const Payload &> && std::is_constructible_v<T, Payload>, "Bind::Class::Transfer: T is built again from what it crosses as");
+            if (!_record->registerTransfer.empty()) {
+                throw std::logic_error("Bind: '" + _record->desc.name + "' declares twice how it crosses between runtimes");
+            }
+            _record->registerTransfer = [name = _record->desc.name, get]() {
+                Detail::V8RegisterTransfer<T, Payload>(name, get);
+                Detail::LuaRegisterTransfer<T, Payload>(name, get);
+            };
+            return *this;
+        }
+
+        // Registers the class as a host type of ValueTransfer and of LuaTransfer, under its name, the way Transfer
+        // declared it. Process-wide, and for the start of the process: ValueTransfer tries the newest registration
+        // first, so a class is registered after its bases, and calling this again moves the class to the front.
+        // Throws std::logic_error when the class declared no Transfer.
+        void RegisterTransfer() const {
+            if (_record->registerTransfer.empty()) {
+                throw std::logic_error("Bind: '" + _record->desc.name + "' is registered to cross between runtimes without a Transfer");
+            }
+            _record->registerTransfer();
         }
 
         const ClassDesc &Describe() const {

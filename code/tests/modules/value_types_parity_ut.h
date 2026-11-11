@@ -486,7 +486,8 @@ MODULE(value_types_parity, {
         Runtimes runtimes;
         EQUALS(runtimes.Started(), true);
 
-        // toJSON is what JSON.stringify calls. Lua has no JSON yet, so it has no counterpart there.
+        // toJSON is what JSON.stringify calls. Lua has no such method: its JSON codec writes the same object from
+        // the JsonProperties of the class (lua_json_ut.h).
         EQUALS(runtimes.Js("JSON.stringify(new Vector2(1, 2))"), R"({"x":1,"y":2})");
         EQUALS(runtimes.Js("JSON.stringify(new Vector3(1, 2, 3))"), R"({"x":1,"y":2,"z":3})");
         EQUALS(runtimes.Js("JSON.stringify(new Vector4(1, 2, 3, 4))"), R"({"x":1,"y":2,"z":3,"w":4})");

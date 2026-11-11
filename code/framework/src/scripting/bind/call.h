@@ -16,6 +16,8 @@
 
 #include <function2/function2.hpp>
 
+#include <utils/result.h>
+
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -28,6 +30,7 @@
 
 namespace Framework::Scripting {
     class ResourceManager;
+    struct TransferredValue; // value_transfer.h
 } // namespace Framework::Scripting
 
 namespace Framework::Scripting::Bind {
@@ -108,6 +111,16 @@ namespace Framework::Scripting::Bind {
         // A script function that calls `function`, with a Call of its own. It keeps `function` for as long as the
         // script keeps it, beyond this call.
         virtual Value NewFunction(NativeFunction function) = 0;
+
+        // The value a copy made with Value::ToTransfer holds, built in this runtime: how a value of another
+        // runtime, of either language, arrives. Throws to the script, and gives Nil, for what the language cannot
+        // receive: a RegExp or a host type it does not have in Lua, a host type the runtime lacks in JavaScript.
+        virtual Value FromTransfer(const TransferredValue &value) = 0;
+
+        // What JSON text holds, as JSON.parse reads it in JavaScript and LuaJson::Decode in Lua (lua_json.h), where
+        // null is nil. The error says what is wrong with text that is not JSON; nothing is thrown to the script,
+        // since a payload that does not parse is rarely the fault of the script reading it.
+        virtual Utils::Result<Value, std::string> ParseJson(std::string_view text) = 0;
 
         // A new instance of the bound class of `bound`, holding a copy of it, or what is moved out of an rvalue.
         // Throws to the script, and gives Nil, in a runtime that does not have the class.

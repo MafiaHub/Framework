@@ -96,6 +96,21 @@ namespace Framework::Scripting::Bind::Detail {
             }
         }
 
+        // The getter of the property `name` of `definition`, its own before those of its bases, or nullptr.
+        const LuaFunction *FindGetter(const LuaClass &definition, const std::string &name) {
+            for (const LuaProperty &property : definition.properties) {
+                if (property.getter.name == name) {
+                    return &property.getter;
+                }
+            }
+            for (const LuaBase &base : definition.bases) {
+                if (const LuaFunction *found = FindGetter(*base.definition, name)) {
+                    return found;
+                }
+            }
+            return nullptr;
+        }
+
         // --- Calling a C++ function ---
 
         int Raise(lua_State *L, const std::string &message) {
@@ -246,6 +261,13 @@ namespace Framework::Scripting::Bind::Detail {
             CheckArguments(L, *setter, 2);
             Invoke(L, *setter, self);
             return 0;
+        }
+
+        // What LuaPushProperty calls: the object is at index 1 and the getter, a light userdata, at index 2.
+        int ReadProperty(lua_State *L) {
+            const LuaFunction &getter = *static_cast<const LuaFunction *>(lua_touserdata(L, 2));
+            lua_settop(L, 1);
+            return Invoke(L, getter, CheckReceiver(L, getter));
         }
 
         // __gc. A finalizer that ran earlier in the same collection may have kept the userdata, so it loses its
@@ -479,6 +501,46 @@ namespace Framework::Scripting::Bind::Detail {
             throw std::logic_error("Bind: '" + function.label + "' has " + std::to_string(operands) + " operand(s) but its function takes " + std::to_string(function.thunk.params.size()) + " parameter(s)");
         }
         definition.metas[index].push_back(std::move(function));
+    }
+
+    void LuaSetJsonProperties(LuaClass &definition, const std::vector<std::string> &names) {
+        if (!definition.json.empty()) {
+            throw std::logic_error("Bind: '" + definition.desc.name + "' names its JSON properties twice");
+        }
+        if (names.empty()) {
+            throw std::logic_error("Bind: '" + definition.desc.name + "' names no JSON property");
+        }
+        std::vector<const LuaFunction *> getters;
+        for (const std::string &name : names) {
+            const LuaFunction *getter = FindGetter(definition, name);
+            if (getter == nullptr) {
+                throw std::logic_error("Bind: '" + definition.desc.name + "." + name + "' is named for JSON and is not a property of the class");
+            }
+            getters.push_back(getter);
+        }
+        definition.json = std::move(getters);
+    }
+
+    const std::vector<const LuaFunction *> *LuaJsonProperties(const LuaClass &definition) {
+        if (!definition.json.empty()) {
+            return &definition.json;
+        }
+        for (const LuaBase &base : definition.bases) {
+            if (const auto *found = LuaJsonProperties(*base.definition)) {
+                return found;
+            }
+        }
+        return nullptr;
+    }
+
+    // Called as a function of its own, so that the getter finds its receiver where every thunk expects it.
+    void LuaPushProperty(lua_State *L, int index, const LuaFunction &getter) {
+        index = lua_absindex(L, index);
+        luaL_checkstack(L, 3, "cannot read a property");
+        lua_pushcfunction(L, ReadProperty);
+        lua_pushvalue(L, index);
+        PushPointer(L, &getter);
+        lua_call(L, 2, 1);
     }
 
     void LuaMaterialiseClass(lua_State *L, const LuaClass &definition, Side runtime) {

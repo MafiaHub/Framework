@@ -9,6 +9,7 @@
 #include "call.h"
 
 #include "../module.h"
+#include "../value_transfer.h"
 
 #include <core_modules.h>
 
@@ -52,6 +53,12 @@ namespace Framework::Scripting::Bind {
             return innermost;
         }
     } // namespace Detail
+
+    // Out of the header, which names TransferredValue without defining it.
+    Utils::Result<TransferredValue, std::string> Value::ToTransfer() const {
+        const Target target = Find();
+        return target.backend != nullptr ? target.backend->TransferOf(target.slot) : Utils::Result<TransferredValue, std::string>::Ok();
+    }
 
     void SetCallResourceManager(const void *runtime, ResourceManager *manager) {
         std::scoped_lock lock(ManagersMutex());

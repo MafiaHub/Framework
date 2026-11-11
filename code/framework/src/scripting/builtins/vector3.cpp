@@ -74,10 +74,13 @@ namespace Framework::Scripting::Builtins {
                 .Static("up", &Vector3::up, Doc("Creates the framework's positive-Y unit direction.").Returns("New Vector3(0, 1, 0)."))
                 .Static("forward", &Vector3::forward, Doc("Creates the framework's positive-Z unit direction.").Returns("New Vector3(0, 0, 1)."))
                 .Static("right", &Vector3::right, Doc("Creates the framework's positive-X unit direction.").Returns("New Vector3(1, 0, 0)."))
-                // JavaScript only, until Lua has JSON.
+                // What JSON.stringify asks a JavaScript object for. Lua writes the same object from JsonProperties.
                 .V8Hook([](v8pp::class_<Vector3> &cls, v8::Isolate *) {
                     cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ x: number; y: number; z: number }", {}, "Converts this vector to a plain object for JSON.stringify.", "Object containing the current components."));
-                }));
+                })
+                .JsonProperties({"x", "y", "z"})
+                // Crosses between runtimes as its glm value.
+                .Transfer(&Vector3::vec));
         return definition;
     }
 

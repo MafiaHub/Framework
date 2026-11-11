@@ -114,6 +114,10 @@ namespace Framework::Scripting::Bind {
             std::optional<LuaFunction> constructor;
             std::array<std::deque<LuaFunction>, kLuaMetaEventCount> metas;
             std::vector<LuaClassHook> hooks;
+            // The getters of the properties an object is written to JSON with, in order (Class::JsonProperties).
+            std::vector<const LuaFunction *> json;
+            // Registers the class as a host type of both transfers (Class::Transfer). Empty when it does not cross.
+            fu2::function<void() const> registerTransfer;
             void (*destroy)(void *object) = nullptr; // nullptr for a trivially destructible class
             char classTableKey            = 0;       // its address keys the class table in the registry
             size_t size                   = 0;       // of an object
@@ -132,6 +136,19 @@ namespace Framework::Scripting::Bind {
         // Functions added for one event are tried in the order they were added. Throws std::logic_error when the
         // function does not take as many operands as the operator has.
         void LuaAddMeta(LuaClass &definition, LuaMetaEvent event, LuaThunk thunk);
+
+        // Names the properties an object of the class is written to JSON with, in the order they are written. Throws
+        // std::logic_error when one is not a property of the class or of one of its bases, when there is none, and
+        // when the class has named them already.
+        void LuaSetJsonProperties(LuaClass &definition, const std::vector<std::string> &names);
+
+        // The getters of the properties an object of `definition` is written to JSON with: those the class names,
+        // or else those of the first of its bases that names some. nullptr when none does.
+        const std::vector<const LuaFunction *> *LuaJsonProperties(const LuaClass &definition);
+
+        // Pushes what the property behind `getter` reads on the object at `index`, as indexing the object does.
+        // Raises a Lua error, carrying what() when the getter threw.
+        void LuaPushProperty(lua_State *L, int index, const LuaFunction &getter);
 
         // Creates the metatable and the class table of `definition` in the state of `L`, after those of its bases,
         // with the members that exist in a runtime of side `runtime`. Does nothing in a state that has them.

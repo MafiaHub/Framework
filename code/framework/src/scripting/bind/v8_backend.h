@@ -132,6 +132,15 @@ namespace Framework::Scripting::Bind {
         template <typename T>
         inline constexpr V8ClassAccess V8AccessOf = {&V8Has<T>, &V8Unwrap<T>, &V8Adopt<T>};
 
+        // Makes the class of T exist in the isolate, when T says how: a builtin materialises its class the first
+        // time its GetClass(isolate) is asked for it. A class without one is there or is not.
+        template <typename T>
+        void V8EnsureClass(v8::Isolate *isolate) {
+            if constexpr (requires { T::GetClass(isolate); }) {
+                T::GetClass(isolate);
+            }
+        }
+
         // What v8pp::metadata::docs(returns, {param(name, type, optional, description)...}, description,
         // returnsDescription) builds, from a description. A rest parameter is what rest_param(name, type,
         // description) is there.

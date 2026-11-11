@@ -73,10 +73,13 @@ namespace Framework::Scripting::Builtins {
                 // Static factory methods
                 .Static("zero", &Vector4::zero, Doc("Creates a zero vector.").Returns("New Vector4(0, 0, 0, 0)."))
                 .Static("one", &Vector4::one, Doc("Creates a vector whose components are one.").Returns("New Vector4(1, 1, 1, 1)."))
-                // JavaScript only, until Lua has JSON.
+                // What JSON.stringify asks a JavaScript object for. Lua writes the same object from JsonProperties.
                 .V8Hook([](v8pp::class_<Vector4> &cls, v8::Isolate *) {
                     cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ x: number; y: number; z: number; w: number }", {}, "Converts this vector to a plain object for JSON.stringify.", "Object containing the current components."));
-                }));
+                })
+                .JsonProperties({"x", "y", "z", "w"})
+                // Crosses between runtimes as its glm value.
+                .Transfer(&Vector4::vec));
         return definition;
     }
 

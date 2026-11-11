@@ -10,12 +10,18 @@
 
 #include "types.h"
 
+#include <utils/result.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace Framework::Scripting {
+    struct TransferredValue; // value_transfer.h
+} // namespace Framework::Scripting
 
 namespace Framework::Scripting::Bind {
     class Value;
@@ -63,13 +69,15 @@ namespace Framework::Scripting::Bind {
             virtual std::string StringOf(size_t slot) const             = 0;
             virtual std::string DisplayStringOf(size_t slot)            = 0;
             // The object in the value at `slot` seen as the class of `definition`, or nullptr.
-            virtual void *BoundOf(size_t slot, const LuaClass *definition) const       = 0;
-            virtual Value GetKey(size_t slot, std::string_view key)                    = 0;
-            virtual void SetKey(size_t slot, std::string_view key, const Value &value) = 0;
-            virtual std::vector<std::string> KeysOf(size_t slot)                       = 0;
-            virtual size_t LengthOf(size_t slot) const                                 = 0;
-            virtual Value ElementAt(size_t slot, size_t zeroBased)                     = 0;
-            virtual void AppendTo(size_t slot, const Value &value)                     = 0;
+            virtual void *BoundOf(size_t slot, const LuaClass *definition) const         = 0;
+            virtual Value GetKey(size_t slot, std::string_view key)                      = 0;
+            virtual void SetKey(size_t slot, std::string_view key, const Value &value)   = 0;
+            virtual std::vector<std::string> KeysOf(size_t slot)                         = 0;
+            virtual size_t LengthOf(size_t slot) const                                   = 0;
+            virtual Value ElementAt(size_t slot, size_t zeroBased)                       = 0;
+            virtual void AppendTo(size_t slot, const Value &value)                       = 0;
+            virtual Utils::Result<TransferredValue, std::string> TransferOf(size_t slot) = 0;
+            virtual Utils::Result<std::string, std::string> JsonOf(size_t slot)          = 0;
 
           protected:
             // Becomes the innermost call of the thread, until it is destroyed.
@@ -238,6 +246,30 @@ namespace Framework::Scripting::Bind {
             if (target.backend != nullptr) {
                 target.backend->AppendTo(target.slot, value);
             }
+        }
+
+        // A copy of the value that can be rebuilt in another runtime, of either language, with Call::FromTransfer:
+        // what an event argument, an export value or a call result crosses as. ValueTransfer copies a JavaScript
+        // value and LuaTransfer a Lua one; value_transfer.h, which a caller includes for the type, and
+        // lua_transfer.h say what each kind of value becomes and what is refused. A function is refused.
+        //
+        // The error says where in the value the copy gave up. Nothing is thrown to the script: the function
+        // decides what a value that cannot cross means. Nil, and so a handle read outside its call, copies as
+        // undefined.
+        Utils::Result<TransferredValue, std::string> ToTransfer() const;
+
+        // The value as JSON text: what JSON.stringify gives in JavaScript, where a toJSON is asked, and what
+        // LuaJson::Encode writes in Lua (lua_json.h), which is the same text for the same data. Nil is null in both
+        // languages.
+        //
+        // The error says why a value has no JSON form: a function, a value that refers back to itself, a Lua table
+        // with a key JSON has no form for. In JavaScript whatever was thrown meanwhile, by JSON.stringify or by the
+        // toJSON of the script, is also kept as the error of the call, like what any other read of an object
+        // throws. The first throw wins, so a function that throws the error it was given leaves a JavaScript caller
+        // its own exception and gives a Lua caller the text.
+        Utils::Result<std::string, std::string> ToJson() const {
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->JsonOf(target.slot) : Utils::Result<std::string, std::string>::Ok("null");
         }
 
       private:

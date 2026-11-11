@@ -10,7 +10,9 @@
 #include "lua_class.h"
 #include "value.h"
 
+#include "../lua/lua_json.h"
 #include "../lua/lua_runtime.h"
+#include "../lua/lua_transfer.h"
 
 #include <lauxlib.h>
 #include <lua.h>
@@ -149,6 +151,23 @@ namespace Framework::Scripting::Bind {
             Value NewFunction(NativeFunction function) override {
                 PushLuaFunction(_L, std::move(function));
                 return Top();
+            }
+
+            Value FromTransfer(const TransferredValue &value) override {
+                std::string error;
+                if (!LuaTransfer::Rebuild(_L, value, error)) {
+                    ThrowError(std::move(error));
+                    return At(0);
+                }
+                return Top();
+            }
+
+            Utils::Result<Value, std::string> ParseJson(std::string_view text) override {
+                std::string error;
+                if (!LuaJson::Decode(_L, text, error)) {
+                    return Utils::Result<Value, std::string>::Err(std::move(error));
+                }
+                return Utils::Result<Value, std::string>::Ok(Top());
             }
 
             void Return(Value value) override {
@@ -346,6 +365,16 @@ namespace Framework::Scripting::Bind {
                 Reserve(1);
                 Push(Slot(value));
                 lua_rawseti(_L, Index(slot), static_cast<lua_Integer>(lua_rawlen(_L, Index(slot))) + 1);
+            }
+
+            Utils::Result<TransferredValue, std::string> TransferOf(size_t slot) override {
+                const int index = Index(slot);
+                return index != 0 ? LuaTransfer::Copy(_L, index) : Utils::Result<TransferredValue, std::string>::Ok();
+            }
+
+            Utils::Result<std::string, std::string> JsonOf(size_t slot) override {
+                const int index = Index(slot);
+                return index != 0 ? LuaJson::Encode(_L, index) : Utils::Result<std::string, std::string>::Ok("null");
             }
 
           protected:

@@ -14,6 +14,7 @@
 #include "../engine_helpers.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
+#include "../value_transfer.h"
 
 #include <v8.h>
 #include <v8pp/class.hpp>
@@ -148,6 +149,43 @@ namespace Framework::Scripting::Bind {
                 return Keep(made);
             }
 
+            // What the rebuild throws, an unknown host type or what the constructor of a handle threw, is the
+            // error of the call.
+            Value FromTransfer(const TransferredValue &value) override {
+                if (!CanRun()) {
+                    return At(0);
+                }
+                v8::TryCatch tryCatch(_isolate);
+                v8::Local<v8::Value> rebuilt;
+                if (!ValueTransfer::Rebuild(_isolate, _context, value).ToLocal(&rebuilt)) {
+                    Caught(tryCatch);
+                    return At(0);
+                }
+                return Keep(rebuilt);
+            }
+
+            // The SyntaxError of JSON.parse is told to the function and not thrown.
+            Utils::Result<Value, std::string> ParseJson(std::string_view text) override {
+                using Result = Utils::Result<Value, std::string>;
+                v8::Local<v8::String> source;
+                if (!CanRun()) {
+                    return Result::Err(kTerminating);
+                }
+                if (!NewString(text).ToLocal(&source)) {
+                    return Result::Err("the text is too long for JavaScript");
+                }
+                v8::TryCatch tryCatch(_isolate);
+                v8::Local<v8::Value> parsed;
+                if (!v8::JSON::Parse(_context, source).ToLocal(&parsed)) {
+                    if (tryCatch.HasTerminated()) {
+                        _thrown = Thrown::Terminated;
+                        return Result::Err(kTerminating);
+                    }
+                    return Result::Err(Spell(tryCatch.Exception(), "the text is not JSON"));
+                }
+                return Result::Ok(Keep(parsed));
+            }
+
             void Return(Value value) override {
                 _result   = Local(Slot(value));
                 _returned = true;
@@ -229,21 +267,8 @@ namespace Framework::Scripting::Bind {
                 return value->IsString() ? ToUtf8(_isolate, value) : std::string();
             }
 
-            // What a toString throws is not the function's to pass on: the value just has no spelling. A
-            // termination is another matter, and v8::String::Utf8Value alone would swallow it.
             std::string DisplayStringOf(size_t slot) override {
-                if (!CanRun()) {
-                    return {};
-                }
-                v8::TryCatch tryCatch(_isolate);
-                v8::Local<v8::String> spelled;
-                if (!Local(slot)->ToString(_context).ToLocal(&spelled)) {
-                    if (tryCatch.HasTerminated()) {
-                        _thrown = Thrown::Terminated;
-                    }
-                    return {};
-                }
-                return ToUtf8(_isolate, spelled);
+                return Spell(Local(slot));
             }
 
             void *BoundOf(size_t slot, const Detail::LuaClass *definition) const override {
@@ -326,6 +351,49 @@ namespace Framework::Scripting::Bind {
                 }
             }
 
+            // A getter that throws fails the copy, which keeps what it threw in its error. The script is not
+            // thrown at.
+            Utils::Result<TransferredValue, std::string> TransferOf(size_t slot) override {
+                using Result = Utils::Result<TransferredValue, std::string>;
+                if (!CanRun()) {
+                    return Result::Err(kTerminating);
+                }
+                Result copied = ValueTransfer::Copy(_isolate, _context, Local(slot));
+                if (!copied && _isolate->IsExecutionTerminating()) {
+                    _thrown = Thrown::Terminated;
+                }
+                return copied;
+            }
+
+            Utils::Result<std::string, std::string> JsonOf(size_t slot) override {
+                using Result                     = Utils::Result<std::string, std::string>;
+                const v8::Local<v8::Value> value = Local(slot);
+                if (value->IsNullOrUndefined()) {
+                    return Result::Ok("null");
+                }
+                if (!CanRun()) {
+                    return Result::Err(kTerminating);
+                }
+                v8::TryCatch tryCatch(_isolate);
+                v8::Local<v8::String> json;
+                if (!v8::JSON::Stringify(_context, value).ToLocal(&json)) {
+                    if (tryCatch.HasTerminated()) {
+                        _thrown = Thrown::Terminated;
+                        return Result::Err(kTerminating);
+                    }
+                    const v8::Local<v8::Value> exception = tryCatch.Exception();
+                    Caught(tryCatch);
+                    return Result::Err(Spell(exception, kNoJsonForm));
+                }
+                // JSON.stringify gives undefined, which V8 spells here, for a function, a symbol and an object
+                // whose toJSON gives one of them. A string would be in quotes.
+                std::string text = ToUtf8(_isolate, json);
+                if (text == "undefined") {
+                    return Result::Err(kNoJsonForm);
+                }
+                return Result::Ok(std::move(text));
+            }
+
           protected:
             void *SelfAs(const Detail::LuaClass *definition) const override {
                 return _method ? Unwrap(_info.This(), definition) : nullptr;
@@ -357,8 +425,34 @@ namespace Framework::Scripting::Bind {
                 Terminated // the isolate is being terminated, and throws that itself
             };
 
+            static constexpr const char *kTerminating = "the runtime is being terminated";
+            static constexpr const char *kNoJsonForm  = "a value of this kind has no JSON form";
+
             Value At(size_t slot) const {
                 return Detail::ValueAccess::Make(*this, slot);
+            }
+
+            // String(value). What a toString throws is not the function's to pass on: the value just has no
+            // spelling. A termination is another matter, and v8::String::Utf8Value alone would swallow it.
+            std::string Spell(v8::Local<v8::Value> value) {
+                if (value.IsEmpty() || !CanRun()) {
+                    return {};
+                }
+                v8::TryCatch tryCatch(_isolate);
+                v8::Local<v8::String> spelled;
+                if (!value->ToString(_context).ToLocal(&spelled)) {
+                    if (tryCatch.HasTerminated()) {
+                        _thrown = Thrown::Terminated;
+                    }
+                    return {};
+                }
+                return ToUtf8(_isolate, spelled);
+            }
+
+            // What was thrown, spelled, or `fallback` when it has no spelling.
+            std::string Spell(v8::Local<v8::Value> exception, const char *fallback) {
+                std::string text = Spell(exception);
+                return text.empty() ? std::string(fallback) : text;
             }
 
             // undefined needs no slot.

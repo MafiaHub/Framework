@@ -101,10 +101,13 @@ namespace Framework::Scripting::Builtins {
                 .Static("identity", &Quaternion::identity, Doc("Creates the identity rotation.").Returns("New Quaternion(1, 0, 0, 0)."))
                 .Static("fromEuler", &Quaternion::fromEuler, Doc("Creates a rotation from Euler angles.").Param("pitch", "Pitch angle in radians.").Param("yaw", "Yaw angle in radians.").Param("roll", "Roll angle in radians.").Returns("New rotation quaternion."))
                 .Static("fromAxisAngle", &Quaternion::fromAxisAngle, Doc("Creates a rotation around an axis.").Param("axis", "Rotation axis; it is normalized internally.").Param("angle", "Rotation angle in radians.").Returns("New axis-angle rotation quaternion."))
-                // JavaScript only, until Lua has JSON.
+                // What JSON.stringify asks a JavaScript object for. Lua writes the same object from JsonProperties.
                 .V8Hook([](v8pp::class_<Quaternion> &cls, v8::Isolate *) {
                     cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ w: number; x: number; y: number; z: number }", {}, "Converts this quaternion to a plain object for JSON.stringify.", "Object containing the current components."));
                 })
+                .JsonProperties({"w", "x", "y", "z"})
+                // Crosses between runtimes as its glm value.
+                .Transfer(&Quaternion::quat)
                 // Lua operators. The product is a new quaternion and leaves its operands as they were.
                 .LuaMeta(LuaMetaEvent::Mul,
                     [](const Quaternion &left, const Quaternion &right) {
