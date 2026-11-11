@@ -300,6 +300,13 @@ namespace Framework::Scripting {
         Run(entry, 0, nullptr);
     }
 
+    std::optional<std::chrono::steady_clock::time_point> LuaScheduler::NextDue() const {
+        if (_stopped || _queue.empty()) {
+            return std::nullopt;
+        }
+        return _queue.begin()->first.first;
+    }
+
     size_t LuaScheduler::SuspendedCoroutines() const {
         return static_cast<size_t>(std::count_if(_coroutines.begin(), _coroutines.end(), [](const auto &coroutine) {
             return lua_status(coroutine.first) == LUA_YIELD;

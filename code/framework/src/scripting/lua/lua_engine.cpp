@@ -204,6 +204,20 @@ namespace Framework::Scripting {
         FinishShutdown();
     }
 
+    std::optional<std::chrono::steady_clock::time_point> LuaEngine::NextDue() const {
+        std::optional<std::chrono::steady_clock::time_point> earliest;
+        for (const auto &[name, runtime] : _runtimes) {
+            if (runtime->IsExecuting()) {
+                continue;
+            }
+            const auto due = runtime->Scheduler().NextDue();
+            if (due && (!earliest || *due < *earliest)) {
+                earliest = due;
+            }
+        }
+        return earliest;
+    }
+
     bool LuaEngine::CreateResourceRuntime(const std::string &resourceName) {
         if (!_initialized) {
             _lastError = "Engine not initialized";

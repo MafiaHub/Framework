@@ -119,7 +119,7 @@ namespace LuaEngineTest {
 
     // An initialised engine over resource directories, on a clock the test moves. Every runtime gets record(text),
     // destroy(resource), which destroys a runtime from inside a script, tick(ms), which ticks the engine from
-    // inside one, and shutdown().
+    // inside one, nextDue(), which is DueMs() from inside one, and shutdown().
     struct Scripted final {
         Files files;
         std::chrono::steady_clock::time_point start = std::chrono::steady_clock::time_point() + std::chrono::hours(1);
@@ -142,6 +142,9 @@ namespace LuaEngineTest {
                 lua_pushlightuserdata(L, this);
                 lua_pushcclosure(L, TickInside, 1);
                 lua_setglobal(L, "tick");
+                lua_pushlightuserdata(L, this);
+                lua_pushcclosure(L, NextDueInside, 1);
+                lua_setglobal(L, "nextDue");
                 AddShutdown(runtime, engine);
             });
             engine.AddRuntimeDisposingListener([this](LuaRuntime &runtime) {
@@ -167,6 +170,12 @@ namespace LuaEngineTest {
             return 0;
         }
 
+        static int NextDueInside(lua_State *L) {
+            auto *self = static_cast<Scripted *>(lua_touserdata(L, lua_upvalueindex(1)));
+            lua_pushinteger(L, self->DueMs());
+            return 1;
+        }
+
         // Creates the runtime of `resource`, with its directory as the root.
         bool Create(const std::string &resource) {
             engine.SetResourceRoot(resource, files.Root(resource));
@@ -176,6 +185,12 @@ namespace LuaEngineTest {
         // Ticks at `ms` after the start.
         void At(int ms) {
             engine.Tick(start + std::chrono::milliseconds(ms));
+        }
+
+        // When the engine says it next has something to run, in milliseconds after the start. -1 when it has nothing.
+        int DueMs() const {
+            const auto due = engine.NextDue();
+            return due ? static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(*due - start).count()) : -1;
         }
 
         // Writes `source` as a file of the resource and runs it. Empty when it ran, the error otherwise.
@@ -658,6 +673,45 @@ MODULE(lua_engine, {
         EQUALS(RecordedText(), "");
         scripted.engine.Tick();
         EQUALS(RecordedText(), "fired");
+    });
+
+    IT("tells when the first timer or sleep of any runtime is due", {
+        Scripted scripted;
+        EQUALS(scripted.DueMs(), -1);
+        EQUALS(scripted.Create("a"), true);
+        EQUALS(scripted.Create("b"), true);
+        scripted.At(0);
+        EQUALS(scripted.DueMs(), -1);
+        EQUALS(scripted.Run("a", "main.lua", "timeout = setTimeout(function() end, 50)"), "");
+        EQUALS(scripted.DueMs(), 50);
+        EQUALS(scripted.Run("b", "main.lua", "interval = setInterval(function() end, 20)\nsleep(5)"), "");
+        EQUALS(scripted.DueMs(), 5);
+        scripted.At(5);
+        EQUALS(scripted.DueMs(), 20);
+        // An interval is due again a period after it was.
+        scripted.At(25);
+        EQUALS(scripted.DueMs(), 40);
+        EQUALS(scripted.Run("b", "next.lua", "clearInterval(interval)"), "");
+        EQUALS(scripted.DueMs(), 50);
+        scripted.At(50);
+        EQUALS(scripted.DueMs(), -1);
+    });
+
+    IT("leaves the timers of a runtime that is executing or going out of what is due next", {
+        Scripted scripted;
+        EQUALS(scripted.Create("a"), true);
+        EQUALS(scripted.Create("b"), true);
+        scripted.At(0);
+        EQUALS(scripted.Run("a", "main.lua", "setTimeout(function() end, 10)\nrecord('from a: ' .. nextDue())"), "");
+        EQUALS(scripted.Run("b", "main.lua", "setTimeout(function() end, 30)\nrecord('from b: ' .. nextDue())"), "");
+        EQUALS(RecordedText(), "from a: -1,from b: 10");
+        EQUALS(scripted.DueMs(), 10);
+
+        scripted.engine.DestroyResourceRuntime("a");
+        EQUALS(scripted.DueMs(), 30);
+        // Destroyed from inside its own file, it is still there, and fires nothing any more.
+        EQUALS(scripted.Run("b", "next.lua", "destroy('b')"), "");
+        EQUALS(scripted.DueMs(), -1);
     });
 
     IT("queues an error raised from a timer under its resource", {

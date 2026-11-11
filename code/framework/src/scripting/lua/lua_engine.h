@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -80,6 +81,11 @@ namespace Framework::Scripting {
         // that is executing further up the stack is left alone. The second form is given the time, for a test.
         void Tick() override;
         void Tick(std::chrono::steady_clock::time_point now);
+
+        // When Tick next has something to run: the earliest time a timer fires or a sleep ends in any runtime, on
+        // the clock Tick() reads. Nothing when none is pending. A runtime that is executing is left out, as Tick
+        // leaves it alone.
+        std::optional<std::chrono::steady_clock::time_point> NextDue() const;
 
         // Fails when the resource has a runtime already, when the state cannot be created, when the setup
         // callback fails, and when that callback destroys the runtime it is setting up ("resource runtime was

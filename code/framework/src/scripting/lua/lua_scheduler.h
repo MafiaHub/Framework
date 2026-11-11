@@ -118,6 +118,10 @@ namespace Framework::Scripting {
             return _timers.size();
         }
 
+        // When the first timer fires or the first sleep ends, on the clock Tick is given: the next Tick at or after
+        // it has something to run. Nothing when none is pending, or once the scheduler was stopped.
+        std::optional<std::chrono::steady_clock::time_point> NextDue() const;
+
         // Coroutines that wait for a Tick or a Resume.
         size_t SuspendedCoroutines() const;
 
