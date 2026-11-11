@@ -50,6 +50,7 @@ set(FRAMEWORK_SRC
     src/scripting/v8pp_glm.cpp
     src/scripting/bind/descriptors.cpp
     src/scripting/bind/lua_class.cpp
+    src/scripting/bind/lua_glm.cpp
     src/scripting/builtins/builtins.cpp
     src/scripting/builtins/vector2.cpp
     src/scripting/builtins/vector3.cpp

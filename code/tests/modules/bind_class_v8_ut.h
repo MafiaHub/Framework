@@ -256,8 +256,8 @@ namespace BindClassV8Test {
         return definition;
     }
 
-    // Compass bound for V8 alone, member by member as Class<T> does: Class<T> binds for Lua as well, and Lua has
-    // no converter for the glm types yet.
+    // Compass bound for V8 alone, member by member as Class<T> does. value_types_parity binds glm values through
+    // Class<T>, for both languages.
     inline std::unique_ptr<v8pp::class_<Compass>> MaterialiseCompass(v8::Isolate *isolate, v8pp::metadata::registry &catalog) {
         using Bind::Doc;
         using Bind::Side;

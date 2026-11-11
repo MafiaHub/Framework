@@ -15,13 +15,79 @@
 #include "scripting/node_engine.h"
 #include "scripting/scripting_catalog.h"
 
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 #include <cmath>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
 
 namespace ValueTypesParityTest {
     namespace Bind = Framework::Scripting::Bind;
+
+    // Takes and returns glm values, which a script sees as the value types in both languages.
+    class Anchor final {
+      public:
+        glm::vec2 flip(const glm::vec2 &value) const {
+            return {value.y, value.x};
+        }
+
+        glm::vec3 shift(const glm::vec3 &by) const {
+            return _position + by;
+        }
+
+        glm::vec4 scale(const glm::vec4 &value, float factor) const {
+            return value * factor;
+        }
+
+        glm::quat turn(const glm::quat &by) const {
+            return _rotation * by;
+        }
+
+        glm::vec3 position() const {
+            return _position;
+        }
+
+        void setPosition(const glm::vec3 &position) {
+            _position = position;
+        }
+
+        glm::quat rotation() const {
+            return _rotation;
+        }
+
+        void setRotation(const glm::quat &rotation) {
+            _rotation = rotation;
+        }
+
+        static glm::vec3 origin() {
+            return glm::vec3(0.0f);
+        }
+
+      private:
+        glm::vec3 _position {0.0f};
+        glm::quat _rotation {1.0f, 0.0f, 0.0f, 0.0f};
+    };
+} // namespace ValueTypesParityTest
+
+FW_SCRIPT_CLASS(ValueTypesParityTest::Anchor, "Anchor");
+
+namespace ValueTypesParityTest {
+    inline const Bind::Class<Anchor> &AnchorDefinition() {
+        using Bind::Doc;
+        static const auto definition = Bind::Class<Anchor>("Anchor", "Holds a position and a rotation.")
+                                           .Constructor<>(Doc("Creates an anchor at the origin."))
+                                           .Method("flip", &Anchor::flip, Doc("Swaps the components.").Param("value", "Vector to flip.").Returns("The flipped vector."))
+                                           .Method("shift", &Anchor::shift, Doc("Offsets the position.").Param("by", "Offset to add.").Returns("The offset position."))
+                                           .Method("scale", &Anchor::scale, Doc("Scales a vector.").Param("value", "Vector to scale.").Param("factor", "Multiplier.").Returns("The scaled vector."))
+                                           .Method("turn", &Anchor::turn, Doc("Composes the rotation.").Param("by", "Rotation applied first.").Returns("The composed rotation."))
+                                           .Property("position", &Anchor::position, &Anchor::setPosition, "Where the anchor is.")
+                                           .Property("rotation", &Anchor::rotation, &Anchor::setRotation, "How the anchor is turned.")
+                                           .Static("origin", &Anchor::origin, Doc("Reads the origin.").Returns("The zero vector."));
+        return definition;
+    }
 
     // What an expression gives in both languages: a number, compared within 1e-5, or a text, compared exactly. A
     // boolean is the text "true" or "false".
@@ -56,9 +122,11 @@ namespace ValueTypesParityTest {
         return std::abs(left - right) <= 1e-5;
     }
 
-    // A JavaScript runtime and a Lua state, each with the value types as globals.
+    // A JavaScript runtime and a Lua state, each with the value types and Anchor as globals.
     class Runtimes final {
       public:
+        static constexpr const char *kCatalogName = "value_types_parity";
+
         Runtimes() {
             using namespace Framework::Scripting;
             _started = _engine.Init() == ScriptingError::SCRIPTING_NONE;
@@ -67,14 +135,26 @@ namespace ValueTypesParityTest {
             }
 
             Enter([this](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+                // A catalog of its own: Anchor is no builtin, and the default catalog is shared by every test.
+                SetScriptingCatalog(isolate, kCatalogName);
                 v8::Local<v8::Object> global = context->Global();
                 Builtins::RegisterValueTypes(isolate, global);
+                _anchor = AnchorDefinition().MaterialiseV8(isolate, GetScriptingCatalog(isolate), Bind::Side::Server);
+                global->Set(context, v8pp::to_v8(isolate, "Anchor"), _anchor->js_function_template()->GetFunction(context).ToLocalChecked()).Check();
             });
 
             Builtins::RegisterValueTypesLua(_lua.L, Bind::Side::Server);
+            AnchorDefinition().MaterialiseLua(_lua.L, Bind::Side::Server);
+            lua_pushglobaltable(_lua.L);
+            AnchorDefinition().PublishLua(_lua.L, -1);
+            lua_pop(_lua.L, 1);
         }
 
         ~Runtimes() {
+            if (_started) {
+                _anchor.reset();
+                Framework::Scripting::ClearScriptingCatalog(_engine.GetIsolate());
+            }
             _engine.Shutdown();
         }
 
@@ -160,6 +240,7 @@ namespace ValueTypesParityTest {
 
         Framework::Scripting::NodeEngine _engine {{}};
         LuaTest::State _lua;
+        std::unique_ptr<v8pp::class_<Anchor>> _anchor;
         bool _started = false;
     };
     inline std::vector<Case> Vector2Cases() {
@@ -330,10 +411,28 @@ namespace ValueTypesParityTest {
             {"Color.transparent().toString()", "Color.transparent():toString()", "Color(0, 0, 0, 0)"},
         };
     }
+
+    // glm parameters, return values and properties of a bound class.
+    inline std::vector<Case> GlmCases() {
+        return {
+            {"String(new Anchor().flip(new Vector2(1, 2)))", "tostring(Anchor.new():flip(Vector2.new(1, 2)))", "Vector2(2, 1)"},
+            {"String(new Anchor().shift(new Vector3(1, 2, 3)))", "tostring(Anchor.new():shift(Vector3.new(1, 2, 3)))", "Vector3(1, 2, 3)"},
+            {"String(new Anchor().scale(new Vector4(1, 2, 3, 4), 2))", "tostring(Anchor.new():scale(Vector4.new(1, 2, 3, 4), 2))", "Vector4(2, 4, 6, 8)"},
+            {"String(new Anchor().turn(new Quaternion(0, 0, 1, 0)))", "tostring(Anchor.new():turn(Quaternion.new(0, 0, 1, 0)))", "Quaternion(0, 0, 1, 0)"},
+            {"String(new Anchor().position)", "tostring(Anchor.new().position)", "Vector3(0, 0, 0)"},
+            {"{ const a = new Anchor(); a.position = new Vector3(1, 2, 3); String(a.shift(new Vector3(1, 1, 1))) }", "local a = Anchor.new(); a.position = Vector3.new(1, 2, 3); return tostring(a:shift(Vector3.new(1, 1, 1)))", "Vector3(2, 3, 4)"},
+            {"String(new Anchor().rotation)", "tostring(Anchor.new().rotation)", "Quaternion(1, 0, 0, 0)"},
+            {"{ const a = new Anchor(); a.rotation = new Quaternion(0, 1, 0, 0); a.rotation.x }", "local a = Anchor.new(); a.rotation = Quaternion.new(0, 1, 0, 0); return a.rotation.x", 1},
+            {"String(Anchor.origin())", "tostring(Anchor.origin())", "Vector3(0, 0, 0)"},
+            // A value a method returns is a value type like any other.
+            {"Anchor.origin().add(new Vector3(1, 2, 3)).length", "Anchor.origin():add(Vector3.new(1, 2, 3)).length", std::sqrt(14.0)},
+        };
+    }
 } // namespace ValueTypesParityTest
 
 MODULE(value_types_parity, {
     using namespace Framework::Scripting;
+    using ValueTypesParityTest::AnchorDefinition;
     using ValueTypesParityTest::Runtimes;
 
     IT("gives Vector2 the same behaviour in JavaScript and in Lua", {
@@ -426,6 +525,73 @@ MODULE(value_types_parity, {
         EQUALS(runtimes.Js("Color.fromHex(5).toString()"), "Color(1, 1, 1, 1)");
         EQUALS(runtimes.Js("new Color(1, 0, 0).set(1, 1)"), "<threw> Error: Argument count does not match function definition. Expected 4 but got 2");
         EQUALS(runtimes.Js("new Color(1, 0, 0).toHex(1)"), "<threw> Error: expected Optional, typeof=number");
+    });
+
+    IT("passes glm values as the value types in both languages", {
+        Runtimes runtimes;
+        EQUALS(runtimes.Started(), true);
+        const std::string mismatches = runtimes.Mismatches(ValueTypesParityTest::GlmCases());
+        EQUALS(mismatches, "");
+
+        const Bind::ClassDesc &anchor = AnchorDefinition().Describe();
+        EQUALS(Bind::ToTypeScript(anchor.functions[0].params[0].type), "Vector2");
+        EQUALS(Bind::ToLuaAnnotation(anchor.functions[1].returns), "Vector3");
+        EQUALS(Bind::ToLuaAnnotation(anchor.functions[2].params[0].type), "Vector4");
+        EQUALS(Bind::ToTypeScript(anchor.properties[1].type), "Quaternion");
+
+        // JavaScript takes any object with the components. Lua takes the value type only.
+        EQUALS(runtimes.Js("String(new Anchor().shift({ x: 1, y: 2, z: 3 }))"), "Vector3(1, 2, 3)");
+        EQUALS(LuaTest::Eval(runtimes.Lua(), "Anchor.new():shift({ x = 1, y = 2, z = 3 })"), "<error> eval:1: bad argument #1 to 'Anchor:shift' (Vector3 expected, got table)");
+        EQUALS(LuaTest::Eval(runtimes.Lua(), "Anchor.new():shift(Vector4.new(1, 2, 3, 4))"), "<error> eval:1: bad argument #1 to 'Anchor:shift' (Vector3 expected, got Vector4)");
+        EQUALS(LuaTest::Eval(runtimes.Lua(), "Anchor.new():turn(Vector4.new(1, 2, 3, 4))"), "<error> eval:1: bad argument #1 to 'Anchor:turn' (Quaternion expected, got Vector4)");
+        EQUALS(LuaTest::Eval(runtimes.Lua(), "local a = Anchor.new(); a.position = 5"), "<error> eval:1: bad argument #1 to 'Anchor.position' (Vector3 expected, got number)");
+    });
+
+    IT("converts glm values on the Lua stack through the value types", {
+        LuaTest::State state;
+        lua_State *L = state.L;
+        Builtins::RegisterValueTypesLua(L, Bind::Side::Server);
+
+        Bind::LuaConvert<glm::vec2>::Push(L, glm::vec2(1.0f, 2.0f));
+        Bind::LuaConvert<glm::vec3>::Push(L, glm::vec3(1.0f, 2.0f, 3.0f));
+        Bind::LuaConvert<glm::vec4>::Push(L, glm::vec4(1.0f, 2.0f, 3.0f, 4.0f));
+        Bind::LuaConvert<glm::quat>::Push(L, glm::quat(1.0f, 2.0f, 3.0f, 4.0f));
+        EQUALS(lua_gettop(L), 4);
+
+        STREQUALS(Bind::LuaTypeNameAt(L, 1), "Vector2");
+        STREQUALS(Bind::LuaTypeNameAt(L, 2), "Vector3");
+        STREQUALS(Bind::LuaTypeNameAt(L, 3), "Vector4");
+        STREQUALS(Bind::LuaTypeNameAt(L, 4), "Quaternion");
+
+        EQUALS(Bind::LuaConvert<glm::vec2>::Is(L, 1), true);
+        EQUALS(Bind::LuaConvert<glm::vec3>::Is(L, 2), true);
+        EQUALS(Bind::LuaConvert<glm::vec4>::Is(L, 3), true);
+        EQUALS(Bind::LuaConvert<glm::quat>::Is(L, 4), true);
+        EQUALS(Bind::LuaConvert<glm::vec2>::Get(L, 1) == glm::vec2(1.0f, 2.0f), true);
+        EQUALS(Bind::LuaConvert<glm::vec3>::Get(L, 2) == glm::vec3(1.0f, 2.0f, 3.0f), true);
+        EQUALS(Bind::LuaConvert<glm::vec4>::Get(L, 3) == glm::vec4(1.0f, 2.0f, 3.0f, 4.0f), true);
+        EQUALS(Bind::LuaConvert<glm::quat>::Get(L, 4) == glm::quat(1.0f, 2.0f, 3.0f, 4.0f), true);
+
+        // A value type is not another one, and a Color is not the Vector4 it holds.
+        EQUALS(Bind::LuaConvert<glm::vec3>::Is(L, 1), false);
+        EQUALS(Bind::LuaConvert<glm::vec4>::Is(L, 4), false);
+        EQUALS(Bind::LuaConvert<glm::quat>::Is(L, 3), false);
+        Bind::LuaConvert<Builtins::Color>::Push(L, Builtins::Color(1.0f, 0.0f, 0.0f));
+        EQUALS(Bind::LuaConvert<glm::vec4>::Is(L, -1), false);
+
+        // Nor is a table with the components, a number or nothing.
+        lua_newtable(L);
+        lua_pushnumber(L, 1.0);
+        lua_setfield(L, -2, "x");
+        EQUALS(Bind::LuaConvert<glm::vec3>::Is(L, -1), false);
+        lua_pushnumber(L, 1.0);
+        EQUALS(Bind::LuaConvert<glm::vec2>::Is(L, -1), false);
+        EQUALS(Bind::LuaConvert<glm::quat>::Is(L, 20), false);
+
+        STREQUALS(Bind::LuaConvert<glm::vec2>::Expected(), "Vector2");
+        STREQUALS(Bind::LuaConvert<glm::vec3>::Expected(), "Vector3");
+        STREQUALS(Bind::LuaConvert<glm::vec4>::Expected(), "Vector4");
+        STREQUALS(Bind::LuaConvert<glm::quat>::Expected(), "Quaternion");
     });
 
     IT("adds operators to the vectors in Lua, each giving a new value", {

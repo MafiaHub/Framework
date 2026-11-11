@@ -12,6 +12,7 @@
 #include "doc.h"
 #include "lua_class.h"
 #include "lua_convert.h"
+#include "lua_glm.h"
 #include "types.h"
 #include "v8_backend.h"
 
