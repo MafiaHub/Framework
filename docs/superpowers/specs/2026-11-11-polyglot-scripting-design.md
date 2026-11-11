@@ -231,6 +231,17 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
 - **Scheduler** (C++): every script file, handler and timer callback runs in its own coroutine. Globals:
   `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` (as JavaScript), plus Lua-only `sleep(ms)`
   and `spawn(fn, ...)`. Timers die with the state.
+  - Each stretch a coroutine runs, from its start or a resume to its end or its next wait, is one entry
+    with its own deadline. A coroutine that fails tells whoever waits on it, or else the resource's error
+    handler, never both.
+  - A script waits only in a coroutine the scheduler started. `sleep` in a coroutine the script created
+    itself raises, as it does where Lua cannot yield (under `table.sort`, in `__tostring`). To a script
+    the coroutine it runs in is the main thread of plain Lua: `coroutine.yield()` with no coroutine of
+    its own around it ends it with `attempt to yield from outside a coroutine`.
+  - Time is what the host passes to `Tick`. A tick fires what was due when it started, in due order, so
+    a timer armed by a callback waits for the next tick. An interval is armed again from the time it was
+    due, and fires once per tick until it has caught up. At most 10 000 timers per state, as in the V8
+    engine; one more raises. At most 64 entries nested in one another (a spawned function that spawns).
 - The Lua engine holds no V8. A server running only Lua resources executes no JavaScript for them.
 
 ## 3. Resources
