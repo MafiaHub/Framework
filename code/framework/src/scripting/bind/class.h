@@ -294,7 +294,7 @@ namespace Framework::Scripting::Bind {
 
             _record->bases.push_back({base->_record.get(), &Upcast<Base>});
             _record->desc.bases.push_back(base->Describe().name);
-            _v8->bases.push_back(&V8Inherit<Base>);
+            _v8->bases.push_back(&Detail::V8Inherit<T, Base>);
             return *this;
         }
 
@@ -305,8 +305,9 @@ namespace Framework::Scripting::Bind {
             return *this;
         }
 
-        // Declares the constructor T(Args...), reached as Name.new(...) and Name(...) in Lua and as new Name(...) in
-        // JavaScript. A class without one cannot be constructed by a script: in Lua both forms raise. Throws
+        // Declares the constructor T(Args...), reached as Name.new(...) and Name(...) in Lua and as new Name(...)
+        // and Name(...) in JavaScript. A trailing std::optional argument may be omitted, in both languages. A class
+        // without a constructor cannot be constructed by a script: every one of these forms raises. Throws
         // std::logic_error when the class already has a constructor.
         template <typename... Args>
         Class &Constructor(Doc doc) {
@@ -447,11 +448,6 @@ namespace Framework::Scripting::Bind {
         template <typename Base>
         static void *Upcast(void *object) {
             return static_cast<Base *>(static_cast<T *>(object));
-        }
-
-        template <typename Base>
-        static void V8Inherit(v8pp::class_<T> &cls) {
-            cls.template inherit<Base>();
         }
 
         // Described under its qualified name, so that a Doc that disagrees with the signature is reported as

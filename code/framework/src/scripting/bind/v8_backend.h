@@ -12,6 +12,8 @@
 #include "doc.h"
 #include "types.h"
 
+#include "../v8pp_glm.h"
+
 #include <function2/function2.hpp>
 #include <v8.h>
 #include <v8pp/class.hpp>
@@ -26,6 +28,28 @@
 #include <utility>
 #include <vector>
 
+// JavaScript and Lua differences
+//
+// JavaScript gets a class through v8pp, unchanged, so that a binding ported to a definition behaves as it did. In
+// four places that is not what the Lua backend does with the same definition:
+//
+// 1. A method that returns a reference or a pointer to another bound object, not its receiver. JavaScript gets
+//    the object that already wraps it (`c.pick(other) === other`); Lua gets a copy.
+// 2. A method of a base that returns a reference to its receiver, called on an object of a derived class whose
+//    base part does not lie at its own address (a base that is not the first one). v8pp finds a wrapper by
+//    address, finds none and returns a copy typed as the base, so the rest of a chain works on the copy
+//    (`derived.add(1).add(1)` adds 1 to `derived`). Lua returns the receiver. With the base first, as in a single
+//    inheritance, both return the receiver.
+// 3. A parameter that is a pointer to a bound class. JavaScript passes nullptr for anything that is not such an
+//    object, a number or null alike, so the function has to expect it; Lua refuses the call. A parameter that is
+//    a reference is refused by both.
+// 4. Errors. A wrong argument is reported in v8pp's words (`Argument count does not match function definition.
+//    Expected 1 but got 0`, `expected Number, typeof=string`), which do not name the function; Lua's name it
+//    (`bad argument #1 to 'Counter:add' (integer expected, got string)`).
+//
+// Besides, v8pp cannot return an object of a class that cannot be copied, by value or by reference: a class with
+// such a member materialises into Lua only (V8CanReturn).
+
 namespace Framework::Scripting::Bind {
     // What V8 needs of a bound class: Class<T> fills a V8Class, and materialising it builds the v8pp class a
     // hand-written binding would, with the same records in the catalog.
@@ -35,7 +59,12 @@ namespace Framework::Scripting::Bind {
         inline v8pp::metadata::function_options V8FunctionOptions(const FunctionDesc &desc) {
             v8pp::metadata::function_options options = v8pp::metadata::docs(ToTypeScript(desc.returns), {}, desc.description, desc.returnsDescription);
             for (const ParamDesc &param : desc.params) {
-                options.explicit_signature->parameters.push_back({param.name, {ToTypeScript(param.type), {}, param.optional}, param.description, false});
+                v8pp::metadata::parameter documented;
+                documented.name                = param.name;
+                documented.value_type.name     = ToTypeScript(param.type);
+                documented.value_type.optional = param.optional;
+                documented.description         = param.description;
+                options.explicit_signature->parameters.push_back(std::move(documented));
             }
             return options;
         }
@@ -43,7 +72,12 @@ namespace Framework::Scripting::Bind {
         // v8pp::metadata::property_docs(type, description) for a property with a setter, and the read-only form of
         // it for one without.
         inline v8pp::metadata::property_options V8PropertyOptions(const PropertyDesc &desc) {
-            return {desc.description, ToTypeScript(desc.type), desc.readonly, desc.isStatic};
+            v8pp::metadata::property_options options;
+            options.description = desc.description;
+            options.type        = ToTypeScript(desc.type);
+            options.readonly    = desc.readonly;
+            options.static_     = desc.isStatic;
+            return options;
         }
 
         // Whether v8pp can hand a value of type R to JavaScript. It copies an object it is given by value or by
@@ -110,12 +144,25 @@ namespace Framework::Scripting::Bind {
             std::vector<fu2::function<void(v8pp::class_<T> &, v8::Isolate *) const>> hooks;
         };
 
+        template <typename T, typename Base>
+        void V8Inherit(v8pp::class_<T> &cls) {
+            cls.template inherit<Base>();
+        }
+
         // Declares the constructor T(Args...) with its documentation; `factory` builds the object when there is one.
+        // Otherwise the arguments are converted here and not by the factory v8pp makes: that one takes them as
+        // Args &&, in which v8pp no longer sees a std::optional, so a trailing one could not be omitted.
         template <typename T, typename... Args>
         auto V8ConstructorOf(v8pp::metadata::function_options options) {
             return [options = std::move(options)](v8pp::class_<T> &cls, const typename V8Class<T>::Factory &factory) {
                 if (factory.empty()) {
-                    cls.template ctor<Args...>(options);
+                    cls.template ctor<Args...>(options, [](const v8::FunctionCallbackInfo<v8::Value> &info) -> T * {
+                        return v8pp::detail::call_from_v8<v8pp::raw_ptr_traits>(
+                            [](Args... args) -> T * {
+                                return new T(std::forward<Args>(args)...);
+                            },
+                            info);
+                    });
                 }
                 else {
                     cls.template ctor<Args...>(options, factory);

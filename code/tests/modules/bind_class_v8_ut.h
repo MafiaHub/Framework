@@ -13,13 +13,16 @@
 
 #include "scripting/bind/class.h"
 #include "scripting/builtins/builtins.h"
+#include "scripting/builtins/vector3.h"
 #include "scripting/class_cache.h"
 #include "scripting/node_engine.h"
 #include "scripting/scripting_catalog.h"
 
+#include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -83,6 +86,43 @@ namespace BindClassV8Test {
         }
     };
 
+    // Takes an argument a script may omit.
+    class Span final {
+      public:
+        explicit Span(int from, std::optional<int> to = std::nullopt): _from(from), _to(to.value_or(from)) {}
+
+        int length() const {
+            return _to - _from;
+        }
+
+      private:
+        int _from = 0;
+        int _to   = 0;
+    };
+
+    // Takes and returns glm values, which a script sees as the builtin vector classes.
+    class Compass final {
+      public:
+        glm::vec3 shift(const glm::vec3 &by) const {
+            return _heading + by;
+        }
+
+        glm::vec3 heading() const {
+            return _heading;
+        }
+
+        void setHeading(glm::vec3 heading) {
+            _heading = heading;
+        }
+
+        static glm::vec3 north() {
+            return {0.0f, 1.0f, 0.0f};
+        }
+
+      private:
+        glm::vec3 _heading {0.0f};
+    };
+
     struct Bare final {};
 
     struct Lenient final {
@@ -92,6 +132,8 @@ namespace BindClassV8Test {
 
 FW_SCRIPT_CLASS(BindClassV8Test::Gauge, "Gauge");
 FW_SCRIPT_CLASS(BindClassV8Test::Dial, "Dial");
+FW_SCRIPT_CLASS(BindClassV8Test::Span, "Span");
+FW_SCRIPT_CLASS(BindClassV8Test::Compass, "Compass");
 FW_SCRIPT_CLASS(BindClassV8Test::Bare, "Bare");
 FW_SCRIPT_CLASS(BindClassV8Test::Lenient, "Lenient");
 
@@ -200,6 +242,46 @@ namespace BindClassV8Test {
         return definition;
     }
 
+    inline const Bind::Class<Span> &SpanDefinition() {
+        using Bind::Doc;
+        static const auto definition = Bind::Class<Span>("Span", "A range of integers.")
+                                           .Constructor<int, std::optional<int>>(Doc("Creates a span.").Param("from", "First value.").Param("to", "Last value; the first when omitted."))
+                                           .Method("length", &Span::length, Doc("Measures the span.").Returns("Last value minus first."))
+                                           .Static(
+                                               "lengthOf",
+                                               [](const Span *span) {
+                                                   return span != nullptr ? span->length() : -1;
+                                               },
+                                               Doc("Measures a span.").Param("span", "Span to measure.").Returns("Its length, or -1 without a span."));
+        return definition;
+    }
+
+    // Compass bound for V8 alone, member by member as Class<T> does: Class<T> binds for Lua as well, and Lua has
+    // no converter for the glm types yet.
+    inline std::unique_ptr<v8pp::class_<Compass>> MaterialiseCompass(v8::Isolate *isolate, v8pp::metadata::registry &catalog) {
+        using Bind::Doc;
+        using Bind::Side;
+        namespace Detail = Bind::Detail;
+
+        Bind::ClassDesc desc;
+        desc.name        = "Compass";
+        desc.description = "Points somewhere.";
+
+        Bind::PropertyDesc heading;
+        heading.name        = "heading";
+        heading.type        = Bind::TypeOf<glm::vec3>();
+        heading.description = "Where the compass points.";
+
+        Detail::V8Class<Compass> definition;
+        definition.constructor = Detail::V8ConstructorOf<Compass>(Detail::V8FunctionOptions(Bind::DescribeConstructor<>(Doc("Creates a compass."))));
+        definition.members.push_back(Detail::V8Method<Compass>(Detail::SignatureOf<decltype(&Compass::shift)>::Type {}, Side::Shared, desc.name, "shift", &Compass::shift,
+            Detail::V8FunctionOptions(Bind::DescribeFunction<decltype(&Compass::shift)>("shift", Doc("Shifts the heading.").Param("by", "Offset to add.").Returns("The shifted heading."), false, Side::Shared))));
+        definition.members.push_back(Detail::V8Static<Compass>(Detail::SignatureOf<decltype(&Compass::north)>::Type {}, Side::Shared, desc.name, "north", &Compass::north,
+            Detail::V8FunctionOptions(Bind::DescribeFunction<decltype(&Compass::north)>("north", Doc("Points north.").Returns("The north heading."), true, Side::Shared))));
+        definition.members.push_back(Detail::V8Property<Compass, glm::vec3>(Side::Shared, desc.name, "heading", &Compass::heading, &Compass::setHeading, Detail::V8PropertyOptions(heading)));
+        return Detail::V8MaterialiseClass(definition, desc, isolate, catalog, Side::Server);
+    }
+
     // Gauge and Dial bound the way a builtin is written by hand, to compare with what their definitions produce.
     inline void HandWrittenGaugeAndDial(v8::Isolate *isolate, v8pp::metadata::registry &catalog, std::vector<std::shared_ptr<void>> &keep) {
         namespace metadata = v8pp::metadata;
@@ -281,7 +363,7 @@ namespace BindClassV8Test {
 
         ~Runtime() {
             // The caches and the catalog are keyed by isolate address, which a later isolate may reuse.
-            Forget<Counter, SubCounter, Tracked, Token, Sealed, Gauge, Dial>();
+            Forget<Counter, SubCounter, Tracked, Token, Sealed, Gauge, Dial, Span>();
             Framework::Scripting::Builtins::UnregisterAll(Isolate());
             Framework::Scripting::ClearScriptingCatalog(Isolate());
             _runtime.reset();
@@ -387,6 +469,7 @@ MODULE(bind_class_v8, {
     using BindClassV8Test::Host;
     using BindClassV8Test::MessageOf;
     using BindClassV8Test::Runtime;
+    using BindClassV8Test::SpanDefinition;
 
     // --- Construction and methods ---
 
@@ -398,6 +481,7 @@ MODULE(bind_class_v8, {
         EQUALS(runtime.Eval("typeof Counter"), "function");
         EQUALS(runtime.Eval("new Counter(2).add(3).get() === 5"), "true");
         EQUALS(runtime.Eval("new Counter(2) instanceof Counter"), "true");
+        EQUALS(runtime.Eval("Counter(2).get()"), "2");
         EQUALS(runtime.Eval("var c = new Counter(1); c.add(1) === c"), "true");
         EQUALS(runtime.Eval("c.get()"), "2");
     });
@@ -528,6 +612,68 @@ MODULE(bind_class_v8, {
         EQUALS(runtime.Eval("new Counter(1).plus(new Counter(2))"), "3");
     });
 
+    IT("lets a trailing optional argument of the constructor be omitted, as Lua does", {
+        Host host;
+        Runtime runtime(host);
+        runtime.Publish(SpanDefinition());
+
+        EQUALS(runtime.Eval("new Span(1).length()"), "0");
+        EQUALS(runtime.Eval("new Span(1, undefined).length()"), "0");
+        EQUALS(runtime.Eval("new Span(1, 4).length()"), "3");
+        EQUALS(runtime.Eval("new Span()"), "<threw> Error: Argument count does not match function definition. Expected 2 but got 0");
+        EQUALS(runtime.Eval("new Span(1, 4, 9)"), "<threw> Error: Argument count does not match function definition. Expected 2 but got 3");
+        EQUALS(runtime.Eval("new Span('x')"), "<threw> Error: expected Number, typeof=string");
+        EQUALS(runtime.Eval("new Span(1, 'x')"), "<threw> Error: expected Optional, typeof=string");
+        EQUALS(runtime.Symbol("Span")["constructor"]["parameters"][1]["type"].dump(), R"({"cppName":"","name":"number","optional":true})");
+
+        LuaTest::State state;
+        BindClassLuaTest::Publish(state.L, SpanDefinition(), Side::Server);
+        EQUALS(LuaTest::Eval(state.L, "Span.new(1):length()"), "0");
+        EQUALS(LuaTest::Eval(state.L, "Span.new(1, 4):length()"), "3");
+    });
+
+    IT("gives a pointer parameter a null pointer for anything that is not a bound object, where Lua refuses", {
+        Host host;
+        Runtime runtime(host);
+        runtime.Publish(SpanDefinition());
+
+        EQUALS(runtime.Eval("Span.lengthOf(new Span(1, 4))"), "3");
+        EQUALS(runtime.Eval("Span.lengthOf(5)"), "-1");
+        EQUALS(runtime.Eval("Span.lengthOf('span')"), "-1");
+        EQUALS(runtime.Eval("Span.lengthOf(null)"), "-1");
+        EQUALS(runtime.Eval("Span.lengthOf(undefined)"), "-1");
+        EQUALS(runtime.Eval("Span.lengthOf({})"), "-1");
+
+        LuaTest::State state;
+        BindClassLuaTest::Publish(state.L, SpanDefinition(), Side::Server);
+        EQUALS(LuaTest::Eval(state.L, "Span.lengthOf(Span.new(1, 4))"), "3");
+        EQUALS(LuaTest::Eval(state.L, "Span.lengthOf(5)"), "<error> eval:1: bad argument #1 to 'Span.lengthOf' (Span expected, got number)");
+    });
+
+    IT("takes and returns glm values as the builtin vector classes", {
+        Host host;
+        Runtime runtime(host);
+
+        std::unique_ptr<v8pp::class_<BindClassV8Test::Compass>> compass;
+        runtime.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            Framework::Scripting::Builtins::Vector3::Register(isolate, context->Global());
+            compass = BindClassV8Test::MaterialiseCompass(isolate, runtime.Catalog());
+            context->Global()->Set(context, v8pp::to_v8(isolate, "Compass"), compass->js_function_template()->GetFunction(context).ToLocalChecked()).Check();
+        });
+
+        EQUALS(runtime.Eval("var c = new Compass(); var v = c.shift(new Vector3(1, 2, 3)); v instanceof Vector3"), "true");
+        EQUALS(runtime.Eval("[v.x, v.y, v.z].join()"), "1,2,3");
+        EQUALS(runtime.Eval("c.heading = new Vector3(4, 5, 6); c.heading instanceof Vector3"), "true");
+        EQUALS(runtime.Eval("c.shift(new Vector3(1, 1, 1)).toString()"), "Vector3(5, 6, 7)");
+        EQUALS(runtime.Eval("Compass.north().toString()"), "Vector3(0, 1, 0)");
+        EQUALS(runtime.Eval("c.shift(5)"), "<threw> Error: expected object for vec3");
+
+        const nlohmann::json shift = Runtime::Named(runtime.Symbol("Compass")["functions"], "shift");
+        EQUALS(shift["parameters"][0]["type"]["name"], "Vector3");
+        EQUALS(shift["returns"]["type"]["name"], "Vector3");
+        EQUALS(Runtime::Named(runtime.Symbol("Compass")["properties"], "heading")["type"]["name"], "Vector3");
+    });
+
     IT("wraps an object made in C++", {
         Host host;
         Runtime runtime(host);
@@ -571,6 +717,22 @@ MODULE(bind_class_v8, {
         EQUALS(runtime.Eval("new Counter(1).plus(new SubCounter(4))"), "5");
         EQUALS(runtime.Eval("new SubCounter(1).absorb(new SubCounter(4))"), "5");
         EQUALS(runtime.Eval("new SubCounter(1).absorb(new Counter(4))"), "<threw> Error: failed to unwrap C++ object");
+    });
+
+    // v8pp finds the wrapper of a returned object by its address, and the Counter part of a SubCounter does not
+    // lie at the address of the SubCounter. Lua returns the receiver here.
+    IT("returns a copy typed as the base from a base method called on an object whose base part is not first", {
+        Host host;
+        Runtime runtime(host);
+        runtime.PublishCounters();
+
+        EQUALS(runtime.Eval("var s = new SubCounter(2); var r = s.add(1); r === s"), "false");
+        EQUALS(runtime.Eval("r instanceof Counter && !(r instanceof SubCounter)"), "true");
+        EQUALS(runtime.Eval("r.get() + ' ' + s.get()"), "3 3");
+
+        // The second call of a chain therefore lands on the copy.
+        EQUALS(runtime.Eval("s.add(1).add(1).get()"), "5");
+        EQUALS(runtime.Eval("s.get()"), "4");
     });
 
     IT("materialises the bases a definition ensures before the class", {
@@ -847,6 +1009,7 @@ MODULE(bind_class_v8, {
         runtime.Publish(SealedDefinition());
 
         EQUALS(runtime.Eval("new Sealed()").find("has no constructor") != std::string::npos, true);
+        EQUALS(runtime.Eval("Sealed()").find("has no constructor") != std::string::npos, true);
         EQUALS(runtime.Eval("Sealed.make().value"), "3");
         EQUALS(runtime.Eval("Sealed.counter().get()"), "1");
         EQUALS(runtime.Symbol("Sealed")["constructor"].is_null(), true);
