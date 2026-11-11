@@ -91,26 +91,23 @@ namespace Framework::Graphics {
     }
 
     bool Renderer::GetBackBufferSize(int &width, int &height) const {
-        // The game thread asks this; the D3D12 swapchain may already be freed there.
+        // The game thread asks this, where the swapchain may already be freed: the backends
+        // answer from a copy they take on the render thread.
+        UINT bufferWidth  = 0;
+        UINT bufferHeight = 0;
+        bool known        = false;
         if (_d3d12Backend) {
-            UINT bufferWidth  = 0;
-            UINT bufferHeight = 0;
-            if (!_d3d12Backend->GetBackBufferSize(bufferWidth, bufferHeight)) {
-                return false;
-            }
-            width  = static_cast<int>(bufferWidth);
-            height = static_cast<int>(bufferHeight);
-            return true;
+            known = _d3d12Backend->GetBackBufferSize(bufferWidth, bufferHeight);
         }
-
-        IDXGISwapChain *swapChain = _d3d11Backend ? _d3d11Backend->GetSwapChain() : nullptr;
-        DXGI_SWAP_CHAIN_DESC desc {};
-        if (!swapChain || FAILED(swapChain->GetDesc(&desc)) || desc.BufferDesc.Width == 0 || desc.BufferDesc.Height == 0) {
+        else if (_d3d11Backend) {
+            known = _d3d11Backend->GetBackBufferSize(bufferWidth, bufferHeight);
+        }
+        if (!known) {
             return false;
         }
 
-        width  = static_cast<int>(desc.BufferDesc.Width);
-        height = static_cast<int>(desc.BufferDesc.Height);
+        width  = static_cast<int>(bufferWidth);
+        height = static_cast<int>(bufferHeight);
         return true;
     }
 
