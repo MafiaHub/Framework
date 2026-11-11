@@ -50,6 +50,13 @@ namespace Framework::Scripting {
         bool sandboxed = false;
 
         /**
+         * Threads of Node's platform pool, which every isolate in the process shares for collection and
+         * compilation. With an isolate per resource a server sizes it to its cores. Read once, by the first
+         * engine initialised in the process.
+         */
+        int platformThreads = 4;
+
+        /**
          * Process name shown in Node.js (argv[0]).
          */
         std::string processName = "mafiahub";
@@ -149,6 +156,11 @@ namespace Framework::Scripting {
         /**
          * Get the engine options.
          */
+        // Before Init(), and before any other engine in the process initialised: the platform pool is made once.
+        void SetPlatformThreads(int threads) {
+            _options.platformThreads = threads;
+        }
+
         const NodeEngineOptions &GetOptions() const {
             return _options;
         }

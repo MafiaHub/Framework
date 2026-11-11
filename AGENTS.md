@@ -215,6 +215,7 @@ Other agents do not run these hooks; the rules still apply to them as written.
 4. **Scripting** (`scripting/`) - JavaScript/TypeScript scripting for game logic (Server: libnode, Client: V8)
 5. **GUI Manager** (`gui/manager.h`) - UI using CEF and Dear ImGui
 6. **Job System** (`jobs/job_system.h`) - Opt-in fiber-based task scheduling using FTL
+   - **Server threading** (`docs/server_threading.md`) is separate: `Utils::TaskScheduler` (Asio) takes blocking work off the tick thread and brings results back to it, `Utils::ForkJoinPool` spreads per-tick loops over the replication workers, and `Utils::ThreadBudget` sizes both to the host. Only the tick thread touches the replicated world.
 7. **Voice** (`voice/`) - Proximity voice chat; the server relays opaque Opus frames (RakVoice) without decoding, routed by `VoiceRouter`
 
 ### Integration Layer
@@ -229,7 +230,7 @@ Both expose virtual methods (`PostInit`, `PostUpdate`, `PreShutdown`, `ModuleReg
 ### Key Patterns
 
 - **RPC System**: Typed, on the peer — `RegisterRPC<T>(handler)` to receive, `BroadcastRPC<T>(payload)` and `SendRPC<T>(payload, guid)` to send (`networking/network_peer.h`). Payload structs live in the project's `shared/`, one per header.
-- **Module Registration**: Access systems via `Framework::CoreModules::Get*()` static methods — `GetNetworkPeer()`, `GetReplication()`, `GetScriptingModule()`, `GetWebManager()`, `GetInput()`, `GetVoiceServer()` / `GetVoiceClient()`, `GetClientInstance()`
+- **Module Registration**: Access systems via `Framework::CoreModules::Get*()` static methods — `GetNetworkPeer()`, `GetReplication()`, `GetScriptingModule()`, `GetWebManager()`, `GetInput()`, `GetVoiceServer()` / `GetVoiceClient()`, `GetClientInstance()`, and on the server `GetTaskScheduler()` / `GetTickWorkers()`
 - **Replicated Entities**: Subclass `Framework::Networking::Replication::NetworkEntity`, declare a `kTypeName`, and register it with `EntityRegistry::Get().Register<T>(T::kTypeName)`. Type ids are a CRC32 of the name, so registration order is irrelevant — but client and server MUST register the same set, so keep the list in shared code.
 - **Serialization**: Split three ways — `OnSerializeConstruction` (spawn metadata), `SerializeTransform` (high-frequency, unreliable), `SerializeFields` (low-frequency reliable deltas).
 

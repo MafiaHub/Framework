@@ -36,6 +36,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/asset_http_ut.h"
 #include "modules/bitops_ut.h"
 #include "modules/cef_runtime_files_ut.h"
+#include "modules/client_package_ut.h"
 #include "modules/connection_admission_ut.h"
 #include "modules/connection_gate_ut.h"
 #include "modules/delegation_ut.h"
@@ -108,6 +109,8 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/run_until_ut.h"
 #include "modules/resource_ut.h"
 #include "modules/timer_context_ut.h"
+// Starts and stops whole servers, which shuts the logger down with each: kept last.
+#include "modules/server_threading_ut.h"
 
 int main() {
     UNIT_CREATE("FrameworkTests");
@@ -136,6 +139,7 @@ int main() {
     UNIT_MODULE(task_scheduler);
     UNIT_MODULE(thread_budget);
     UNIT_MODULE(webserver_main_thread);
+    UNIT_MODULE(client_package);
     UNIT_MODULE(input_state);
     UNIT_MODULE(delegation);
     UNIT_MODULE(entity_registry);
@@ -189,6 +193,7 @@ int main() {
     UNIT_MODULE(cef_runtime_files);
     UNIT_MODULE(connection_admission);
     UNIT_MODULE(nametag);
+    UNIT_MODULE(server_threading);
 
     return UNIT_RUN();
 }

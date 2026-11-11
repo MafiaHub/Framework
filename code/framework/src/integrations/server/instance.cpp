@@ -56,6 +56,7 @@
 #include "utils/config_schema.h"
 #include "utils/path.h"
 #include "utils/profiler.h"
+#include "utils/thread_budget.h"
 #include "utils/time.h"
 #include "utils/version.h"
 
@@ -63,6 +64,7 @@
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <csignal>
+#include <thread>
 
 #ifdef _WIN32
 #include <timeapi.h>
@@ -226,6 +228,15 @@ namespace Framework::Integrations::Server {
         // Initialize the logging instance with the mod slug name
         Logging::GetInstance()->SetLogName(_opts.modSlug);
 
+        // The host's cores, shared out before anything starts a thread of its own. This thread is the
+        // tick thread: it owns the scheduler, so completions and tick-thread routes run in Update().
+        const Utils::ThreadBudget threads = Utils::ThreadBudget::For(std::thread::hardware_concurrency(), _opts.replicationThreads, _opts.backgroundThreads);
+        _tickWorkers                      = std::make_unique<Utils::ForkJoinPool>(threads.replicationWorkers);
+        _scheduler                        = std::make_unique<Utils::TaskScheduler>(threads.backgroundWorkers);
+        CoreModules::SetTickWorkers(_tickWorkers.get());
+        CoreModules::SetTaskScheduler(_scheduler.get());
+        _scriptingModule->SetPlatformThreads(threads.scriptPlatformThreads);
+
         // Initialize our networking engine
         // MafiaNet drops a request nobody answers; the gate always answers first, with a reason.
         Framework::Networking::AdmissionSettings admission;
@@ -250,6 +261,7 @@ namespace Framework::Integrations::Server {
             return Error("Failed to start the HTTP server on TCP " + _opts.bindHost + ":" + std::to_string(_opts.bindPort));
         }
         CoreModules::SetWebserver(_webServer.get());
+        _webServer->SetTickThreadScheduler(_scheduler.get());
         // Downloads never take the last workers: the info endpoint and the mod's routes share the pool.
         constexpr size_t kWorkersKeptFromDownloads = 4;
         _assetFileServer.Register(webWorkers - kWorkersKeptFromDownloads);
@@ -264,6 +276,7 @@ namespace Framework::Integrations::Server {
         auto *replication = _networkingEngine->GetNetworkServer()->GetReplicationManager();
         CoreModules::SetReplication(replication);
         if (replication) {
+            replication->SetReplicationWorkerPool(_tickWorkers.get());
             replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
             replication->ConfigureGrid(_opts.worldConfig.streamCellSize, _opts.worldConfig.streamWorldMin, _opts.worldConfig.streamWorldMax);
             // A text label streams exactly as far as it draws. Held to its own range, labels are
@@ -377,6 +390,8 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Password:\t{}", _opts.bindPassword.empty() ? "none" : "required");
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)
+            ->info("Threads:\t{} cores: tick, network, {} replication, {} background, {} script platform, {} web", std::thread::hardware_concurrency(), threads.replicationWorkers, threads.backgroundWorkers, threads.scriptPlatformThreads, webWorkers);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
@@ -419,7 +434,9 @@ namespace Framework::Integrations::Server {
                 {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)}, {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()},
                 {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()}, {"download-url", "http(s) base URLs clients fetch resource files from before the game port, separated by spaces or commas", cxxopts::value<std::string>()},
                 {"max-downloading", "Connections admitted beyond maxplayers while they download; 0 keeps downloads on player slots", cxxopts::value<int32_t>()},
-                {"package-secret", "Secret the resource package key is derived from; defaults to the server token", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+                {"package-secret", "Secret the resource package key is derived from; defaults to the server token", cxxopts::value<std::string>()},
+                {"replication-threads", "Threads sharing the replication pass with the tick thread; -1 sizes them to the host, 0 uses none", cxxopts::value<int32_t>()},
+                {"background-threads", "Threads for blocking work taken off the tick thread; -1 sizes them to the host, 0 runs it inline", cxxopts::value<int32_t>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts) {
@@ -439,6 +456,8 @@ namespace Framework::Integrations::Server {
         read("max-downloading", opts.maxDownloading);
         read("package-secret", opts.packageSecret);
         read("slow-script-ms", opts.slowScriptWarnMs);
+        read("replication-threads", opts.replicationThreads);
+        read("background-threads", opts.backgroundThreads);
     }
 
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts) {
@@ -457,6 +476,8 @@ namespace Framework::Integrations::Server {
         read("download-url", opts.assetDownloadUrl);
         read("max-downloading", opts.maxDownloading);
         read("package-secret", opts.packageSecret);
+        read("replication-threads", opts.replicationThreads);
+        read("background-threads", opts.backgroundThreads);
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -547,6 +568,8 @@ namespace Framework::Integrations::Server {
         frameworkKeys["max-downloading"] = _opts.maxDownloading;
         frameworkKeys["package-secret"]  = _opts.packageSecret;
         frameworkKeys["slow-script-ms"]  = _opts.slowScriptWarnMs;
+        frameworkKeys["replication-threads"] = _opts.replicationThreads;
+        frameworkKeys["background-threads"]  = _opts.backgroundThreads;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
 
@@ -934,21 +957,38 @@ namespace Framework::Integrations::Server {
         // Clients never receive these, so a client manifest must not depend on them.
         _serverOnlyResources = CollectServerOnlyResources();
 
-        size_t packagedFiles = 0;
-        for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
-            PackageClientResource(resourceName, stagingDir, packagedFiles);
-        }
-
         // Asset paks: plain ZIPs the client's engine mounts, staged beside the packages and served
         // the same way. A resource stopped at runtime ships none until it starts again.
-        if (_opts.assetPakPolicy) {
-            if (!_assetPakBuilder.IsActive()) {
-                _assetPakBuilder.Init(_opts.assetPakPolicy, stagingDir);
-            }
-            for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
-                PublishResourceAssetPaks(resourceName);
+        if (_opts.assetPakPolicy && !_assetPakBuilder.IsActive()) {
+            _assetPakBuilder.Init(_opts.assetPakPolicy, stagingDir);
+        }
+
+        // Every resource is built on its own, so they are built side by side; what they produced is
+        // then recorded here, in order.
+        const std::vector<std::string> names = resourceManager->GetAllResourceNames();
+        std::vector<ClientPublishJob> jobs;
+        jobs.reserve(names.size());
+        for (const auto &resourceName : names) {
+            jobs.push_back(PlanClientPublish(resourceName, stagingDir));
+        }
+        std::vector<ClientPublish> built(jobs.size());
+        const auto build = [&](uint32_t index, uint32_t) {
+            built[index] = RunClientPublish(jobs[index], _assetPakBuilder);
+        };
+        if (_tickWorkers) {
+            _tickWorkers->Run(static_cast<uint32_t>(jobs.size()), build);
+        }
+        else {
+            for (uint32_t i = 0; i < jobs.size(); ++i) {
+                build(i, 0);
             }
         }
+        size_t packagedFiles = 0;
+        for (size_t i = 0; i < names.size(); ++i) {
+            RecordClientPublish(names[i], std::move(built[i]), packagedFiles);
+        }
+        // A rebuild still on its way was planned against the set this one just replaced.
+        _publishAgain.insert(_publishing.begin(), _publishing.end());
 
         if (!_opts.assetDownloadUrl.empty()) {
             std::string names;
@@ -977,71 +1017,73 @@ namespace Framework::Integrations::Server {
         return serverOnlyResources;
     }
 
-    bool Instance::PackageClientResource(const std::string &resourceName, const std::string &stagingDir, size_t &packagedFiles) {
-        const auto resource = GetScriptingModule()->GetResourceManager()->GetResource(resourceName);
+    Instance::ClientPublishJob Instance::PlanClientPublish(const std::string &name, const std::string &stagingDir) const {
+        ClientPublishJob job;
+        job.name            = name;
+        const auto resource = GetScriptingModule()->GetResourceManager()->GetResource(name);
         if (!resource) {
-            return false;
+            return job;
         }
-        if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
-            return false;
-        }
-        if (!Framework::Utils::StreamedAssets::IsValidPackageName(resourceName)) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client resource '{}' cannot be served: its name is not [A-Za-z0-9._-], at most {} characters", resourceName, Framework::Utils::StreamedAssets::kMaxPackageName);
-            return false;
-        }
-
-        Framework::Scripting::PackagedResource packaged;
-        std::string error;
-        if (!Framework::Scripting::ResourcePackager::Package(resourceName, resource->GetPath(), resource->GetManifest(), &_packageKey, packaged, error, _serverOnlyResources)) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not package client resource '{}': {}", resourceName, error);
-            return false;
-        }
-
-        std::error_code ec;
-        const std::string packageName = resourceName + Framework::Utils::Package::kExtension;
-        const auto packagePath        = std::filesystem::path(stagingDir) / packageName;
-
-        bool needsWrite = true;
-        if (std::filesystem::exists(packagePath, ec) && !ec) {
-            const auto existing = Framework::Utils::Crypto::Sha256FileHex(packagePath.string());
-            needsWrite          = !Framework::Utils::Crypto::ConstantTimeEquals(existing, packaged.sha256);
-        }
-
-        if (needsWrite) {
-            std::ofstream out(packagePath, std::ios::binary | std::ios::trunc);
-            if (!out.is_open()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not write package '{}'", packagePath.string());
-                return false;
+        if (resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
+            if (!Framework::Utils::StreamedAssets::IsValidPackageName(name)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client resource '{}' cannot be served: its name is not [A-Za-z0-9._-], at most {} characters", name, Framework::Utils::StreamedAssets::kMaxPackageName);
             }
-            out.write(packaged.blob.data(), static_cast<std::streamsize>(packaged.blob.size()));
-            if (!out.good()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed while writing package '{}'", packagePath.string());
-                return false;
+            else {
+                // Copies: the build may run while the tick thread restarts the resource again.
+                job.package = ClientPackageRequest {name, resource->GetPath(), resource->GetManifest(), _packageKey, _serverOnlyResources, stagingDir};
             }
         }
-
-        _servedFiles[packageName]    = packagePath;
-        _packageHashes[resourceName] = packaged.sha256;
-        _packageSizes[resourceName]  = packaged.blob.size();
-        packagedFiles += packaged.fileCount;
-
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Packaged client resource '{}': {} files, {} bytes, sha256 {}{}", resourceName, packaged.fileCount, packaged.blob.size(), packaged.sha256.substr(0, 16), needsWrite ? "" : " (unchanged)");
-        return true;
+        if (_opts.assetPakPolicy && (!_resourcesBooted || resource->IsRunning())) {
+            job.pakFolder = resource->GetPath();
+        }
+        return job;
     }
 
-    void Instance::PublishResourceAssetPaks(const std::string &resourceName) {
-        const auto resource = GetScriptingModule()->GetResourceManager()->GetResource(resourceName);
-        if (!resource || (_resourcesBooted && !resource->IsRunning())) {
-            _assetPakBuilder.Forget(resourceName);
+    Instance::ClientPublish Instance::RunClientPublish(const ClientPublishJob &job, const AssetPakBuilder &paks) {
+        ClientPublish built;
+        if (job.package) {
+            built.wantsPackage = true;
+            built.package      = BuildClientPackage(*job.package);
+        }
+        if (job.pakFolder) {
+            built.wantsPaks = true;
+            built.paks      = paks.Prepare(job.name, *job.pakFolder);
+        }
+        return built;
+    }
+
+    void Instance::RecordClientPublish(const std::string &name, ClientPublish built, size_t &packagedFiles) {
+        if (built.wantsPackage) {
+            ClientPackage &package = built.package;
+            if (!package.built) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not package client resource '{}': {}", name, package.error);
+            }
+            else if (!CommitClientPackage(package)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not write package '{}'", package.served.string());
+            }
+            else {
+                _servedFiles[name + Framework::Utils::Package::kExtension] = package.served;
+                _packageHashes[name]                                       = package.sha256;
+                _packageSizes[name]                                        = package.size;
+                packagedFiles += package.fileCount;
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Packaged client resource '{}': {} files, {} bytes, sha256 {}", name, package.fileCount, package.size, package.sha256.substr(0, 16));
+            }
+        }
+
+        if (!_opts.assetPakPolicy) {
             return;
         }
-        std::vector<Framework::Networking::RPC::AssetPakInfo> paks = _assetPakBuilder.Build(resourceName, resource->GetPath());
+        if (!built.wantsPaks) {
+            _assetPakBuilder.Forget(name);
+            return;
+        }
+        std::vector<Framework::Networking::RPC::AssetPakInfo> paks = _assetPakBuilder.Adopt(name, std::move(built.paks));
         for (auto &pak : paks) {
-            pak.deferred                                                                                   = _opts.assetPakPolicy->LaneMayDefer(pak.lane);
-            _servedFiles[Framework::Utils::StreamedAssets::PakFileName(resourceName, pak.lane, pak.sha256)] = _assetPakBuilder.PathOf(resourceName, pak);
+            pak.deferred                                                                            = _opts.assetPakPolicy->LaneMayDefer(pak.lane);
+            _servedFiles[Framework::Utils::StreamedAssets::PakFileName(name, pak.lane, pak.sha256)] = _assetPakBuilder.PathOf(name, pak);
         }
         if (!paks.empty()) {
-            _assetPaks[resourceName] = std::move(paks);
+            _assetPaks[name] = std::move(paks);
         }
     }
 
@@ -1052,12 +1094,45 @@ namespace Framework::Integrations::Server {
         // packages may depend on; so does a first publish that never happened.
         if (!resourceManager || !_packageKeyReady || CollectServerOnlyResources() != _serverOnlyResources) {
             PublishClientAssets();
+            AnnounceResourceRefresh(name);
             return;
         }
 
-        const std::string stagingDir = GetPackageStagingDir();
+        // One build at a time per resource: a second change waits for the first build and starts over.
+        if (!_publishing.insert(name).second) {
+            _publishAgain.insert(name);
+            return;
+        }
+        _scheduler->Compute(
+            [job = PlanClientPublish(name, GetPackageStagingDir()), paks = &std::as_const(_assetPakBuilder)] {
+                return RunClientPublish(job, *paks);
+            },
+            [this, name](ClientPublish built) {
+                FinishRepublish(name, std::move(built));
+            });
+    }
 
-        // Drop what the resource served before; it is rebuilt below or it is gone.
+    void Instance::FinishRepublish(const std::string &name, ClientPublish built) {
+        _publishing.erase(name);
+        if (_shuttingDown) {
+            DiscardClientPackage(built.package);
+            return;
+        }
+        if (_publishAgain.erase(name) > 0) {
+            DiscardClientPackage(built.package);
+            RepublishClientResource(name);
+            return;
+        }
+        const auto scripting       = GetScriptingModule();
+        const auto resourceManager = scripting ? scripting->GetResourceManager() : nullptr;
+        const auto *resource       = resourceManager ? resourceManager->GetResource(name) : nullptr;
+        if (!resource || !resource->IsRunning()) {
+            // Stopped while it was being built: there is nothing left to announce.
+            DiscardClientPackage(built.package);
+            return;
+        }
+
+        // Drop what the resource served before; it is recorded again below or it is gone.
         _servedFiles.erase(name + Framework::Utils::Package::kExtension);
         _packageHashes.erase(name);
         _packageSizes.erase(name);
@@ -1069,12 +1144,10 @@ namespace Framework::Integrations::Server {
         }
 
         size_t packagedFiles = 0;
-        PackageClientResource(name, stagingDir, packagedFiles);
-        if (_opts.assetPakPolicy) {
-            PublishResourceAssetPaks(name);
-        }
+        RecordClientPublish(name, std::move(built), packagedFiles);
         _assetFileServer.Publish(_servedFiles);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Republished client resource '{}' ({} files); {} packages and {} resource(s) shipping asset paks are served", name, packagedFiles, _packageHashes.size(), _assetPaks.size());
+        AnnounceResourceRefresh(name);
     }
 
     Framework::Networking::RPC::ResourceInfo Instance::DescribeResource(const std::string &name, const std::string &version) const {
@@ -1133,8 +1206,17 @@ namespace Framework::Integrations::Server {
         }
 
         // Republish this resource so its changed files are announced with fresh hashes; the whole set only
-        // when the change could reach other packages. See docs/resource_hot_reload.md.
+        // when the change could reach other packages. Clients are told once the new files are served,
+        // which is a later tick: the build runs off this thread. See docs/resource_hot_reload.md.
         RepublishClientResource(resource->GetName());
+    }
+
+    void Instance::AnnounceResourceRefresh(const std::string &name) {
+        const auto *resource = _scriptingModule ? _scriptingModule->GetResourceManager()->GetResource(name) : nullptr;
+        const auto net       = _networkingEngine ? _networkingEngine->GetNetworkServer() : nullptr;
+        if (!resource || !net) {
+            return;
+        }
 
         // Only resources with a client entry point or asset paks need a client-side refresh.
         const bool scripts = resource->GetManifest().GetMafiaHubConfig().HasClientContent();
@@ -1497,9 +1579,22 @@ namespace Framework::Integrations::Server {
         // Detach from the peer before the networking engine tears it down.
         _voiceServer.Shutdown();
 
+        // No tick will run a request or a completion from here on. Requests waiting on one are answered
+        // 503 as the web server stops; background work finishes before the objects it reads go.
+        if (_webServer) {
+            _webServer->SetTickThreadScheduler(nullptr);
+        }
+        CoreModules::SetTaskScheduler(nullptr);
+        _scheduler.reset();
+
         if (_networkingEngine) {
+            if (auto *server = _networkingEngine->GetNetworkServer(); server != nullptr && server->GetReplicationManager() != nullptr) {
+                server->GetReplicationManager()->SetReplicationWorkerPool(nullptr);
+            }
             _networkingEngine->Shutdown();
         }
+        CoreModules::SetTickWorkers(nullptr);
+        _tickWorkers.reset();
 
         if (_scriptingModule) {
             _scriptingModule->Shutdown();
@@ -1552,6 +1647,13 @@ namespace Framework::Integrations::Server {
             // One monitor frame per server tick, so a resource's RPC handlers, timers and events in it add up together.
             if (auto *engine = _scriptingModule ? _scriptingModule->GetEngine() : nullptr; engine != nullptr && engine->IsInitialized()) {
                 engine->CloseMonitorTick();
+            }
+
+            // What background work finished and what other threads asked of this one: run before the
+            // packet pump, so what it sends leaves with this tick.
+            if (_scheduler) {
+                FW_PROFILE_SCOPE_N("Server::TickThreadTasks");
+                _scheduler->Drain();
             }
 
             // Before the packet pump: voice frames are routed inline there, and must see the worlds

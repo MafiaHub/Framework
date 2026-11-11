@@ -106,6 +106,13 @@ namespace Framework::Integrations::Server::Scripting {
         void SetDevMode(bool enabled);
 
         /**
+         * Size Node's platform pool, shared by every resource's isolate. Must be set before Init().
+         */
+        void SetPlatformThreads(uint32_t threads) {
+            _nodeEngine->SetPlatformThreads(static_cast<int>(threads));
+        }
+
+        /**
          * Set the mod version exposed as ExecutionEnvironment.modVersion. Must be set before Init().
          */
         void SetModVersion(const std::string &version) {

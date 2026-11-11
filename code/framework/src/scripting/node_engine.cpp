@@ -215,7 +215,7 @@ namespace Framework::Scripting {
         }
 
         // Create MultiIsolatePlatform for Worker thread support
-        _platform = node::MultiIsolatePlatform::Create(4);
+        _platform = node::MultiIsolatePlatform::Create(std::max(_options.platformThreads, 1));
         v8::V8::InitializePlatform(_platform.get());
         v8::V8::Initialize();
 

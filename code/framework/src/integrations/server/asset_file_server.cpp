@@ -239,40 +239,45 @@ namespace Framework::Integrations::Server {
         }));
     }
 
-    namespace {
-        // A list beside the file is kept while it is newer than the file and still describes it;
-        // one of another shape (an older format, a write cut short) is made again.
-        bool HasCurrentChunkList(const std::filesystem::path &path, const std::filesystem::path &list) {
-            std::error_code code;
-            if (!std::filesystem::exists(list, code) || code || std::filesystem::last_write_time(list, code) < std::filesystem::last_write_time(path, code) || code) {
-                return false;
-            }
-            const auto size = std::filesystem::file_size(path, code);
-            if (code) {
-                return false;
-            }
-            std::ifstream in(list, std::ios::binary);
-            const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-            std::vector<Utils::StreamedAssets::Chunk> chunks;
-            return Utils::StreamedAssets::ParseChunkList(text, size, chunks);
+    std::filesystem::path AssetFileServer::ChunkListPath(const std::filesystem::path &file) {
+        return file.string() + ".chunks";
+    }
+
+    // A list beside the file is kept while it is newer than the file and still describes it;
+    // one of another shape (an older format, a write cut short) is made again.
+    bool AssetFileServer::HasCurrentChunkList(const std::filesystem::path &path) {
+        const std::filesystem::path list = ChunkListPath(path);
+        std::error_code code;
+        if (!std::filesystem::exists(list, code) || code || std::filesystem::last_write_time(list, code) < std::filesystem::last_write_time(path, code) || code) {
+            return false;
         }
-    } // namespace
+        const auto size = std::filesystem::file_size(path, code);
+        if (code) {
+            return false;
+        }
+        std::ifstream in(list, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        std::vector<Utils::StreamedAssets::Chunk> chunks;
+        return Utils::StreamedAssets::ParseChunkList(text, size, chunks);
+    }
+
+    bool AssetFileServer::WriteChunkList(const std::filesystem::path &file, const std::filesystem::path &list) {
+        const std::vector<Utils::StreamedAssets::Chunk> chunks = Utils::StreamedAssets::HashFileChunks(file.string());
+        if (chunks.empty()) {
+            return false;
+        }
+        std::ofstream out(list, std::ios::binary | std::ios::trunc);
+        out << Utils::StreamedAssets::FormatChunkList(chunks);
+        return static_cast<bool>(out);
+    }
 
     void AssetFileServer::Publish(std::unordered_map<std::string, std::filesystem::path> files) {
         std::unordered_map<std::string, std::filesystem::path> lists;
         for (const auto &[name, path] : files) {
-            const std::filesystem::path list = path.string() + ".chunks";
-            if (!HasCurrentChunkList(path, list)) {
-                const std::vector<Utils::StreamedAssets::Chunk> chunks = Utils::StreamedAssets::HashFileChunks(path.string());
-                if (chunks.empty()) {
-                    continue;
-                }
-                std::ofstream out(list, std::ios::binary | std::ios::trunc);
-                out << Utils::StreamedAssets::FormatChunkList(chunks);
-                if (!out) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Could not write the chunk list of '{}'; clients read it whole", name);
-                    continue;
-                }
+            const std::filesystem::path list = ChunkListPath(path);
+            if (!HasCurrentChunkList(path) && !WriteChunkList(path, list)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Could not write the chunk list of '{}'; clients read it whole", name);
+                continue;
             }
             lists[Utils::StreamedAssets::ChunkListFileName(name)] = list;
         }

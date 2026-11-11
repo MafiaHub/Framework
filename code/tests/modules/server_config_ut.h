@@ -199,4 +199,18 @@ MODULE(server_config, {
         EQUALS(Framework::Integrations::Server::DerivePackageKey(both) != Framework::Integrations::Server::DerivePackageKey(withToken), true);
         EQUALS(Framework::Integrations::Server::DerivePackageKey(withToken) != Framework::Integrations::Server::DerivePackageKey(compiledDefaults()), true);
     });
+
+    IT("leaves the thread counts to the machine unless the operator pins them", {
+        const auto defaults = resolve(nlohmann::json::object(), {});
+        EQUALS(defaults.replicationThreads, -1);
+        EQUALS(defaults.backgroundThreads, -1);
+
+        const auto fromFile = resolve({{"replication-threads", 6}, {"background-threads", 0}}, {});
+        EQUALS(fromFile.replicationThreads, 6);
+        EQUALS(fromFile.backgroundThreads, 0);
+
+        const auto fromLine = resolve({{"replication-threads", 6}}, {"--replication-threads", "2", "--background-threads", "3"});
+        EQUALS(fromLine.replicationThreads, 2);
+        EQUALS(fromLine.backgroundThreads, 3);
+    });
 });

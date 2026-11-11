@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "integrations/server/asset_file_server.h"
 #include "integrations/server/asset_paks/asset_pak_builder.h"
 #include "networking/rpc/server_resources.h"
 #include "utils/crypto.h"
@@ -24,6 +25,8 @@
 #include <memory>
 #include <random>
 #include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
 // Asset paks: a resource's lane folders built into plain ZIPs an engine mounts, staged beside its
@@ -279,6 +282,62 @@ MODULE(streamed_assets, {
         EQUALS(changed[0].sha256 != first[0].sha256, true);
         EQUALS(std::filesystem::exists(builder.PathOf("demo", changed[0])), true);
         EQUALS(std::filesystem::exists(firstPath), false);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("prepares a changed lane on another thread while clients still fetch the pak it replaces", {
+        const auto root    = Scratch("fw_asset_pak_prepare");
+        const auto staging = root / "staging";
+        std::filesystem::create_directories(staging);
+        WriteBytes(root / "demo" / "stream" / "a.bin", 4000, 5);
+
+        Framework::Integrations::Server::AssetPakBuilder builder;
+        builder.Init(std::make_shared<TestPolicy>(), staging);
+        const auto first = builder.Build("demo", root / "demo");
+        UEQUALS(first.size(), 1u);
+        const auto firstPath = builder.PathOf("demo", first[0]);
+
+        const auto modified = std::filesystem::last_write_time(root / "demo" / "stream" / "a.bin");
+        WriteBytes(root / "demo" / "stream" / "a.bin", 4000, 6);
+        WriteBytes(root / "demo" / "stream" / "b.bin", 300, 7);
+        std::filesystem::last_write_time(root / "demo" / "stream" / "a.bin", modified + std::chrono::seconds(2));
+
+        Framework::Integrations::Server::AssetPakBuilder::Prepared prepared;
+        std::thread worker([&] {
+            prepared = std::as_const(builder).Prepare("demo", root / "demo");
+        });
+        worker.join();
+
+        // Nothing the server announces has changed yet: the old pak is still there and still what it answers for.
+        EQUALS(std::filesystem::exists(firstPath), true);
+        EQUALS(builder.HasEntry("stream", "b.bin"), false);
+
+        const auto adopted = builder.Adopt("demo", std::move(prepared));
+        UEQUALS(adopted.size(), 1u);
+        EQUALS(adopted[0].sha256 != first[0].sha256, true);
+        const auto newPath = builder.PathOf("demo", adopted[0]);
+        EQUALS(std::filesystem::exists(newPath), true);
+        EQUALS(std::filesystem::exists(firstPath), false);
+        EQUALS(builder.HasEntry("stream", "b.bin"), true);
+        // Its chunk list came with it, so publishing it does not hash the pak again on the tick thread.
+        EQUALS(Framework::Integrations::Server::AssetFileServer::HasCurrentChunkList(newPath), true);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("keeps the pak of a lane prepared again without a change", {
+        const auto root    = Scratch("fw_asset_pak_prepare_same");
+        const auto staging = root / "staging";
+        std::filesystem::create_directories(staging);
+        WriteBytes(root / "demo" / "stream" / "a.bin", 4000, 5);
+
+        Framework::Integrations::Server::AssetPakBuilder builder;
+        builder.Init(std::make_shared<TestPolicy>(), staging);
+        const auto first     = builder.Build("demo", root / "demo");
+        const auto firstPath = builder.PathOf("demo", first[0]);
+        const auto adopted   = builder.Adopt("demo", builder.Prepare("demo", root / "demo"));
+        UEQUALS(adopted.size(), 1u);
+        EQUALS(adopted[0].sha256 == first[0].sha256, true);
+        EQUALS(std::filesystem::exists(firstPath), true);
         std::filesystem::remove_all(root);
     });
 

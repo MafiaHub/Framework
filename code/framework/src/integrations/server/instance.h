@@ -18,6 +18,7 @@
 
 #include "asset_file_server.h"
 #include "asset_paks/asset_pak_builder.h"
+#include "client_package.h"
 #include "connection_gate.h"
 #include "http/webserver.h"
 #include "logging/logger.h"
@@ -38,7 +39,9 @@
 #include <mafianet/types.h>
 
 #include <utils/crypto.h>
+#include <utils/fork_join_pool.h>
 #include <utils/lifecycle.h>
+#include <utils/task_scheduler.h>
 
 #include <atomic>
 #include <chrono>
@@ -87,6 +90,14 @@ namespace Framework::Integrations::Server {
         // A script handler, listener, export call or resource tick that spends at least this long in its own
         // script logs a warning naming the resource (server.json "slow-script-ms"; 0 turns the warnings off).
         int32_t slowScriptWarnMs = 50;
+
+        // Threads beside the tick thread (server.json "replication-threads" and "background-threads", or
+        // the flags of the same names). Negative, the default, sizes them to the host's cores (see
+        // Utils::ThreadBudget); 0 keeps that work on the tick thread.
+        // Replication: interest and the serialize pass, and the game's own per-tick loops.
+        int32_t replicationThreads = -1;
+        // Background: blocking work such as packaging a hot-reloaded resource.
+        int32_t backgroundThreads = -1;
 
         // What a resource's asset paks may carry, one lane per folder (`<resource>/<lane>/`). Null
         // ships none. See AssetPakBuilder.
@@ -281,17 +292,39 @@ namespace Framework::Integrations::Server {
         std::set<std::string> _serverOnlyResources;
 
         std::set<std::string> CollectServerOnlyResources() const;
-        // Packages one resource into the staging directory and records its hash, size and served
-        // file. False when it ships no package (no client content, bad name, packaging failed).
-        bool PackageClientResource(const std::string &resourceName, const std::string &stagingDir, size_t &packagedFiles);
-        // Builds (or forgets) one resource's asset paks and records what is served.
-        void PublishResourceAssetPaks(const std::string &resourceName);
-        // After one resource (re)started at runtime: repackage it alone when nothing else can have
-        // changed, the whole set otherwise.
+
+        // Publishing one resource to clients is cut in three so the slow part can leave the tick
+        // thread: what to build is read off the resource here (Plan), built anywhere (RunClientPublish:
+        // its package beside the served one, its asset paks under new names), and only then recorded,
+        // put in place and served, here again (Record). Nothing the server has announced changes
+        // before Record.
+        struct ClientPublishJob {
+            std::string name;
+            std::optional<ClientPackageRequest> package;
+            std::optional<std::filesystem::path> pakFolder;
+        };
+        struct ClientPublish {
+            bool wantsPackage = false;
+            ClientPackage package;
+            bool wantsPaks = false;
+            AssetPakBuilder::Prepared paks;
+        };
+        ClientPublishJob PlanClientPublish(const std::string &name, const std::string &stagingDir) const;
+        static ClientPublish RunClientPublish(const ClientPublishJob &job, const AssetPakBuilder &paks);
+        void RecordClientPublish(const std::string &name, ClientPublish built, size_t &packagedFiles);
+        // After one resource (re)started at runtime: rebuilt alone on a background thread when nothing
+        // else can have changed, and announced to clients once it is served; the whole set, at once,
+        // otherwise.
         void RepublishClientResource(const std::string &name);
+        void FinishRepublish(const std::string &name, ClientPublish built);
+        // Tell connected clients a resource's files changed. Only after they are served.
+        void AnnounceResourceRefresh(const std::string &name);
+        // Resources being rebuilt in the background, and those that changed again meanwhile.
+        std::unordered_set<std::string> _publishing;
+        std::unordered_set<std::string> _publishAgain;
         // Directory the built .fwpak containers are staged in for the streamer to upload.
         std::string GetPackageStagingDir() const;
-        // Re-sync a hot-reloaded/started client resource to connected clients.
+        // A client resource started or was hot-reloaded: republish it, then re-sync connected clients.
         void BroadcastResourceRefresh(const std::string &name);
         // Tell connected clients to stop a client resource.
         void BroadcastResourceStop(const std::string &name);
@@ -312,6 +345,12 @@ namespace Framework::Integrations::Server {
         void DispatchVoiceChanges();
         // Subscription raising entityStateChange; released on shutdown.
         Framework::Networking::Replication::StateChangeHandle _stateBagEvents = Framework::Networking::Replication::kInvalidStateChangeHandle;
+
+        // Declared last, so they are stopped first: background work reads the asset pak builder above.
+        // The replication pass and the game's own per-tick loops share the workers; the tick thread
+        // is one of their lanes.
+        std::unique_ptr<Utils::ForkJoinPool> _tickWorkers;
+        std::unique_ptr<Utils::TaskScheduler> _scheduler;
 
       public:
         Instance();
@@ -409,6 +448,18 @@ namespace Framework::Integrations::Server {
 
         HTTP::Webserver *GetWebserver() const {
             return _webServer.get();
+        }
+
+        // Blocking work goes here instead of into the tick: RunInBackground for the work, with a
+        // completion that runs on the tick thread, at the top of a later tick.
+        Utils::TaskScheduler *GetScheduler() const {
+            return _scheduler.get();
+        }
+
+        // For a loop of independent iterations inside PostUpdate: Run() spreads it over the
+        // replication workers and returns when every iteration has run.
+        Utils::ForkJoinPool *GetTickWorkers() const {
+            return _tickWorkers.get();
         }
 
         // Register a custom command with the command processor
