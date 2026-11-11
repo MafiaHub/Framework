@@ -116,6 +116,11 @@ namespace Framework::Scripting {
         // wait.
         void Stop();
 
+        // Whether Stop was called: the runtime is on its way out, and nothing more is to be started in it.
+        bool IsStopped() const {
+            return _stopped;
+        }
+
         // Timeouts still to fire and intervals, less the ones a script cleared. A sleep is not one.
         size_t PendingTimers() const {
             return _timers.size();

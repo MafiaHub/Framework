@@ -59,7 +59,8 @@ namespace Framework::Scripting::Builtins {
     }
 
     // Drops every builtin type's cached class wrapper for this isolate, then everything v8pp holds for it
-    // (class registries, the objects they wrap, bound functions' data). Call once, just before disposal:
+    // (class registries, the objects they wrap, bound functions' data), after telling the callables and the
+    // deferred results of the binding layer that the isolate goes (bind/callable.h). Call once, just before disposal:
     // a leftover entry leaks and, if the isolate address is later reused, resolves to a wrapper bound to
     // the dead isolate. Out-of-line so callers don't pull in the handle types' networking headers.
     void UnregisterAll(v8::Isolate *isolate);

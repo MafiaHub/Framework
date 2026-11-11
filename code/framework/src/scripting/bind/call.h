@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "callable.h"
 #include "doc.h"
 #include "types.h"
 #include "value.h"
@@ -115,6 +116,11 @@ namespace Framework::Scripting::Bind {
         // The value a copy made with Value::ToTransfer holds, built in this runtime: how a value of another
         // runtime, of either language, arrives. Throws to the script, and gives Nil, for what the language cannot
         // receive: a RegExp or a host type it does not have in Lua, a host type the runtime lacks in JavaScript.
+        //
+        // A function in it arrives as a function that invokes the original in the runtime that owns it, with
+        // copies of its arguments, and gives a copy of its result: the value itself when the original finished at
+        // once, and otherwise what Defer gives, a promise in JavaScript and a wait in Lua. In the runtime that owns
+        // it, it arrives as the original itself.
         virtual Value FromTransfer(const TransferredValue &value) = 0;
 
         // What JSON text holds, as JSON.parse reads it in JavaScript and LuaJson::Decode in Lua (lua_json.h), where
@@ -167,6 +173,17 @@ namespace Framework::Scripting::Bind {
         virtual void ThrowError(std::string message)     = 0;
         virtual bool HasThrown() const                   = 0;
 
+        // Makes the result of the call one that is settled later, through the Deferred this gives (callable.h),
+        // which is the same one each time. What the function returns no longer counts. In JavaScript the script
+        // gets a promise. In Lua the coroutine that called waits once the function has returned, unless the
+        // deferred was settled by then: the call then returns or raises at once. Where a Lua script cannot wait, on
+        // the main thread or in a coroutine it made itself, a call that is still unsettled when the function
+        // returns raises "cannot wait here" instead, and its deferred does nothing.
+        //
+        // What the function threw is thrown all the same, and the deferred then does nothing. In a Lua state no
+        // LuaRuntime made there is nothing to wait with: do not call it there.
+        virtual Deferred Defer() = 0;
+
       protected:
         Call()  = default;
         ~Call() = default;
@@ -188,5 +205,10 @@ namespace Framework::Scripting::Bind {
     namespace Detail {
         // The manager of `runtime`, as SetCallResourceManager describes it.
         ResourceManager *CallResourceManager(const void *runtime);
+
+        // What a function that stands for `callable` in another runtime runs: it invokes it with copies of its
+        // arguments and answers with a copy of the result, at once when the callable finished at once and through
+        // Call::Defer otherwise. One body for both languages.
+        NativeFunction CallableForwarder(std::shared_ptr<ScriptCallable> callable);
     } // namespace Detail
 } // namespace Framework::Scripting::Bind

@@ -11,6 +11,7 @@
 #include <logging/logger.h>
 #include <utils/profiler.h>
 
+#include <scripting/bind/callable.h>
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/chat.h>
 
@@ -59,6 +60,10 @@ namespace Framework::Integrations::Server::Scripting {
         luaOptions.memoryLimitBytes = 512u << 20;
         luaOptions.entryDeadline    = std::chrono::milliseconds(0);
         _luaEngine                  = std::make_unique<Framework::Scripting::LuaEngine>(luaOptions);
+
+        // A function a builtin kept, and a result it still owes, hear of the runtime they belong to going.
+        Framework::Scripting::Bind::WatchRuntimes(*_nodeEngine);
+        Framework::Scripting::Bind::WatchRuntimes(*_luaEngine);
 
         // Before any project registers its own handle types (PostInit runs ahead of Init): the newest is tried first,
         // so the framework's bases must come first.

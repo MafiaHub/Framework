@@ -25,14 +25,17 @@
 namespace Framework::Scripting {
 
     /**
-     * How functions cross. Without these, copying a function fails.
+     * How functions cross. Without these, copying a function fails, and one is rebuilt only from the callable it
+     * carries (TransferredValue::callable).
      */
     struct TransferFunctions {
-        // Source side: keep the function reachable and fill in `reference` and `retainer`. `holder` is the object or
-        // array the function was found in, empty for a function sent on its own: what it is called on later.
+        // Source side: keep the function reachable and fill in what it crosses as, `reference` and `retainer` or
+        // `callable`. `holder` is the object or array the function was found in, empty for a function sent on its
+        // own: what it is called on later.
         fu2::function<void(v8::Isolate *, v8::Local<v8::Function>, v8::Local<v8::Object> holder, TransferredValue &) const> exportFunction;
 
-        // Target side: make the callable stand-in for an exported function.
+        // Target side: make the callable stand-in for an exported function. A function that carries no reference is
+        // not this hook's: it is rebuilt from its callable, as it is without the hook.
         fu2::function<v8::MaybeLocal<v8::Function>(v8::Isolate *, v8::Local<v8::Context>, uint64_t) const> importFunction;
     };
 
@@ -68,6 +71,9 @@ namespace Framework::Scripting {
         /**
          * Build a copied value in the target isolate. The caller holds its scopes and the context. On failure a
          * JavaScript exception is pending and the result is empty.
+         *
+         * A function that carries a callable and no reference `functions` imports arrives as a function that
+         * invokes the callable (bind/v8_callable.h), or as the function itself in the isolate that owns it.
          */
         static v8::MaybeLocal<v8::Value> Rebuild(v8::Isolate *isolate, v8::Local<v8::Context> context, const TransferredValue &value, const TransferFunctions &functions = {});
     };

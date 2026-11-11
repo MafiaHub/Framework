@@ -13,6 +13,7 @@
 #include "state_bag.h"
 #include "text_label.h"
 
+#include "../bind/v8_callable.h"
 #include "../value_transfer.h"
 
 #include <exception>
@@ -41,6 +42,10 @@ namespace Framework::Scripting::Builtins {
     }
 
     void UnregisterAll(v8::Isolate *isolate) {
+        // The functions the host kept of this isolate, and the results it still owes it: for an isolate no
+        // disposing listener speaks for, and for what a listener that ran script left behind.
+        Bind::V8RuntimeDisposing(isolate);
+
         Vector2::UnregisterIsolate(isolate);
         Vector3::UnregisterIsolate(isolate);
         Vector4::UnregisterIsolate(isolate);

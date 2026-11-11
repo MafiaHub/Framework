@@ -14,6 +14,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -24,6 +25,7 @@ namespace Framework::Scripting {
 } // namespace Framework::Scripting
 
 namespace Framework::Scripting::Bind {
+    class ScriptCallable; // callable.h
     class Value;
 
     // What a script value is, in either language.
@@ -78,6 +80,8 @@ namespace Framework::Scripting::Bind {
             virtual void AppendTo(size_t slot, const Value &value)                       = 0;
             virtual Utils::Result<TransferredValue, std::string> TransferOf(size_t slot) = 0;
             virtual Utils::Result<std::string, std::string> JsonOf(size_t slot)          = 0;
+            // The callable of the function at `slot`, or nullptr for what is not a function.
+            virtual std::shared_ptr<ScriptCallable> CallableOf(size_t slot) = 0;
 
           protected:
             // Becomes the innermost call of the thread, until it is destroyed.
@@ -248,10 +252,20 @@ namespace Framework::Scripting::Bind {
             }
         }
 
+        // The function in the value as something the host keeps beyond this call and invokes later, whatever its
+        // language (callable.h): an event handler, a key bind, an exported function. The same function gives the
+        // same callable for as long as anyone holds it, so a handler can be found again to be removed. nullptr for
+        // what is not a function, and so for a handle read outside its call.
+        std::shared_ptr<ScriptCallable> ToCallable() const {
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->CallableOf(target.slot) : nullptr;
+        }
+
         // A copy of the value that can be rebuilt in another runtime, of either language, with Call::FromTransfer:
         // what an event argument, an export value or a call result crosses as. ValueTransfer copies a JavaScript
         // value and LuaTransfer a Lua one; value_transfer.h, which a caller includes for the type, and
-        // lua_transfer.h say what each kind of value becomes and what is refused. A function is refused.
+        // lua_transfer.h say what each kind of value becomes and what is refused. A function crosses as its
+        // callable, and arrives as a function that runs it in the runtime it came from.
         //
         // The error says where in the value the copy gave up. Nothing is thrown to the script: the function
         // decides what a value that cannot cross means. Nil, and so a handle read outside its call, copies as

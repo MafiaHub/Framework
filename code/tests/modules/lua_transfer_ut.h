@@ -862,9 +862,8 @@ MODULE(lua_transfer, {
 
     IT("refuses what cannot be copied out of Lua and says where", {
         Worlds worlds;
-        EQUALS(worlds.Refusal("{ items = { 1, { name = function() end } } }"), "Cannot copy value.items[2].name: a function cannot be copied");
-        EQUALS(worlds.Refusal("print"), "Cannot copy value: a function cannot be copied");
-        EQUALS(worlds.Refusal("{ job = coroutine.create(function() end) }"), "Cannot copy value.job: a coroutine cannot be copied");
+        EQUALS(worlds.Refusal("{ items = { 1, { job = coroutine.create(function() end) } } }"), "Cannot copy value.items[2].job: a coroutine cannot be copied");
+        EQUALS(worlds.Refusal("coroutine.create(print)"), "Cannot copy value: a coroutine cannot be copied");
         EQUALS(worlds.Refusal("{ list = { TransferPlain() } }"), "Cannot copy value.list[1]: a TransferPlain cannot be copied");
         EQUALS(worlds.Refusal("(function() local loop = { inner = {} } loop.inner.back = loop return loop end)()"), "Cannot copy value.inner.back: it refers back to itself");
         EQUALS(worlds.Refusal("{ [true] = 1 }"), "Cannot copy value: it has a key that is neither a string nor an integer");
@@ -993,8 +992,18 @@ MODULE(lua_transfer, {
 
     IT("hands the function the refusal of ToTransfer, in both languages", {
         Worlds worlds;
-        EQUALS(worlds.Lua("Codec.copy({ on = function() end })"), "<failed> Cannot copy value.on: a function cannot be copied");
-        EQUALS(worlds.Js("Codec.copy({ on() {} })"), "<failed> Cannot copy value.on: a function cannot be copied here");
+        EQUALS(worlds.Lua("Codec.copy({ job = coroutine.create(print) })"), "<failed> Cannot copy value.job: a coroutine cannot be copied");
+        EQUALS(worlds.Js("Codec.copy({ id: Symbol('id') })"), "<failed> Cannot copy value.id: a symbol cannot be copied");
+    });
+
+    // script_callable_ut.h has what a function does once it is in another runtime.
+    IT("copies a function as itself into the runtime it came from", {
+        Worlds worlds;
+        EQUALS(worlds.Lua("(function() local on = function() end return rawequal(Codec.copy({ on = on }).on, on) end)()"), "true");
+        EQUALS(worlds.Lua("rawequal(Codec.copy(print), print)"), "true");
+        EQUALS(worlds.Js("(() => { const on = () => {}; return Codec.copy({ on }).on === on; })()"), "true");
+        // The transfer of JavaScript still refuses one on its own.
+        EQUALS(worlds.CopyJs("{ on() {} }").GetError(), "Cannot copy value.on: a function cannot be copied here");
     });
 
     IT("throws to the script what FromTransfer cannot rebuild, once the function has returned", {

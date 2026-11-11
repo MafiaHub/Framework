@@ -9,6 +9,7 @@
 #include "call.h"
 #include "lua_class.h"
 #include "v8_backend.h"
+#include "v8_callable.h"
 #include "value.h"
 
 #include "../engine_helpers.h"
@@ -58,11 +59,20 @@ namespace Framework::Scripting::Bind {
                 }
             }
 
-            // Gives the script what the function returned, or throws what it threw.
+            // Gives the script what the function returned, or the promise of what it deferred, or throws what it
+            // threw.
             void Finish() {
+                // A promise the script never sees must not be rejected behind its back.
+                if (_deferred != nullptr && _thrown != Thrown::None) {
+                    _deferred->Drop();
+                }
                 switch (_thrown) {
                 case Thrown::None:
-                    if (_returned) {
+                    if (_deferred != nullptr) {
+                        _deferred->Returned(_isolate, _context);
+                        _info.GetReturnValue().Set(_promise);
+                    }
+                    else if (_returned) {
                         _info.GetReturnValue().Set(_result);
                     }
                     break;
@@ -201,6 +211,14 @@ namespace Framework::Scripting::Bind {
 
             bool HasThrown() const override {
                 return _thrown != Thrown::None;
+            }
+
+            // In an isolate that is being terminated there is no promise to make, and nobody to give one to.
+            Deferred Defer() override {
+                if (_deferred == nullptr && CanRun()) {
+                    _deferred = Detail::V8Defer(_isolate, _context, _promise);
+                }
+                return Deferred(_deferred);
             }
 
             // --- ValueBackend ---
@@ -351,14 +369,19 @@ namespace Framework::Scripting::Bind {
                 }
             }
 
+            std::shared_ptr<ScriptCallable> CallableOf(size_t slot) override {
+                const v8::Local<v8::Value> value = Local(slot);
+                return value->IsFunction() ? V8ToCallable(_isolate, _context, value.As<v8::Function>()) : nullptr;
+            }
+
             // A getter that throws fails the copy, which keeps what it threw in its error. The script is not
-            // thrown at.
+            // thrown at. A function is copied as its callable.
             Utils::Result<TransferredValue, std::string> TransferOf(size_t slot) override {
                 using Result = Utils::Result<TransferredValue, std::string>;
                 if (!CanRun()) {
                     return Result::Err(kTerminating);
                 }
-                Result copied = ValueTransfer::Copy(_isolate, _context, Local(slot));
+                Result copied = ValueTransfer::Copy(_isolate, _context, Local(slot), V8CallableTransfer());
                 if (!copied && _isolate->IsExecutionTerminating()) {
                     _thrown = Thrown::Terminated;
                 }
@@ -566,6 +589,10 @@ namespace Framework::Scripting::Bind {
             Thrown _thrown = Thrown::None;
             std::string _message;
             v8::Local<v8::Value> _caught;
+
+            // What Defer made, if the function called it, and the promise the script gets for it.
+            std::shared_ptr<Detail::V8Deferred> _deferred;
+            v8::Local<v8::Promise> _promise;
         };
 
         // The script is thrown at from here, outside the catch block and once the function has returned.

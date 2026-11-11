@@ -184,8 +184,10 @@ namespace Framework::Scripting::Bind {
 
         // Runs `function` on the values a script passed, which are the whole stack of `L`, and returns as a
         // lua_CFunction does. `method` says the first of them is the receiver and not an argument. What the
-        // function threw is raised here, once the function has returned and its Call is gone.
-        int LuaInvokeNative(lua_State *L, NativeFunction &function, bool method);
+        // function threw is raised here, once the function has returned and its Call is gone. A function that
+        // deferred its result and has not settled it makes the coroutine wait here (Call::Defer); `label` is
+        // what the error of a script that cannot wait names it by, "Chat.sendToAll".
+        int LuaInvokeNative(lua_State *L, NativeFunction &function, bool method, const char *label = nullptr);
 
         // A function that is not a member of a class: `owner` is what an error names before it, "Chat" in
         // "Chat.sendToAll".

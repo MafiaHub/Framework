@@ -10,6 +10,7 @@
 
 #include "lua_value_walk.h"
 
+#include "../bind/lua_callable.h"
 #include "../bind/lua_class.h"
 
 #include <utils/profiler.h>
@@ -97,7 +98,10 @@ namespace Framework::Scripting {
                 case LUA_TSTRING: return CopyString(index, out);
                 case LUA_TTABLE: return CopyTable(index, out);
                 case LUA_TUSERDATA: return CopyObject(index, out);
-                case LUA_TFUNCTION: return Fail("a function cannot be copied");
+                case LUA_TFUNCTION:
+                    out.kind     = Kind::Function;
+                    out.callable = Bind::LuaToCallable(_L, index);
+                    return true;
                 case LUA_TTHREAD: return Fail("a coroutine cannot be copied");
                 default: return Fail("a userdata cannot be copied");
                 }
@@ -299,7 +303,7 @@ namespace Framework::Scripting {
                 case Kind::Map: return BuildMap(value);
                 case Kind::HostObject: return BuildHostObject(value);
                 case Kind::RegExp: return Fail("a RegExp cannot be copied to Lua");
-                case Kind::Function: return Fail("a function cannot be copied");
+                case Kind::Function: return BuildFunction(value);
                 }
                 return Fail("it is of a kind Lua does not know");
             }
@@ -429,6 +433,15 @@ namespace Framework::Scripting {
                     lua_rawset(_L, -3);
                 }
                 --_depth;
+                return true;
+            }
+
+            // One that was exported between JavaScript runtimes alone (function_references.h) has no callable.
+            bool BuildFunction(const TransferredValue &value) {
+                if (value.callable == nullptr) {
+                    return Fail("a function cannot be copied");
+                }
+                Bind::LuaPushCallable(_L, value.callable);
                 return true;
             }
 

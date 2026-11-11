@@ -14,6 +14,10 @@
 #include <utility>
 #include <vector>
 
+namespace Framework::Scripting::Bind {
+    class ScriptCallable; // bind/callable.h
+} // namespace Framework::Scripting::Bind
+
 namespace Framework::Scripting {
 
     /**
@@ -71,9 +75,15 @@ namespace Framework::Scripting {
         // ride in `properties` too, under those names).
         std::vector<std::pair<std::string, TransferredValue>> properties;
 
-        // Function: the id the exporting side handed out for it, and what keeps it exported while this copy exists.
+        // Function, between two JavaScript runtimes (function_references.h): the id the exporting side handed out for
+        // it, and what keeps it exported while this copy exists.
         uint64_t reference = 0;
         std::shared_ptr<void> retainer;
+
+        // Function, whatever the languages on the two sides: the function itself, to be invoked in the runtime that
+        // owns it. Set for a function copied out of Lua, and for one copied out of JavaScript through the binding
+        // layer (Bind::Value::ToTransfer, the result of a ScriptCallable).
+        std::shared_ptr<Bind::ScriptCallable> callable;
     };
 
 } // namespace Framework::Scripting

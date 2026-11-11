@@ -7,6 +7,7 @@
  */
 
 #include "call.h"
+#include "lua_callable.h"
 #include "lua_class.h"
 #include "value.h"
 
@@ -40,7 +41,8 @@
 //
 // Nothing is raised while the function runs, apart from what Lua itself raises when it is out of memory or of
 // stack, which unwinds the function as a C++ exception does. What the function threw is kept as text and raised
-// by LuaInvokeNative, outside the catch block and after the Call is gone.
+// by LuaInvokeNative, outside the catch block and after the Call is gone. That is also where a function that
+// deferred its result has its coroutine wait.
 
 namespace Framework::Scripting::Bind {
     namespace {
@@ -62,13 +64,14 @@ namespace Framework::Scripting::Bind {
             LuaCall(lua_State *L, bool method): _L(L), _receiver(method && lua_gettop(L) >= 1), _first(method ? 2 : 1), _count(static_cast<size_t>(std::max(lua_gettop(L) - (method ? 1 : 0), 0))) {}
 
             // What the function leaves the script: the number of results, now on top of the stack, or the message
-            // to raise in `error`.
-            int Finish(std::optional<std::string> &error) {
+            // to raise in `error`, or in `deferred` the result it left for later, which then is what counts.
+            int Finish(std::optional<std::string> &error, std::shared_ptr<Detail::LuaDeferred> &deferred) {
                 if (_thrown) {
                     error = std::move(_thrown);
                     return 0;
                 }
-                if (!_returned) {
+                deferred = std::move(_deferred);
+                if (deferred != nullptr || !_returned) {
                     return 0;
                 }
                 Reserve(1);
@@ -187,6 +190,13 @@ namespace Framework::Scripting::Bind {
 
             bool HasThrown() const override {
                 return _thrown.has_value();
+            }
+
+            Deferred Defer() override {
+                if (_deferred == nullptr) {
+                    _deferred = Detail::LuaDefer(_L);
+                }
+                return Deferred(_deferred);
             }
 
             // --- ValueBackend ---
@@ -367,6 +377,10 @@ namespace Framework::Scripting::Bind {
                 lua_rawseti(_L, Index(slot), static_cast<lua_Integer>(lua_rawlen(_L, Index(slot))) + 1);
             }
 
+            std::shared_ptr<ScriptCallable> CallableOf(size_t slot) override {
+                return Is(slot, LUA_TFUNCTION) ? LuaToCallable(_L, Index(slot)) : nullptr;
+            }
+
             Utils::Result<TransferredValue, std::string> TransferOf(size_t slot) override {
                 const int index = Index(slot);
                 return index != 0 ? LuaTransfer::Copy(_L, index) : Utils::Result<TransferredValue, std::string>::Ok();
@@ -493,6 +507,9 @@ namespace Framework::Scripting::Bind {
             size_t _result = 0;
             bool _returned = false;
             std::optional<std::string> _thrown;
+
+            // What Defer made, if the function called it.
+            std::shared_ptr<Detail::LuaDeferred> _deferred;
         };
 
         // __gc of what a function made by PushLuaFunction holds. The userdata loses its metatable with its
@@ -535,8 +552,9 @@ namespace Framework::Scripting::Bind {
     }
 
     namespace Detail {
-        int LuaInvokeNative(lua_State *L, NativeFunction &function, bool method) {
+        int LuaInvokeNative(lua_State *L, NativeFunction &function, bool method, const char *label) {
             std::optional<std::string> error;
+            std::shared_ptr<LuaDeferred> deferred;
             int results = 0;
             {
                 LuaCall call(L, method);
@@ -546,7 +564,12 @@ namespace Framework::Scripting::Bind {
                 catch (const std::exception &exception) {
                     call.ThrowError(exception.what());
                 }
-                results = call.Finish(error);
+                results = call.Finish(error, deferred);
+            }
+            // Settled by now, the result is given at once. Otherwise the coroutine waits here, or Lua raises
+            // that it cannot: neither comes back.
+            if (deferred != nullptr) {
+                results = deferred->Finish(L, label, error);
             }
             if (!error) {
                 return results;

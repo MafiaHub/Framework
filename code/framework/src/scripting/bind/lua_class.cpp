@@ -198,7 +198,7 @@ namespace Framework::Scripting::Bind::Detail {
         int CallMethod(lua_State *L) {
             const LuaFunction &function = FunctionUpvalue(L);
             if (function.thunk.native != nullptr) {
-                return LuaInvokeNative(L, *function.thunk.native, true);
+                return LuaInvokeNative(L, *function.thunk.native, true, function.label.c_str());
             }
             void *self = CheckReceiver(L, function);
             CheckArguments(L, function, 2);
@@ -208,7 +208,7 @@ namespace Framework::Scripting::Bind::Detail {
         int CallStatic(lua_State *L) {
             const LuaFunction &function = FunctionUpvalue(L);
             if (function.thunk.native != nullptr) {
-                return LuaInvokeNative(L, *function.thunk.native, false);
+                return LuaInvokeNative(L, *function.thunk.native, false, function.label.c_str());
             }
             CheckArguments(L, function, 1);
             return Invoke(L, function, nullptr);

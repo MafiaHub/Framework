@@ -33,6 +33,10 @@ namespace Framework::Scripting {
      * A table is read raw. Its metatable does not cross and none of its metamethods runs, so the table of a
      * script's own class arrives as a plain table of its fields. An object of a bound class is recognised by its
      * class and crosses when that class is a host type.
+     *
+     * A function crosses as its callable (bind/callable.h), which keeps it alive in its state, and arrives as a
+     * function that runs it there: bind/call.h, at Call::FromTransfer, says what calling it gives. In the state it
+     * came from it arrives as itself. This needs a state a LuaRuntime made, on both sides.
      */
     class LuaTransfer final {
       public:
@@ -58,8 +62,8 @@ namespace Framework::Scripting {
         /**
          * Copy the value at `index` out of its state. The stack is left as it was.
          *
-         * Fails, naming where in the value it gave up ("Cannot copy value.items[2].name: ..."), on a function, a
-         * coroutine, a userdata that is not an object of a host type, a table that refers back to itself or has a
+         * Fails, naming where in the value it gave up ("Cannot copy value.items[2].name: ..."), on a coroutine, a
+         * userdata that is not an object of a host type, a table that refers back to itself or has a
          * key that is neither a string nor an integer, a string that is not UTF-8, tables nested more than 128
          * deep, and a value larger than ValueTransfer::kMaxValues and kMaxBytes allow. An index in that path is
          * the one Lua counts with, from 1.
@@ -69,8 +73,9 @@ namespace Framework::Scripting {
         /**
          * Build a copied value in the state of `L` and push it: one value. On failure nothing is pushed and `error`
          * says why, naming where in the value: a RegExp, a BigInt beyond 64 bits, a Map key that is neither a
-         * string nor a number, a host type Lua does not have, a function. An index in that path counts from 0, as
-         * the path of ValueTransfer does.
+         * string nor a number, a host type Lua does not have, a function that carries no callable, as one that
+         * was exported between JavaScript runtimes alone. An index in that path counts from 0, as the path of
+         * ValueTransfer does.
          */
         static bool Rebuild(lua_State *L, const TransferredValue &value, std::string &error);
     };

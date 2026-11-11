@@ -15,7 +15,10 @@
 
 #include <atomic>
 #include <mutex>
+#include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace Framework::Scripting::Bind {
     namespace {
@@ -81,6 +84,56 @@ namespace Framework::Scripting::Bind {
             }
             const ScriptingModule *module = CoreModules::GetScriptingModule();
             return module != nullptr ? module->GetResourceManager() : nullptr;
+        }
+
+        NativeFunction CallableForwarder(std::shared_ptr<ScriptCallable> callable) {
+            // What the call and the `done` of its Invoke share: the outcome when `done` came first, the deferred
+            // result of the call when the call returned first.
+            struct Answer final {
+                bool told    = false;
+                bool waiting = false;
+                CallOutcome outcome;
+                Deferred later;
+            };
+
+            return [callable = std::move(callable)](Call &call) {
+                // An argument is named as the calling language counts it.
+                const size_t first = call.GetLanguage() == Language::Lua ? 1 : 0;
+                std::vector<TransferredValue> arguments(call.ArgCount());
+                for (size_t i = 0; i < arguments.size(); ++i) {
+                    auto copied = call.Arg(i).ToTransfer();
+                    if (!copied) {
+                        call.ThrowError("Argument " + std::to_string(i + first) + ": " + copied.GetError());
+                        return;
+                    }
+                    arguments[i] = std::move(copied).GetValue();
+                }
+
+                const auto answer = std::make_shared<Answer>();
+                callable->Invoke(arguments, ReturnMode::Value, [answer](CallOutcome &&outcome) {
+                    if (!answer->waiting) {
+                        answer->told    = true;
+                        answer->outcome = std::move(outcome);
+                    }
+                    else if (outcome.threw) {
+                        answer->later.Reject(std::move(outcome.error));
+                    }
+                    else {
+                        answer->later.Resolve(std::move(outcome.value));
+                    }
+                });
+
+                if (!answer->told) {
+                    answer->later   = call.Defer();
+                    answer->waiting = true;
+                }
+                else if (answer->outcome.threw) {
+                    call.ThrowError(std::move(answer->outcome.error));
+                }
+                else {
+                    call.Return(call.FromTransfer(answer->outcome.value));
+                }
+            };
         }
     } // namespace Detail
 } // namespace Framework::Scripting::Bind
