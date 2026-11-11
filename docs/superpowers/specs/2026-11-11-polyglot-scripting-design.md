@@ -225,8 +225,30 @@ class ScriptCallable {
 };
 ```
 
-`Deferred` (`Resolve(TransferredValue)`, `Reject(std::string)`) settles the promise a JavaScript caller
-received, or resumes the Lua coroutine that called.
+`Deferred` (`Resolve(TransferredValue = {})`, `Reject(std::string)`, `Settled()`) settles the promise a
+JavaScript caller received, or resumes the Lua coroutine that called. It is a copyable handle; the first
+settlement counts.
+
+- `callable.h` names neither language, so `TransferredValue` lives in `scripting/transferred_value.h`,
+  which `value_transfer.h` includes.
+- A function has one callable while anyone holds it, so `ToCallable()` twice gives the same one, and a
+  function that stands for a callable of another runtime gives that callable.
+- A callable is told that its runtime goes: `Bind::WatchRuntimes(engine)` adds the one disposing listener
+  per engine that does it. `Builtins::UnregisterAll` does the same for an isolate no listener speaks for
+  (the engine's own, the one isolate of a shared engine), and a Lua state no engine owns says so as it
+  closes. The callable is then dead, and every `Invoke` it still owed, like every later one, is told
+  `threw` and `runtime stopped`. A Lua runtime destroyed from inside its own call is dead at once,
+  though its state stays open until the engine ticks.
+- `Invoke` calls the function on nothing: `this` is undefined in JavaScript and Lua gets no receiver, also
+  for a function that crossed as a property of an object.
+- `done` is told later for a promise, with one exception: a promise that settles as the call leaves its
+  runtime, where the runtime's queues drain, has told `done` by the time `Invoke` returns.
+- A JavaScript callable is a `Bind::V8Callable` (`bind/v8_callable.h`), which gives its isolate and its
+  function to a caller that runs in the same isolate and needs no copy.
+- In Lua a deferred that is settled before the function returns makes the call return or raise at once.
+  Otherwise the coroutine waits; where the script cannot wait (the main thread, a coroutine it made
+  itself) the call raises `<Api>.<method>: cannot wait here`. In JavaScript the call always returns a
+  promise. What the function threw wins over what it deferred.
 
 ### 1.5 Error conventions
 
@@ -346,8 +368,8 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
 
 One value crosses per call result: a Lua function's first return value.
 
-- The table is `LuaTransfer` (`scripting/lua/lua_transfer.h`). On its own it refuses a function, in both
-  directions: one crosses through the function references of §4.2.
+- The table is `LuaTransfer` (`scripting/lua/lua_transfer.h`). A function crosses as its callable (§4.2),
+  in a state a `LuaRuntime` made.
 - A Lua table is read raw: its metatable does not cross and no metamethod runs. An Object's keys are
   copied in one order, integers ascending then strings sorted by their bytes, and where a table has an
   integer key and the string key of the same text the string key is the one copied. A key that arrives as
@@ -369,7 +391,18 @@ One value crosses per call result: a Lua function's first return value.
 
 - A function that crosses becomes a callable in the receiving runtime that runs it in its owner, with
   arguments and result copied (§4.1). A JavaScript function that returns a promise suspends a Lua caller
-  until it settles; a Lua function that suspends hands a JavaScript caller a Promise.
+  until it settles; a Lua function that suspends hands a JavaScript caller a Promise. A function that
+  finishes at once gives its caller the value itself, in both languages.
+  - The copy carries the function as `TransferredValue::callable`: `LuaTransfer` always, `ValueTransfer`
+    when it is given `Bind::V8CallableTransfer()`, as `Value::ToTransfer` and the results of a
+    `ScriptCallable` are. Back in the runtime that owns it the function arrives as itself, and a
+    stand-in sent on is the function it stands for, not a stand-in of a stand-in.
+  - The function references between JavaScript runtimes are as they were: a value they exported carries
+    `reference` and no `callable`, and is rebuilt by their import hook. Where a value has both and the
+    caller gave `ValueTransfer::Rebuild` an import hook, the hook wins; a value with a callable alone is
+    rebuilt from it whatever the caller gave.
+  - A function called through a callable gets no `this` (§1.4). Calling a method on the object it was
+    sent with stays what the function references of JavaScript do, and only they.
 - The event, message and export tables store `ScriptCallable`. Dispatch between two JavaScript handlers
   in one isolate keeps passing values by reference, as today. Every other pairing copies.
 - The JSON payload of a network event or a state bag is read and written by a C++ codec in Lua
