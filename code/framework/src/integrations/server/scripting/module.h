@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include <scripting/lua/lua_engine.h>
 #include <scripting/module.h>
 #include <scripting/node_engine.h>
 #include <scripting/resource/resource_manager.h>
@@ -29,10 +30,11 @@ namespace Framework::Integrations::Server::Scripting {
     };
 
     /**
-     * Server-side JavaScript scripting module with resource management support.
+     * Server-side scripting module with resource management support.
      *
      * Uses Node.js for full server-side JavaScript capabilities including
-     * require(), async/await, npm packages, etc.
+     * require(), async/await, npm packages, etc. A resource's `.lua` scripts
+     * run in a sandboxed Lua state of its own, next to its Node.js environment.
      */
     class ServerScriptingModule final
         : public Framework::Lifecycle
@@ -42,7 +44,7 @@ namespace Framework::Integrations::Server::Scripting {
         ~ServerScriptingModule();
 
         /**
-         * Initialize the Node.js engine and resource manager.
+         * Initialize the Node.js engine, the Lua engine and resource manager.
          * @param sdkCallback Optional callback for registering additional SDK bindings
          * @return true if initialization succeeded
          */
@@ -54,12 +56,12 @@ namespace Framework::Integrations::Server::Scripting {
         bool PreShutdown();
 
         /**
-         * Shutdown the Node.js engine.
+         * Shutdown the resource manager, then the Lua engine, then the Node.js engine.
          */
         void Shutdown() override;
 
         /**
-         * Update tick - process Node.js event loop and scheduled restarts.
+         * Update tick - process Node.js event loop, Lua timers and scheduled restarts.
          * Call this from the game loop.
          */
         void Update() override;
@@ -78,6 +80,13 @@ namespace Framework::Integrations::Server::Scripting {
 
         Framework::Scripting::Engine *GetScriptingEngine() const override {
             return _nodeEngine.get();
+        }
+
+        /**
+         * Get the Lua engine.
+         */
+        Framework::Scripting::LuaEngine *GetLuaEngine() const {
+            return _luaEngine.get();
         }
 
         /**
@@ -128,12 +137,23 @@ namespace Framework::Integrations::Server::Scripting {
          */
         void RegisterFrameworkBindings();
 
+        /**
+         * Register the Framework SDK bindings in a resource's Lua runtime. The Lua engine runs this inside every
+         * runtime it creates, in a protected call.
+         */
+        void RegisterLuaBindings(Framework::Scripting::LuaRuntime &runtime);
+
       private:
-        // Hand uncaught errors the engine queued to the resource manager, outside any script.
+        // Hand uncaught errors the engines queued to the resource manager, outside any script.
         void HandleRuntimeErrors();
 
+        // Fire the Lua timers that are due and wake the coroutines whose sleep is over, then handle what they raised.
+        void TickLua();
+
         std::unique_ptr<Framework::Scripting::NodeEngine> _nodeEngine;
+        std::unique_ptr<Framework::Scripting::LuaEngine> _luaEngine;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
+        std::chrono::steady_clock::time_point _lastLuaTick {};
         std::string _modVersion;
 
         std::string _resourcesPath = "resources";

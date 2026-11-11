@@ -11,12 +11,14 @@
 #include "lua_runtime_ut.h"
 #include "resource_manager_ut.h"
 
+#include "integrations/server/scripting/module.h"
 #include "scripting/lua/lua_engine.h"
 #include "scripting/lua/lua_runtime.h"
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
 
 #include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -28,6 +30,7 @@
 
 namespace LuaResourcesTest {
     using namespace Framework::Scripting;
+    using Framework::Integrations::Server::Scripting::ServerScriptingModule;
     using LuaRuntimeTest::Contains;
 
     using Scripts = std::vector<std::pair<std::string, std::string>>;
@@ -224,6 +227,38 @@ namespace LuaResourcesTest {
             return runtime != nullptr ? LuaRuntimeTest::Eval(*runtime, expression) : "<no runtime>";
         }
     };
+
+    // A server scripting module over a resources directory of its own.
+    struct Server final {
+        Files files;
+        ServerScriptingModule module;
+
+        // Brings the module up and starts what was written. False when either failed.
+        bool Start() {
+            module.SetResourcesPath(files.root.string());
+            return module.Init() == ScriptingError::SCRIPTING_NONE && module.StartAllResources();
+        }
+
+        std::string Eval(const std::string &resource, const std::string &expression) const {
+            LuaEngine *engine   = module.GetLuaEngine();
+            LuaRuntime *runtime = engine != nullptr ? engine->GetRuntime(resource) : nullptr;
+            return runtime != nullptr ? LuaRuntimeTest::Eval(*runtime, expression) : "<no runtime>";
+        }
+
+        // Updates the module as the server's ticks do until `expression` is `expected` in the resource, or time
+        // runs out.
+        bool UpdateUntil(const std::string &resource, const std::string &expression, const std::string &expected, int timeoutMs = 2000) {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+            while (std::chrono::steady_clock::now() < deadline) {
+                module.Update();
+                if (Eval(resource, expression) == expected) {
+                    return true;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            return false;
+        }
+    };
 } // namespace LuaResourcesTest
 
 MODULE(lua_resources, {
@@ -232,6 +267,7 @@ MODULE(lua_resources, {
     using LuaResourcesTest::Log;
     using LuaResourcesTest::LogText;
     using LuaResourcesTest::Rig;
+    using LuaResourcesTest::Server;
 
     // ==================== Runtimes ====================
 
@@ -637,5 +673,94 @@ MODULE(lua_resources, {
 
         EQUALS(rig.Start("asker"), "");
         EQUALS(LogText(), "main,Exports.get: export 'anything' not found in resource 'lua-only'");
+    });
+
+    // ==================== The server module ====================
+
+    IT("gives the Lua resources of a server the value types", {
+        Server server;
+        server.files.Resource("vectors", {{"main.lua", "result = Vector3.new(1, 2, 3):add(Vector3.new(4, 5, 6)):toString()"}});
+
+        EQUALS(server.Start(), true);
+        EQUALS(server.module.GetLuaEngine() != nullptr, true);
+        EQUALS(server.module.GetResourceManager()->GetLuaEngine() == server.module.GetLuaEngine(), true);
+        EQUALS(server.module.GetResourceManager()->IsResourceRunning("vectors"), true);
+        EQUALS(server.Eval("vectors", "result"), "Vector3(5, 7, 9)");
+        EQUALS(server.module.GetEngine()->GetResourceRuntime("vectors") == nullptr, true);
+
+        server.module.Shutdown();
+        EQUALS(server.module.GetLuaEngine() == nullptr, true);
+    });
+
+    IT("fires the Lua timers of a server from its update", {
+        Server server;
+        server.files.Resource("timed", {{"main.lua", "fired = 0\nsetInterval(function() fired = fired + 1 end, 1)"}});
+
+        EQUALS(server.Start(), true);
+        EQUALS(server.Eval("timed", "fired"), "0");
+        EQUALS(server.UpdateUntil("timed", "fired >= 3", "true"), true);
+    });
+
+    IT("hands a server the error of a Lua timer, which stops the resource", {
+        Server server;
+        server.files.Resource("fragile", {{"main.lua", "setTimeout(function() error('boom') end, 1)"}});
+
+        EQUALS(server.Start(), true);
+        auto *manager = server.module.GetResourceManager();
+        EQUALS(manager->IsResourceRunning("fragile"), true);
+
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (manager->GetResourceState("fragile") != ResourceState::Error && std::chrono::steady_clock::now() < deadline) {
+            server.module.Update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(manager->GetResourceState("fragile") == ResourceState::Error, true);
+        EQUALS(Contains(manager->GetResource("fragile")->GetErrorMessage(), "fragile/main.lua:1: boom"), true);
+        EQUALS(server.module.GetLuaEngine()->GetRuntime("fragile") == nullptr, true);
+    });
+
+    IT("fires a Lua timer that comes due while a server waits for its next tick", {
+        Server server;
+        // The second timer is armed when the first fires: both only fire in one wait if Lua is ticked when a timer
+        // is due, not once at the end.
+        server.files.Resource("waiting", {{"main.lua", "fired = ''\nsetTimeout(function() fired = fired .. 'first' setTimeout(function() fired = fired .. ',second' end, 20) end, 20)\nsetTimeout(function() fired = fired .. ',late' end, 60000)"}});
+        EQUALS(server.Start(), true);
+
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400);
+        server.module.WaitUntil(deadline);
+        EQUALS(std::chrono::steady_clock::now() >= deadline, true);
+        EQUALS(server.Eval("waiting", "fired"), "first,second");
+    });
+
+    IT("hands a server the error of a Lua timer that comes due while it waits", {
+        Server server;
+        server.files.Resource("fragile", {{"main.lua", "setTimeout(function() error('boom') end, 10)"}});
+        EQUALS(server.Start(), true);
+
+        server.module.WaitUntil(std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
+        EQUALS(server.module.GetResourceManager()->GetResourceState("fragile") == ResourceState::Error, true);
+    });
+
+    IT("sleeps through the wait of a server whose Lua timers are far off", {
+        Server server;
+        server.files.Resource("patient", {{"main.lua", "setTimeout(function() end, 60000)"}});
+        EQUALS(server.Start(), true);
+
+        const std::clock_t before = std::clock();
+        server.module.WaitUntil(std::chrono::steady_clock::now() + std::chrono::milliseconds(300));
+        const double cpuMs = 1000.0 * static_cast<double>(std::clock() - before) / CLOCKS_PER_SEC;
+        LESSER(cpuMs, 150.0);
+    });
+
+    IT("wakes a Lua coroutine that sleeps for no time once a millisecond at most while a server waits", {
+        Server server;
+        server.files.Resource("spinner", {{"main.lua", "turns = 0\nspawn(function() while true do turns = turns + 1 sleep(0) end end)"}});
+        EQUALS(server.Start(), true);
+
+        server.module.WaitUntil(std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
+        const int turns = std::stoi(server.Eval("spinner", "turns"));
+        // It went on between two ticks of the server, and did not spin through the wait.
+        GREATER(turns, 10);
+        LESSER(turns, 300);
     });
 })
