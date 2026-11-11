@@ -51,6 +51,9 @@ namespace ServerThreadingTest {
         std::vector<int> squares;
         uint32_t lanesUsed = 0;
         bool started       = false;
+        // The resources folder as the server is given it, relative to the working directory.
+        std::string resources;
+        std::filesystem::path previousDirectory;
 
         ~Server() {
             Stop();
@@ -74,7 +77,13 @@ namespace ServerThreadingTest {
         }
 
         bool Start(const char *name, int32_t replicationThreads, int32_t backgroundThreads) {
-            root = std::filesystem::temp_directory_path() / name;
+            // Beside the executable, and run from there, as a server is: the server finds its resources from the
+            // working directory and stages their packages from the executable's, so the two have to agree.
+            const std::filesystem::path home = std::filesystem::path(Framework::Utils::GetAbsolutePathA("."));
+            previousDirectory                = std::filesystem::current_path();
+            std::filesystem::current_path(home);
+            resources = std::string(name) + "/resources";
+            root      = home / name;
             std::filesystem::remove_all(root);
             Write(root / "resources" / "demo" / "package.json", R"({"name":"demo","version":"1.0.0","main":"server.js","mafiahub":{"server":"server.js","client":"client.js"}})");
             Write(root / "resources" / "demo" / "server.js", "globalThis.started = true;");
@@ -94,7 +103,7 @@ namespace ServerThreadingTest {
             opts.bindPublicServer   = false;
             opts.enableSignals      = false;
             opts.modConfigFile      = (root / "server.json").string();
-            opts.resourcesPath      = (root / "resources").string();
+            opts.resourcesPath      = resources;
             opts.replicationThreads = replicationThreads;
             opts.backgroundThreads  = backgroundThreads;
             opts.argc               = 1;
@@ -124,9 +133,9 @@ namespace ServerThreadingTest {
             return true;
         }
 
-        // The staging directory sits beside the resources folder, which the server resolves against its executable.
+        // The staging directory sits beside the resources folder.
         std::filesystem::path Staging() const {
-            return std::filesystem::path(Framework::Utils::GetAbsolutePathA((root / "resources").string())).parent_path() / ".packages";
+            return root / ".packages";
         }
 
         std::filesystem::path Package() const {
@@ -134,13 +143,17 @@ namespace ServerThreadingTest {
         }
 
         void Stop() {
-            if (!std::exchange(started, false)) {
-                return;
+            if (std::exchange(started, false)) {
+                Shutdown();
             }
-            Shutdown();
             std::error_code code;
-            std::filesystem::remove_all(Staging().parent_path(), code);
-            std::filesystem::remove_all(root, code);
+            if (!previousDirectory.empty()) {
+                std::filesystem::current_path(previousDirectory, code);
+                previousDirectory.clear();
+            }
+            if (!root.empty()) {
+                std::filesystem::remove_all(root, code);
+            }
         }
     };
 } // namespace ServerThreadingTest
