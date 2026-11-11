@@ -7,9 +7,11 @@
  */
 
 #include "function_references.h"
+
 #include "callback_scope.h"
 #include "engine_helpers.h"
 #include "resource_monitor.h"
+#include "script_gate.h"
 
 #include <utils/profiler.h>
 
@@ -85,6 +87,8 @@ namespace Framework::Scripting {
         struct Entered {
             explicit Entered(Runtime &runtime): locker(runtime.isolate), isolateScope(runtime.isolate), handleScope(runtime.isolate), context(runtime.context.Get(runtime.isolate)), contextScope(context), callbackScope(OpenCallbackScope(runtime.isolate)) {}
 
+            // First in, last out: a call from a script into another runtime holds safe points off for its length.
+            RuntimeEntry entry;
             v8::Locker locker;
             v8::Isolate::Scope isolateScope;
             v8::HandleScope handleScope;

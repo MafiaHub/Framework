@@ -7,7 +7,9 @@
  */
 
 #include "node_runtime.h"
+
 #include "callback_scope.h"
+#include "script_gate.h"
 
 #include <utils/profiler.h>
 
@@ -72,6 +74,8 @@ namespace Framework::Scripting {
 
         RuntimesByIsolate()[runtime->_isolate] = runtime.get();
         runtime->_isolate->AddCallCompletedCallback(&NodeRuntime::OnCallCompleted);
+        // Before it runs any script: a server with a script thread asks it for safe points.
+        RegisterIsolate(runtime->_isolate);
 
         // From here every entry into the runtime (a script, an event handler, another runtime's call) runs inside
         // Node's scope, as its own callbacks do.
@@ -141,6 +145,7 @@ namespace Framework::Scripting {
         LeaveSchedule();
         UnregisterCallbackScope(_isolate);
         RuntimesByIsolate().erase(_isolate);
+        UnregisterIsolate(_isolate);
 
         // CommonEnvironmentSetup's teardown runs the loop until the platform lets go of the isolate, which takes at
         // least one run, and that run frees this handle. Left open, it would keep that run waiting and the loop from
@@ -187,6 +192,8 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(_isolate);
         v8::Context::Scope contextScope(_setup->context());
 
+        OnIsolateRunning(_isolate);
+
         // Cleared first: script that runs in this tick sets it again, so the runtime is ticked once more for what
         // that script queued where the loop does not show it, such as an unreferenced immediate.
         _entered = false;
@@ -227,6 +234,7 @@ namespace Framework::Scripting {
         v8::Isolate::Scope isolateScope(_isolate);
         v8::HandleScope handleScope(_isolate);
         v8::Context::Scope contextScope(_setup->context());
+        OnIsolateRunning(_isolate);
         RunLoopOnce();
     }
 

@@ -8,6 +8,8 @@
 
 #include "resource_manager.h"
 
+#include "../script_gate.h"
+
 #include "../builtins/events.h"
 #include "../builtins/messages.h"
 #include "../builtins/state_bag.h"
@@ -203,6 +205,8 @@ namespace Framework::Scripting {
     }
 
     size_t ResourceManager::DiscoverResources() {
+        // Starts and frees runtimes: from another thread, only with the script thread out of them.
+        const RuntimeEntry entry;
         size_t count = 0;
 
         // Deduplicated by DiscoverResource.
@@ -396,6 +400,8 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::StartAll() {
+        // Starts and frees runtimes: from another thread, only with the script thread out of them.
+        const RuntimeEntry entry;
         std::string depError;
         if (!ValidateDependencies(depError)) {
             return ResourceOperationResult(depError);
@@ -432,6 +438,8 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::StopAll() {
+        // Starts and frees runtimes: from another thread, only with the script thread out of them.
+        const RuntimeEntry entry;
         auto loadOrder = GetLoadOrder();
         // Stop in reverse order
         std::reverse(loadOrder.begin(), loadOrder.end());
@@ -490,6 +498,8 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::StartResource(std::string_view name) {
+        // Starts and frees runtimes: from another thread, only with the script thread out of them.
+        const RuntimeEntry entry;
         Resource *resource = GetResourceMutable(name);
         if (!resource) {
             return ResourceOperationResult("Resource not found: " + std::string(name));
@@ -632,6 +642,8 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::StopResource(std::string_view name) {
+        // Starts and frees runtimes: from another thread, only with the script thread out of them.
+        const RuntimeEntry entry;
         Resource *resource = GetResourceMutable(name);
         if (!resource) {
             return ResourceOperationResult("Resource not found: " + std::string(name));
@@ -710,6 +722,8 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::RestartResource(std::string_view name) {
+        // Starts and frees runtimes: from another thread, only with the script thread out of them.
+        const RuntimeEntry entry;
         // Evict the resource's modules between stop and start: in a shared
         // runtime a plain stop+start would re-run against stale caches and not
         // reload code. See docs/resource_hot_reload.md.
@@ -760,6 +774,8 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::RefreshResource(std::string_view name) {
+        // Starts and frees runtimes: from another thread, only with the script thread out of them.
+        const RuntimeEntry entry;
         std::string path;
         bool wasRunning = false;
         {

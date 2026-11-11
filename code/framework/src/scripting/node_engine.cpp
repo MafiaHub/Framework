@@ -427,14 +427,27 @@ namespace Framework::Scripting {
     }
 #endif
 
+    void NodeEngine::GateRelease() {
+        if (_runGate != nullptr && !_gateLost) {
+            _runGate->Release();
+        }
+    }
+
+    void NodeEngine::GateAcquire() {
+        if (_runGate != nullptr && !_gateLost && !_runGate->Acquire()) {
+            _gateLost = true;
+        }
+    }
+
     void NodeEngine::RunUntil(std::chrono::steady_clock::time_point deadline) {
         using Clock       = std::chrono::steady_clock;
+        _gateLost         = false;
         const auto stopAt = deadline - kRunMargin;
         // Which runtimes have work now: a completion on their loop, or a timer, immediate or callback due. Kept across
         // rounds.
         std::vector<ResourceRuntime *> due;
 #ifdef _WIN32
-        while (_initialized && _runtime && _pendingErrors.empty()) {
+        while (_initialized && _runtime && _pendingErrors.empty() && !_gateLost) {
             const auto now = Clock::now();
             if (now >= stopAt) {
                 break;
@@ -454,7 +467,7 @@ namespace Framework::Scripting {
         // Every loop's backend fd, readable while the loop has I/O to run.
         std::vector<ResourceRuntime *> watched;
         std::vector<pollfd> fds;
-        while (_initialized && _runtime && _pendingErrors.empty() && Clock::now() < stopAt) {
+        while (_initialized && _runtime && _pendingErrors.empty() && !_gateLost && Clock::now() < stopAt) {
             const uint64_t generation = _runtimesGeneration;
             const auto now            = Clock::now();
             // How long until the next runtime has something due, if nothing has now.
@@ -496,7 +509,18 @@ namespace Framework::Scripting {
                 }
             }
             else {
+                // Only a wait gives the world up: a poll that returns at once is not worth the handoff.
+                const bool waits = idle && waitMs > 0;
+                if (waits) {
+                    GateRelease();
+                }
                 const int ready = poll(fds.data(), static_cast<nfds_t>(fds.size()), idle ? static_cast<int>(waitMs) : 0);
+                if (waits) {
+                    GateAcquire();
+                }
+                if (_gateLost) {
+                    return;
+                }
                 if (ready > 0) {
                     for (size_t i = 0; i < fds.size(); ++i) {
                         if (fds[i].revents != 0) {
@@ -521,7 +545,7 @@ namespace Framework::Scripting {
             RunReady(due, generation, stopAt);
         }
 #endif
-        if (_pendingErrors.empty()) {
+        if (_pendingErrors.empty() && !_gateLost) {
             SleepUntil(deadline);
         }
     }
@@ -531,6 +555,12 @@ namespace Framework::Scripting {
             return;
         }
         for (ResourceRuntime *entry : ready) {
+            // Between two runtimes nothing of a script is on the stack: where a waiting tick, or a thread that wants
+            // to run script itself, is let in. What it started or stopped shows in the generation below.
+            if (_gateLost || (_runGate != nullptr && !_runGate->Checkpoint())) {
+                _gateLost = true;
+                return;
+            }
             // Script started or stopped resources: whatever is still ready is found on the next pass.
             if (generation != _runtimesGeneration || std::chrono::steady_clock::now() >= stopAt) {
                 break;
@@ -558,6 +588,16 @@ namespace Framework::Scripting {
     }
 
     void NodeEngine::SleepUntil(std::chrono::steady_clock::time_point until) {
+        if (std::chrono::steady_clock::now() >= until) {
+            return;
+        }
+        GateRelease();
+        struct Reacquire {
+            NodeEngine *engine;
+            ~Reacquire() {
+                engine->GateAcquire();
+            }
+        } reacquire {this};
 #ifdef _WIN32
         // The timer runs on another clock and can fire a little before `until`.
         for (auto now = std::chrono::steady_clock::now(); _waitTimer != nullptr && now < until; now = std::chrono::steady_clock::now()) {
@@ -577,6 +617,13 @@ namespace Framework::Scripting {
         if (now >= until) {
             return;
         }
+        GateRelease();
+        struct Reacquire {
+            NodeEngine *engine;
+            ~Reacquire() {
+                engine->GateAcquire();
+            }
+        } reacquire {this};
         LARGE_INTEGER due;
         due.QuadPart = -static_cast<LONGLONG>(std::max<int64_t>(1, std::chrono::duration_cast<std::chrono::nanoseconds>(until - now).count() / 100));
         if (!SetWaitableTimer(_waitTimer, &due, 0, nullptr, nullptr, FALSE)) {

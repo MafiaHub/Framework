@@ -13,6 +13,7 @@
 #include "../function_references.h"
 #include "../resource/resource_manager.h"
 #include "../resource_monitor.h"
+#include "../script_gate.h"
 #include "../scripting_catalog.h"
 
 #include <logging/logger.h>
@@ -437,6 +438,7 @@ namespace Framework::Scripting::Builtins {
         auto *monitor        = ResourceMonitor::Current();
         const double charged = monitor ? monitor->ChargedMs(isolate, ResourceMonitor::Clock::now()) : 0.0;
         {
+            const RuntimeEntry entry;
             ResourceMonitor::Scope scope(isolate);
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);

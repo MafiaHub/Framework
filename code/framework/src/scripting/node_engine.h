@@ -17,6 +17,7 @@
 #include "function_references.h"
 #include "node_runtime.h"
 #include "resource_monitor.h"
+#include "script_gate.h"
 
 #include <node.h>
 #include <uv.h>
@@ -156,6 +157,18 @@ namespace Framework::Scripting {
         /**
          * Get the engine options.
          */
+        // For a host that runs the engine on a thread of its own: RunUntil() gives the world up through the gate
+        // while it waits for work and between two runtimes, and returns at once when the gate turns it away. Not
+        // owned; null, the default, runs as before.
+        void SetRunGate(RunGate *gate) {
+            _runGate = gate;
+        }
+
+        // Whether the last RunUntil() ended because the gate turned it away.
+        bool LostRunGate() const {
+            return _gateLost;
+        }
+
         // Before Init(), and before any other engine in the process initialised: the platform pool is made once.
         void SetPlatformThreads(int threads) {
             _options.platformThreads = threads;
@@ -329,6 +342,11 @@ namespace Framework::Scripting {
 #else
         // RunUntil's poll() over the loops failed with something other than EINTR, which is said once.
         bool _pollFailed = false;
+        RunGate *_runGate = nullptr;
+        // The gate turned the engine away during a wait or between runtimes: it no longer has the world.
+        bool _gateLost = false;
+        void GateRelease();
+        void GateAcquire();
         // The loops this tick's poll found I/O ready in.
         std::vector<NodeRuntime *> _ioReady;
 #endif

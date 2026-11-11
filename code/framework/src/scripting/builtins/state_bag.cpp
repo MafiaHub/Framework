@@ -11,6 +11,7 @@
 #include "../callback_scope.h"
 #include "../engine_helpers.h"
 #include "../resource_monitor.h"
+#include "../script_gate.h"
 #include "../scripting_catalog.h"
 
 #include <core_modules.h>
@@ -172,7 +173,10 @@ namespace Framework::Scripting::Builtins {
         }
 
         // A change can originate off the script thread, so the isolate is entered rather than
-        // assumed. Locker nests safely when a script's own write is what got us here.
+        // assumed. Locker nests safely when a script's own write is what got us here. The entry puts the
+        // script thread out first when it is another thread's write, and holds safe points off when it
+        // is a script's: the bag being written is in the middle of its change.
+        const RuntimeEntry runtimeEntry;
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
         v8::HandleScope handleScope(isolate);

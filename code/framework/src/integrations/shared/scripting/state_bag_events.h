@@ -17,6 +17,7 @@
 #include <scripting/engine.h>
 #include <scripting/module.h>
 #include <scripting/resource/resource_manager.h>
+#include <scripting/script_gate.h>
 
 #include <function2/function2.hpp>
 #include <v8.h>
@@ -82,6 +83,7 @@ namespace Framework::Integrations::Shared::Scripting {
 
             // A write can come from off the script thread, so the isolate is entered rather than
             // assumed. Locker nests safely when a script's own write is what got us here.
+            const Framework::Scripting::RuntimeEntry entry;
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
