@@ -12,6 +12,7 @@
 
 #include <lauxlib.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <stdexcept>
 #include <utility>
@@ -20,35 +21,32 @@ namespace Framework::Scripting {
     namespace {
         constexpr const char *kDeadlineMessage = "script ran too long";
 
-        // The message handler of every entry: the error as text, then where it was raised. An error that is not a
-        // string is spelled as tostring() would.
-        int Traceback(lua_State *L) {
-            const char *message = lua_type(L, 1) == LUA_TSTRING ? lua_tostring(L, 1) : luaL_tolstring(L, 1, nullptr);
-            luaL_traceback(L, L, message, 1);
-            return 1;
-        }
+        // The message of an error keeps half of what an error text may hold, which leaves the traceback its room.
+        constexpr size_t kMaxTracedMessageBytes = LuaRuntime::kMaxErrorBytes / 2;
 
-        // Takes the error off the stack. Nothing here allocates in the state, which may have no memory left.
-        std::string PopError(lua_State *L) {
-            std::string error;
-            if (lua_type(L, -1) == LUA_TSTRING) {
-                size_t length    = 0;
-                const char *text = lua_tolstring(L, -1, &length);
-                error.assign(text, length);
+        // A space for each control character but the tab, so that a script cannot start a line of its own in the
+        // log or drive the terminal that shows it. That covers the C1 controls as UTF-8 spells them.
+        void BlankControlCharacters(std::string &line) {
+            for (size_t i = 0; i < line.size(); ++i) {
+                const auto byte = static_cast<unsigned char>(line[i]);
+                if ((byte < 0x20 && byte != '\t') || byte == 0x7F) {
+                    line[i] = ' ';
+                }
+                else if (byte == 0xC2 && i + 1 < line.size() && static_cast<unsigned char>(line[i + 1]) >= 0x80 && static_cast<unsigned char>(line[i + 1]) <= 0x9F) {
+                    line[i]     = ' ';
+                    line[i + 1] = ' ';
+                }
             }
-            else {
-                error = std::string("(error object is a ") + luaL_typename(L, -1) + " value)";
-            }
-            lua_pop(L, 1);
-            return error;
         }
     } // namespace
 
-    LuaRuntime::LuaRuntime(LuaRuntimeOptions options): _options(std::move(options)), _printHandler(DefaultPrintHandler()) {
+    LuaRuntime::LuaRuntime(LuaRuntimeOptions options): _options(std::move(options)) {
         _state = lua_newstate(Allocate, this, luaL_makeseed(nullptr));
         if (_state == nullptr) {
-            throw std::runtime_error("LuaRuntime: the memory limit of '" + _options.resourceName + "' is too small for a Lua state");
+            const char *reason = _options.memoryLimitBytes != 0 ? "its memory limit is too small for a Lua state" : "out of memory";
+            throw std::runtime_error("LuaRuntime: cannot create the Lua state of '" + _options.resourceName + "': " + reason);
         }
+        lua_atpanic(_state, Panic);
 
         // A coroutine starts with a copy of this, so From() reads it on any thread.
         *static_cast<LuaRuntime **>(lua_getextraspace(_state)) = this;
@@ -61,7 +59,7 @@ namespace Framework::Scripting {
         }
 
         // Installed for good: a coroutine inherits the hook of the thread that creates it.
-        if (_options.entryDeadline.count() > 0) {
+        if (HasDeadline()) {
             lua_sethook(_state, DeadlineHook, LUA_MASKCOUNT, kHookInterval);
         }
     }
@@ -88,18 +86,19 @@ namespace Framework::Scripting {
     }
 
     void LuaRuntime::SetPrintHandler(PrintHandler handler) {
-        _printHandler = handler ? std::move(handler) : DefaultPrintHandler();
-    }
-
-    LuaRuntime::PrintHandler LuaRuntime::DefaultPrintHandler() const {
-        return [resourceName = _options.resourceName](const std::string &line) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("[{}] {}", resourceName, line);
-        };
+        _printHandler = std::move(handler);
     }
 
     bool LuaRuntime::Execute(int nargs, int nresults, std::string &error) {
         const int function = lua_gettop(_state) - nargs;
-        if (!lua_checkstack(_state, 1)) {
+        // Host code that takes the failure of a nested entry and returns must not be a way to go on.
+        if (PastDeadline()) {
+            lua_settop(_state, function - 1);
+            error = kDeadlineMessage;
+            return false;
+        }
+        // The handler, and the results a call leaves beyond what it took.
+        if (!lua_checkstack(_state, 1 + std::max(nresults, 0))) {
             lua_settop(_state, function - 1);
             error = "cannot grow the Lua stack";
             return false;
@@ -107,17 +106,34 @@ namespace Framework::Scripting {
         lua_pushcfunction(_state, Traceback);
         lua_insert(_state, function);
 
-        if (_entryDepth++ == 0 && _options.entryDeadline.count() > 0) {
+        if (_entryDepth++ == 0 && HasDeadline()) {
             _deadline = std::chrono::steady_clock::now() + _options.entryDeadline;
         }
         const int status = lua_pcall(_state, nargs, nresults, function);
-        --_entryDepth;
+        if (--_entryDepth == 0) {
+            _expired = false;
+        }
 
         if (status != LUA_OK) {
             error = PopError(_state);
         }
         lua_remove(_state, function);
         return status == LUA_OK;
+    }
+
+    // The message handler of every entry: the error as text, then where it was raised. An error that is not a string
+    // is spelled as tostring() would.
+    int LuaRuntime::Traceback(lua_State *L) {
+        size_t length       = 0;
+        const char *message = lua_type(L, 1) == LUA_TSTRING ? lua_tolstring(L, 1, &length) : luaL_tolstring(L, 1, &length);
+        if (length > kMaxTracedMessageBytes) {
+            lua_pushlstring(L, message, kMaxTracedMessageBytes);
+            lua_pushstring(L, kTruncated);
+            lua_concat(L, 2);
+            message = lua_tostring(L, -1);
+        }
+        luaL_traceback(L, L, message, 1);
+        return 1;
     }
 
     // Counts the bytes handed out, which growth alone can take past the cap. A block can always be freed or made
@@ -144,23 +160,100 @@ namespace Framework::Scripting {
         return resized;
     }
 
-    // Past the deadline the thread is made to stop at every instruction, so that code which catches the error is
-    // raised on again before it does anything: pcall cannot keep an entry alive. The next entry finds the thread
-    // counting single instructions and puts the interval back.
+    // Reached by an error raised where no protected call can take it, which host code alone can do. Lua aborts the
+    // process when this returns; an exception takes the error to that host code instead, and leaves a state whose
+    // stack nobody unwound.
+    int LuaRuntime::Panic(lua_State *L) {
+        throw std::runtime_error("LuaRuntime: unprotected Lua error: " + PopError(L));
+    }
+
+    bool LuaRuntime::PastDeadline() const {
+        return HasDeadline() && _entryDepth > 0 && (_expired || std::chrono::steady_clock::now() >= _deadline);
+    }
+
     void LuaRuntime::DeadlineHook(lua_State *L, lua_Debug *) {
-        const LuaRuntime *runtime = From(L);
-        if (runtime->_entryDepth == 0 || std::chrono::steady_clock::now() < runtime->_deadline) {
-            if (lua_gethookcount(L) != kHookInterval) {
-                lua_sethook(L, DeadlineHook, LUA_MASKCOUNT, kHookInterval);
-            }
+        if (From(L)->PastDeadline()) {
+            // A hook runs in the activation it interrupted, so level 0 is the Lua code that ran too long.
+            RaiseDeadline(L, 0);
             return;
         }
+        // The next entry finds a thread that was stopped at every instruction, and puts the interval back.
+        if (lua_gethookcount(L) != kHookInterval) {
+            lua_sethook(L, DeadlineHook, LUA_MASKCOUNT, kHookInterval);
+        }
+    }
 
+    // From here to the end of the entry, `L` is stopped at every instruction: whatever of the script still gets
+    // to run on it, a __close handler for one, is raised on again before it does anything.
+    int LuaRuntime::RaiseDeadline(lua_State *L, int level) {
+        LuaRuntime *runtime = From(L);
+        if (!runtime->_expired) {
+            runtime->_expired = true;
+            runtime->_deadlineWhere.clear();
+            // The nearest Lua code: a function of the sandbox may have been called by another C function.
+            lua_Debug activation;
+            for (; lua_getstack(L, level, &activation) != 0; ++level) {
+                lua_getinfo(L, "Sl", &activation);
+                if (activation.currentline > 0) {
+                    runtime->_deadlineWhere = std::string(activation.short_src) + ":" + std::to_string(activation.currentline) + ": ";
+                    break;
+                }
+            }
+        }
         lua_sethook(L, DeadlineHook, LUA_MASKCOUNT, 1);
-        // A hook runs in the activation it interrupted, so level 0 is the Lua code that ran too long.
-        luaL_where(L, 0);
-        lua_pushstring(L, kDeadlineMessage);
-        lua_concat(L, 2);
-        lua_error(L);
+        lua_pushfstring(L, "%s%s", runtime->_deadlineWhere.c_str(), kDeadlineMessage);
+        return lua_error(L);
+    }
+
+    bool LuaRuntime::AppendBounded(std::string &text, const char *data, size_t length, size_t limit) {
+        const size_t room = limit - std::min(limit, text.size());
+        text.append(data, std::min(length, room));
+        return length <= room;
+    }
+
+    // Nothing here allocates in the state, which may have no memory left.
+    std::string LuaRuntime::PopError(lua_State *L) {
+        std::string error;
+        if (lua_type(L, -1) == LUA_TSTRING) {
+            size_t length    = 0;
+            const char *text = lua_tolstring(L, -1, &length);
+            if (!AppendBounded(error, text, length, kMaxErrorBytes)) {
+                error += kTruncated;
+            }
+        }
+        else {
+            error = std::string("(error object is a ") + luaL_typename(L, -1) + " value)";
+        }
+        lua_pop(L, 1);
+        return error;
+    }
+
+    void LuaRuntime::WriteLine(std::string line) {
+        BlankControlCharacters(line);
+        if (_printHandler) {
+            _printHandler(line);
+        }
+        else {
+            LogLine(line);
+        }
+    }
+
+    // A script that prints in a loop would otherwise fill the log as fast as the disk takes it.
+    void LuaRuntime::LogLine(const std::string &line) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now - _logSecond >= std::chrono::seconds(1)) {
+            _logSecond = now;
+            _logLines  = 0;
+        }
+        if (_logLines > kMaxLinesPerSecond) {
+            return;
+        }
+        const auto logger = Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING);
+        if (_logLines++ < kMaxLinesPerSecond) {
+            logger->info("[{}] {}", _options.resourceName, line);
+        }
+        else {
+            logger->warn("[{}] output suppressed: more than {} lines in a second", _options.resourceName, kMaxLinesPerSecond);
+        }
     }
 } // namespace Framework::Scripting
