@@ -327,7 +327,7 @@ if(LIBNODE_AVAILABLE)
     if(WIN32)
         target_compile_definitions(FrameworkNodeEngine PRIVATE _USE_MATH_DEFINES NOMINMAX)
     endif()
-    target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_20)
+    target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_23)
 
     # Node.js inspector: enabled via explicit option OR Debug builds
     target_compile_definitions(FrameworkNodeEngine PRIVATE
@@ -349,7 +349,7 @@ target_compile_definitions(FrameworkV8Engine PRIVATE MG_ENABLE_LOG=0)
 if(WIN32)
     target_compile_definitions(FrameworkV8Engine PRIVATE _USE_MATH_DEFINES NOMINMAX)
 endif()
-target_compile_features(FrameworkV8Engine PRIVATE cxx_std_20)
+target_compile_features(FrameworkV8Engine PRIVATE cxx_std_23)
 
 # Link the solutions based on the platform
 link_shared_deps(Framework)
