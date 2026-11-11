@@ -255,6 +255,15 @@ endif()
 # Custom defines
 target_compile_definitions(Framework PUBLIC MG_ENABLE_LOG=0)
 
+# The headers need C++23, so the requirement travels with the targets: a consumer that sets
+# CXX_STANDARD lower on one of its own targets is raised to C++23 instead of slipping past
+# fw_sdk_check_abi(), which only sees the directory-wide CMAKE_CXX_STANDARD.
+foreach(_fw_lib Framework FrameworkClient FrameworkServer FrameworkLoader)
+    if(TARGET ${_fw_lib})
+        target_compile_features(${_fw_lib} PUBLIC cxx_std_23)
+    endif()
+endforeach()
+
 # The RPC identifier salt is a runtime value since the Framework ships prebuilt: a project hands it
 # to InstanceOptions::rpcIdentifierSalt from its own define (see networking/rpc/rpc_identifier.h).
 if(DEFINED FW_RPC_IDENTIFIER_SALT AND NOT FW_RPC_IDENTIFIER_SALT STREQUAL "")
