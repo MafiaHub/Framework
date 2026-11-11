@@ -82,6 +82,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/voice_ptt_gate_ut.h"
 #include "modules/voice_router_ut.h"
 #include "modules/webserver_main_thread_ut.h"
+#include "modules/world_lock_ut.h"
 #include "modules/world_text_ut.h"
 
 #ifdef _WIN32
@@ -139,6 +140,7 @@ int main() {
     UNIT_MODULE(task_scheduler);
     UNIT_MODULE(thread_budget);
     UNIT_MODULE(webserver_main_thread);
+    UNIT_MODULE(world_lock);
     UNIT_MODULE(client_package);
     UNIT_MODULE(input_state);
     UNIT_MODULE(delegation);

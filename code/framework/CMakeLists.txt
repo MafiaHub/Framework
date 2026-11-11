@@ -15,6 +15,7 @@ set(FRAMEWORK_SRC
     src/utils/fork_join_pool.cpp
     src/utils/task_scheduler.cpp
     src/utils/thread_budget.cpp
+    src/utils/world_lock.cpp
     src/utils/command_listener.cpp
     src/utils/command_processor.cpp
     src/utils/crypto.cpp
