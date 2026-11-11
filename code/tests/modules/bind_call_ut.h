@@ -1483,6 +1483,116 @@ MODULE(bind_call, {
         EQUALS(lua_gettop(L), 0);
     });
 
+    IT("takes the value of a runtime constant from each materialisation", {
+        Bind::Namespace told("ProbeTold", "Says what its runtime was told.");
+        told.RuntimeConstant<bool>("flag", "A switch of the runtime.")
+            .RuntimeConstant<double>("level", "A level of the runtime.")
+            .Constant("fixed", 7, "The same in every runtime.")
+            .RuntimeConstant<std::string>("label", "A label of the runtime.")
+            .RuntimeConstant<std::string>("serverLabel", "A label of a server.", Side::Server);
+
+        // A client is given no value for what only a server has.
+        const Bind::Namespace::RuntimeConstants first = {{"flag", true}, {"level", 3.0}, {"label", std::string("first")}};
+        Runtimes client(Side::Client);
+        v8pp::metadata::registry recorded;
+        client.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            told.MaterialiseV8(isolate, context, context->Global(), recorded, Side::Client, first);
+        });
+        told.RegisterLuaGlobal(client.LuaSide().State(), Side::Client, first);
+        std::string mismatches;
+        mismatches += client.Both("ProbeTold.flag === true", "ProbeTold.flag == true", "true");
+        mismatches += client.Both("ProbeTold.level", "3");
+        mismatches += client.Both("ProbeTold.fixed", "7");
+        mismatches += client.Both("ProbeTold.label", "first");
+        EQUALS(mismatches, "");
+        EQUALS(client.Js("typeof ProbeTold.serverLabel"), "undefined");
+        EQUALS(client.Lua("type(ProbeTold.serverLabel)"), "nil");
+        EQUALS(client.Lua("math.type(ProbeTold.level)"), "integer");
+
+        // To a script it is a constant like any other.
+        EQUALS(client.Js("ProbeTold.label = 'x'; ProbeTold.label"), "first");
+        EQUALS(client.Js("Reflect.deleteProperty(ProbeTold, 'label')"), "false");
+        EQUALS(client.Lua("(function() ProbeTold.label = 'x' end)()"), "<error> eval:1: attempt to set 'label' on ProbeTold");
+        const nlohmann::json expected = {{"description", "A label of the runtime."}, {"name", "label"}, {"readonly", true}, {"static", false}, {"type", {{"cppName", ""}, {"name", "string"}, {"optional", false}}}};
+        nlohmann::json label;
+        for (const nlohmann::json &property : SymbolOf(recorded, "ProbeTold")["properties"]) {
+            if (property["name"] == "label") {
+                label = property;
+            }
+        }
+        EQUALS(label.dump(), expected.dump());
+
+        // Another runtime is told something else.
+        const Bind::Namespace::RuntimeConstants second = {{"serverLabel", std::string("behind")}, {"label", std::string("second")}, {"level", 0.5}, {"flag", false}};
+        Runtimes server;
+        server.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            told.MaterialiseV8(isolate, context, context->Global(), recorded, Side::Server, second);
+        });
+        told.RegisterLuaGlobal(server.LuaSide().State(), Side::Server, second);
+        mismatches += server.Both("ProbeTold.flag === false", "ProbeTold.flag == false", "true");
+        mismatches += server.Both("ProbeTold.level", "0.5");
+        mismatches += server.Both("ProbeTold.label", "second");
+        mismatches += server.Both("ProbeTold.serverLabel", "behind");
+        EQUALS(mismatches, "");
+        EQUALS(client.Both("ProbeTold.label", "first"), "");
+
+        // A state that has the namespace keeps what it was first told.
+        told.MaterialiseLua(client.LuaSide().State(), Side::Client, second);
+        EQUALS(client.Lua("ProbeTold.label"), "first");
+    });
+
+    IT("refuses a runtime constant that is given no value, or one of another type", {
+        Bind::Namespace told("ProbeUntold", "Says what its runtime was told.");
+        told.RuntimeConstant<bool>("flag", "A switch of the runtime.").RuntimeConstant<std::string>("label", "A label of the runtime.").RuntimeConstant<double>("serverLevel", "A level of a server.", Side::Server);
+        const std::string refusedTwice = LogicErrorOf([&] {
+            told.RuntimeConstant<bool>("label", "Declared before.");
+        });
+        EQUALS(refusedTwice, "Bind: 'ProbeUntold.label' is declared twice, and a member cannot be overloaded");
+
+        const Bind::Namespace::RuntimeConstants missing = {{"flag", true}};
+        const Bind::Namespace::RuntimeConstants mistyped = {{"flag", true}, {"label", 1.0}};
+        const Bind::Namespace::RuntimeConstants whole    = {{"flag", true}, {"label", std::string("whole")}};
+        const std::string noValue                        = "Bind: 'ProbeUntold.label' is a runtime constant, and the runtime gives it no value";
+        const std::string otherType                      = "Bind: 'ProbeUntold.label' is a runtime constant, and the runtime gives it a value of another type";
+
+        Runtimes runtimes(Side::Client);
+        std::string refusedMissing;
+        std::string refusedMistyped;
+        std::string refusedOtherSide;
+        runtimes.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            v8pp::metadata::registry &scratch = v8pp::metadata::catalog("bind_call/scratch");
+            refusedMissing                    = LogicErrorOf([&] {
+                told.MaterialiseV8(isolate, context, context->Global(), scratch, Side::Client, missing);
+            });
+            refusedMistyped = LogicErrorOf([&] {
+                told.MaterialiseV8(isolate, context, context->Global(), scratch, Side::Client, mistyped);
+            });
+            // What only the other side has needs no value here, and needs one there.
+            refusedOtherSide = LogicErrorOf([&] {
+                told.MaterialiseV8(isolate, context, context->Global(), scratch, Side::Server, whole);
+            });
+        });
+        EQUALS(refusedMissing, noValue);
+        EQUALS(refusedMistyped, otherType);
+        EQUALS(refusedOtherSide, "Bind: 'ProbeUntold.serverLevel' is a runtime constant, and the runtime gives it no value");
+        EQUALS(runtimes.Js("typeof ProbeUntold"), "undefined");
+
+        lua_State *L = runtimes.LuaSide().State();
+        refusedMissing = LogicErrorOf([&] {
+            told.MaterialiseLua(L, Side::Client, missing);
+        });
+        refusedMistyped = LogicErrorOf([&] {
+            told.MaterialiseLua(L, Side::Client, mistyped);
+        });
+        EQUALS(refusedMissing, noValue);
+        EQUALS(refusedMistyped, otherType);
+        EQUALS(lua_gettop(L), 0);
+        EQUALS(runtimes.Lua("type(ProbeUntold)"), "nil");
+
+        told.MaterialiseLua(L, Side::Client, whole);
+        EQUALS(runtimes.Lua("ProbeUntold.label"), "whole");
+    });
+
     IT("refuses to give JavaScript a function it cannot receive the result of", {
         using BindClassLuaTest::Token;
         Bind::Namespace sealing("ProbeSealing", "Returns what cannot be copied.");

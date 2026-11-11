@@ -30,6 +30,7 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace Framework::Scripting::Bind {
     // The definition of a global object of functions and constants, such as a service a script reaches as `Chat`:
@@ -41,8 +42,9 @@ namespace Framework::Scripting::Bind {
     //
     // A function is a context function, void(Bind::Call &), whose Doc gives the types, or a typed callable (a
     // function, a static member function or a captureless lambda), which the language converts the arguments for
-    // as it does for a static of a class. Functions and constants share the names of the object: Function and
-    // Constant throw std::logic_error naming <Namespace>.<member> for a name the namespace already declares.
+    // as it does for a static of a class. Functions and constants share the names of the object: Function,
+    // Constant and RuntimeConstant throw std::logic_error naming <Namespace>.<member> for a name the namespace
+    // already declares.
     //
     //     void SendToAll(Bind::Call &call) {
     //         if (!call.Arg(0).IsString()) {
@@ -63,6 +65,12 @@ namespace Framework::Scripting::Bind {
     //     }
     class Namespace final {
       public:
+        // What a constant holds.
+        using ConstantValue = std::variant<bool, double, std::string>;
+
+        // The values of the constants a definition leaves to the runtime (RuntimeConstant), by name.
+        using RuntimeConstants = std::vector<std::pair<std::string, ConstantValue>>;
+
         Namespace(std::string name, std::string description);
 
         Namespace &Function(std::string name, NativeFunction function, Doc doc, Side side = Side::Shared);
@@ -93,6 +101,15 @@ namespace Framework::Scripting::Bind {
             return Constant(std::move(name), std::string(value), std::move(description), side);
         }
 
+        // A constant the definition only declares, of type T: bool, double or std::string. Its value is what is
+        // known when a runtime is set up and not before, as the version of a mod is, so each materialisation is
+        // given it. To a script it is a constant like any other.
+        template <typename T>
+            requires(std::same_as<T, bool> || std::same_as<T, double> || std::same_as<T, std::string>)
+        Namespace &RuntimeConstant(std::string name, std::string description, Side side = Side::Shared) {
+            return AddConstant(std::move(name), TypeOf<T>(), T {}, std::move(description), side, true);
+        }
+
         // Described as a class that is a namespace: its functions are static, its constants read-only static
         // properties.
         const ClassDesc &Describe() const;
@@ -100,18 +117,22 @@ namespace Framework::Scripting::Bind {
         // Sets target[name] to a new object carrying the members that exist in a runtime of side `runtime`, and
         // records it in `catalog` the way a builtin written by hand does: a global_object with its functions and,
         // for the constants, read-only properties. Returns the object. Every call makes a new one. Call with
-        // `context` entered. Throws std::logic_error when a function returns what JavaScript cannot receive.
-        v8::Local<v8::Object> MaterialiseV8(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, v8pp::metadata::registry &catalog, Side runtime) const;
+        // `context` entered. `constants` has the value of every runtime constant of that side. Throws
+        // std::logic_error, before anything is set, when a function returns what JavaScript cannot receive, and
+        // when a runtime constant has no value or one of another type.
+        v8::Local<v8::Object> MaterialiseV8(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, v8pp::metadata::registry &catalog, Side runtime, const RuntimeConstants &constants = {}) const;
 
         // Publishes the namespace as a global of the state under its name: a table a script reads the members of
         // and cannot write to, with those that exist in a runtime of side `runtime`. In a state that already has
-        // it, whatever the side, it only puts it back under its name. The global is set raw. Runs unprotected: a
-        // Lua error here panics unless the caller is in a protected call.
-        void MaterialiseLua(lua_State *L, Side runtime) const;
+        // it, whatever the side and whatever `constants`, it only puts it back under its name. The global is set
+        // raw. `constants` is what it is for MaterialiseV8, and what is wrong with it throws std::logic_error before
+        // anything is made in the state. Runs unprotected: a Lua error here panics unless the caller is in a
+        // protected call.
+        void MaterialiseLua(lua_State *L, Side runtime, const RuntimeConstants &constants = {}) const;
 
         // MaterialiseLua, under the name the RegisterLua of a builtin calls for a class too.
-        void RegisterLuaGlobal(lua_State *L, Side runtime) const {
-            MaterialiseLua(L, runtime);
+        void RegisterLuaGlobal(lua_State *L, Side runtime, const RuntimeConstants &constants = {}) const {
+            MaterialiseLua(L, runtime, constants);
         }
 
       private:
@@ -137,7 +158,8 @@ namespace Framework::Scripting::Bind {
         std::string QualifiedName(const std::string &member) const;
 
         Namespace &AddFunction(FunctionDesc desc, Detail::LuaThunk lua, V8Maker v8);
-        Namespace &AddConstant(std::string name, TypeRef type, std::variant<bool, double, std::string> value, std::string description, Side side);
+        // `value` is the constant, or with `runtime` only what tells its type.
+        Namespace &AddConstant(std::string name, TypeRef type, ConstantValue value, std::string description, Side side, bool runtime = false);
 
         std::shared_ptr<Record> _record;
     };

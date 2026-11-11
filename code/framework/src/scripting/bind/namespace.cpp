@@ -28,8 +28,39 @@ namespace Framework::Scripting::Bind {
             size_t described = 0;                        // its index in desc.functions, or in desc.properties for a constant
             std::optional<Detail::LuaFunction> function; // empty for a constant
             V8Maker v8;                                  // of a function
-            std::variant<bool, double, std::string> constant;
+            ConstantValue constant;
+            bool runtime = false; // a constant each materialisation is given: `constant` only tells its type
         };
+
+        // What `constants` gives the runtime constant `name`, or nullptr.
+        static const ConstantValue *Given(const RuntimeConstants &constants, const std::string &name) {
+            const auto given = std::find_if(constants.begin(), constants.end(), [&name](const std::pair<std::string, ConstantValue> &constant) {
+                return constant.first == name;
+            });
+            return given != constants.end() ? &given->second : nullptr;
+        }
+
+        // The value of a constant in one materialisation: its own, or what the runtime gives it.
+        const ConstantValue &ValueOf(const Member &member, const RuntimeConstants &constants) const {
+            return member.runtime ? *Given(constants, desc.properties[member.described].name) : member.constant;
+        }
+
+        // Throws for the first runtime constant of side `runtime` that `constants` has no value of its type for.
+        void RequireConstants(Side runtime, const RuntimeConstants &constants) const {
+            for (const Member &member : members) {
+                if (!member.runtime || !Materialises(member.side, runtime)) {
+                    continue;
+                }
+                const std::string &name    = desc.properties[member.described].name;
+                const ConstantValue *given = Given(constants, name);
+                if (given == nullptr) {
+                    throw std::logic_error("Bind: '" + desc.name + "." + name + "' is a runtime constant, and the runtime gives it no value");
+                }
+                if (given->index() != member.constant.index()) {
+                    throw std::logic_error("Bind: '" + desc.name + "." + name + "' is a runtime constant, and the runtime gives it a value of another type");
+                }
+            }
+        }
 
         ClassDesc desc;
         // In the order they were declared. A Lua state points at the function of a member, so it stays where it is.
@@ -59,7 +90,7 @@ namespace Framework::Scripting::Bind {
             }
         }
 
-        void PushConstant(lua_State *L, const std::variant<bool, double, std::string> &constant) {
+        void PushConstant(lua_State *L, const Namespace::ConstantValue &constant) {
             if (const std::string *text = std::get_if<std::string>(&constant)) {
                 lua_pushlstring(L, text->data(), text->size());
                 return;
@@ -77,7 +108,7 @@ namespace Framework::Scripting::Bind {
             }
         }
 
-        v8::Local<v8::Value> ConstantToV8(v8::Isolate *isolate, const std::variant<bool, double, std::string> &constant) {
+        v8::Local<v8::Value> ConstantToV8(v8::Isolate *isolate, const Namespace::ConstantValue &constant) {
             if (const std::string *text = std::get_if<std::string>(&constant)) {
                 return v8pp::to_v8(isolate, *text);
             }
@@ -117,12 +148,13 @@ namespace Framework::Scripting::Bind {
         return *this;
     }
 
-    Namespace &Namespace::AddConstant(std::string name, TypeRef type, std::variant<bool, double, std::string> value, std::string description, Side side) {
+    Namespace &Namespace::AddConstant(std::string name, TypeRef type, ConstantValue value, std::string description, Side side, bool runtime) {
         RefuseSecond(_record->desc, name);
         Record::Member member;
         member.side      = side;
         member.described = _record->desc.properties.size();
         member.constant  = std::move(value);
+        member.runtime   = runtime;
         _record->members.push_back(std::move(member));
         _record->desc.properties.push_back({std::move(name), std::move(type), std::move(description), true, true, side});
         return *this;
@@ -148,13 +180,14 @@ namespace Framework::Scripting::Bind {
         return _record->desc.name + "." + member;
     }
 
-    v8::Local<v8::Object> Namespace::MaterialiseV8(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, v8pp::metadata::registry &catalog, Side runtime) const {
+    v8::Local<v8::Object> Namespace::MaterialiseV8(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, v8pp::metadata::registry &catalog, Side runtime, const RuntimeConstants &constants) const {
         const ClassDesc &desc = _record->desc;
         for (const Record::Member &member : _record->members) {
             if (member.function && member.v8.empty() && Materialises(member.side, runtime)) {
                 throw std::logic_error("Bind: '" + QualifiedName(member.function->name) + "' returns an object of a class that cannot be copied, which JavaScript cannot receive");
             }
         }
+        _record->RequireConstants(runtime, constants);
 
         v8::EscapableHandleScope scope(isolate);
         v8::Local<v8::Object> object   = v8::Object::New(isolate);
@@ -170,7 +203,7 @@ namespace Framework::Scripting::Bind {
             }
             else {
                 const PropertyDesc &constant = desc.properties[member.described];
-                object->DefineOwnProperty(context, v8pp::to_v8(isolate, constant.name), ConstantToV8(isolate, member.constant), static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete)).Check();
+                object->DefineOwnProperty(context, v8pp::to_v8(isolate, constant.name), ConstantToV8(isolate, _record->ValueOf(member, constants)), static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete)).Check();
                 symbol.add_property(constant.name, ToTypeScript(constant.type), constant.description, true);
             }
         }
@@ -178,13 +211,14 @@ namespace Framework::Scripting::Bind {
         return scope.Escape(object);
     }
 
-    void Namespace::MaterialiseLua(lua_State *L, Side runtime) const {
+    void Namespace::MaterialiseLua(lua_State *L, Side runtime, const RuntimeConstants &constants) const {
         const ClassDesc &desc = _record->desc;
         luaL_checkstack(L, 6, "cannot materialise a namespace");
         const int top = lua_gettop(L);
 
         if (lua_rawgetp(L, LUA_REGISTRYINDEX, &_record->tableKey) == LUA_TNIL) {
             lua_pop(L, 1);
+            _record->RequireConstants(runtime, constants);
             lua_newtable(L);
             const int fields = lua_gettop(L);
             for (const Record::Member &member : _record->members) {
@@ -196,7 +230,7 @@ namespace Framework::Scripting::Bind {
                     lua_setfield(L, fields, member.function->name.c_str());
                 }
                 else {
-                    PushConstant(L, member.constant);
+                    PushConstant(L, _record->ValueOf(member, constants));
                     lua_setfield(L, fields, desc.properties[member.described].name.c_str());
                 }
             }
