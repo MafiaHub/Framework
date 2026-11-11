@@ -13,6 +13,8 @@ set(FRAMEWORK_SRC
     src/utils/interpolator.cpp
     src/utils/time.cpp
     src/utils/fork_join_pool.cpp
+    src/utils/task_scheduler.cpp
+    src/utils/thread_budget.cpp
     src/utils/command_listener.cpp
     src/utils/command_processor.cpp
     src/utils/crypto.cpp
@@ -288,7 +290,9 @@ macro(link_shared_deps target_name)
         ${Framework_SOURCE_DIR}/vendors/physfs/src
         ${Framework_SOURCE_DIR}/vendors/semver
         ${Framework_SOURCE_DIR}/vendors/ftl/include
+        ${FW_ASIO_INCLUDE_DIR}
     )
+    target_compile_definitions(${target_name} PRIVATE ASIO_STANDALONE ASIO_NO_DEPRECATED)
 
     # Required libraries for apple systems
     if(APPLE)

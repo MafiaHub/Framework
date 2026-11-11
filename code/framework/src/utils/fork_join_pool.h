@@ -40,7 +40,8 @@ namespace Framework::Utils {
         }
 
         // Calls fn(iteration, lane) for every iteration in [0, count). `lane` is the running thread's
-        // index, so per-thread scratch can be indexed by it without locking. Not reentrant.
+        // index, so per-thread scratch can be indexed by it without locking. One caller at a time; a loop started
+        // from inside an iteration runs on the thread that started it, under that thread's lane.
         void Run(uint32_t count, fu2::function_view<void(uint32_t, uint32_t)> fn);
 
       private:

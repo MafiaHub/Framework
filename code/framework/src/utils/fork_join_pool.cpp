@@ -8,7 +8,15 @@
 
 #include "fork_join_pool.h"
 
+#include <utility>
+
 namespace Framework::Utils {
+    namespace {
+        // The pool whose loop this thread is inside, and the lane it runs there.
+        thread_local const ForkJoinPool *tRunning = nullptr;
+        thread_local uint32_t tLane               = 0;
+    } // namespace
+
     ForkJoinPool::ForkJoinPool(uint32_t workers) {
         _threads.reserve(workers);
         for (uint32_t i = 0; i < workers; ++i) {
@@ -33,11 +41,23 @@ namespace Framework::Utils {
         if (count == 0) {
             return;
         }
+        // Started from inside one of this pool's own iterations: the workers are busy with the outer loop, so the
+        // inner one stays on this thread, under the lane it already has.
+        if (tRunning == this) {
+            for (uint32_t i = 0; i < count; ++i) {
+                fn(i, tLane);
+            }
+            return;
+        }
         // One iteration, or nobody to share with: waking a thread costs more than it saves.
         if (_threads.empty() || count == 1) {
+            const ForkJoinPool *outer = std::exchange(tRunning, this);
+            const uint32_t outerLane  = std::exchange(tLane, 0u);
             for (uint32_t i = 0; i < count; ++i) {
                 fn(i, 0);
             }
+            tRunning = outer;
+            tLane    = outerLane;
             return;
         }
         {
@@ -58,9 +78,13 @@ namespace Framework::Utils {
     }
 
     void ForkJoinPool::Drain(uint32_t lane) {
+        const ForkJoinPool *outer = std::exchange(tRunning, this);
+        const uint32_t outerLane  = std::exchange(tLane, lane);
         for (uint32_t i = _next.fetch_add(1, std::memory_order_relaxed); i < _count; i = _next.fetch_add(1, std::memory_order_relaxed)) {
             (*_fn)(i, lane);
         }
+        tRunning = outer;
+        tLane    = outerLane;
     }
 
     void ForkJoinPool::Work(uint32_t lane) {

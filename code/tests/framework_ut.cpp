@@ -68,7 +68,9 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/streamed_assets_ut.h"
 #include "modules/string_utils_ut.h"
 #include "modules/system_graphics_ut.h"
+#include "modules/task_scheduler_ut.h"
 #include "modules/text_label_ut.h"
+#include "modules/thread_budget_ut.h"
 #include "modules/tick_breakdown_ut.h"
 #include "modules/logger_ut.h"
 #include "modules/transform_batch_ut.h"
@@ -130,6 +132,8 @@ int main() {
     UNIT_MODULE(interest_grid);
     UNIT_MODULE(interest_scale);
     UNIT_MODULE(fork_join_pool);
+    UNIT_MODULE(task_scheduler);
+    UNIT_MODULE(thread_budget);
     UNIT_MODULE(input_state);
     UNIT_MODULE(delegation);
     UNIT_MODULE(entity_registry);

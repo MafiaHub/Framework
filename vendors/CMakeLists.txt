@@ -35,6 +35,11 @@ find_package(cppfs CONFIG REQUIRED)
 find_package(miniz CONFIG REQUIRED)
 find_package(cxxopts CONFIG REQUIRED)
 find_package(function2 CONFIG REQUIRED)
+# Header-only, and only utils/task_scheduler.cpp includes it: the Framework targets take its include
+# directory privately, so the SDK neither ships nor asks a project for it.
+find_package(asio CONFIG REQUIRED)
+get_target_property(FW_ASIO_INCLUDE_DIR asio::asio INTERFACE_INCLUDE_DIRECTORIES)
+set(FW_ASIO_INCLUDE_DIR "${FW_ASIO_INCLUDE_DIR}" CACHE INTERNAL "Standalone Asio headers")
 find_package(sentry CONFIG REQUIRED)
 
 # The crashpad backend launches this helper out-of-process, so it has to sit next to the binaries.
