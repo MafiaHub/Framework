@@ -16,6 +16,7 @@
 #include "replication_connection.h"
 
 #include <utils/profiler.h>
+#include <utils/thread_budget.h>
 #include <utils/time.h>
 
 #include <algorithm>
@@ -92,9 +93,6 @@ namespace Framework::Networking::Replication {
     namespace {
         // Below this many viewers in a tick, waking the workers costs more than it saves.
         constexpr size_t kParallelMin = 8;
-        // Enough to take a crowd's refresh off the server thread without competing with the network
-        // thread and the scripts' own threads for the rest of the machine.
-        constexpr uint32_t kDefaultWorkerThreads = 3;
 
         // Writes the milliseconds from construction to destruction into `into`, however the scope ends.
         class ElapsedMs final {
@@ -120,18 +118,29 @@ namespace Framework::Networking::Replication {
     void ReplicationManager::SetReplicationWorkerThreads(uint32_t workers) {
         _workerThreads = workers;
         _workersSet    = true;
+        _sharedWorkers = nullptr;
         _workers.reset();
+    }
+
+    void ReplicationManager::SetReplicationWorkerPool(Utils::ForkJoinPool *pool) {
+        _sharedWorkers = pool;
+        if (pool != nullptr) {
+            _workers.reset();
+        }
     }
 
     Utils::ForkJoinPool *ReplicationManager::Workers(size_t work) {
         if (work < kParallelMin) {
             return nullptr;
         }
+        if (_sharedWorkers != nullptr) {
+            return _sharedWorkers->Lanes() > 1 ? _sharedWorkers : nullptr;
+        }
         if (!_workers) {
             if (!_workersSet) {
-                const uint32_t cores = std::thread::hardware_concurrency();
-                _workerThreads       = std::min(kDefaultWorkerThreads, cores > 2 ? cores - 2 : 0);
-                _workersSet          = true;
+                // Every core the tick and network threads leave, up to where the pass stops scaling.
+                _workerThreads = Utils::ThreadBudget::For(std::thread::hardware_concurrency()).replicationWorkers;
+                _workersSet    = true;
             }
             if (_workerThreads > 0) {
                 _workers = std::make_unique<Utils::ForkJoinPool>(_workerThreads);
@@ -158,6 +167,7 @@ namespace Framework::Networking::Replication {
             return;
         }
         const ElapsedMs elapsed(_lastPassMs);
+        _preparedDiffs = 0;
         {
             FW_PROFILE_SCOPE_N("Replication::RM3Update");
             MafiaNet::ReplicaManager3::Update();

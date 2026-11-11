@@ -68,8 +68,10 @@ namespace Framework::Networking::Replication {
         // its turn: never computed, invalidated, or its viewer or dimension changed.
         bool InterestUrgent() const;
 
-        // Computes this viewer's interest set into the pending result QueryReplicaList applies next.
-        // Reads only shared state; runs on any thread, several connections at once.
+        // Computes this viewer's interest set into the pending result QueryReplicaList applies next,
+        // and what that set gains and loses against what ReplicaManager3 has constructed here, so the
+        // pass only hands the two lists over. Reads shared state and writes this connection alone;
+        // runs on any thread, several connections at once, while nothing else touches the world.
         void ComputeInterest(InterestGrid::Scratch &scratch);
 
         // The entity in this slot is gone: drop it from the set and any pending result.
@@ -86,6 +88,10 @@ namespace Framework::Networking::Replication {
         };
 
         NetworkEntity *Viewer() const;
+        // The second half of ComputeInterest: the pending set against the constructed replicas.
+        void PrepareDiff();
+        // Whether nothing a prepared diff was taken against has changed since.
+        bool DiffStillHolds() const;
         void ApplyRefresh(DataStructures::List<MafiaNet::Replica3 *> &create, DataStructures::List<MafiaNet::Replica3 *> &destroy);
         // Brings what ReplicaManager3 has constructed here back in line with the current set.
         void Resync(DataStructures::List<MafiaNet::Replica3 *> &create, DataStructures::List<MafiaNet::Replica3 *> &destroy);
@@ -113,6 +119,14 @@ namespace Framework::Networking::Replication {
         std::vector<uint32_t> _computedSlots;
         std::vector<SlotRef> _computed;
         bool _computedReady = false;
+        // The pending set as bits, and what it gains and loses, worked out with it. Good only while
+        // ReplicaManager3 holds what it held then: _diffMembership and _diffConstructed say whether it does.
+        SlotSet _computedSet;
+        std::vector<NetworkEntity *> _pendingCreate;
+        std::vector<NetworkEntity *> _pendingDestroy;
+        bool _diffReady           = false;
+        uint32_t _diffMembership  = 0;
+        unsigned _diffConstructed = 0;
         // What the pending result was computed for; a change since makes it stale.
         const NetworkEntity *_computedViewer = nullptr;
         MafiaNet::VirtualWorldId _computedWorld {};

@@ -253,8 +253,66 @@ MODULE(interest_scale, {
             for (size_t c = 0; c < serial.connections.size(); ++c) {
                 for (size_t i = 0; i < serialThings.size(); ++i) {
                     EQUALS(parallel.connections[c]->IsRelevant(parallelThings[i]), serial.connections[c]->IsRelevant(serialThings[i]));
+                    EQUALS(parallel.connections[c]->HasReplicaConstructed(parallelThings[i]), serial.connections[c]->HasReplicaConstructed(serialThings[i]));
                 }
             }
         }
+    });
+
+    IT("works out what each viewer gains and loses along with its interest, ahead of the pass", {
+        World world;
+        std::vector<NetworkEntity *> movers;
+        populate(world, movers);
+        moveIn(movers);
+        world.Tick();
+        EQUALS(world.CountSeeing(movers), kPlayers);
+        // Every viewer's turn comes each tick here, and none of them had to be decided again by the pass.
+        EQUALS(world.manager->PreparedDiffsLastPass(), static_cast<uint32_t>(kPlayers));
+    });
+
+    IT("works them out on the worker threads too, to the same result", {
+        World world;
+        world.manager->SetReplicationWorkerThreads(3);
+        std::vector<NetworkEntity *> movers;
+        populate(world, movers);
+        moveIn(movers);
+        world.Tick();
+        EQUALS(world.CountSeeing(movers), kPlayers);
+        EQUALS(world.manager->PreparedDiffsLastPass(), static_cast<uint32_t>(kPlayers));
+        // And back out again.
+        for (NetworkEntity *mover : movers) {
+            mover->position.z = 5000.0f;
+        }
+        world.Tick();
+        EQUALS(world.CountSeeing(movers), 0);
+    });
+
+    IT("decides again in the pass when an entity left after the interest was computed", {
+        World world;
+        std::vector<NetworkEntity *> movers;
+        populate(world, movers);
+        NetworkEntity *doomed = world.Spawn(30 * 1000.0f, 20.0f);
+        world.Tick();
+        EQUALS(world.connections[30]->HasReplicaConstructed(doomed), true);
+        const auto countHeld = [&world] {
+            DataStructures::List<MafiaNet::Replica3 *> replicas;
+            world.connections[30]->GetConstructedReplicas(replicas);
+            return replicas.Size();
+        };
+        const unsigned held = countHeld();
+        moveIn(movers);
+
+        g_nowUS += World::kTickMs * 1000;
+        world.manager->RebuildInterest();
+        // Between the two halves of a tick: what was worked out names an entity that is gone.
+        world.Despawn(doomed);
+        NetworkEntity *late = world.Spawn(30 * 1000.0f, 25.0f);
+        world.manager->Update();
+
+        EQUALS(world.manager->PreparedDiffsLastPass(), 0u);
+        EQUALS(world.CountSeeing(movers), kPlayers);
+        EQUALS(world.connections[30]->HasReplicaConstructed(late), true);
+        // The avatar, the mover and the late one; the doomed one is not counted in.
+        EQUALS(countHeld(), held + 1);
     });
 });

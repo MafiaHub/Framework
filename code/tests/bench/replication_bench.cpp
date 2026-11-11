@@ -29,6 +29,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <random>
+#include <string>
 #include <vector>
 
 namespace {
@@ -152,10 +153,25 @@ int main(int argc, char **argv) {
     }
     std::printf("%d NPCs in a %.0f m hub, %d measured ticks\n", kNpcs, kHubRadius * 2 / 100, kMeasuredTicks);
     std::printf("%8s %8s | %9s %9s %9s %9s | %11s %9s\n", "players", "workers", "mean ms", "p50 ms", "p99 ms", "max ms", "interest ms", "pass ms");
+    // FW_BENCH_WORKERS=0,3,7 measures those worker counts instead of none and the default.
+    std::vector<int> workerCounts;
+    if (const char *list = std::getenv("FW_BENCH_WORKERS")) {
+        for (const char *at = list; *at != '\0';) {
+            char *end = nullptr;
+            workerCounts.push_back(static_cast<int>(std::strtol(at, &end, 10)));
+            at = (*end == ',') ? end + 1 : end;
+            if (end == at && *end != '\0') {
+                break;
+            }
+        }
+    }
+    if (workerCounts.empty()) {
+        workerCounts = {0, -1};
+    }
     for (const int players : counts) {
-        for (const int workers : {0, -1}) {
+        for (const int workers : workerCounts) {
             const Result r = Run(players, workers);
-            std::printf("%8d %8s | %9.2f %9.2f %9.2f %9.2f | %11.2f %9.2f\n", players, workers == 0 ? "0" : "default", r.meanMs, r.p50Ms, r.p99Ms, r.maxMs, r.interestMs, r.passMs);
+            std::printf("%8d %8s | %9.2f %9.2f %9.2f %9.2f | %11.2f %9.2f\n", players, workers < 0 ? "default" : std::to_string(workers).c_str(), r.meanMs, r.p50Ms, r.p99Ms, r.maxMs, r.interestMs, r.passMs);
         }
     }
     return 0;

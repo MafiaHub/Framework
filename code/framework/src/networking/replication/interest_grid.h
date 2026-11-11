@@ -53,6 +53,9 @@ namespace Framework::Networking::Replication {
                 _words.resize(words, 0);
             }
         }
+        void Swap(SlotSet &other) {
+            _words.swap(other._words);
+        }
         size_t Count() const {
             size_t count = 0;
             for (const uint64_t word : _words) {

@@ -74,6 +74,40 @@ namespace Framework::Networking::Replication {
             _computed.push_back({slot, interest.GenerationOf(slot)});
         }
         _computedReady = true;
+        PrepareDiff();
+    }
+
+    void ReplicationConnection::PrepareDiff() {
+        const InterestGrid &interest = _manager->Interest();
+        _computedSet.Clear();
+        _pendingCreate.clear();
+        _pendingDestroy.clear();
+        for (const uint32_t slot : _computedSlots) {
+            NetworkEntity *entity = interest.EntityAt(slot);
+            if (entity == nullptr) {
+                continue;
+            }
+            _computedSet.Set(slot);
+            if (!HasReplicaConstructed(entity)) {
+                _pendingCreate.push_back(entity);
+            }
+        }
+        for (unsigned i = 0; i < constructedReplicaList.Size(); ++i) {
+            auto *entity        = static_cast<NetworkEntity *>(constructedReplicaList[i]->replica);
+            const uint32_t slot = interest.SlotOf(entity);
+            if (slot == InterestGrid::kNoSlot || !_computedSet.Test(slot)) {
+                _pendingDestroy.push_back(entity);
+            }
+        }
+        _diffMembership  = _manager->GetMembershipGeneration();
+        _diffConstructed = constructedReplicaList.Size();
+        _diffReady       = true;
+    }
+
+    bool ReplicationConnection::DiffStillHolds() const {
+        // A replica dereferenced since may be one the lists point at, and its slot may have a new
+        // occupant; a constructed list of another size is not the one the lists were taken against.
+        return _diffReady && _diffMembership == _manager->GetMembershipGeneration() && _diffConstructed == constructedReplicaList.Size();
     }
 
     void ReplicationConnection::ForgetSlot(uint32_t slot) {
@@ -131,6 +165,21 @@ namespace Framework::Networking::Replication {
     }
 
     void ReplicationConnection::ApplyRefresh(DataStructures::List<MafiaNet::Replica3 *> &create, DataStructures::List<MafiaNet::Replica3 *> &destroy) {
+        if (DiffStillHolds()) {
+            _relevant.Swap(_computedSet);
+            for (NetworkEntity *entity : _pendingCreate) {
+                create.Push(entity, _FILE_AND_LINE_);
+            }
+            for (NetworkEntity *entity : _pendingDestroy) {
+                destroy.Push(entity, _FILE_AND_LINE_);
+            }
+            _computed.clear();
+            _computedReady = false;
+            _diffReady     = false;
+            _manager->NotePreparedDiff();
+            return;
+        }
+        _diffReady                   = false;
         const InterestGrid &interest = _manager->Interest();
         _relevant.Clear();
         for (const SlotRef &ref : _computed) {

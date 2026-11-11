@@ -280,6 +280,18 @@ namespace Framework::Networking::Replication {
         // each independent of the others. 0 keeps it all on the server thread. Defaults to a few,
         // fewer on a small machine.
         void SetReplicationWorkerThreads(uint32_t workers);
+        // The same work on a pool the caller owns and shares with its own per-tick loops, which must
+        // outlive this manager's use of it. Null goes back to the manager's own workers.
+        void SetReplicationWorkerPool(Utils::ForkJoinPool *pool);
+
+        // Connections whose construct and destroy lists the last pass took as worked out with their
+        // interest, instead of deciding them again itself.
+        uint32_t PreparedDiffsLastPass() const {
+            return _preparedDiffs;
+        }
+        void NotePreparedDiff() {
+            ++_preparedDiffs;
+        }
 
         // The per-tick interest step. Server only; call once per tick before ReplicaManager3
         // serializes (driven from NetworkPeer::Update): brings the spatial index up to date with
@@ -417,6 +429,8 @@ namespace Framework::Networking::Replication {
         // One scratch per lane of the pool; the first is the server thread's.
         std::vector<InterestGrid::Scratch> _scratch = std::vector<InterestGrid::Scratch>(1);
         std::unique_ptr<Utils::ForkJoinPool> _workers;
+        Utils::ForkJoinPool *_sharedWorkers = nullptr; // not owned
+        uint32_t _preparedDiffs             = 0;
         uint32_t _workerThreads = 0;
         bool _workersSet        = false;
         double _lastInterestMs  = 0.0;
