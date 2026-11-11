@@ -137,8 +137,10 @@ class Call {
     virtual size_t ArgCount() const = 0;
     virtual Value Arg(size_t index) const = 0;         // Nil beyond ArgCount
     template <typename T> T *Self() const;             // receiver of a method call, or nullptr
+    virtual Value This() const = 0;                    // the receiver as a value, to return for chaining; Nil outside a method
 
-    virtual Value Nil() = 0;
+    virtual Value Nil() = 0;                           // undefined in JavaScript
+    virtual Value Null() = 0;                          // null in JavaScript, nil in Lua; its kind is Nil
     virtual Value Boolean(bool) = 0;
     virtual Value Number(double) = 0;
     virtual Value Integer(int64_t) = 0;
@@ -159,6 +161,7 @@ class Call {
 class Value {
   public:
     ValueKind Kind() const;   // Nil, Boolean, Number, String, Function, Array, Object, Bound, Other
+    bool IsList() const;      // an Array, or an Object without a key: the check for "a list was passed"
     bool AsBoolean() const;  double AsNumber() const;  std::optional<int64_t> AsInteger() const;
     std::string AsString() const;  std::string ToDisplayString() const;
     template <typename T> T *AsBound() const;
@@ -173,6 +176,14 @@ class Value {
 
 JavaScript `undefined` and `null` are both `Nil`. `Array` is a JavaScript array or a Lua sequence
 (§4.1). Indices in the C++ interface are zero-based in both languages.
+
+- The empty Lua table is an `Object`, as nothing tells it from one, so `IsArray()` is not the check for
+  a list parameter: `IsList()` is, and `Length()`/`At()` read whatever passes it.
+- Only an `Object` or an `Array` has keys. A bound instance and a function have none in either language.
+  `Keys()` gives integer keys ascending before string keys, and for an `Array` its indices from zero;
+  `Get`/`Set` with such a key address the same element in both languages.
+- A `Value` is good in its own call until that call returns. Kept beyond it, or read in a call nested in
+  its own, it is `Nil`: it reads, is stored and is returned as the nil of the call it is used in.
 
 `ScriptCallable` is a script function kept beyond a call: an event handler, a key bind, an export.
 
