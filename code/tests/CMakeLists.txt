@@ -66,6 +66,10 @@ target_link_libraries(FrameworkLoggingBench Framework)
 # Tests use Node.js APIs through the scripting engine
 target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
 
+# Committed files a test compares against, read from the source tree so that a test asked to
+# regenerate one rewrites the tracked copy.
+target_compile_definitions(FrameworkTests PRIVATE FW_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+
 add_custom_target(RunFrameworkTests
         COMMAND $<TARGET_FILE:FrameworkTests>
         COMMAND $<TARGET_FILE:FrameworkClientScriptingTests>

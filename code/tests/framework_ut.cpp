@@ -107,6 +107,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/resource_monitor_ut.h"
 #include "modules/run_until_ut.h"
 #include "modules/resource_ut.h"
+#include "modules/scripting_catalog_golden_ut.h"
 #include "modules/timer_context_ut.h"
 
 int main() {
@@ -189,6 +190,7 @@ int main() {
     UNIT_MODULE(connection_gate);
     UNIT_MODULE(connection_admission);
     UNIT_MODULE(nametag);
+    UNIT_MODULE(scripting_catalog_golden);
 
     return UNIT_RUN();
 }
