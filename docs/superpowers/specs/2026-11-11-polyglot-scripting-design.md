@@ -211,6 +211,13 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
 - `ResourceManager` keeps its `Engine *` constructor and gains the Lua engine through a setter. A
   resource gets a Lua state when its script list for this side has a `.lua` file, and a JavaScript
   runtime when it has anything else, so a Lua-only resource never pays for a Node environment.
+  - Which engine a script is for is asked of the engines (`HandlesFile`), the Lua one first. The scripts
+    run in the order the manifest gives, whatever their language.
+  - The JavaScript runtime is created first and the Lua state second, and both go wherever the JavaScript
+    runtime went before: stop, a start that fails, restart, a runtime error. A `.lua` script with no Lua
+    engine fails the start with `Lua scripting is not available`, before a runtime is created or a script
+    has run.
+  - A resource with no script at all for this side keeps the JavaScript runtime it always had.
 - `LuaRuntime` is one `lua_State`: its resource, its side, its scheduler, its memory account.
   - **Libraries:** base, coroutine, table, string, utf8, math, and `os` cut down to `time`, `clock`,
     `date`, `difftime`. Removed from base: `dofile`, `loadfile`; `load` only accepts text and only
@@ -265,7 +272,13 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
     script ran under or at the next tick.
   - Disposing listeners hear of every runtime while its state is still open. They key what they keep on
     the runtime, not on the resource name.
+  - `NextDue` is when `Tick` next has a timer to fire or a sleep to end, for a host that waits.
 - The Lua engine holds no V8. A server running only Lua resources executes no JavaScript for them.
+- The server scripting module owns the Lua engine: 512 MB a state, no deadline, and the value types for
+  bindings so far. It ticks it in `Update()` and, while it waits for its next tick with Node, when a timer
+  or a sleep comes due, a millisecond after the last Lua tick at the earliest, so a coroutine that
+  sleeps for no time does not spin through the wait. What the engine queued as errors goes to
+  `ResourceManager::HandleResourceRuntimeError` with Node's.
 
 ## 3. Resources
 

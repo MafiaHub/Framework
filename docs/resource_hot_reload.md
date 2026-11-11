@@ -1,9 +1,9 @@
 # Resource Hot-Reload
 
-The scripting layer can reload a JavaScript resource from disk without
+The scripting layer can reload a resource from disk without
 restarting the server, and propagate that reload to connected clients. This is
-a development aid: edit a resource's `.js`, and the running resource picks up
-the change.
+a development aid: edit a resource's `.js` or `.lua`, and the running resource
+picks up the change.
 
 ## Enabling
 
@@ -78,14 +78,17 @@ as a 1ms bounded timeout.
    in a Node environment of its own (see
    [scripting_resource_isolation.md](scripting_resource_isolation.md)), and
    stopping the resource destroys it: its timers, sockets, worker threads and
-   module cache go with it. The client shares one V8 isolate between resources,
+   module cache go with it. A resource's Lua state is destroyed with it, and
+   takes its timers, its sleeping coroutines and the modules it loaded with
+   `require`. The client shares one V8 isolate between resources,
    so there `Engine::ClearResourceTimers` cancels the resource's
    `setTimeout`/`setInterval` and `Engine::EvictModulesUnderPath` removes its
    modules from the V8 module cache.
 3. **Re-parses `package.json`** from disk (manifest edits — entry points,
    dependencies — take effect) and rebuilds the dependency graph.
 4. **Restarts** the resource and the dependents that were stopped. On the server
-   the restart is a fresh environment, so every file is read from disk again.
+   the restart is a fresh environment, and a fresh Lua state for a resource
+   with `.lua` scripts, so every file is read from disk again.
 
 `RefreshAll` additionally rescans the resources directory and registers
 newly-added resource directories (left stopped — `start` them explicitly).
