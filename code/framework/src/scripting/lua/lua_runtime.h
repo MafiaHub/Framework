@@ -57,11 +57,11 @@ namespace Framework::Scripting {
     //
     // Modules. require(name) runs a file of the resource once and gives what it returned, or true, from then on.
     // The name is made of letters, digits, '_', '-' and the dots between its parts, so it cannot leave the
-    // resource: "a.b" is a/b.lua, or else a/b/init.lua, read through the module loader. The chunk gets the name
-    // as its argument and runs to its end inside the call: it cannot wait, and a sleep() at its top level raises
-    // "sleep: cannot wait here". A module that fails is not kept, so the next require runs it again; one required
-    // again while it loads raises "require: cyclic dependency on '<name>'". What is loaded is kept in the registry,
-    // out of a script's reach.
+    // resource, and is 256 bytes long at most: "a.b" is a/b.lua, or else a/b/init.lua, read through the module
+    // loader. The chunk gets the name as its argument and runs to its end inside the call: it cannot wait, and a
+    // sleep() at its top level raises "sleep: cannot wait here". A module that fails is not kept, so the next
+    // require runs it again; one required again while it loads raises "require: cyclic dependency on '<name>'".
+    // What is loaded is kept in the registry, out of a script's reach.
     //
     // Host code. A Lua error raised outside a protected call throws std::runtime_error; the state must then be
     // considered unusable and the runtime destroyed. Outside an entry, read and write values a script owns with raw
@@ -106,6 +106,7 @@ namespace Framework::Scripting {
         // waits. False with the message and the traceback in `error` when it does not compile or fails before
         // that. A chunk that waits goes on from later ticks, and what it raises then goes to the scheduler's error
         // handler. `chunkName` is what Lua shows in messages: "@resource/file.lua" for a file, "=name" otherwise.
+        // A UTF-8 byte order mark at the start of `source` is skipped, here and in a module.
         bool RunString(std::string_view source, std::string_view chunkName, std::string &error);
 
         // Protected call of the function and `nargs` arguments on top of the main stack, under the deadline, on
@@ -127,11 +128,10 @@ namespace Framework::Scripting {
         // Where require finds its files. Without one it raises "require: no module loader".
         void SetModuleLoader(ModuleLoader loader);
 
-        // Whether an entry into the state is in progress: script is running, or host code it called. The runtime
-        // must not be destroyed then.
-        bool IsExecuting() const {
-            return _entryDepth > 0;
-        }
+        // Whether the runtime is at work: an entry into the state is in progress (script is running, or host code
+        // it called), or the scheduler is in the middle of a Start, a Resume or a Tick, `done` and the error
+        // handler included. It must not be destroyed then.
+        bool IsExecuting() const;
 
         LuaScheduler &Scheduler() {
             return *_scheduler;

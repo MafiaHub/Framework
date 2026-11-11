@@ -34,11 +34,12 @@ namespace Framework::Scripting {
     // The Lua engine: one LuaRuntime (lua_runtime.h) for each resource that has Lua scripts, created, ticked and
     // destroyed here. It holds no V8.
     //
-    // A runtime that is executing is not destroyed under its own feet: DestroyResourceRuntime takes it away at
+    // A runtime that is executing (LuaRuntime::IsExecuting: script is running in it, or its scheduler is in the
+    // middle of telling a `done`) is not destroyed under its own feet. DestroyResourceRuntime takes it away at
     // once, so that GetRuntime no longer gives it, no file runs in it, none of its timers fires and nothing that
     // waits in it is resumed, and the next Tick that finds it idle destroys it. The name is free in between, for
     // a restart to create the next one. Any other runtime is destroyed on the spot, also when the call comes
-    // from the script of another resource. Shutdown does not wait.
+    // from the script of another resource.
     class LuaEngine final: public ScriptEngine {
       public:
         // Installs the bindings in a runtime. A Lua error it raises, or a std::exception it throws, fails the
@@ -59,7 +60,11 @@ namespace Framework::Scripting {
         // Creates nothing: a state is made when a resource needs one.
         [[nodiscard]] ScriptingError Init();
 
-        // Destroys every runtime, the ones that are executing included.
+        // Destroys every runtime. It may be called from inside a script. While any runtime is executing none of
+        // them is closed: they are all taken away as DestroyResourceRuntime takes one that is executing, the
+        // engine is no longer initialised, and they are destroyed once none of them is executing any more. That is
+        // on the way out of the Tick, the file or the creation the script ran under, or else, when the script was
+        // started past the engine, at the next of those calls, the next Tick at the latest, or with the engine.
         void Shutdown() override;
 
         Language GetLanguage() const override {
@@ -76,8 +81,9 @@ namespace Framework::Scripting {
         void Tick() override;
         void Tick(std::chrono::steady_clock::time_point now);
 
-        // Fails when the resource has a runtime already, when the state cannot be created, and when the setup
-        // callback fails.
+        // Fails when the resource has a runtime already, when the state cannot be created, when the setup
+        // callback fails, and when that callback destroys the runtime it is setting up ("resource runtime was
+        // destroyed during setup").
         bool CreateResourceRuntime(const std::string &resourceName) override;
         void DestroyResourceRuntime(const std::string &resourceName) override;
 
@@ -88,8 +94,9 @@ namespace Framework::Scripting {
         // Run inside every runtime created from now on, in a protected call, before any script.
         void SetRuntimeSetupCallback(RuntimeSetup setup);
 
-        // The directory of a resource: where require finds its modules, and what the chunk names leave out. Set it
-        // before the runtime is created, which keeps the root it was created with.
+        // The directory of a resource: where require finds its modules, and what the chunk names leave out. It is
+        // read when a file is run and when a module is asked for, so it may be set, or changed, once the runtime
+        // exists. LuaRuntimeOptions::rootPath is what it was when the runtime was created.
         void SetResourceRoot(const std::string &resourceName, const std::string &rootPath);
 
         // The runtime of a resource, or null: it has none, or the one it had is being destroyed.
@@ -100,39 +107,40 @@ namespace Framework::Scripting {
         std::vector<PendingError> DrainPendingErrors();
 
         // Called for every runtime before it is destroyed, the one whose setup failed included: the place to drop
-        // what a binding keeps for that state. Listeners live as long as the engine. They must not run script.
+        // what a binding keeps for that state. Keep such things by the LuaRuntime, or its lua_State, never by the
+        // name of the resource: a runtime that was put off is told of here after the resource has got its next
+        // one. Listeners live as long as the engine. They must not run script.
         void AddRuntimeDisposingListener(RuntimeDisposing listener);
 
       private:
-        struct ResourceRuntime final {
-            std::string resourceName;
-            std::string rootPath;
-            std::unique_ptr<LuaRuntime> runtime;
-            // Calls of the engine into the runtime that have not returned.
-            int entered = 0;
-        };
+        // Runs the setup callback in a runtime that was just created. False when it failed, or took the runtime
+        // away.
+        bool SetUp(const std::string &resourceName, LuaRuntime &runtime);
 
-        // Counts a call of the engine into a runtime, for as long as it lives.
-        class Entered;
-
-        // Whether the runtime cannot be destroyed now.
-        static bool IsBusy(const ResourceRuntime &runtime);
+        // The root of a resource as it is now, or empty.
+        std::string ResourceRoot(const std::string &resourceName) const;
 
         // Tells the listeners and closes the state.
-        void Teardown(std::unique_ptr<ResourceRuntime> runtime);
+        void Teardown(std::unique_ptr<LuaRuntime> runtime);
 
-        // Destroys the runtimes whose destruction was put off, but for those still executing.
+        // Destroys the runtimes whose destruction was put off, but for those still executing. A shutdown that was
+        // put off holds them all back until none is.
         void FlushRetiredRuntimes();
+
+        // Ends a shutdown that a script asked for, if there is one and nothing is executing any more.
+        void FinishShutdown();
 
         LuaEngineOptions _options;
         RuntimeSetup _runtimeSetup;
         std::vector<RuntimeDisposing> _runtimeDisposingListeners;
 
         std::map<std::string, std::string, std::less<>> _resourceRoots;
-        std::map<std::string, std::unique_ptr<ResourceRuntime>, std::less<>> _runtimes;
+        std::map<std::string, std::unique_ptr<LuaRuntime>, std::less<>> _runtimes;
 
         // Runtimes destroyed while they were executing.
-        std::vector<std::unique_ptr<ResourceRuntime>> _retiredRuntimes;
+        std::vector<std::unique_ptr<LuaRuntime>> _retiredRuntimes;
+        // Shutdown found one of them executing, and waits for all of them.
+        bool _shuttingDown = false;
 
         std::vector<PendingError> _pendingErrors;
     };

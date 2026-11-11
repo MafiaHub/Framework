@@ -25,18 +25,24 @@ namespace Framework::Scripting {
         constexpr const char *kDeadlineMessage = "script ran too long";
 
         // The registry keeps, under these addresses, what every module that was required gave, by its name, and
-        // the metatable of what marks a module as loading.
-        const char kModules     = 0;
-        const char kLoadingMeta = 0;
+        // the metatable of what marks a module as loading. Not const: equal constants may be given one address.
+        char kModules     = 0;
+        char kLoadingMeta = 0;
 
         // What the registry holds in place of the value of a module while its chunk runs.
-        const char kLoading = 0;
+        char kLoading = 0;
 
         // LoadChunk found no file for the module.
         constexpr int kNoModule = -1;
 
-        void *Loading() {
-            return const_cast<char *>(&kLoading);
+        // The longest name a module has. The host builds its paths from it.
+        constexpr size_t kMaxModuleNameBytes = 256;
+
+        constexpr std::string_view kByteOrderMark = "\xEF\xBB\xBF";
+
+        // `source` past the UTF-8 byte order mark some editors start a file with, which Lua does not read.
+        std::string_view WithoutByteOrderMark(std::string_view source) {
+            return source.starts_with(kByteOrderMark) ? source.substr(kByteOrderMark.size()) : source;
         }
 
         // Letters, digits, '_' and '-' in parts that dots join: "a.b" names a/b.lua and nothing outside the
@@ -115,6 +121,7 @@ namespace Framework::Scripting {
 
     bool LuaRuntime::RunString(std::string_view source, std::string_view chunkName, std::string &error) {
         const std::string name(chunkName);
+        source = WithoutByteOrderMark(source);
         if (luaL_loadbufferx(_state, source.data(), source.size(), name.c_str(), "t") != LUA_OK) {
             error = PopError(_state);
             return false;
@@ -146,7 +153,8 @@ namespace Framework::Scripting {
                 const std::string file = path + suffix;
                 if (runtime._moduleLoader(file, source)) {
                     const std::string chunkName = "@" + runtime._options.resourceName + "/" + file;
-                    return luaL_loadbufferx(L, source.data(), source.size(), chunkName.c_str(), "t");
+                    const std::string_view text = WithoutByteOrderMark(source);
+                    return luaL_loadbufferx(L, text.data(), text.size(), chunkName.c_str(), "t");
                 }
             }
             return kNoModule;
@@ -159,6 +167,9 @@ namespace Framework::Scripting {
             lua_settop(L, 1);
             size_t length    = 0;
             const char *name = lua_tolstring(L, 1, &length);
+            if (length > kMaxModuleNameBytes) {
+                return luaL_error(L, "require: module name is longer than %d bytes", static_cast<int>(kMaxModuleNameBytes));
+            }
             if (!IsModuleName(std::string_view(name, length))) {
                 return luaL_error(L, "require: invalid module name '%s'", name);
             }
@@ -171,7 +182,7 @@ namespace Framework::Scripting {
             const int modules = lua_gettop(L);
             lua_pushvalue(L, 1);
             const int kept = lua_rawget(L, modules);
-            if (kept == LUA_TLIGHTUSERDATA && lua_touserdata(L, -1) == Loading()) {
+            if (kept == LUA_TLIGHTUSERDATA && lua_touserdata(L, -1) == &kLoading) {
                 return luaL_error(L, "require: cyclic dependency on '%s'", name);
             }
             if (kept != LUA_TNIL) {
@@ -197,7 +208,7 @@ namespace Framework::Scripting {
             lua_setmetatable(L, -2);
             lua_toclose(L, -1);
             lua_pushvalue(L, 1);
-            lua_pushlightuserdata(L, Loading());
+            lua_pushlightuserdata(L, &kLoading);
             lua_rawset(L, modules);
 
             // Without a continuation, so the chunk cannot yield: a module is loaded or it is not.
@@ -219,7 +230,7 @@ namespace Framework::Scripting {
             lua_rawgetp(L, LUA_REGISTRYINDEX, &kModules);
             lua_rawgeti(L, 1, 1);
             lua_pushvalue(L, -1);
-            if (lua_rawget(L, -3) == LUA_TLIGHTUSERDATA && lua_touserdata(L, -1) == Loading()) {
+            if (lua_rawget(L, -3) == LUA_TLIGHTUSERDATA && lua_touserdata(L, -1) == &kLoading) {
                 lua_pop(L, 1);
                 lua_pushnil(L);
                 lua_rawset(L, -3);
@@ -238,6 +249,10 @@ namespace Framework::Scripting {
             lua_setglobal(L, "require");
         }
     };
+
+    bool LuaRuntime::IsExecuting() const {
+        return _entryDepth > 0 || _scheduler->IsAtWork();
+    }
 
     void LuaRuntime::Tick(std::chrono::steady_clock::time_point now) {
         _scheduler->Tick(now);

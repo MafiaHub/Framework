@@ -28,9 +28,9 @@
 namespace Framework::Scripting {
     namespace {
         // The registry keeps, under these addresses, the thread of every coroutine that has not ended and the
-        // { callback, arguments... } of every timer.
-        const char kThreads = 0;
-        const char kTimers  = 0;
+        // { callback, arguments... } of every timer. Not const: equal constants may be given one address.
+        char kThreads = 0;
+        char kTimers  = 0;
 
         // The longest a timer waits: what fits the 32 bits JavaScript gives a delay, 24 days.
         constexpr lua_Number kMaxDelayMs = 2147483647;
@@ -69,6 +69,23 @@ namespace Framework::Scripting {
         std::string error;
         // What a __close handler raised when the coroutine had to be closed in the entry.
         std::string closing;
+    };
+
+    class LuaScheduler::Working final {
+      public:
+        explicit Working(LuaScheduler &scheduler): _scheduler(scheduler) {
+            ++_scheduler._working;
+        }
+
+        ~Working() {
+            --_scheduler._working;
+        }
+
+        Working(const Working &)            = delete;
+        Working &operator=(const Working &) = delete;
+
+      private:
+        LuaScheduler &_scheduler;
     };
 
     struct LuaScheduler::Globals final {
@@ -294,6 +311,9 @@ namespace Framework::Scripting {
     }
 
     bool LuaScheduler::Run(Entry &entry, int values, std::string *error) {
+        // To the end: what is told below may ask for the runtime to be destroyed, with the coroutine still to
+        // let go of.
+        const Working working(*this);
         lua_State *L    = _runtime.State();
         entry.scheduler = this;
         if (_runtime._entryDepth >= kMaxNesting) {
@@ -515,6 +535,7 @@ namespace Framework::Scripting {
         if (_stopped) {
             return;
         }
+        const Working working(*this);
         _now = now;
 
         // What is due as the tick starts. What a callback arms waits for the next tick, so an interval fires once

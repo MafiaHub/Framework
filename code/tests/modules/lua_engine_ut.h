@@ -104,9 +104,22 @@ namespace LuaEngineTest {
         return 0;
     }
 
+    // shutdown(): shuts down the engine in its upvalue, from inside a script.
+    inline int ShutdownEngine(lua_State *L) {
+        static_cast<LuaEngine *>(lua_touserdata(L, lua_upvalueindex(1)))->Shutdown();
+        return 0;
+    }
+
+    inline void AddShutdown(LuaRuntime &runtime, LuaEngine &engine) {
+        lua_State *L = runtime.State();
+        lua_pushlightuserdata(L, &engine);
+        lua_pushcclosure(L, ShutdownEngine, 1);
+        lua_setglobal(L, "shutdown");
+    }
+
     // An initialised engine over resource directories, on a clock the test moves. Every runtime gets record(text),
-    // destroy(resource), which destroys a runtime from inside a script, and tick(ms), which ticks the engine from
-    // inside one.
+    // destroy(resource), which destroys a runtime from inside a script, tick(ms), which ticks the engine from
+    // inside one, and shutdown().
     struct Scripted final {
         Files files;
         std::chrono::steady_clock::time_point start = std::chrono::steady_clock::time_point() + std::chrono::hours(1);
@@ -129,6 +142,7 @@ namespace LuaEngineTest {
                 lua_pushlightuserdata(L, this);
                 lua_pushcclosure(L, TickInside, 1);
                 lua_setglobal(L, "tick");
+                AddShutdown(runtime, engine);
             });
             engine.AddRuntimeDisposingListener([this](LuaRuntime &runtime) {
                 lua_State *L = runtime.State();
@@ -182,7 +196,24 @@ namespace LuaEngineTest {
             }
             return text;
         }
+
+        // Has every runtime that is destroyed from now on say so through record, as "closing <resource>".
+        void RecordClosing() {
+            engine.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
+                Recorded().push_back("closing " + runtime.Options().resourceName);
+            });
+        }
     };
+
+    // Starts the global function `name` of the runtime, straight through its scheduler as an event or an export
+    // will, with a `done` that notes what it was told in `told` and destroys the runtime of `resource`.
+    inline void StartAndDestroy(Scripted &scripted, LuaRuntime &runtime, const char *name, const std::string &resource, std::string &told) {
+        lua_getglobal(runtime.State(), name);
+        runtime.Scheduler().Start(0, [&scripted, &told, resource](bool ok, lua_State *thread, const std::string &error) {
+            told = ok ? lua_tostring(thread, -1) : "failed: " + FirstLine(error);
+            scripted.engine.DestroyResourceRuntime(resource);
+        });
+    }
 
     // Mounts a resource of the given files in the VFS for as long as it lives.
     struct Mounted final {
@@ -359,6 +390,40 @@ MODULE(lua_engine, {
         EQUALS(FirstLine(scripted.engine.GetLastError()), "a/outside.lua:1: outside");
     });
 
+    IT("reads the root of a resource when it needs it, not when the runtime is created", {
+        Scripted scripted;
+        EQUALS(scripted.engine.CreateResourceRuntime("a"), true);
+        scripted.files.Write("a", "lib/util.lua", "return 'util'");
+        const std::string path = scripted.files.Write("a", "sub/main.lua", "value = require('lib.util')\nerror('named')");
+        // With no root there is no module, and a file has its name alone.
+        EQUALS(scripted.Eval("a", "require('lib.util')"), "<error> eval:1: module 'lib.util' not found in resource 'a'");
+        EQUALS(scripted.engine.ExecuteResourceFile("a", path), false);
+        EQUALS(FirstLine(scripted.engine.GetLastError()), "a/main.lua:1: module 'lib.util' not found in resource 'a'");
+
+        scripted.engine.SetResourceRoot("a", scripted.files.Root("a"));
+        EQUALS(scripted.engine.ExecuteResourceFile("a", path), false);
+        EQUALS(FirstLine(scripted.engine.GetLastError()), "a/sub/main.lua:2: named");
+        EQUALS(scripted.Eval("a", "value"), "util");
+
+        // And follows it when it changes.
+        scripted.files.Write("moved", "lib/other.lua", "return 'other'");
+        scripted.engine.SetResourceRoot("a", scripted.files.Root("moved"));
+        EQUALS(scripted.Eval("a", "require('lib.other')"), "other");
+    });
+
+    IT("skips a byte order mark at the start of a file and of a module", {
+        const std::string mark = "\xEF\xBB\xBF";
+        Scripted scripted;
+        EQUALS(scripted.Create("a"), true);
+        scripted.files.Write("a", "lib/marked.lua", mark + "return 'marked'");
+        EQUALS(FirstLine(scripted.Run("a", "main.lua", mark + "value = require('lib.marked')\nerror('second line')")), "a/main.lua:2: second line");
+        EQUALS(scripted.Eval("a", "value"), "marked");
+        EQUALS(scripted.Run("a", "only.lua", mark), "");
+        // Anywhere else it is not Lua.
+        EQUALS(Contains(scripted.Run("a", "late.lua", "value = 1\n" + mark + "value = 2"), "a/late.lua:2: unexpected symbol"), true);
+        EQUALS(scripted.Eval("a", "value"), "marked");
+    });
+
     IT("fails a file of a resource that has no runtime, and one it cannot read", {
         Scripted scripted;
         EQUALS(scripted.Run("ghost", "main.lua", "value = 1"), "no Lua runtime for resource 'ghost'");
@@ -465,6 +530,11 @@ MODULE(lua_engine, {
             EQUALS(scripted.Eval("a", "(select(2, pcall(require, name)):gsub('^(require: invalid module name).*', '%1'))"), "require: invalid module name");
         }
         EQUALS(scripted.Eval("a", "require('../x')"), "<error> eval:1: require: invalid module name '../x'");
+        // A name has its length, so that a script cannot have the host build paths without end.
+        SetGlobalString(*scripted.engine.GetRuntime("a"), "name", std::string(257, 'a'));
+        EQUALS(scripted.Eval("a", "select(2, pcall(require, name))"), "require: module name is longer than 256 bytes");
+        SetGlobalString(*scripted.engine.GetRuntime("a"), "name", std::string(256, 'a'));
+        EQUALS(scripted.Eval("a", "(select(2, pcall(require, name)):gsub('a+', 'a'))"), "module 'a' not found in resource 'a'");
         EQUALS(scripted.Eval("a", "require(42)"), "<error> eval:1: require: module name must be a string");
         EQUALS(scripted.Eval("a", "require()"), "<error> eval:1: require: module name must be a string");
         EQUALS(scripted.Eval("a", "require('sub.y')"), "y");
@@ -723,6 +793,72 @@ MODULE(lua_engine, {
         EQUALS(scripted.DisposedText(), "a:told");
     });
 
+    IT("puts off destroying a runtime from the done of a function the host started in it", {
+        Scripted scripted;
+        EQUALS(scripted.Create("a"), true);
+        scripted.At(0);
+        EQUALS(scripted.Run("a", "main.lua", "value = 'started' function work() return 'worked' end"), "");
+        LuaRuntime *runtime = scripted.engine.GetRuntime("a");
+        std::string told;
+        StartAndDestroy(scripted, *runtime, "work", "a", told);
+        EQUALS(told, "worked");
+        // The scheduler had the coroutine still to let go of when it told.
+        EQUALS(scripted.engine.GetRuntime("a") == nullptr, true);
+        EQUALS(scripted.DisposedText(), "");
+        EQUALS(runtime->IsExecuting(), false);
+        scripted.At(10);
+        EQUALS(scripted.DisposedText(), "a:started");
+
+        // The same when it tells of a failure.
+        EQUALS(scripted.Create("a"), true);
+        runtime = scripted.engine.GetRuntime("a");
+        EQUALS(LuaRuntimeTest::Run(*runtime, "value = 'again' function fail() error('broke') end"), "");
+        StartAndDestroy(scripted, *runtime, "fail", "a", told);
+        EQUALS(told, "failed: test:1: broke");
+        EQUALS(scripted.DisposedText(), "a:started");
+        scripted.At(20);
+        EQUALS(scripted.DisposedText(), "a:started,a:again");
+    });
+
+    IT("puts off destroying a runtime from the done of a coroutine the host resumed", {
+        Scripted scripted;
+        EQUALS(scripted.Create("a"), true);
+        EQUALS(scripted.Create("b"), true);
+        scripted.At(0);
+        LuaRuntime *runtime = scripted.engine.GetRuntime("a");
+        SetGlobalFunction(*runtime, "wait", LuaSchedulerTest::Wait);
+        EQUALS(scripted.Run("a", "main.lua", "value = 'waited' function work() return wait() end"), "");
+        std::string told;
+        StartAndDestroy(scripted, *runtime, "work", "a", told);
+        EQUALS(told, "");
+        runtime->Scheduler().Resume(LuaSchedulerTest::g_token, [](lua_State *thread) {
+            lua_pushstring(thread, "resumed");
+            return 1;
+        });
+        EQUALS(told, "resumed");
+        EQUALS(scripted.engine.GetRuntime("a") == nullptr, true);
+        EQUALS(scripted.DisposedText(), "");
+        scripted.At(10);
+        EQUALS(scripted.DisposedText(), "a:waited");
+
+        // And when the done of one runtime, still at work, is what a script of another stops it from.
+        runtime = scripted.engine.GetRuntime("b");
+        SetGlobalFunction(*runtime, "wait", LuaSchedulerTest::Wait);
+        EQUALS(scripted.Run("b", "main.lua", "value = 'stopped by a' function work() return wait() end"), "");
+        EQUALS(scripted.Create("a"), true);
+        EQUALS(scripted.Run("a", "main.lua", "function stop() destroy('b') return 'stopped' end"), "");
+        lua_getglobal(runtime->State(), "work");
+        runtime->Scheduler().Start(0, [&scripted, &told](bool, lua_State *, const std::string &) {
+            StartAndDestroy(scripted, *scripted.engine.GetRuntime("a"), "stop", "none", told);
+        });
+        runtime->Scheduler().Resume(LuaSchedulerTest::g_token, {});
+        EQUALS(told, "stopped");
+        EQUALS(scripted.engine.GetRuntime("b") == nullptr, true);
+        EQUALS(scripted.DisposedText(), "a:waited");
+        scripted.At(20);
+        EQUALS(scripted.DisposedText(), "a:waited,b:stopped by a");
+    });
+
     IT("destroys another runtime from inside a script at once", {
         Scripted scripted;
         EQUALS(scripted.Create("a"), true);
@@ -805,6 +941,115 @@ MODULE(lua_engine, {
         EQUALS(scripted.Eval("a", "value"), "nil");
     });
 
+    IT("puts off a shutdown from inside a file until the file has returned", {
+        Scripted scripted;
+        scripted.RecordClosing();
+        EQUALS(scripted.Create("a"), true);
+        EQUALS(scripted.Create("b"), true);
+        scripted.At(0);
+        EQUALS(scripted.Run("b", "main.lua", "value = 'b' setTimeout(function() record('b timer') end, 10)"), "");
+        EQUALS(scripted.Run("a", "main.lua",
+                   "value = 'a'\n"
+                   "setTimeout(function() record('a timer') end, 10)\n"
+                   "shutdown()\n"
+                   "record('went on')\n"
+                   "value = 'after'\n"
+                   "tick(10)\n"
+                   "record('ticked')"),
+            "");
+        // Every state was still open while the script that shut the engine down ran, and closed as it returned.
+        EQUALS(RecordedText(), "went on,ticked,closing a,closing b");
+        EQUALS(scripted.DisposedText(), "a:after,b:b");
+        EQUALS(scripted.engine.IsInitialized(), false);
+        EQUALS(scripted.engine.GetRuntime("a") == nullptr, true);
+        EQUALS(scripted.engine.GetRuntime("b") == nullptr, true);
+        scripted.At(20);
+        EQUALS(RecordedText(), "went on,ticked,closing a,closing b");
+        EQUALS(scripted.Create("a"), false);
+        EQUALS(scripted.engine.GetLastError(), "Engine not initialized");
+    });
+
+    IT("takes every runtime away at once on a shutdown from inside a script", {
+        Scripted scripted;
+        EQUALS(scripted.Create("a"), true);
+        EQUALS(scripted.Create("b"), true);
+        scripted.At(0);
+        EQUALS(scripted.Run("b", "main.lua", "value = 'b'"), "");
+        EQUALS(scripted.Run("a", "main.lua", "shutdown()\nrecord(tostring(pcall(destroy, 'b')))\nshutdown()\nsetTimeout(function() record('armed after') end, 0)"), "");
+        EQUALS(RecordedText(), "true");
+        EQUALS(scripted.DisposedText(), "a:nil,b:b");
+    });
+
+    IT("puts off a shutdown from inside a timer until the tick has returned", {
+        Scripted scripted;
+        scripted.RecordClosing();
+        EQUALS(scripted.Create("a"), true);
+        EQUALS(scripted.Create("b"), true);
+        scripted.At(0);
+        EQUALS(scripted.Run("a", "main.lua", "setTimeout(function() shutdown() record('timer went on') end, 10)\nsetTimeout(function() record('same tick') end, 10)"), "");
+        EQUALS(scripted.Run("b", "main.lua", "setTimeout(function() record('b timer') end, 10)"), "");
+        scripted.At(10);
+        EQUALS(RecordedText(), "timer went on,closing a,closing b");
+        EQUALS(scripted.engine.IsInitialized(), false);
+    });
+
+    IT("ends a shutdown from a coroutine the host started at the next tick", {
+        Scripted scripted;
+        EQUALS(scripted.Create("a"), true);
+        scripted.At(0);
+        EQUALS(scripted.Run("a", "main.lua", "value = 'old' function stop() shutdown() record('went on') end"), "");
+        LuaRuntime *runtime = scripted.engine.GetRuntime("a");
+        lua_getglobal(runtime->State(), "stop");
+        runtime->Scheduler().Start(0);
+        EQUALS(RecordedText(), "went on");
+        EQUALS(scripted.engine.IsInitialized(), false);
+        EQUALS(scripted.engine.GetRuntime("a") == nullptr, true);
+        // The engine was not on the way out of that call: it finds out at its next tick.
+        EQUALS(scripted.DisposedText(), "");
+        scripted.At(10);
+        EQUALS(scripted.DisposedText(), "a:old");
+        EQUALS(scripted.engine.IsInitialized(), false);
+    });
+
+    IT("starts over after a shutdown from inside a script", {
+        Scripted scripted;
+        EQUALS(scripted.Create("a"), true);
+        EQUALS(scripted.Run("a", "main.lua", "value = 'old' function stop() shutdown() end"), "");
+        LuaRuntime *runtime = scripted.engine.GetRuntime("a");
+        lua_getglobal(runtime->State(), "stop");
+        runtime->Scheduler().Start(0);
+        EQUALS(scripted.DisposedText(), "");
+        // The name is free for the next runtime, and the old one goes as soon as the engine is called again.
+        EQUALS(scripted.engine.Init() == ScriptingError::SCRIPTING_NONE, true);
+        EQUALS(scripted.Create("a"), true);
+        EQUALS(scripted.DisposedText(), "a:old");
+        EQUALS(scripted.Run("a", "main.lua", "value = 'new'"), "");
+        scripted.At(10);
+        EQUALS(scripted.DisposedText(), "a:old");
+        EQUALS(scripted.Eval("a", "value"), "new");
+    });
+
+    IT("ends a shutdown that is still pending when it goes", {
+        std::vector<std::string> disposed;
+        {
+            LuaEngine engine;
+            engine.SetRuntimeSetupCallback([&engine](LuaRuntime &runtime) {
+                AddShutdown(runtime, engine);
+            });
+            engine.AddRuntimeDisposingListener([&disposed](LuaRuntime &runtime) {
+                disposed.push_back(runtime.Options().resourceName);
+            });
+            EQUALS(engine.Init() == ScriptingError::SCRIPTING_NONE, true);
+            EQUALS(engine.CreateResourceRuntime("a"), true);
+            LuaRuntime *runtime = engine.GetRuntime("a");
+            lua_getglobal(runtime->State(), "shutdown");
+            runtime->Scheduler().Start(0);
+            EQUALS(engine.IsInitialized(), false);
+            EQUALS(disposed.size(), 0u);
+        }
+        EQUALS(disposed.size(), 1u);
+    });
+
     IT("destroys its runtimes when it goes", {
         std::vector<std::string> disposed;
         {
@@ -879,6 +1124,54 @@ MODULE(lua_engine, {
         EQUALS(engine.CreateResourceRuntime("a"), true);
         EQUALS(engine.GetRuntime("a") != nullptr, true);
         EQUALS(disposed.size(), 2u);
+    });
+
+    IT("fails the creation of a runtime that its setup destroys", {
+        std::vector<std::string> disposed;
+        std::string doing = "destroy";
+        LuaEngine engine;
+        engine.SetRuntimeSetupCallback([&engine, &doing](LuaRuntime &runtime) {
+            if (doing == "destroy" || doing == "destroy and fail") {
+                engine.DestroyResourceRuntime(runtime.Options().resourceName);
+            }
+            if (doing == "shutdown") {
+                engine.Shutdown();
+            }
+            if (doing == "destroy and fail") {
+                luaL_error(runtime.State(), "failed as well");
+            }
+        });
+        engine.AddRuntimeDisposingListener([&disposed](LuaRuntime &runtime) {
+            disposed.push_back(runtime.Options().resourceName);
+        });
+        EQUALS(engine.Init() == ScriptingError::SCRIPTING_NONE, true);
+
+        EQUALS(engine.CreateResourceRuntime("a"), false);
+        EQUALS(engine.GetLastError(), "resource runtime was destroyed during setup");
+        EQUALS(engine.GetRuntime("a") == nullptr, true);
+        // It was running its setup: it goes at the next tick.
+        EQUALS(disposed.size(), 0u);
+        engine.Tick();
+        EQUALS(disposed.size(), 1u);
+
+        doing = "destroy and fail";
+        EQUALS(engine.CreateResourceRuntime("a"), false);
+        EQUALS(FirstLine(engine.GetLastError()), "failed as well");
+        EQUALS(engine.GetRuntime("a") == nullptr, true);
+        engine.Tick();
+        EQUALS(disposed.size(), 2u);
+
+        doing = "shutdown";
+        EQUALS(engine.CreateResourceRuntime("a"), false);
+        EQUALS(engine.GetLastError(), "resource runtime was destroyed during setup");
+        EQUALS(engine.IsInitialized(), false);
+        EQUALS(disposed.size(), 3u);
+
+        doing.clear();
+        EQUALS(engine.Init() == ScriptingError::SCRIPTING_NONE, true);
+        EQUALS(engine.CreateResourceRuntime("a"), true);
+        EQUALS(engine.GetRuntime("a") != nullptr, true);
+        EQUALS(disposed.size(), 3u);
     });
 
     IT("fails the creation of a runtime that does not fit its memory limit", {

@@ -54,9 +54,11 @@ namespace Framework::Scripting {
     // What a __close handler raises while the scheduler closes a coroutine that failed with handlers pending (its
     // resume was refused, or it yielded as above) goes to the error handler, next to the coroutine's own error.
     //
-    // `done`, `push` and the error handler run inside Start, Resume or Tick. They must not throw, and must not
-    // destroy the runtime. Destroying the runtime drops what is pending: no timer fires, no coroutine is resumed
-    // or closed, and neither `done` nor the error handler is called.
+    // `done`, `push` and the error handler run inside Start, Resume or Tick, with the scheduler still at work
+    // around them. They must not throw, and must not destroy the runtime: LuaRuntime::IsExecuting() says so for as
+    // long as any of the three is in progress, which is what LuaEngine reads to put a destruction off. Destroying
+    // the runtime drops what is pending: no timer fires, no coroutine is resumed or closed, and neither `done` nor
+    // the error handler is called.
     class LuaScheduler final {
       public:
         // Called once, when the coroutine has ended: `ok` with its first result on top of `thread`'s stack (nil
@@ -118,6 +120,12 @@ namespace Framework::Scripting {
         // Coroutines that wait for a Tick or a Resume.
         size_t SuspendedCoroutines() const;
 
+        // Whether a Start, a Resume or a Tick is in progress, `done` and the error handler included: the scheduler
+        // then has its own state and the Lua state still to touch.
+        bool IsAtWork() const {
+            return _working > 0;
+        }
+
         // Whether `thread` is a coroutine the scheduler started and has not let go of yet: from before it first
         // runs until after its `done` was told.
         bool Owns(lua_State *thread) const {
@@ -137,6 +145,9 @@ namespace Framework::Scripting {
 
         // One entry into the state: what it is to run, and how that went.
         struct Entry;
+
+        // Counts in _working for as long as it lives.
+        class Working;
 
         // What a resume brings: values, or with `raise` the one message to raise.
         struct Wakeup final {
@@ -223,5 +234,7 @@ namespace Framework::Scripting {
         uint64_t _lastArmed = 0;
         std::chrono::steady_clock::time_point _now;
         bool _stopped = false;
+        // The Run and Tick calls in progress, one inside another.
+        int _working = 0;
     };
 } // namespace Framework::Scripting

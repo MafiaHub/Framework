@@ -15,6 +15,7 @@
 
 #include <lua.h>
 
+#include <algorithm>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -143,23 +144,6 @@ namespace Framework::Scripting {
         }
     } // namespace
 
-    class LuaEngine::Entered final {
-      public:
-        explicit Entered(ResourceRuntime &runtime): _runtime(runtime) {
-            ++_runtime.entered;
-        }
-
-        ~Entered() {
-            --_runtime.entered;
-        }
-
-        Entered(const Entered &)            = delete;
-        Entered &operator=(const Entered &) = delete;
-
-      private:
-        ResourceRuntime &_runtime;
-    };
-
     LuaEngine::LuaEngine(LuaEngineOptions options): _options(options) {}
 
     LuaEngine::~LuaEngine() {
@@ -173,18 +157,26 @@ namespace Framework::Scripting {
     }
 
     void LuaEngine::Shutdown() {
-        // Resources have normally stopped by now. A teardown runs listeners, which may destroy further runtimes.
-        while (!_runtimes.empty() || !_retiredRuntimes.empty()) {
-            if (!_runtimes.empty()) {
-                auto node = _runtimes.extract(_runtimes.begin());
-                Teardown(std::move(node.mapped()));
-                continue;
-            }
-            std::unique_ptr<ResourceRuntime> runtime = std::move(_retiredRuntimes.front());
-            _retiredRuntimes.erase(_retiredRuntimes.begin());
-            Teardown(std::move(runtime));
-        }
         _initialized = false;
+
+        // Resources have normally stopped by now. Any runtime left is taken away as one destroyed from inside its
+        // own call is, ahead of the ones that already were.
+        std::vector<std::unique_ptr<LuaRuntime>> retired;
+        retired.reserve(_runtimes.size() + _retiredRuntimes.size());
+        for (auto &[name, runtime] : _runtimes) {
+            runtime->Scheduler().Stop();
+            retired.push_back(std::move(runtime));
+        }
+        _runtimes.clear();
+        for (auto &runtime : _retiredRuntimes) {
+            retired.push_back(std::move(runtime));
+        }
+        _retiredRuntimes = std::move(retired);
+
+        // Called from a script, this would close the state that script is running in, and host code further up
+        // the stack may be in the middle of any of the others: they all go once nothing runs in any of them.
+        _shuttingDown = true;
+        FlushRetiredRuntimes();
     }
 
     void LuaEngine::Tick() {
@@ -192,10 +184,10 @@ namespace Framework::Scripting {
     }
 
     void LuaEngine::Tick(std::chrono::steady_clock::time_point now) {
+        FlushRetiredRuntimes();
         if (!_initialized) {
             return;
         }
-        FlushRetiredRuntimes();
 
         // By name: a callback may create and destroy runtimes, the one it runs in included.
         std::vector<std::string> names;
@@ -205,13 +197,11 @@ namespace Framework::Scripting {
         }
         for (const std::string &name : names) {
             const auto found = _runtimes.find(name);
-            if (found == _runtimes.end() || IsBusy(*found->second)) {
-                continue;
+            if (found != _runtimes.end() && !found->second->IsExecuting()) {
+                found->second->Tick(now);
             }
-            ResourceRuntime &runtime = *found->second;
-            const Entered entered(runtime);
-            runtime.runtime->Tick(now);
         }
+        FinishShutdown();
     }
 
     bool LuaEngine::CreateResourceRuntime(const std::string &resourceName) {
@@ -224,50 +214,52 @@ namespace Framework::Scripting {
             return false;
         }
 
-        auto created          = std::make_unique<ResourceRuntime>();
-        created->resourceName = resourceName;
-        if (const auto root = _resourceRoots.find(resourceName); root != _resourceRoots.end()) {
-            created->rootPath = root->second;
-        }
-
         LuaRuntimeOptions options;
         options.resourceName     = resourceName;
         options.side             = _options.side;
         options.memoryLimitBytes = _options.memoryLimitBytes;
         options.entryDeadline    = _options.entryDeadline;
-        options.rootPath         = created->rootPath;
+        options.rootPath         = ResourceRoot(resourceName);
+        std::unique_ptr<LuaRuntime> created;
         try {
-            created->runtime = std::make_unique<LuaRuntime>(std::move(options));
+            created = std::make_unique<LuaRuntime>(std::move(options));
         }
         catch (const std::exception &exception) {
             _lastError = exception.what();
             return false;
         }
 
-        created->runtime->SetModuleLoader([root = created->rootPath](const std::string &relativePath, std::string &source) {
-            return ReadModule(root, relativePath, source);
+        // The root as it is when a module is asked for: it may be set once the runtime exists.
+        created->SetModuleLoader([this, resourceName](const std::string &relativePath, std::string &source) {
+            return ReadModule(ResourceRoot(resourceName), relativePath, source);
         });
         // Queued: the scheduler is still at work in the runtime when it tells, and what handles an error may stop
         // the resource.
-        created->runtime->Scheduler().SetErrorHandler([this, resourceName](const std::string &message) {
+        created->Scheduler().SetErrorHandler([this, resourceName](const std::string &message) {
             _pendingErrors.push_back({resourceName, message});
         });
 
-        ResourceRuntime &runtime = *created;
+        LuaRuntime &runtime = *created;
         _runtimes.emplace(resourceName, std::move(created));
-        if (!_runtimeSetup) {
-            return true;
-        }
+        const bool ready = !_runtimeSetup || SetUp(resourceName, runtime);
+        FinishShutdown();
+        return ready;
+    }
 
+    bool LuaEngine::SetUp(const std::string &resourceName, LuaRuntime &runtime) {
         // In a protected call: a binding that fails to register raises, and outside one that is a panic.
-        bool ready = false;
-        {
-            const SetupCall call {_runtimeSetup, *runtime.runtime};
-            lua_State *L = runtime.runtime->State();
-            lua_pushcfunction(L, RunSetup);
-            lua_pushlightuserdata(L, const_cast<SetupCall *>(&call));
-            const Entered entered(runtime);
-            ready = runtime.runtime->Call(1, 0, _lastError);
+        const SetupCall call {_runtimeSetup, runtime};
+        lua_pushcfunction(runtime.State(), RunSetup);
+        lua_pushlightuserdata(runtime.State(), const_cast<SetupCall *>(&call));
+        const bool ready = runtime.Call(1, 0, _lastError);
+
+        // The callback may have destroyed the runtime it was setting up, or shut the engine down. That runtime is
+        // on its way out then, and the name may already be another's.
+        if (GetRuntime(resourceName) != &runtime) {
+            if (ready) {
+                _lastError = "resource runtime was destroyed during setup";
+            }
+            return false;
         }
         if (!ready) {
             DestroyResourceRuntime(resourceName);
@@ -280,13 +272,14 @@ namespace Framework::Scripting {
         if (found == _runtimes.end()) {
             return;
         }
-        std::unique_ptr<ResourceRuntime> runtime = std::move(found->second);
+        std::unique_ptr<LuaRuntime> runtime = std::move(found->second);
         _runtimes.erase(found);
 
-        // Destroyed from inside its own call, it has to outlive that call: it is freed at the next tick, from the
-        // top, and until then none of its timers fires and nothing that waits in it is resumed.
-        if (IsBusy(*runtime)) {
-            runtime->runtime->Scheduler().Stop();
+        // Destroyed from inside its own call, or with its scheduler at work, it has to outlive that: it is freed
+        // at the next tick, from the top, and until then none of its timers fires and nothing that waits in it is
+        // resumed.
+        if (runtime->IsExecuting()) {
+            runtime->Scheduler().Stop();
             _retiredRuntimes.push_back(std::move(runtime));
             return;
         }
@@ -299,7 +292,7 @@ namespace Framework::Scripting {
             _lastError = "no Lua runtime for resource '" + resourceName + "'";
             return false;
         }
-        ResourceRuntime &runtime = *found->second;
+        LuaRuntime &runtime = *found->second;
 
         const std::string path(filepath);
         std::string source;
@@ -308,9 +301,10 @@ namespace Framework::Scripting {
             return false;
         }
 
-        // The file may destroy the runtime it runs in, which then waits for this to return.
-        const Entered entered(runtime);
-        return runtime.runtime->RunString(source, ChunkName(resourceName, runtime.rootPath, path), _lastError);
+        // The file may destroy the runtime it runs in, which is then not to be touched once this returns.
+        const bool ran = runtime.RunString(source, ChunkName(resourceName, ResourceRoot(resourceName), path), _lastError);
+        FinishShutdown();
+        return ran;
     }
 
     void LuaEngine::SetRuntimeSetupCallback(RuntimeSetup setup) {
@@ -323,7 +317,7 @@ namespace Framework::Scripting {
 
     LuaRuntime *LuaEngine::GetRuntime(const std::string &resourceName) const {
         const auto found = _runtimes.find(resourceName);
-        return found != _runtimes.end() ? found->second->runtime.get() : nullptr;
+        return found != _runtimes.end() ? found->second.get() : nullptr;
     }
 
     std::vector<LuaEngine::PendingError> LuaEngine::DrainPendingErrors() {
@@ -336,28 +330,46 @@ namespace Framework::Scripting {
         _runtimeDisposingListeners.push_back(std::move(listener));
     }
 
-    bool LuaEngine::IsBusy(const ResourceRuntime &runtime) {
-        return runtime.entered > 0 || runtime.runtime->IsExecuting();
+    std::string LuaEngine::ResourceRoot(const std::string &resourceName) const {
+        const auto found = _resourceRoots.find(resourceName);
+        return found != _resourceRoots.end() ? found->second : std::string();
     }
 
-    void LuaEngine::Teardown(std::unique_ptr<ResourceRuntime> runtime) {
+    void LuaEngine::Teardown(std::unique_ptr<LuaRuntime> runtime) {
         for (const auto &listener : _runtimeDisposingListeners) {
-            listener(*runtime->runtime);
+            listener(*runtime);
         }
-        runtime->runtime.reset();
+        runtime.reset();
     }
 
     void LuaEngine::FlushRetiredRuntimes() {
+        // A shutdown that found a runtime executing leaves them all until none is.
+        if (_shuttingDown) {
+            const bool executing = std::any_of(_retiredRuntimes.begin(), _retiredRuntimes.end(), [](const auto &runtime) {
+                return runtime->IsExecuting();
+            });
+            if (executing) {
+                return;
+            }
+            _shuttingDown = false;
+        }
+
         // Taken out first: a teardown runs listeners, which may destroy, and so retire, further runtimes.
-        std::vector<std::unique_ptr<ResourceRuntime>> retired;
+        std::vector<std::unique_ptr<LuaRuntime>> retired;
         retired.swap(_retiredRuntimes);
         for (auto &runtime : retired) {
-            if (IsBusy(*runtime)) {
+            if (runtime->IsExecuting()) {
                 _retiredRuntimes.push_back(std::move(runtime));
             }
             else {
                 Teardown(std::move(runtime));
             }
+        }
+    }
+
+    void LuaEngine::FinishShutdown() {
+        if (_shuttingDown) {
+            FlushRetiredRuntimes();
         }
     }
 } // namespace Framework::Scripting
