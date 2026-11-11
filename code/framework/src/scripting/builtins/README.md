@@ -80,7 +80,11 @@ what it needs, and nothing else diverges:
   and `Builtins::RegisterValueTypesLua` does so for the five. A new member goes
   in the definition, never in one language's registration. What exists in one
   language only is declared there too: `toJSON` is JavaScript's (`V8Hook`), the
-  arithmetic and equality operators are Lua's (`LuaMeta`).
+  arithmetic and equality operators are Lua's (`LuaMeta`). The definition also
+  says how the type leaves a runtime: `JsonProperties` names what Lua writes it
+  to JSON with, the same keys and values `toJSON` gives, and `Transfer` what it
+  crosses to another runtime as, which `Builtins::RegisterTransferTypes`
+  registers for both languages.
 
 - **Service APIs** — need the context and the `ResourceManager`:
 

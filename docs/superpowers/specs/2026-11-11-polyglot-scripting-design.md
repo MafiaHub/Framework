@@ -85,6 +85,15 @@ A member's implementation is one of:
 
 Members carry a `Bind::Side` (`Shared`, `Server`, `Client`); a runtime materialises `Shared` plus its own.
 
+A definition also says how its class leaves a runtime (§4.1):
+
+- `Transfer(get)`: an object crosses between runtimes as itself, as the bytes of what `get` reads from it
+  (`&Vector3::vec`, later the id of a handle), and is built again as `T(payload)` on the other side. One
+  declaration serves `ValueTransfer` and `LuaTransfer`; `RegisterTransfer()` registers both, when
+  `Builtins::RegisterTransferTypes()` calls it, so the order `ValueTransfer` depends on stays in one place.
+- `JsonProperties({"x", "y", "z"})`: the properties an object is written to JSON with from Lua, in that
+  order. It names what `toJSON` gives in JavaScript, which stays a `V8Hook` so the catalog does not change.
+
 ### 1.2 Type model
 
 | C++ | Neutral | TypeScript | Lua annotation | Lua runtime value |
@@ -148,7 +157,8 @@ class Call {
     virtual Value NewObject() = 0;
     virtual Value NewArray() = 0;
     virtual Value NewFunction(NativeFunction fn) = 0;  // fu2::function<void(Call &)>
-    virtual Value FromTransfer(const TransferredValue &) = 0;
+    virtual Value FromTransfer(const TransferredValue &) = 0;   // throws to the script what cannot be rebuilt
+    virtual Utils::Result<Value, std::string> ParseJson(std::string_view text) = 0;
     template <typename T> Value Wrap(T &&bound);       // a bound class instance
 
     virtual void Return(Value) = 0;
@@ -184,6 +194,15 @@ JavaScript `undefined` and `null` are both `Nil`. `Array` is a JavaScript array 
   `Get`/`Set` with such a key address the same element in both languages.
 - A `Value` is good in its own call until that call returns. Kept beyond it, or read in a call nested in
   its own, it is `Nil`: it reads, is stored and is returned as the nil of the call it is used in.
+- `ToTransfer` and `FromTransfer` are `ValueTransfer` in JavaScript and `LuaTransfer` in Lua (§4.1).
+  `ToJson` is `JSON.stringify` in JavaScript, so a `toJSON` is asked, and `LuaJson::Encode` in Lua;
+  `ParseJson` is `JSON.parse` and `LuaJson::Decode`. `Nil` is `null` in JSON in both languages.
+- `ToTransfer`, `ToJson` and `ParseJson` answer with a result and throw nothing: the function decides what
+  a value that does not cross, or text that does not parse, means. One exception keeps JavaScript as it
+  was: what `JSON.stringify` or a script's `toJSON` threw is also the error of the call, and the first
+  throw wins, so a function that throws the error it was given leaves a JavaScript caller its own
+  exception. A value JavaScript has no JSON for (a function, a symbol) is an error, not the text
+  `undefined`.
 
 `ScriptCallable` is a script function kept beyond a call: an event handler, a key bind, an export.
 
@@ -327,6 +346,25 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
 
 One value crosses per call result: a Lua function's first return value.
 
+- The table is `LuaTransfer` (`scripting/lua/lua_transfer.h`). On its own it refuses a function, in both
+  directions: one crosses through the function references of §4.2.
+- A Lua table is read raw: its metatable does not cross and no metamethod runs. An Object's keys are
+  copied in one order, integers ascending then strings sorted by their bytes, and where a table has an
+  integer key and the string key of the same text the string key is the one copied. A key that arrives as
+  the text of an integer stays a string.
+- A float that is a NaN, an infinity or a negative zero stays a float. The elements of an Array keep
+  their indices around a hole, and the length Lua gives a table with a hole is any of its borders.
+- A Map key is a string or a number, an integral one within ±2^53 an integer; a NaN or any other key is
+  refused. A null or undefined property, Map value or Set member is absent.
+- A bound object crosses when its class, or one of its bases, is a host type (`Bind::Class::Transfer`),
+  under the name and with the bytes JavaScript uses; any other is refused, as is a host type Lua has no
+  class for (`host type 'Player' is not available in Lua`).
+- The bounds are `ValueTransfer`'s: 128 levels, about a million values, 256 MB of strings and binary
+  data. A refusal names where in the value it happened (`Cannot copy value.items[2].name: a function
+  cannot be copied`), counting from 1 in a value read from Lua and from 0 in one being built.
+- Neither direction lets a Lua error out, whether it is called from a script's call or from host code:
+  the work is a protected call, and a state out of memory fails the copy.
+
 ### 4.2 Functions, events, exports, messages
 
 - A function that crosses becomes a callable in the receiving runtime that runs it in its owner, with
@@ -334,8 +372,14 @@ One value crosses per call result: a Lua function's first return value.
   until it settles; a Lua function that suspends hands a JavaScript caller a Promise.
 - The event, message and export tables store `ScriptCallable`. Dispatch between two JavaScript handlers
   in one isolate keeps passing values by reference, as today. Every other pairing copies.
-- The JSON payload of a network event or a state bag is read and written by a C++ codec in Lua with the
-  mapping of §4.1.
+- The JSON payload of a network event or a state bag is read and written by a C++ codec in Lua
+  (`LuaJson`, `scripting/lua/lua_json.h`) with the mapping of §4.1.
+  - It writes the text `JSON.stringify` writes for the same data: numbers as JavaScript spells them, a
+    NaN or an infinity as `null`, strings escaped the same way, an empty table as `[]`. Object keys come
+    in the order of §4.1. A bound object is the object of its class's `JsonProperties`; one without is
+    refused, as are a function, a cycle, a string that is not UTF-8 and nesting beyond 128 levels.
+  - It reads `null` as `nil`, a number with an integral value within ±2^53 as an integer and any other
+    as a float, and of two members with one key the last.
 
 ## 5. Tooling
 
