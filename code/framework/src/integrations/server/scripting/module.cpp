@@ -205,6 +205,18 @@ namespace Framework::Integrations::Server::Scripting {
         }
     }
 
+    bool ServerScriptingModule::RunScriptsUntil(std::chrono::steady_clock::time_point deadline) {
+        if (!_nodeEngine || !_nodeEngine->IsInitialized()) {
+            return false;
+        }
+        _nodeEngine->RunUntil(deadline);
+        // Turned away by its gate, it no longer has the world the error handling stops resources in.
+        if (!_nodeEngine->LostRunGate()) {
+            HandleRuntimeErrors();
+        }
+        return true;
+    }
+
     void ServerScriptingModule::HandleRuntimeErrors() {
         for (const auto &err : _nodeEngine->DrainPendingErrors()) {
             // Raised before its resource was stopped or restarted, by a runtime that is gone: the resource running now did not fail.

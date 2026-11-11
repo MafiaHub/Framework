@@ -88,6 +88,7 @@ set(FRAMEWORK_SERVER_SRC
     src/integrations/server/asset_paks/asset_pak_builder.cpp
     src/integrations/server/asset_file_server.cpp
     src/integrations/server/client_package.cpp
+    src/integrations/server/script_thread.cpp
     src/integrations/server/networking/engine.cpp
 
     # JavaScript scripting (server module)

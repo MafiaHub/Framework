@@ -70,6 +70,12 @@ namespace Framework::Integrations::Server::Scripting {
         void WaitUntil(std::chrono::steady_clock::time_point deadline);
 
         /**
+         * For a server whose scripts have their own thread: run the runtimes that have work until the deadline,
+         * once, and come back early with an error waiting or a task for that thread. False with no engine to run.
+         */
+        bool RunScriptsUntil(std::chrono::steady_clock::time_point deadline);
+
+        /**
          * Get the Node.js engine.
          */
         Framework::Scripting::NodeEngine *GetEngine() const {

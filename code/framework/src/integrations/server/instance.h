@@ -23,6 +23,7 @@
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
+#include "script_thread.h"
 #include "scripting/module.h"
 #include "tick_breakdown.h"
 #include "voice/server/voice_server.h"
@@ -98,6 +99,12 @@ namespace Framework::Integrations::Server {
         int32_t replicationThreads = -1;
         // Background: blocking work such as packaging a hot-reloaded resource.
         int32_t backgroundThreads = -1;
+
+        // Run scripts on a thread of their own (server.json "script-thread"), so a script that computes for
+        // a long time does not hold up the tick: replication, packets and PostUpdate carry on, and take the
+        // world from the script between two of its instructions. False runs them inside the tick, as
+        // before. See docs/server_threading.md for what code on the tick thread has to do differently.
+        bool scriptThread = true;
 
         // What a resource's asset paks may carry, one lane per folder (`<resource>/<lane>/`). Null
         // ships none. See AssetPakBuilder.
@@ -346,6 +353,15 @@ namespace Framework::Integrations::Server {
         // Subscription raising entityStateChange; released on shutdown.
         Framework::Networking::Replication::StateChangeHandle _stateBagEvents = Framework::Networking::Replication::kInvalidStateChangeHandle;
 
+        // Scripts' own thread, when they have one. With it, a tick has the world from its first line to
+        // its last, and so does the thread that runs Init() and Shutdown().
+        std::unique_ptr<ScriptThread> _scriptThread;
+        bool _worldHeld = false;
+        // What the tick did for scripts, once per tick interval, on whichever thread runs them.
+        void ScriptRound();
+        // The scripting half of Init(), on the thread scripts run on. Empty on success.
+        std::string InitScripting(Framework::Networking::Replication::ReplicationManager *replication);
+
         // Declared last, so they are stopped first: background work reads the asset pak builder above.
         // The replication pass and the game's own per-tick loops share the workers; the tick thread
         // is one of their lanes.
@@ -449,6 +465,20 @@ namespace Framework::Integrations::Server {
         HTTP::Webserver *GetWebserver() const {
             return _webServer.get();
         }
+
+        // Whether scripts run on a thread of their own. Then code on the tick thread (PostUpdate, RPC and
+        // packet handlers, the On* overrides the tick calls) should hand its script work over with
+        // PostToScripts: entering script from the tick thread itself still works, but waits for
+        // whatever script is running.
+        bool ScriptsHaveOwnThread() const {
+            return _scriptThread != nullptr;
+        }
+
+        // Runs `task` on the thread scripts run on, with the world: it may open an EngineScope, emit
+        // events and touch the world like tick code. At once when scripts share the tick thread.
+        void PostToScripts(Utils::TaskScheduler::Task task);
+        // The same, and waits for it. From the tick thread the world may have changed when it returns.
+        void RunOnScriptThread(Utils::TaskScheduler::Task task);
 
         // Blocking work goes here instead of into the tick: RunInBackground for the work, with a
         // completion that runs on the tick thread, at the top of a later tick.

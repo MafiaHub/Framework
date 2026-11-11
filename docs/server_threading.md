@@ -4,9 +4,10 @@ How a server uses the host's cores, and how game code takes part.
 
 ## The rule
 
-One thread, the **tick thread**, owns the replicated world, the scripting
-runtimes and everything a mod's `Instance` holds. Nothing else reads or
-writes them. Every other thread either works on data it was handed, or runs
+There is one world: the replicated entities, the connections, everything a
+mod's `Instance` holds. One thread has it at a time. The **tick thread** has
+it for the length of a tick; the **script thread** has it whenever it runs
+anything. Every other thread either works on data it was handed, or runs
 while the tick thread waits for it.
 
 That rule is what lets the rest be simple: there are no locks on entities,
@@ -17,7 +18,8 @@ none.
 
 | Thread | What it does | Sized by |
 | --- | --- | --- |
-| Tick | Packets, RPC handlers, scripts, `PostUpdate`, completions | one |
+| Tick | Packets, RPC handlers, replication, `PostUpdate`, completions | one |
+| Script | Every resource's runtime, and what the tick thread posts to scripts | one (`script-thread`) |
 | Network (MafiaNet) | Sockets, reliability, the voice relay | one |
 | Replication workers | Viewer interest, construct/destroy lists, the serialize pass, a game's own per-tick loops | `replication-threads` |
 | Background workers | Blocking work handed off the tick | `background-threads` |
@@ -132,17 +134,92 @@ a handler given up on is never run afterwards; 500 when the handler throws.
 - **Script platform.** Node's platform pool is shared by every resource's
   isolate; it now grows with the machine instead of staying at four.
 
+## Scripts on their own thread
+
+With `"script-thread": true`, the default, every runtime is created, run and
+freed on the script thread. A script that computes for 300 ms holds up the
+other scripts and nothing else: the tick asks for the world and takes it at
+the script's next **safe point**, replicates, and gives it back.
+
+A safe point is between two tasks of the script thread, or between two
+instructions of a running script (V8 interrupts it at a loop edge or a
+function call; the script keeps its place and carries on afterwards). So:
+
+- A script's native call is never interrupted. It runs with the world from
+  start to end, exactly as it did inside the tick.
+- Between two statements of a script, a tick may have run. An entity looked
+  up on one line may be gone on the next, as it always could be after an
+  `await`. Bindings look entities up by id on every call, so this is a
+  stale answer, never a dangling one.
+- No safe point is taken while native code that the script called is on the
+  stack and has called back into script (an event handler run from
+  `Events.emit`, a state-bag listener, an export of another resource): that
+  native code is in the middle of its work. The tick then waits for that
+  call to return.
+- A script blocked inside a native call that takes long on its own
+  (`fs.readFileSync` of a large file, `execSync`) cannot be interrupted
+  either. Use the asynchronous forms.
+
+`"script-thread": false` runs scripts inside the tick, as before.
+
+### What changes for code on the tick thread
+
+Code on the tick thread is `PostUpdate`, RPC and packet handlers, and the
+`On*` overrides the tick calls. It may still do what it always did: open an
+`EngineScope`, emit an event, start or stop a resource. That now first puts
+the script thread out of whatever it is running and keeps it out until the
+scope closes, which **waits for the running script**. It is correct and it
+gives up, for that tick, what the script thread is for.
+
+Hand the work over instead:
+
+```cpp
+void MyServer::OnPlayerConnect(const PlayerConnectionData &data) {
+    SpawnAvatar(data); // the world: stays here
+    PostToScripts([this, guid = data.guid] {
+        // The script thread, with the world: an EngineScope, an event, anything tick code may do.
+        EmitPlayerJoined(guid);
+    });
+}
+```
+
+- `PostToScripts(task)` runs `task` on the script thread within a couple of
+  milliseconds. With scripts inside the tick it runs at once.
+- `RunOnScriptThread(task)` waits for it. From the tick thread the world may
+  have changed when it returns.
+- A handler's answer can no longer be read on the line after the emit. Have
+  the task act on it, or post the outcome back with
+  `GetScheduler()->PostToOwner`.
+
+The framework's own events already go this way: client events
+(`Events.onClient`), `playerConnecting` and the admission that follows,
+voice events, console commands and resource hot reload.
+
+Two things are not supported and deadlock or crash:
+
+- Entering a runtime from the tick thread with V8's own scopes (`v8::Locker`
+  and a `Function::Call`) instead of `EngineScope`. The script thread may be
+  stopped in the middle of that runtime.
+- Calling into script from native code while holding a pointer the tick may
+  free, without `Scripting::NoSafePoint` around the call. The framework's
+  entries (`EngineScope`, calls between runtimes) hold safe points off by
+  themselves; a binding that calls a JS function directly and goes on using
+  an entity pointer afterwards needs the guard.
+
+### What it costs
+
+- An event raised by the tick reaches its handlers up to about 2 ms later.
+- The resource monitor charges a script for the time it stood at a safe
+  point, so a script that was interrupted reads slower than it ran.
+- `tick.scriptsMs` in the slow-tick warning is now the time the tick waited
+  for scripts to reach a safe point.
+
 ## What still runs on the tick thread
 
-Packet handling, RPC dispatch, inbound transforms and every script. A slow
-script still delays the tick it runs in, replication included. Separating
-the two needs the world to be readable while scripts write it, which is a
-change to how entities are stored and to MafiaNet's serialize pass, not to
-where work is scheduled.
-
-Each resource has its own isolate, but all of them run on the tick thread,
-as in FiveM and MTA:SA. Long script work belongs in a `worker_threads`
-worker.
+Packet handling, RPC dispatch and inbound transforms. Each resource has its
+own isolate, and all of them share the script thread, as in FiveM and
+MTA:SA: one slow script still delays the other scripts. Long script work
+belongs in a `worker_threads` worker.
 
 ## Measuring
 

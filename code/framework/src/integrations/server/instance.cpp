@@ -237,6 +237,14 @@ namespace Framework::Integrations::Server {
         CoreModules::SetTaskScheduler(_scheduler.get());
         _scriptingModule->SetPlatformThreads(threads.scriptPlatformThreads);
 
+        // From here to the end of Init() this thread has the world, as a tick has: what Init() sets up is
+        // not seen half-made by a script that is already running.
+        if (_opts.scriptThread) {
+            _scriptThread = std::make_unique<ScriptThread>(_opts.worldConfig.tickInterval);
+            _scriptThread->LockWorld();
+            _worldHeld = true;
+        }
+
         // Initialize our networking engine
         // MafiaNet drops a request nobody answers; the gate always answers first, with a reason.
         Framework::Networking::AdmissionSettings admission;
@@ -322,6 +330,44 @@ namespace Framework::Integrations::Server {
         // Initialize mod subsystems
         PostInit();
 
+        // Every runtime is made, run and freed on the thread scripts run on.
+        if (_scriptThread) {
+            if (auto *engine = _scriptingModule->GetEngine()) {
+                engine->SetRunGate(_scriptThread.get());
+            }
+            ScriptThread::Hooks hooks;
+            hooks.round = [this] {
+                ScriptRound();
+            };
+            hooks.runUntil = [this](std::chrono::steady_clock::time_point until) {
+                return _scriptingModule->RunScriptsUntil(until);
+            };
+            _scriptThread->Start(std::move(hooks));
+        }
+        std::string scriptingError;
+        RunOnScriptThread([&] {
+            scriptingError = InitScripting(replication);
+        });
+        if (!scriptingError.empty()) {
+            return Error(scriptingError);
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Password:\t{}", _opts.bindPassword.empty() ? "none" : "required");
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)
+            ->info("Threads:\t{} cores: tick, network, {} replication, {} background, {} script platform, {} web", std::thread::hardware_concurrency(), threads.replicationWorkers, threads.backgroundWorkers, threads.scriptPlatformThreads, webWorkers);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
+
+        _initialized  = true;
+        _shuttingDown = false;
+        return {};
+    }
+
+    std::string Instance::InitScripting(Framework::Networking::Replication::ReplicationManager *replication) {
         const auto sdkCallback = [this](Framework::Scripting::Engine *engine) {
             this->RegisterScriptingBuiltins(engine);
         };
@@ -331,7 +377,7 @@ namespace Framework::Integrations::Server {
         _scriptingModule->SetDevMode(_opts.developmentMode);
         _scriptingModule->SetModVersion(_opts.modVersion);
         if (_scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
-            return Error("Failed to initialize the scripting engine");
+            return "Failed to initialize the scripting engine";
         }
         if (auto *engine = _scriptingModule->GetEngine()) {
             engine->GetMonitor().SetSlowThresholdMs(_opts.slowScriptWarnMs);
@@ -384,20 +430,48 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources: {}", startResult.GetError());
         }
         _resourcesBooted = true;
-
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Password:\t{}", _opts.bindPassword.empty() ? "none" : "required");
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)
-            ->info("Threads:\t{} cores: tick, network, {} replication, {} background, {} script platform, {} web", std::thread::hardware_concurrency(), threads.replicationWorkers, threads.backgroundWorkers, threads.scriptPlatformThreads, webWorkers);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
-
-        _initialized  = true;
-        _shuttingDown = false;
         return {};
+    }
+
+    void Instance::PostToScripts(Utils::TaskScheduler::Task task) {
+        if (_scriptThread) {
+            _scriptThread->Post(std::move(task));
+        }
+        else {
+            task();
+        }
+    }
+
+    void Instance::RunOnScriptThread(Utils::TaskScheduler::Task task) {
+        if (_scriptThread) {
+            _scriptThread->Run(std::move(task));
+        }
+        else {
+            task();
+        }
+    }
+
+    void Instance::ScriptRound() {
+        // One monitor frame per tick interval, so a resource's handlers, timers and events in it add up together.
+        if (auto *engine = _scriptingModule ? _scriptingModule->GetEngine() : nullptr; engine != nullptr && engine->IsInitialized()) {
+            engine->CloseMonitorTick();
+        }
+        {
+            FW_PROFILE_SCOPE_N("Server::VoiceChanges");
+            DispatchVoiceChanges();
+        }
+        if (_scriptingModule) {
+            FW_PROFILE_SCOPE_N("Server::Scripting");
+            _scriptingModule->Update();
+        }
+        if (_networkingEngine) {
+            FW_PROFILE_SCOPE_N("Server::Admission");
+            ApplyAdmissionDecisions();
+        }
+        if (_commandListener) {
+            FW_PROFILE_SCOPE_N("Server::Commands");
+            _commandListener->Update();
+        }
     }
 
     void Instance::InitEndpoints() {
@@ -436,7 +510,8 @@ namespace Framework::Integrations::Server {
                 {"max-downloading", "Connections admitted beyond maxplayers while they download; 0 keeps downloads on player slots", cxxopts::value<int32_t>()},
                 {"package-secret", "Secret the resource package key is derived from; defaults to the server token", cxxopts::value<std::string>()},
                 {"replication-threads", "Threads sharing the replication pass with the tick thread; -1 sizes them to the host, 0 uses none", cxxopts::value<int32_t>()},
-                {"background-threads", "Threads for blocking work taken off the tick thread; -1 sizes them to the host, 0 runs it inline", cxxopts::value<int32_t>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+                {"background-threads", "Threads for blocking work taken off the tick thread; -1 sizes them to the host, 0 runs it inline", cxxopts::value<int32_t>()},
+                {"script-thread", "Run scripts on a thread of their own (true) or inside the tick (false)", cxxopts::value<bool>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts) {
@@ -458,6 +533,7 @@ namespace Framework::Integrations::Server {
         read("slow-script-ms", opts.slowScriptWarnMs);
         read("replication-threads", opts.replicationThreads);
         read("background-threads", opts.backgroundThreads);
+        read("script-thread", opts.scriptThread);
     }
 
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts) {
@@ -478,6 +554,7 @@ namespace Framework::Integrations::Server {
         read("package-secret", opts.packageSecret);
         read("replication-threads", opts.replicationThreads);
         read("background-threads", opts.backgroundThreads);
+        read("script-thread", opts.scriptThread);
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -570,6 +647,7 @@ namespace Framework::Integrations::Server {
         frameworkKeys["slow-script-ms"]  = _opts.slowScriptWarnMs;
         frameworkKeys["replication-threads"] = _opts.replicationThreads;
         frameworkKeys["background-threads"]  = _opts.backgroundThreads;
+        frameworkKeys["script-thread"]       = _opts.scriptThread;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
 
@@ -615,7 +693,10 @@ namespace Framework::Integrations::Server {
 
         // A waiting request went away: the client gave up, or MafiaNet timed it out.
         net->SetOnSessionAbandonedCallback([this](MafiaNet::RakNetGUID guid) {
-            _connectionGate.Drop(guid.g);
+            // The gate holds the handlers' promises: dropped where scripts run.
+            PostToScripts([this, guid = guid.g] {
+                _connectionGate.Drop(guid);
+            });
         });
 
         // Admitted and build verified -> send the resource list (carries the ReadyEvent id and tick rate).
@@ -753,7 +834,10 @@ namespace Framework::Integrations::Server {
             if (!sender) {
                 return;
             }
-            OnClientEvent(sender->GetNetworkID(), name, payload.GetPayload());
+            // Handlers run where scripts run: a slow one holds up other scripts, not the packets behind this one.
+            PostToScripts([this, senderId = static_cast<uint64_t>(sender->GetNetworkID()), name, eventPayload = payload.GetPayload()] {
+                OnClientEvent(senderId, name, eventPayload);
+            });
         });
 
         // A client announcing whether its player left voice chat on. The GUID is the packet's,
@@ -813,9 +897,12 @@ namespace Framework::Integrations::Server {
         net->SetPeerIdentity(guid, identity);
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {} is connecting", identity.name, guid.g, identity.hardwareId);
-        if (!_connectionGate.Begin(guid, identity, net->GetAddress(guid))) {
-            AdmitSession(guid);
-        }
+        // playerConnecting is raised where scripts run; the request waits in MafiaNet's pool meanwhile.
+        PostToScripts([this, guid, identity, address = net->GetAddress(guid)] {
+            if (!_connectionGate.Begin(guid, identity, address)) {
+                AdmitSession(guid);
+            }
+        });
     }
 
     void Instance::AdmitSession(MafiaNet::RakNetGUID guid) {
@@ -1564,17 +1651,25 @@ namespace Framework::Integrations::Server {
         // instance. Lifecycle::Shutdown() below clears _initialized far too late for that.
         _stopRequested = true;
 
+        // As in Init(): this thread has the world until the script thread is gone.
+        if (_scriptThread && !_worldHeld) {
+            _scriptThread->LockWorld();
+            _worldHeld = true;
+        }
+
         PreShutdown();
 
         Integrations::Shared::Scripting::ReleaseStateBagEvents(_stateBagEvents);
 
-        // Holds Promises of the engine torn down below.
-        _connectionGate.Shutdown();
+        // What ends in script is ended where scripts run.
+        RunOnScriptThread([this] {
+            // Holds Promises of the engine torn down below.
+            _connectionGate.Shutdown();
+            if (_scriptingModule) {
+                _scriptingModule->PreShutdown();
+            }
+        });
         CoreModules::SetConnectionGate(nullptr);
-
-        if (_scriptingModule) {
-            _scriptingModule->PreShutdown();
-        }
 
         // Detach from the peer before the networking engine tears it down.
         _voiceServer.Shutdown();
@@ -1596,8 +1691,17 @@ namespace Framework::Integrations::Server {
         CoreModules::SetTickWorkers(nullptr);
         _tickWorkers.reset();
 
-        if (_scriptingModule) {
-            _scriptingModule->Shutdown();
+        // The runtimes are freed on the thread that ran them, which then has nothing left to run.
+        RunOnScriptThread([this] {
+            if (_scriptingModule) {
+                _scriptingModule->Shutdown();
+            }
+        });
+        if (_scriptThread) {
+            _scriptThread->Stop();
+            _scriptThread->UnlockWorld();
+            _worldHeld = false;
+            _scriptThread.reset();
         }
 
         if (_webServer) {
@@ -1644,8 +1748,18 @@ namespace Framework::Integrations::Server {
                 lapStart = now;
             };
 
+            // With scripts on their own thread the tick takes the world from them: at once when they are idle,
+            // at a running script's next safe point otherwise. That wait is what the tick still owes scripts.
+            if (_scriptThread) {
+                if (!_worldHeld) {
+                    FW_PROFILE_SCOPE_N("Server::WaitForScripts");
+                    _scriptThread->LockWorld();
+                    _worldHeld = true;
+                }
+                lap(tick.scriptsMs);
+            }
             // One monitor frame per server tick, so a resource's RPC handlers, timers and events in it add up together.
-            if (auto *engine = _scriptingModule ? _scriptingModule->GetEngine() : nullptr; engine != nullptr && engine->IsInitialized()) {
+            else if (auto *engine = _scriptingModule ? _scriptingModule->GetEngine() : nullptr; engine != nullptr && engine->IsInitialized()) {
                 engine->CloseMonitorTick();
             }
 
@@ -1690,26 +1804,30 @@ namespace Framework::Integrations::Server {
                 _voiceServer.Update();
             }
 
-            {
+            // Voice events, the runtimes, admission and console commands all end in script: they run here
+            // only when scripts share this thread, and on the script thread's own round otherwise.
+            if (!_scriptThread) {
                 FW_PROFILE_SCOPE_N("Server::VoiceChanges");
                 DispatchVoiceChanges();
             }
             lap(tick.packetsMs);
 
-            if (_scriptingModule) {
-                FW_PROFILE_SCOPE_N("Server::Scripting");
-                _scriptingModule->Update();
-            }
-            lap(tick.scriptsMs);
+            if (!_scriptThread) {
+                if (_scriptingModule) {
+                    FW_PROFILE_SCOPE_N("Server::Scripting");
+                    _scriptingModule->Update();
+                }
+                lap(tick.scriptsMs);
 
-            if (_networkingEngine) {
-                FW_PROFILE_SCOPE_N("Server::Admission");
-                ApplyAdmissionDecisions();
-            }
+                if (_networkingEngine) {
+                    FW_PROFILE_SCOPE_N("Server::Admission");
+                    ApplyAdmissionDecisions();
+                }
 
-            if (_commandListener) {
-                FW_PROFILE_SCOPE_N("Server::Commands");
-                _commandListener->Update();
+                if (_commandListener) {
+                    FW_PROFILE_SCOPE_N("Server::Commands");
+                    _commandListener->Update();
+                }
             }
 
             if (_masterlist->IsInitialized()) {
@@ -1751,6 +1869,15 @@ namespace Framework::Integrations::Server {
 
             // Tick work consumes the interval; overruns leave no wait and no catch-up backlog.
             _nextTick = start + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(_opts.worldConfig.tickInterval));
+
+            // The world is the scripts' again until the next tick.
+            if (_scriptThread) {
+                _worldHeld = false;
+                _scriptThread->UnlockWorld();
+            }
+        }
+        else if (_scriptThread) {
+            std::this_thread::sleep_until(_nextTick);
         }
         else if (_scriptingModule) {
             _scriptingModule->WaitUntil(_nextTick);
