@@ -68,7 +68,7 @@ namespace Framework::Scripting {
         End end = End::Failed;
         std::string error;
         // What a __close handler raised when the coroutine had to be closed in the entry.
-        std::string closing;
+        std::optional<std::string> closing;
     };
 
     class LuaScheduler::Working final {
@@ -359,8 +359,8 @@ namespace Framework::Scripting {
             done(true, entry.thread, entry.error);
         }
         Retire(entry.thread);
-        if (!entry.closing.empty()) {
-            Unhandled(entry.closing);
+        if (entry.closing) {
+            Unhandled(*entry.closing);
         }
         return finished;
     }
@@ -484,46 +484,54 @@ namespace Framework::Scripting {
         }
     }
 
-    // An error nobody waits on goes to the handler, or to the log at the rate the runtime writes there.
+    // An error nobody waits on goes to the handler, or to the log as the runtime writes errors there.
     void LuaScheduler::Unhandled(const std::string &message) {
         if (_errorHandler) {
             _errorHandler(message);
         }
         else {
-            _runtime.LogLine(message, true);
+            _runtime.LogError(message);
         }
     }
 
-    // Closes `thread` and gives what a __close handler raised while it did. Only a coroutine that still waits has
-    // such handlers left: one that failed answers with the status it failed with, which is not news.
-    std::string LuaScheduler::Close(lua_State *thread) {
+    // Closes `thread`, leaves its stack empty and gives what a __close handler raised while it closed, if one
+    // did. Only a coroutine that still waits has such handlers left: one that failed answers with the status it
+    // failed with, which is not news.
+    //
+    // The empty stack is what makes the thread a dead coroutine to a script that kept it. Lua puts the error of a
+    // coroutine that failed back on the thread it closes, and resuming a thread that is not running calls the
+    // value it holds: a string, once a script has given strings a __call.
+    std::optional<std::string> LuaScheduler::Close(lua_State *thread) {
         const bool waits = lua_status(thread) == LUA_YIELD;
-        if (lua_closethread(thread, _runtime.State()) == LUA_OK || !waits) {
-            return {};
+        std::optional<std::string> raised;
+        if (lua_closethread(thread, _runtime.State()) != LUA_OK && waits) {
+            raised = LuaRuntime::PopError(thread);
         }
-        return LuaRuntime::PopError(thread);
+        lua_settop(thread, 0);
+        return raised;
     }
 
     // Lets go of a coroutine that has ended. Closing it runs nothing of the script, unless it still waited: that
-    // one was refused its resume, inside another entry, whose deadline its __close handlers then run under. From
-    // here on a script may hold the thread, as a dead coroutine.
+    // one was refused its resume, inside another entry, whose deadline its __close handlers then run under. A
+    // script may have kept the thread: what it holds from here on is closed, has nothing on its stack and is no
+    // longer the scheduler's, a dead coroutine like any other.
     void LuaScheduler::Retire(lua_State *thread) {
-        lua_State *L             = _runtime.State();
-        const std::string raised = Close(thread);
-        if (lua_checkstack(L, 2)) {
-            lua_rawgetp(L, LUA_REGISTRYINDEX, &kThreads);
-            lua_pushnil(L);
-            lua_rawsetp(L, -2, thread);
-            lua_pop(L, 1);
-        }
+        const std::optional<std::string> raised = Close(thread);
+        // On the stack of the thread itself, which Close left empty: this needs nothing of the main stack, which
+        // the host may have filled.
+        lua_rawgetp(thread, LUA_REGISTRYINDEX, &kThreads);
+        lua_pushnil(thread);
+        lua_rawsetp(thread, -2, thread);
+        lua_pop(thread, 1);
+
         // No token outlives the record it leads to.
         const auto found = _coroutines.find(thread);
         if (found->second.token != 0) {
             _tokens.erase(found->second.token);
         }
         _coroutines.erase(found);
-        if (!raised.empty()) {
-            Unhandled(raised);
+        if (raised) {
+            Unhandled(*raised);
         }
     }
 

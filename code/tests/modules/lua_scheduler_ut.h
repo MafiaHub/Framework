@@ -531,6 +531,15 @@ MODULE(lua_scheduler, {
         EQUALS(scripted.Log(), "before,closed,usable");
     });
 
+    IT("hands on what a __close handler raises while a coroutine is closed even when it is an empty text", {
+        Scripted scripted;
+        const std::string error = scripted.Run("local guard <close> = setmetatable({}, { __close = function() error('', 0) end })\n"
+                                               "coroutine.yield()");
+        EQUALS(error, "test:2: attempt to yield from outside a coroutine");
+        EQUALS(scripted.errors->size(), 1u);
+        EQUALS((*scripted.errors)[0], "");
+    });
+
     IT("hands what a __close handler raises while a coroutine is closed to the error handler", {
         Scripted scripted;
         AddNesting(scripted.runtime);
@@ -746,7 +755,7 @@ MODULE(lua_scheduler, {
         LuaRuntime runtime(options);
         EQUALS(Run(runtime, "setTimeout(function() error('unhandled') end, 0)"), "");
         runtime.Tick(std::chrono::steady_clock::now() + std::chrono::seconds(1));
-        EQUALS(CountStartingWith(log.Lines(), "[shop] test:1: unhandled\nstack traceback:"), 1u);
+        EQUALS(CountStartingWith(log.Lines(), "[shop] test:1: unhandled\n[shop] stack traceback:\n[shop] \t"), 1u);
 
         std::vector<std::string> errors;
         runtime.Scheduler().SetErrorHandler([&errors](const std::string &message) {
@@ -758,6 +767,26 @@ MODULE(lua_scheduler, {
         EQUALS(Run(runtime, "spawn(error, 'logged again')"), "");
         EQUALS(errors.size(), 1u);
         EQUALS(CountStartingWith(log.Lines(), "[shop] logged again"), 1u);
+    });
+
+    IT("writes an error to the log under the name of the resource, line by line and without control characters", {
+        LogCapture log;
+        LuaRuntimeOptions options = Options();
+        options.resourceName      = "shop";
+        LuaRuntime runtime(options);
+        EQUALS(Run(runtime, "spawn(error, 'red\\27[31m\\r\\u{9b}2J\\n[admin] forged\\ttab\\n')"), "");
+        std::string logged;
+        for (const std::string &line : log.Lines()) {
+            if (line.starts_with("[shop] red")) {
+                logged = line;
+            }
+        }
+        EQUALS(logged.starts_with("[shop] red [31m   2J\n[shop] [admin] forged\ttab\n[shop] \n[shop] stack traceback:\n[shop] \t"), true);
+        size_t unnamed = 0;
+        for (size_t at = logged.find('\n'); at != std::string::npos; at = logged.find('\n', at + 1)) {
+            unnamed += logged.compare(at + 1, 7, "[shop] ") == 0 ? 0 : 1;
+        }
+        EQUALS(unnamed, 0u);
     });
 
     IT("writes the errors nobody takes to the log no faster than it writes lines", {
@@ -976,6 +1005,77 @@ MODULE(lua_scheduler, {
         EQUALS(scripted.Run("log = {} note(coroutine.status(me)) note(select(2, coroutine.resume(me))) note(coroutine.close(me))"), "");
         EQUALS(scripted.Log(), "dead,cannot resume dead coroutine,true");
         EQUALS(lua_gettop(L), 0);
+    });
+
+    IT("leaves a script nothing to run on a coroutine the host started once it has ended", {
+        Scripted scripted;
+        AddNesting(scripted.runtime);
+        lua_State *L = scripted.runtime.State();
+        // Lua resumes a thread that is not running by calling the value it holds, and a string can be made
+        // callable. A coroutine that failed must not be left holding its error text.
+        EQUALS(scripted.Run("getmetatable('').__call = function() note('ran on the thread of the host') end\n"
+                            "spawn(function() me = coroutine.running() error('x') end)\n"
+                            "note(coroutine.status(me)) note(select(2, coroutine.resume(me)))"),
+            "");
+        EQUALS(scripted.Log(), "dead,cannot resume dead coroutine");
+
+        // The same for every way a coroutine ends.
+        EQUALS(scripted.Run("log = {} ended = {}\n"
+                            "function returns() ended.returned = coroutine.running() return 'a result' end\n"
+                            "function fails() ended.failed = coroutine.running() error('x') end\n"
+                            "function yields() ended.yielded = coroutine.running() coroutine.yield('y') end\n"
+                            "function waits(name) ended[name] = coroutine.running() wait() end"),
+            "");
+        StartGlobal(scripted, "returns");
+        StartGlobal(scripted, "fails");
+        StartGlobal(scripted, "yields");
+        lua_getglobal(L, "waits");
+        lua_pushstring(L, "unpushed");
+        scripted.Scheduler().Start(1);
+        scripted.Scheduler().Resume(g_token, [](lua_State *thread) {
+            return luaL_error(thread, "no values");
+        });
+        lua_getglobal(L, "waits");
+        lua_pushstring(L, "refused");
+        scripted.Scheduler().Start(1);
+        g_waiting = g_token;
+        EQUALS(scripted.Run("at_depth(64)"), "");
+        EQUALS(scripted.Scheduler().SuspendedCoroutines(), 0u);
+
+        std::string wrong;
+        for (const std::string name : {"returned", "failed", "yielded", "unpushed", "refused"}) {
+            const std::string thread = "ended." + name;
+            lua_getglobal(L, "ended");
+            lua_getfield(L, -1, name.c_str());
+            const int held = lua_gettop(lua_tothread(L, -1));
+            lua_pop(L, 2);
+            const std::string seen = std::to_string(held) + "," + Eval(scripted.runtime, "coroutine.status(" + thread + ")") + "," + Eval(scripted.runtime, "select(2, coroutine.resume(" + thread + "))") + ","
+                                     + Eval(scripted.runtime, "select(2, coroutine.resume(" + thread + ", 'an argument'))") + "," + Eval(scripted.runtime, "coroutine.close(" + thread + ")");
+            if (seen != "0,dead,cannot resume dead coroutine,cannot resume dead coroutine,true") {
+                wrong += name + ": " + seen + "; ";
+            }
+        }
+        EQUALS(wrong, "");
+        EQUALS(scripted.Log(), "");
+    });
+
+    IT("lets go of a coroutine whatever the main stack holds", {
+        Scripted scripted;
+        lua_State *L = scripted.runtime.State();
+        SetGlobalFunction(scripted.runtime, "wait", Wait);
+        EQUALS(scripted.Run("kept = setmetatable({}, { __mode = 'v' }) kept[1] = coroutine.running() wait()"), "");
+        // The host has filled the main stack, with the reserve Lua opens after a first refusal, and the resume
+        // cannot even be entered.
+        while (lua_checkstack(L, 2) || lua_checkstack(L, 2)) {
+            lua_pushnil(L);
+        }
+        scripted.Scheduler().Resume(g_token, {});
+        lua_settop(L, 0);
+        EQUALS(scripted.errors->size(), 1u);
+        EQUALS((*scripted.errors)[0], "cannot grow the Lua stack");
+        EQUALS(scripted.Scheduler().SuspendedCoroutines(), 0u);
+        lua_gc(L, LUA_GCCOLLECT);
+        EQUALS(Eval(scripted.runtime, "kept[1]"), "nil");
     });
 
     IT("does not let a coroutine the host started close itself", {

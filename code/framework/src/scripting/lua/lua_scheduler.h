@@ -39,7 +39,8 @@ namespace Framework::Scripting {
     // thread it is not the script's to resume or to close, though coroutine.running() gives it away: for as long as
     // the scheduler knows a coroutine, coroutine.resume answers false and "cannot resume a coroutine the host
     // started" for it and coroutine.close raises "cannot close a coroutine the host started", in the coroutine
-    // itself and in any other (lua_sandbox.cpp).
+    // itself and in any other (lua_sandbox.cpp). After that it is a dead coroutine, closed and with nothing on its
+    // stack that Lua could be made to call.
     //
     // Timers. setTimeout, setInterval, clearTimeout and clearInterval as JavaScript has them, sleep(ms) and
     // spawn(fn, ...). Time is what Tick is given and nothing else: a delay counts from the last tick, or from the
@@ -133,8 +134,9 @@ namespace Framework::Scripting {
         }
 
         // Receives the error of a coroutine that was started without a `done`. The default, which an empty handler
-        // restores, writes "[resource] message" to the scripting logger as an error, within the
-        // LuaRuntime::kMaxLinesPerSecond it shares with print.
+        // restores, writes it to the scripting logger as an error: "[resource] " and the text for each of its lines,
+        // control characters blanked as in a line of output, within the LuaRuntime::kMaxLinesPerSecond it shares
+        // with print.
         void SetErrorHandler(ErrorHandler handler);
 
       private:
@@ -203,7 +205,7 @@ namespace Framework::Scripting {
         void Wake(uint64_t token, Wakeup wakeup);
         void Report(Finished &done, const std::string &message, std::string *error);
         void Unhandled(const std::string &message);
-        std::string Close(lua_State *thread);
+        std::optional<std::string> Close(lua_State *thread);
         void Retire(lua_State *thread);
 
         Due Arm(std::chrono::steady_clock::time_point at, Pending pending);

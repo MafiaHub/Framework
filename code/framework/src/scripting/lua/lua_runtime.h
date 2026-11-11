@@ -198,6 +198,10 @@ namespace Framework::Scripting {
         // its share.
         void LogLine(const std::string &line, bool isError);
 
+        // Writes an error text to the scripting logger as one entry: each of its lines under the name of the
+        // resource and with a space for each control character, as a line of output has.
+        void LogError(const std::string &message);
+
         LuaRuntimeOptions _options;
         PrintHandler _printHandler; // empty: the log
         ModuleLoader _moduleLoader;

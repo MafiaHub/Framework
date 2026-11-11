@@ -417,6 +417,23 @@ namespace Framework::Scripting {
         }
     }
 
+    // A script chooses the text of its errors as it chooses what it prints: it must get no line of its own and no
+    // control sequence into the log with it. The traceback keeps its lines.
+    void LuaRuntime::LogError(const std::string &message) {
+        std::string entry;
+        for (size_t start = 0; start <= message.size();) {
+            const size_t end = std::min(message.find('\n', start), message.size());
+            std::string line = message.substr(start, end - start);
+            BlankControlCharacters(line);
+            if (start != 0) {
+                entry += "\n[" + _options.resourceName + "] ";
+            }
+            entry += line;
+            start = end + 1;
+        }
+        LogLine(entry, true);
+    }
+
     // A script that prints or fails in a loop would otherwise fill the log as fast as the disk takes it.
     void LuaRuntime::LogLine(const std::string &line, bool isError) {
         const auto now = std::chrono::steady_clock::now();
