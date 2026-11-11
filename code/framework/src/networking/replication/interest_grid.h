@@ -12,6 +12,7 @@
 
 #include <glm/glm.hpp>
 
+#include <algorithm>
 #include <bit>
 #include <cstdint>
 #include <limits>
