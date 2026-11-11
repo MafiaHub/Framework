@@ -366,6 +366,9 @@ target_link_libraries(Framework v8 v8pp)
 if(LIBNODE_AVAILABLE)
     target_link_libraries(Framework libnode)
 endif()
+# Lua built as C++ (the port's cpp feature). The plain signature links publicly, so <lua.h> reaches
+# everything that links Framework.
+target_link_libraries(Framework unofficial::lua::lua-cpp)
 
 # The prebuilt MafiaHubServices (IMPORTED archive, created in src/services) references Framework
 # symbols (Utils::Time) but can't declare that dependency there since Framework isn't defined yet.

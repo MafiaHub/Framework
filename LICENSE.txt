@@ -84,3 +84,4 @@ This codebase also depends on the following third-party libraries:
     sdl2            - https://www.libsdl.org/license.php
     stackwalker     - https://github.com/JochenKalmbach/StackWalker/blob/master/LICENSE
     v8pp            - https://github.com/pmed/v8pp
+    lua             - https://www.lua.org/license.html

@@ -34,6 +34,13 @@
       "name": "openssl"
     },
     {
+      "$comment": "cpp builds Lua as C++, so a Lua error is a C++ exception and unwinds through the bindings it crosses.",
+      "name": "lua",
+      "features": [
+        "cpp"
+      ]
+    },
+    {
       "name": "directxtk",
       "platform": "windows"
     },
