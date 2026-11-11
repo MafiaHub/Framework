@@ -10,6 +10,9 @@
 
 #include <httplib.h>
 #include <logging/logger.h>
+#include <utils/task_scheduler.h>
+
+#include <condition_variable>
 
 namespace Framework::HTTP {
     Webserver::Webserver() {
@@ -120,6 +123,67 @@ namespace Framework::HTTP {
             std::lock_guard lock(_getRoutesMutex);
             _getRoutes.emplace_back(std::regex(path), callback);
         }
+    }
+
+    void Webserver::SetTickThreadScheduler(Utils::TaskScheduler *scheduler, std::chrono::milliseconds timeout) {
+        _tickTimeoutMs = timeout.count();
+        _tickScheduler = scheduler;
+    }
+
+    void Webserver::RegisterTickThreadRequest(const std::string &path, const RequestCallback &callback) const {
+        if (!callback) {
+            return;
+        }
+        RegisterRequest(path, [this, callback](const httplib::Request &req, httplib::Response &res) {
+            Utils::TaskScheduler *scheduler = _tickScheduler.load();
+            if (scheduler == nullptr) {
+                res.status = 503;
+                return;
+            }
+
+            // Shared by the worker and the task it posts. The task holds the mutex for as long as the
+            // handler runs, so the worker can only give up before the handler starts: `req` and `res`
+            // are the worker's, and stay alive exactly as long as it has not returned.
+            struct Hop {
+                std::mutex mutex;
+                std::condition_variable settled;
+                bool done      = false;
+                bool abandoned = false;
+            };
+            auto hop = std::make_shared<Hop>();
+            scheduler->PostToOwner([hop, callback, &req, &res] {
+                std::unique_lock lock(hop->mutex);
+                if (hop->abandoned) {
+                    return;
+                }
+                try {
+                    callback(req, res);
+                }
+                catch (const std::exception &ex) {
+                    Logging::GetLogger(FRAMEWORK_INNER_HTTP)->error("[Webserver] Tick-thread handler for {} threw: {}", req.path, ex.what());
+                    res.status = 500;
+                }
+                catch (...) {
+                    Logging::GetLogger(FRAMEWORK_INNER_HTTP)->error("[Webserver] Tick-thread handler for {} threw", req.path);
+                    res.status = 500;
+                }
+                hop->done = true;
+                lock.unlock();
+                hop->settled.notify_one();
+            });
+
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(_tickTimeoutMs.load());
+            std::unique_lock lock(hop->mutex);
+            // In slices, so a server shutting down is not held up by requests waiting on a tick that will not come.
+            while (!hop->done && _running && std::chrono::steady_clock::now() < deadline) {
+                hop->settled.wait_for(lock, std::chrono::milliseconds(50));
+            }
+            if (!hop->done) {
+                hop->abandoned = true;
+                res.status     = 503;
+                res.set_header("Retry-After", "1");
+            }
+        });
     }
 
     void Webserver::RegisterPostRequest(const std::string &path, const PostCallback &callback) const {
