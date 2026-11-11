@@ -8,6 +8,7 @@
 
 #include "vector2.h"
 #include "../scripting_catalog.h"
+#include "vector_operators.h"
 
 #include <sstream>
 
@@ -44,9 +45,8 @@ namespace Framework::Scripting::Builtins {
 
     const Bind::Class<Vector2> &Vector2::Definition() {
         using Bind::Doc;
-        using Bind::LuaMetaEvent;
-        static const auto definition =
-            Bind::Class<Vector2>("Vector2", "Mutable two-dimensional vector.")
+        // AddVectorOperators gives the class its Lua operators.
+        static const auto definition = AddVectorOperators(Bind::Class<Vector2>("Vector2", "Mutable two-dimensional vector.")
                 .Constructor<float, float>(Doc("Creates a vector from two numeric components.").Param("x", "Initial X component.").Param("y", "Initial Y component."))
                 // Instance methods
                 .Method("add", &Vector2::add, Doc("Adds another vector to this vector in place.").Param("other", "Vector to add component-wise.").Returns("This mutated vector for chaining."))
@@ -71,35 +71,7 @@ namespace Framework::Scripting::Builtins {
                 // JavaScript only, until Lua has JSON.
                 .V8Hook([](v8pp::class_<Vector2> &cls, v8::Isolate *) {
                     cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ x: number; y: number }", {}, "Converts this vector to a plain object for JSON.stringify.", "Object containing the current components."));
-                })
-                // Lua operators. Each gives a new vector and leaves its operands as they were.
-                .LuaMeta(LuaMetaEvent::Add,
-                    [](const Vector2 &left, const Vector2 &right) {
-                        return Vector2(left.vec() + right.vec());
-                    })
-                .LuaMeta(LuaMetaEvent::Sub,
-                    [](const Vector2 &left, const Vector2 &right) {
-                        return Vector2(left.vec() - right.vec());
-                    })
-                .LuaMeta(LuaMetaEvent::Mul,
-                    [](const Vector2 &vector, float scalar) {
-                        return Vector2(vector.vec() * scalar);
-                    })
-                .LuaMeta(LuaMetaEvent::Mul,
-                    [](float scalar, const Vector2 &vector) {
-                        return Vector2(scalar * vector.vec());
-                    })
-                .LuaMeta(LuaMetaEvent::Div,
-                    [](const Vector2 &vector, float scalar) {
-                        return Vector2(vector.vec() / scalar);
-                    })
-                .LuaMeta(LuaMetaEvent::Unm,
-                    [](const Vector2 &vector) {
-                        return Vector2(-vector.vec());
-                    })
-                .LuaMeta(LuaMetaEvent::Eq, [](const Vector2 &left, const Vector2 &right) {
-                    return left.vec() == right.vec();
-                });
+                }));
         return definition;
     }
 

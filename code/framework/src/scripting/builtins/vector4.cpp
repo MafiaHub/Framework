@@ -8,6 +8,7 @@
 
 #include "vector4.h"
 #include "../scripting_catalog.h"
+#include "vector_operators.h"
 
 #include <sstream>
 
@@ -46,9 +47,8 @@ namespace Framework::Scripting::Builtins {
 
     const Bind::Class<Vector4> &Vector4::Definition() {
         using Bind::Doc;
-        using Bind::LuaMetaEvent;
-        static const auto definition =
-            Bind::Class<Vector4>("Vector4", "Mutable four-dimensional vector.")
+        // AddVectorOperators gives the class its Lua operators.
+        static const auto definition = AddVectorOperators(Bind::Class<Vector4>("Vector4", "Mutable four-dimensional vector.")
                 .Constructor<float, float, float, float>(Doc("Creates a vector from four numeric components.").Param("x", "Initial X component.").Param("y", "Initial Y component.").Param("z", "Initial Z component.").Param("w", "Initial W component."))
                 // Instance methods
                 .Method("add", &Vector4::add, Doc("Adds another vector to this vector in place.").Param("other", "Vector to add component-wise.").Returns("This mutated vector for chaining."))
@@ -76,35 +76,7 @@ namespace Framework::Scripting::Builtins {
                 // JavaScript only, until Lua has JSON.
                 .V8Hook([](v8pp::class_<Vector4> &cls, v8::Isolate *) {
                     cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ x: number; y: number; z: number; w: number }", {}, "Converts this vector to a plain object for JSON.stringify.", "Object containing the current components."));
-                })
-                // Lua operators. Each gives a new vector and leaves its operands as they were.
-                .LuaMeta(LuaMetaEvent::Add,
-                    [](const Vector4 &left, const Vector4 &right) {
-                        return Vector4(left.vec() + right.vec());
-                    })
-                .LuaMeta(LuaMetaEvent::Sub,
-                    [](const Vector4 &left, const Vector4 &right) {
-                        return Vector4(left.vec() - right.vec());
-                    })
-                .LuaMeta(LuaMetaEvent::Mul,
-                    [](const Vector4 &vector, float scalar) {
-                        return Vector4(vector.vec() * scalar);
-                    })
-                .LuaMeta(LuaMetaEvent::Mul,
-                    [](float scalar, const Vector4 &vector) {
-                        return Vector4(scalar * vector.vec());
-                    })
-                .LuaMeta(LuaMetaEvent::Div,
-                    [](const Vector4 &vector, float scalar) {
-                        return Vector4(vector.vec() / scalar);
-                    })
-                .LuaMeta(LuaMetaEvent::Unm,
-                    [](const Vector4 &vector) {
-                        return Vector4(-vector.vec());
-                    })
-                .LuaMeta(LuaMetaEvent::Eq, [](const Vector4 &left, const Vector4 &right) {
-                    return left.vec() == right.vec();
-                });
+                }));
         return definition;
     }
 
