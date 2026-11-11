@@ -797,7 +797,7 @@ MODULE(resource_manager, {
 
         auto result = manager.StartResource("selfdep");
         EQUALS(static_cast<bool>(result), false);
-        EQUALS(result.GetError().find("cycle") != std::string::npos, true);
+        EQUALS(result.GetError().contains("cycle"), true);
         EQUALS(manager.IsResourceRunning("selfdep"), false);
 
         engine.Shutdown();
@@ -833,7 +833,7 @@ MODULE(resource_manager, {
 
         auto result = manager.StartResource("cycle-a");
         EQUALS(static_cast<bool>(result), false);
-        EQUALS(result.GetError().find("cycle") != std::string::npos, true);
+        EQUALS(result.GetError().contains("cycle"), true);
         EQUALS(manager.IsResourceRunning("cycle-a"), false);
         EQUALS(manager.IsResourceRunning("cycle-b"), false);
 
@@ -913,7 +913,7 @@ MODULE(resource_manager, {
         // The chain must have been unwound, or this would report something other than a cycle.
         auto second = manager.StartResource("cycle-a");
         EQUALS(static_cast<bool>(second), false);
-        EQUALS(second.GetError().find("cycle") != std::string::npos, true);
+        EQUALS(second.GetError().contains("cycle"), true);
         EQUALS(manager.IsResourceRunning("cycle-a"), false);
 
         engine.Shutdown();
@@ -1000,7 +1000,7 @@ MODULE(resource_manager, {
 
         auto startResult = manager.StartResource("escape-test");
         EQUALS((bool)startResult, false);
-        EQUALS(startResult.GetError().find("escapes resource directory") != std::string::npos, true);
+        EQUALS(startResult.GetError().contains("escapes resource directory"), true);
         EQUALS(manager.IsResourceRunning("escape-test"), false);
 
         engine.Shutdown();
@@ -1214,7 +1214,7 @@ MODULE(resource_lifecycle, {
 
         const auto result = manager.StartResource("reject-start");
         EQUALS((bool)result, false);
-        EQUALS(result.GetError().find("migration failed") != std::string::npos, true);
+        EQUALS(result.GetError().contains("migration failed"), true);
         EQUALS(manager.GetResourceState("reject-start"), ResourceState::Error);
         EQUALS(manager.GetEvents().GetListenerCount("leaked-start-listener"), static_cast<size_t>(0));
 
@@ -1246,7 +1246,7 @@ MODULE(resource_lifecycle, {
 
         const auto result = manager.StartResource("timeout-start");
         EQUALS((bool)result, false);
-        EQUALS(result.GetError().find("timed out") != std::string::npos, true);
+        EQUALS(result.GetError().contains("timed out"), true);
         EQUALS(manager.GetResourceState("timeout-start"), ResourceState::Error);
         EQUALS(manager.GetEvents().GetListenerCount("leaked-timeout-listener"), static_cast<size_t>(0));
 

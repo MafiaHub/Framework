@@ -1502,8 +1502,8 @@ MODULE(js_features, {
             v8::Local<v8::Value> obj = v8::Script::Compile(context, objCode).ToLocalChecked()->Run(context).ToLocalChecked();
             std::string objResult = Console::FormatValue(isolate, obj);
             // JSON output should contain x and y
-            EQUALS(objResult.find("\"x\"") != std::string::npos, true);
-            EQUALS(objResult.find("\"y\"") != std::string::npos, true);
+            EQUALS(objResult.contains("\"x\""), true);
+            EQUALS(objResult.contains("\"y\""), true);
         }
 
         engine.Shutdown();

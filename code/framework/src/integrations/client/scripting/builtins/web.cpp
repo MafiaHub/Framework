@@ -760,11 +760,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                     }
                     else {
                         const auto before = handlers.size();
-                        handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
-                                           [&](const Handler &h) {
-                                               return h.callback.Get(isolate)->StrictEquals(handler);
-                                           }),
-                            handlers.end());
+                        std::erase_if(handlers, [&](const Handler &h) {
+                            return h.callback.Get(isolate)->StrictEquals(handler);
+                        });
                         removed = handlers.size() != before;
                     }
                     if (handlers.empty()) {
@@ -997,16 +995,14 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 }
             }
             for (auto &[id, events] : _handlers) {
-                if (std::find(viewsToDestroy.begin(), viewsToDestroy.end(), id) != viewsToDestroy.end()) {
+                if (std::ranges::contains(viewsToDestroy, id)) {
                     continue; // erased wholesale below
                 }
                 for (auto eventIt = events.begin(); eventIt != events.end();) {
                     auto &handlers = eventIt->second;
-                    handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
-                                       [&](const Handler &h) {
-                                           return h.resourceName == resourceName;
-                                       }),
-                        handlers.end());
+                    std::erase_if(handlers, [&](const Handler &h) {
+                        return h.resourceName == resourceName;
+                    });
                     if (handlers.empty()) {
                         emptiedEvents.emplace_back(id, eventIt->first);
                         eventIt = events.erase(eventIt);

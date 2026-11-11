@@ -145,7 +145,7 @@ namespace Framework::Integrations::Client {
 
     void AssetDownloader::Transfer::Unregister(httplib::Client *client) {
         std::lock_guard lock(mutex);
-        clients.erase(std::remove(clients.begin(), clients.end(), client), clients.end());
+        std::erase(clients, client);
     }
 
     void AssetDownloader::Transfer::NoteAnswer(int status, const std::string &queue, bool accepted) {

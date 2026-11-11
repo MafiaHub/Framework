@@ -90,7 +90,7 @@ namespace Framework::Networking::Replication {
         }
         Entry &entry     = EntryFor(entity);
         auto &list       = entry.declined;
-        const bool known = std::ranges::find(list, guid) != list.end();
+        const bool known = std::ranges::contains(list, guid);
         if (known == declined) {
             return;
         }
@@ -107,7 +107,7 @@ namespace Framework::Networking::Replication {
 
     bool DelegationManager::IsDeclined(const NetworkEntity *entity, MafiaNet::PeerGuid guid) const {
         const Entry *entry = FindEntry(entity);
-        return entry != nullptr && std::ranges::find(entry->declined, guid) != entry->declined.end();
+        return entry != nullptr && std::ranges::contains(entry->declined, guid);
     }
 
     void DelegationManager::OnEntityDestroyed(uint64_t networkId) {
@@ -208,7 +208,7 @@ namespace Framework::Networking::Replication {
         MafiaNet::PeerGuid desired    = MafiaNet::UNASSIGNED_PEER_GUID;
         float bestRank                = std::numeric_limits<float>::max();
         const auto isDeclined         = [&](MafiaNet::PeerGuid guid) {
-            return std::ranges::find(declined, guid) != declined.end();
+            return std::ranges::contains(declined, guid);
         };
 
         const DelegationCandidate *incumbent = nullptr;
@@ -386,7 +386,7 @@ namespace Framework::Networking::Replication {
             // An entity mid-action gets to say "not now". It is asked only when something is
             // actually about to change, and only while it has an owner to refuse on behalf of --
             // an entity nobody is simulating has nothing to interrupt. A declining owner gave it up.
-            const bool declinedByCurrent = std::ranges::find(entry.declined, current) != entry.declined.end();
+            const bool declinedByCurrent = std::ranges::contains(entry.declined, current);
             if (current != MafiaNet::UNASSIGNED_PEER_GUID && !declinedByCurrent && !entity->CanReleaseSimulation()) {
                 if (entry.refusingSince == 0) {
                     entry.refusingSince = now;

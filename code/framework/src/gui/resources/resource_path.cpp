@@ -69,7 +69,7 @@ namespace Framework::GUI::Resources {
             if (segment == "." || segment == "..") {
                 return true;
             }
-            return segment.find_first_of("\\:") != std::string::npos || segment.find('\0') != std::string::npos;
+            return segment.find_first_of("\\:") != std::string::npos || segment.contains('\0');
         }
     } // namespace
 

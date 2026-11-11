@@ -134,11 +134,9 @@ namespace Framework::Integrations::Server {
         }
         // Its transfers end on their own and release themselves; only its place in line goes now.
         std::lock_guard lock(_slotsMutex);
-        _queue.erase(std::remove_if(_queue.begin(), _queue.end(),
-                         [&token](const auto &entry) {
-                             return entry.first == token;
-                         }),
-            _queue.end());
+        std::erase_if(_queue, [&token](const auto &entry) {
+            return entry.first == token;
+        });
     }
 
     bool AssetFileServer::IsGranted(const std::string &token) {
@@ -152,11 +150,9 @@ namespace Framework::Integrations::Server {
     }
 
     void AssetFileServer::ExpireQueue(std::chrono::steady_clock::time_point now) {
-        _queue.erase(std::remove_if(_queue.begin(), _queue.end(),
-                         [now](const auto &entry) {
-                             return now - entry.second > kQueueEntryLifetime;
-                         }),
-            _queue.end());
+        std::erase_if(_queue, [now](const auto &entry) {
+            return now - entry.second > kQueueEntryLifetime;
+        });
         // A peer between two files of its set keeps its slot for a moment, so a burst does not push it
         // to the back of the line after every file; one that is done lets go.
         for (auto it = _slots.begin(); it != _slots.end();) {

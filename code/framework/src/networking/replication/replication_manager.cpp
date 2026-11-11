@@ -504,7 +504,7 @@ namespace Framework::Networking::Replication {
         _stateChangeHandlers.erase(it);
 
         const auto drop = [handle](std::vector<StateChangeHandle> &bucket) {
-            bucket.erase(std::remove(bucket.begin(), bucket.end(), handle), bucket.end());
+            std::erase(bucket, handle);
         };
         if (key.empty()) {
             drop(_stateChangeAnyKey);

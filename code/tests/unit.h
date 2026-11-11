@@ -372,7 +372,7 @@ static inline bool unit__selected(const char *filter, const char *module) {
     while (!rest.empty()) {
         const auto comma = rest.find(',');
         const auto term  = rest.substr(0, comma);
-        if (!term.empty() && std::string_view(module).find(term) != std::string_view::npos) {
+        if (!term.empty() && std::string_view(module).contains(term)) {
             return true;
         }
         rest = comma == std::string_view::npos ? std::string_view() : rest.substr(comma + 1);

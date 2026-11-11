@@ -354,11 +354,9 @@ namespace Framework::Scripting::Builtins {
                 auto it     = table.find(evt);
                 if (it != table.end()) {
                     auto &handlers = it->second;
-                    handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
-                                       [&](const EventHandler &h) {
-                                           return h.resourceName == resName && h.isolate == iso && h.callback.Get(iso)->StrictEquals(hnd);
-                                       }),
-                        handlers.end());
+                    std::erase_if(handlers, [&](const EventHandler &h) {
+                        return h.resourceName == resName && h.isolate == iso && h.callback.Get(iso)->StrictEquals(hnd);
+                    });
                 }
             },
             data)
@@ -461,11 +459,9 @@ namespace Framework::Scripting::Builtins {
         auto it     = table.find(eventName);
         if (it != table.end()) {
             auto &handlers = it->second;
-            handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
-                               [&](const EventHandler &h) {
-                                   return h.resourceName == resourceName && h.isolate == isolate && h.callback.Get(isolate)->StrictEquals(handler);
-                               }),
-                handlers.end());
+            std::erase_if(handlers, [&](const EventHandler &h) {
+                return h.resourceName == resourceName && h.isolate == isolate && h.callback.Get(isolate)->StrictEquals(handler);
+            });
         }
     }
 
@@ -1035,11 +1031,9 @@ namespace Framework::Scripting::Builtins {
         // Remove from global + client handlers
         for (auto *table : {&_globalHandlers, &_clientHandlers}) {
             for (auto &[eventName, handlers] : *table) {
-                handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
-                                   [&](const EventHandler &h) {
-                                       return h.resourceName == resourceName;
-                                   }),
-                    handlers.end());
+                std::erase_if(handlers, [&](const EventHandler &h) {
+                    return h.resourceName == resourceName;
+                });
             }
         }
 

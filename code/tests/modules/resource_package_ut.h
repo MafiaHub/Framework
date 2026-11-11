@@ -130,8 +130,8 @@ MODULE(resource_package, {
         EQUALS(Framework::Utils::Package::IsEncrypted(blob), true);
 
         // The plaintext must not be recoverable by scanning the container.
-        EQUALS(blob.find("globalThis.x") == std::string::npos, true);
-        EQUALS(blob.find("<h1>hi</h1>") == std::string::npos, true);
+        EQUALS(!blob.contains("globalThis.x"), true);
+        EQUALS(!blob.contains("<h1>hi</h1>"), true);
 
         std::string zip, error;
         EQUALS(Framework::Utils::Package::Open(blob, &key, zip, error), true);
@@ -326,7 +326,7 @@ MODULE(resource_package, {
         // Derived from role: server scripts are absent.
         const auto shipped = cfg.GetShippedPaths();
         UEQUALS(shipped.size(), 3u);
-        EQUALS(std::find(shipped.begin(), shipped.end(), std::string("s1.js")) == shipped.end(), true);
+        EQUALS(!std::ranges::contains(shipped, std::string("s1.js")), true);
 
         // Legacy single entry points fold in ahead of any list, and clientFiles becomes files.
         nlohmann::json legacy = {
@@ -388,7 +388,7 @@ MODULE(resource_package, {
         Framework::Scripting::PackagedResource packaged;
         std::string error;
         EQUALS(Framework::Scripting::ResourcePackager::Package("roles", root.string(), manifest, &key, packaged, error), true);
-        EQUALS(packaged.blob.find("SECRET") == std::string::npos, true);
+        EQUALS(!packaged.blob.contains("SECRET"), true);
 
         std::string zip;
         EQUALS(Framework::Utils::Package::Open(packaged.blob, &key, zip, error), true);
@@ -431,7 +431,7 @@ MODULE(resource_package, {
         Framework::Scripting::PackagedResource packaged;
         std::string error;
         EQUALS(Framework::Scripting::ResourcePackager::Package("demo", root.string(), manifest, &key, packaged, error), true);
-        EQUALS(packaged.blob.find("SECRET") == std::string::npos, true);
+        EQUALS(!packaged.blob.contains("SECRET"), true);
 
         // Asserted through PhysicsFS, as the client sees it.
         std::string zip;
@@ -476,7 +476,7 @@ MODULE(resource_package, {
 
         // package.json, dist/client.js, ui/index.html -- and nothing else.
         UEQUALS(packaged.fileCount, 3u);
-        EQUALS(packaged.blob.find("SECRET") == std::string::npos, true);
+        EQUALS(!packaged.blob.contains("SECRET"), true);
 
         std::filesystem::remove_all(root);
     });
@@ -533,7 +533,7 @@ MODULE(resource_package, {
 
         // What resource discovery walks.
         const auto dirs = vfs.EnumerateDirectories("/resources");
-        EQUALS(std::find(dirs.begin(), dirs.end(), std::string("demo")) != dirs.end(), true);
+        EQUALS(std::ranges::contains(dirs, std::string("demo")), true);
 
         // Unmounting drops the bytes.
         mounter.Unmount(cacheRoot.string(), "demo");
@@ -575,7 +575,7 @@ MODULE(resource_package, {
         for (const std::string &name : std::vector<std::string>{"../fwpak_ut_outside/demo", (outside / "demo").string(), "sub/demo", "sub\\demo", "..", ".", "", std::string(200, 'a')}) {
             error.clear();
             EQUALS(mounter.Mount(cacheRoot.string(), name, hash, error), false);
-            EQUALS(error.find("name") != std::string::npos, true);
+            EQUALS(error.contains("name"), true);
         }
         EQUALS(mounter.GetMountedResources().empty(), true);
 
@@ -627,7 +627,7 @@ MODULE(resource_package, {
 
         std::string error;
         EQUALS(mounter.Mount(cacheRoot.string(), "huge", std::string(64, 'a'), error), false);
-        EQUALS(error.find("unreadable") != std::string::npos, true);
+        EQUALS(error.contains("unreadable"), true);
 
         std::filesystem::remove_all(cacheRoot);
     });
@@ -970,7 +970,7 @@ MODULE(resource_package, {
         // binary, so the script itself does not run here.
         const auto filtered = startPackaged({"ut_srv_core"});
         UEQUALS(filtered.first.size(), 0u);
-        EQUALS(filtered.second.find("depends on missing resource") == std::string::npos, true);
+        EQUALS(!filtered.second.contains("depends on missing resource"), true);
 
         engine.Shutdown();
         std::filesystem::remove_all(root);
@@ -1006,7 +1006,7 @@ MODULE(resource_package, {
 
         const auto result = manager.StartAll();
         EQUALS(static_cast<bool>(result), false);
-        EQUALS(result.GetError().find("ut_broken") != std::string::npos, true);
+        EQUALS(result.GetError().contains("ut_broken"), true);
         UEQUALS(result.GetValue().size(), 0u);
         EQUALS(manager.IsResourceRunning("ut_broken"), false);
 
@@ -1137,7 +1137,7 @@ MODULE(resource_package, {
         STREQUALS(lean.sha256.c_str(), redundant.sha256.c_str());
 
         // Neither ships the server bundle.
-        EQUALS(lean.blob.find("SECRET") == std::string::npos, true);
+        EQUALS(!lean.blob.contains("SECRET"), true);
 
         std::filesystem::remove_all(root);
     });

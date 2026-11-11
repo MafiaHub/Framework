@@ -313,7 +313,7 @@ namespace Framework::External::Epic {
                 const auto b   = v.find_last_not_of(ws);
                 v              = (a == std::string::npos) ? "" : v.substr(a, b - a + 1);
             };
-            if (s.find("authorizationCode") != std::string::npos) {
+            if (s.contains("authorizationCode")) {
                 try {
                     const auto j = nlohmann::json::parse(s);
                     if (j.contains("authorizationCode")) {

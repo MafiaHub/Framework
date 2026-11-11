@@ -67,7 +67,7 @@ MODULE(logger, {
 
         // The report follows the stall, on the output's own thread.
         std::string log;
-        for (int i = 0; i < 5000 && log.find("Last line") == std::string::npos; ++i) {
+        for (int i = 0; i < 5000 && !log.contains("Last line"); ++i) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             logger->flush();
             log = LoggerTest::ReadLog(folder);
@@ -81,7 +81,7 @@ MODULE(logger, {
         LESSER(callerMs, 500.0);
         GREATER(dropped, uint64_t {1000});
         LESSER(dropped, static_cast<uint64_t>(lines));
-        EQUALS(log.find("Last line") != std::string::npos, true);
-        EQUALS(log.find(std::to_string(dropped) + " log line(s) were dropped") != std::string::npos, true);
+        EQUALS(log.contains("Last line"), true);
+        EQUALS(log.contains(std::to_string(dropped) + " log line(s) were dropped"), true);
     });
 });

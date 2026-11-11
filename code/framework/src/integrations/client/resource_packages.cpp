@@ -126,7 +126,7 @@ namespace Framework::Integrations::Client {
             return false;
         }
 
-        if (std::find(_mounted.begin(), _mounted.end(), resourceName) == _mounted.end()) {
+        if (!std::ranges::contains(_mounted, resourceName)) {
             _mounted.push_back(resourceName);
         }
 
@@ -137,7 +137,7 @@ namespace Framework::Integrations::Client {
     void ResourcePackageMounter::Unmount(const std::string &cacheRoot, const std::string &resourceName) {
         (void)cacheRoot;
         Utils::Vfs::Get().Unmount(MountId(resourceName));
-        _mounted.erase(std::remove(_mounted.begin(), _mounted.end(), resourceName), _mounted.end());
+        std::erase(_mounted, resourceName);
     }
 
     void ResourcePackageMounter::Reset() {
