@@ -13,8 +13,13 @@
 #include "lua_class.h"
 #include "lua_convert.h"
 #include "types.h"
+#include "v8_backend.h"
 
+#include <function2/function2.hpp>
 #include <lua.h>
+#include <v8.h>
+#include <v8pp/class.hpp>
+#include <v8pp/metadata.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -212,6 +217,9 @@ namespace Framework::Scripting::Bind {
     // A Class is a handle: a copy is the same definition. The definition itself is never destroyed, because the
     // catalog and every Lua state it was materialised into keep pointing into it.
     //
+    // JavaScript gets the class through v8pp, built the way a binding written by hand is: v8pp converts the
+    // arguments and words the errors. Lua gets it through LuaConvert.
+    //
     // A member is implemented by a typed callable. A method, a getter or a setter takes a member function of T or
     // of one of its bases, or a function or a captureless lambda that takes the receiver first, as T &, const T &
     // or T *. A static or an operator takes a function, a static member function or a captureless lambda.
@@ -240,6 +248,7 @@ namespace Framework::Scripting::Bind {
             if constexpr (!std::is_trivially_destructible_v<T>) {
                 _record->destroy = &Destroy;
             }
+            _v8 = std::make_shared<Detail::V8Class<T>>();
 
             Detail::LuaClassOf<T>::definition = _record.get();
             // Never deleted: this handle is what keeps the definition alive.
@@ -260,17 +269,43 @@ namespace Framework::Scripting::Bind {
 
             _record->bases.push_back({base->_record.get(), &Upcast<Base>});
             _record->desc.bases.push_back(base->Describe().name);
+            _v8->bases.push_back(&V8Inherit<Base>);
             return *this;
         }
 
-        // Declares the constructor T(Args...), reached as Name.new(...) and Name(...). A class without one cannot
-        // be constructed by a script. Throws std::logic_error when the class already has a constructor.
+        // Runs `ensure` at the start of each MaterialiseV8. v8pp inherits from the class of the base in the
+        // isolate, which has to exist by then: `ensure` is what makes it exist, the GetClass(isolate) of the base.
+        Class &V8EnsureBase(fu2::function<void(v8::Isolate *) const> ensure) {
+            _v8->ensureBases.push_back(std::move(ensure));
+            return *this;
+        }
+
+        // Declares the constructor T(Args...), reached as Name.new(...) and Name(...) in Lua and as new Name(...) in
+        // JavaScript. A class without one cannot be constructed by a script. Throws std::logic_error when the class
+        // already has a constructor.
         template <typename... Args>
         Class &Constructor(Doc doc) {
             static_assert(std::is_constructible_v<T, Args...>, "Bind::Class::Constructor: T has no constructor taking Args");
             FunctionDesc desc = DescribeMember(Detail::Signature<void, void, Args...> {}, "constructor", doc, false, Side::Shared);
             Detail::LuaSetConstructor(*_record, {Detail::LuaParamsOf<Args...>(), &Detail::LuaConstructorThunk<T, Args...>::Invoke, nullptr});
+            _v8->constructor          = Detail::V8ConstructorOf<T, Args...>(Detail::V8FunctionOptions(desc));
             _record->desc.constructor = std::move(desc);
+            return *this;
+        }
+
+        // Builds the object of a JavaScript `new Name(...)` with `factory` instead of converting the arguments to
+        // those of the declared constructor, for a constructor more lenient than its signature, such as one whose
+        // arguments default. The object is made with new and JavaScript owns it. The constructor stays documented
+        // as declared, and Lua keeps the declared one. Throws std::logic_error when the class declares no
+        // constructor yet, or has a V8 constructor already.
+        Class &V8Constructor(fu2::function<T *(const v8::FunctionCallbackInfo<v8::Value> &) const> factory) {
+            if (_v8->constructor.empty()) {
+                throw std::logic_error("Bind: '" + _record->desc.name + "' is given a V8 constructor before it declares a constructor");
+            }
+            if (!_v8->factory.empty()) {
+                throw std::logic_error("Bind: '" + _record->desc.name + "' is given a second V8 constructor");
+            }
+            _v8->factory = std::move(factory);
             return *this;
         }
 
@@ -280,7 +315,8 @@ namespace Framework::Scripting::Bind {
             static_assert(Detail::CallableOn<T, F>, "Bind::Class::Method: F is a member function of T or of one of its bases, or a function or a lambda that takes the receiver first, as T &, const T & or T *");
             using Shape       = Detail::MethodShapeOf<F>;
             FunctionDesc desc = DescribeMember(typename Shape::Script {}, name, doc, false, side);
-            Detail::LuaAddMethod(*_record, std::move(name), side, Shape::template Thunk<T, F>(std::move(function)));
+            Detail::LuaAddMethod(*_record, name, side, Shape::template Thunk<T, F>(function));
+            _v8->members.push_back(Detail::V8Method<T>(typename Detail::SignatureOf<F>::Type {}, side, _record->desc.name, std::move(name), std::move(function), Detail::V8FunctionOptions(desc)));
             _record->desc.functions.push_back(std::move(desc));
             return *this;
         }
@@ -289,7 +325,8 @@ namespace Framework::Scripting::Bind {
         Class &Static(std::string name, F function, Doc doc, Side side = Side::Shared) {
             static_assert(Detail::FreeCallable<F>, "Bind::Class::Static: F is a function, a static member function or a lambda");
             FunctionDesc desc = DescribeMember(typename Detail::SignatureOf<F>::Type {}, name, doc, true, side);
-            Detail::LuaAddStatic(*_record, std::move(name), side, Detail::LuaFunctionThunkOf(typename Detail::SignatureOf<F>::Type {}, std::move(function)));
+            Detail::LuaAddStatic(*_record, name, side, Detail::LuaFunctionThunkOf(typename Detail::SignatureOf<F>::Type {}, function));
+            _v8->members.push_back(Detail::V8Static<T>(typename Detail::SignatureOf<F>::Type {}, side, _record->desc.name, std::move(name), std::move(function), Detail::V8FunctionOptions(desc)));
             _record->desc.functions.push_back(std::move(desc));
             return *this;
         }
@@ -298,7 +335,8 @@ namespace Framework::Scripting::Bind {
         template <typename G>
         Class &Property(std::string name, G getter, std::string description, Side side = Side::Shared) {
             PropertyDesc desc = DescribeProperty<G>(name, std::move(description), true, side);
-            Detail::LuaAddProperty(*_record, std::move(name), side, GetterThunk(std::move(getter)), std::nullopt);
+            Detail::LuaAddProperty(*_record, name, side, GetterThunk(getter), std::nullopt);
+            _v8->members.push_back(Detail::V8Property<T, typename Detail::MethodShapeOf<G>::Return>(side, _record->desc.name, std::move(name), std::move(getter), Detail::V8PropertyOptions(desc)));
             _record->desc.properties.push_back(std::move(desc));
             return *this;
         }
@@ -308,7 +346,8 @@ namespace Framework::Scripting::Bind {
             static_assert(Detail::CallableOn<T, S>, "Bind::Class::Property: the setter is a member function of T or of one of its bases, or a function or a lambda that takes the receiver first, as T & or T *");
             static_assert(Detail::MethodShapeOf<S>::arity == 1, "Bind::Class::Property: a setter takes the new value and nothing else");
             PropertyDesc desc = DescribeProperty<G>(name, std::move(description), false, side);
-            Detail::LuaAddProperty(*_record, std::move(name), side, GetterThunk(std::move(getter)), Detail::MethodShapeOf<S>::template Thunk<T, S>(std::move(setter)));
+            Detail::LuaAddProperty(*_record, name, side, GetterThunk(getter), Detail::MethodShapeOf<S>::template Thunk<T, S>(setter));
+            _v8->members.push_back(Detail::V8Property<T, typename Detail::MethodShapeOf<G>::Return>(side, _record->desc.name, std::move(name), std::move(getter), std::move(setter), Detail::V8PropertyOptions(desc)));
             _record->desc.properties.push_back(std::move(desc));
             return *this;
         }
@@ -316,7 +355,7 @@ namespace Framework::Scripting::Bind {
         // Gives the class a Lua operator. `function` takes every operand: two, or one for Unm and Len. Several
         // functions declared for one event are tried in order and the first that takes the operands is called,
         // which is how `vector * number` and `number * vector` coexist. Eq is false, not an error, when none
-        // does. Nothing is described: an operator exists in Lua only.
+        // does. Nothing is described and JavaScript gets nothing: an operator exists in Lua only.
         template <typename F>
         Class &LuaMeta(LuaMetaEvent event, F function) {
             static_assert(Detail::FreeCallable<F>, "Bind::Class::LuaMeta: F is a function or a lambda that takes every operand");
@@ -324,9 +363,17 @@ namespace Framework::Scripting::Bind {
             return *this;
         }
 
-        // Runs `hook` each time the class is materialised, after its declared members are in place.
+        // Runs `hook` each time the class is materialised into a Lua state, after its declared members are in place.
         Class &LuaHook(LuaClassHook hook) {
             _record->hooks.push_back(std::move(hook));
+            return *this;
+        }
+
+        // Runs `hook` each time the class is materialised into an isolate, after its declared members are in place:
+        // for what exists in JavaScript only, such as toJSON. What the hook adds, it records in the catalog itself;
+        // v8pp::class_::prototype_function does both.
+        Class &V8Hook(fu2::function<void(v8pp::class_<T> &, v8::Isolate *) const> hook) {
+            _v8->hooks.push_back(std::move(hook));
             return *this;
         }
 
@@ -347,6 +394,15 @@ namespace Framework::Scripting::Bind {
             Detail::LuaPublishClass(L, *_record, targetIndex);
         }
 
+        // Builds the v8pp class in `isolate` the way a binding written by hand does, with the members that exist in
+        // a runtime of side `runtime`, and records it in `catalog`. Every call builds a class, and an isolate takes
+        // one per C++ type: the caller keeps what it gets for the isolate (ClassCache). Call with the isolate
+        // entered. Throws std::logic_error when a member returns what JavaScript cannot receive, and what v8pp
+        // throws when the isolate has the class already or lacks the class of a base.
+        std::unique_ptr<v8pp::class_<T>> MaterialiseV8(v8::Isolate *isolate, v8pp::metadata::registry &catalog, Side runtime) const {
+            return Detail::V8MaterialiseClass(*_v8, _record->desc, isolate, catalog, runtime);
+        }
+
         // The definition for T, or nullptr.
         static const Class *Find() {
             return _registered;
@@ -363,6 +419,11 @@ namespace Framework::Scripting::Bind {
         template <typename Base>
         static void *Upcast(void *object) {
             return static_cast<Base *>(static_cast<T *>(object));
+        }
+
+        template <typename Base>
+        static void V8Inherit(v8pp::class_<T> &cls) {
+            cls.template inherit<Base>();
         }
 
         // Described under its qualified name, so that a Doc that disagrees with the signature is reported as
@@ -393,6 +454,7 @@ namespace Framework::Scripting::Bind {
         }
 
         std::shared_ptr<Detail::LuaClass> _record;
+        std::shared_ptr<Detail::V8Class<T>> _v8;
 
         static inline const Class *_registered = nullptr;
     };
