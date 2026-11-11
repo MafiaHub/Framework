@@ -6,7 +6,6 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 96
 #include "alloc_counter.h"
 #include "logging/logger.h"
 #include "unit.h"
