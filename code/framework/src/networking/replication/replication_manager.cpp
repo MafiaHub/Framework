@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <optional>
 #include <thread>
 
 namespace Framework::Networking::Replication {
@@ -41,6 +42,19 @@ namespace Framework::Networking::Replication {
             uint16_t count = 0;
             return bs.Read(count) && count != 0;
         }
+
+        // StateBagSync as the flush sends it: indices into changes built once, instead of a copy
+        // of each change per connection. Same identifier, same bytes.
+        struct StateBagSyncView {
+            static constexpr auto kIdentifier                  = RPC::StateBagSync::kIdentifier;
+            const std::vector<RPC::StateBagSync::Change> *pool = nullptr;
+            const uint32_t *indices                            = nullptr;
+            uint16_t count                                     = 0;
+
+            void Serialize(MafiaNet::BitStream *bs, bool /*write*/) {
+                RPC::StateBagSync::WriteChanges(bs, *pool, indices, count);
+            }
+        };
 
         // Raw RPC: the tail is the entity's polymorphic SerializeForcedState payload.
         constexpr auto kForceStateId = FW_RPC_IDENTIFIER("Framework::ForceState");
@@ -96,7 +110,11 @@ namespace Framework::Networking::Replication {
         };
     } // namespace
 
-    ReplicationManager::ReplicationManager()  = default;
+    struct ReplicationManager::StateBagFlushPool {
+        std::vector<RPC::StateBagSync::Change> changes;
+    };
+
+    ReplicationManager::ReplicationManager(): _stateBagFlushPool(std::make_unique<StateBagFlushPool>()) {}
     ReplicationManager::~ReplicationManager() = default;
 
     void ReplicationManager::SetReplicationWorkerThreads(uint32_t workers) {
@@ -577,10 +595,15 @@ namespace Framework::Networking::Replication {
             return;
         }
 
-        // One buffer per connection, filled once and sent once. Placement asks the connection
-        // whether it has the entity constructed — the question interest, virtual worlds and budgets
-        // have already answered, so none of it is repeated here.
-        std::vector<std::vector<RPC::StateBagSync::Change>> buffers(connectionCount);
+        // Each change is built once into a shared pool; a connection is sent the indices of the ones
+        // it should get, so a change for many viewers is not copied per viewer. Placement asks the
+        // connection whether it has the entity constructed — the question interest, virtual worlds
+        // and budgets have already answered, so none of it is repeated here.
+        _stateBagFlushPool->changes.clear();
+        _stateBagFlushIndices.resize(connectionCount);
+        for (auto &indices : _stateBagFlushIndices) {
+            indices.clear();
+        }
         for (const uint64_t networkId : _dirtyStateBags) {
             NetworkEntity *entity = GetEntityByNetworkID(networkId);
             if (entity == nullptr) {
@@ -590,21 +613,30 @@ namespace Framework::Networking::Replication {
             for (const auto &[key, dirty] : entity->state.Dirty()) {
                 const StateValue *current = entity->state.Get(key);
 
-                RPC::StateBagSync::Change update;
-                update.networkId = entity->GetNetworkID();
-                update.key       = key;
-                update.removed   = current == nullptr;
+                const auto updateIndex            = static_cast<uint32_t>(_stateBagFlushPool->changes.size());
+                RPC::StateBagSync::Change &update = _stateBagFlushPool->changes.emplace_back();
+                update.networkId                  = entity->GetNetworkID();
+                update.key                        = key;
+                update.removed                    = current == nullptr;
                 if (current != nullptr) {
                     update.value = *current;
                 }
 
                 // Sent to a connection that held the key and is no longer meant to. Nothing else takes
                 // a value back off a peer: a client stores what it is sent and filtering later updates
-                // would leave the old one sitting there.
-                RPC::StateBagSync::Change revoke;
-                revoke.networkId = entity->GetNetworkID();
-                revoke.key       = key;
-                revoke.removed   = true;
+                // would leave the old one sitting there. Built the first time a connection needs it,
+                // since most keys never narrow.
+                std::optional<uint32_t> revokeIndex;
+                const auto revoke = [&]() {
+                    if (!revokeIndex.has_value()) {
+                        revokeIndex                       = static_cast<uint32_t>(_stateBagFlushPool->changes.size());
+                        RPC::StateBagSync::Change &change = _stateBagFlushPool->changes.emplace_back();
+                        change.networkId                  = entity->GetNetworkID();
+                        change.key                        = key;
+                        change.removed                    = true;
+                    }
+                    return *revokeIndex;
+                };
 
                 for (unsigned i = 0; i < connectionCount; ++i) {
                     MafiaNet::Connection_RM3 *connection = GetConnectionAtIndex(i);
@@ -623,10 +655,10 @@ namespace Framework::Networking::Replication {
                     };
 
                     if (inAudience(dirty.scope)) {
-                        buffers[i].push_back(update);
+                        _stateBagFlushIndices[i].push_back(updateIndex);
                     }
                     else if (dirty.previous.has_value() && inAudience(*dirty.previous)) {
-                        buffers[i].push_back(revoke);
+                        _stateBagFlushIndices[i].push_back(revoke());
                     }
                 }
             }
@@ -635,7 +667,8 @@ namespace Framework::Networking::Replication {
         _dirtyStateBags.clear();
 
         for (unsigned i = 0; i < connectionCount; ++i) {
-            if (buffers[i].empty()) {
+            const std::vector<uint32_t> &indices = _stateBagFlushIndices[i];
+            if (indices.empty()) {
                 continue;
             }
             MafiaNet::Connection_RM3 *connection = GetConnectionAtIndex(i);
@@ -643,11 +676,13 @@ namespace Framework::Networking::Replication {
                 continue;
             }
             // Chunked to what the receiver accepts, so the reader never trusts a count off the wire.
-            for (size_t offset = 0; offset < buffers[i].size(); offset += RPC::StateBagSync::kMaxChanges) {
-                const size_t end = std::min(offset + RPC::StateBagSync::kMaxChanges, buffers[i].size());
-                RPC::StateBagSync payload;
-                payload.changes.assign(buffers[i].begin() + static_cast<ptrdiff_t>(offset), buffers[i].begin() + static_cast<ptrdiff_t>(end));
-                _owner->SendRPC(payload, connection->GetRakNetGUID());
+            for (size_t offset = 0; offset < indices.size(); offset += RPC::StateBagSync::kMaxChanges) {
+                const size_t end = std::min(offset + RPC::StateBagSync::kMaxChanges, indices.size());
+                StateBagSyncView view;
+                view.pool    = &_stateBagFlushPool->changes;
+                view.indices = indices.data() + offset;
+                view.count   = static_cast<uint16_t>(end - offset);
+                _owner->SendRPC(view, connection->GetRakNetGUID());
             }
         }
     }

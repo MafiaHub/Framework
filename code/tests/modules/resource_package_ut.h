@@ -543,6 +543,95 @@ MODULE(resource_package, {
         std::filesystem::remove_all(cacheRoot);
     });
 
+    IT("refuses a resource name that is not one safe file name", {
+        const auto cacheRoot = std::filesystem::temp_directory_path() / "fwpak_ut_mount_names";
+        std::filesystem::remove_all(cacheRoot);
+        std::filesystem::create_directories(cacheRoot);
+
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+
+        Framework::Utils::Package::Writer writer;
+        EQUALS(writer.Add("package.json", "{}"), true);
+        std::string blob;
+        EQUALS(writer.Build(&key, blob), true);
+        const auto hash = Framework::Utils::Crypto::Sha256Hex(blob);
+        {
+            std::ofstream out(cacheRoot / "demo.fwpak", std::ios::binary | std::ios::trunc);
+            out.write(blob.data(), static_cast<std::streamsize>(blob.size()));
+        }
+
+        Framework::Integrations::Client::ResourcePackageMounter mounter;
+        std::string error;
+        EQUALS(mounter.SetKey(Framework::Utils::Crypto::ToHex(key.data(), key.size())), true);
+
+        // A sibling directory holding the same valid package, reachable only by escaping the cache.
+        const auto outside = cacheRoot.parent_path() / "fwpak_ut_outside";
+        std::filesystem::remove_all(outside);
+        std::filesystem::create_directories(outside);
+        std::filesystem::copy_file(cacheRoot / "demo.fwpak", outside / "demo.fwpak");
+
+        for (const std::string &name : std::vector<std::string>{"../fwpak_ut_outside/demo", (outside / "demo").string(), "sub/demo", "sub\\demo", "..", ".", "", std::string(200, 'a')}) {
+            error.clear();
+            EQUALS(mounter.Mount(cacheRoot.string(), name, hash, error), false);
+            EQUALS(error.find("name") != std::string::npos, true);
+        }
+        EQUALS(mounter.GetMountedResources().empty(), true);
+
+        // The plain name still mounts.
+        EQUALS(mounter.Mount(cacheRoot.string(), "demo", hash, error), true);
+        mounter.Unmount(cacheRoot.string(), "demo");
+
+        std::filesystem::remove_all(outside);
+        std::filesystem::remove_all(cacheRoot);
+    });
+
+    IT("refuses a malformed announced hash", {
+        const auto cacheRoot = std::filesystem::temp_directory_path() / "fwpak_ut_mount_hash";
+        std::filesystem::remove_all(cacheRoot);
+        std::filesystem::create_directories(cacheRoot);
+
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+
+        Framework::Integrations::Client::ResourcePackageMounter mounter;
+        EQUALS(mounter.SetKey(Framework::Utils::Crypto::ToHex(key.data(), key.size())), true);
+
+        std::string error;
+        EQUALS(mounter.Mount(cacheRoot.string(), "demo", "abc", error), false);
+        EQUALS(mounter.Mount(cacheRoot.string(), "demo", std::string(63, 'a') + "g", error), false);
+        EQUALS(mounter.Mount(cacheRoot.string(), "demo", std::string(65, 'a'), error), false);
+
+        std::filesystem::remove_all(cacheRoot);
+    });
+
+    IT("refuses a package file larger than a package can be", {
+        const auto cacheRoot = std::filesystem::temp_directory_path() / "fwpak_ut_mount_big";
+        std::filesystem::remove_all(cacheRoot);
+        std::filesystem::create_directories(cacheRoot);
+
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+
+        const auto path = cacheRoot / "huge.fwpak";
+        { std::ofstream out(path, std::ios::binary | std::ios::trunc); }
+        std::error_code ec;
+        std::filesystem::resize_file(path, Framework::Utils::Package::kMaxFileSize + 1, ec);
+        EQUALS(!ec, true);
+
+        Framework::Integrations::Client::ResourcePackageMounter mounter;
+        EQUALS(mounter.SetKey(Framework::Utils::Crypto::ToHex(key.data(), key.size())), true);
+
+        std::string error;
+        EQUALS(mounter.Mount(cacheRoot.string(), "huge", std::string(64, 'a'), error), false);
+        EQUALS(error.find("unreadable") != std::string::npos, true);
+
+        std::filesystem::remove_all(cacheRoot);
+    });
+
     IT("refuses a wrong key and an unencrypted container", {
         auto &vfs = Framework::Utils::Vfs::Get();
 

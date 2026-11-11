@@ -2,7 +2,7 @@ name: Test Build
 
 on:
     push:
-         branches: [ 'master' ]
+         branches: [ 'develop' ]
     pull_request:
          branches: [ 'develop' ]
          # Skip PRs that cannot change the build. This is a denylist on purpose: a file nobody
@@ -30,8 +30,14 @@ on:
            - '!VERSION'
            - '!mise.toml'
     workflow_dispatch:
+    workflow_call:
+        inputs:
+            ref:
+                description: "Git ref to test (defaults to the triggering ref)"
+                required: false
+                type: string
 
-# A new push to a PR supersedes the run already testing it. Pushes to master each keep their run.
+# A new push to a PR supersedes the run already testing it. Pushes to develop each keep their run.
 concurrency:
     group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -39,11 +45,12 @@ concurrency:
 env:
     BUILD_TYPE: Debug
     # vcpkg binary cache. Without one, every cold runner builds openssl, curl and sentry-native
-    # from source before a single Framework file compiles. x-gha needs no secrets, but GitHub
-    # scopes cache entries per ref: a run on a tag can only read what the default branch wrote.
-    # Set the VCPKG_BINARY_SOURCES repository variable to an S3/R2 or NuGet store to escape that,
-    # and to share one cache across every project and architecture.
-    VCPKG_BINARY_SOURCES: ${{ vars.VCPKG_BINARY_SOURCES || 'clear;x-gha,readwrite' }}
+    # from source before a single Framework file compiles. The default is vcpkg's `files` backend
+    # over a directory that actions/cache saves and restores (see the "vcpkg binary cache" steps).
+    # GitHub scopes cache entries per ref: a PR reads what its base branch wrote, so the push
+    # build of develop is what keeps PRs warm. Set the VCPKG_BINARY_SOURCES repository variable
+    # to an S3/R2 or NuGet store to share one cache across every project and architecture instead.
+    VCPKG_BINARY_SOURCES_OVERRIDE: ${{ vars.VCPKG_BINARY_SOURCES }}
 
 jobs:
   build:
@@ -58,16 +65,17 @@ jobs:
             cmake_generator: "Visual Studio 17 2022"
             build_type: "Debug"
           - os: ubuntu-latest
-            cmake_generator: "Unix Makefiles"
+            cmake_generator: "Ninja"
             build_type: "Debug"
             extra_cmake_args: "-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++"
           - os: macos-latest
-            cmake_generator: "Unix Makefiles"
+            cmake_generator: "Ninja"
             build_type: "Debug"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.ref }}
           submodules: ${{ secrets.FW_SERVICES_PAT != '' && 'recursive' || 'false' }}
           token: ${{ secrets.FW_SERVICES_PAT || github.token }}
                               
@@ -94,14 +102,30 @@ jobs:
         if: runner.os == 'Windows'
         uses: egor-tensin/vs-shell@v2
 
-      # vcpkg's x-gha backend reads these two out of the environment; the runner does not export
-      # them to job steps on its own.
-      - name: Export the Actions cache tokens for vcpkg
-        uses: actions/github-script@v7
+      - name: Restore the vcpkg binary cache
+        if: env.VCPKG_BINARY_SOURCES_OVERRIDE == ''
+        uses: actions/cache@v4
         with:
-          script: |
-            core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          path: .vcpkg-cache
+          # One entry per run so new packages are saved; restore-keys picks the newest
+          # entry for this OS and manifest, then any for this OS.
+          key: vcpkg-${{ runner.os }}-${{ matrix.arch || 'default' }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-triplets/**') }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ matrix.arch || 'default' }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-triplets/**') }}-
+            vcpkg-${{ runner.os }}-${{ matrix.arch || 'default' }}-
+
+      - name: Point vcpkg at the binary cache
+        shell: bash
+        run: |
+          if [ -n "${VCPKG_BINARY_SOURCES_OVERRIDE}" ]; then
+            echo "VCPKG_BINARY_SOURCES=${VCPKG_BINARY_SOURCES_OVERRIDE}" >> "$GITHUB_ENV"
+          else
+            mkdir -p "${GITHUB_WORKSPACE}/.vcpkg-cache"
+            # cygpath: vcpkg on Windows needs a native path, not /d/a/...
+            dir="${GITHUB_WORKSPACE}/.vcpkg-cache"
+            if command -v cygpath >/dev/null 2>&1; then dir="$(cygpath -m "$dir")"; fi
+            echo "VCPKG_BINARY_SOURCES=clear;files,${dir},readwrite" >> "$GITHUB_ENV"
+          fi
 
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'

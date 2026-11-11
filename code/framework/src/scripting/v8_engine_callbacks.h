@@ -58,7 +58,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
         auto *manager = engine ? engine->GetResourceManager() : nullptr;
         if (!manager)
             return;
-        auto key          = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.promiseOwner"));
+        auto key          = engine->PromiseOwnerKey();
         std::string owner = manager->GetResourceContextFromStack(isolate);
         if (owner.empty())
             owner = manager->GetCurrentResourceContext();
@@ -72,7 +72,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
         }
         if (!value.IsEmpty() && value->IsString()) {
             (void)promise->SetPrivate(context, key, value).FromMaybe(false);
-            auto generationKey = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "Framework.promiseGeneration"));
+            auto generationKey = engine->PromiseGenerationKey();
             v8::Local<v8::Value> generation;
             if (owner.empty() && parent->IsPromise()) {
                 if (!parent.As<v8::Promise>()->GetPrivate(context, generationKey).ToLocal(&generation))
@@ -120,11 +120,16 @@ namespace Framework::Scripting::V8EngineCallbacks {
             return;
         }
 
-        // Extract engine and currentDir from External data
-        v8::Local<v8::External> external = v8::Local<v8::External>::Cast(args.Data());
-        auto *data                       = static_cast<V8Engine::RequireData *>(external->Value());
+        // The directory rides on the function as a V8 string, so it lives exactly as long as the
+        // function does: a require kept across a resource restart must not point at engine memory.
+        v8::String::Utf8Value currentDir(isolate, args.Data());
+        auto *engine = V8Engine::FromContext(isolate->GetCurrentContext());
+        if (!*currentDir || !engine) {
+            isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8Literal(isolate, "require() is not available in this context")));
+            return;
+        }
 
-        v8::MaybeLocal<v8::Value> result = data->engine->LoadModule(requested, data->currentDir);
+        v8::MaybeLocal<v8::Value> result = engine->LoadModule(requested, std::string_view(*currentDir, static_cast<size_t>(currentDir.length())));
         v8::Local<v8::Value> localResult;
         if (result.ToLocal(&localResult)) {
             args.GetReturnValue().Set(localResult);

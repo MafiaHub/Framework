@@ -106,7 +106,7 @@ namespace Framework::GUI::CEF {
         // so App (not RendererApp) receives this callback. Register the same
         // JS bindings that RendererApp::OnContextCreated registers in multi-process mode.
         CefRefPtr<CefV8Value> global    = context->GetGlobal();
-        CefRefPtr<CefV8Handler> handler = new CallEventHandler(browser);
+        CefRefPtr<CefV8Handler> handler = new CallEventHandler();
         CefRefPtr<CefV8Value> func      = CefV8Value::CreateFunction("callEvent", handler);
         global->SetValue("callEvent", func, V8_PROPERTY_ATTRIBUTE_NONE);
     }

@@ -10,6 +10,7 @@
 
 #include <logging/logger.h>
 #include <utils/package/package.h>
+#include <utils/streamed_assets/policy.h>
 #include <utils/vfs.h>
 
 #include <algorithm>
@@ -25,6 +26,10 @@ namespace Framework::Integrations::Client {
             }
             const auto size = file.tellg();
             if (size < 0) {
+                return false;
+            }
+            // A package is bounded; anything larger is not one, and is not read to find that out.
+            if (static_cast<uint64_t>(size) > Utils::Package::kMaxFileSize) {
                 return false;
             }
             file.seekg(0, std::ios::beg);
@@ -74,6 +79,17 @@ namespace Framework::Integrations::Client {
         }
         if (expectedHash.empty()) {
             outError = "the server announced no package hash for this resource";
+            return false;
+        }
+
+        // The name comes from the server and becomes a file name under the cache and a mount point:
+        // anything but one plain name could address a file outside it.
+        if (!Utils::StreamedAssets::IsValidPackageName(resourceName)) {
+            outError = "the server announced a resource name that is not a valid package name";
+            return false;
+        }
+        if (!Utils::StreamedAssets::IsSha256(expectedHash)) {
+            outError = "the server announced a malformed package hash";
             return false;
         }
 

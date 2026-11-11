@@ -89,7 +89,7 @@ namespace Framework::Scripting {
          */
         [[nodiscard]] bool ResetContext();
 
-        // Evict cached modules (and require() backing data) under rootPath.
+        // Evict cached modules under rootPath.
         void EvictModulesUnderPath(const std::string &rootPath) override;
 
         // Cancel all timers created by the named resource.
@@ -119,17 +119,19 @@ namespace Framework::Scripting {
         void OnPromiseReject(v8::PromiseRejectMessage message);
         static V8Engine *FromContext(v8::Local<v8::Context> context);
 
+        v8::Local<v8::Private> PromiseOwnerKey() const {
+            return _promiseOwnerKey.Get(_isolate);
+        }
+        v8::Local<v8::Private> PromiseGenerationKey() const {
+            return _promiseGenerationKey.Get(_isolate);
+        }
+
         uint32_t GetResourceGeneration(const std::string &resource) const {
             auto found = _resourceGenerations.find(resource);
             return found == _resourceGenerations.end() ? 0 : found->second;
         }
 
-        // Data structs for V8 callbacks (public for anonymous-namespace callbacks)
-        struct RequireData {
-            V8Engine *engine;
-            std::string currentDir;
-        };
-
+        // Data struct for V8 callbacks (public for anonymous-namespace callbacks)
         struct TimerCallbackData {
             V8Engine *engine;
             bool isInterval;
@@ -162,6 +164,11 @@ namespace Framework::Scripting {
         v8::Isolate::CreateParams _createParams;
         v8::Global<v8::Context> _context;
 
+        // Created once: Private::ForApi looks a key up by name each time it is called, and the
+        // promise hook runs for every promise.
+        v8::Eternal<v8::Private> _promiseOwnerKey;
+        v8::Eternal<v8::Private> _promiseGenerationKey;
+
         // Timer queue
         std::vector<std::unique_ptr<TimerEntry>> _timers;
         uint32_t _nextTimerId = 1;
@@ -172,9 +179,6 @@ namespace Framework::Scripting {
 
         // Module cache (keyed by resolved absolute path)
         std::map<std::string, v8::Global<v8::Value>> _moduleCache;
-
-        // RequireData instances (owned, cleaned up in Shutdown)
-        std::vector<std::unique_ptr<RequireData>> _requireDataStore;
     };
 
 } // namespace Framework::Scripting

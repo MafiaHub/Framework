@@ -664,8 +664,16 @@ namespace Framework::Integrations::Server {
             }
             _joinedGuids.insert(guid.g);
 
-            // Only a request carrying an identity is ever accepted, so a connection has one.
-            const Framework::Networking::RPC::ClientIdentity &identity = *net->GetPeerIdentity(guid);
+            // An accepted request always carried an identity, but what is stored for a connection
+            // is only as trustworthy as every packet since: refuse rather than dereference.
+            const Framework::Networking::RPC::ClientIdentity *storedIdentity = net->GetPeerIdentity(guid);
+            if (storedIdentity == nullptr) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Refusing the join of guid {}: it has no stored identity", guid.g);
+                _joinedGuids.erase(guid.g);
+                net->KickPlayer(guid, Framework::Networking::DisconnectionReason::KICKED_INVALID_PACKET, "");
+                return;
+            }
+            const Framework::Networking::RPC::ClientIdentity &identity = *storedIdentity;
 
             // The game builds the avatar and registers it as this connection's viewer; hand it the
             // metadata so it spawns with the real nickname/slot.
@@ -915,7 +923,8 @@ namespace Framework::Integrations::Server {
 
         _packageHashes.clear();
         _packageSizes.clear();
-        std::unordered_map<std::string, std::filesystem::path> served;
+        _servedFiles.clear();
+        _assetPaks.clear();
 
         const auto resourceManager = scripting->GetResourceManager();
         if (!resourceManager) {
@@ -923,98 +932,149 @@ namespace Framework::Integrations::Server {
         }
 
         // Clients never receive these, so a client manifest must not depend on them.
+        _serverOnlyResources = CollectServerOnlyResources();
+
+        size_t packagedFiles = 0;
+        for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
+            PackageClientResource(resourceName, stagingDir, packagedFiles);
+        }
+
+        // Asset paks: plain ZIPs the client's engine mounts, staged beside the packages and served
+        // the same way. A resource stopped at runtime ships none until it starts again.
+        if (_opts.assetPakPolicy) {
+            if (!_assetPakBuilder.IsActive()) {
+                _assetPakBuilder.Init(_opts.assetPakPolicy, stagingDir);
+            }
+            for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
+                PublishResourceAssetPaks(resourceName);
+            }
+        }
+
+        if (!_opts.assetDownloadUrl.empty()) {
+            std::string names;
+            for (const auto &[name, path] : _servedFiles) {
+                names += (names.empty() ? "" : ", ") + name;
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Clients download from {} first; mirror these files and their .chunks lists from '{}' there: {}", _opts.assetDownloadUrl, stagingDir, names.empty() ? "(none)" : names);
+        }
+        _assetFileServer.Publish(_servedFiles);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset file server ready with {} encrypted resource packages ({} files) and {} resource(s) shipping asset paks", _packageHashes.size(), packagedFiles, _assetPaks.size());
+    }
+
+    std::set<std::string> Instance::CollectServerOnlyResources() const {
         std::set<std::string> serverOnlyResources;
+        const auto scripting       = GetScriptingModule();
+        const auto resourceManager = scripting ? scripting->GetResourceManager() : nullptr;
+        if (!resourceManager) {
+            return serverOnlyResources;
+        }
         for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
             const auto resource = resourceManager->GetResource(resourceName);
             if (resource && !resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
                 serverOnlyResources.insert(resourceName);
             }
         }
+        return serverOnlyResources;
+    }
+
+    bool Instance::PackageClientResource(const std::string &resourceName, const std::string &stagingDir, size_t &packagedFiles) {
+        const auto resource = GetScriptingModule()->GetResourceManager()->GetResource(resourceName);
+        if (!resource) {
+            return false;
+        }
+        if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
+            return false;
+        }
+        if (!Framework::Utils::StreamedAssets::IsValidPackageName(resourceName)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client resource '{}' cannot be served: its name is not [A-Za-z0-9._-], at most {} characters", resourceName, Framework::Utils::StreamedAssets::kMaxPackageName);
+            return false;
+        }
+
+        Framework::Scripting::PackagedResource packaged;
+        std::string error;
+        if (!Framework::Scripting::ResourcePackager::Package(resourceName, resource->GetPath(), resource->GetManifest(), &_packageKey, packaged, error, _serverOnlyResources)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not package client resource '{}': {}", resourceName, error);
+            return false;
+        }
+
+        std::error_code ec;
+        const std::string packageName = resourceName + Framework::Utils::Package::kExtension;
+        const auto packagePath        = std::filesystem::path(stagingDir) / packageName;
+
+        bool needsWrite = true;
+        if (std::filesystem::exists(packagePath, ec) && !ec) {
+            const auto existing = Framework::Utils::Crypto::Sha256FileHex(packagePath.string());
+            needsWrite          = !Framework::Utils::Crypto::ConstantTimeEquals(existing, packaged.sha256);
+        }
+
+        if (needsWrite) {
+            std::ofstream out(packagePath, std::ios::binary | std::ios::trunc);
+            if (!out.is_open()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not write package '{}'", packagePath.string());
+                return false;
+            }
+            out.write(packaged.blob.data(), static_cast<std::streamsize>(packaged.blob.size()));
+            if (!out.good()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed while writing package '{}'", packagePath.string());
+                return false;
+            }
+        }
+
+        _servedFiles[packageName]    = packagePath;
+        _packageHashes[resourceName] = packaged.sha256;
+        _packageSizes[resourceName]  = packaged.blob.size();
+        packagedFiles += packaged.fileCount;
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Packaged client resource '{}': {} files, {} bytes, sha256 {}{}", resourceName, packaged.fileCount, packaged.blob.size(), packaged.sha256.substr(0, 16), needsWrite ? "" : " (unchanged)");
+        return true;
+    }
+
+    void Instance::PublishResourceAssetPaks(const std::string &resourceName) {
+        const auto resource = GetScriptingModule()->GetResourceManager()->GetResource(resourceName);
+        if (!resource || (_resourcesBooted && !resource->IsRunning())) {
+            _assetPakBuilder.Forget(resourceName);
+            return;
+        }
+        std::vector<Framework::Networking::RPC::AssetPakInfo> paks = _assetPakBuilder.Build(resourceName, resource->GetPath());
+        for (auto &pak : paks) {
+            pak.deferred                                                                                   = _opts.assetPakPolicy->LaneMayDefer(pak.lane);
+            _servedFiles[Framework::Utils::StreamedAssets::PakFileName(resourceName, pak.lane, pak.sha256)] = _assetPakBuilder.PathOf(resourceName, pak);
+        }
+        if (!paks.empty()) {
+            _assetPaks[resourceName] = std::move(paks);
+        }
+    }
+
+    void Instance::RepublishClientResource(const std::string &name) {
+        const auto scripting       = GetScriptingModule();
+        const auto resourceManager = scripting ? scripting->GetResourceManager() : nullptr;
+        // A manifest edit that moved a resource in or out of the server-only set changes what other
+        // packages may depend on; so does a first publish that never happened.
+        if (!resourceManager || !_packageKeyReady || CollectServerOnlyResources() != _serverOnlyResources) {
+            PublishClientAssets();
+            return;
+        }
+
+        const std::string stagingDir = GetPackageStagingDir();
+
+        // Drop what the resource served before; it is rebuilt below or it is gone.
+        _servedFiles.erase(name + Framework::Utils::Package::kExtension);
+        _packageHashes.erase(name);
+        _packageSizes.erase(name);
+        if (const auto paks = _assetPaks.find(name); paks != _assetPaks.end()) {
+            for (const auto &pak : paks->second) {
+                _servedFiles.erase(Framework::Utils::StreamedAssets::PakFileName(name, pak.lane, pak.sha256));
+            }
+            _assetPaks.erase(paks);
+        }
 
         size_t packagedFiles = 0;
-        for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
-            const auto resource = resourceManager->GetResource(resourceName);
-            if (!resource) {
-                continue;
-            }
-            if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
-                continue;
-            }
-            if (!Framework::Utils::StreamedAssets::IsValidPackageName(resourceName)) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client resource '{}' cannot be served: its name is not [A-Za-z0-9._-], at most {} characters", resourceName, Framework::Utils::StreamedAssets::kMaxPackageName);
-                continue;
-            }
-
-            Framework::Scripting::PackagedResource packaged;
-            std::string error;
-            if (!Framework::Scripting::ResourcePackager::Package(resourceName, resource->GetPath(), resource->GetManifest(), &_packageKey, packaged, error, serverOnlyResources)) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not package client resource '{}': {}", resourceName, error);
-                continue;
-            }
-
-            const std::string packageName = resourceName + Framework::Utils::Package::kExtension;
-            const auto packagePath        = std::filesystem::path(stagingDir) / packageName;
-
-            bool needsWrite = true;
-            if (std::filesystem::exists(packagePath, ec) && !ec) {
-                const auto existing = Framework::Utils::Crypto::Sha256FileHex(packagePath.string());
-                needsWrite          = !Framework::Utils::Crypto::ConstantTimeEquals(existing, packaged.sha256);
-            }
-
-            if (needsWrite) {
-                std::ofstream out(packagePath, std::ios::binary | std::ios::trunc);
-                if (!out.is_open()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not write package '{}'", packagePath.string());
-                    continue;
-                }
-                out.write(packaged.blob.data(), static_cast<std::streamsize>(packaged.blob.size()));
-                if (!out.good()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed while writing package '{}'", packagePath.string());
-                    continue;
-                }
-            }
-
-            served[packageName]          = packagePath;
-            _packageHashes[resourceName] = packaged.sha256;
-            _packageSizes[resourceName]  = packaged.blob.size();
-            packagedFiles += packaged.fileCount;
-
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Packaged client resource '{}': {} files, {} bytes, sha256 {}{}", resourceName, packaged.fileCount, packaged.blob.size(), packaged.sha256.substr(0, 16), needsWrite ? "" : " (unchanged)");
-        }
-
-        // Asset paks: plain ZIPs the client's engine mounts, staged beside the packages and served
-        // the same way. A resource stopped at runtime ships none until it starts again.
-        _assetPaks.clear();
+        PackageClientResource(name, stagingDir, packagedFiles);
         if (_opts.assetPakPolicy) {
-            if (!_assetPakBuilder.IsActive()) {
-                _assetPakBuilder.Init(_opts.assetPakPolicy, stagingDir);
-            }
-            for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
-                const auto resource = resourceManager->GetResource(resourceName);
-                if (!resource || (_resourcesBooted && !resource->IsRunning())) {
-                    _assetPakBuilder.Forget(resourceName);
-                    continue;
-                }
-                std::vector<Framework::Networking::RPC::AssetPakInfo> paks = _assetPakBuilder.Build(resourceName, resource->GetPath());
-                for (auto &pak : paks) {
-                    pak.deferred                                                                              = _opts.assetPakPolicy->LaneMayDefer(pak.lane);
-                    served[Framework::Utils::StreamedAssets::PakFileName(resourceName, pak.lane, pak.sha256)] = _assetPakBuilder.PathOf(resourceName, pak);
-                }
-                if (!paks.empty()) {
-                    _assetPaks[resourceName] = std::move(paks);
-                }
-            }
+            PublishResourceAssetPaks(name);
         }
-
-        if (!_opts.assetDownloadUrl.empty()) {
-            std::string names;
-            for (const auto &[name, path] : served) {
-                names += (names.empty() ? "" : ", ") + name;
-            }
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Clients download from {} first; mirror these files and their .chunks lists from '{}' there: {}", _opts.assetDownloadUrl, stagingDir, names.empty() ? "(none)" : names);
-        }
-        _assetFileServer.Publish(std::move(served));
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset file server ready with {} encrypted resource packages ({} files) and {} resource(s) shipping asset paks", _packageHashes.size(), packagedFiles, _assetPaks.size());
+        _assetFileServer.Publish(_servedFiles);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Republished client resource '{}' ({} files); {} packages and {} resource(s) shipping asset paks are served", name, packagedFiles, _packageHashes.size(), _assetPaks.size());
     }
 
     Framework::Networking::RPC::ResourceInfo Instance::DescribeResource(const std::string &name, const std::string &version) const {
@@ -1072,8 +1132,9 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        // Republish so changed files are announced with fresh hashes. See docs/resource_hot_reload.md.
-        PublishClientAssets();
+        // Republish this resource so its changed files are announced with fresh hashes; the whole set only
+        // when the change could reach other packages. See docs/resource_hot_reload.md.
+        RepublishClientResource(resource->GetName());
 
         // Only resources with a client entry point or asset paks need a client-side refresh.
         const bool scripts = resource->GetManifest().GetMafiaHubConfig().HasClientContent();

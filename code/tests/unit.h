@@ -14,7 +14,7 @@ GitHub:
   https://github.com/zpl-c/tester
 
 Version History:
-  MafiaHub - typed failure values, FW_TEST_FILTER, failure summary, NO_COLOR (see below)
+  MafiaHub - typed failure values, FW_TEST_FILTER, failure summary, NO_COLOR, bounds-checked module table (see below)
   1.1.1 - ensure memory arena only works with zpl present
   1.1.0 - introduce memory arena for per-module allocations
   1.0.1 - Small tweaks
@@ -286,6 +286,12 @@ License:
 
 typedef int32_t (*unit_case)();
 
+// Registering past UNIT_MAX_MODULES would write off the end of the module table.
+[[noreturn]] static inline void unit__too_many_modules(const char *name) {
+    fprintf(stderr, "unit: cannot register module '%s': UNIT_MAX_MODULES (%d) reached. Raise it before including unit.h.\n", name, UNIT_MAX_MODULES);
+    abort();
+}
+
 #define UNIT_CREATE(name)                                                                                              \
     const char *unit_name                               = name;                                                        \
     unit_case unit_modules[UNIT_MAX_MODULES]            = {0};                                                         \
@@ -293,7 +299,9 @@ typedef int32_t (*unit_case)();
     int32_t unit_count                                  = 0;
 
 #define UNIT_MODULE(name)                                                                                              \
-    (unit_module_names[unit_count] = #name, unit_modules[unit_count++] = UNIT_JOIN2(module__, name))
+    (unit_count < UNIT_MAX_MODULES                                                                                     \
+            ? (void)(unit_module_names[unit_count] = #name, unit_modules[unit_count++] = UNIT_JOIN2(module__, name))   \
+            : unit__too_many_modules(#name))
 
 #define UNIT_RUN() unit_main(unit_name, unit_modules, unit_module_names, unit_count)
 

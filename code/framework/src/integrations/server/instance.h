@@ -42,8 +42,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <optional>
+#include <set>
 #include <sig.h>
 #include <string>
 #include <string_view>
@@ -271,6 +273,22 @@ namespace Framework::Integrations::Server {
         // Runs once per tick, after scripting: acts on what the gate settled.
         void ApplyAdmissionDecisions();
         void PublishClientAssets();
+        // What the asset file server serves: published name -> staged file. Kept so one resource
+        // can be republished without rebuilding the rest.
+        std::unordered_map<std::string, std::filesystem::path> _servedFiles;
+        // The resources clients never receive, as of the last full publish. A change to this set
+        // changes other packages' manifests, so it decides whether a single republish is enough.
+        std::set<std::string> _serverOnlyResources;
+
+        std::set<std::string> CollectServerOnlyResources() const;
+        // Packages one resource into the staging directory and records its hash, size and served
+        // file. False when it ships no package (no client content, bad name, packaging failed).
+        bool PackageClientResource(const std::string &resourceName, const std::string &stagingDir, size_t &packagedFiles);
+        // Builds (or forgets) one resource's asset paks and records what is served.
+        void PublishResourceAssetPaks(const std::string &resourceName);
+        // After one resource (re)started at runtime: repackage it alone when nothing else can have
+        // changed, the whole set otherwise.
+        void RepublishClientResource(const std::string &name);
         // Directory the built .fwpak containers are staged in for the streamer to upload.
         std::string GetPackageStagingDir() const;
         // Re-sync a hot-reloaded/started client resource to connected clients.

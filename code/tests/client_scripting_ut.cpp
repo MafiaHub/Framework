@@ -6,6 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
+#include "alloc_counter.h"
 #include "logging/logger.h"
 #include "scripting/resource/resource_manager.h"
 #include "scripting/v8_engine.h"
@@ -14,11 +15,32 @@
 #include "utils/vfs.h"
 
 #include <chrono>
+#include <cstdlib>
+#include <new>
 #include <thread>
 
 #ifdef _WIN32
 #include "modules/keybinds_ut.h"
 #endif
+
+// Feeds FrameworkTests::AllocationScope. Every other form of new and delete defaults onto these two.
+void *operator new(std::size_t size) {
+    if (FrameworkTests::g_countAllocations) {
+        ++FrameworkTests::g_allocations;
+    }
+    if (void *block = std::malloc(size == 0 ? 1 : size)) {
+        return block;
+    }
+    throw std::bad_alloc();
+}
+
+void operator delete(void *block) noexcept {
+    std::free(block);
+}
+
+void operator delete(void *block, std::size_t) noexcept {
+    std::free(block);
+}
 
 MODULE(client_scripting, {
     IT("restarts packaged client scripts and timers without restarting other resources", {
@@ -140,6 +162,93 @@ MODULE(client_scripting, {
         vfs.Unmount("timer-failure.zip");
         vfs.Unmount("promise-failure.zip");
         vfs.Unmount("healthy.zip");
+    });
+    IT("keeps a module's require valid after its resource is restarted", {
+        auto &vfs = Framework::Utils::Vfs::Get();
+        EQUALS(vfs.Init(nullptr), true);
+
+        const auto mount = [&](int version) {
+            Framework::Utils::Package::Writer writer;
+            writer.Add("package.json", "{\"name\":\"stale\",\"version\":\"1.0.0\",\"mafiahub\":{\"clientScripts\":[\"client.js\"]}}");
+            writer.Add("client.js", "globalThis.staleRequire ||= require; globalThis.staleLoads = (globalThis.staleLoads || 0) + 1; require('./helper');");
+            writer.Add("helper.js", "module.exports = " + std::to_string(version) + ";");
+            std::string blob, zip, error;
+            if (!writer.Build(nullptr, blob) || !Framework::Utils::Package::Open(blob, nullptr, zip, error)) {
+                return false;
+            }
+            vfs.Unmount("stale.zip");
+            return vfs.MountMemory(std::move(zip), "stale.zip", Framework::Utils::Vfs::ResourcePath("stale"), error);
+        };
+
+        EQUALS(mount(1), true);
+
+        Framework::Scripting::V8Engine engine;
+        engine.SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        {
+            Framework::Scripting::ResourceManagerConfig config;
+            config.resourcesPath = Framework::Utils::Vfs::kResourceMountRoot;
+            config.isClient      = true;
+            Framework::Scripting::ResourceManager manager(&engine, config);
+            EQUALS(manager.DiscoverResources(), 1u);
+            EQUALS(static_cast<bool>(manager.StartAll()), true);
+            EQUALS(engine.Execute("if (typeof staleRequire !== 'function' || staleLoads !== 1) throw Error('setup');"), true);
+
+            EQUALS(static_cast<bool>(manager.StopResource("stale")), true);
+            EQUALS(mount(2), true);
+            EQUALS(static_cast<bool>(manager.StartResource("stale")), true);
+
+            // Churn allocations so a dangling record would likely be overwritten.
+            EQUALS(engine.Execute("for (let i = 0; i < 2000; ++i) { try { require('./missing-' + i); } catch (e) {} }"), true);
+            EQUALS(engine.Execute("if (staleRequire('./helper') !== 2) throw Error('stale require did not load the current helper');"), true);
+            manager.StopAll();
+        }
+        engine.Shutdown();
+        vfs.Unmount("stale.zip");
+    });
+    IT("attributes promises to their resource without re-reading the stack", {
+        auto &vfs = Framework::Utils::Vfs::Get();
+        EQUALS(vfs.Init(nullptr), true);
+        {
+            Framework::Utils::Package::Writer writer;
+            writer.Add("package.json", "{\"name\":\"spinner\",\"version\":\"1.0.0\",\"mafiahub\":{\"clientScripts\":[\"client.js\"]}}");
+            writer.Add("client.js", "globalThis.spin = async (n) => { for (let i = 0; i < n; ++i) { await null; } return n; }; globalThis.spun = 0;");
+            std::string blob, zip, error;
+            EQUALS(writer.Build(nullptr, blob), true);
+            EQUALS(Framework::Utils::Package::Open(blob, nullptr, zip, error), true);
+            EQUALS(vfs.MountMemory(std::move(zip), "spinner.zip", Framework::Utils::Vfs::ResourcePath("spinner"), error), true);
+        }
+
+        Framework::Scripting::V8Engine engine;
+        engine.SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        {
+            Framework::Scripting::ResourceManagerConfig config;
+            config.resourcesPath = Framework::Utils::Vfs::kResourceMountRoot;
+            config.isClient      = true;
+            Framework::Scripting::ResourceManager manager(&engine, config);
+            EQUALS(manager.DiscoverResources(), 1u);
+            EQUALS(static_cast<bool>(manager.StartAll()), true);
+
+            // Warm up: first use of a script fills whatever is cached.
+            EQUALS(engine.Execute("spin(10).then(n => { spun += n; });", "/resources/spinner/client.js"), true);
+            engine.Tick();
+
+            uint64_t allocations = 0;
+            {
+                FrameworkTests::AllocationScope scope;
+                EQUALS(engine.Execute("spin(1000).then(n => { spun += n; });", "/resources/spinner/client.js"), true);
+                engine.Tick();
+                allocations = scope.Count();
+            }
+            EQUALS(engine.Execute("if (spun !== 1010) throw Error('promises did not settle: ' + spun);"), true);
+            // Measured about 22000 before the script-owner cache and about 4000 after: the bound sits between
+            // the two, so a return to resolving the script path for every promise fails it.
+            EQUALS(allocations < 8000, true);
+            manager.StopAll();
+        }
+        engine.Shutdown();
+        vfs.Unmount("spinner.zip");
     });
 
 });

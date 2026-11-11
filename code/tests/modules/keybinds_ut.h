@@ -131,4 +131,62 @@ MODULE(keybinds, {
         engine.Shutdown();
         vfs.Unmount("keys.zip");
     });
+
+    IT("unbinds only the calling resource's handlers", {
+        using namespace KeybindTests;
+        auto &vfs = Framework::Utils::Vfs::Get();
+        EQUALS(vfs.Init(nullptr), true);
+        const auto mount = [&](const std::string &name) {
+            Framework::Utils::Package::Writer writer;
+            writer.Add("package.json", "{\"name\":\"" + name + "\",\"version\":\"1.0.0\",\"mafiahub\":{\"clientScripts\":[\"client.js\"]}}");
+            writer.Add("client.js", "0;");
+            std::string blob, zip, error;
+            if (!writer.Build(nullptr, blob) || !Framework::Utils::Package::Open(blob, nullptr, zip, error)) {
+                return false;
+            }
+            return vfs.MountMemory(std::move(zip), name + ".zip", Framework::Utils::Vfs::ResourcePath(name), error);
+        };
+        EQUALS(mount("alpha"), true);
+        EQUALS(mount("bravo"), true);
+
+        FocusedInput input;
+        Framework::CoreModules::SetInput(&input);
+        Keybinds::SetActiveCallback(nullptr);
+        Framework::Scripting::V8Engine engine;
+        engine.SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        {
+            Framework::Scripting::ResourceManagerConfig config;
+            config.resourcesPath = Framework::Utils::Vfs::kResourceMountRoot;
+            config.isClient      = true;
+            Framework::Scripting::ResourceManager manager(&engine, config);
+            {
+                Framework::Scripting::EngineScope scope(&engine);
+                const auto context = scope.Context();
+                Keybinds::Register(scope.Isolate(), context, context->Global(), &manager);
+            }
+            EQUALS(manager.DiscoverResources(), 2u);
+            EQUALS(static_cast<bool>(manager.StartAll()), true);
+
+            // The script filename is what the caller resolves to, so each call below is made "by" that resource.
+            EQUALS(engine.Execute("globalThis.log = []; Key.bind('wheelup', () => log.push('a'));", "/resources/alpha/client.js"), true);
+            EQUALS(engine.Execute("Key.bind('wheelup', () => log.push('b'));", "/resources/bravo/client.js"), true);
+            EQUALS(engine.Execute("globalThis.first = Key.unbind('wheelup');", "/resources/bravo/client.js"), true);
+            EQUALS(engine.Execute("globalThis.second = Key.unbind('wheelup');", "/resources/bravo/client.js"), true);
+            EQUALS(engine.Execute("if (first !== true || second !== false) throw Error('unbind returned ' + first + ',' + second);"), true);
+
+            Turn(input, {1});
+            Keybinds::Update();
+            EQUALS(engine.Execute("if (log.join() !== 'a') throw Error('ran ' + log.join());"), true);
+
+            EQUALS(engine.Execute("Key.unbind('wheelup');", "/resources/alpha/client.js"), true);
+            Keybinds::Shutdown();
+            manager.StopAll();
+        }
+        Keybinds::SetActiveCallback(nullptr);
+        Framework::CoreModules::SetInput(nullptr);
+        engine.Shutdown();
+        vfs.Unmount("alpha.zip");
+        vfs.Unmount("bravo.zip");
+    });
 });

@@ -6,6 +6,7 @@ name: Release
 # Versions are set by hand: raise VERSION in a commit (see .github/CONTRIBUTING.md for which part to
 # raise), then push the matching tag, e.g. `git tag v41.0.0 && git push origin v41.0.0`. A tag with a
 # suffix (v41.0.0-rc.1) is released as a prerelease.
+# The tagged commit's tests (build-test.yml) must pass before the release is created.
 
 on:
   push:
@@ -16,7 +17,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    uses: ./.github/workflows/build-test.yml
+    with:
+      ref: ${{ github.ref_name }}
+    secrets: inherit
+
   release:
+    needs: test
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ github.ref_name }}

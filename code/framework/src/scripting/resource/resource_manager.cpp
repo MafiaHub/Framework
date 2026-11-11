@@ -199,6 +199,7 @@ namespace Framework::Scripting {
 
     void ResourceManager::SetConfig(const ResourceManagerConfig &config) {
         _config = config;
+        _scriptOwners.clear();
     }
 
     size_t ResourceManager::DiscoverResources() {
@@ -271,6 +272,7 @@ namespace Framework::Scripting {
             }
 
             _resources[name] = std::move(resource);
+            _scriptOwners.clear();
         }
 
         // Discovery keeps the graph current: mounted-package discovery and the client's hot-reload
@@ -472,6 +474,7 @@ namespace Framework::Scripting {
             _dependencies.clear();
             _dependents.clear();
             _resources.clear();
+            _scriptOwners.clear();
         }
         {
             std::scoped_lock lock(_contextMutex);
@@ -494,6 +497,22 @@ namespace Framework::Scripting {
         if (resource->IsRunning()) {
             return ResourceOperationResult::Ok({std::string(name)});
         }
+
+        if (std::find(_startChain.begin(), _startChain.end(), name) != _startChain.end()) {
+            std::string chain;
+            for (const auto &link : _startChain) {
+                chain += link + " -> ";
+            }
+            return ResourceOperationResult("Dependency cycle: " + chain + std::string(name));
+        }
+        _startChain.emplace_back(name);
+        // Unwinds on every return below, and there are many.
+        struct ChainGuard {
+            std::vector<std::string> &chain;
+            ~ChainGuard() {
+                chain.pop_back();
+            }
+        } chainGuard {_startChain};
 
         // Start dependencies first
         auto deps = GetDependencies(name);
@@ -551,6 +570,7 @@ namespace Framework::Scripting {
             CleanupResourceRuntime(*resource, name);
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
+            NotifyStoppedIfStillFailed(resource, std::string(name));
             return ResourceOperationResult(error);
         }
 
@@ -578,6 +598,7 @@ namespace Framework::Scripting {
             CleanupResourceRuntime(*resource, name);
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
+            NotifyStoppedIfStillFailed(resource, std::string(name));
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start JS resource '{}': {}", name, error);
             return ResourceOperationResult(error);
         }
@@ -757,6 +778,7 @@ namespace Framework::Scripting {
                 _resources.erase(oldName);
             }
             _resources[newName] = std::move(reparsed);
+            _scriptOwners.clear();
         }
         BuildDependencyGraph();
 
@@ -823,6 +845,7 @@ namespace Framework::Scripting {
                 renamed[name] = newName;
             }
             _resources[newName] = std::move(reparsed);
+            _scriptOwners.clear();
         }
 
         // Pick up brand-new resource directories, then rebuild the graph once.
@@ -1014,6 +1037,18 @@ namespace Framework::Scripting {
         // Last: the handles dropped above belong to the runtime, which takes whatever the resource left running.
         if (_jsEngine) {
             _jsEngine->DestroyResourceRuntime(std::string(resourceName));
+        }
+    }
+
+    void ResourceManager::RetireFailedResource(Resource &resource, const std::string &resourceName) {
+        CleanupResourceRuntime(resource, resourceName);
+        FireOnResourceStopped(resourceName);
+    }
+
+    void ResourceManager::NotifyStoppedIfStillFailed(const Resource *failed, const std::string &resourceName) {
+        const Resource *current = GetResourceMutable(resourceName);
+        if (current == failed && current->GetState() == ResourceState::Error) {
+            FireOnResourceStopped(resourceName);
         }
     }
 
@@ -1246,31 +1281,40 @@ namespace Framework::Scripting {
             return owner;
         }
 
-        // Get stack trace with up to 20 frames
-        v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(isolate, 20);
-        if (stackTrace.IsEmpty()) {
-            return "";
+        // The creating frame is nearly always the top one, so ask for that alone before paying for
+        // a deep trace.
+        for (const int depth : {1, 20}) {
+            v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(isolate, depth);
+            if (stackTrace.IsEmpty()) {
+                return "";
+            }
+            for (int i = 0; i < stackTrace->GetFrameCount(); ++i) {
+                v8::Local<v8::StackFrame> frame = stackTrace->GetFrame(isolate, i);
+                const int scriptId              = frame->GetScriptId();
+                if (const auto known = _scriptOwners.find(scriptId); known != _scriptOwners.end()) {
+                    if (!known->second.empty()) {
+                        return known->second;
+                    }
+                    continue;
+                }
+
+                std::string owner;
+                v8::Local<v8::String> scriptName = frame->GetScriptName();
+                if (!scriptName.IsEmpty()) {
+                    v8::String::Utf8Value scriptPath(isolate, scriptName);
+                    if (*scriptPath) {
+                        owner = GetResourceNameFromScriptPath(*scriptPath);
+                    }
+                }
+                _scriptOwners.emplace(scriptId, owner);
+                if (!owner.empty()) {
+                    return owner;
+                }
+            }
+            if (stackTrace->GetFrameCount() < depth) {
+                break; // The whole stack was shorter than what was asked for: nothing deeper to see.
+            }
         }
-
-        // Look for the first frame with a file path in the resources directory
-        for (int i = 0; i < stackTrace->GetFrameCount(); ++i) {
-            v8::Local<v8::StackFrame> frame  = stackTrace->GetFrame(isolate, i);
-            v8::Local<v8::String> scriptName = frame->GetScriptName();
-            if (scriptName.IsEmpty()) {
-                continue;
-            }
-
-            v8::String::Utf8Value scriptPath(isolate, scriptName);
-            if (!*scriptPath) {
-                continue;
-            }
-
-            std::string result = GetResourceNameFromScriptPath(*scriptPath);
-            if (!result.empty()) {
-                return result;
-            }
-        }
-
         return "";
     }
 
@@ -1341,6 +1385,8 @@ namespace Framework::Scripting {
 
         const std::string errorBehavior = resource->GetManifest().GetMafiaHubConfig().errorBehavior;
         v8::Isolate *failedIsolate      = resource->GetIsolate();
+        // Several errors can be queued for one resource; the first one already retired it.
+        const bool alreadyFailed = resource->GetState() == ResourceState::Error;
         resource->SetError(error);
         FireOnResourceError(resourceName, error);
 
@@ -1351,11 +1397,14 @@ namespace Framework::Scripting {
         if (current != resource || current->GetState() != ResourceState::Error || current->GetIsolate() != failedIsolate) {
             return;
         }
+        if (alreadyFailed) {
+            return;
+        }
         if (errorBehavior == "restart" || errorBehavior == "stop") {
             // Error is already non-running, so StopResource would skip this.
             // Drop exports, handlers and runtime-owned work after error owners
             // have been notified. Node defers disposal while callbacks unwind.
-            CleanupResourceRuntime(*current, resourceName);
+            RetireFailedResource(*current, resourceName);
         }
         if (errorBehavior == "restart") {
             ScheduleAutoRestart(resourceName);

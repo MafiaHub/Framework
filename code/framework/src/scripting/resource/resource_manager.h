@@ -23,6 +23,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 // Forward declaration for V8
@@ -386,6 +387,16 @@ namespace Framework::Scripting {
         // settle (or time out) before this is called.
         void CleanupResourceRuntime(Resource &resource, std::string_view resourceName);
 
+        // Tears down a resource that failed while running and tells its owners the way a clean
+        // stop does. Native state created on a resource's behalf (web views, key binds, the client
+        // half of the resource) is released from those callbacks, so a teardown that skipped them
+        // would leave it behind.
+        void RetireFailedResource(Resource &resource, const std::string &resourceName);
+        // The same notification for a start that failed after its runtime was already torn down.
+        // An error callback may have recovered or replaced the resource in between; then there is
+        // nothing stopped to announce.
+        void NotifyStoppedIfStillFailed(const Resource *failed, const std::string &resourceName);
+
         // Build dependency graph from discovered resources
         void BuildDependencyGraph();
 
@@ -415,6 +426,11 @@ namespace Framework::Scripting {
         // True if the dependency graph has a cycle (can't fully topo-sort).
         bool HasDependencyCycle() const;
 
+        // Names on the current StartResource call chain. A dependency that leads back to one of
+        // them is a cycle: a resource only becomes Loading after its dependencies have started, so
+        // its state cannot stop the recursion.
+        std::vector<std::string> _startChain;
+
         // Configuration
         ResourceManagerConfig _config;
 
@@ -424,6 +440,12 @@ namespace Framework::Scripting {
         // Resource registry
         std::map<std::string, std::unique_ptr<Resource>, std::less<>> _resources;
         mutable std::mutex _resourcesMutex;
+
+        // Which resource a script belongs to, by V8 script id, including "none" (empty). A script's
+        // id never changes or gets reused within an isolate, and resolving a path costs string and
+        // path work that a promise hook would otherwise repeat for every promise. Only consulted
+        // for a runtime every resource shares; cleared whenever the set of resources changes.
+        mutable std::unordered_map<int, std::string> _scriptOwners;
 
         // Dependency graph: resource -> set of dependencies
         std::map<std::string, std::set<std::string, std::less<>>, std::less<>> _dependencies;

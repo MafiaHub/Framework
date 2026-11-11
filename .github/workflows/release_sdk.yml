@@ -22,7 +22,8 @@ on:
         required: true
 
 env:
-  VCPKG_BINARY_SOURCES: ${{ vars.VCPKG_BINARY_SOURCES || 'clear;x-gha,readwrite' }}
+  # vcpkg binary cache: see build-test.yml. The cache steps below set VCPKG_BINARY_SOURCES.
+  VCPKG_BINARY_SOURCES_OVERRIDE: ${{ vars.VCPKG_BINARY_SOURCES }}
 
 jobs:
   plan:
@@ -85,12 +86,30 @@ jobs:
         with:
           arch: ${{ matrix.arch }}
 
-      - name: Export the Actions cache tokens for vcpkg
-        uses: actions/github-script@v7
+      - name: Restore the vcpkg binary cache
+        if: env.VCPKG_BINARY_SOURCES_OVERRIDE == ''
+        uses: actions/cache@v4
         with:
-          script: |
-            core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          path: .vcpkg-cache
+          # One entry per run so new packages are saved; restore-keys picks the newest
+          # entry for this OS and manifest, then any for this OS.
+          key: vcpkg-${{ runner.os }}-${{ matrix.arch || 'default' }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-triplets/**') }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ matrix.arch || 'default' }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-triplets/**') }}-
+            vcpkg-${{ runner.os }}-${{ matrix.arch || 'default' }}-
+
+      - name: Point vcpkg at the binary cache
+        shell: bash
+        run: |
+          if [ -n "${VCPKG_BINARY_SOURCES_OVERRIDE}" ]; then
+            echo "VCPKG_BINARY_SOURCES=${VCPKG_BINARY_SOURCES_OVERRIDE}" >> "$GITHUB_ENV"
+          else
+            mkdir -p "${GITHUB_WORKSPACE}/.vcpkg-cache"
+            # cygpath: vcpkg on Windows needs a native path, not /d/a/...
+            dir="${GITHUB_WORKSPACE}/.vcpkg-cache"
+            if command -v cygpath >/dev/null 2>&1; then dir="$(cygpath -m "$dir")"; fi
+            echo "VCPKG_BINARY_SOURCES=clear;files,${dir},readwrite" >> "$GITHUB_ENV"
+          fi
 
       # /Z7 keeps the debug information inside the archives, so a project's final link still writes a
       # full PDB with no separate symbol files to carry. No /GL: whole-program objects bind to the exact

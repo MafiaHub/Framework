@@ -117,6 +117,16 @@ namespace Framework::Networking {
             }
             _packetDataOffset = offset;
             uint8_t packetID  = _packet->data[_packetDataOffset];
+            if (_packetDataOffset != 0 && !IsAllowedBehindTimestamp(packetID)) {
+                ++_droppedBehindTimestamp;
+                const auto now = std::chrono::steady_clock::now();
+                if (now >= _nextTimestampDropWarning) {
+                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Dropped {} control packet(s) sent behind a timestamp, last one {} from {}", _droppedBehindTimestamp, packetID, _packet->guid.g);
+                    _droppedBehindTimestamp   = 0;
+                    _nextTimestampDropWarning = now + std::chrono::seconds(1);
+                }
+                continue;
+            }
 
             if (!HandlePacket(packetID, _packet)) {
                 if (IsReplicationPacket(packetID)) {
@@ -156,6 +166,10 @@ namespace Framework::Networking {
         case ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE: return true;
         default: return false;
         }
+    }
+
+    bool NetworkPeer::IsAllowedBehindTimestamp(uint8_t packetID) {
+        return packetID >= ID_USER_PACKET_ENUM || IsReplicationPacket(packetID);
     }
 
     const char *NetworkPeer::GetStartupResultString(uint8_t id) {

@@ -61,9 +61,7 @@ namespace Framework::Scripting {
 
     void V8Engine::ClearModuleCache() {
         // Must only be called after stopping resources.
-        // RequireData stores backing pointers for module-scoped require().
         _moduleCache.clear();
-        _requireDataStore.clear();
     }
 
     bool V8Engine::ResetContext() {
@@ -162,12 +160,6 @@ namespace Framework::Scripting {
                 ++it;
             }
         }
-
-        _requireDataStore.erase(std::remove_if(_requireDataStore.begin(), _requireDataStore.end(),
-                                    [&](const std::unique_ptr<RequireData> &d) {
-                                        return d && insideRoot(d->currentDir);
-                                    }),
-            _requireDataStore.end());
     }
 
     void V8Engine::ClearResourceTimers(const std::string &resourceName) {
@@ -216,6 +208,8 @@ namespace Framework::Scripting {
         // Dispose the isolate
         _isolate->Dispose();
         _isolate = nullptr;
+        _promiseOwnerKey      = {};
+        _promiseGenerationKey = {};
 
         // Free the array buffer allocator (V8 docs: caller is responsible)
         delete _createParams.array_buffer_allocator;
@@ -252,11 +246,15 @@ namespace Framework::Scripting {
 
         // Install promise rejection callback
         _isolate->SetPromiseRejectCallback(PromiseRejectCallback);
-        _isolate->SetPromiseHook(PromiseHook);
 
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolateScope(_isolate);
         v8::HandleScope handleScope(_isolate);
+
+        // Before the hook, which reads them for every promise.
+        _promiseOwnerKey.Set(_isolate, v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseOwner")));
+        _promiseGenerationKey.Set(_isolate, v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseGeneration")));
+        _isolate->SetPromiseHook(PromiseHook);
 
         // Create context
         v8::Local<v8::Context> context = v8::Context::New(_isolate);
@@ -264,6 +262,8 @@ namespace Framework::Scripting {
             _lastError = "Failed to create V8 context";
             _isolate->Dispose();
             _isolate = nullptr;
+            _promiseOwnerKey      = {};
+            _promiseGenerationKey = {};
             delete _createParams.array_buffer_allocator;
             _createParams.array_buffer_allocator = nullptr;
             return false;
@@ -331,13 +331,9 @@ namespace Framework::Scripting {
         v8::Local<v8::Object> global   = context->Global();
 
         // Default require uses cwd as the reference directory
-        std::string cwd = std::filesystem::current_path().string();
-        auto data       = std::make_unique<RequireData>(RequireData {this, cwd});
-        auto *dataPtr   = data.get();
-        _requireDataStore.push_back(std::move(data));
-        v8::Local<v8::External> external = v8::External::New(_isolate, dataPtr);
-
-        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, external);
+        const std::string cwd                       = std::filesystem::current_path().string();
+        v8::Local<v8::String> requireDir            = v8::String::NewFromUtf8(_isolate, cwd.c_str(), v8::NewStringType::kNormal, static_cast<int>(cwd.size())).ToLocalChecked();
+        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, requireDir);
         global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "require"), requireTmpl->GetFunction(context).ToLocalChecked()).Check();
     }
 
@@ -600,12 +596,10 @@ namespace Framework::Scripting {
         provisionalExports.Reset(_isolate, exportsObj);
         _moduleCache[resolvedPath] = std::move(provisionalExports);
 
-        // Create a require function bound to this module's directory (owned by engine)
-        auto requireData     = std::make_unique<RequireData>(RequireData {this, moduleDir});
-        auto *requireDataPtr = requireData.get();
-        _requireDataStore.push_back(std::move(requireData));
-        v8::Local<v8::External> requireExternal     = v8::External::New(_isolate, requireDataPtr);
-        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, requireExternal);
+        // A require function bound to this module's directory. The directory is the function's
+        // own data, so the function stays valid however long script keeps it.
+        v8::Local<v8::String> requireDir            = v8::String::NewFromUtf8(_isolate, moduleDir.c_str(), v8::NewStringType::kNormal, static_cast<int>(moduleDir.size())).ToLocalChecked();
+        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, requireDir);
         v8::Local<v8::Function> requireFn           = requireTmpl->GetFunction(context).ToLocalChecked();
 
         // Wrap source in CommonJS function
@@ -693,7 +687,7 @@ namespace Framework::Scripting {
         if (message.GetEvent() != v8::kPromiseRejectWithNoHandler)
             return;
         auto context = GetContext();
-        auto key     = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseOwner"));
+        auto key     = PromiseOwnerKey();
         v8::Local<v8::Value> value;
         std::string owner;
         if (promise->GetPrivate(context, key).ToLocal(&value) && value->IsString()) {
@@ -706,7 +700,7 @@ namespace Framework::Scripting {
         if (owner.empty() && _resourceManager)
             owner = _resourceManager->GetCurrentResourceContext();
         auto generation    = GetResourceGeneration(owner);
-        auto generationKey = v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseGeneration"));
+        auto generationKey = PromiseGenerationKey();
         if (promise->GetPrivate(context, generationKey).ToLocal(&value) && value->IsUint32()) {
             generation = value.As<v8::Uint32>()->Value();
         }

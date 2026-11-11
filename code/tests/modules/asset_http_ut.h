@@ -1464,6 +1464,27 @@ MODULE(asset_http, {
         EQUALS(Framework::Utils::StreamedAssets::SplitUrlList("").empty(), true);
     });
 
+    IT("accepts a download mirror only on a public host or the server's own", {
+        using Framework::Utils::StreamedAssets::IsAllowedMirrorUrl;
+        const std::string server = "203.0.113.7";
+        for (const char *url : {"https://cdn.example/files", "http://cdn.example:8080/files/", "https://CDN.Example/files", "http://203.0.113.7:9000/files", "http://[2001:db8::1]/files", "http://[2001:db8::1]:8080/files", "https://cdn.example:443/files", "http://172.15.0.1/x", "http://172.32.0.1/x", "http://11.0.0.1/x", "http://100.128.0.1/x"}) {
+            EQUALS(IsAllowedMirrorUrl(url, server), true);
+        }
+        EQUALS(IsAllowedMirrorUrl("http://192.168.1.20/files", "192.168.1.20"), true);
+        for (const char *url : {"ftp://cdn.example/files", "cdn.example/files", "http://", "https:///files", "http://user:pw@cdn.example/files", "https://cdn.example/files?x=1", "https://cdn.example/files#frag", "http://localhost/x", "http://LOCALHOST:8080/x", "http://a.localhost/x", "http://127.0.0.1/x", "http://127.1/x", "http://2130706433/x", "http://10.1.2.3/x",
+                                "http://172.16.0.1/x", "http://172.31.255.255/x", "http://192.168.0.1/x", "http://169.254.169.254/x", "http://100.64.0.1/x", "http://0.0.0.0/x", "http://192.168.1.20/files", "http://[::1]/x", "http://[fd00::1]/x", "http://[fe80::1]/x", "http://[::ffff:127.0.0.1]/x", "http://127.0.0.1:abc/x", "http://127.0.0.1:/x", "http://cdn.example:/x", "http://cdn.example:80a/x", "http://fe80::1/x", "http://[::1]x/y", "http://[2001:db8::1]:abc/y"}) {
+            EQUALS(IsAllowedMirrorUrl(url, server), false);
+        }
+        // Other spellings of the same private hosts, and hosts a URL parser may read differently.
+        for (const char *url : {"http://[0:0:0:0:0:0:0:1]/x", "http://[0000::1]/x", "http://[0:0:0:0:0:ffff:7f00:1]/x", "http://[::7f00:1]/x", "http://[::127.0.0.1]/x", "http://[FD00::1]/x", "http://[fe80::1%25eth0]/x", "http://[cdn.example]/x", "http://[1::2::3]/x", "http://[12345::1]/x", "http://[1:2:3:4:5:6:7:8:9]/x", "http://[]/x",
+                                "http://localhost./x", "http://a.localhost./x", "http://127.0.0.1./x", "http://./x", "http://0x7f.0.0.1/x", "http://0x7f000001/x", "http://012.0.0.1/x", "http://8.8.8.08/x", "http://cdn.example.0x10/x", "http://cdn.example.7/x", "http://127.0.0.1\\x", "http://cdn_a.example/x", "http://cdn.example%2f/x", "http://cdn example/x"}) {
+            EQUALS(IsAllowedMirrorUrl(url, server), false);
+        }
+        for (const char *url : {"https://cdn.example./files", "http://[2001:DB8:0:0:0:0:0:1]/files", "http://[2001:db8::192.0.2.1]/files", "http://8.8.8.8/x", "https://cdn-7.example/x", "https://7cdn.example/x"}) {
+            EQUALS(IsAllowedMirrorUrl(url, server), true);
+        }
+    });
+
     IT("trusts a verified file by its note until it is touched", {
         AssetHttpTest::Fixture fixture;
         std::unordered_map<std::string, std::filesystem::path> published;

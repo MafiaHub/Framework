@@ -42,6 +42,19 @@ namespace Framework::Networking::RPC {
 
         std::vector<Change> changes;
 
+        // Writes `count` changes picked out of `pool` by index: the form the flush uses, where one
+        // change is shared by every connection it goes to. Byte-identical to Serialize(bs, true).
+        static void WriteChanges(MafiaNet::BitStream *bs, const std::vector<Change> &pool, const uint32_t *indices, uint16_t count) {
+            bs->Write(count);
+            for (uint16_t i = 0; i < count; ++i) {
+                const Change &change = pool[indices[i]];
+                bs->WriteCompressed(change.networkId);
+                bs->Write(change.key);
+                bs->Write(change.removed);
+                change.value.Write(bs);
+            }
+        }
+
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             auto count = static_cast<uint16_t>(std::min<size_t>(changes.size(), kMaxChanges));
             bs->Serialize(write, count);

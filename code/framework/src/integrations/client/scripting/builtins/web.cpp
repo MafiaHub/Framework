@@ -393,6 +393,22 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         return gui->GetView(viewId);
     }
 
+    Framework::GUI::View *Web::GetCallerView(v8::Isolate *isolate, int viewId) {
+        if (!_resourceManager) {
+            return nullptr;
+        }
+        const std::string caller = ResolveResourceName(isolate, _resourceManager);
+        {
+            std::scoped_lock lock(_mutex);
+            const auto it = _viewOwners.find(viewId);
+            if (it == _viewOwners.end() || it->second != caller) {
+                return nullptr;
+            }
+        }
+        auto *gui = CoreModules::GetWebManager();
+        return gui ? gui->GetView(viewId) : nullptr;
+    }
+
     void Web::CreateViewCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
@@ -471,7 +487,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        args.GetReturnValue().Set(DestroyViewInternal(id));
+        args.GetReturnValue().Set(GetCallerView(isolate, id) != nullptr && DestroyViewInternal(id));
     }
 
     void Web::ShowViewCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -483,7 +499,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        auto *view = GetOwnedView(id);
+        auto *view = GetCallerView(isolate, id);
         if (!view) {
             args.GetReturnValue().Set(false);
             return;
@@ -501,7 +517,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        auto *view = GetOwnedView(id);
+        auto *view = GetCallerView(isolate, id);
         if (!view) {
             args.GetReturnValue().Set(false);
             return;
@@ -526,7 +542,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             focused = args[1]->BooleanValue(isolate);
         }
 
-        auto *view = GetOwnedView(id);
+        auto *view = GetCallerView(isolate, id);
         if (!view) {
             args.GetReturnValue().Set(false);
             return;
@@ -544,7 +560,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        auto *view = GetOwnedView(id);
+        auto *view = GetCallerView(isolate, id);
         args.GetReturnValue().Set(view != nullptr && view->ShouldDisplay());
     }
 
@@ -562,7 +578,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             offscreen = args[1]->BooleanValue(isolate);
         }
 
-        auto *view = GetOwnedView(id);
+        auto *view = GetCallerView(isolate, id);
         if (!view) {
             args.GetReturnValue().Set(false);
             return;
@@ -580,7 +596,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        auto *view = GetOwnedView(id);
+        auto *view = GetCallerView(isolate, id);
         args.GetReturnValue().Set(view != nullptr && view->IsOffscreen());
     }
 
@@ -596,7 +612,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         const int id          = args[0]->Int32Value(isolate->GetCurrentContext()).FromMaybe(-1);
         const std::string url = v8pp::from_v8<std::string>(isolate, args[1]);
 
-        auto *view = GetOwnedView(id);
+        auto *view = GetCallerView(isolate, id);
         if (!view) {
             args.GetReturnValue().Set(false);
             return;
@@ -619,7 +635,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         const int width  = args[1]->Int32Value(context).FromMaybe(0);
         const int height = args[2]->Int32Value(context).FromMaybe(0);
 
-        auto *view = GetOwnedView(id);
+        auto *view = GetCallerView(isolate, id);
         if (!view || width <= 0 || height <= 0) {
             args.GetReturnValue().Set(false);
             return;
@@ -644,7 +660,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         const int x  = args[1]->Int32Value(context).FromMaybe(0);
         const int y  = args[2]->Int32Value(context).FromMaybe(0);
 
-        auto *view = GetOwnedView(id);
+        auto *view = GetCallerView(isolate, id);
         if (!view) {
             args.GetReturnValue().Set(false);
             return;
@@ -682,7 +698,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        auto *view = GetOwnedView(id);
+        auto *view = GetCallerView(isolate, id);
         if (!view) {
             ThrowError(isolate, "Web.on: unknown web view " + std::to_string(id));
             return;
@@ -722,6 +738,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         v8::Local<v8::Function> handler;
         if (args.Length() >= 3 && args[2]->IsFunction()) {
             handler = args[2].As<v8::Function>();
+        }
+
+        if (!GetCallerView(isolate, id)) {
+            args.GetReturnValue().Set(false);
+            return;
         }
 
         bool removed        = false;
@@ -776,7 +797,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         const int id                = args[0]->Int32Value(context).FromMaybe(-1);
         const std::string eventName = v8pp::from_v8<std::string>(isolate, args[1]);
 
-        auto *view = GetOwnedView(id);
+        auto *view = GetCallerView(isolate, id);
         if (!view) {
             args.GetReturnValue().Set(false);
             return;
@@ -894,7 +915,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         (void)events.EmitReservedTo(isolate, context, eventName, args, owner);
     }
 
-    void Web::DispatchPageEvent(int viewId, const std::string &eventName, const std::string &payload) {
+    void Web::DispatchPageEvent(int viewId, std::string eventName, std::string payload) {
         auto *manager = _resourceManager;
         if (!manager) {
             return;
