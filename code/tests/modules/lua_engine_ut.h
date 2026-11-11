@@ -22,6 +22,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -189,7 +190,15 @@ namespace LuaEngineTest {
 
         // When the engine says it next has something to run, in milliseconds after the start. -1 when it has nothing.
         int DueMs() const {
-            const auto due = engine.NextDue();
+            return DueMs(engine.NextDue(std::chrono::steady_clock::time_point::min()));
+        }
+
+        // The same, for what is due later than `ms` after the start.
+        int DueMsAfter(int ms) const {
+            return DueMs(engine.NextDue(start + std::chrono::milliseconds(ms)));
+        }
+
+        int DueMs(std::optional<std::chrono::steady_clock::time_point> due) const {
             return due ? static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(*due - start).count()) : -1;
         }
 
@@ -695,6 +704,50 @@ MODULE(lua_engine, {
         EQUALS(scripted.DueMs(), 50);
         scripted.At(50);
         EQUALS(scripted.DueMs(), -1);
+    });
+
+    IT("tells what is due after a given time, past what is due by then", {
+        Scripted scripted;
+        EQUALS(scripted.Create("a"), true);
+        EQUALS(scripted.Create("b"), true);
+        scripted.At(0);
+        EQUALS(scripted.Run("a", "main.lua", "setTimeout(function() end, 10)\nsetTimeout(function() end, 30)"), "");
+        EQUALS(scripted.Run("b", "main.lua", "setTimeout(function() end, 20)"), "");
+        EQUALS(scripted.DueMsAfter(0), 10);
+        EQUALS(scripted.DueMsAfter(9), 10);
+        // Strictly after.
+        EQUALS(scripted.DueMsAfter(10), 20);
+        EQUALS(scripted.DueMsAfter(20), 30);
+        EQUALS(scripted.DueMsAfter(30), -1);
+
+        // What a tick left due at its own time, as a wait for no time is, does not hide a later timer.
+        scripted.At(15);
+        EQUALS(scripted.Run("b", "next.lua", "setTimeout(function() end, 0)\nspawn(function() sleep(0) end)"), "");
+        EQUALS(scripted.DueMs(), 15);
+        EQUALS(scripted.DueMsAfter(15), 20);
+    });
+
+    IT("fires only what came due after a given time in a tick between two ticks", {
+        Scripted scripted;
+        EQUALS(scripted.Create("a"), true);
+        EQUALS(scripted.Create("b"), true);
+        scripted.At(0);
+        EQUALS(scripted.Run("a", "main.lua", "spawn(function() while true do record('a turn') sleep(0) end end)"), "");
+        EQUALS(scripted.Run("b", "main.lua", "setTimeout(function() record('b timer') end, 10)"), "");
+        EQUALS(RecordedText(), "a turn");
+
+        scripted.engine.Tick(scripted.start + std::chrono::milliseconds(5), scripted.start);
+        EQUALS(RecordedText(), "a turn");
+        scripted.engine.Tick(scripted.start + std::chrono::milliseconds(10), scripted.start + std::chrono::milliseconds(5));
+        EQUALS(RecordedText(), "a turn,b timer");
+        EQUALS(scripted.DueMsAfter(10), -1);
+
+        // The loop goes round once for each tick that is not between two.
+        scripted.At(16);
+        EQUALS(RecordedText(), "a turn,b timer,a turn");
+        scripted.engine.Tick(scripted.start + std::chrono::milliseconds(20), scripted.start + std::chrono::milliseconds(16));
+        scripted.At(32);
+        EQUALS(RecordedText(), "a turn,b timer,a turn,a turn");
     });
 
     IT("leaves the timers of a runtime that is executing or going out of what is due next", {

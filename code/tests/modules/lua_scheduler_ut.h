@@ -297,6 +297,55 @@ MODULE(lua_scheduler, {
         EQUALS(Eval(scripted.runtime, "count"), "4");
     });
 
+    IT("tells when the first timer or sleep after a given time is due", {
+        Scripted scripted;
+        const auto at = [&scripted](int ms) {
+            return scripted.start + std::chrono::milliseconds(ms);
+        };
+        EQUALS(scripted.Scheduler().NextDue(at(0)).has_value(), false);
+        EQUALS(scripted.Run("first = setTimeout(function() end, 10)\nsetInterval(function() end, 25)\nsleep(40)"), "");
+        EQUALS(scripted.Scheduler().NextDue(at(0)) == at(10), true);
+        EQUALS(scripted.Scheduler().NextDue(at(9)) == at(10), true);
+        // Strictly after.
+        EQUALS(scripted.Scheduler().NextDue(at(10)) == at(25), true);
+        EQUALS(scripted.Scheduler().NextDue(at(25)) == at(40), true);
+        EQUALS(scripted.Scheduler().NextDue(at(40)).has_value(), false);
+        EQUALS(scripted.Run("clearTimeout(first)"), "");
+        EQUALS(scripted.Scheduler().NextDue(at(0)) == at(25), true);
+
+        // What is armed for no delay is due at the time of the last tick, not after it.
+        scripted.At(30);
+        EQUALS(scripted.Run("setTimeout(function() end, 0)"), "");
+        EQUALS(scripted.Scheduler().NextDue(at(29)) == at(30), true);
+        EQUALS(scripted.Scheduler().NextDue(at(30)) == at(40), true);
+
+        // A scheduler that was stopped fires nothing any more.
+        scripted.Scheduler().Stop();
+        EQUALS(scripted.Scheduler().NextDue(at(0)).has_value(), false);
+    });
+
+    IT("fires only what came due after a given time when a tick is told to", {
+        Scripted scripted;
+        const auto at = [&scripted](int ms) {
+            return scripted.start + std::chrono::milliseconds(ms);
+        };
+        EQUALS(scripted.Run("spawn(function() sleep(0) note('slept') end)\nsetTimeout(function() note('zero') end, 0)\n"
+                            "setTimeout(function() note('ten') setTimeout(function() note('again') end, 0) end, 10)\nsetTimeout(function() note('twenty') end, 20)"),
+            "");
+
+        // What was due at the start stays, and so does what a callback arms for no delay: it is due at this tick.
+        scripted.runtime.Tick(at(15), at(0));
+        EQUALS(scripted.Log(), "ten");
+        scripted.runtime.Tick(at(25), at(15));
+        EQUALS(scripted.Log(), "ten,twenty");
+        scripted.runtime.Tick(at(28), at(25));
+        EQUALS(scripted.Log(), "ten,twenty");
+
+        // A tick without the time fires them all, in the order they came due.
+        scripted.At(30);
+        EQUALS(scripted.Log(), "ten,twenty,slept,zero,again");
+    });
+
     IT("counts a timeout as pending until it fires and an interval until it is cleared", {
         Scripted scripted;
         SetGlobalFunction(scripted.runtime, "pending", Pending);

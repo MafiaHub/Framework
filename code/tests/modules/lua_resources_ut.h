@@ -9,6 +9,7 @@
 #pragma once
 
 #include "lua_runtime_ut.h"
+#include "node_test_helpers.h"
 #include "resource_manager_ut.h"
 
 #include "integrations/server/scripting/module.h"
@@ -18,7 +19,7 @@
 #include "scripting/resource/resource_manager.h"
 
 #include <chrono>
-#include <ctime>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -243,6 +244,21 @@ namespace LuaResourcesTest {
             LuaEngine *engine   = module.GetLuaEngine();
             LuaRuntime *runtime = engine != nullptr ? engine->GetRuntime(resource) : nullptr;
             return runtime != nullptr ? LuaRuntimeTest::Eval(*runtime, expression) : "<no runtime>";
+        }
+
+        // The value of `expression` in the JavaScript runtime of the resource, as a string.
+        std::string EvalJavaScript(const std::string &resource, const std::string &expression) const {
+            NodeRuntime *runtime = module.GetEngine()->GetResourceRuntime(resource);
+            return runtime != nullptr ? NodeTest::Eval(*runtime, expression) : "<no runtime>";
+        }
+
+        // Waits as the server does between two ticks, for `ms`. Gives the rounds the wait took: one when nothing
+        // cut it short.
+        uint64_t Wait(int ms) {
+            const uint64_t before = module.GetWaitRounds();
+            const auto deadline   = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+            module.WaitUntil(deadline);
+            return std::chrono::steady_clock::now() >= deadline ? module.GetWaitRounds() - before : 0;
         }
 
         // Updates the module as the server's ticks do until `expression` is `expected` in the resource, or time
@@ -748,11 +764,15 @@ MODULE(lua_resources, {
         // is due, not once at the end.
         server.files.Resource("waiting", {{"main.lua", "fired = ''\nsetTimeout(function() fired = fired .. 'first' setTimeout(function() fired = fired .. ',second' end, 20) end, 20)\nsetTimeout(function() fired = fired .. ',late' end, 60000)"}});
         EQUALS(server.Start(), true);
+        server.module.Update();
+        EQUALS(server.Eval("waiting", "fired"), "");
 
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400);
-        server.module.WaitUntil(deadline);
-        EQUALS(std::chrono::steady_clock::now() >= deadline, true);
+        // A round up to each of the two timers and one to the end of the wait, give or take a sleep that came
+        // back early.
+        const uint64_t rounds = server.Wait(600);
         EQUALS(server.Eval("waiting", "fired"), "first,second");
+        GREATEREQ(rounds, 3u);
+        LESSEREQ(rounds, 10u);
     });
 
     IT("hands a server the error of a Lua timer that comes due while it waits", {
@@ -760,7 +780,7 @@ MODULE(lua_resources, {
         server.files.Resource("fragile", {{"main.lua", "setTimeout(function() error('boom') end, 10)"}});
         EQUALS(server.Start(), true);
 
-        server.module.WaitUntil(std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
+        server.module.WaitUntil(std::chrono::steady_clock::now() + std::chrono::milliseconds(300));
         EQUALS(server.module.GetResourceManager()->GetResourceState("fragile") == ResourceState::Error, true);
     });
 
@@ -768,22 +788,66 @@ MODULE(lua_resources, {
         Server server;
         server.files.Resource("patient", {{"main.lua", "setTimeout(function() end, 60000)"}});
         EQUALS(server.Start(), true);
+        server.module.Update();
 
-        const std::clock_t before = std::clock();
-        server.module.WaitUntil(std::chrono::steady_clock::now() + std::chrono::milliseconds(300));
-        const double cpuMs = 1000.0 * static_cast<double>(std::clock() - before) / CLOCKS_PER_SEC;
-        LESSER(cpuMs, 150.0);
+        const uint64_t rounds = server.Wait(200);
+        GREATEREQ(rounds, 1u);
+        LESSEREQ(rounds, 2u);
     });
 
-    IT("wakes a Lua coroutine that sleeps for no time once a millisecond at most while a server waits", {
+    IT("leaves what Lua waits no time for to the next update of a server, once for each", {
         Server server;
-        server.files.Resource("spinner", {{"main.lua", "turns = 0\nspawn(function() while true do turns = turns + 1 sleep(0) end end)"}});
+        server.files.Resource("spinner", {{"main.lua", "turns = 0\nspawn(function() while true do turns = turns + 1 sleep(0) end end)\nfires = 0\nlocal function again() fires = fires + 1 setTimeout(again, 0) end\nsetTimeout(again, 0)"}});
         EQUALS(server.Start(), true);
+        EQUALS(server.Eval("spinner", "turns .. ' ' .. fires"), "1 0");
+        server.module.Update();
+        EQUALS(server.Eval("spinner", "turns .. ' ' .. fires"), "2 1");
 
-        server.module.WaitUntil(std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
-        const int turns = std::stoi(server.Eval("spinner", "turns"));
-        // It went on between two ticks of the server, and did not spin through the wait.
-        GREATER(turns, 10);
-        LESSER(turns, 300);
+        // Both are due again at once, and neither goes on before the server ticks, nor cuts the wait short.
+        const uint64_t rounds = server.Wait(100);
+        EQUALS(server.Eval("spinner", "turns .. ' ' .. fires"), "2 1");
+        GREATEREQ(rounds, 1u);
+        LESSEREQ(rounds, 2u);
+
+        server.module.Update();
+        EQUALS(server.Eval("spinner", "turns .. ' ' .. fires"), "3 2");
+        server.module.Update();
+        EQUALS(server.Eval("spinner", "turns .. ' ' .. fires"), "4 3");
+        server.Wait(20);
+        EQUALS(server.Eval("spinner", "turns .. ' ' .. fires"), "4 3");
+    });
+
+    IT("ticks Lua every few milliseconds at most while a server waits", {
+        Server server;
+        // An interval fires once in a tick however late it is, so it counts the ticks.
+        server.files.Resource("eager", {{"main.lua", "ticks = 0\nsetInterval(function() ticks = ticks + 1 end, 1)"}});
+        EQUALS(server.Start(), true);
+        server.module.Update();
+        const int before = std::stoi(server.Eval("eager", "ticks"));
+
+        const uint64_t rounds = server.Wait(400);
+        const int ticks       = std::stoi(server.Eval("eager", "ticks")) - before;
+        // 400 ms at 4 ms a tick, where a tick for each millisecond would be 400.
+        GREATEREQ(ticks, 3);
+        LESSEREQ(ticks, 110);
+        LESSEREQ(rounds, 130u);
+    });
+
+    IT("lets JavaScript run between the ticks of a server while Lua has timers that are always due", {
+        Server server;
+        server.files.Resource("busy", {{"main.lua", "turns = 0\nspawn(function() while true do turns = turns + 1 sleep(0) end end)\nticks = 0\nsetInterval(function() ticks = ticks + 1 end, 1)"}});
+        server.files.Resource("clock", {{"main.js", "globalThis.fired = 'no'; setTimeout(() => { globalThis.fired = 'yes'; }, 20);"}});
+        EQUALS(server.Start(), true);
+        server.module.Update();
+        EQUALS(server.EvalJavaScript("clock", "globalThis.fired"), "no");
+        const std::string turns = server.Eval("busy", "turns");
+        const int before        = std::stoi(server.Eval("busy", "ticks"));
+
+        server.Wait(500);
+        // The timer of the JavaScript resource fired in the wait, with no tick of the server.
+        EQUALS(server.EvalJavaScript("clock", "globalThis.fired"), "yes");
+        // So did the interval of the Lua one, and its loop waited for the server.
+        GREATEREQ(std::stoi(server.Eval("busy", "ticks")) - before, 3);
+        EQUALS(server.Eval("busy", "turns"), turns);
     });
 })

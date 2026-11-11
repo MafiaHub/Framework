@@ -137,8 +137,9 @@ namespace Framework::Scripting {
             return *_scheduler;
         }
 
-        // Fires the timers that are due at `now` and wakes the coroutines whose sleep is over.
-        void Tick(std::chrono::steady_clock::time_point now);
+        // Fires the timers that are due at `now` and wakes the coroutines whose sleep is over. With `after`, only
+        // those that came due later than it (LuaScheduler::Tick).
+        void Tick(std::chrono::steady_clock::time_point now, std::chrono::steady_clock::time_point after = std::chrono::steady_clock::time_point::min());
 
       private:
         friend class LuaScheduler;

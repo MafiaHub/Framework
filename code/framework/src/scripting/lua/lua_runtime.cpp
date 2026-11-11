@@ -254,8 +254,8 @@ namespace Framework::Scripting {
         return _entryDepth > 0 || _scheduler->IsAtWork();
     }
 
-    void LuaRuntime::Tick(std::chrono::steady_clock::time_point now) {
-        _scheduler->Tick(now);
+    void LuaRuntime::Tick(std::chrono::steady_clock::time_point now, std::chrono::steady_clock::time_point after) {
+        _scheduler->Tick(now, after);
     }
 
     int LuaRuntime::Open(lua_State *L) {

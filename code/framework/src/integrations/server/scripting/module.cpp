@@ -35,10 +35,10 @@
 namespace Framework::Integrations::Server::Scripting {
 
     namespace {
-        // The least time between two Lua ticks while the server waits for its next tick. A coroutine that sleeps for
-        // no time, or a timer that arms one of no delay, is due again as soon as it has run: it goes on a millisecond
-        // later, as a Node timer of no delay does, and does not spin through the wait.
-        constexpr std::chrono::milliseconds kLuaWaitGranularity {1};
+        // The least time between two Lua ticks while the server waits for its next tick. Node has the wait in
+        // between, and NodeEngine::RunUntil starts no script in its last millisecond: a Lua timer due every
+        // millisecond would otherwise leave Node nothing of the wait.
+        constexpr std::chrono::milliseconds kLuaWaitGranularity {4};
     } // namespace
 
     ServerScriptingModule::ServerScriptingModule() {
@@ -241,10 +241,14 @@ namespace Framework::Integrations::Server::Scripting {
         }
         // RunUntil comes back early with an error waiting, so the resource is stopped or restarted before it runs on.
         while (std::chrono::steady_clock::now() < deadline) {
-            // Node has the wait, up to when Lua next has a timer to fire or a coroutine to wake. One that is due
-            // at the deadline or later is left to the tick.
+            ++_waitRounds;
+
+            // Node has the wait, up to when Lua next has a timer to fire or a coroutine to wake. Only what comes
+            // due after the last Lua tick counts: what that tick left due, as a sleep or a timer of no delay is,
+            // goes on at the next Update, once for each tick of the server. So does what is due at the deadline
+            // or later.
             std::optional<std::chrono::steady_clock::time_point> luaWake;
-            if (const auto due = _luaEngine->NextDue()) {
+            if (const auto due = _luaEngine->NextDue(_lastLuaTick)) {
                 const auto wake = std::max(*due, _lastLuaTick + kLuaWaitGranularity);
                 if (wake < deadline) {
                     luaWake = wake;
@@ -254,18 +258,19 @@ namespace Framework::Integrations::Server::Scripting {
             _nodeEngine->RunUntil(luaWake.value_or(deadline));
             HandleRuntimeErrors();
             if (luaWake && std::chrono::steady_clock::now() >= *luaWake) {
-                TickLua();
+                TickLua(_lastLuaTick);
             }
         }
     }
 
-    void ServerScriptingModule::TickLua() {
+    void ServerScriptingModule::TickLua(std::chrono::steady_clock::time_point after) {
         if (!_luaEngine || !_luaEngine->IsInitialized()) {
             return;
         }
         FW_PROFILE_SCOPE_N("Scripting::Lua");
-        _lastLuaTick = std::chrono::steady_clock::now();
-        _luaEngine->Tick(_lastLuaTick);
+        const auto now = std::chrono::steady_clock::now();
+        _luaEngine->Tick(now, after);
+        _lastLuaTick = now;
 
         // Queued, not handled where they were raised, so that a resource is stopped or restarted outside its script.
         HandleRuntimeErrors();

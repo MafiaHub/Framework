@@ -86,10 +86,16 @@ namespace Framework::Scripting {
         void Tick() override;
         void Tick(std::chrono::steady_clock::time_point now);
 
-        // When Tick next has something to run: the earliest time a timer fires or a sleep ends in any runtime, on
-        // the clock Tick() reads. Nothing when none is pending. A runtime that is executing is left out, as Tick
-        // leaves it alone.
-        std::optional<std::chrono::steady_clock::time_point> NextDue() const;
+        // A tick between two ticks of the host: fires and wakes only what came due later than `after`, the time of
+        // the tick before. What that tick left due, as a sleep or a timer of no delay is, stays for the next Tick
+        // without `after`, so it goes on once for each tick of the host.
+        void Tick(std::chrono::steady_clock::time_point now, std::chrono::steady_clock::time_point after);
+
+        // For a host that waits between two ticks: the earliest time, later than `after`, at which a timer fires or
+        // a sleep ends in any runtime, on the clock Tick() reads: when a Tick with the same `after` has something
+        // to run. Nothing when none is pending that late. A runtime that is executing is left out, as Tick leaves
+        // it alone.
+        std::optional<std::chrono::steady_clock::time_point> NextDue(std::chrono::steady_clock::time_point after) const;
 
         // Fails when the resource has a runtime already, when the state cannot be created, when the setup
         // callback fails, and when that callback destroys the runtime it is setting up ("resource runtime was

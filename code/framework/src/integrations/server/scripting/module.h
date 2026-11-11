@@ -9,6 +9,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -67,9 +68,20 @@ namespace Framework::Integrations::Server::Scripting {
         void Update() override;
 
         /**
-         * Wait for the next tick, running scripts' I/O, timers and promises as they become ready meanwhile.
+         * Wait for the next tick, running scripts' I/O, timers and promises as they become ready meanwhile. Lua timers
+         * fire when they come due, a few milliseconds apart at least. A Lua sleep or timer of no delay is left to the
+         * next Update, so a loop around sleep(0) goes round once for each tick.
          */
         void WaitUntil(std::chrono::steady_clock::time_point deadline);
+
+        /**
+         * How many rounds WaitUntil has taken since the module was created: one for a wait that nothing cut short,
+         * one more each time a Lua timer came due or an uncaught error came up before the deadline. For diagnostics
+         * and tests.
+         */
+        uint64_t GetWaitRounds() const {
+            return _waitRounds;
+        }
 
         /**
          * Get the Node.js engine.
@@ -148,12 +160,14 @@ namespace Framework::Integrations::Server::Scripting {
         void HandleRuntimeErrors();
 
         // Fire the Lua timers that are due and wake the coroutines whose sleep is over, then handle what they raised.
-        void TickLua();
+        // With `after`, only what came due later than it.
+        void TickLua(std::chrono::steady_clock::time_point after = std::chrono::steady_clock::time_point::min());
 
         std::unique_ptr<Framework::Scripting::NodeEngine> _nodeEngine;
         std::unique_ptr<Framework::Scripting::LuaEngine> _luaEngine;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
         std::chrono::steady_clock::time_point _lastLuaTick {};
+        uint64_t _waitRounds = 0;
         std::string _modVersion;
 
         std::string _resourcesPath = "resources";

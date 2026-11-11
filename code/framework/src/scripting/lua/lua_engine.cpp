@@ -184,6 +184,10 @@ namespace Framework::Scripting {
     }
 
     void LuaEngine::Tick(std::chrono::steady_clock::time_point now) {
+        Tick(now, std::chrono::steady_clock::time_point::min());
+    }
+
+    void LuaEngine::Tick(std::chrono::steady_clock::time_point now, std::chrono::steady_clock::time_point after) {
         FlushRetiredRuntimes();
         if (!_initialized) {
             return;
@@ -198,19 +202,19 @@ namespace Framework::Scripting {
         for (const std::string &name : names) {
             const auto found = _runtimes.find(name);
             if (found != _runtimes.end() && !found->second->IsExecuting()) {
-                found->second->Tick(now);
+                found->second->Tick(now, after);
             }
         }
         FinishShutdown();
     }
 
-    std::optional<std::chrono::steady_clock::time_point> LuaEngine::NextDue() const {
+    std::optional<std::chrono::steady_clock::time_point> LuaEngine::NextDue(std::chrono::steady_clock::time_point after) const {
         std::optional<std::chrono::steady_clock::time_point> earliest;
         for (const auto &[name, runtime] : _runtimes) {
             if (runtime->IsExecuting()) {
                 continue;
             }
-            const auto due = runtime->Scheduler().NextDue();
+            const auto due = runtime->Scheduler().NextDue(after);
             if (due && (!earliest || *due < *earliest)) {
                 earliest = due;
             }

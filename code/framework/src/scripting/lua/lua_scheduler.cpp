@@ -13,6 +13,7 @@
 #include <lauxlib.h>
 
 #include <algorithm>
+#include <limits>
 #include <vector>
 
 // How a coroutine runs.
@@ -300,11 +301,16 @@ namespace Framework::Scripting {
         Run(entry, 0, nullptr);
     }
 
-    std::optional<std::chrono::steady_clock::time_point> LuaScheduler::NextDue() const {
-        if (_stopped || _queue.empty()) {
+    std::optional<std::chrono::steady_clock::time_point> LuaScheduler::NextDue(std::chrono::steady_clock::time_point after) const {
+        if (_stopped) {
             return std::nullopt;
         }
-        return _queue.begin()->first.first;
+        // Past everything that is due at `after`, in whatever order it was armed.
+        const auto next = _queue.upper_bound(Due {after, std::numeric_limits<uint64_t>::max()});
+        if (next == _queue.end()) {
+            return std::nullopt;
+        }
+        return next->first.first;
     }
 
     size_t LuaScheduler::SuspendedCoroutines() const {
@@ -546,7 +552,7 @@ namespace Framework::Scripting {
         _stopped = true;
     }
 
-    void LuaScheduler::Tick(std::chrono::steady_clock::time_point now) {
+    void LuaScheduler::Tick(std::chrono::steady_clock::time_point now, std::chrono::steady_clock::time_point after) {
         if (_stopped) {
             return;
         }
@@ -556,7 +562,7 @@ namespace Framework::Scripting {
         // What is due as the tick starts. What a callback arms waits for the next tick, so an interval fires once
         // and a callback that sets a timer of no delay does not hold the tick for ever.
         std::vector<std::pair<Due, Pending>> due;
-        for (auto queued = _queue.begin(); queued != _queue.end() && queued->first.first <= now; ++queued) {
+        for (auto queued = _queue.upper_bound(Due {after, std::numeric_limits<uint64_t>::max()}); queued != _queue.end() && queued->first.first <= now; ++queued) {
             due.emplace_back(*queued);
         }
         for (const auto &[when, pending] : due) {

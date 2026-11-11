@@ -105,8 +105,11 @@ namespace Framework::Scripting {
         void Resume(uint64_t token, Push push);
         void ResumeWithError(uint64_t token, const std::string &message);
 
-        // Sets the time to `now`, fires the timers that are due and wakes the coroutines whose sleep is over.
-        void Tick(std::chrono::steady_clock::time_point now);
+        // Sets the time to `now`, fires the timers that are due and wakes the coroutines whose sleep is over. With
+        // `after`, only those that came due later than it: what was due by then stays for a tick without it. A host
+        // that ticks again between two of its own ticks gives the time of its last tick, so that a wait for no time
+        // goes on once for each of its own ticks, however often it looks in between.
+        void Tick(std::chrono::steady_clock::time_point now, std::chrono::steady_clock::time_point after = std::chrono::steady_clock::time_point::min());
 
         // For a runtime that is to be destroyed once it has stopped executing: from now on no timer fires and no
         // coroutine that waits is resumed, by Tick or by Resume. What is running goes on to its end or its next
@@ -118,9 +121,11 @@ namespace Framework::Scripting {
             return _timers.size();
         }
 
-        // When the first timer fires or the first sleep ends, on the clock Tick is given: the next Tick at or after
-        // it has something to run. Nothing when none is pending, or once the scheduler was stopped.
-        std::optional<std::chrono::steady_clock::time_point> NextDue() const;
+        // When the first timer fires or the first sleep ends that is due later than `after`, on the clock Tick is
+        // given. What is due at `after` or before is passed over: given the time of the last tick, that is what the
+        // tick left for the next one, as a wait for no time is. Nothing when none is pending that late, or once the
+        // scheduler was stopped.
+        std::optional<std::chrono::steady_clock::time_point> NextDue(std::chrono::steady_clock::time_point after) const;
 
         // Coroutines that wait for a Tick or a Resume.
         size_t SuspendedCoroutines() const;
