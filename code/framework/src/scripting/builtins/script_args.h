@@ -8,27 +8,27 @@
 
 #pragma once
 
-#include <scripting/bind/call.h>
-#include <scripting/bind/value.h>
+#include "../bind/call.h"
+#include "../bind/value.h"
 
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 
-namespace Framework::Integrations::Client::Scripting::Builtins {
+namespace Framework::Scripting::Builtins {
     // An argument that is a flag, read as the language of the script reads a condition, which is how the
-    // client builtins always read one from JavaScript: undefined, null, false, 0, NaN, the empty string and
+    // builtins of both sides always read one from JavaScript: undefined, null, false, 0, NaN, the empty string and
     // the bigint zero are false there, nil and false in Lua.
-    inline bool ReadFlag(const Framework::Scripting::Bind::Call &call, size_t index) {
-        const Framework::Scripting::Bind::Value flag = call.Arg(index);
+    inline bool ReadFlag(const Bind::Call &call, size_t index) {
+        const Bind::Value flag = call.Arg(index);
         if (flag.IsNil()) {
             return false;
         }
         if (flag.IsBoolean()) {
             return flag.AsBoolean();
         }
-        if (call.GetLanguage() == Framework::Scripting::Language::Lua) {
+        if (call.GetLanguage() == Language::Lua) {
             return true;
         }
         if (flag.IsNumber()) {
@@ -39,7 +39,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return !flag.AsString().empty();
         }
         // Of what is left only a bigint can be false, and only zero is spelled "0".
-        return flag.Kind() != Framework::Scripting::Bind::ValueKind::Other || flag.ToDisplayString() != "0";
+        return flag.Kind() != Bind::ValueKind::Other || flag.ToDisplayString() != "0";
     }
 
     // ToInt32 of JavaScript, which is how the client builtins always read an enum value, a size or the id of a
@@ -55,7 +55,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     // The whole part of a number that is an id, a timestamp or a mask, held to what 64 bits have, which is how
     // the client builtins always read one from JavaScript. A Lua integer is itself. 0 for a NaN and for what
     // is not a number.
-    inline std::int64_t ToInt64(const Framework::Scripting::Bind::Value &value) {
+    inline std::int64_t ToInt64(const Bind::Value &value) {
         if (const auto integer = value.AsInteger()) {
             return *integer;
         }
@@ -73,4 +73,4 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
         return static_cast<std::int64_t>(number);
     }
-} // namespace Framework::Integrations::Client::Scripting::Builtins
+} // namespace Framework::Scripting::Builtins

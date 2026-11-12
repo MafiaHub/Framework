@@ -8,7 +8,7 @@
 
 #include "nametags.h"
 
-#include "script_args.h"
+#include <scripting/builtins/script_args.h>
 
 #include <external/imgui/widgets/nametag.h>
 #include <integrations/client/ui/nametag_notes.h>
@@ -21,6 +21,8 @@
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
     namespace Bind = Framework::Scripting::Bind;
+    using Framework::Scripting::Builtins::ReadFlag;
+    using Framework::Scripting::Builtins::ToInt64;
 
     namespace {
         using Framework::External::ImGUI::Widgets::NameTagView;
@@ -118,7 +120,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static const auto definition = [] {
             const auto number  = TypeOf<double>();
             const auto boolean = TypeOf<bool>();
-            return Bind::Namespace("Nametags", "The local player's view of the nametags above players: whether they draw at all, whether they carry a health bar, and whether their own is shown.")
+            return Bind::Namespace("Nametags", "The local player's view of the nametags above players: whether they draw at all, whether they carry a health bar, and whether their own is shown.", Side::Client)
                 .Function("setVisible", &SetVisible, Doc("Shows or hides all nametags for this player only. A player hidden with Player.setNametagVisible stays hidden either way.").Param("visible", boolean, "True to draw nametags, false to hide every one of them."), Side::Client)
                 .Function("isVisible", &IsVisible, Doc("Checks whether this player draws nametags.").ReturnType(boolean).Returns("True unless they were hidden locally."), Side::Client)
                 .Function("setHealthVisible", &SetHealthVisible, Doc("Shows or hides the health bar on all nametags for this player only, leaving the names alone.").Param("visible", boolean, "True to draw the health bar under each name, false to hide it."), Side::Client)

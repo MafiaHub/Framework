@@ -74,7 +74,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             const auto text    = TypeOf<std::string>();
             const auto boolean = TypeOf<bool>();
             const auto handler = Custom("KeyHandler", "fun(key: string, state: string)");
-            return Bind::Namespace("Key", "Client-only, resource-owned physical key bindings exposed as the global Key.")
+            return Bind::Namespace("Key", "Client-only, resource-owned physical key bindings exposed as the global Key.", Side::Client)
                 .Function("getLabel", &GetLabel,
                     Doc("Returns the current layout's label for a physical key, even while UI owns input. Query again when refreshing prompts. Throws for unknown keys or non-string arguments.")
                         .Param("key", text, "Case-insensitive physical key name, using the same names as bind.")

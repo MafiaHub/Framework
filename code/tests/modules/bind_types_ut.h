@@ -497,12 +497,25 @@ MODULE(bind_types, {
         EQUALS(ExistsIn(empty, Side::Shared), true);
         EQUALS(ExistsIn(clientChat, Side::Shared), false);
 
-        // The order of recording decides nothing between the two.
+        // The order of recording decides nothing between the two, for Chat as for Voice.
         ApiCatalog reversed;
         reversed.Record(&clientChat);
         reversed.Record(&serverChat);
         EQUALS(reversed.Find("Chat", Side::Server) == &serverChat, true);
         EQUALS(reversed.Find("Chat", Side::Client) == &clientChat, true);
+        ClassDesc serverVoice;
+        serverVoice.name = "Voice";
+        serverVoice.side = Side::Server;
+        ClassDesc clientVoice;
+        clientVoice.name = "Voice";
+        clientVoice.side = Side::Client;
+        for (const bool serverFirst : {true, false}) {
+            ApiCatalog voices;
+            voices.Record(serverFirst ? &serverVoice : &clientVoice);
+            voices.Record(serverFirst ? &clientVoice : &serverVoice);
+            EQUALS(voices.Find("Voice", Side::Server) == &serverVoice, true);
+            EQUALS(voices.Find("Voice", Side::Client) == &clientVoice, true);
+        }
     });
 
     IT("keeps descriptions in recording order and ignores one already recorded", {

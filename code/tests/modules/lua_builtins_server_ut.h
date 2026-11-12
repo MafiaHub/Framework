@@ -693,9 +693,12 @@ MODULE(lua_builtins_server, {
         booth.Lua("Voice.setPlayerMuted(p, false)");
         EQUALS(router.IsPlayerMuted(booth.p), false);
 
-        // A BigInt is no kind the binding layer reads, so 0n mutes, where JavaScript itself holds it false.
-        booth.Js("Voice.setPlayerMuted(p, 0n)");
+        // The zero of a BigInt is false to JavaScript, and any other is true.
+        booth.Js("Voice.setPlayerMuted(p, 1n)");
         EQUALS(router.IsPlayerMuted(booth.p), true);
+        booth.Js("Voice.setPlayerMuted(p, 0n)");
+        EQUALS(router.IsPlayerMuted(booth.p), false);
+        booth.Js("Voice.setPlayerMuted(p, 1)");
         booth.Js("Voice.setPlayerMuted(p, null)");
         EQUALS(router.IsPlayerMuted(booth.p), false);
 

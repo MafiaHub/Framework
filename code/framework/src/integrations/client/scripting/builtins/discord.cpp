@@ -8,7 +8,7 @@
 
 #include "discord.h"
 
-#include "script_args.h"
+#include <scripting/builtins/script_args.h>
 
 #include "integrations/client/instance.h"
 
@@ -32,6 +32,9 @@
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
     namespace Bind = Framework::Scripting::Bind;
+    using Framework::Scripting::Builtins::ReadFlag;
+    using Framework::Scripting::Builtins::ToInt32;
+    using Framework::Scripting::Builtins::ToInt64;
 
     namespace {
         // Staged activity mutated by the setters, published on update()/setPresence().
@@ -572,7 +575,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             };
 
             // Composition, then commit and lifecycle, then queries.
-            return Bind::Namespace("Discord", "Client-only Discord rich-presence composer exposed as the global Discord; setters stage values until update or setPresence publishes them.")
+            return Bind::Namespace("Discord", "Client-only Discord rich-presence composer exposed as the global Discord; setters stage values until update or setPresence publishes them.", Side::Client)
                 .Function("setType", &SetType, field(type, "type", "the Discord activity verb or numeric enum value."), Side::Client)
                 .Function("setName", StringSetter(StringField::Name), field(text, "name", "the activity name."), Side::Client)
                 .Function("setDetails", StringSetter(StringField::Details), field(text, "details", "the top presence line."), Side::Client)

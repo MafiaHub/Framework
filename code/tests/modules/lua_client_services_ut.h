@@ -14,6 +14,9 @@
 #include "integrations/client/instance.h"
 #include "integrations/client/scripting/builtins/chat.h"
 #include "integrations/client/scripting/builtins/discord.h"
+#include "integrations/client/scripting/builtins/keybinds.h"
+#include "integrations/client/scripting/builtins/voice.h"
+#include "integrations/server/scripting/builtins/voice.h"
 #ifdef FW_TEST_CLIENT_NAMETAGS
 #include "external/imgui/widgets/nametag.h"
 #include "integrations/client/scripting/builtins/nametags.h"
@@ -230,6 +233,84 @@ MODULE(lua_client_services, {
         EQUALS(Bind::ApiCatalog::Get().Find("Chat", Bind::Side::Client) == &ofClient, true);
         EQUALS(Bind::ApiCatalog::Get().Find("Chat", Bind::Side::Server) == &ofServer, true);
         EQUALS(ofClient.side == Bind::Side::Client && ofServer.side == Bind::Side::Server, true);
+    });
+
+    // Voice is the other name both sides have. Each definition declares its side, as every builtin of one side does.
+    IT("keeps the Voice of a client and the Voice of a server apart", {
+        namespace ServerBuiltins = Framework::Integrations::Server::Scripting::Builtins;
+        Stage stage;
+        EQUALS(stage.ready, true);
+        const Bind::ClassDesc &ofClient = ClientBuiltins::Voice::Definition().Describe();
+        const Bind::ClassDesc &ofServer = ServerBuiltins::Voice::Definition().Describe();
+        EQUALS(&ofClient != &ofServer, true);
+        EQUALS(ofClient.name, ofServer.name);
+        EQUALS(ofClient.side == Bind::Side::Client && ofServer.side == Bind::Side::Server, true);
+        EQUALS(Bind::ApiCatalog::Get().Find("Voice", Bind::Side::Client) == &ofClient, true);
+        EQUALS(Bind::ApiCatalog::Get().Find("Voice", Bind::Side::Server) == &ofServer, true);
+
+        // setTier is the client's, setRange the server's.
+        const std::string members = "type(Voice.setTier) .. ',' .. type(Voice.setRange)";
+        LuaRuntimeOptions options = LuaRuntimeTest::Options();
+        options.side              = Bind::Side::Client;
+        {
+            LuaRuntime client(options);
+            ServerBuiltins::Voice::RegisterLua(client);
+            EQUALS(LuaRuntimeTest::Eval(client, "type(Voice)"), "nil");
+            ClientBuiltins::Voice::RegisterLua(client);
+            EQUALS(LuaRuntimeTest::Eval(client, members), "function,nil");
+        }
+        {
+            LuaRuntime client(options);
+            ClientBuiltins::Voice::RegisterLua(client);
+            ServerBuiltins::Voice::RegisterLua(client);
+            EQUALS(LuaRuntimeTest::Eval(client, members), "function,nil");
+        }
+        {
+            LuaRuntime server(LuaRuntimeTest::Options());
+            ClientBuiltins::Voice::RegisterLua(server);
+            EQUALS(LuaRuntimeTest::Eval(server, "type(Voice)"), "nil");
+            ServerBuiltins::Voice::RegisterLua(server);
+            EQUALS(LuaRuntimeTest::Eval(server, members), "nil,function");
+        }
+        {
+            LuaRuntime server(LuaRuntimeTest::Options());
+            ServerBuiltins::Voice::RegisterLua(server);
+            ClientBuiltins::Voice::RegisterLua(server);
+            EQUALS(LuaRuntimeTest::Eval(server, members), "nil,function");
+        }
+
+        // In JavaScript each materialised for the other side sets nothing and records nothing, before and after
+        // the one of the runtime is there.
+        {
+            EngineScope scope(&stage.client.v8);
+            const auto context = scope.Context();
+            auto &catalog      = GetScriptingCatalog(scope.Isolate());
+            const auto before  = v8pp::metadata::to_json(catalog);
+            EQUALS(ServerBuiltins::Voice::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), catalog, Bind::Side::Client).IsEmpty(), true);
+            EQUALS(ClientBuiltins::Voice::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), catalog, Bind::Side::Server).IsEmpty(), true);
+            EQUALS(v8pp::metadata::to_json(catalog) == before, true);
+        }
+        EQUALS(stage.Js("typeof Voice"), "undefined");
+        {
+            EngineScope scope(&stage.client.v8);
+            const auto context = scope.Context();
+            ClientBuiltins::Voice::Register(scope.Isolate(), context, context->Global(), stage.client.manager.get());
+            EQUALS(ServerBuiltins::Voice::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), GetScriptingCatalog(scope.Isolate()), Bind::Side::Client).IsEmpty(), true);
+        }
+        EQUALS(stage.Js("typeof Voice.setTier + ',' + typeof Voice.setRange"), "function,undefined");
+
+        // What only a client has is nowhere on a server, whatever the sides of its members.
+        for (const Bind::ClassDesc *desc : {&ClientBuiltins::Keybinds::Definition().Describe(), &ClientBuiltins::Discord::Definition().Describe(), &ClientBuiltins::Chat::Definition().Describe(), &ofClient}) {
+            EQUALS(Bind::ExistsIn(*desc, Bind::Side::Client), true);
+            EQUALS(Bind::ExistsIn(*desc, Bind::Side::Server), false);
+            EQUALS(Bind::ApiCatalog::Get().Find(desc->name, Bind::Side::Server) != desc, true);
+        }
+        EQUALS(Bind::ApiCatalog::Get().Find("Key", Bind::Side::Server) == nullptr, true);
+        EQUALS(Bind::ApiCatalog::Get().Find("Discord", Bind::Side::Server) == nullptr, true);
+#ifdef FW_TEST_CLIENT_NAMETAGS
+        EQUALS(Bind::ApiCatalog::Get().Find("Nametags", Bind::Side::Server) == nullptr, true);
+        EQUALS(Bind::ApiCatalog::Get().Find("Nametags", Bind::Side::Client) == &ClientBuiltins::Nametags::Definition().Describe(), true);
+#endif
     });
 
     // ==================== Chat ====================

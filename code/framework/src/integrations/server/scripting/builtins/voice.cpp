@@ -10,6 +10,7 @@
 
 #include <core_modules.h>
 #include <scripting/builtins/entity.h>
+#include <scripting/builtins/script_args.h>
 #include <scripting/lua/lua_runtime.h>
 #include <scripting/scripting_catalog.h>
 #include <voice/server/voice_server.h>
@@ -19,6 +20,7 @@
 
 namespace Framework::Integrations::Server::Scripting::Builtins {
     namespace Bind = Framework::Scripting::Bind;
+    using Framework::Scripting::Builtins::ReadFlag;
 
     namespace {
         Framework::Voice::VoiceServer *Resolve() {
@@ -63,27 +65,6 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
 
             out = static_cast<Framework::Voice::VoiceTier>(static_cast<uint8_t>(value));
             return true;
-        }
-
-        // A flag, read as the language of the script reads a condition, which is how JavaScript always
-        // read it here: undefined, null, false, 0, NaN and the empty string are false there, nil and
-        // false in Lua.
-        bool ReadFlag(const Bind::Call &call, size_t index) {
-            const Bind::Value flag = call.Arg(index);
-            if (flag.IsNil()) {
-                return false;
-            }
-            if (flag.IsBoolean()) {
-                return flag.AsBoolean();
-            }
-            if (call.GetLanguage() == Framework::Scripting::Language::Lua) {
-                return true;
-            }
-            if (flag.IsNumber()) {
-                const double number = flag.AsNumber();
-                return number != 0.0 && number == number;
-            }
-            return !flag.IsString() || !flag.AsString().empty();
         }
 
         void SetRange(Bind::Call &call) {
@@ -260,7 +241,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             const char *tierHelp = "Voice tier: 0 whisper, 1 normal, 2 shout.";
             const char *query    = "Player to query.";
             const char *radius   = "Radius in world units.";
-            return Bind::Namespace("Voice", "Server-side proximity voice rules: how far voice carries, and who may talk to or hear whom.")
+            return Bind::Namespace("Voice", "Server-side proximity voice rules: how far voice carries, and who may talk to or hear whom.", Side::Server)
                 .Function("setRange", &SetRange,
                     Doc("Sets how far voice carries for talkers with no override of their own. Connected clients are told, so their playback fades out at the same distance.").Param("range", number, "Audibility radius in world units; values <= 0 restore the default of 25."),
                     Side::Server)

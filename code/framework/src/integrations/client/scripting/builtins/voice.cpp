@@ -8,7 +8,7 @@
 
 #include "voice.h"
 
-#include "script_args.h"
+#include <scripting/builtins/script_args.h>
 
 #include "core_modules.h"
 
@@ -26,6 +26,7 @@
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
     namespace Bind = Framework::Scripting::Bind;
+    using Framework::Scripting::Builtins::ReadFlag;
 
     namespace {
         // Null before the client is running, where setters no-op and getters report defaults.
@@ -274,7 +275,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             const auto boolean = TypeOf<bool>();
             const auto text    = TypeOf<std::string>();
             const auto mode    = Custom("'pushToTalk' | 'voiceActivity'", "'pushToTalk' | 'voiceActivity'");
-            return Bind::Namespace("Voice", "Local player's proximity voice chat settings: on/off, playback volume, hearing range and the push-to-talk binding.")
+            return Bind::Namespace("Voice", "Local player's proximity voice chat settings: on/off, playback volume, hearing range and the push-to-talk binding.", Side::Client)
                 .Function("setEnabled", &SetEnabled, Doc("Turns voice chat on or off. Off closes the microphone and playback devices and tells the server to stop relaying voice to this client.").Param("enabled", boolean, "Whether voice chat runs at all for this player."),
                     Side::Client)
                 .Function("isEnabled", &IsEnabled, Doc("Checks whether voice chat is enabled for this player.").ReturnType(boolean).Returns("True unless the player turned voice chat off."), Side::Client)

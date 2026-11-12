@@ -8,7 +8,7 @@
 
 #include "web.h"
 
-#include "script_args.h"
+#include <scripting/builtins/script_args.h>
 
 #include <core_modules.h>
 
@@ -46,6 +46,7 @@
 namespace Framework::Integrations::Client::Scripting::Builtins {
     namespace Bind = Framework::Scripting::Bind;
     using Framework::Scripting::TransferredValue;
+    using Framework::Scripting::Builtins::ToInt32;
 
     namespace {
         // Keep in sync with the payload builder, the catalog metadata, and the docs.

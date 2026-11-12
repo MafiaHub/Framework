@@ -8,7 +8,7 @@
 
 #include "chat.h"
 
-#include "script_args.h"
+#include <scripting/builtins/script_args.h>
 
 #include "integrations/client/instance.h"
 #include "integrations/client/ui/chat_box.h"
@@ -22,6 +22,7 @@
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
     namespace Bind = Framework::Scripting::Bind;
+    using Framework::Scripting::Builtins::ReadFlag;
 
     namespace {
         UI::ChatBox *ResolveBox() {
