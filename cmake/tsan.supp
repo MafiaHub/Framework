@@ -1,0 +1,12 @@
+# ThreadSanitizer suppressions for a -DFW_SANITIZE=thread build of the tests:
+#   TSAN_OPTIONS=suppressions=cmake/tsan.supp build/bin/FrameworkTests
+#
+# Third-party code only, one reason per entry. Nothing here may name Framework or MafiaNet code:
+# a report there is a finding.
+#
+# Format: https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
+
+# Tracy starts its worker threads from one static initializer and constructs its allocator's span
+# cache from a later one in the same file, so the constructor writes zeros under a thread already
+# allocating. Before main(), inside vendors/tracy.
+race:tracy::global_cache_t::global_cache_t

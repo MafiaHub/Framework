@@ -140,3 +140,123 @@ jobs:
       - name: Run the tests
         run: |
           cmake --build build --target RunFrameworkTests
+
+  # The threading tests under ThreadSanitizer (-DFW_SANITIZE=thread). MafiaNet is built from source
+  # with the same instrumentation, so a race across the library boundary shows both sides; the
+  # pinned archive is not instrumented. Any report fails the job. cmake/tsan.supp holds the
+  # suppressions: third-party code only, never Framework or MafiaNet.
+  tsan:
+    name: ThreadSanitizer
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # A release is tested against the pinned MafiaNet archive, which this job does not use.
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    env:
+      # The MafiaNet ref to build. The code needs the unreleased branch of MafiaHub/MafiaNet#88;
+      # once that is released and cmake/MafiaNetPin.cmake names it, this becomes the pinned tag,
+      # v${MAFIANET_PIN_VERSION}.
+      MAFIANET_REF: feat/receive-off-pass-thread
+      # Modules that start V8 (server_*, resource*, node_*, engine and the rest of scripting) are
+      # left out: libnode is not instrumented.
+      FW_TEST_FILTER: world,fork_join_pool,task_scheduler,world_lock,replication_parallel,replication_threads,network_packets,delegation
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: ${{ secrets.FW_SERVICES_PAT != '' && 'recursive' || 'false' }}
+          token: ${{ secrets.FW_SERVICES_PAT || github.token }}
+
+      - name: Checkout MafiaNet
+        uses: actions/checkout@v5
+        with:
+          repository: MafiaHub/MafiaNet
+          ref: ${{ env.MAFIANET_REF }}
+          path: .mafianet-src
+          persist-credentials: false
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          # autoconf/automake/libtool: see the build job. libssl-dev is for the MafiaNet build.
+          sudo apt-get install -y ninja-build build-essential g++ libcurl4-openssl-dev libssl-dev autoconf autoconf-archive automake libtool
+          echo "Building with:"; gcc --version; g++ --version
+
+      # Ubuntu 24.04 runners use 32 bits of mmap randomisation, which older TSan runtimes cannot
+      # map their shadow memory around.
+      - name: Reduce ASLR entropy for TSan
+        run: sudo sysctl vm.mmap_rnd_bits=28
+
+      - name: Set up CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.31.0"
+
+      # Release, static: the one configuration the Framework maps every build type onto
+      # (vendors/CMakeLists.txt). -g for file and line in the reports.
+      - name: Build MafiaNet with ThreadSanitizer
+        run: |
+          cmake -S .mafianet-src -B "${RUNNER_TEMP}/mafianet-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-g -DCMAKE_CXX_FLAGS=-g \
+            -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+            -DMAFIANET_SANITIZER=thread \
+            -DMAFIANET_BUILD_SHARED=OFF -DMAFIANET_BUILD_STATIC=ON \
+            -DCMAKE_INSTALL_PREFIX="${RUNNER_TEMP}/mafianet-prefix"
+          cmake --build "${RUNNER_TEMP}/mafianet-build"
+          cmake --install "${RUNNER_TEMP}/mafianet-build"
+
+      # Restored only: the packages are the ones the Linux build job saves.
+      - name: Restore the vcpkg binary cache
+        if: env.VCPKG_BINARY_SOURCES_OVERRIDE == ''
+        uses: actions/cache/restore@v4
+        with:
+          path: .vcpkg-cache
+          key: vcpkg-${{ runner.os }}-default-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-triplets/**') }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-default-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-triplets/**') }}-
+            vcpkg-${{ runner.os }}-default-
+
+      - name: Point vcpkg at the binary cache
+        run: |
+          if [ -n "${VCPKG_BINARY_SOURCES_OVERRIDE}" ]; then
+            echo "VCPKG_BINARY_SOURCES=${VCPKG_BINARY_SOURCES_OVERRIDE}" >> "$GITHUB_ENV"
+          else
+            mkdir -p "${GITHUB_WORKSPACE}/.vcpkg-cache"
+            echo "VCPKG_BINARY_SOURCES=clear;files,${GITHUB_WORKSPACE}/.vcpkg-cache,read" >> "$GITHUB_ENV"
+          fi
+
+      - name: Configure CMake
+        run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+            -DFW_MAFIANET_ROOT="${RUNNER_TEMP}/mafianet-prefix" -DFW_SANITIZE=thread
+
+      - name: Build the tests
+        run: cmake --build build --target FrameworkTests
+
+      # halt_on_error=0 so one run lists every report; the runtime still exits non-zero when it
+      # made any, and the grep covers a report that a passing exit code would hide.
+      - name: Run the threading tests
+        env:
+          TSAN_OPTIONS: halt_on_error=0:second_deadlock_stack=1:suppressions=${{ github.workspace }}/cmake/tsan.supp
+        run: |
+          set -o pipefail
+          build/bin/FrameworkTests 2>&1 | tee tsan.log
+          if grep -q 'WARNING: ThreadSanitizer' tsan.log; then
+            echo "::error::ThreadSanitizer made reports in a run that exited cleanly"
+            exit 1
+          fi
+
+      - name: Summarize the reports
+        if: always()
+        run: |
+          test -f tsan.log || exit 0
+          grep 'SUMMARY: ThreadSanitizer' tsan.log | sort | uniq -c | sort -rn || echo "No ThreadSanitizer reports"
+
+      - name: Upload the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsan-log
+          path: tsan.log
+          if-no-files-found: ignore
