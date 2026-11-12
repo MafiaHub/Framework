@@ -238,6 +238,11 @@ namespace Framework::Networking::Replication {
         return _doomed.find(id) != _doomed.end();
     }
 
+    bool World::Exists(uint64_t id) const {
+        const std::lock_guard guard(_slotsMutex);
+        return _slots.find(id) != _slots.end();
+    }
+
     NetworkEntity *World::CreateEntity(uint32_t typeId, Detail::WorldHold &hold) {
         RequireNoneHeld("an entity was created");
         if (!_manager.IsServer()) {

@@ -269,6 +269,11 @@ namespace Framework::Networking::Replication {
         // holds no handle at all: now, or when the last of those is released.
         bool Destroy(uint64_t id);
 
+        // Whether the id names an entity now, answered from the table of ids alone: no entity's lock is
+        // taken, so it may be asked from inside a handle's scope, and by the time it is read the
+        // entity may be gone. For telling a caller its id is wrong, not for deciding to use it.
+        bool Exists(uint64_t id) const;
+
         // One object per type, registered before the server starts and kept for the world's life.
         template <typename T>
         void RegisterState(std::unique_ptr<T> state) {

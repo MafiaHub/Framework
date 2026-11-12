@@ -20,8 +20,9 @@
 #include <stdexcept>
 
 namespace Framework::Scripting::Builtins {
-    Entity::Entity(uint64_t networkId): _id(networkId) {
-        if (!Resolve()) {
+    void Entity::RequireExists(uint64_t networkId) {
+        auto *replication = CoreModules::GetReplication();
+        if (replication == nullptr || !replication->GetWorld().Exists(networkId)) {
             throw std::runtime_error(fmt::format("Entity handle '{}' is not valid!", networkId));
         }
     }
@@ -99,7 +100,7 @@ namespace Framework::Scripting::Builtins {
         return _classes.Get(isolate, [isolate]() {
             auto cls = std::make_unique<v8pp::class_<Entity>>(isolate, GetScriptingCatalog(isolate), "Entity", "Base handle for a live replicated network entity.");
             cls->auto_wrap_objects(true);
-            cls->ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a script wrapper for an existing entity with this ID; it does not spawn an entity."))
+            cls->ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a script wrapper for an existing entity with this ID; it does not spawn an entity."), &Entity::ConstructFromScript<Entity>)
                 .function("toString", &Entity::ToString, v8pp::metadata::docs("string", {}, "Formats this entity handle for logging and debugging.", "Text containing the network entity ID."))
                 .property("id", &Entity::GetId, v8pp::metadata::property_docs("number", "Immutable network entity identifier."))
                 .property("virtualWorld", &Entity::GetVirtualWorld, v8pp::metadata::property_docs("number", "Current virtual-world identifier."))

@@ -639,6 +639,30 @@ MODULE(world, {
         EQUALS(propViewer, false);
     });
 
+    IT("says whether an id names an entity, from inside a handle's scope too", {
+        Fixture fixture;
+        World &world     = fixture.world;
+        const uint64_t a = fixture.Make<Walker>();
+        const uint64_t b = fixture.Make<Prop>();
+
+        EQUALS(world.Exists(a), true);
+        EQUALS(world.Exists(b), true);
+        EQUALS(world.Exists(0), false);
+        EQUALS(world.Exists(b + 1000), false);
+        {
+            // No lock of an entity is taken to answer, so holding one, even the one asked about, is no obstacle.
+            const auto walker = world.Write<Walker>(a);
+            EQUALS(world.Exists(a), true);
+            EQUALS(world.Exists(b), true);
+            // Destroyed while held: the id stops naming it at once, though the entity is still there.
+            EQUALS(world.Destroy(a), true);
+            EQUALS(world.Exists(a), false);
+        }
+        EQUALS(world.Exists(a), false);
+        EQUALS(world.Destroy(b), true);
+        EQUALS(world.Exists(b), false);
+    });
+
     IT("counts handles held by the thread", {
         Fixture fixture;
         World &world     = fixture.world;

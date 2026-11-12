@@ -19,6 +19,8 @@
 #include "networking/rpc/client_join.h"
 #include "networking/rpc/rpc_identifier.h"
 #include "networking/rpc/server_resources.h"
+#include "scripting/builtins/entity.h"
+#include "scripting/builtins/player.h"
 #include "scripting/engine_scope.h"
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
@@ -175,11 +177,16 @@ namespace ServerPacketThreadTest {
                 pong.value = ping.value;
                 sender.Reply(pong);
             });
-            net->RegisterRPC<Hold>([this](const Hold &, Sender sender, World &world) {
+            net->RegisterRPC<Hold>([this](const Hold &hold, Sender sender, World &world) {
                 const auto avatar = world.Write<Avatar>(sender.Avatar());
                 heldAvatar        = static_cast<bool>(avatar);
                 Framework::Scripting::EngineScope scope(GetScriptingModule()->GetEngine());
                 std::vector<v8::Local<v8::Value>> args {v8pp::to_v8(scope.Isolate(), std::string("held"))};
+                // With the sender itself as an argument, wrapped for script as a mod's event helpers wrap it.
+                if (hold.value == 1 && avatar) {
+                    avatar->position.x = 7.0f;
+                    args.push_back(WrapScriptPlayer(scope.Isolate(), avatar->GetNetworkID()));
+                }
                 GetScriptingModule()->GetResourceManager()->GetEvents().EmitReserved(scope.Isolate(), scope.Context(), "heldEvent", args);
                 ++holds;
             });
@@ -778,6 +785,89 @@ MODULE(server_packet_thread, {
         }),
             true);
         EQUALS(server.heldAvatar.load(), true);
+        server.Stop();
+    });
+
+    IT("lets a handler pass the entity it holds to an event, wrapped for script", {
+        Server server;
+        const bool up = server.Start("fw_packet_thread_wrapped", R"(
+            const fs = require('node:fs');
+            Events.on('heldEvent', (text, player) => { fs.writeFileSync('$ROOT/wrapped', `${player.id}:${player.position.x}`); });
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        Client client;
+        const bool in = Join(server, client);
+        EQUALS(in, true);
+        if (!in) {
+            break;
+        }
+        const std::string expected = std::to_string(server.Replication()->GetViewerId(client.Guid())) + ":7";
+        client.Send<Hold>(1);
+        std::string seen;
+        EQUALS(Pump(server, {&client}, [&] {
+            seen.clear();
+            std::ifstream(server.Marker("wrapped")) >> seen;
+            return seen == expected;
+        }),
+            true);
+        STREQUALS(seen.c_str(), expected.c_str());
+        EQUALS(server.heldAvatar.load(), true);
+        server.Stop();
+    });
+
+    IT("wraps an id that names no entity without throwing, and answers for it with nothing", {
+        Server server;
+        const bool up = server.Start("fw_packet_thread_ghost", R"(
+            const fs = require('node:fs');
+            let refused = 'no';
+            try { new Entity(999999); } catch (error) { refused = 'yes'; }
+            try { new Player(999999); refused += ',no'; } catch (error) { refused += ',yes'; }
+            fs.writeFileSync('$ROOT/refused', refused);
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        constexpr uint64_t kNobody = 999999;
+        bool threw                 = false;
+        bool wrapped               = false;
+        float x                    = 1.0f;
+        uint32_t virtualWorld      = 1;
+        bool hasOwner              = true;
+        std::string steamId        = "?";
+        try {
+            // Natively, as an event argument is built: no entity is asked for, so none has to be there.
+            const Framework::Scripting::Builtins::Entity ghost(kNobody);
+            x            = ghost.GetPosition().getX();
+            virtualWorld = ghost.GetVirtualWorld();
+            MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
+            hasOwner                 = ghost.ResolveOwner(owner);
+            const Framework::Scripting::Builtins::Player nobody(kNobody);
+            steamId = nobody.GetSteamId();
+            Framework::Scripting::EngineScope scope(server.GetScriptingModule()->GetEngine());
+            wrapped = !server.WrapScriptPlayer(scope.Isolate(), kNobody).IsEmpty() && !server.WrapScriptEntity(scope.Isolate(), kNobody).IsEmpty();
+        }
+        catch (const std::exception &) {
+            threw = true;
+        }
+        EQUALS(threw, false);
+        EQUALS(wrapped, true);
+        EQUALS(x, 0.0f);
+        EQUALS(virtualWorld, 0u);
+        EQUALS(hasOwner, false);
+        STREQUALS(steamId.c_str(), "");
+        // A script that names an entity itself is still told when there is none.
+        std::string refused;
+        EQUALS(Pump(server, {}, [&] {
+            refused.clear();
+            std::ifstream(server.Marker("refused")) >> refused;
+            return refused == "yes,yes";
+        }),
+            true);
+        STREQUALS(refused.c_str(), "yes,yes");
         server.Stop();
     });
 
