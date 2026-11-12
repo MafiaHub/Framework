@@ -163,6 +163,8 @@ class Call {
     virtual Value NewObject() = 0;
     virtual Value NewArray() = 0;
     virtual Value NewFunction(NativeFunction fn) = 0;  // fu2::function<void(Call &)>
+    virtual Value NewFunction(NativeFunction fn, Value data) = 0;  // carries one script value the collector traces
+    virtual Value Data() const = 0;                    // that value, inside such a function; Nil in any other
     virtual Utils::Result<Value, std::string> FromTransfer(const TransferredValue &) = 0;
     virtual Utils::Result<Value, std::string> ParseJson(std::string_view text) = 0;
     template <typename T> Value Wrap(T &&bound);       // a bound class instance

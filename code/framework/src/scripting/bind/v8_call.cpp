@@ -47,17 +47,31 @@ namespace Framework::Scripting::Bind {
         // 2^63, the first double past the largest int64_t.
         constexpr double kInt64Limit = 9223372036854775808.0;
 
+        // What a function made with a value runs (Call::NewFunction): its data is that value and its holder.
+        void CallCarrying(const v8::FunctionCallbackInfo<v8::Value> &info);
+
         class V8Call final
             : public Call
             , public Detail::ValueBackend {
           public:
-            V8Call(const v8::FunctionCallbackInfo<v8::Value> &info, bool method): _info(info), _isolate(info.GetIsolate()), _context(_isolate->GetCurrentContext()), _method(method), _first(method ? 2 : 1), _count(static_cast<size_t>(info.Length())) {
-                _values.reserve(_count + 9);
+            // `carried` is what the function was made with (NewFunction with a value), or empty.
+            V8Call(const v8::FunctionCallbackInfo<v8::Value> &info, bool method, v8::Local<v8::Value> carried = {})
+                : _info(info)
+                , _isolate(info.GetIsolate())
+                , _context(_isolate->GetCurrentContext())
+                , _method(method)
+                , _first(method ? 2 : 1)
+                , _count(static_cast<size_t>(info.Length())) {
+                _values.reserve(_count + 10);
                 if (method) {
                     _values.push_back(info.This());
                 }
                 for (int i = 0; i < info.Length(); ++i) {
                     _values.push_back(info[i]);
+                }
+                if (!carried.IsEmpty()) {
+                    _values.push_back(carried);
+                    _data = _values.size();
                 }
             }
 
@@ -177,6 +191,25 @@ namespace Framework::Scripting::Bind {
                     return At(0);
                 }
                 return Keep(made);
+            }
+
+            // The data of the function is a pair: what holds the NativeFunction, and the value. V8 keeps the
+            // pair alive with the function and traces into it.
+            Value NewFunction(NativeFunction function, Value data) override {
+                if (!CanRun()) {
+                    return At(0);
+                }
+                v8::Local<v8::Array> pair = v8::Array::New(_isolate, 2);
+                v8::Local<v8::Function> made;
+                if (!pair->Set(_context, 0, v8pp::detail::external_data::set(_isolate, FunctionHolder(std::make_shared<NativeFunction>(std::move(function))))).FromMaybe(false) || !pair->Set(_context, 1, Local(Slot(data))).FromMaybe(false)
+                    || !v8::Function::New(_context, &CallCarrying, pair).ToLocal(&made)) {
+                    return At(0);
+                }
+                return Keep(made);
+            }
+
+            Value Data() const override {
+                return At(_data);
             }
 
             // What the rebuild throws, an unknown host type or what the constructor of a handle threw, is told to
@@ -654,6 +687,7 @@ namespace Framework::Scripting::Bind {
             bool _method;
             size_t _first; // the slot of the first argument
             size_t _count;
+            size_t _data = 0; // the slot of what the function carries, 0 without
 
             std::vector<v8::Local<v8::Value>> _values;
             v8::Local<v8::Value> _result;
@@ -675,6 +709,28 @@ namespace Framework::Scripting::Bind {
             // A copy: the script may drop the function while it runs.
             const FunctionHolder function = v8pp::detail::external_data::get<FunctionHolder>(info.Data());
             V8Call call(info, method);
+            try {
+                (*function)(call);
+            }
+            catch (const std::exception &exception) {
+                call.ThrowError(exception.what());
+            }
+            call.Finish();
+        }
+
+        // What a function made with a value runs: its data is the pair NewFunction made.
+        void CallCarrying(const v8::FunctionCallbackInfo<v8::Value> &info) {
+            v8::Isolate *isolate = info.GetIsolate();
+            v8::HandleScope scope(isolate);
+            v8::Local<v8::Context> context = isolate->GetCurrentContext();
+            v8::Local<v8::Array> pair      = info.Data().As<v8::Array>();
+            v8::Local<v8::Value> holder;
+            v8::Local<v8::Value> carried;
+            if (!pair->Get(context, 0).ToLocal(&holder) || !pair->Get(context, 1).ToLocal(&carried)) {
+                return;
+            }
+            const FunctionHolder function = v8pp::detail::external_data::get<FunctionHolder>(holder);
+            V8Call call(info, false, carried);
             try {
                 (*function)(call);
             }

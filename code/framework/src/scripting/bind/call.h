@@ -121,6 +121,16 @@ namespace Framework::Scripting::Bind {
         // script keeps it, beyond this call.
         virtual Value NewFunction(NativeFunction function) = 0;
 
+        // NewFunction, with one value of this call that the function carries: `data` lives for as long as the
+        // function does, kept where the collector of the language sees it (with the function in JavaScript, as an
+        // upvalue in Lua), and the function reads it with Data(). It is how a function a builtin makes refers to
+        // a script value, a handler say, without the host holding it: a value captured as a ScriptCallable is a
+        // root, so a script value that leads back to the function would never be collected.
+        virtual Value NewFunction(NativeFunction function, Value data) = 0;
+
+        // In a function made by NewFunction with a value, that value. Nil in any other function.
+        virtual Value Data() const = 0;
+
         // The value a copy made with Value::ToTransfer holds, built in this runtime: how a value of another
         // runtime, of either language, arrives. The error says what the language cannot receive: a RegExp or a host
         // type it does not have in Lua, a host type the runtime lacks in JavaScript. Nothing is thrown to the

@@ -49,6 +49,11 @@ namespace Framework::Scripting::Bind {
         // Not const, so that no other object can come to share its address.
         char holderKey = 0;
 
+        // Pushes the userdata that holds `function` for a Lua function about to be made of it.
+        void PushHeldFunction(lua_State *L, NativeFunction function);
+        // PushLuaFunction, with the value at `data` (nil for 0) as what the function carries (Call::Data).
+        void PushCarryingFunction(lua_State *L, NativeFunction function, int data);
+
         static_assert(alignof(NativeFunction) <= alignof(Detail::LuaMaxAlign), "a NativeFunction fits the alignment of a userdata");
 
         // tostring(value), for a protected call.
@@ -61,7 +66,8 @@ namespace Framework::Scripting::Bind {
             : public Call
             , public Detail::ValueBackend {
           public:
-            LuaCall(lua_State *L, bool method): _L(L), _receiver(method && lua_gettop(L) >= 1), _first(method ? 2 : 1), _count(static_cast<size_t>(std::max(lua_gettop(L) - (method ? 1 : 0), 0))) {}
+            // `dataUpvalue` is the upvalue of the running function that holds what it carries, 0 without.
+            LuaCall(lua_State *L, bool method, int dataUpvalue = 0): _L(L), _dataUpvalue(dataUpvalue), _receiver(method && lua_gettop(L) >= 1), _first(method ? 2 : 1), _count(static_cast<size_t>(std::max(lua_gettop(L) - (method ? 1 : 0), 0))) {}
 
             // What the function leaves the script: the number of results, now on top of the stack, or the message
             // to raise in `error`, or in `deferred` the result it left for later, which then is what counts.
@@ -158,6 +164,21 @@ namespace Framework::Scripting::Bind {
 
             Value NewFunction(NativeFunction function) override {
                 PushLuaFunction(_L, std::move(function));
+                return Top();
+            }
+
+            Value NewFunction(NativeFunction function, Value data) override {
+                PushCarryingFunction(_L, std::move(function), Index(Slot(data)));
+                return Top();
+            }
+
+            // A copy of the upvalue on the stack, which is where the values of a call are.
+            Value Data() const override {
+                if (_dataUpvalue == 0) {
+                    return At(0);
+                }
+                luaL_checkstack(_L, 1, "cannot read the data of a function");
+                lua_pushvalue(_L, lua_upvalueindex(_dataUpvalue));
                 return Top();
             }
 
@@ -544,6 +565,7 @@ namespace Framework::Scripting::Bind {
             }
 
             lua_State *_L;
+            int _dataUpvalue;
             // Whether the call is one of a method that was given a receiver: index 1 is then what it was called
             // on. Told as the call begins, since what the function makes later lands on the same stack.
             bool _receiver;
@@ -578,32 +600,62 @@ namespace Framework::Scripting::Bind {
         }
     } // namespace
 
-    void PushLuaFunction(lua_State *L, NativeFunction function) {
-        luaL_checkstack(L, 4, "cannot push a function");
-        void *block = lua_newuserdatauv(L, sizeof(NativeFunction), 0);
-        if (lua_rawgetp(L, LUA_REGISTRYINDEX, &holderKey) == LUA_TNIL) {
+    namespace {
+        // What a function made with a value runs. Upvalue 1 holds the NativeFunction, upvalue 2 the value.
+        int CallCarrying(lua_State *L) {
+            luaL_checkstack(L, 1, nullptr);
+            if (lua_getmetatable(L, lua_upvalueindex(1)) == 0) {
+                return luaL_error(L, "function called while its state closes");
+            }
             lua_pop(L, 1);
-            lua_createtable(L, 0, 2);
-            lua_pushcfunction(L, CollectFunction);
-            lua_setfield(L, -2, "__gc");
-            lua_pushboolean(L, 0);
-            lua_setfield(L, -2, "__metatable");
-            lua_pushvalue(L, -1);
-            lua_rawsetp(L, LUA_REGISTRYINDEX, &holderKey);
+            return Detail::LuaInvokeNative(L, *static_cast<NativeFunction *>(lua_touserdata(L, lua_upvalueindex(1))), false, nullptr, 2);
         }
-        // Built once nothing above can raise any more, and finalized from the moment it has its metatable.
-        ::new (block) NativeFunction(std::move(function));
-        lua_setmetatable(L, -2);
+    } // namespace
+
+    void PushLuaFunction(lua_State *L, NativeFunction function) {
+        PushHeldFunction(L, std::move(function));
         lua_pushcclosure(L, CallFunction, 1);
     }
 
+    namespace {
+        void PushCarryingFunction(lua_State *L, NativeFunction function, int data) {
+            PushHeldFunction(L, std::move(function));
+            luaL_checkstack(L, 1, "cannot push a function");
+            if (data != 0) {
+                lua_pushvalue(L, data);
+            }
+            else {
+                lua_pushnil(L);
+            }
+            lua_pushcclosure(L, CallCarrying, 2);
+        }
+
+        void PushHeldFunction(lua_State *L, NativeFunction function) {
+            luaL_checkstack(L, 4, "cannot push a function");
+            void *block = lua_newuserdatauv(L, sizeof(NativeFunction), 0);
+            if (lua_rawgetp(L, LUA_REGISTRYINDEX, &holderKey) == LUA_TNIL) {
+                lua_pop(L, 1);
+                lua_createtable(L, 0, 2);
+                lua_pushcfunction(L, CollectFunction);
+                lua_setfield(L, -2, "__gc");
+                lua_pushboolean(L, 0);
+                lua_setfield(L, -2, "__metatable");
+                lua_pushvalue(L, -1);
+                lua_rawsetp(L, LUA_REGISTRYINDEX, &holderKey);
+            }
+            // Built once nothing above can raise any more, and finalized from the moment it has its metatable.
+            ::new (block) NativeFunction(std::move(function));
+            lua_setmetatable(L, -2);
+        }
+    } // namespace
+
     namespace Detail {
-        int LuaInvokeNative(lua_State *L, NativeFunction &function, bool method, const char *label) {
+        int LuaInvokeNative(lua_State *L, NativeFunction &function, bool method, const char *label, int dataUpvalue) {
             std::optional<std::string> error;
             std::shared_ptr<LuaDeferred> deferred;
             int results = 0;
             {
-                LuaCall call(L, method);
+                LuaCall call(L, method, dataUpvalue);
                 try {
                     function(call);
                 }

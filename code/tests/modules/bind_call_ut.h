@@ -504,6 +504,23 @@ namespace BindCallTest {
                     },
                     Doc("Makes a function that holds a value.").ReturnType(Type::Custom("() => number", "fun(): integer")))
                 .Function(
+                    "carry",
+                    [](Call &call) {
+                        // The function carries its argument and gives it back, with the kind Data has outside it.
+                        const std::string outside = KindName(call.Data().Kind());
+                        call.Return(call.NewFunction(
+                            [outside](Call &inner) {
+                                if (inner.ArgCount() > 0) {
+                                    inner.Return(outside + KindName(inner.Data().Kind()));
+                                }
+                                else {
+                                    inner.Return(inner.Data());
+                                }
+                            },
+                            call.Arg(0)));
+                    },
+                    Doc("Makes a function that carries a value.").Param("value", Type::Any(), "What it carries.").ReturnType(Type::Custom("(kind?: boolean) => unknown", "fun(kind?: boolean): any")))
+                .Function(
                     "failType",
                     [](Call &call) {
                         const bool before = call.HasThrown();
@@ -1058,6 +1075,37 @@ MODULE(bind_call, {
         EQUALS(runtimes.Lua("select('#', Probe.echo(nil))"), "1");
         EQUALS(runtimes.Lua("math.type(Probe.sum(1, 2))"), "float");
         EQUALS(runtimes.Lua("math.type(Probe.argc(1, 2))"), "integer");
+    });
+
+    IT("makes a function that carries a script value the collector sees", {
+        Runtimes runtimes;
+        std::string mismatches;
+        mismatches += runtimes.Both("{ const o = {}; Probe.carry(o)() === o }", "(function() local o = {} return rawequal(Probe.carry(o)(), o) end)()", "true");
+        mismatches += runtimes.Both("{ const f = () => 1; Probe.carry(f)() === f }", "(function() local f = function() end return rawequal(Probe.carry(f)(), f) end)()", "true");
+        mismatches += runtimes.Both("Probe.carry('text')()", "text");
+        mismatches += runtimes.Both("Probe.carry({})(true)", "NilObject");
+        mismatches += runtimes.Both("Probe.carry()(true)", "NilNil");
+        mismatches += runtimes.Both("{ const f = Probe.carry(5); f() + f() }", "(function() local f = Probe.carry(5) return f() + f() end)()", "10");
+        EQUALS(mismatches, "");
+
+        // A value that leads back to the function that carries it is collected with it: the host roots neither.
+        EQUALS(LuaRuntimeTest::Run(runtimes.LuaSide(), "kept = setmetatable({}, {__mode = 'k'}) for i = 1, 50 do local o = {} o.f = Probe.carry(o) kept[o] = true end"), "");
+        lua_gc(runtimes.LuaSide().State(), LUA_GCCOLLECT);
+        EQUALS(runtimes.Lua("(function() local n = 0 for _ in pairs(kept) do n = n + 1 end return n end)()"), "0");
+
+        EQUALS(runtimes.Js("globalThis.plain = []; for (let i = 0; i < 50; i++) { const o = {}; plain.push(new WeakRef(o)); } plain.length"), "50");
+        // A WeakRef holds its target until the job that made it has ended: the collection is told it has.
+        runtimes.Enter([](v8::Isolate *isolate, v8::Local<v8::Context>) {
+            isolate->ClearKeptObjects();
+            isolate->LowMemoryNotification();
+        });
+        EQUALS(runtimes.Js("plain.filter((ref) => ref.deref() !== undefined).length"), "0");
+        EQUALS(runtimes.Js("globalThis.refs = []; for (let i = 0; i < 50; i++) { const o = {}; o.f = Probe.carry(o); refs.push(new WeakRef(o)); } refs.length"), "50");
+        runtimes.Enter([](v8::Isolate *isolate, v8::Local<v8::Context>) {
+            isolate->ClearKeptObjects();
+            isolate->LowMemoryNotification();
+        });
+        EQUALS(runtimes.Js("refs.filter((ref) => ref.deref() !== undefined).length"), "0");
     });
 
     IT("gives the V8 handle of a JavaScript value, and takes one back", {
