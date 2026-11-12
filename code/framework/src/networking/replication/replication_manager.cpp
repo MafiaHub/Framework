@@ -838,10 +838,26 @@ namespace Framework::Networking::Replication {
     bool ReplicationManager::DestroyByOwner(NetworkEntity *entity, MafiaNet::Connection_RM3 *source) {
         const uint64_t id = entity->GetNetworkID();
         std::shared_ptr<Detail::WorldEntitySlot> unheld;
-        if (_world.MarkDoomed(id, unheld) != World::Doom::Marked) {
-            return false;
+        {
+            // Alone with the entity from the owner check to the mod's PreDestruction: a handler or a
+            // script that held it has let go, and none takes it in between. (ReplicaManager3's world,
+            // the sender's connection, then the entity: the order everything else takes them in.)
+            const Detail::EntityGuard guard(*entity, true);
+            if (MafiaNet::ToPeerGuid(source->GetRakNetGUID()) != entity->ownerGUID || !entity->CanOwnerDestroy()) {
+                return false;
+            }
+            if (_world.MarkDoomed(id, unheld) != World::Doom::Marked) {
+                return false;
+            }
+            if (unheld) {
+                entity->PreDestruction(source);
+            }
+            else {
+                // A handle holds it still, or waits for it: its holder must not see the entity
+                // half taken apart. The teardown that the last release brings runs it, once.
+                entity->_preDestructionOwed = true;
+            }
         }
-        entity->PreDestruction(source);
         if (unheld) {
             _world.TeardownUnheld(std::move(unheld));
         }
@@ -850,6 +866,10 @@ namespace Framework::Networking::Replication {
 
     void ReplicationManager::TeardownEntity(NetworkEntity *entity) {
         const uint64_t id = entity->GetNetworkID();
+        if (std::exchange(entity->_preDestructionOwed, false)) {
+            // The connection that asked may be gone by now, so none is named.
+            entity->PreDestruction(nullptr);
+        }
         {
             const WorldGuard world(*this);
             {

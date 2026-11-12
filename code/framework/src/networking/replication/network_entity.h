@@ -521,6 +521,9 @@ namespace Framework::Networking::Replication {
 
         // Server: being torn down, and so never filed in the interest index again.
         bool _leaving = false;
+        // Server: destroyed by its owner while something still held it, so PreDestruction, which
+        // must not run beside whoever holds the entity, is owed to its teardown.
+        bool _preDestructionOwed = false;
 
         // Server: the entity's lock, which lives in the world beside it; null on a client.
         Detail::WorldLockable *_worldLock = nullptr;

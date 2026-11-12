@@ -28,6 +28,16 @@
 // These tests pin the owner gate directly: DeserializeDestruction's return value IS the decision
 // (true -> the base deletes + relays the destruction, false -> the entity is kept), so a return of
 // true for a non-owner connection reproduces the vulnerability and a return of false proves the fix.
+namespace ReplicationAuthorityTest {
+    // Counts what a mod would do when one of its entities is destroyed by its owner.
+    struct Counted final: Framework::Networking::Replication::NetworkEntity {
+        static inline int preDestructions = 0;
+        void PreDestruction(MafiaNet::Connection_RM3 *) override {
+            ++preDestructions;
+        }
+    };
+} // namespace ReplicationAuthorityTest
+
 MODULE(replication_authority, {
     using Framework::Networking::NetworkServer;
     using Framework::Networking::Replication::NetworkEntity;
@@ -168,6 +178,52 @@ MODULE(replication_authority, {
         EQUALS(destroyed.size(), 2u);
         EQUALS(TestWorld::Find(manager, manager->GetViewerId(MafiaNet::ToPeerGuid(player))) == nullptr, true);
         TestWorld::Destroy(manager, watcher);
+    });
+
+    IT("runs an owner's PreDestruction only once nothing else holds the entity", {
+        using ReplicationAuthorityTest::Counted;
+        Counted::preDestructions = 0;
+        NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        const auto type = Framework::Networking::Replication::EntityRegistry::Get().Register<Counted>("Test::OwnerDestruction::Counted");
+        auto &world     = manager->GetWorld();
+        const MafiaNet::RakNetGUID player(3100);
+        MafiaNet::Connection_RM3 *connection = TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, player);
+        uint64_t ids[2] = {0, 0};
+        for (uint64_t &id : ids) {
+            const auto created = world.Create(type);
+            created->ownerGUID = MafiaNet::ToPeerGuid(player);
+            id                 = created.Id();
+        }
+        MafiaNet::BitStream bs;
+
+        // Nobody holds the first: destroyed at once, the hook run under its lock alone.
+        NetworkEntity *free = TestWorld::Find(manager, ids[0]);
+        EQUALS(free->DeserializeDestruction(&bs, connection), true);
+        EQUALS(Counted::preDestructions, 1);
+        EQUALS(world.Exists(ids[0]), false);
+
+        // The second is held, as by a handler in the middle of its work: the destruction waits for it,
+        // and so does the hook.
+        int duringHold = -1;
+        bool kept      = true;
+        {
+            const auto held = world.Write<NetworkEntity>(ids[1]);
+            kept            = !held->DeserializeDestruction(&bs, connection);
+            duringHold      = Counted::preDestructions;
+        }
+        EQUALS(kept, true);
+        EQUALS(duringHold, 1);
+        EQUALS(Counted::preDestructions, 2);
+        EQUALS(world.Exists(ids[1]), false);
+        TestWorld::Rm3(manager)->DeallocConnection(connection);
     });
 
     IT("refuses a client's attempt to destroy an entity it does not own", {

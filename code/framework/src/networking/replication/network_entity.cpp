@@ -189,18 +189,12 @@ namespace Framework::Networking::Replication {
         // destruction from the entity's current owner; fail closed on a missing connection. Returning
         // false keeps the entity alive. Clients still accept the server's authoritative destructions.
         if (IsServerPeer()) {
-            {
-                const Detail::EntityGuard guard(*this, false);
-                if (!sourceConnection || MafiaNet::ToPeerGuid(sourceConnection->GetRakNetGUID()) != ownerGUID || !CanOwnerDestroy()) {
-                    return false;
-                }
-            }
             // Destroyed here, not by the base: its delete skips the teardown's bookkeeping and leaves
             // the viewer map and interest sets on freed memory. The base re-resolves the id after
             // this returns and finds it gone; unless a handle still holds the entity, which then goes
             // when that is released, and the base, which would find it and delete it, is told to
-            // keep it.
-            return Manager()->DestroyByOwner(this, sourceConnection);
+            // keep it. The owner check is made there, under the lock the destruction is decided under.
+            return sourceConnection != nullptr && Manager()->DestroyByOwner(this, sourceConnection);
         }
         return true;
     }

@@ -483,8 +483,10 @@ namespace Framework::Networking::Replication {
         // can be handed out again. From its teardown, and from ~NetworkEntity for any other way out.
         void ForgetEntity(NetworkEntity *entity);
         void ForgetSlot(uint32_t slot);
-        // Server: the owner's destruction of its entity, already accepted. True once the entity is
-        // gone; false when it was on its way out already, or waits on a handle.
+        // Server: a connection's destruction of an entity, accepted only from its owner. True once the
+        // entity is gone; false when it was refused, was on its way out already, or waits on a handle.
+        // The mod's PreDestruction runs with the entity held by nobody else: now, or, when a handle
+        // still holds it, at its teardown (with no connection named).
         bool DestroyByOwner(NetworkEntity *entity, MafiaNet::Connection_RM3 *source);
         // What World::Destroy ends in, with nothing left holding the entity: out of the viewer map,
         // the index and delegation, then the destruction broadcast and the delete.
