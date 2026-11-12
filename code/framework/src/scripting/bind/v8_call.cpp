@@ -558,7 +558,6 @@ namespace Framework::Scripting::Bind {
             };
 
             static constexpr const char *kTerminating = "the runtime is being terminated";
-            static constexpr const char *kNoJsonForm  = "a value of this kind has no JSON form";
 
             Value At(size_t slot) const {
                 return Detail::ValueAccess::Make(*this, slot);

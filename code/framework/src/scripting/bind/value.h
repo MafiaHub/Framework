@@ -41,6 +41,11 @@ namespace Framework::Scripting::Bind {
         Other   // what the other language has nothing for: a symbol, a bigint, a coroutine, a userdata of no class
     };
 
+    // The error of Value::ToJson for a JavaScript value JSON.stringify gives no text for, undefined instead: a
+    // function, a symbol, an object whose toJSON gives one of them. It tells such a value, which an API may always
+    // have taken for none, from one that failed to be written.
+    inline constexpr const char *kNoJsonForm = "a value of this kind has no JSON form";
+
     namespace Detail {
         // What a Value forwards to: the values of one call, by slot. Slot 0 is nil. Implemented once per language,
         // by the Call of that language (lua_call.cpp, v8_call.cpp).
