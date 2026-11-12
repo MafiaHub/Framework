@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -82,7 +83,8 @@ namespace Framework::Scripting::Builtins {
         static void UnregisterIsolate(v8::Isolate *isolate);
 
       protected:
-        const Networking::RPC::ClientIdentity *ResolveIdentity() const;
+        // A copy: the connection it describes may close while the caller reads it.
+        std::optional<Networking::RPC::ClientIdentity> ResolveIdentity() const;
 
         // The entity's nametag with the entity held, for the scope that keeps it.
         struct HeldNametag {

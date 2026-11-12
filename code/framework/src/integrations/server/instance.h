@@ -48,6 +48,7 @@
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <sig.h>
@@ -244,6 +245,9 @@ namespace Framework::Integrations::Server {
         // Reused every tick so the drain never allocates.
         std::vector<Voice::TalkingChange> _voiceTalkingChanges;
         std::vector<Voice::TierChange> _voiceTierChanges;
+        // Where each connection is on its way into the world. Written where packets are handled and
+        // read by admission, where scripts run: under this mutex, which is held across no call.
+        mutable std::mutex _connectionsMutex;
         std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
         std::unordered_set<uint64_t> _readyPlayerGuids;
         // Connections that joined the world (ClientJoin): the ones holding a player slot.

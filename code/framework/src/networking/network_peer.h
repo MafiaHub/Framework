@@ -10,8 +10,10 @@
 
 #include "channels.h"
 #include "connection.h"
+#include "rpc/client_identity.h"
 #include "rpc/rpc.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <logging/logger.h>
@@ -23,6 +25,8 @@
 #include <mafianet/rpc4_plugin.h>
 #include <mafianet/two_way_authentication.h>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -34,10 +38,6 @@
 namespace Framework::Networking::Replication {
     class ReplicationManager;
 } // namespace Framework::Networking::Replication
-
-namespace Framework::Networking::RPC {
-    struct ClientIdentity;
-} // namespace Framework::Networking::RPC
 
 namespace Framework::Networking {
     class NetworkPeer: public Lifecycle {
@@ -87,8 +87,10 @@ namespace Framework::Networking {
 
         // Deployment salt mixed into every RPC4 slot key (see rpc/rpc_identifier.h), and the tokens
         // derived from it so a send costs a lookup, not a hash. Keyed by digest; node-stable, so the
-        // C strings handed to RPC4 stay valid for the peer's lifetime.
+        // C strings handed to RPC4 stay valid for the peer's lifetime. Any thread that sends resolves
+        // one, hence the mutex around the map.
         std::uint64_t _identifierSalt = RPC::kDefaultIdentifierSalt;
+        std::mutex _identifierTokensMutex;
         std::unordered_map<std::uint64_t, RPC::Token> _identifierTokens;
 
         static void DispatchRPC(MafiaNet::BitStream *bs, MafiaNet::Packet *packet, void *context) {
@@ -99,6 +101,13 @@ namespace Framework::Networking {
         }
 
         bool RegisterBuildToken();
+
+        // Called by DrainPackets before each Receive(), on the thread that drains.
+        virtual void BeforeReceive() {}
+
+      private:
+        // Handles the packet DrainPackets has just received.
+        void Dispatch();
 
       public:
         // TwoWayAuthentication identifier under which the build token is registered/challenged.
@@ -190,6 +199,10 @@ namespace Framework::Networking {
         }
 
         void Update() override;
+        // Receives until nothing waits, handling each packet as it comes: plugins, RPC handlers,
+        // HandlePacket, in arrival order. One thread calls it. `stop`, when given, ends the drain
+        // before the next packet once it is raised.
+        void DrainPackets(const std::atomic<bool> *stop = nullptr);
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
 
         // Byte offset of the packet id in a datagram, skipping an optional ID_TIMESTAMP + 8-byte
@@ -213,9 +226,10 @@ namespace Framework::Networking {
         // Server-only; base no-op lets shared code kick through a NetworkPeer* without a cast.
         virtual void KickPlayer(MafiaNet::RakNetGUID, DisconnectionReason, const std::string & = "") {}
 
-        // Server-only; the identity the peer announced via ClientIdentity (unverified), else nullptr.
-        virtual const RPC::ClientIdentity *GetPeerIdentity(MafiaNet::RakNetGUID) const {
-            return nullptr;
+        // Server-only; the identity the peer announced via ClientIdentity (unverified), if it is
+        // connected. A copy: the connection may go, on another thread, while the caller reads it.
+        virtual std::optional<RPC::ClientIdentity> GetPeerIdentity(MafiaNet::RakNetGUID) const {
+            return std::nullopt;
         }
 
         // Server-only; the connection's average round-trip time in ms, or -1 if unavailable.

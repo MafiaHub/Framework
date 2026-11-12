@@ -20,13 +20,16 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
+#include <atomic>
 #include <mafianet/peer_interface.h>
 #include <mafianet/types.h>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace Framework::Networking::Replication {
     class World;
@@ -65,11 +68,25 @@ namespace Framework::Networking {
         SessionRequestCallback _onSessionRequestCallback;
         ClientGuidCallback _onSessionAbandonedCallback;
 
+        // What is kept per connection. Packets write it where they are handled, and any thread asks
+        // (a script reading a player's identity, a kick): all of it under this mutex, which is taken
+        // last and never held across a call out of this class.
+        mutable std::mutex _clientsMutex;
+
         // Guids whose build challenge passed — the gate keeping unverified peers out of replication.
         std::unordered_set<uint64_t> _authenticatedClients;
 
         // Identities from the session request, kept for the connection's lifetime.
         std::unordered_map<uint64_t, RPC::ClientIdentity> _peerIdentities;
+
+        // Ready events of connections that were kicked, for the thread that handles packets to
+        // delete before its next one: ReadyEvent belongs to that thread.
+        std::vector<int> _staleReadyEvents;
+        std::atomic<bool> _anyStaleReadyEvents {false};
+        void DeleteStaleReadyEvents();
+        void BeforeReceive() override {
+            DeleteStaleReadyEvents();
+        }
 
         bool _replicationRPCsRegistered = false;
 
@@ -105,6 +122,7 @@ namespace Framework::Networking {
         std::string GetAddress(MafiaNet::RakNetGUID guid) const override;
 
         bool IsAuthenticated(MafiaNet::RakNetGUID guid) const {
+            const std::lock_guard guard(_clientsMutex);
             return _authenticatedClients.contains(guid.g);
         }
 
@@ -138,12 +156,14 @@ namespace Framework::Networking {
         void KickPlayer(MafiaNet::RakNetGUID guid, DisconnectionReason reason, const std::string &customReason = "") override;
 
         void SetPeerIdentity(MafiaNet::RakNetGUID guid, const RPC::ClientIdentity &identity) {
+            const std::lock_guard guard(_clientsMutex);
             _peerIdentities[guid.g] = identity;
         }
 
-        const RPC::ClientIdentity *GetPeerIdentity(MafiaNet::RakNetGUID guid) const override {
+        std::optional<RPC::ClientIdentity> GetPeerIdentity(MafiaNet::RakNetGUID guid) const override {
+            const std::lock_guard guard(_clientsMutex);
             const auto it = _peerIdentities.find(guid.g);
-            return it != _peerIdentities.end() ? &it->second : nullptr;
+            return it != _peerIdentities.end() ? std::optional<RPC::ClientIdentity>(it->second) : std::nullopt;
         }
 
         // Per-connection ReadyEvent id, derived from the slot so both ends agree without coordination.

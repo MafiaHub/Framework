@@ -291,7 +291,12 @@ namespace Framework::Integrations::Server {
             // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
             // still resolvable) just before destroying and broadcasting the destruction of the avatar.
             replication->SetOnClientDisconnect([this, replication](MafiaNet::PeerGuid guid) {
-                if (_readyPlayerGuids.contains(static_cast<uint64_t>(guid))) {
+                bool ready = false;
+                {
+                    const std::lock_guard guard(_connectionsMutex);
+                    ready = _readyPlayerGuids.contains(static_cast<uint64_t>(guid));
+                }
+                if (ready) {
                     OnPlayerDisconnect(guid, replication->GetWorld());
                 }
             });
@@ -703,25 +708,33 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Build verified for player guid {}, sending resource list", guid.g);
 
             Framework::Networking::RPC::ServerResources resources;
-            resources.readyEventId  = Framework::Networking::NetworkServer::ReadyEventId(guid);
-            resources.tickRate      = _opts.worldConfig.tickInterval;
-            resources.packageKey    = _packageKeyHex;
+            resources.readyEventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
+            resources.tickRate     = _opts.worldConfig.tickInterval;
+            // Granted here, where the disconnection that revokes it is handled too: after it, never.
             resources.downloadToken = _assetFileServer.Grant(guid.g);
             resources.downloadUrl   = _opts.assetDownloadUrl;
-            resources.resources     = DescribeClientResources();
-            net->SendRPC(resources, guid);
+            // The list is read off the resources, which start, stop and are republished where scripts
+            // run and in the tick: it is put together there.
+            PostToScripts([this, net, guid, resources = std::move(resources)]() mutable {
+                resources.packageKey = _packageKeyHex;
+                resources.resources  = DescribeClientResources();
+                net->SendRPC(resources, guid);
 
-            // Travels with the resource list: a client that learns the ranges only when
-            // someone speaks would misjudge the first words it hears.
-            _voiceServer.SendSettingsTo(guid);
+                // Travels with the resource list: a client that learns the ranges only when
+                // someone speaks would misjudge the first words it hears.
+                _voiceServer.SendSettingsTo(guid);
+            });
         });
 
         net->SetOnPlayerDisconnectCallback([this, net](MafiaNet::Packet *packet, Framework::Networking::DisconnectionReason reason, const std::string &) {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
-            _armedSpawnBarrierGuids.erase(guid.g);
-            _readyPlayerGuids.erase(guid.g);
-            _joinedGuids.erase(guid.g);
+            {
+                const std::lock_guard guard(_connectionsMutex);
+                _armedSpawnBarrierGuids.erase(guid.g);
+                _readyPlayerGuids.erase(guid.g);
+                _joinedGuids.erase(guid.g);
+            }
             // Drop voice state unconditionally: a peer that never reached the ready barrier can
             // still have been registered in the router by a position push.
             _voiceServer.OnPlayerDisconnect(guid.g);
@@ -733,8 +746,14 @@ namespace Framework::Integrations::Server {
         });
 
         net->SetOnConnectionReadyCallback([this, net](int eventId, MafiaNet::RakNetGUID guid) {
-            if (eventId != Framework::Networking::NetworkServer::ReadyEventId(guid) || _armedSpawnBarrierGuids.erase(guid.g) == 0 || !_readyPlayerGuids.insert(guid.g).second) {
+            if (eventId != Framework::Networking::NetworkServer::ReadyEventId(guid)) {
                 return;
+            }
+            {
+                const std::lock_guard guard(_connectionsMutex);
+                if (_armedSpawnBarrierGuids.erase(guid.g) == 0 || !_readyPlayerGuids.insert(guid.g).second) {
+                    return;
+                }
             }
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Client spawn ready for player guid {}", guid.g);
             OnPlayerReady(MafiaNet::ToPeerGuid(guid), net->GetReplicationManager()->GetWorld());
@@ -760,19 +779,29 @@ namespace Framework::Integrations::Server {
 
             // The player slot is taken here, not at admission: a connection that only downloaded held
             // one of the maxDownloading places. The world may have filled meanwhile.
-            if (_joinedGuids.size() >= static_cast<size_t>(_opts.maxPlayers)) {
+            bool full = false;
+            {
+                const std::lock_guard guard(_connectionsMutex);
+                full = _joinedGuids.size() >= static_cast<size_t>(_opts.maxPlayers);
+                if (!full) {
+                    _joinedGuids.insert(guid.g);
+                }
+            }
+            if (full) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refusing the join of guid {}: the server filled up while it was downloading", guid.g);
                 net->KickPlayer(guid, Framework::Networking::DisconnectionReason::KICKED_CUSTOM, kServerFullReason);
                 return;
             }
-            _joinedGuids.insert(guid.g);
 
             // An accepted request always carried an identity, but what is stored for a connection
             // is only as trustworthy as every packet since: refuse rather than dereference.
-            const Framework::Networking::RPC::ClientIdentity *storedIdentity = net->GetPeerIdentity(guid);
-            if (storedIdentity == nullptr) {
+            const std::optional<Framework::Networking::RPC::ClientIdentity> storedIdentity = net->GetPeerIdentity(guid);
+            if (!storedIdentity) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Refusing the join of guid {}: it has no stored identity", guid.g);
-                _joinedGuids.erase(guid.g);
+                {
+                    const std::lock_guard guard(_connectionsMutex);
+                    _joinedGuids.erase(guid.g);
+                }
                 net->KickPlayer(guid, Framework::Networking::DisconnectionReason::KICKED_INVALID_PACKET, "");
                 return;
             }
@@ -797,7 +826,10 @@ namespace Framework::Integrations::Server {
             const int eventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
             net->GetReadyEvent()->SetEvent(eventId, false);
             net->GetReadyEvent()->AddToWaitList(eventId, guid);
-            _armedSpawnBarrierGuids.insert(guid.g);
+            {
+                const std::lock_guard guard(_connectionsMutex);
+                _armedSpawnBarrierGuids.insert(guid.g);
+            }
         });
 
         // Incoming chat from clients. Sender resolution + command parsing happen here; the mod
@@ -903,7 +935,11 @@ namespace Framework::Integrations::Server {
         // The pool let the request in whatever the player count, so a queue can hold people while the
         // server is full. Letting one in still needs a free slot: a player slot for the world it will
         // join, and a connection for the download in between.
-        const bool worldFull       = _joinedGuids.size() >= static_cast<size_t>(_opts.maxPlayers);
+        bool worldFull = false;
+        {
+            const std::lock_guard guard(_connectionsMutex);
+            worldFull = _joinedGuids.size() >= static_cast<size_t>(_opts.maxPlayers);
+        }
         const bool connectionsFull = net->GetPlayerCount() >= static_cast<uint32_t>(_opts.maxPlayers + _opts.maxDownloading);
         if (worldFull || connectionsFull) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refusing guid {}: the server is full", guid.g);

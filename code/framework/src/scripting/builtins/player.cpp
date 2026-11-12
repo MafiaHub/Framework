@@ -49,27 +49,27 @@ namespace Framework::Scripting::Builtins {
     }
 
     std::string Player::GetSteamId() const {
-        const auto *identity = ResolveIdentity();
+        const auto identity = ResolveIdentity();
         return identity ? identity->steamId : "";
     }
 
     std::string Player::GetEpicId() const {
-        const auto *identity = ResolveIdentity();
+        const auto identity = ResolveIdentity();
         return identity ? identity->epicId : "";
     }
 
     std::string Player::GetDiscordId() const {
-        const auto *identity = ResolveIdentity();
+        const auto identity = ResolveIdentity();
         return identity ? identity->discordId : "";
     }
 
     std::string Player::GetDiscordName() const {
-        const auto *identity = ResolveIdentity();
+        const auto identity = ResolveIdentity();
         return identity ? identity->discordName : "";
     }
 
     std::string Player::GetHardwareId() const {
-        const auto *identity = ResolveIdentity();
+        const auto identity = ResolveIdentity();
         return identity ? identity->hardwareId : "";
     }
 
@@ -203,13 +203,13 @@ namespace Framework::Scripting::Builtins {
         });
     }
 
-    const Networking::RPC::ClientIdentity *Player::ResolveIdentity() const {
+    std::optional<Networking::RPC::ClientIdentity> Player::ResolveIdentity() const {
         MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
         if (!ResolveOwner(owner)) {
-            return nullptr;
+            return std::nullopt;
         }
         auto *peer = CoreModules::GetNetworkPeer();
-        return peer ? peer->GetPeerIdentity(MafiaNet::ToGuid(owner)) : nullptr;
+        return peer ? peer->GetPeerIdentity(MafiaNet::ToGuid(owner)) : std::nullopt;
     }
 
     void Player::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {

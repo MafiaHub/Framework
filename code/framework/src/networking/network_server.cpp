@@ -124,7 +124,10 @@ namespace Framework::Networking {
         };
         case ID_SESSION_CONFIG_ABANDONED: {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Connection request from {} abandoned", MafiaNet::to_string(packet->guid));
-            _peerIdentities.erase(packet->guid.g);
+            {
+                const std::lock_guard guard(_clientsMutex);
+                _peerIdentities.erase(packet->guid.g);
+            }
             if (_onSessionAbandonedCallback) {
                 _onSessionAbandonedCallback(packet->guid);
             }
@@ -160,7 +163,10 @@ namespace Framework::Networking {
         // -> drop (the version-incompatibility path).
         case ID_TWO_WAY_AUTHENTICATION_INCOMING_CHALLENGE_SUCCESS: {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Build verified for {}", MafiaNet::to_string(packet->guid));
-            _authenticatedClients.insert(packet->guid.g);
+            {
+                const std::lock_guard guard(_clientsMutex);
+                _authenticatedClients.insert(packet->guid.g);
+            }
             if (_onClientAuthenticatedCallback) {
                 _onClientAuthenticatedCallback(packet->guid);
             }
@@ -233,7 +239,10 @@ namespace Framework::Networking {
     }
 
     void NetworkServer::RejectSession(MafiaNet::RakNetGUID guid, const std::string &reason) {
-        _peerIdentities.erase(guid.g);
+        {
+            const std::lock_guard guard(_clientsMutex);
+            _peerIdentities.erase(guid.g);
+        }
         _peer->RejectSession(guid, reason.c_str());
     }
 
@@ -258,8 +267,27 @@ namespace Framework::Networking {
     }
 
     void NetworkServer::ClearClientState(MafiaNet::RakNetGUID guid) {
+        const std::lock_guard guard(_clientsMutex);
         _authenticatedClients.erase(guid.g);
         _peerIdentities.erase(guid.g);
-        _readyEvent.DeleteEvent(ReadyEventId(guid)); // recycle the slot for reconnects
+        // Recycles the slot for reconnects, before the next packet is handled: so before any from a
+        // connection that takes the slot over.
+        _staleReadyEvents.push_back(ReadyEventId(guid));
+        _anyStaleReadyEvents.store(true, std::memory_order_release);
+    }
+
+    void NetworkServer::DeleteStaleReadyEvents() {
+        if (!_anyStaleReadyEvents.load(std::memory_order_acquire)) {
+            return;
+        }
+        std::vector<int> stale;
+        {
+            const std::lock_guard guard(_clientsMutex);
+            stale.swap(_staleReadyEvents);
+            _anyStaleReadyEvents.store(false, std::memory_order_release);
+        }
+        for (const int eventId : stale) {
+            _readyEvent.DeleteEvent(eventId);
+        }
     }
 } // namespace Framework::Networking
