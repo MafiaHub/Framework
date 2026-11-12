@@ -314,6 +314,8 @@ namespace Framework::Integrations::Server {
             bool wantsPackage = false;
             ClientPackage package;
             bool wantsPaks = false;
+            // The paks could not be built: not the same as a resource that ships none. What it served before stays.
+            bool paksFailed = false;
             AssetPakBuilder::Prepared paks;
         };
         ClientPublishJob PlanClientPublish(const std::string &name, const std::string &stagingDir);

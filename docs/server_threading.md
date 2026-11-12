@@ -154,8 +154,11 @@ function call; the script keeps its place and carries on afterwards). So:
 - No safe point is taken while native code that the script called is on the
   stack and has called back into script (an event handler run from
   `Events.emit`, a state-bag listener, an export of another resource): that
-  native code is in the middle of its work. The tick then waits for that
-  call to return.
+  native code is in the middle of its work. The tick waits for that call to
+  return and keeps asking meanwhile. V8 does not report the return, so it is
+  read off the stack: the call is over once the script is no deeper than
+  where it made it. A script that went into deeper calls of its own right
+  after is taken for still being inside it until it comes back up.
 - A script blocked inside a native call that takes long on its own
   (`fs.readFileSync` of a large file, `execSync`) cannot be interrupted
   either. Use the asynchronous forms.
@@ -183,8 +186,11 @@ void MyServer::OnPlayerConnect(const PlayerConnectionData &data) {
 }
 ```
 
-- `PostToScripts(task)` runs `task` on the script thread within a couple of
-  milliseconds. With scripts inside the tick it runs at once.
+- `PostToScripts(task)` queues `task` for the script thread, which looks at
+  its queue about every 2 ms between the scripts it runs. That is an
+  interval, not a deadline: a task waits behind the tasks queued before it
+  and behind a script that is in the middle of a long callback. With scripts
+  inside the tick it runs at once.
 - `RunOnScriptThread(task)` waits for it. From the tick thread the world may
   have changed when it returns.
 - A handler's answer can no longer be read on the line after the emit. Have
@@ -208,7 +214,8 @@ Two things are not supported and deadlock or crash:
 
 ### What it costs
 
-- An event raised by the tick reaches its handlers up to about 2 ms later.
+- An event raised by the tick reaches its handlers about 2 ms later when the
+  script thread is idle, and later than that behind a long callback.
 - The resource monitor charges a script for the time it stood at a safe
   point, so a script that was interrupted reads slower than it ran.
 - `tick.scriptsMs` in the slow-tick warning is now the time the tick waited

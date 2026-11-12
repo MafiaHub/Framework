@@ -1127,14 +1127,30 @@ namespace Framework::Integrations::Server {
     }
 
     Instance::ClientPublish Instance::RunClientPublish(const ClientPublishJob &job, const AssetPakBuilder &paks) {
+        // Each half fails on its own, and a build that throws still comes back with what it has: the caller's
+        // completion is what clears the way for the next build, and a package already written must reach it to be
+        // put in place or removed.
         ClientPublish built;
         if (job.package) {
             built.wantsPackage = true;
-            built.package      = BuildClientPackage(*job.package);
+            try {
+                built.package = BuildClientPackage(*job.package);
+            }
+            catch (const std::exception &ex) {
+                built.package       = {};
+                built.package.name  = job.name;
+                built.package.error = ex.what();
+            }
         }
         if (job.pakFolder) {
             built.wantsPaks = true;
-            built.paks      = paks.Prepare(job.name, *job.pakFolder);
+            try {
+                built.paks = paks.Prepare(job.name, *job.pakFolder);
+            }
+            catch (const std::exception &ex) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not build the asset paks of '{}': {}", job.name, ex.what());
+                built.paksFailed = true;
+            }
         }
         return built;
     }
@@ -1158,6 +1174,10 @@ namespace Framework::Integrations::Server {
         }
 
         if (!_opts.assetPakPolicy) {
+            return;
+        }
+        // Nothing to adopt, and no reason to drop what was built last time: the caller left it published.
+        if (built.paksFailed) {
             return;
         }
         if (!built.wantsPaks) {
@@ -1201,17 +1221,7 @@ namespace Framework::Integrations::Server {
         }
         _scheduler->Compute(
             [job = PlanClientPublish(name, GetPackageStagingDir()), paks = &std::as_const(_assetPakBuilder)] {
-                // A build that throws still has to come back: the completion is what lets the next one start.
-                try {
-                    return RunClientPublish(job, *paks);
-                }
-                catch (const std::exception &ex) {
-                    ClientPublish failed;
-                    failed.wantsPackage  = job.package.has_value();
-                    failed.package.name  = job.name;
-                    failed.package.error = ex.what();
-                    return failed;
-                }
+                return RunClientPublish(job, *paks);
             },
             [this, name](ClientPublish built) {
                 FinishRepublish(name, std::move(built));
@@ -1242,7 +1252,8 @@ namespace Framework::Integrations::Server {
         _servedFiles.erase(name + Framework::Utils::Package::kExtension);
         _packageHashes.erase(name);
         _packageSizes.erase(name);
-        if (const auto paks = _assetPaks.find(name); paks != _assetPaks.end()) {
+        // The paks only when there are new ones to put in their place, or the resource now ships none.
+        if (const auto paks = _assetPaks.find(name); paks != _assetPaks.end() && !built.paksFailed) {
             for (const auto &pak : paks->second) {
                 _servedFiles.erase(Framework::Utils::StreamedAssets::PakFileName(name, pak.lane, pak.sha256));
             }
