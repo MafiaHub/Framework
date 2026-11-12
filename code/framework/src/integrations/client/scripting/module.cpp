@@ -243,6 +243,10 @@ namespace Framework::Integrations::Client::Scripting {
             Builtins::Keybinds::Update();
             Builtins::Web::Update();
         }
+        else {
+            // Without JavaScript the replies owed to Lua are delivered all the same.
+            Framework::Scripting::Builtins::Messages::ProcessPendingResponses();
+        }
     }
 
     void ClientScriptingModule::SetResourceCachePath(const std::string &path) {

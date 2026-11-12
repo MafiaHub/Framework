@@ -199,6 +199,7 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), Framework::Scripting::Bind::Side::Server);
 
         Framework::Scripting::Builtins::Events::RegisterLua(runtime);
+        Framework::Scripting::Builtins::Messages::RegisterLua(runtime);
         Framework::Scripting::Builtins::Imports::RegisterLua(runtime);
         Framework::Scripting::Builtins::Exports::RegisterLua(runtime);
         Framework::Scripting::Builtins::Console::RegisterLua(runtime);
@@ -266,6 +267,10 @@ namespace Framework::Integrations::Server::Scripting {
             v8::Local<v8::Context> context = scope.Context();
 
             Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);
+        }
+        else {
+            // Without JavaScript the replies owed to Lua are delivered all the same.
+            Framework::Scripting::Builtins::Messages::ProcessPendingResponses();
         }
     }
 

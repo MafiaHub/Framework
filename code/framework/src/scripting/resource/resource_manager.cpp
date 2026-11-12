@@ -1133,6 +1133,10 @@ namespace Framework::Scripting {
             v8::Local<v8::Context> context = scope.Context();
             Builtins::Messages::CleanupResource(isolate, context, std::string(resourceName));
         }
+        else {
+            // Without JavaScript only Lua waits on a request, and that needs no isolate.
+            Builtins::Messages::CleanupResource(std::string(resourceName));
+        }
         return true;
     }
 
