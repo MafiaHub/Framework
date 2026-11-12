@@ -112,6 +112,21 @@ namespace Framework::Networking::Replication {
         };
     } // namespace Detail
 
+    namespace Detail {
+        // NetworkIDObject's getter is not const, though it changes nothing once the id is set.
+        template <typename T>
+        uint64_t IdOf(const T *entity) {
+            static_assert(std::is_base_of_v<NetworkEntity, T>, "Id(): only an entity has a network id");
+            return entity != nullptr ? const_cast<NetworkEntity *>(static_cast<const NetworkEntity *>(entity))->GetNetworkID() : 0;
+        }
+    } // namespace Detail
+
+    // What a ForEach callback may return to end the walk early; one that returns nothing visits all.
+    enum class Walk : uint8_t {
+        Continue,
+        Stop
+    };
+
     // A write handle on an entity or a registered state: holds its lock for as long as it lives.
     // Empty when what was asked for does not resolve. Keep it in the scope that took it; what is kept
     // across calls is the id.
@@ -138,6 +153,15 @@ namespace Framework::Networking::Replication {
         }
         T &operator*() const {
             return *_object;
+        }
+        // The entity's network id, 0 for an empty handle. For entity handles only.
+        uint64_t Id() const {
+            return Detail::IdOf(_object);
+        }
+        // Lets go now rather than at the end of the scope; the handle is empty afterwards.
+        void Reset() {
+            _object = nullptr;
+            _hold   = Detail::WorldHold();
         }
 
       private:
@@ -172,6 +196,15 @@ namespace Framework::Networking::Replication {
         }
         const T &operator*() const {
             return *_object;
+        }
+        // The entity's network id, 0 for an empty handle. For entity handles only.
+        uint64_t Id() const {
+            return Detail::IdOf(_object);
+        }
+        // Lets go now rather than at the end of the scope; the handle is empty afterwards.
+        void Reset() {
+            _object = nullptr;
+            _hold   = Detail::WorldHold();
         }
 
       private:
@@ -238,13 +271,29 @@ namespace Framework::Networking::Replication {
         }
 
         // Visits every T that exists when the call starts, by ascending id, one lock at a time. The
-        // callback holds the entity it is given and so cannot ask the world for another.
-        template <typename T>
-        void ForEach(fu2::function<void(Ref<T> &)> fn) {
+        // callback holds the entity it is given and so cannot ask the world for another. It takes a
+        // Ref<T> & and returns nothing, or a Walk to stop before the rest.
+        template <typename T, typename Fn>
+        void ForEach(Fn &&fn) {
             static_assert(std::is_base_of_v<NetworkEntity, T>, "World::ForEach<T>: T must derive from NetworkEntity");
             for (const uint64_t id : IdsOfType(TypeOf<T>(), std::is_same_v<T, NetworkEntity>)) {
                 if (Ref<T> entity = Write<T>(id)) {
-                    fn(entity);
+                    if (Visit(fn, entity) == Walk::Stop) {
+                        return;
+                    }
+                }
+            }
+        }
+        // The same for reading: the callback takes a ConstRef<T> &, and shares each entity with other
+        // readers instead of keeping them out.
+        template <typename T, typename Fn>
+        void ForEachRead(Fn &&fn) {
+            static_assert(std::is_base_of_v<NetworkEntity, T>, "World::ForEachRead<T>: T must derive from NetworkEntity");
+            for (const uint64_t id : IdsOfType(TypeOf<T>(), std::is_same_v<T, NetworkEntity>)) {
+                if (ConstRef<T> entity = Read<T>(id)) {
+                    if (Visit(fn, entity) == Walk::Stop) {
+                        return;
+                    }
                 }
             }
         }
@@ -299,6 +348,17 @@ namespace Framework::Networking::Replication {
         friend class ReplicationManager;
         friend class DelegationManager;
         friend class Detail::WorldHold;
+
+        template <typename Fn, typename Handle>
+        static Walk Visit(Fn &fn, Handle &entity) {
+            if constexpr (std::is_void_v<std::invoke_result_t<Fn &, Handle &>>) {
+                fn(entity);
+                return Walk::Continue;
+            }
+            else {
+                return fn(entity);
+            }
+        }
 
         template <typename... Ts>
         static constexpr size_t kEntityCount = (size_t {0} + ... + (std::is_base_of_v<NetworkEntity, Ts> ? 1 : 0));

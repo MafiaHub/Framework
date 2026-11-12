@@ -22,6 +22,7 @@
 #include <memory>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace WorldTest {
     struct Walker final: Framework::Networking::Replication::NetworkEntity {
@@ -661,6 +662,99 @@ MODULE(world, {
         EQUALS(world.Exists(a), false);
         EQUALS(world.Destroy(b), true);
         EQUALS(world.Exists(b), false);
+    });
+
+    IT("gives an entity's id through either kind of handle, and 0 through an empty one", {
+        Fixture fixture;
+        World &world     = fixture.world;
+        const uint64_t a = fixture.Make<Walker>();
+
+        const auto read = world.Read<Walker>(a);
+        EQUALS(read.Id(), a);
+        const auto missing = world.Read<Walker>(a + 1000);
+        EQUALS(missing.Id(), uint64_t {0});
+        const Framework::Networking::Replication::Ref<Walker> empty;
+        EQUALS(empty.Id(), uint64_t {0});
+        // And through the base, as a walk over every entity is given them.
+        uint64_t seen = 0;
+        {
+            const auto any = world.Read<NetworkEntity>(a + 1000);
+            seen           = any.Id();
+        }
+        EQUALS(seen, uint64_t {0});
+    });
+
+    IT("lets a handle go before the end of its scope", {
+        Fixture fixture;
+        World &world     = fixture.world;
+        const uint64_t a = fixture.Make<Walker>();
+        const uint64_t b = fixture.Make<Prop>();
+
+        auto walker = world.Write<Walker>(a);
+        EQUALS(World::HeldByThisThread(), size_t {1});
+        walker.Reset();
+        EQUALS(static_cast<bool>(walker), false);
+        EQUALS(walker.Id(), uint64_t {0});
+        EQUALS(World::HeldByThisThread(), size_t {0});
+        // Which is what makes asking for another one legal.
+        auto prop = world.Read<Prop>(b);
+        EQUALS(static_cast<bool>(prop), true);
+        prop.Reset();
+        EQUALS(static_cast<bool>(prop), false);
+        EQUALS(World::HeldByThisThread(), size_t {0});
+        // Again does nothing.
+        prop.Reset();
+        walker.Reset();
+        EQUALS(World::HeldByThisThread(), size_t {0});
+        EQUALS(static_cast<bool>(world.Write<Walker>(a)), true);
+    });
+
+    IT("visits entities for reading, and stops a walk when its callback says so", {
+        Fixture fixture;
+        World &world = fixture.world;
+        std::vector<uint64_t> walkers;
+        for (int i = 0; i < 5; ++i) {
+            walkers.push_back(fixture.Make<Walker>());
+        }
+        fixture.Make<Prop>();
+        using Framework::Networking::Replication::ConstRef;
+        using Framework::Networking::Replication::Ref;
+        using Framework::Networking::Replication::Walk;
+
+        // Reading: every walker, by ascending id, shared with another reader of the same entity.
+        std::vector<uint64_t> read;
+        std::atomic<int> shared {0};
+        world.ForEachRead<Walker>([&](ConstRef<Walker> &walker) {
+            read.push_back(walker.Id());
+            std::thread other([&] {
+                if (world.Read<Walker>(read.back())) {
+                    ++shared;
+                }
+            });
+            other.join();
+        });
+        EQUALS(read == walkers, true);
+        EQUALS(shared.load(), 5);
+
+        // Stopped at the third, in both forms.
+        int visited = 0;
+        world.ForEachRead<Walker>([&](ConstRef<Walker> &) {
+            return ++visited == 3 ? Walk::Stop : Walk::Continue;
+        });
+        EQUALS(visited, 3);
+        int written = 0;
+        world.ForEach<Walker>([&](Ref<Walker> &walker) {
+            ++walker->steps;
+            return ++written == 3 ? Walk::Stop : Walk::Continue;
+        });
+        EQUALS(written, 3);
+        int stepped = 0;
+        // A callback that returns nothing still visits them all.
+        world.ForEach<Walker>([&](Ref<Walker> &walker) {
+            stepped += walker->steps;
+        });
+        EQUALS(stepped, 3);
+        EQUALS(World::HeldByThisThread(), size_t {0});
     });
 
     IT("counts handles held by the thread", {
