@@ -199,6 +199,8 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), Framework::Scripting::Bind::Side::Server);
 
         Framework::Scripting::Builtins::Events::RegisterLua(runtime);
+        Framework::Scripting::Builtins::Imports::RegisterLua(runtime);
+        Framework::Scripting::Builtins::Exports::RegisterLua(runtime);
         Framework::Scripting::Builtins::Console::RegisterLua(runtime);
         Framework::Scripting::Builtins::ExecutionEnvironment::RegisterLua(runtime, _modVersion);
         Framework::Scripting::Builtins::Entity::RegisterLua(runtime);

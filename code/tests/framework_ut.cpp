@@ -113,6 +113,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/resource_manager_ut.h"
 #include "modules/resource_isolation_ut.h"
 #include "modules/lua_events_ut.h"
+#include "modules/lua_exports_ut.h"
 #include "modules/lua_resources_ut.h"
 #include "modules/lua_builtins_chat_ut.h"
 #include "modules/lua_builtins_core_ut.h"
@@ -210,6 +211,7 @@ int main() {
     UNIT_MODULE(script_callable);
     UNIT_MODULE(lua_resources);
     UNIT_MODULE(lua_events);
+    UNIT_MODULE(lua_exports);
     UNIT_MODULE(lua_builtins_chat);
     UNIT_MODULE(lua_builtins_core);
     UNIT_MODULE(lua_builtins_entity);
