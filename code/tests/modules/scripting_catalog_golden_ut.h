@@ -10,6 +10,7 @@
 
 #include "integrations/server/scripting/builtins/pending_connection.h"
 #include "integrations/server/scripting/builtins/voice.h"
+#include "integrations/server/scripting/event_metadata.h"
 #include "scripting/builtins/builtins.h"
 #include "scripting/builtins/chat.h"
 #include "scripting/builtins/console.h"
@@ -87,6 +88,7 @@ class ScriptingCatalogGolden {
             v8pp::metadata::registry &registry = GetScriptingCatalog(isolate);
 
             RegisterEventMetadata(registry);
+            Framework::Integrations::Server::Scripting::RegisterServerEventMetadata(registry);
             RegisterTimerMetadata(registry, /*isClient*/ false);
 
             Builtins::RegisterValueTypes(isolate, global);

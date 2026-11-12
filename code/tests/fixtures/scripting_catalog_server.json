@@ -947,6 +947,17 @@
       "name": "EventMap",
       "properties": [
         {
+          "description": "Dispatched for a line typed into the server console that no built-in command (help, ensure, refresh, ...) claimed. `args` is the rest of the line, split on whitespace. The console is the operator's, so this is the place for commands no player may run.",
+          "name": "consoleCommand",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[command: string, args: string[]]",
+            "optional": false
+          }
+        },
+        {
           "description": "Dispatched when one key of an entity's state changes: on the server when a script writes it, on a client when the write arrives. `value` is undefined when the key was removed and `previous` is undefined when it held nothing before, so a stored null stays distinguishable from an absent key. The entity is whatever the game's WrapScriptEntity answers, and the base Entity handle by default.",
           "name": "entityStateChange",
           "readonly": false,

@@ -18,6 +18,7 @@
 
 #include "builtins/pending_connection.h"
 #include "builtins/voice.h"
+#include "event_metadata.h"
 #include <scripting/builtins/console.h>
 #include <scripting/builtins/entity.h>
 #include <scripting/builtins/events.h>
@@ -171,11 +172,7 @@ namespace Framework::Integrations::Server::Scripting {
 
         // The events the framework raises; a mod's catalog blends them into its own EventMap.
         Framework::Scripting::RegisterEventMetadata(Framework::Scripting::GetScriptingCatalog(isolate));
-        Framework::Scripting::GetScriptingCatalog(isolate)
-            .data_type("EventMap")
-            .add_property("consoleCommand", "[command: string, args: string[]]",
-                "Dispatched for a line typed into the server console that no built-in command (help, ensure, refresh, ...) claimed. `args` is the rest of the line, split on whitespace. The console is the operator's, so this is the "
-                "place for commands no player may run.");
+        RegisterServerEventMetadata(Framework::Scripting::GetScriptingCatalog(isolate));
 
         // The engine installs the timers without a binding; declare them for it.
         Framework::Scripting::RegisterTimerMetadata(Framework::Scripting::GetScriptingCatalog(isolate), /*isClient*/ false);
