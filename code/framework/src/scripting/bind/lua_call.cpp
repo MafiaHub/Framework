@@ -73,6 +73,9 @@ namespace Framework::Scripting::Bind {
             // to raise in `error`, or in `deferred` the result it left for later, which then is what counts.
             int Finish(std::optional<std::string> &error, std::shared_ptr<Detail::LuaDeferred> &deferred) {
                 if (_thrown) {
+                    if (_deferred != nullptr) {
+                        _deferred->Drop();
+                    }
                     error = std::move(_thrown);
                     return 0;
                 }

@@ -1148,6 +1148,41 @@ MODULE(script_callable, {
         EQUALS(lua_gettop(stage.Runtime("gamma").State()), 0);
     });
 
+    IT("tells whether anybody still waits for a deferred result", {
+        Stage stage;
+        stage.CreateJs("alpha");
+        stage.CreateLua("gamma");
+        EQUALS(Deferred().Awaited(), false);
+
+        // A promise a script holds and a coroutine that waits are waited for, until they are settled.
+        stage.Js("alpha", "Stage.later(); 0");
+        EQUALS(stage.Lua("gamma", "Stage.later()"), "");
+        EQUALS(Held().deferreds.at(0).Awaited(), true);
+        EQUALS(Held().deferreds.at(1).Awaited(), true);
+        Held().deferreds.at(0).Resolve();
+        Held().deferreds.at(1).Reject("no");
+        EQUALS(Held().deferreds.at(0).Awaited(), false);
+        EQUALS(Held().deferreds.at(1).Awaited(), false);
+
+        // A call that threw, and a Lua call that could not wait, left nobody.
+        stage.Js("alpha", "try { Stage.laterAndThrow(); } catch (e) {} 0");
+        stage.LuaValue("gamma", "pcall(Stage.laterAndThrow)");
+        stage.LuaValue("gamma", "pcall(Stage.later)");
+        EQUALS(Held().deferreds.at(2).Awaited(), false);
+        EQUALS(Held().deferreds.at(3).Awaited(), false);
+        EQUALS(Held().deferreds.at(4).Awaited(), false);
+
+        // Nor does a runtime that went.
+        stage.Js("alpha", "Stage.later(); 0");
+        EQUALS(stage.Lua("gamma", "Stage.later()"), "");
+        EQUALS(Held().deferreds.at(5).Awaited(), true);
+        EQUALS(Held().deferreds.at(6).Awaited(), true);
+        DestroyRuntime("alpha");
+        DestroyRuntime("gamma");
+        EQUALS(Held().deferreds.at(5).Awaited(), false);
+        EQUALS(Held().deferreds.at(6).Awaited(), false);
+    });
+
     IT("settles a deferred once, and not at all once its runtime is gone", {
         Stage stage;
         stage.CreateJs("alpha");

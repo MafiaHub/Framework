@@ -267,6 +267,14 @@ class ScriptCallable {
 `Deferred` (`Resolve(TransferredValue = {})`, `Reject(std::string)`, `Settled()`) settles the promise a
 JavaScript caller received, or resumes the Lua coroutine that called. It is a copyable handle; the first
 settlement counts.
+`Awaited()` tells whether a settlement would still reach a script: not once it is settled, once the
+runtime of its call has stopped, or when the call threw or, in Lua, could not wait. A builtin that keeps a
+deferred in a table lets go of it then (`Messages::DropAbandonedRequests`).
+
+A `ScriptCallable` need not be a script function: the host may implement one for something a script is
+handed as a function and that belongs to no runtime (the `reply` of a message handler). Such a callable
+says `Language::Lua`; only one that says `Language::JavaScript` may be taken for a `V8Callable`, and a
+`Language::Lua` one is never downcast without asking.
 
 - `callable.h` names neither language, so `TransferredValue` lives in `scripting/transferred_value.h`,
   which `value_transfer.h` includes.

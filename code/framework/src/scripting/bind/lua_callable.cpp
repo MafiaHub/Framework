@@ -452,6 +452,16 @@ namespace Framework::Scripting::Bind {
                 return LuaScheduler::Wait(L);
             }
 
+            void Drop() override {
+                _returned = true;
+            }
+
+            // Once the function has returned only a coroutine that waits can be reached: one that could not wait
+            // was raised in instead, and has no token.
+            bool Awaited() const override {
+                return !Settled() && _link->Running() != nullptr && (!_returned || _token != 0);
+            }
+
           protected:
             void OnResolve(TransferredValue &&value) override {
                 if (!_returned) {

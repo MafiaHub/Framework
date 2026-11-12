@@ -397,6 +397,11 @@ namespace Framework::Scripting::Bind {
                 _context.Reset();
             }
 
+            // The promise is let go of when the call threw and when the runtime stopped.
+            bool Awaited() const override {
+                return !Settled() && _runtime->Alive() && !_resolver.IsEmpty();
+            }
+
           protected:
             void OnResolve(TransferredValue &&value) override {
                 if (!_returned) {

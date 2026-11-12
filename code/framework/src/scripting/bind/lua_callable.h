@@ -66,6 +66,9 @@ namespace Framework::Scripting::Bind {
             // to raise in `error`, and 0. Not settled yet: it does not return, as the coroutine waits, or as Lua
             // raises that it cannot, with `label` in front when there is one.
             virtual int Finish(lua_State *L, const char *label, std::optional<std::string> &error) = 0;
+
+            // The call threw: nobody waits, and nothing is to settle it.
+            virtual void Drop() = 0;
         };
 
         // Raises a Lua error when Lua is out of memory or of stack.

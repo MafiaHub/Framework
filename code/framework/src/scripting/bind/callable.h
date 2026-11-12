@@ -64,6 +64,13 @@ namespace Framework::Scripting::Bind {
     // ticks, but to its callables it is gone at once, and one made in it during that time is dead from the start.
     // The runtime says so through its engine, which WatchRuntimes listens to.
     //
+    // Not every callable is a script function. The host may implement one itself, for something a script is handed
+    // as a function and that belongs to no runtime: the `reply` of a message handler is one (Messages). It crosses
+    // and is called like any other, and is its own identity. So GetLanguage tells where a callable runs, not what
+    // class it is: only a callable that says Language::JavaScript may be taken for a V8Callable (v8_callable.h),
+    // which every one of them is, and nothing may downcast a callable that says Language::Lua without asking
+    // (dynamic_cast), which is what a callable of the host says.
+    //
     // Everything here runs on the scripting thread.
     class ScriptCallable {
       public:
@@ -124,6 +131,9 @@ namespace Framework::Scripting::Bind {
                 return _settled;
             }
 
+            // Whether a settlement would still reach a script (Deferred::Awaited).
+            virtual bool Awaited() const = 0;
+
           protected:
             virtual void OnResolve(TransferredValue &&value) = 0;
             virtual void OnReject(std::string &&message)     = 0;
@@ -166,6 +176,14 @@ namespace Framework::Scripting::Bind {
 
         bool Settled() const {
             return _state == nullptr || _state->Settled();
+        }
+
+        // Whether settling it would still reach a script: not once it is settled, once the runtime of its call
+        // has stopped, or when its call ended with nobody left to wait, because it threw or, in Lua, could not
+        // wait. It is true while the function that made it has not returned. For who keeps a deferred in a table
+        // and needs to know when to let go of it.
+        bool Awaited() const {
+            return _state != nullptr && _state->Awaited();
         }
 
       private:
