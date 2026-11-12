@@ -23,6 +23,7 @@
 #include "scripting/builtins/chat.h"
 #include "scripting/engine_scope.h"
 #include "scripting/lua/lua_runtime.h"
+#include "scripting/scripting_catalog.h"
 
 #include <v8pp/convert.hpp>
 
@@ -186,14 +187,41 @@ MODULE(lua_client_services, {
         // And the client state still has its own.
         EQUALS(stage.Lua("type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "function,nil");
 
-        // Registered in a state of the other side, each is a table without a member, not the other one.
+        // Registering a Chat in a state of the other side does nothing, so the order of registration cannot
+        // matter: the Chat of the server never shows in a client state, nor replaces the one that is there.
         LuaRuntimeOptions options = LuaRuntimeTest::Options();
         options.side              = Bind::Side::Client;
-        LuaRuntime client(options);
-        Builtins::Chat::RegisterLua(client);
-        EQUALS(LuaRuntimeTest::Eval(client, "type(Chat) .. ',' .. type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "table,nil,nil");
-        ClientBuiltins::Chat::RegisterLua(client);
-        EQUALS(LuaRuntimeTest::Eval(client, "type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "function,nil");
+        {
+            LuaRuntime client(options);
+            Builtins::Chat::RegisterLua(client);
+            EQUALS(LuaRuntimeTest::Eval(client, "type(Chat)"), "nil");
+            ClientBuiltins::Chat::RegisterLua(client);
+            EQUALS(LuaRuntimeTest::Eval(client, "type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "function,nil");
+        }
+        {
+            LuaRuntime client(options);
+            ClientBuiltins::Chat::RegisterLua(client);
+            Builtins::Chat::RegisterLua(client);
+            EQUALS(LuaRuntimeTest::Eval(client, "type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "function,nil");
+        }
+        ClientBuiltins::Chat::RegisterLua(server);
+        EQUALS(LuaRuntimeTest::Eval(server, "type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "nil,function");
+        {
+            LuaRuntime fresh(LuaRuntimeTest::Options());
+            ClientBuiltins::Chat::RegisterLua(fresh);
+            EQUALS(LuaRuntimeTest::Eval(fresh, "type(Chat)"), "nil");
+        }
+
+        // The same in JavaScript: materialised for the other side, a Chat sets nothing and records nothing.
+        {
+            EngineScope scope(&stage.client.v8);
+            const auto context = scope.Context();
+            const auto before  = v8pp::metadata::to_json(GetScriptingCatalog(scope.Isolate()));
+            EQUALS(Builtins::Chat::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), GetScriptingCatalog(scope.Isolate()), Bind::Side::Client).IsEmpty(), true);
+            EQUALS(ClientBuiltins::Chat::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), GetScriptingCatalog(scope.Isolate()), Bind::Side::Server).IsEmpty(), true);
+            EQUALS(v8pp::metadata::to_json(GetScriptingCatalog(scope.Isolate())) == before, true);
+        }
+        EQUALS(stage.Js("typeof Chat.send + ',' + typeof Chat.sendToAll"), "function,undefined");
 
         const Bind::ClassDesc &ofClient = ClientBuiltins::Chat::Definition().Describe();
         const Bind::ClassDesc &ofServer = Builtins::Chat::Definition().Describe();
@@ -201,6 +229,7 @@ MODULE(lua_client_services, {
         EQUALS(ofClient.name, ofServer.name);
         EQUALS(Bind::ApiCatalog::Get().Find("Chat", Bind::Side::Client) == &ofClient, true);
         EQUALS(Bind::ApiCatalog::Get().Find("Chat", Bind::Side::Server) == &ofServer, true);
+        EQUALS(ofClient.side == Bind::Side::Client && ofServer.side == Bind::Side::Server, true);
     });
 
     // ==================== Chat ====================
@@ -474,6 +503,11 @@ MODULE(lua_client_services, {
             {"Discord.setParty({size: {0: 1, 1: 2, length: 2}})", "Discord.setParty({size = {a = 1, b = 2}})", "party= 0/0 privacy=0 secrets=|| instance=0 written=0x0"},
             {"Discord.setParty({size: ['6', ' 7 ']})", "Discord.setParty({size = {'6', ' 7 '}})", "party= 6/7 privacy=0 secrets=|| instance=0 written=0x80"},
             {"Discord.setParty({size: [true, 'x']})", "Discord.setParty({size = {true, 'x'}})", "party= 1/0 privacy=0 secrets=|| instance=0 written=0x80"},
+            // A string is a decimal number or nothing, whatever the locale of the process says of a comma.
+            {"Discord.setParty({size: ['1.5', ' 2 ']})", "Discord.setParty({size = {'1.5', ' 2 '}})", "party= 1/2 privacy=0 secrets=|| instance=0 written=0x80"},
+            {"Discord.setParty({size: ['0x1p3', '1,5']})", "Discord.setParty({size = {'0x1p3', '1,5'}})", "party= 0/0 privacy=0 secrets=|| instance=0 written=0x80"},
+            {"Discord.setParty({size: ['+7', '-3e1']})", "Discord.setParty({size = {'+7', '-3e1'}})", "party= 7/-30 privacy=0 secrets=|| instance=0 written=0x80"},
+            {"Discord.setParty({size: ['+-7', '']})", "Discord.setParty({size = {'+-7', ''}})", "party= 0/0 privacy=0 secrets=|| instance=0 written=0x80"},
             {"Discord.setParty({size: [1.9, -1.9]})", "Discord.setParty({size = {1.9, -1.9}})", "party= 1/-1 privacy=0 secrets=|| instance=0 written=0x80"},
             {"Discord.setParty({privacy: 1})", "Discord.setParty({privacy = 1})", "party= 0/0 privacy=1 secrets=|| instance=0 written=0x80"},
             {"Discord.setParty({privacy: false})", "Discord.setParty({privacy = false})", "party= 0/0 privacy=0 secrets=|| instance=0 written=0x80"},
