@@ -8,6 +8,7 @@
 
 #include "world_lock.h"
 
+#include <chrono>
 #include <utility>
 
 namespace Framework::Utils {
@@ -17,19 +18,23 @@ namespace Framework::Utils {
     }
 
     void WorldLock::LockForTick() {
+        const auto free = [this] {
+            return _owner == Owner::None && !_lent;
+        };
         std::unique_lock lock(_mutex);
-        if (_owner != Owner::None) {
+        if (!free()) {
             ++_ticksWaiting;
-            if (_owner == Owner::Script && _contended) {
-                // Outside the mutex: the hook reaches into the script side, which may be about to take it.
-                auto hook = _contended;
-                lock.unlock();
-                hook();
-                lock.lock();
-            }
-            _changed.wait(lock, [this] {
-                return _owner == Owner::None;
-            });
+            // Asked again for as long as this waits: a script that could not stop where the first request found it
+            // (native code of its own was on its stack) can a moment later.
+            do {
+                if (_owner == Owner::Script && _contended) {
+                    // Outside the mutex: the hook reaches into the script side, which may be about to take it.
+                    auto hook = _contended;
+                    lock.unlock();
+                    hook();
+                    lock.lock();
+                }
+            } while (!_changed.wait_for(lock, std::chrono::milliseconds(1), free));
             --_ticksWaiting;
         }
         _owner = Owner::Tick;
@@ -51,13 +56,16 @@ namespace Framework::Utils {
         if (!_scriptInTask) {
             return;
         }
-        // It stopped mid-task for this tick. Hand the world back so it can finish the task; it leaves at its next
-        // checkpoint, where it sees the eviction.
+        // It stopped mid-task for this tick. Lend it the world so it can finish the task; it leaves at its next
+        // checkpoint, where it sees the eviction. Lent, not released: another thread waiting for the world must not
+        // get it in between, this tick is still in the middle of its work.
         _owner = Owner::None;
+        _lent  = true;
         _changed.notify_all();
         _changed.wait(lock, [this] {
             return !_scriptInTask && _owner == Owner::None;
         });
+        _lent  = false;
         _owner = Owner::Tick;
     }
 
@@ -93,15 +101,16 @@ namespace Framework::Utils {
 
     bool WorldLock::YieldToTick() {
         std::unique_lock lock(_mutex);
-        if (_ticksWaiting == 0) {
+        // On loan from a tick that waits for this task to end: the ticks waiting are waiting for that tick.
+        if (_ticksWaiting == 0 || _lent) {
             return false;
         }
         // Still in its task: only the world changes hands.
         _owner = Owner::None;
         _changed.notify_all();
-        // An eviction does not hold it back here: the tick that evicts is waiting for this very task to finish.
+        // Back when no tick is waiting, or when the tick that took it lends it back to finish this very task.
         _changed.wait(lock, [this] {
-            return _owner == Owner::None && _ticksWaiting == 0;
+            return _owner == Owner::None && (_ticksWaiting == 0 || _lent);
         });
         _owner = Owner::Script;
         return true;

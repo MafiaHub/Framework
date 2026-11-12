@@ -26,8 +26,9 @@ namespace Framework::Utils {
     // The script side is one thread. The tick side is whichever other thread calls it, one at a time.
     class WorldLock final {
       public:
-        // Called on the tick side, with nothing held, when a tick has to wait for the script side: the hook is how
-        // a script that is mid-task gets told to reach a safe point.
+        // Called on the tick side, with nothing held, when a tick has to wait for the script side, and again every
+        // millisecond or so for as long as it waits: the hook is how a script that is mid-task gets told to reach
+        // a safe point, and a script that could not take one when first asked may be able to by the next time.
         void SetContendedHook(fu2::function<void()> hook);
 
         // --- Tick side ---
@@ -36,8 +37,9 @@ namespace Framework::Utils {
 
         // While holding the world: make sure the script side is in no task at all, so nothing of a script is on its
         // stack, and keep it out until ReadmitScript(). For a tick that is about to run script itself. A script that
-        // had stopped mid-task for this tick is given the world back to finish that task first, so this can take as
-        // long as the task does. Calls nest.
+        // had stopped mid-task for this tick is lent the world to finish that task first, so this can take as long
+        // as the task does. Lent to the script only: no other thread on the tick side gets the world meanwhile.
+        // Calls nest.
         void EvictScript();
         void ReadmitScript();
 
@@ -76,6 +78,9 @@ namespace Framework::Utils {
         // Ticks waiting for the world. The script side does not take it while there are any.
         uint32_t _ticksWaiting = 0;
         uint32_t _evictions    = 0;
+        // The tick that holds the world has lent it to the script side to finish its task, and takes it back when
+        // the task ends. Nobody else may take the world while it is.
+        bool _lent = false;
         // Between LockForScript and UnlockFromScript, also while it stopped mid-task for a tick.
         bool _scriptInTask = false;
         bool _closed       = false;

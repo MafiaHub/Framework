@@ -236,4 +236,85 @@ MODULE(world_lock, {
         EQUALS(lock.LockForScript(), false);
         lock.UnlockFromTick();
     });
+
+    IT("keeps asking a script for a safe point for as long as the tick waits", {
+        WorldLock lock;
+        std::atomic<int> asked {0};
+        std::atomic<bool> scriptInTask {false};
+        lock.SetContendedHook([&] {
+            ++asked;
+        });
+        std::thread script([&] {
+            lock.LockForScript();
+            scriptInTask = true;
+            // Cannot stop when first asked: something of its own is in the way for a while.
+            while (asked.load() < 5) {
+                std::this_thread::sleep_for(100us);
+            }
+            lock.YieldToTick();
+            lock.UnlockFromScript();
+        });
+        EQUALS(waitFor(scriptInTask), true);
+        lock.LockForTick();
+        lock.UnlockFromTick();
+        script.join();
+        GREATEREQ(asked.load(), 5);
+    });
+
+    IT("lends the world to the script for an eviction, and to nobody else", {
+        // Who gets the world when it is lent is a race, so the race is run many times: one win by the wrong
+        // thread is a failure.
+        int intrusions = 0;
+        int rounds     = 0;
+        for (int round = 0; round < 300; ++round) {
+            WorldLock lock;
+            std::atomic<bool> scriptInTask {false}, stop {false};
+            // Raised by the tick for as long as it is in the middle of its work, the eviction included.
+            std::atomic<bool> tickBusy {false};
+            std::atomic<bool> intruded {false};
+
+            std::thread script([&] {
+                lock.LockForScript();
+                scriptInTask = true;
+                while (!stop) {
+                    lock.YieldToTick();
+                }
+                lock.UnlockFromScript();
+            });
+            if (!waitFor(scriptInTask)) {
+                stop = true;
+                script.join();
+                continue;
+            }
+
+            lock.LockForTick();
+            tickBusy = true;
+            // A second thread on the tick side, such as a web worker entering scripts, wants the world too.
+            std::thread other([&] {
+                lock.LockForTick();
+                if (tickBusy) {
+                    intruded = true;
+                }
+                lock.UnlockFromTick();
+            });
+            while (!lock.TickWaiting()) {
+                std::this_thread::yield();
+            }
+            std::thread finisher([&] {
+                std::this_thread::sleep_for(200us);
+                stop = true;
+            });
+            lock.EvictScript();
+            lock.ReadmitScript();
+            tickBusy = false;
+            lock.UnlockFromTick();
+            finisher.join();
+            other.join();
+            script.join();
+            intrusions += intruded ? 1 : 0;
+            ++rounds;
+        }
+        EQUALS(intrusions, 0);
+        GREATER(rounds, 250);
+    });
 });
