@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace Framework::Scripting {
     class LuaRuntime;
@@ -43,10 +44,11 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
       public:
         PendingConnection(uint64_t guid, const Framework::Networking::RPC::ClientIdentity &identity, std::string address);
 
-        // The connection the gate holds under `guid`, which is how one arrives in another runtime.
-        // Throws std::runtime_error for a connection the gate no longer holds: one that is decided
-        // or gone has nothing left to cross as.
-        explicit PendingConnection(uint64_t guid);
+        // What a connection crosses between runtimes as: its guid, its identity and its address, so that it
+        // is built again without asking the gate, which may have decided it by then. Such a handle reads
+        // as it did, is no longer pending, and its calls do nothing.
+        void Encode(std::vector<uint8_t> &bytes) const;
+        static PendingConnection Decode(const std::vector<uint8_t> &bytes);
 
         uint64_t GetGuid() const {
             return _guid;
@@ -85,8 +87,8 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         // Gives a Lua runtime the class, for the handles its handlers receive. No global there either.
         static void RegisterLua(Framework::Scripting::LuaRuntime &runtime);
 
-        // Lets a connection cross between runtimes as itself, in both languages: by its guid.
-        // Process-wide and idempotent; the server scripting module's constructor sees to it.
+        // Lets a connection cross between runtimes as itself, in both languages. Process-wide and
+        // idempotent; the server scripting module's constructor sees to it.
         static void RegisterTransfer();
 
         static v8::Local<v8::Object> Create(v8::Isolate *isolate, v8::Local<v8::Context> context, uint64_t guid, const Framework::Networking::RPC::ClientIdentity &identity, const std::string &address);

@@ -270,12 +270,37 @@ MODULE(lua_builtins_server, {
         EQUALS(admission.Js("Object.getPrototypeOf(probe) === Object.prototype"), "true");
         EQUALS(admission.Js("Object.prototype.toString.call(probe)"), "[object Object]");
         EQUALS(admission.Js("typeof PendingConnection"), "undefined");
-        EQUALS(admission.Js("Object.keys(probe).join()"), "nickname,steamId,epicId,discordId,discordName,hardwareId,ticket,ip,reject,update,isPending");
+        // Its own keys are the members the definition declares, the properties and then the functions: one added
+        // there cannot be missing here.
+        std::string declared;
+        for (const Bind::PropertyDesc &property : PendingConnection::Definition().Describe().properties) {
+            declared += (declared.empty() ? "" : ",") + property.name;
+        }
+        for (const Bind::FunctionDesc &function : PendingConnection::Definition().Describe().functions) {
+            declared += "," + function.name;
+        }
+        EQUALS(admission.Js("Object.keys(probe).join()"), declared);
+        EQUALS(declared, "nickname,steamId,epicId,discordId,discordName,hardwareId,ticket,ip,reject,update,isPending");
+        EQUALS(admission.Js("Object.keys(probe).map((key) => typeof probe[key]).join()"), "string,string,string,string,string,string,string,string,function,function,function");
         EQUALS(admission.Js("Object.values(Object.getOwnPropertyDescriptors(probe)).every((d) => !d.writable && !d.configurable && d.enumerable)"), "true");
         EQUALS(admission.Js("JSON.stringify(probe)"), R"({"nickname":"probe","steamId":"76561198000000000","epicId":"epic","discordId":"discord","discordName":"discord-name","hardwareId":"hardware","ticket":"one-time-ticket","ip":"10.0.0.2"})");
         EQUALS(admission.Js("`${probe.reject.name}|${probe.reject.length}|${probe.isPending()}`"), "|0|true");
 
-        // Its functions need no receiver: each carries the connection it answers.
+        // The handler's runtime is the resource's own, and the connection is one there: an assignment changes
+        // nothing, silently in sloppy code and with a TypeError in strict code.
+        EQUALS(admission.Js("probe.nickname = 'other'; probe.nickname"), "probe");
+        EQUALS(admission.Js("(() => { 'use strict'; try { probe.nickname = 'other'; } catch (e) { return e.name + ' ' + probe.nickname; } return 'assigned'; })()"), "TypeError probe");
+        EQUALS(admission.Js("delete probe.ticket; probe.reject = () => 'mine'; `${probe.ticket} ${typeof probe.reject()}`"), "one-time-ticket undefined");
+        EQUALS(admission.gate.IsPending(11), false);
+    });
+
+    IT("lets a JavaScript handler call the functions of a connection without a receiver", {
+        Admission admission;
+        admission.server.files.Resource("js-gate", {{"main.js", "Events.on('playerConnecting', (connection) => { globalThis.probe = connection; });"}});
+        EQUALS(admission.Start(), true);
+        EQUALS(admission.Begin(11, "probe"), true);
+
+        // Each carries the connection it answers.
         EQUALS(admission.Js("const { reject, isPending } = probe; reject('Detached'); isPending()"), "false");
         const auto decisions = admission.Settle();
         EQUALS(decisions.size(), 1u);
@@ -470,19 +495,90 @@ MODULE(lua_builtins_server, {
         EQUALS(admission.Js("got"), "nickname,steamId,epicId,discordId,discordName,hardwareId,ticket,ip,reject,update,isPending:to-js:10.0.0.2:true:false");
     });
 
-    IT("does not carry a connection that is decided to another runtime", {
+    IT("raises for a method of a connection called with a dot in Lua, and leaves the connection waiting", {
         Admission admission;
+        admission.server.files.Resource("gate", {{"main.lua", "Events.on('playerConnecting', function(connection) probe = connection sleep(60000) end)"}});
+        EQUALS(admission.Start(2000), true);
+        EQUALS(admission.Begin(11, "probe"), true);
+
+        EQUALS(admission.Lua("select(2, pcall(function() probe.reject('banned') end))"), "eval:1: bad receiver for 'PendingConnection:reject' (PendingConnection expected, got string)");
+        EQUALS(admission.Lua("select(2, pcall(function() probe.update('Checking') end))"), "eval:1: bad receiver for 'PendingConnection:update' (PendingConnection expected, got string)");
+        EQUALS(admission.Lua("select(2, pcall(function() return probe.isPending() end))"), "eval:1: bad receiver for 'PendingConnection:isPending' (PendingConnection expected, got no value)");
+        EQUALS(admission.gate.IsPending(11), true);
+
+        // With the receiver passed by hand it is the method.
+        EQUALS(admission.Lua("probe.reject(probe, 'banned')"), "nil");
+        const auto decisions = admission.Settle();
+        EQUALS(decisions.size(), 1u);
+        EQUALS(decisions[0].reason, "banned");
+    });
+
+    IT("carries a connection to another runtime while it waits and once it is decided", {
+        Admission admission;
+        // Three runtimes: a JavaScript gate and a Lua gate that keep the connection, and a JavaScript resource
+        // that only logs. `hand` sends the kept connection to the two other runtimes.
+        admission.server.files.Resource("js-gate", {{"main.js", R"(
+            Events.on("playerConnecting", (connection) => { globalThis.kept = connection; });
+            globalThis.hand = () => { Events.emit("toLog", "js", kept); Events.emit("toLua", kept); return "handed"; };
+        )"}});
         admission.server.files.Resource("gate", {{"main.lua", R"(
             Events.on("playerConnecting", function(connection) kept = connection end)
-            Events.on("handed", function(connection) got = connection end)
+            Events.on("toLua", function(connection)
+                local pending = connection:isPending()
+                local quiet = select("#", connection:update("Handed over"))
+                if refuse or not pending then
+                    quiet = quiet + select("#", connection:reject("Handed over"))
+                end
+                got = type(connection) .. ":" .. connection.nickname .. ":" .. connection.steamId .. ":" .. connection.ticket .. ":" .. connection.ip .. ":" .. tostring(pending) .. ":" .. quiet
+            end)
+            function hand() setTimeout(function() Events.emit("toLog", "lua", kept) end, 0) return "handed" end
         )"}});
-        EQUALS(admission.Start(), true);
-        EQUALS(admission.Decide(40, "admit"), "admitted");
+        admission.server.files.Resource("log", {{"main.js", R"(
+            globalThis.got = {};
+            Events.on("toLog", (from, connection) => {
+                const pending = connection.isPending();
+                const quiet = [connection.update("Handed over"), pending ? undefined : connection.reject("Logged")].every((result) => result === undefined);
+                got[from] = `${Object.keys(connection).length}:${connection.nickname}:${connection.steamId}:${connection.ticket}:${connection.ip}:${pending}:${quiet}`;
+            });
+        )"}});
+        EQUALS(admission.Start(2000), true);
 
-        // In its own runtime the handle is what it was; to another it has nothing left to cross as.
-        EQUALS(admission.Lua("kept.nickname .. tostring(kept:isPending())"), "admitfalse");
-        EQUALS(LuaResourcesTest::Contains(admission.Lua("select(2, pcall(Events.emit, 'handed', kept))"), "PendingConnection: the connection is no longer waiting on a decision"), true);
-        EQUALS(admission.Lua("got"), "nil");
+        const auto handAround = [&] {
+            admission.Js("globalThis.got = {}; 0", "log");
+            admission.Lua("(function() got = nil end)()");
+            const std::string handed = admission.Js("hand()") + " " + admission.Lua("hand()");
+            const auto deadline      = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+            while ((admission.Js("String(got.js) + String(got.lua)", "log").contains("undefined") || admission.Lua("got") == "nil") && std::chrono::steady_clock::now() < deadline) {
+                admission.server.module.Update();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            return handed;
+        };
+
+        // Waiting: it arrives pending, JavaScript to JavaScript, JavaScript to Lua and Lua to JavaScript.
+        EQUALS(admission.Begin(50, "queued"), true);
+        EQUALS(handAround(), "handed handed");
+        EQUALS(admission.Js("got.js", "log"), "11:queued:76561198000000000:one-time-ticket:10.0.0.2:true:true");
+        EQUALS(admission.Js("got.lua", "log"), "11:queued:76561198000000000:one-time-ticket:10.0.0.2:true:true");
+        EQUALS(admission.Lua("got"), "userdata:queued:76561198000000000:one-time-ticket:10.0.0.2:true:0");
+        EQUALS(admission.gate.IsPending(50), true);
+
+        // The runtime it was handed to answers it: here the Lua one refuses.
+        admission.Lua("(function() refuse = true end)()");
+        EQUALS(handAround(), "handed handed");
+        const auto decisions = admission.Settle();
+        EQUALS(decisions.size(), 1u);
+        EQUALS(decisions[0].admitted, false);
+        EQUALS(decisions[0].reason, "Handed over");
+        EQUALS(admission.gate.IsPending(50), false);
+
+        // Decided: it still crosses, JavaScript to JavaScript, JavaScript to Lua and Lua to JavaScript, as a
+        // handle that reads as it did, is no longer pending, and whose calls do nothing.
+        EQUALS(handAround(), "handed handed");
+        EQUALS(admission.Js("got.js", "log"), "11:queued:76561198000000000:one-time-ticket:10.0.0.2:false:true");
+        EQUALS(admission.Js("got.lua", "log"), "11:queued:76561198000000000:one-time-ticket:10.0.0.2:false:true");
+        EQUALS(admission.Lua("got"), "userdata:queued:76561198000000000:one-time-ticket:10.0.0.2:false:0");
+        EQUALS(admission.Settle(50).empty(), true);
     });
 
     // ==================== Voice ====================
@@ -506,6 +602,10 @@ MODULE(lua_builtins_server, {
         // A Lua script reads Voice and cannot replace a function of it; to JavaScript it is the plain object it was.
         EQUALS(booth.Lua("(function() Voice.setRange = print end)()"), "<error> eval:1: attempt to set 'setRange' on Voice");
         EQUALS(booth.Js("Voice.custom = () => 'mine'; Voice.custom()"), "mine");
+        // Its functions are ordinary properties of it, nameless and declaring no parameter, as they were.
+        EQUALS(booth.Js("Object.values(Object.getOwnPropertyDescriptors(Voice)).every((d) => d.writable && d.configurable && d.enumerable)"), "true");
+        EQUALS(booth.Js("Object.keys(Voice).filter((key) => Voice[key].name !== '' || Voice[key].length !== 0).join()"), "");
+        EQUALS(booth.Js("{ const original = Voice.getRange; Voice.getRange = () => -1; const replaced = Voice.getRange(); Voice.getRange = original; delete Voice.custom; `${replaced} ${typeof Voice.custom}` }"), "-1 undefined");
     });
 
     IT("sets how far voice carries from Lua as from JavaScript", {
@@ -591,6 +691,12 @@ MODULE(lua_builtins_server, {
         booth.Lua("Voice.setPlayerMuted(p, 0)");
         EQUALS(router.IsPlayerMuted(booth.p), true);
         booth.Lua("Voice.setPlayerMuted(p, false)");
+        EQUALS(router.IsPlayerMuted(booth.p), false);
+
+        // A BigInt is no kind the binding layer reads, so 0n mutes, where JavaScript itself holds it false.
+        booth.Js("Voice.setPlayerMuted(p, 0n)");
+        EQUALS(router.IsPlayerMuted(booth.p), true);
+        booth.Js("Voice.setPlayerMuted(p, null)");
         EQUALS(router.IsPlayerMuted(booth.p), false);
 
         // What a player chose and does, which only their client changes.

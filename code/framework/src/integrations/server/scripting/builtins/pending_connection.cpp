@@ -18,8 +18,8 @@
 
 #include <v8pp/convert.hpp>
 
+#include <algorithm>
 #include <cstring>
-#include <stdexcept>
 #include <utility>
 
 namespace Framework::Integrations::Server::Scripting::Builtins {
@@ -93,20 +93,78 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             target->DefineOwnProperty(context, v8pp::to_v8(isolate, name), value, attributes).Check();
         }
 
-        // Where the JavaScript object of a connection keeps its guid: what tells the transfer that
-        // an object is one, under a key no script can name.
-        v8::Local<v8::Private> GuidKey(v8::Isolate *isolate) {
-            return v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.pendingConnection.guid"));
+        // Where the JavaScript object of a connection keeps what it crosses as (Encode), in an
+        // ArrayBuffer: what tells the transfer that an object is one, under a key no script can name.
+        v8::Local<v8::Private> PayloadKey(v8::Isolate *isolate) {
+            return v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.pendingConnection.payload"));
+        }
+
+        // Where a context keeps the object every connection made in it is a copy of, on its global.
+        v8::Local<v8::Private> BlankKey(v8::Isolate *isolate) {
+            return v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.pendingConnection.blank"));
+        }
+
+        // A new object for a connection: plain to a script, with one internal field it never sees. The
+        // transfer asks its host types about native-backed objects only, and tells those by their
+        // internal fields. The template is instantiated once for a context; every object after is a
+        // copy of that instance.
+        v8::Local<v8::Object> NewConnectionObject(v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            const v8::Local<v8::Object> global = context->Global();
+            v8::Local<v8::Value> blank;
+            if (!global->GetPrivate(context, BlankKey(isolate)).ToLocal(&blank) || !blank->IsObject()) {
+                v8::Local<v8::ObjectTemplate> shape = v8::ObjectTemplate::New(isolate);
+                shape->SetInternalFieldCount(1);
+                const v8::Local<v8::Object> made = shape->NewInstance(context).ToLocalChecked();
+                // An instance of a template has a prototype of its own; a plain object has the one of every object.
+                made->SetPrototypeV2(context, v8::Object::New(isolate)->GetPrototypeV2()).Check();
+                global->SetPrivate(context, BlankKey(isolate), made).Check();
+                blank = made;
+            }
+            return blank.As<v8::Object>()->Clone();
+        }
+
+        void WriteBytes(std::vector<uint8_t> &bytes, const void *data, size_t size) {
+            const auto *from = static_cast<const uint8_t *>(data);
+            bytes.insert(bytes.end(), from, from + size);
+        }
+
+        // Reads what is there, and zeroes for what is not.
+        void ReadBytes(const std::vector<uint8_t> &bytes, size_t &at, void *into, size_t size) {
+            std::memset(into, 0, size);
+            const size_t taken = std::min(size, bytes.size() - at);
+            std::memcpy(into, bytes.data() + at, taken);
+            at += taken;
         }
     } // namespace
 
     PendingConnection::PendingConnection(uint64_t guid, const Framework::Networking::RPC::ClientIdentity &identity, std::string address): _guid(guid), _identity(identity), _address(std::move(address)) {}
 
-    PendingConnection::PendingConnection(uint64_t guid): _guid(guid) {
-        const ConnectionGate *gate = CoreModules::GetConnectionGate();
-        if (!gate || !gate->Describe(guid, _identity, _address)) {
-            throw std::runtime_error("PendingConnection: the connection is no longer waiting on a decision");
+    void PendingConnection::Encode(std::vector<uint8_t> &bytes) const {
+        bytes.clear();
+        WriteBytes(bytes, &_guid, sizeof(_guid));
+        for (const std::string *text : {&_identity.name, &_identity.steamId, &_identity.epicId, &_identity.discordId, &_identity.discordName, &_identity.hardwareId, &_identity.ticket, &_address}) {
+            const uint32_t length = static_cast<uint32_t>(text->size());
+            WriteBytes(bytes, &length, sizeof(length));
+            WriteBytes(bytes, text->data(), text->size());
         }
+    }
+
+    PendingConnection PendingConnection::Decode(const std::vector<uint8_t> &bytes) {
+        size_t at     = 0;
+        uint64_t guid = 0;
+        ReadBytes(bytes, at, &guid, sizeof(guid));
+
+        Framework::Networking::RPC::ClientIdentity identity;
+        std::string address;
+        for (std::string *text : {&identity.name, &identity.steamId, &identity.epicId, &identity.discordId, &identity.discordName, &identity.hardwareId, &identity.ticket, &address}) {
+            uint32_t length = 0;
+            ReadBytes(bytes, at, &length, sizeof(length));
+            // Bytes that are cut short read as empty text.
+            const size_t taken = std::min<size_t>(length, bytes.size() - at);
+            text->assign(reinterpret_cast<const char *>(bytes.data()) + at, taken);
+            at += taken;
+        }
+        return PendingConnection(guid, identity, std::move(address));
     }
 
     const Bind::Class<PendingConnection> &PendingConnection::Definition() {
@@ -138,20 +196,15 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
                     Side::Server)
                 .Method("isPending", &OnReceiver<&IsPending>, Doc("Checks whether this connection is still waiting on a decision.").ReturnType(TypeOf<bool>()).Returns("False once it was let in or turned away, or the player gave up and left; a queue drops such entries."),
                     Side::Server)
-                // Crosses between runtimes as its guid, and is who the gate holds under it where it arrives.
-                .Transfer(&PendingConnection::GetGuid);
+                // Crosses between runtimes with its identity, so that one the gate has decided still arrives.
+                .Transfer(&PendingConnection::Encode, &PendingConnection::Decode);
         return definition;
     }
 
     v8::Local<v8::Object> PendingConnection::ToObject(v8::Isolate *isolate, v8::Local<v8::Context> context) const {
         v8::EscapableHandleScope handleScope(isolate);
-        // A plain object to a script, with one internal field it never sees: the transfer asks its host
-        // types about native-backed objects only, and tells those by their internal fields.
-        v8::Local<v8::ObjectTemplate> shape = v8::ObjectTemplate::New(isolate);
-        shape->SetInternalFieldCount(1);
-        v8::Local<v8::Object> connection = shape->NewInstance(context).ToLocalChecked();
-        // An instance of a template has a prototype of its own; a plain object has the one of every object.
-        connection->SetPrototypeV2(context, v8::Object::New(isolate)->GetPrototypeV2()).Check();
+        // The members the definition declares, as properties of the object's own, in its order.
+        v8::Local<v8::Object> connection = NewConnectionObject(isolate, context);
 
         DefineValue(isolate, context, connection, "nickname", v8pp::to_v8(isolate, _identity.name));
         DefineValue(isolate, context, connection, "steamId", v8pp::to_v8(isolate, _identity.steamId));
@@ -166,7 +219,11 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         DefineValue(isolate, context, connection, "update", OnConnection<&Update>(isolate, context, _guid));
         DefineValue(isolate, context, connection, "isPending", OnConnection<&IsPending>(isolate, context, _guid));
 
-        connection->SetPrivate(context, GuidKey(isolate), v8::BigInt::NewFromUnsigned(isolate, _guid)).Check();
+        std::vector<uint8_t> payload;
+        Encode(payload);
+        const v8::Local<v8::ArrayBuffer> carried = v8::ArrayBuffer::New(isolate, payload.size());
+        std::memcpy(carried->Data(), payload.data(), payload.size());
+        connection->SetPrivate(context, PayloadKey(isolate), carried).Check();
 
         return handleScope.Escape(connection);
     }
@@ -182,33 +239,26 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         }
         registered = true;
 
-        // Both languages, as the definition declares it: a Lua handle crosses as its guid.
+        // Both languages, as the definition declares it: that is how a Lua handle crosses.
         Definition().RegisterTransfer();
 
         // JavaScript has no object of the class: a connection is a plain object there, told by the
-        // guid it carries, and built again as one.
+        // payload it carries, and built again as one. Registered under the same name, this replaces
+        // the JavaScript half the definition registered, so it has to come after it.
         Framework::Scripting::ValueTransfer::RegisterHostType(
             Definition().Describe().name,
             [](v8::Isolate *isolate, v8::Local<v8::Object> object, std::vector<uint8_t> &bytes) {
                 v8::Local<v8::Value> carried;
-                if (!object->GetPrivate(isolate->GetCurrentContext(), GuidKey(isolate)).ToLocal(&carried) || !carried->IsBigInt()) {
+                if (!object->GetPrivate(isolate->GetCurrentContext(), PayloadKey(isolate)).ToLocal(&carried) || !carried->IsArrayBuffer()) {
                     return false;
                 }
-                const uint64_t guid = carried.As<v8::BigInt>()->Uint64Value();
-                bytes.resize(sizeof(guid));
-                std::memcpy(bytes.data(), &guid, sizeof(guid));
+                const v8::Local<v8::ArrayBuffer> payload = carried.As<v8::ArrayBuffer>();
+                const auto *data                         = static_cast<const uint8_t *>(payload->Data());
+                bytes.assign(data, data + payload->ByteLength());
                 return true;
             },
             [](v8::Isolate *isolate, v8::Local<v8::Context> context, const std::vector<uint8_t> &bytes) -> v8::MaybeLocal<v8::Value> {
-                uint64_t guid = 0;
-                std::memcpy(&guid, bytes.data(), std::min(bytes.size(), sizeof(guid)));
-                try {
-                    return PendingConnection(guid).ToObject(isolate, context);
-                }
-                catch (const std::exception &exception) {
-                    isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string(exception.what()))));
-                    return {};
-                }
+                return Decode(bytes).ToObject(isolate, context);
             });
     }
 
@@ -227,14 +277,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
 
         // The type is described the way the definition declares it. It is recorded as a data type and
         // not as a class: JavaScript has no constructor of it, only the objects the gate hands out.
-        const Bind::ClassDesc &described = Definition().Describe();
-        auto &type                       = catalog.data_type(described.name, described.description);
-        for (const Bind::PropertyDesc &property : described.properties) {
-            type.add_property(property.name, Bind::ToTypeScript(property.type), property.description, property.readonly);
-        }
-        for (const Bind::FunctionDesc &function : described.functions) {
-            type.record(v8pp::metadata::function_of<v8::FunctionCallback>(function.name, Bind::Detail::V8FunctionOptions(function)));
-        }
+        Bind::RecordV8DataType(catalog, Definition().Describe());
     }
 
 } // namespace Framework::Integrations::Server::Scripting::Builtins
