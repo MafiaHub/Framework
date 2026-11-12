@@ -172,6 +172,7 @@ class Call {
     virtual void ThrowError(std::string message) = 0;
     virtual bool HasThrown() const = 0;
     virtual void WriteOutput(OutputLevel level, std::string_view line) = 0;  // the output of the runtime
+    virtual size_t OutputLineLimit() const = 0;        // the bytes of a line it keeps
     virtual Deferred Defer() = 0;                      // the call's result becomes asynchronous
 };
 
@@ -214,7 +215,9 @@ JavaScript `undefined` and `null` are both `Nil`. `Array` is a JavaScript array 
 
 - `WriteOutput` is where a console writes. In JavaScript it is the scripting logger at the level given,
   `[resource] line`, or the line alone when the resource cannot be told. In Lua it is the path of `print`
-  (§2).
+  (§2). `OutputLineLimit` is the bound of a line there, and the largest `size_t` in JavaScript, which has
+  none: who builds a line from many values stops once it is past the bound, so that a script cannot make
+  the host spell more than a line takes.
 - A JavaScript call asks the resource manager of its isolate for its resource: the one a builtin's
   `Register` was given (`Bind::SetCallResourceManager`), which is forgotten when the isolate is
   unregistered or the manager is destroyed, and otherwise the scripting module's.
@@ -301,8 +304,9 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
     strings; `string.dump` is removed; `collectgarbage` only answers `"count"`. `print` writes to the
     scripting logger under the resource's name, and `console` writes where `print` does
     (`LuaRuntime::WriteOutput`): a line is cut at the same bound, its control characters are blanked, it
-    counts in the same share of the log per second, and it is logged at the level of its function. A
-    print handler gets the lines of both, without the level. `pcall`, `xpcall`, `setmetatable` and
+    counts in the same share of the log per second, and it is logged at the level of its function. The
+    arguments that lie past the bound are not formatted. A print handler gets the lines of both, without
+    the level. `pcall`, `xpcall`, `setmetatable` and
     `coroutine.create`/`wrap`/`resume`/`close` are the runtime's own, on both sides: they behave as
     Lua's, except that `setmetatable` refuses a metatable carrying `__gc` and that none of them lets
     a script run past the deadline of an entry.
