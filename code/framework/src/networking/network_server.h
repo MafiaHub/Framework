@@ -90,6 +90,10 @@ namespace Framework::Networking {
         }
 
         bool _replicationRPCsRegistered = false;
+        // Set when a packet thread starts on this server: the handler table and the world's
+        // registered states are read there without a lock, so nothing is added to them afterwards.
+        std::atomic<bool> _registrationsClosed {false};
+        void OnPacketThreadStarting() override;
 
         std::atomic<int32_t> _slowHandlerWarnMs {10};
         // The draining thread's own: slow handlers since the last warning, and when the next may be written.
@@ -116,13 +120,13 @@ namespace Framework::Networking {
         // a PacketThread on a running server.
         void Update() override;
 
-        // A handler that takes at least this long is logged, at most once a second, with the digest
-        // of its RPC identifier (the name is not in the binary). 0 turns the warning off.
         // Typed RPCs dropped since the server started because their payload was cut short.
         uint64_t ShortPayloadsDropped() const {
             return _shortPayloadsDropped.load(std::memory_order_relaxed);
         }
 
+        // A handler that takes at least this long is logged, at most once a second, with the digest
+        // of its RPC identifier (the name is not in the binary). 0 turns the warning off.
         void SetSlowHandlerWarnMs(int32_t ms) {
             _slowHandlerWarnMs.store(ms, std::memory_order_relaxed);
         }
@@ -135,7 +139,8 @@ namespace Framework::Networking {
         // (see RPC::ReadChecked) is dropped before the handler, counted (ShortPayloadsDropped) and
         // logged at most once a second. Handlers run where packets are drained, on a server its packet
         // thread, one at a time; register them before it starts (an instance's PostInit or
-        // PostScriptInit), since the table they go in is read there without a lock.
+        // PostScriptInit), since the table they go in is read there without a lock: registering
+        // once a packet thread has started logs critical and aborts.
         template <RPC::Payload T>
         void RegisterRPC(fu2::function<void(const T &payload, Sender sender, Replication::World &world) const> handler) {
             RegisterRawRPC(T::kIdentifier, [this, cb = std::move(handler)](MafiaNet::BitStream *bs, Sender sender, Replication::World &world) {

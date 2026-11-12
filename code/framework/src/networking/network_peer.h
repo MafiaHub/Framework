@@ -220,6 +220,9 @@ namespace Framework::Networking {
         // further packet is handled: a server's RPCs still in the queue are dropped unhandled, and
         // the rest is left in the peer.
         void DrainPackets(const std::atomic<bool> *stop = nullptr);
+        // Told by a PacketThread as it starts on this peer: from here on another thread reads what
+        // was registered. A server closes its registrations (NetworkServer).
+        virtual void OnPacketThreadStarting() {}
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
 
         // Byte offset of the packet id in a datagram, skipping an optional ID_TIMESTAMP + 8-byte

@@ -347,6 +347,12 @@ namespace Framework::Networking::Replication {
 
     void World::AddState(const void *key, void *object, void (*destroy)(void *)) {
         std::unique_ptr<void, void (*)(void *)> owned(object, destroy);
+        if (_registrationClosed.load(std::memory_order_acquire)) {
+            const auto logger = Logging::GetLogger(FRAMEWORK_INNER_NETWORKING);
+            logger->critical("World: a state was registered after the packet thread started; register in PostInit or PostScriptInit");
+            logger->flush();
+            std::abort();
+        }
         for (const auto &state : _states) {
             if (state->key == key) {
                 state->object = std::move(owned);

@@ -24,6 +24,7 @@ namespace Framework::Networking {
         if (_thread.joinable()) {
             return;
         }
+        peer.OnPacketThreadStarting();
         _peer    = &peer;
         _onEntry = std::move(onEntry);
         _stop    = false;

@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <exception>
 #include <string>
 #include <string_view>
@@ -43,7 +44,20 @@ namespace Framework::Networking {
         _server->KickPlayer(_guid, reason.empty() ? DisconnectionReason::KICKED : DisconnectionReason::KICKED_CUSTOM, std::string(reason));
     }
 
+    void NetworkServer::OnPacketThreadStarting() {
+        _registrationsClosed.store(true, std::memory_order_release);
+        _replicationManager->GetWorld().CloseRegistration();
+    }
+
     void NetworkServer::RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, Sender, Replication::World &)> handler) {
+        if (_registrationsClosed.load(std::memory_order_acquire)) {
+            // The packet thread is reading the table this would change. Fatal like other misuse: the
+            // alternative is a handler that is sometimes there.
+            const auto logger = Logging::GetLogger(FRAMEWORK_INNER_NETWORKING);
+            logger->critical("An RPC handler ({:016x}) was registered after the packet thread started; register in PostInit or PostScriptInit", identifier.digest);
+            logger->flush();
+            std::abort();
+        }
         NetworkPeer::RegisterRawRPC(identifier, [this, identifier, cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) mutable {
             // Shutting down: no handler starts once the drain was told to stop.
             if (DrainStopped()) {

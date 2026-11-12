@@ -326,13 +326,20 @@ namespace Framework::Networking::Replication {
         // entity may be gone. For telling a caller its id is wrong, not for deciding to use it.
         bool Exists(uint64_t id) const;
 
-        // One object per type, registered before the server starts and kept for the world's life.
+        // One object per type, registered before the server handles packets (an instance's PostInit
+        // or PostScriptInit) and kept for the world's life: the list is read by every thread without a
+        // lock, so registering once a packet thread has started logs critical and aborts.
         template <typename T>
         void RegisterState(std::unique_ptr<T> state) {
             static_assert(!std::is_base_of_v<NetworkEntity, T>, "World::RegisterState<T>: entities are made with Create");
             AddState(StateKey<T>(), state.release(), [](void *object) {
                 delete static_cast<T *>(object);
             });
+        }
+
+        // No state is registered from here on: called as a packet thread starts on this world's server.
+        void CloseRegistration() {
+            _registrationClosed.store(true, std::memory_order_release);
         }
 
         // Handles the calling thread holds, on any world.
@@ -507,6 +514,7 @@ namespace Framework::Networking::Replication {
         std::atomic<size_t> _doomedCount {0};
         // In registration order, which is their lock order. Fixed once the server runs.
         std::vector<std::unique_ptr<StateSlot>> _states;
+        std::atomic<bool> _registrationClosed {false};
     };
 
     namespace Detail {
