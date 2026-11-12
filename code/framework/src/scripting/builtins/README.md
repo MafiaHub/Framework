@@ -42,6 +42,9 @@ Rules:
   silently drop the call (e.g. `Chat.send` with no network peer throws, matching
   `TextLabel.create`).
 - Message format: `"<Api>.<method>: <what was expected / what went wrong>"`.
+  The client `Discord` keeps two messages from before this rule, which its
+  single-field setters share and scripts may match: `Discord: expected a string
+  argument` and `Discord: expected a numeric argument`. Do not add others.
 
 ## Registration
 
