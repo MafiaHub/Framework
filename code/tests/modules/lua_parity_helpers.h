@@ -17,6 +17,7 @@
 #include <lualib.h>
 #include <nlohmann/json.hpp>
 
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -95,6 +96,40 @@ namespace LuaParity {
         }
         lua_pop(L, 1);
         return type;
+    }
+
+    // The type of what the metatable of the objects of `definition` has under `event`: "__add".
+    inline int MetaType(lua_State *L, const BindDetail::LuaClass &definition, const std::string &event) {
+        int type = LUA_TNONE;
+        if (BindDetail::LuaPushInstanceMetatable(L, definition)) {
+            lua_pushstring(L, event.c_str());
+            type = lua_rawget(L, -2);
+            lua_pop(L, 1);
+        }
+        lua_pop(L, 1);
+        return type;
+    }
+
+    // Whether calling the class table of `definition` constructs: it has a constructor, and its table a __call.
+    inline bool IsCallable(lua_State *L, const BindDetail::LuaClass &definition) {
+        bool callable = false;
+        if (BindDetail::LuaPushClassTable(L, definition) && lua_getmetatable(L, -1) != 0) {
+            lua_pushstring(L, "__call");
+            callable = lua_rawget(L, -2) == LUA_TFUNCTION;
+            lua_pop(L, 2);
+        }
+        lua_pop(L, 1);
+        return callable && definition.constructor.has_value();
+    }
+
+    // The metamethod behind an operator as a script writes it between its operands, "" for none: "==" is "__eq".
+    inline std::string EventOfSymbol(std::string_view symbol, bool unary) {
+        static const std::map<std::string_view, const char *> binary = {{"+", "__add"}, {"-", "__sub"}, {"*", "__mul"}, {"/", "__div"}, {"==", "__eq"}, {"<", "__lt"}, {"<=", "__le"}, {"..", "__concat"}};
+        if (unary) {
+            return symbol == "-" ? "__unm" : symbol == "#" ? "__len" : "";
+        }
+        const auto it = binary.find(symbol);
+        return it != binary.end() ? it->second : "";
     }
 
     class Gate final {
@@ -224,7 +259,10 @@ namespace LuaParity {
     // What a definition file declares, and what of it a state lacks.
     struct Declared final {
         std::set<std::string> globals; // tables and functions
-        int members = 0;               // functions and fields of a table
+        std::set<std::string> tables;  // classes and namespaces, global or not
+        int members   = 0;             // functions and fields of a table
+        int operators = 0;             // annotated, and named in a description
+        int callable  = 0;             // classes with a call signature
         std::set<std::string> missing;
     };
 
@@ -234,6 +272,7 @@ namespace LuaParity {
         Declared declared;
         std::string current; // the class the annotations being read belong to
         std::set<std::string> local;
+        std::vector<std::string> pendingOperators; // named in a description, for the class it leads to
 
         const auto classOf = [&](const std::string &name) -> const BindDetail::LuaClass * {
             const ClassDesc *desc = FindBuiltin(builtins, name, side);
@@ -252,18 +291,79 @@ namespace LuaParity {
             const std::string_view view(line);
             if (view.starts_with("---@class ")) {
                 current = word(view.substr(10));
+                declared.tables.insert(current);
+                const BindDetail::LuaClass *definition = classOf(current);
+                for (const std::string &event : pendingOperators) {
+                    ++declared.operators;
+                    if (definition == nullptr || MetaType(L, *definition, event) != LUA_TFUNCTION) {
+                        declared.missing.insert(current + " " + event + " (operator named in the description)");
+                    }
+                }
+                pendingOperators.clear();
             }
             else if (view.starts_with("---@field ") && !current.empty()) {
                 const std::string field = word(view.substr(10));
                 ++declared.members;
                 if (const BindDetail::LuaClass *definition = classOf(current)) {
-                    const bool readonly = view.find(" Read-only.") != std::string_view::npos;
+                    const bool readonly = view.find(" " + std::string(Framework::Scripting::Bind::kReadOnlyMarker)) != std::string_view::npos;
                     if (BindDetail::LuaFindInstanceMember(L, *definition, field) != (readonly ? LuaInstanceMember::ReadOnlyProperty : LuaInstanceMember::Property)) {
                         declared.missing.insert(current + "." + field + (readonly ? " (read-only property)" : " (property with a setter)"));
                     }
                 }
                 else if (const int type = GlobalFieldType(L, current, field); type == LUA_TNONE || type == LUA_TNIL) {
                     declared.missing.insert(current + "." + field + " (constant)");
+                }
+            }
+            else if (view.starts_with("---@operator ") && !current.empty()) {
+                const std::string event                = "__" + word(view.substr(13));
+                const BindDetail::LuaClass *definition = classOf(current);
+                ++declared.operators;
+                if (definition == nullptr || MetaType(L, *definition, event) != LUA_TFUNCTION) {
+                    declared.missing.insert(current + " " + event + " (operator)");
+                }
+            }
+            else if (view.starts_with("---Also has the operators ") && !pendingOperators.empty()) {
+                declared.missing.insert("operators described twice before a class");
+            }
+            else if (view.starts_with("---Also has the operators ")) {
+                // `left symbol right`, or `symbol operand`, each between backticks. Held until the class is named.
+                for (size_t open = view.find('`'); open != std::string_view::npos; open = view.find('`', open + 1)) {
+                    const size_t close = view.find('`', open + 1);
+                    if (close == std::string_view::npos) {
+                        break;
+                    }
+                    const std::string_view written = view.substr(open + 1, close - open - 1);
+                    const size_t first             = written.find(' ');
+                    const size_t last              = written.rfind(' ');
+                    std::string event;
+                    if (first == std::string_view::npos) {
+                        size_t length = 0;
+                        while (length < written.size() && std::isalnum(static_cast<unsigned char>(written[length])) == 0) {
+                            ++length;
+                        }
+                        event = EventOfSymbol(written.substr(0, length), true);
+                    }
+                    else if (last > first) {
+                        event = EventOfSymbol(written.substr(first + 1, last - first - 1), false);
+                    }
+                    pendingOperators.push_back(event.empty() ? std::string(written) : event);
+                    open = close;
+                }
+            }
+            else if (view.starts_with("---@overload ") && !current.empty()) {
+                const BindDetail::LuaClass *definition = classOf(current);
+                ++declared.callable;
+                if (definition == nullptr || !IsCallable(L, *definition)) {
+                    declared.missing.insert(current + " (callable class)");
+                }
+            }
+            else if (view.ends_with(" = nil") && view.find('.') != std::string_view::npos) {
+                const std::string owner                = word(view);
+                const std::string field                = word(view.substr(owner.size() + 1));
+                const BindDetail::LuaClass *definition = classOf(owner);
+                ++declared.members;
+                if (const int type = definition != nullptr ? ClassFieldType(L, *definition, field) : LUA_TNONE; type == LUA_TNONE || type == LUA_TNIL) {
+                    declared.missing.insert(owner + "." + field + " (static property)");
                 }
             }
             else if (view.ends_with(" = {}")) {
@@ -326,6 +426,52 @@ namespace LuaParity {
         }
         lua_close(L);
         return error;
+    }
+
+    // What separates the globals the JavaScript catalog documents from the definitions Lua is set up from: a
+    // global object or a class of the catalog that no definition is listed for, and a listed namespace or global
+    // class the catalog does not have. A builtin added to one language alone shows here.
+    inline std::set<std::string> OneSided(const nlohmann::json &catalog, const std::vector<const ClassDesc *> &builtins, Side side) {
+        std::set<std::string> documented;
+        for (const nlohmann::json &symbol : catalog.value("symbols", nlohmann::json::array())) {
+            if (symbol.value("kind", std::string()) != "dataType") {
+                documented.insert(symbol.value("name", std::string()));
+            }
+        }
+        std::set<std::string> names;
+        for (const std::string &name : documented) {
+            if (FindBuiltin(builtins, name, side) == nullptr) {
+                names.insert(name + " (JavaScript only)");
+            }
+        }
+        for (const ClassDesc *desc : builtins) {
+            if (ExistsIn(*desc, side) && (desc->isNamespace || desc->global) && !documented.contains(desc->name)) {
+                names.insert(desc->name + " (Lua only)");
+            }
+        }
+        return names;
+    }
+
+    // `text` without the section of the definition `name`: its class and its functions.
+    inline std::string WithoutDefinition(const std::string &text, const std::string &name) {
+        std::string out;
+        for (size_t at = 0; at < text.size();) {
+            size_t end = text.find("\n\n", at);
+            end        = end == std::string::npos ? text.size() : end + 1;
+            const std::string_view paragraph(text.data() + at, end - at);
+            const size_t lastLine             = paragraph.rfind('\n', paragraph.size() - 2);
+            const std::string_view definition = paragraph.substr(lastLine == std::string_view::npos ? 0 : lastLine + 1);
+            const bool ofName                 = paragraph.find("---@class " + name + "\n") != std::string_view::npos || definition.starts_with("function " + name + ".") || definition.starts_with("function " + name + ":");
+            if (!ofName) {
+                out += paragraph;
+                out += end < text.size() ? "\n" : "";
+            }
+            at = end < text.size() ? end + 1 : end;
+        }
+        if (out.ends_with("\n\n")) {
+            out.pop_back();
+        }
+        return out;
     }
 
     // The globals of a Lua state with every standard library open: what a script has without the framework.

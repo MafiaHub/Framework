@@ -206,6 +206,10 @@ namespace Framework::Scripting::Bind {
         // side it was materialised for. None in a state the class is not materialised in.
         LuaInstanceMember LuaFindInstanceMember(lua_State *L, const LuaClass &definition, std::string_view name);
 
+        // Pushes the metatable the state gave the objects of `definition`, where its operators are, or nil in a
+        // state the class is not materialised in. Returns whether it pushed the metatable.
+        bool LuaPushInstanceMetatable(lua_State *L, const LuaClass &definition);
+
         // Pushes the class table of `definition`, the one a script reads the statics and `new` from, or nil in a
         // state the class is not materialised in. Returns whether it pushed the table.
         bool LuaPushClassTable(lua_State *L, const LuaClass &definition);

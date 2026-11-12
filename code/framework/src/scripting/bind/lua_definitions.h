@@ -12,9 +12,13 @@
 #include "doc.h"
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Framework::Scripting::Bind {
+    // What WriteLuaDefinitions starts the description of a property a script cannot assign with.
+    inline constexpr std::string_view kReadOnlyMarker = "[read-only]";
+
     // The globals every Lua state has that no definition declares: the timers, sleep, spawn, and print and require
     // as the sandbox provides them. Written by hand next to WriteLuaDefinitions, which describes them too.
     const std::vector<FunctionDesc> &LuaRuntimeGlobals();
@@ -26,8 +30,10 @@ namespace Framework::Scripting::Bind {
     //
     // A class is a `---@class` with a `---@field` for each property, a function for each method and static,
     // `Name.new` and a call signature when it has a constructor, and an `---@operator` for each Lua operator that
-    // has an annotation. A function documented as returning a Promise is `---@async` and returns what the promise
-    // settles with, since the calling coroutine waits for it.
+    // has an annotation. A static property of a class is a typed field of its table. A function documented as
+    // returning a Promise is `---@async` and returns what the promise settles with, since the calling coroutine
+    // waits for it. A description is the one the definition has, with `undefined` and `null` turned into `nil`
+    // where they stand as words of their own.
     std::string WriteLuaDefinitions(const ApiCatalog &catalog, Side side);
 
     // Writes WriteLuaDefinitions of `definitions` to the file the environment variable `variable` names. True when

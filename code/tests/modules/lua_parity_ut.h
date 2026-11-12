@@ -60,7 +60,9 @@ MODULE(lua_parity, {
         bus.server.files.Resource("lua", {{"main.lua", ""}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("lua"), "");
-        lua_State *L = bus.server.module.GetLuaEngine()->GetRuntime("lua")->State();
+        Framework::Scripting::LuaRuntime *runtime = bus.server.module.GetLuaEngine()->GetRuntime("lua");
+        NEQUALS(runtime, nullptr);
+        lua_State *L = runtime->State();
 
         const auto builtins = ServerScriptingModule::LuaBuiltinDefinitions();
         LuaParity::Gate gate(L, Side::Server, builtins, LuaParityTest::Exemptions());
@@ -68,9 +70,13 @@ MODULE(lua_parity, {
 
         EQUALS(LuaParity::Join(report.missing), "");
         EQUALS(LuaParity::Join(report.stale), "");
-        // The gate looked at something: the catalog is the whole of it.
-        EQUALS(report.symbols >= 17, true);
+        // The gate looked at the whole catalog: 8 global objects, 9 classes and PendingConnection, which is a data
+        // type with a class behind it; EventMap, TextLabelOptions and Timeout have none.
+        EQUALS(report.symbols, 18);
+        EQUALS(report.dataTypes, 3);
         EQUALS(report.members >= 200, true);
+        // A builtin registered for one language alone.
+        EQUALS(LuaParity::Join(LuaParity::OneSided(catalog, builtins, Side::Server)), "");
         EQUALS(static_cast<size_t>(report.exempted), LuaParityTest::Exemptions().size());
     });
 
@@ -79,7 +85,9 @@ MODULE(lua_parity, {
         bus.server.files.Resource("lua", {{"main.lua", ""}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("lua"), "");
-        lua_State *L = bus.server.module.GetLuaEngine()->GetRuntime("lua")->State();
+        Framework::Scripting::LuaRuntime *runtime = bus.server.module.GetLuaEngine()->GetRuntime("lua");
+        NEQUALS(runtime, nullptr);
+        lua_State *L = runtime->State();
 
         const auto builtins                = ServerScriptingModule::LuaBuiltinDefinitions();
         const std::string definitions      = LuaParity::Generate(builtins, Side::Server);
@@ -88,8 +96,14 @@ MODULE(lua_parity, {
         EQUALS(LuaParity::CompileError(definitions), "");
         EQUALS(LuaParity::Join(declared.missing), "");
         EQUALS(LuaParity::Join(LuaParity::UndeclaredGlobals(L, declared.globals)), "");
-        EQUALS(declared.globals.size() >= 20, true);
+        // 16 global tables and 8 global functions; StateBag and PendingConnection are tables no global names.
+        EQUALS(declared.globals.size(), 24u);
+        EQUALS(declared.tables.size(), 18u);
         EQUALS(declared.members >= 200, true);
+        // Five operators for each of the three vectors, with two more in their description; Quaternion and Color.
+        EQUALS(declared.operators, 3 * 7 + 2 + 1);
+        // The value types and the three handles.
+        EQUALS(declared.callable, 8);
 
         // Every global the JavaScript catalog documents and Lua has is declared.
         const nlohmann::json fixture = ScriptingCatalogGolden::ReadFixture();
@@ -129,7 +143,8 @@ MODULE(lua_parity, {
         square.description = "A square.";
         square.bases       = {"Shape"};
         square.constructor = FunctionDesc {"constructor", "Makes a square.", {param("size", TypeOf<double>(), "Side length."), param("end", TypeOf<std::string>(), "A label.", true)}, {}, "", false, Side::Shared};
-        square.properties  = {{"size", TypeOf<double>(), "", false, false, Side::Shared}, {"owner", Type::Custom("Player | undefined", "Player?"), "Who owns it.", true, false, Side::Server}, {"shade", TypeOf<int>(), "Drawn shade.", false, false, Side::Client}};
+        square.properties  = {{"size", TypeOf<double>(), "", false, false, Side::Shared}, {"owner", Type::Custom("Player | undefined", "Player?"), "Read-only. who owns it, or undefined.", true, false, Side::Server},
+            {"shade", TypeOf<int>(), "Drawn shade.", false, false, Side::Client}, {"count", TypeOf<int>(), "How many squares there are; null is not undefined, nullable stays.", true, true, Side::Shared}};
         square.functions   = {
             {"grow", "Grows it.\nIn place.", {param("by", TypeOf<double>(), "How much.")}, Type::This(), "This square.", false, Side::Shared},
             {"save", "Saves it.", {}, Type::Custom("Promise<boolean>", "boolean"), "Whether it was saved.", false, Side::Server},
@@ -168,7 +183,7 @@ MODULE(lua_parity, {
 ---
 ---Not a global: a script is given the objects of this class and cannot create one.
 ---@class Shape
----@field sides integer Read-only. How many sides.
+---@field sides integer [read-only] How many sides.
 local Shape = {}
 
 ---A square.
@@ -176,11 +191,15 @@ local Shape = {}
 ---Also has the operators `number * Square`, `Square < Square`.
 ---@class Square: Shape
 ---@field size number
----@field owner Player? Read-only. Who owns it.
+---@field owner Player? [read-only] Who owns it, or nil.
 ---@operator add(Square): Square
 ---@operator unm: Square
 ---@overload fun(size: number, end_?: string): Square
 Square = {}
+
+---[read-only] How many squares there are; nil is not nil, nullable stays.
+---@type integer
+Square.count = nil
 
 ---Makes a square.
 ---@param size number Side length.
@@ -204,7 +223,7 @@ function Square:save() end
 function Square.unit() end
 
 ---@class Tools
----@field version string Read-only. The version.
+---@field version string [read-only] The version.
 Tools = {}
 
 ---Logs.
@@ -263,7 +282,9 @@ function Tools.log(level, ...) end
         bus.server.files.Resource("lua", {{"main.lua", ""}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("lua"), "");
-        lua_State *L        = bus.server.module.GetLuaEngine()->GetRuntime("lua")->State();
+        Framework::Scripting::LuaRuntime *runtime = bus.server.module.GetLuaEngine()->GetRuntime("lua");
+        NEQUALS(runtime, nullptr);
+        lua_State *L        = runtime->State();
         const auto builtins = ServerScriptingModule::LuaBuiltinDefinitions();
 
         const nlohmann::json catalog           = nlohmann::json::parse(R"({"symbols":[
@@ -286,10 +307,21 @@ function Tools.log(level, ...) end
         EQUALS(report.symbols, 4);
 
         // And the definition file: what it declares and the state lacks is named.
-        const LuaParity::Declared declared = LuaParity::CheckDefinitions("---@class Chat\n---@field motd string Read-only.\nChat = {}\nfunction Chat.whisper(text) end\n---@class Vector3\n---@field x number Read-only. X.\n---@field length number Read-only.\nVector3 = {}\n"
-                                                                         "function Vector3:spin() end\nfunction Vector3.zero() end\n---@class StateBag\nStateBag = {}\n---@class Entity\nlocal Entity = {}\nfunction setImmediate(callback) end\n",
+        const LuaParity::Declared declared = LuaParity::CheckDefinitions("---@class Chat\n---@field motd string [read-only]\nChat = {}\nfunction Chat.whisper(text) end\n"
+                                                                         "---Also has the operators `number * Vector3`, `Vector3 < Vector3`, `#Vector3`.\n---@class Vector3\n---@field x number [read-only] X.\n---@field length number [read-only]\n"
+                                                                         "---@operator add(Vector3): Vector3\n---@operator concat(string): string\n---@overload fun(): Vector3\nVector3 = {}\nVector3.count = nil\n"
+                                                                         "function Vector3:spin() end\nfunction Vector3.zero() end\n---@class StateBag\n---@overload fun(): StateBag\nStateBag = {}\n---@class Entity\nlocal Entity = {}\nfunction setImmediate(callback) end\n",
             L, Side::Server, builtins);
-        EQUALS(LuaParity::Join(declared.missing), "Chat.motd (constant), Chat.whisper (function), Entity (declared as no global, and is one), StateBag (global), Vector3.x (read-only property), Vector3:spin (function), setImmediate (global function)");
+        EQUALS(LuaParity::Join(declared.missing), "Chat.motd (constant), Chat.whisper (function), Entity (declared as no global, and is one), StateBag (callable class), StateBag (global), Vector3 __concat (operator), Vector3 __len (operator named in the description), "
+                                                  "Vector3 __lt (operator named in the description), Vector3.count (static property), Vector3.x (read-only property), Vector3:spin (function), setImmediate (global function)");
+        EQUALS(declared.operators, 5);
+        EQUALS(declared.callable, 2);
+
+        // And a builtin one language has alone.
+        EQUALS(LuaParity::Join(LuaParity::OneSided(catalog, {&Framework::Scripting::Builtins::Vector3::Definition().Describe(), &Framework::Scripting::Builtins::Color::Definition().Describe(), &Framework::Scripting::Builtins::StateBag::Definition().Describe()}, Side::Server)),
+            "Chat (JavaScript only), Color (Lua only), Entity (JavaScript only), Ghost (JavaScript only)");
+        EQUALS(LuaParity::WithoutDefinition("---@meta\n\n---A.\n---@class A\nA = {}\n\n---f\nfunction A.f() end\n\n---@class B\nB = {}\n\nfunction B:g() end\n\nfunction after() end\n", "B"),
+            "---@meta\n\n---A.\n---@class A\nA = {}\n\n---f\nfunction A.f() end\n\nfunction after() end\n");
         EQUALS(LuaParity::Join(LuaParity::UndeclaredGlobals(L, declared.globals)).find("Events") != std::string::npos, true);
     });
 })

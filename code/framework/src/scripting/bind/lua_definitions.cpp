@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdlib>
 #include <fstream>
 #include <string_view>
@@ -21,29 +22,30 @@ namespace Framework::Scripting::Bind {
         constexpr std::string_view kHeaderStart = "---@meta\n"
                                                   "\n"
                                                   "-- MafiaHub Framework: the Lua API of a ";
-        constexpr std::string_view kHeaderEnd   = " resource, for the Lua language server (LuaLS).\n"
-                                                  "-- Generated from the definitions of the builtins. Do not edit.\n"
-                                                  "--\n"
-                                                  "-- A resource runs in a sandbox. Of the standard library it has base, coroutine, table, string, utf8 and\n"
-                                                  "-- math, and of os only time, clock, date and difftime. There is no io, no debug and no package.\n"
-                                                  "--   removed   dofile, loadfile, string.dump\n"
-                                                  "--   changed   load            takes a string chunk only, always compiled as text\n"
-                                                  "--             collectgarbage  answers \"count\" only\n"
-                                                  "--             print           writes a line to the log of the resource\n"
-                                                  "--             require         reads the files of the resource and nothing else\n"
-                                                  "--             setmetatable    refuses a metatable with __gc\n"
-                                                  "--             coroutine.resume, coroutine.close\n"
-                                                  "--                             refuse the coroutine the host runs the script in\n"
-                                                  "--\n"
-                                                  "-- A function marked ---@async waits: the coroutine that calls it is suspended until the result is known,\n"
-                                                  "-- then the call returns it, or raises. Every chunk, handler and timer callback runs in a coroutine.\n"
-                                                  "--\n"
-                                                  "-- What this file cannot say:\n"
-                                                  "--   - the events the framework raises and what their handlers receive (Events.on);\n"
-                                                  "--   - the fields of an option table where a parameter is typed `table`;\n"
-                                                  "--   - the comparisons of a class (==, <, <=) and an operator whose left operand is not the class, which\n"
-                                                  "--     have no annotation: the description of the class names them;\n"
-                                                  "--   - what a class adds for Lua outside its declared members, and what a game adds to all of this.\n";
+        constexpr std::string_view kHeaderEnd = " resource, for the Lua language server (LuaLS).\n"
+                                                "-- Generated from the definitions of the builtins. Do not edit.\n"
+                                                "--\n"
+                                                "-- A resource runs in a sandbox. Of the standard library it has base, coroutine, table, string, utf8 and\n"
+                                                "-- math, and of os only time, clock, date and difftime. There is no io, no debug and no package.\n"
+                                                "--   removed   dofile, loadfile, string.dump\n"
+                                                "--   changed   load            takes a string chunk only, always compiled as text\n"
+                                                "--             collectgarbage  answers \"count\" only\n"
+                                                "--             print           writes a line to the log of the resource\n"
+                                                "--             require         reads the files of the resource and nothing else\n"
+                                                "--             setmetatable    refuses a metatable with __gc\n"
+                                                "--             coroutine.resume, coroutine.close\n"
+                                                "--                             refuse the coroutine the host runs the script in\n"
+                                                "--\n"
+                                                "-- A field marked [read-only] cannot be assigned. A function marked ---@async waits: the coroutine that\n"
+                                                "-- calls it is suspended until the result is known, then the call returns it, or raises. Every chunk,\n"
+                                                "-- handler and timer callback runs in a coroutine.\n"
+                                                "--\n"
+                                                "-- What this file cannot say:\n"
+                                                "--   - the events the framework raises and what their handlers receive (Events.on);\n"
+                                                "--   - the fields of an option table where a parameter is typed `table`;\n"
+                                                "--   - the comparisons of a class (==, <, <=) and an operator whose left operand is not the class, which\n"
+                                                "--     have no annotation: the description of the class names them;\n"
+                                                "--   - what a class adds for Lua outside its declared members, and what a game adds to all of this.\n";
 
         constexpr std::array<std::string_view, 22> kKeywords = {"and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto", "if", "in", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while"};
 
@@ -62,16 +64,51 @@ namespace Framework::Scripting::Bind {
             return it != kOperators.end() ? &*it : nullptr;
         }
 
+        bool IsWordCharacter(char character) {
+            return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') || character == '_';
+        }
+
+        // A description as a Lua author reads it. The definitions word theirs for JavaScript: where `undefined` or
+        // `null` stands as a word of its own, Lua has nil.
+        std::string ForLua(std::string_view text) {
+            std::string out(text);
+            for (const std::string_view word : {std::string_view("undefined"), std::string_view("null")}) {
+                for (size_t at = out.find(word); at != std::string::npos; at = out.find(word, at + 1)) {
+                    const bool starts = at == 0 || !IsWordCharacter(out[at - 1]);
+                    const bool ends   = at + word.size() == out.size() || !IsWordCharacter(out[at + word.size()]);
+                    if (starts && ends) {
+                        out.replace(at, word.size(), "nil");
+                    }
+                }
+            }
+            return out;
+        }
+
+        // The description of a read-only property behind the marker that says so: without a "Read-only" of its own
+        // in front, which would say it twice.
+        std::string AfterReadOnlyMarker(std::string description) {
+            for (const std::string_view prefix : {std::string_view("Read-only. "), std::string_view("Read-only ")}) {
+                if (description.starts_with(prefix) && description.size() > prefix.size()) {
+                    description.erase(0, prefix.size());
+                    description[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(description[0])));
+                    break;
+                }
+            }
+            return description;
+        }
+
         // On one line, for the description an annotation ends with.
         std::string Inline(std::string_view text) {
-            std::string line(text);
+            std::string line = ForLua(text);
             std::replace(line.begin(), line.end(), '\n', ' ');
             line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
             return line;
         }
 
         // `text` as the description above a definition: every line of it behind `---`.
-        void Describe(std::string &out, std::string_view text) {
+        void Describe(std::string &out, std::string_view described) {
+            const std::string forLua = ForLua(described);
+            std::string_view text    = forLua;
             while (!text.empty()) {
                 const size_t end      = text.find('\n');
                 std::string_view line = text.substr(0, end);
@@ -178,6 +215,17 @@ namespace Framework::Scripting::Bind {
             }
         }
 
+        // " [read-only] <description>", " <description>" or "": what follows the type of a property. The marker
+        // is fixed, so that a reader of the file can tell a property a script cannot assign.
+        std::string PropertyDescription(const PropertyDesc &property) {
+            std::string description = Inline(property.description);
+            if (property.readonly) {
+                description = AfterReadOnlyMarker(std::move(description));
+                return std::string(" ") + std::string(kReadOnlyMarker) + (description.empty() ? "" : " " + description);
+            }
+            return description.empty() ? std::string() : " " + description;
+        }
+
         void WriteDefinition(std::string &out, const ClassDesc &desc, Side side) {
             std::string operators;
             std::vector<std::string> unannotated;
@@ -204,19 +252,14 @@ namespace Framework::Scripting::Bind {
             }
             out += '\n';
 
+            // A static property of a class is a field of its table alone, written below it.
+            const auto isField = [&desc, side](const PropertyDesc &property) {
+                return Materialises(property.side, side) && (desc.isNamespace || !property.isStatic);
+            };
             for (const PropertyDesc &property : desc.properties) {
-                if (!Materialises(property.side, side)) {
-                    continue;
+                if (isField(property)) {
+                    out += "---@field " + property.name + " " + ToLuaAnnotation(property.type) + PropertyDescription(property) + "\n";
                 }
-                out += "---@field " + property.name + " " + ToLuaAnnotation(property.type);
-                const std::string description = Inline(property.description);
-                if (property.readonly) {
-                    out += description.empty() ? " Read-only." : " Read-only. " + description;
-                }
-                else if (!description.empty()) {
-                    out += " " + description;
-                }
-                out += '\n';
             }
             out += operators;
             if (desc.constructor) {
@@ -224,6 +267,13 @@ namespace Framework::Scripting::Bind {
             }
             out += (desc.isNamespace || desc.global ? "" : "local ") + desc.name + " = {}\n";
 
+            for (const PropertyDesc &property : desc.properties) {
+                if (Materialises(property.side, side) && !isField(property)) {
+                    out += '\n';
+                    Describe(out, PropertyDescription(property).erase(0, 1));
+                    out += "---@type " + ToLuaAnnotation(property.type) + "\n" + desc.name + "." + property.name + " = nil\n";
+                }
+            }
             if (desc.constructor) {
                 WriteFunction(out, *desc.constructor, desc.name + ".new", desc.name);
             }

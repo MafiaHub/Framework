@@ -710,6 +710,11 @@ namespace Framework::Scripting::Bind::Detail {
         return member;
     }
 
+    bool LuaPushInstanceMetatable(lua_State *L, const LuaClass &definition) {
+        luaL_checkstack(L, 1, "cannot read a class");
+        return lua_rawgetp(L, LUA_REGISTRYINDEX, &definition) == LUA_TTABLE;
+    }
+
     bool LuaPushClassTable(lua_State *L, const LuaClass &definition) {
         luaL_checkstack(L, 1, "cannot read a class");
         return lua_rawgetp(L, LUA_REGISTRYINDEX, &definition.classTableKey) == LUA_TTABLE;

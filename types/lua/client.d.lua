@@ -14,8 +14,9 @@
 --             coroutine.resume, coroutine.close
 --                             refuse the coroutine the host runs the script in
 --
--- A function marked ---@async waits: the coroutine that calls it is suspended until the result is known,
--- then the call returns it, or raises. Every chunk, handler and timer callback runs in a coroutine.
+-- A field marked [read-only] cannot be assigned. A function marked ---@async waits: the coroutine that
+-- calls it is suspended until the result is known, then the call returns it, or raises. Every chunk,
+-- handler and timer callback runs in a coroutine.
 --
 -- What this file cannot say:
 --   - the events the framework raises and what their handlers receive (Events.on);
@@ -30,8 +31,8 @@
 ---@class Vector2
 ---@field x number Mutable X component.
 ---@field y number Mutable Y component.
----@field length number Read-only. Read-only Euclidean magnitude of this vector.
----@field lengthSquared number Read-only. Read-only squared magnitude, avoiding a square-root calculation.
+---@field length number [read-only] Euclidean magnitude of this vector.
+---@field lengthSquared number [read-only] Squared magnitude, avoiding a square-root calculation.
 ---@operator add(Vector2): Vector2
 ---@operator sub(Vector2): Vector2
 ---@operator mul(number): Vector2
@@ -115,8 +116,8 @@ function Vector2.one() end
 ---@field x number Mutable X component.
 ---@field y number Mutable Y component.
 ---@field z number Mutable Z component.
----@field length number Read-only. Read-only Euclidean magnitude of this vector.
----@field lengthSquared number Read-only. Read-only squared magnitude, avoiding a square-root calculation.
+---@field length number [read-only] Euclidean magnitude of this vector.
+---@field lengthSquared number [read-only] Squared magnitude, avoiding a square-root calculation.
 ---@operator add(Vector3): Vector3
 ---@operator sub(Vector3): Vector3
 ---@operator mul(number): Vector3
@@ -220,8 +221,8 @@ function Vector3.right() end
 ---@field y number Mutable Y component.
 ---@field z number Mutable Z component.
 ---@field w number Mutable W component.
----@field length number Read-only. Read-only Euclidean magnitude of this vector.
----@field lengthSquared number Read-only. Read-only squared magnitude, avoiding a square-root calculation.
+---@field length number [read-only] Euclidean magnitude of this vector.
+---@field lengthSquared number [read-only] Squared magnitude, avoiding a square-root calculation.
 ---@operator add(Vector4): Vector4
 ---@operator sub(Vector4): Vector4
 ---@operator mul(number): Vector4
@@ -310,8 +311,8 @@ function Vector4.one() end
 ---@field x number Mutable X imaginary component.
 ---@field y number Mutable Y imaginary component.
 ---@field z number Mutable Z imaginary component.
----@field length number Read-only. Read-only magnitude (norm) of this quaternion; 1 for a unit rotation.
----@field lengthSquared number Read-only. Read-only squared magnitude, avoiding a square-root calculation.
+---@field length number [read-only] Magnitude (norm) of this quaternion; 1 for a unit rotation.
+---@field lengthSquared number [read-only] Squared magnitude, avoiding a square-root calculation.
 ---@operator mul(Quaternion): Quaternion
 ---@overload fun(w: number, x: number, y: number, z: number): Quaternion
 Quaternion = {}
@@ -617,10 +618,10 @@ function console.debug(...) end
 
 ---Runtime-side flags exposed as the global ExecutionEnvironment.
 ---@class ExecutionEnvironment
----@field isClient boolean Read-only. True in the sandboxed client scripting runtime.
----@field isServer boolean Read-only. True in the authoritative server scripting runtime.
----@field frameworkVersion string Read-only. Local Framework release version.
----@field modVersion string Read-only. Local mod version from InstanceOptions.modVersion; empty when unset.
+---@field isClient boolean [read-only] True in the sandboxed client scripting runtime.
+---@field isServer boolean [read-only] True in the authoritative server scripting runtime.
+---@field frameworkVersion string [read-only] Local Framework release version.
+---@field modVersion string [read-only] Local mod version from InstanceOptions.modVersion; empty when unset.
 ExecutionEnvironment = {}
 
 ---Arbitrary key/value state attached to one replicated entity, reached as `entity.state`. Keys set on the server replicate to every client that can currently see the entity.
@@ -631,7 +632,7 @@ local StateBag = {}
 
 ---Reads one key from this entity's state.
 ---@param key string Key to read.
----@return any # The stored value, or undefined when the key is not set.
+---@return any # The stored value, or nil when the key is not set.
 function StateBag:get(key) end
 
 ---Checks whether this entity's state holds a key.
@@ -648,18 +649,18 @@ function StateBag:keys() end
 function StateBag:toObject() end
 
 ---Watches this entity's state. The filter is applied before the handler runs, so a listener watching one key of one entity is not woken by unrelated changes. The subscription is dropped when the registering resource stops.
----@param key string? Only report this key, or null to report every key of this entity.
----@param handler fun(key: string, value: any, previous: any) Called as (key: string, value: any, previous: any) with the changed key, its new value and the value before it. `value` is undefined when the key was removed and `previous` is undefined when it held nothing.
+---@param key string? Only report this key, or nil to report every key of this entity.
+---@param handler fun(key: string, value: any, previous: any) Called as (key: string, value: any, previous: any) with the changed key, its new value and the value before it. `value` is nil when the key was removed and `previous` is nil when it held nothing.
 ---@return fun() # A zero-argument function that cancels this subscription.
 function StateBag:onChange(key, handler) end
 
 ---Base handle for a live replicated network entity.
 ---@class Entity
----@field id integer Read-only. Immutable network entity identifier.
----@field virtualWorld integer Read-only. Current virtual-world identifier.
+---@field id integer [read-only] Immutable network entity identifier.
+---@field virtualWorld integer [read-only] Current virtual-world identifier.
 ---@field position Vector3 Authoritative world-space position; assignment forces replicated state.
 ---@field rotation Quaternion|Vector3 Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees.
----@field state StateBag Read-only. Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag.
+---@field state StateBag [read-only] Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag.
 ---@overload fun(id: integer): Entity
 Entity = {}
 
@@ -704,12 +705,12 @@ function Player:getNametagColor() end
 
 ---Server-created replicated world-space text label.
 ---@class TextLabel: Entity
----@field text string Read-only. Current replicated label text.
----@field color integer Read-only. Current packed ARGB color.
----@field fontSize number Read-only. Current font size.
----@field drawDistance number Read-only. Current maximum rendering distance in world units.
----@field fadeDistance number Read-only. Distance in world units where fading starts.
----@field style integer Read-only. The preset nearest the current look: 0 none, 1 shadow, 2 outline, 3 box.
+---@field text string [read-only] Current replicated label text.
+---@field color integer [read-only] Current packed ARGB color.
+---@field fontSize number [read-only] Current font size.
+---@field drawDistance number [read-only] Current maximum rendering distance in world units.
+---@field fadeDistance number [read-only] Distance in world units where fading starts.
+---@field style integer [read-only] The preset nearest the current look: 0 none, 1 shadow, 2 outline, 3 box.
 ---@overload fun(id: integer): TextLabel
 TextLabel = {}
 
@@ -1153,6 +1154,48 @@ function Voice.setInputDevice(name) end
 ---Reads the chosen microphone.
 ---@return string # Its name, or an empty string for the system default.
 function Voice.getInputDevice() end
+
+---The local player's view of the nametags above players: whether they draw at all, whether they carry a health bar, and whether their own is shown.
+---@class Nametags
+Nametags = {}
+
+---Shows or hides all nametags for this player only. A player hidden with Player.setNametagVisible stays hidden either way.
+---@param visible boolean True to draw nametags, false to hide every one of them.
+function Nametags.setVisible(visible) end
+
+---Checks whether this player draws nametags.
+---@return boolean # True unless they were hidden locally.
+function Nametags.isVisible() end
+
+---Shows or hides the health bar on all nametags for this player only, leaving the names alone.
+---@param visible boolean True to draw the health bar under each name, false to hide it.
+function Nametags.setHealthVisible(visible) end
+
+---Checks whether this player draws health bars on nametags.
+---@return boolean # True unless they were hidden locally.
+function Nametags.isHealthVisible() end
+
+---Shows or hides this player's own nametag, drawn as others see it, with any label set on their own id.
+---@param visible boolean True to draw this player's own nametag, false (default) to leave it off.
+function Nametags.setSelfVisible(visible) end
+
+---Checks whether this player draws their own nametag.
+---@return boolean # False unless it was turned on locally.
+function Nametags.isSelfVisible() end
+
+---Hangs a transient line on that entity's nametag, above its name -- speech, an emote, a status. It follows the body, fades with distance and hides behind cover exactly as the name does. Local to this player: the line is not replicated, and a nametag hidden with Nametags.setVisible draws neither. Player.setNametagText is the server-side counterpart for a lasting name.
+---@param entityId number Network id of the entity to label (server-side `player.id`).
+---@param text string Label text; '\n' splits lines. Empty clears the label.
+---@param durationMs? number How long to hold it (default 6000). <= 0 holds until cleared.
+---@param color? number Packed 0xAARRGGBB; 0 (default) uses the nametag's own colour.
+function Nametags.setLabel(entityId, text, durationMs, color) end
+
+---Removes an entity's label before its duration elapses.
+---@param entityId number Network id of the entity whose label to remove.
+function Nametags.clearLabel(entityId) end
+
+---Removes every label this player is drawing.
+function Nametags.clearLabels() end
 
 ---Calls a function once after a delay, in a coroutine of its own.
 ---@param callback fun(...: any) Function to call.

@@ -14,8 +14,9 @@
 --             coroutine.resume, coroutine.close
 --                             refuse the coroutine the host runs the script in
 --
--- A function marked ---@async waits: the coroutine that calls it is suspended until the result is known,
--- then the call returns it, or raises. Every chunk, handler and timer callback runs in a coroutine.
+-- A field marked [read-only] cannot be assigned. A function marked ---@async waits: the coroutine that
+-- calls it is suspended until the result is known, then the call returns it, or raises. Every chunk,
+-- handler and timer callback runs in a coroutine.
 --
 -- What this file cannot say:
 --   - the events the framework raises and what their handlers receive (Events.on);
@@ -30,8 +31,8 @@
 ---@class Vector2
 ---@field x number Mutable X component.
 ---@field y number Mutable Y component.
----@field length number Read-only. Read-only Euclidean magnitude of this vector.
----@field lengthSquared number Read-only. Read-only squared magnitude, avoiding a square-root calculation.
+---@field length number [read-only] Euclidean magnitude of this vector.
+---@field lengthSquared number [read-only] Squared magnitude, avoiding a square-root calculation.
 ---@operator add(Vector2): Vector2
 ---@operator sub(Vector2): Vector2
 ---@operator mul(number): Vector2
@@ -115,8 +116,8 @@ function Vector2.one() end
 ---@field x number Mutable X component.
 ---@field y number Mutable Y component.
 ---@field z number Mutable Z component.
----@field length number Read-only. Read-only Euclidean magnitude of this vector.
----@field lengthSquared number Read-only. Read-only squared magnitude, avoiding a square-root calculation.
+---@field length number [read-only] Euclidean magnitude of this vector.
+---@field lengthSquared number [read-only] Squared magnitude, avoiding a square-root calculation.
 ---@operator add(Vector3): Vector3
 ---@operator sub(Vector3): Vector3
 ---@operator mul(number): Vector3
@@ -220,8 +221,8 @@ function Vector3.right() end
 ---@field y number Mutable Y component.
 ---@field z number Mutable Z component.
 ---@field w number Mutable W component.
----@field length number Read-only. Read-only Euclidean magnitude of this vector.
----@field lengthSquared number Read-only. Read-only squared magnitude, avoiding a square-root calculation.
+---@field length number [read-only] Euclidean magnitude of this vector.
+---@field lengthSquared number [read-only] Squared magnitude, avoiding a square-root calculation.
 ---@operator add(Vector4): Vector4
 ---@operator sub(Vector4): Vector4
 ---@operator mul(number): Vector4
@@ -310,8 +311,8 @@ function Vector4.one() end
 ---@field x number Mutable X imaginary component.
 ---@field y number Mutable Y imaginary component.
 ---@field z number Mutable Z imaginary component.
----@field length number Read-only. Read-only magnitude (norm) of this quaternion; 1 for a unit rotation.
----@field lengthSquared number Read-only. Read-only squared magnitude, avoiding a square-root calculation.
+---@field length number [read-only] Magnitude (norm) of this quaternion; 1 for a unit rotation.
+---@field lengthSquared number [read-only] Squared magnitude, avoiding a square-root calculation.
 ---@operator mul(Quaternion): Quaternion
 ---@overload fun(w: number, x: number, y: number, z: number): Quaternion
 Quaternion = {}
@@ -633,10 +634,10 @@ function console.debug(...) end
 
 ---Runtime-side flags exposed as the global ExecutionEnvironment.
 ---@class ExecutionEnvironment
----@field isClient boolean Read-only. True in the sandboxed client scripting runtime.
----@field isServer boolean Read-only. True in the authoritative server scripting runtime.
----@field frameworkVersion string Read-only. Local Framework release version.
----@field modVersion string Read-only. Local mod version from InstanceOptions.modVersion; empty when unset.
+---@field isClient boolean [read-only] True in the sandboxed client scripting runtime.
+---@field isServer boolean [read-only] True in the authoritative server scripting runtime.
+---@field frameworkVersion string [read-only] Local Framework release version.
+---@field modVersion string [read-only] Local mod version from InstanceOptions.modVersion; empty when unset.
 ExecutionEnvironment = {}
 
 ---Arbitrary key/value state attached to one replicated entity, reached as `entity.state`. Keys set on the server replicate to every client that can currently see the entity.
@@ -647,7 +648,7 @@ local StateBag = {}
 
 ---Reads one key from this entity's state.
 ---@param key string Key to read.
----@return any # The stored value, or undefined when the key is not set.
+---@return any # The stored value, or nil when the key is not set.
 function StateBag:get(key) end
 
 ---Checks whether this entity's state holds a key.
@@ -664,8 +665,8 @@ function StateBag:keys() end
 function StateBag:toObject() end
 
 ---Watches this entity's state. The filter is applied before the handler runs, so a listener watching one key of one entity is not woken by unrelated changes. The subscription is dropped when the registering resource stops.
----@param key string? Only report this key, or null to report every key of this entity.
----@param handler fun(key: string, value: any, previous: any) Called as (key: string, value: any, previous: any) with the changed key, its new value and the value before it. `value` is undefined when the key was removed and `previous` is undefined when it held nothing.
+---@param key string? Only report this key, or nil to report every key of this entity.
+---@param handler fun(key: string, value: any, previous: any) Called as (key: string, value: any, previous: any) with the changed key, its new value and the value before it. `value` is nil when the key was removed and `previous` is nil when it held nothing.
 ---@return fun() # A zero-argument function that cancels this subscription.
 function StateBag:onChange(key, handler) end
 
@@ -683,11 +684,11 @@ function StateBag:remove(key) end
 
 ---Base handle for a live replicated network entity.
 ---@class Entity
----@field id integer Read-only. Immutable network entity identifier.
----@field virtualWorld integer Read-only. Current virtual-world identifier.
+---@field id integer [read-only] Immutable network entity identifier.
+---@field virtualWorld integer [read-only] Current virtual-world identifier.
 ---@field position Vector3 Authoritative world-space position; assignment forces replicated state.
 ---@field rotation Quaternion|Vector3 Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees.
----@field state StateBag Read-only. Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag.
+---@field state StateBag [read-only] Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag.
 ---@overload fun(id: integer): Entity
 Entity = {}
 
@@ -705,18 +706,18 @@ function Entity:toString() end
 function Entity:setVirtualWorld(world) end
 
 ---Restricts replication of this entity to one owning connection while preserving normal range and visibility checks.
----@param player Entity? Player-owned entity whose connection should exclusively receive this entity, or null to clear the restriction.
+---@param player Entity? Player-owned entity whose connection should exclusively receive this entity, or nil to clear the restriction.
 function Entity:setVisibleTo(player) end
 
 ---Framework-owned base handle for a connected player, extended by each game or mod.
 ---@class Player: Entity
----@field steamId string Read-only. Authenticated Steam identifier, or an empty string when unavailable.
----@field epicId string Read-only. Epic Games account identifier the client reported, not verified by the server, or an empty string when unavailable.
----@field discordId string Read-only. Authenticated Discord identifier, or an empty string when unavailable.
----@field discordName string Read-only. Discord username the client reported, not verified by the server, or an empty string when unavailable.
----@field hardwareId string Read-only. Framework hardware identifier, or an empty string when unavailable.
----@field ping integer Read-only. Current round-trip latency in milliseconds, or -1 when unavailable.
----@field ip string Read-only. Current remote network address, or an empty string when unavailable.
+---@field steamId string [read-only] Authenticated Steam identifier, or an empty string when unavailable.
+---@field epicId string [read-only] Epic Games account identifier the client reported, not verified by the server, or an empty string when unavailable.
+---@field discordId string [read-only] Authenticated Discord identifier, or an empty string when unavailable.
+---@field discordName string [read-only] Discord username the client reported, not verified by the server, or an empty string when unavailable.
+---@field hardwareId string [read-only] Framework hardware identifier, or an empty string when unavailable.
+---@field ping integer [read-only] Current round-trip latency in milliseconds, or -1 when unavailable.
+---@field ip string [read-only] Current remote network address, or an empty string when unavailable.
 ---@overload fun(id: integer): Player
 Player = {}
 
@@ -776,12 +777,12 @@ function Player:setNametagColor(color) end
 
 ---Server-created replicated world-space text label.
 ---@class TextLabel: Entity
----@field text string Read-only. Current replicated label text.
----@field color integer Read-only. Current packed ARGB color.
----@field fontSize number Read-only. Current font size.
----@field drawDistance number Read-only. Current maximum rendering distance in world units.
----@field fadeDistance number Read-only. Distance in world units where fading starts.
----@field style integer Read-only. The preset nearest the current look: 0 none, 1 shadow, 2 outline, 3 box.
+---@field text string [read-only] Current replicated label text.
+---@field color integer [read-only] Current packed ARGB color.
+---@field fontSize number [read-only] Current font size.
+---@field drawDistance number [read-only] Current maximum rendering distance in world units.
+---@field fadeDistance number [read-only] Distance in world units where fading starts.
+---@field style integer [read-only] The preset nearest the current look: 0 none, 1 shadow, 2 outline, 3 box.
 ---@overload fun(id: integer): TextLabel
 TextLabel = {}
 
@@ -963,14 +964,14 @@ function Voice.isPlayerTalking(player) end
 ---
 ---Not a global: a script is given the objects of this class and cannot create one.
 ---@class PendingConnection
----@field nickname string Read-only. The name the player asked to join under.
----@field steamId string Read-only. Steam identifier the client reported, or an empty string when it had none.
----@field epicId string Read-only. Epic Games account identifier the client reported, or an empty string when it had none.
----@field discordId string Read-only. Discord identifier the client reported, or an empty string when it had none.
----@field discordName string Read-only. Discord username the client reported, or an empty string when it had none.
----@field hardwareId string Read-only. Framework hardware identifier the client reported, or an empty string when it had none.
----@field ticket string Read-only. The string the client was launched with, as the `ticket` of its launch link, or an empty string. The framework passes it through untouched; checking it -- against a one-time join ticket your own launcher or website issued, typically -- is the script's job.
----@field ip string Read-only. The remote address the connection comes from, without its port.
+---@field nickname string [read-only] The name the player asked to join under.
+---@field steamId string [read-only] Steam identifier the client reported, or an empty string when it had none.
+---@field epicId string [read-only] Epic Games account identifier the client reported, or an empty string when it had none.
+---@field discordId string [read-only] Discord identifier the client reported, or an empty string when it had none.
+---@field discordName string [read-only] Discord username the client reported, or an empty string when it had none.
+---@field hardwareId string [read-only] Framework hardware identifier the client reported, or an empty string when it had none.
+---@field ticket string [read-only] The string the client was launched with, as the `ticket` of its launch link, or an empty string. The framework passes it through untouched; checking it -- against a one-time join ticket your own launcher or website issued, typically -- is the script's job.
+---@field ip string [read-only] The remote address the connection comes from, without its port.
 local PendingConnection = {}
 
 ---Turns the player away before they receive anything. Takes effect on the next server tick, whatever other handlers are still doing. Does nothing once the connection is decided or the player has left.
