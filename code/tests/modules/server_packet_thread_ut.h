@@ -125,6 +125,11 @@ namespace ServerPacketThreadTest {
         int ticks      = 0;
         int spawnProps = 0;
         bool spinProps = false;
+        // Set before Start: poses travel as transform batches, as a game that opted in sends them.
+        bool batchTransforms = false;
+        // Set before a join: the avatar is made while this resource's script is, as far as the scripting side says,
+        // the one running.
+        std::atomic<bool> claimForDemo {false};
 
         // --- Written by handlers, on the packet thread ---
         std::mutex mutex;
@@ -154,6 +159,7 @@ namespace ServerPacketThreadTest {
         // Before the packet thread starts, as a mod registers its own.
         void PostInit() override {
             auto *net = Net();
+            Replication()->SetTransformBatchingEnabled(batchTransforms);
             net->RegisterRPC<Note>([this](const Note &note, Sender, World &) {
                 const std::lock_guard guard(mutex);
                 notes.push_back(note.value);
@@ -197,7 +203,16 @@ namespace ServerPacketThreadTest {
         }
 
         void OnPlayerConnect(const Framework::Integrations::Server::PlayerConnectionData &data, World &world) override {
+            // What the script thread says while it loads or calls into a resource, said here so that it is certainly
+            // in force when the entity is made.
+            const bool claim = claimForDemo;
+            if (claim) {
+                GetScriptingModule()->GetResourceManager()->SetCurrentResourceContext("demo");
+            }
             const auto avatar = world.Create<Avatar>();
+            if (claim) {
+                GetScriptingModule()->GetResourceManager()->SetCurrentResourceContext("");
+            }
             if (!avatar) {
                 return;
             }
@@ -246,7 +261,7 @@ namespace ServerPacketThreadTest {
             return (root / name).generic_string();
         }
 
-        bool Start(const char *name, const std::string &serverScript = "") {
+        bool Start(const char *name, const std::string &serverScript = "", int32_t replicationThreads = 0) {
             Framework::Networking::Replication::EntityRegistry::Get().Register<Avatar>(Avatar::kTypeName);
             Framework::Networking::Replication::EntityRegistry::Get().Register<Prop>(Prop::kTypeName);
 
@@ -275,7 +290,7 @@ namespace ServerPacketThreadTest {
             opts.verifyBuildToken   = false;
             opts.modConfigFile      = (root / "server.json").string();
             opts.resourcesPath      = (root / "resources").string();
-            opts.replicationThreads = 0;
+            opts.replicationThreads = replicationThreads;
             opts.backgroundThreads  = 1;
             // Several clients of the storm come from this one address at once.
             opts.pendingConnectionsPerAddress = 16;
@@ -318,6 +333,8 @@ namespace ServerPacketThreadTest {
         int32_t readyEvent  = -1;
         bool readySignalled = false;
         std::vector<uint32_t> pongs;
+        // Messages sent with an acknowledgement asked for that the server has acknowledged.
+        int acknowledged            = 0;
         MafiaNet::RakNetGUID server = MafiaNet::UNASSIGNED_RAKNET_GUID;
 
         Client() {
@@ -343,6 +360,13 @@ namespace ServerPacketThreadTest {
             });
             net.RegisterRPC<Pong>([this](const Pong &pong, MafiaNet::Packet *) {
                 pongs.push_back(pong.value);
+            });
+            net.SetUnknownPacketHandler([this](MafiaNet::Packet *packet) {
+                if (packet->data[0] != ID_SND_RECEIPT_ACKED) {
+                    return false;
+                }
+                ++acknowledged;
+                return true;
             });
         }
 
@@ -379,10 +403,10 @@ namespace ServerPacketThreadTest {
         }
 
         template <typename T>
-        void Send(uint32_t value = 0) {
+        void Send(uint32_t value = 0, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
             T payload;
             payload.value = value;
-            net.SendRPC(payload, server);
+            net.SendRPC(payload, server, MafiaNet::Priority::High, reliability);
         }
     };
 
@@ -432,6 +456,135 @@ namespace ServerPacketThreadTest {
             }
         }
         return true;
+    }
+    // What "applies inbound state while the pass serializes" measures, for one shape of server.
+    struct InboundState {
+        bool up      = false;
+        bool joined  = false;
+        bool settled = false;
+        // Over one second, the least any client's counter and pose advanced on the server.
+        uint32_t leastAdvance = 0;
+        float leastMoved      = 0.0f;
+        size_t props          = 0;
+        int ticks             = 0;
+    };
+
+    // Every client writes its own avatar on each update, a counter (the state channel) and a pose (a transform batch),
+    // while the server spins 200 props every tick and sends them down to all of them.
+    inline InboundState RunInboundState(const char *name, int clientCount, int32_t replicationThreads) {
+        using namespace std::chrono_literals;
+        InboundState result;
+        Server server;
+        server.batchTransforms = true;
+        result.up              = server.Start(name, "", replicationThreads);
+        if (!result.up) {
+            return result;
+        }
+        std::vector<std::unique_ptr<Client>> clients;
+        std::vector<uint64_t> avatars;
+        const auto update = [&] {
+            for (auto &client : clients) {
+                client->Update();
+            }
+        };
+        for (int i = 0; i < clientCount; ++i) {
+            clients.push_back(std::make_unique<Client>());
+            Client &client = *clients.back();
+            client.net.GetReplicationManager()->SetTransformBatchingEnabled(true);
+            if (!client.Connect(server.port)) {
+                return result;
+            }
+            const auto deadline = Clock::now() + 10s;
+            while (!(client.ready && server.Replication()->GetViewerId(client.Guid()) != 0)) {
+                if (Clock::now() >= deadline) {
+                    fprintf(stderr, "server_packet_thread: client %d of %d did not get in\n", i + 1, clientCount);
+                    return result;
+                }
+                server.Update();
+                update();
+            }
+            avatars.push_back(server.Replication()->GetViewerId(client.Guid()));
+        }
+        result.joined     = true;
+        server.spawnProps = 200;
+        server.spinProps  = true;
+
+        const auto drive = [&] {
+            for (auto &client : clients) {
+                if (Avatar *own = client->OwnAvatar()) {
+                    ++own->counter;
+                    own->position.x += 0.5f;
+                }
+            }
+        };
+        struct Seen {
+            uint32_t counter = 0;
+            float x          = 0.0f;
+        };
+        const auto read = [&] {
+            std::vector<Seen> seen;
+            for (const uint64_t id : avatars) {
+                const auto avatar = server.Replication()->GetWorld().Read<Avatar>(id);
+                seen.push_back(avatar ? Seen {avatar->counter, avatar->position.x} : Seen {});
+            }
+            return seen;
+        };
+        const auto propsOn = [](Client &client) {
+            size_t count = 0;
+            Framework::Networking::Replication::ClientEntities(*client.net.GetReplicationManager()).ForEach<Prop>([&](Prop *) {
+                ++count;
+            });
+            return count;
+        };
+        const auto pump = [&](const auto &done, std::chrono::milliseconds limit) {
+            const auto deadline = Clock::now() + limit;
+            while (Clock::now() < deadline) {
+                server.Update();
+                update();
+                drive();
+                if (done()) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        // Until every client has all 200 and its own state has reached the server once.
+        result.settled = pump(
+            [&] {
+                for (auto &client : clients) {
+                    if (propsOn(*client) != 200) {
+                        return false;
+                    }
+                }
+                for (const Seen &seen : read()) {
+                    if (seen.counter == 0 || seen.x == 0.0f) {
+                        return false;
+                    }
+                }
+                return true;
+            },
+            15s);
+        if (!result.settled) {
+            return result;
+        }
+        const std::vector<Seen> before = read();
+        const int ticksBefore          = server.ticks;
+        pump(
+            [] {
+                return false;
+            },
+            1000ms);
+        const std::vector<Seen> after = read();
+        result.leastAdvance           = ~0u;
+        result.leastMoved             = 1e9f;
+        for (size_t i = 0; i < after.size(); ++i) {
+            result.leastAdvance = std::min(result.leastAdvance, after[i].counter - before[i].counter);
+            result.leastMoved   = std::min(result.leastMoved, after[i].x - before[i].x);
+        }
+        result.ticks = server.ticks - ticksBefore;
+        result.props = server.Count(Framework::Networking::Replication::EntityTypeId<Prop>());
+        server.Stop();
+        return result;
     }
 } // namespace ServerPacketThreadTest
 
@@ -483,13 +636,12 @@ MODULE(server_packet_thread, {
         if (!up) {
             break;
         }
-        // What the script thread says while it loads or calls into a resource: entities made meanwhile on that
-        // thread are the resource's, and go when it stops. A handler making one at that moment is not that script.
-        auto *resources = server.GetScriptingModule()->GetResourceManager();
-        resources->SetCurrentResourceContext("demo");
+        // Entities made while a resource's script runs are the resource's, and go when it stops. A handler making
+        // one at that moment is not that script.
+        auto *resources    = server.GetScriptingModule()->GetResourceManager();
+        server.claimForDemo = true;
         Client client;
         const bool in = Join(server, client);
-        resources->SetCurrentResourceContext("");
         EQUALS(in, true);
         if (!in) {
             break;
@@ -579,59 +731,26 @@ MODULE(server_packet_thread, {
     });
 
     IT("applies inbound state while the pass serializes", {
-        Server server;
-        const bool up = server.Start("fw_packet_thread_state");
-        EQUALS(up, true);
-        if (!up) {
-            break;
-        }
-        Client client;
-        const bool in = Join(server, client);
-        EQUALS(in, true);
-        if (!in) {
-            break;
-        }
-        const uint64_t avatarId = server.Replication()->GetViewerId(client.Guid());
-        server.spawnProps       = 200;
-        server.spinProps        = true;
-        // The client writes its avatar every update; the server spins 200 props every tick and sends them down.
-        const auto drive = [&] {
-            if (Avatar *own = client.OwnAvatar()) {
-                ++own->counter;
-                own->position.x += 0.5f;
-            }
-        };
-        const auto counter = [&] {
-            const auto avatar = server.Replication()->GetWorld().Read<Avatar>(avatarId);
-            return avatar ? avatar->counter : 0u;
-        };
-        const auto props = [&] {
-            size_t count = 0;
-            Framework::Networking::Replication::ClientEntities(*client.net.GetReplicationManager()).ForEach<Prop>([&](Prop *) {
-                ++count;
-            });
-            return count;
-        };
-        // Until the client has all 200 and its own state has reached the server once.
-        EQUALS(Pump(server, {&client}, [&] {
-            drive();
-            return props() == 200 && counter() != 0;
-        }),
-            true);
-        const uint32_t before = counter();
-        const int ticksBefore = server.ticks;
-        Pump(
-            server, {&client},
-            [&] {
-                drive();
-                return false;
-            },
-            1000ms);
-        const uint32_t after = counter();
-        fprintf(stderr, "server_packet_thread: a client-owned counter went from %u to %u over %d ticks with 200 props replicating\n", before, after, server.ticks - ticksBefore);
-        GREATER(after, before + 5);
-        EQUALS(server.Count(Framework::Networking::Replication::EntityTypeId<Prop>()), static_cast<size_t>(200));
-        server.Stop();
+        const InboundState run = RunInboundState("fw_packet_thread_state", 1, 0);
+        EQUALS(run.up, true);
+        EQUALS(run.joined, true);
+        EQUALS(run.settled, true);
+        fprintf(stderr, "server_packet_thread: client-owned counters advanced by at least %u and poses by %.1f over %d ticks, 1 client, no workers, 200 props replicating\n", run.leastAdvance, run.leastMoved, run.ticks);
+        GREATER(run.leastAdvance, 5u);
+        GREATER(run.leastMoved, 2.0f);
+        EQUALS(run.props, static_cast<size_t>(200));
+    });
+
+    IT("applies inbound state while replication workers serve the pass", {
+        // Eight connections, which is where the pass starts to share them out, and two workers beside the tick.
+        const InboundState run = RunInboundState("fw_packet_thread_workers", 8, 2);
+        EQUALS(run.up, true);
+        EQUALS(run.joined, true);
+        EQUALS(run.settled, true);
+        fprintf(stderr, "server_packet_thread: client-owned counters advanced by at least %u and poses by %.1f over %d ticks, 8 clients, 2 workers, 200 props replicating\n", run.leastAdvance, run.leastMoved, run.ticks);
+        GREATER(run.leastAdvance, 5u);
+        GREATER(run.leastMoved, 2.0f);
+        EQUALS(run.props, static_cast<size_t>(200));
     });
 
     IT("lets a handler raise an event with a handle held", {
@@ -775,9 +894,11 @@ MODULE(server_packet_thread, {
             return server.blocked.load();
         }),
             true);
-        leaver.Send<Who>();
+        // Acknowledged by the server's network thread, which has by then put it in the queue the packet thread is
+        // not reading: that very message, not just any packet.
+        leaver.Send<Who>(0, MafiaNet::Reliability::ReliableOrderedWithAckReceipt);
         const bool queued = Pump(server, {&blocker, &leaver}, [&] {
-            return server.Net()->GetPeer()->GetReceiveBufferSize() > 0;
+            return leaver.acknowledged == 1;
         });
         EQUALS(queued, true);
         // The sender goes before its packet is handled, the way a script's kick takes a player out: its avatar
@@ -837,10 +958,9 @@ MODULE(server_packet_thread, {
             const std::lock_guard guard(server.mutex);
             notes = server.notes;
         }
-        // The truncated one reads as nothing or as a default; either way the one behind it was handled, once.
-        EQUALS(notes.empty() ? 0u : notes.back(), 77u);
-        EQUALS(std::count(notes.begin(), notes.end(), 77u), 1);
-        LESSEREQ(notes.size(), static_cast<size_t>(2));
+        // The truncated one never reached its handler: the only note is the one that was sent whole.
+        EQUALS(notes.size(), static_cast<size_t>(1));
+        EQUALS(notes.empty() ? 0u : notes.front(), 77u);
         EQUALS(client.disconnected, false);
         EQUALS(server.Replication()->GetViewerId(client.Guid()) != 0, true);
         server.Stop();

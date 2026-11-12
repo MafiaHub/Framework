@@ -37,9 +37,11 @@ namespace Framework::Networking {
         // Starts draining `peer`, which must outlive the thread and be started. `onEntry` runs first,
         // on the thread: where it binds what is per thread, such as its scripting runtime.
         void Start(NetworkPeer &peer, fu2::unique_function<void()> onEntry = {});
-        // Lets the handler in progress finish and joins: no handler starts once this returns. The
-        // packets still queued are left in the peer. The caller must not hold what a handler may be
-        // waiting for.
+        // Joins: no handler runs once this returns. The handler in progress finishes, and one more may
+        // start if its packet was being handed over as the flag went up. RPCs still queued behind
+        // it are dropped unhandled (one Receive() hands every RPC it finds to its handler, which
+        // declines); other packets are left in the peer. The caller must not hold what a handler
+        // may be waiting for.
         void Stop();
 
         bool OnPacketThread() const {
