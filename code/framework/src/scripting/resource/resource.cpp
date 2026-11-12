@@ -55,6 +55,8 @@ namespace Framework::Scripting {
         , _loadTimestamp(other._loadTimestamp)
         , _isolate(other._isolate)
         , _exports(std::move(other._exports))
+        , _exportContext(std::move(other._exportContext))
+        , _copiedExports(std::move(other._copiedExports))
         , _restartAttempts(std::move(other._restartAttempts))
         , _ownedEntities(std::move(other._ownedEntities)) {
         other._isolate = nullptr;
@@ -73,6 +75,8 @@ namespace Framework::Scripting {
             _loadTimestamp   = other._loadTimestamp;
             _isolate         = other._isolate;
             _exports         = std::move(other._exports);
+            _exportContext   = std::move(other._exportContext);
+            _copiedExports   = std::move(other._copiedExports);
             _restartAttempts = std::move(other._restartAttempts);
             _ownedEntities   = std::move(other._ownedEntities);
 
@@ -262,38 +266,77 @@ namespace Framework::Scripting {
             return false;
         }
 
-        std::scoped_lock lock(_exportsMutex);
-        _exports[std::string(name)].Reset(_isolate, value);
+        std::shared_ptr<const TransferredValue> replaced;
+        {
+            std::scoped_lock lock(_exportsMutex);
+            _exports[std::string(name)].Reset(_isolate, value);
+            if (_exportContext.IsEmpty() && _isolate->InContext()) {
+                _exportContext.Reset(_isolate, _isolate->GetCurrentContext());
+            }
+            if (const auto copied = _copiedExports.find(name); copied != _copiedExports.end()) {
+                replaced = std::move(copied->second);
+                _copiedExports.erase(copied);
+            }
+        }
+        return true;
+    }
+
+    bool Resource::RegisterExport(std::string_view name, TransferredValue value) {
+        if (!HasExport(name)) {
+            return false;
+        }
+
+        // Let go of outside the lock: a copy holds the callables of its functions.
+        std::shared_ptr<const TransferredValue> replaced = std::make_shared<const TransferredValue>(std::move(value));
+        {
+            std::scoped_lock lock(_exportsMutex);
+            if (const auto existing = _exports.find(name); existing != _exports.end()) {
+                existing->second.Reset();
+                _exports.erase(existing);
+            }
+            std::swap(_copiedExports[std::string(name)], replaced);
+        }
         return true;
     }
 
     void Resource::UnregisterExport(std::string_view name) {
+        std::shared_ptr<const TransferredValue> removed;
         std::scoped_lock lock(_exportsMutex);
         auto it = _exports.find(name);
         if (it != _exports.end()) {
             it->second.Reset();
             _exports.erase(it);
         }
+        if (const auto copied = _copiedExports.find(name); copied != _copiedExports.end()) {
+            removed = std::move(copied->second);
+            _copiedExports.erase(copied);
+        }
     }
 
     void Resource::ClearExports() {
+        decltype(_copiedExports) copied;
         std::scoped_lock lock(_exportsMutex);
         for (auto &[name, global] : _exports) {
             global.Reset();
         }
         _exports.clear();
+        _exportContext.Reset();
+        copied.swap(_copiedExports);
     }
 
     bool Resource::HasRegisteredExport(std::string_view name) const {
         std::scoped_lock lock(_exportsMutex);
-        return _exports.contains(name);
+        return _exports.contains(name) || _copiedExports.contains(name);
     }
 
     std::vector<std::string> Resource::GetRegisteredExportNames() const {
         std::scoped_lock lock(_exportsMutex);
         std::vector<std::string> names;
-        names.reserve(_exports.size());
+        names.reserve(_exports.size() + _copiedExports.size());
         for (const auto &[name, _] : _exports) {
+            names.push_back(name);
+        }
+        for (const auto &[name, _] : _copiedExports) {
             names.push_back(name);
         }
         return names;
@@ -306,6 +349,17 @@ namespace Framework::Scripting {
             return v8::Local<v8::Value>();
         }
         return it->second.Get(_isolate);
+    }
+
+    std::shared_ptr<const TransferredValue> Resource::GetExportCopy(std::string_view name) const {
+        std::scoped_lock lock(_exportsMutex);
+        const auto it = _copiedExports.find(name);
+        return it != _copiedExports.end() ? it->second : nullptr;
+    }
+
+    v8::Local<v8::Context> Resource::GetExportContext() const {
+        std::scoped_lock lock(_exportsMutex);
+        return _exportContext.IsEmpty() || _isolate == nullptr ? v8::Local<v8::Context>() : _exportContext.Get(_isolate);
     }
 
     bool Resource::TransitionTo(ResourceState newState) {
