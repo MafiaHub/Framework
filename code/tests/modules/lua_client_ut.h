@@ -538,6 +538,71 @@ MODULE(lua_client, {
         Vfs::Get().Unmount("session.zip");
     });
 
+    IT("closes the states a reset from inside a script left open at the next update, before the next session", {
+        EQUALS(Mount("leaver", R"("clientScripts":["client.lua"])", {{"client.lua", "x = 1"}}), "");
+        Client client;
+        EQUALS(client.Init(), true);
+        EQUALS(client.Start("leaver"), "");
+        LuaEngine &engine = client.lua.GetEngine();
+        int disposed      = 0;
+        engine.AddRuntimeDisposingListener([&disposed](LuaRuntime &) {
+            ++disposed;
+        });
+
+        // The script disconnects the client, called past the engine as a handler a builtin kept is: nothing is
+        // on the way out to close its state.
+        LuaRuntime *runtime = engine.GetRuntime("leaver");
+        lua_pushlightuserdata(runtime->State(), &client);
+        lua_pushcclosure(
+            runtime->State(),
+            [](lua_State *L) {
+                auto *self = static_cast<Client *>(lua_touserdata(L, lua_upvalueindex(1)));
+                self->manager->Reset();
+                self->lua.Shutdown();
+                return 0;
+            },
+            1);
+        std::string error;
+        EQUALS(runtime->Call(0, 0, error), true);
+        EQUALS(engine.IsInitialized(), false);
+        EQUALS(disposed, 0);
+
+        // Closed by the update of a client that is not connected, and not against the context of the next one.
+        client.lua.Update();
+        EQUALS(disposed, 1);
+        client.v8.ResetContext();
+
+        EQUALS(client.Init(), true);
+        EQUALS(client.Start("leaver"), "");
+        EQUALS(client.Eval("leaver", "x"), "1");
+        EQUALS(client.errors.size(), 0u);
+        Vfs::Get().Unmount("leaver.zip");
+    });
+
+    IT("lets a Lua setup add another while it runs", {
+        EQUALS(Mount("nested", R"("clientScripts":["client.lua"])", {{"client.lua", "x = 1"}}), "");
+        Client client;
+        EQUALS(client.Init(), true);
+
+        std::string seen;
+        int added          = 0;
+        LuaClientHost *lua = &client.lua;
+        lua->AddRuntimeSetup([lua, &seen, &added, label = std::string("a label long enough to live on the heap, and not in the string")](LuaRuntime &) {
+            if (added == 0) {
+                for (int i = 0; i < 64; ++i) {
+                    lua->AddRuntimeSetup([&added](LuaRuntime &) {
+                        ++added;
+                    });
+                }
+            }
+            seen = label;
+        });
+        EQUALS(client.Start("nested"), "");
+        EQUALS(seen, "a label long enough to live on the heap, and not in the string");
+        EQUALS(added, 64);
+        Vfs::Get().Unmount("nested.zip");
+    });
+
     IT("lets go of what the builtins kept for a Lua state that a stop or a reset took", {
         using Builtins::StateBag;
         const LuaClientTest::World world;

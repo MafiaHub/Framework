@@ -29,7 +29,10 @@ namespace Framework::Scripting {
         // The manager is asked for when a state is created, which only the manager of that moment does.
         _engine.SetRuntimeSetupCallback([this](LuaRuntime &runtime) {
             Builtins::RegisterSharedLua(runtime, _engine.GetResourceManager(), _modVersion);
-            for (const auto &setup : _setups) {
+            // Each one called through a copy: a setup may add another, which moves the ones in the list. The one
+            // it adds runs in this state too.
+            for (size_t i = 0; i < _setups.size(); ++i) {
+                const auto setup = _setups[i];
                 setup(runtime);
             }
         });
@@ -50,11 +53,13 @@ namespace Framework::Scripting {
     }
 
     void LuaClientHost::Update() {
+        FW_PROFILE_SCOPE_N("Scripting::Lua");
+        // Also between Shutdown and Init: the engine then only closes the states a shutdown from inside a script
+        // left open, which must not wait for the next connection and its new V8 context.
+        _engine.Tick();
         if (!_engine.IsInitialized()) {
             return;
         }
-        FW_PROFILE_SCOPE_N("Scripting::Lua");
-        _engine.Tick();
 
         // Queued, not handled where they were raised, so that a resource is stopped or restarted outside its script.
         ResourceManager *manager = _engine.GetResourceManager();

@@ -36,11 +36,13 @@ namespace Framework::Scripting {
 
         // Has `setup` run in every state created from now on, after the shared builtins are in it: how the
         // client scripting module adds the builtins only a client has. Call it before a resource starts.
+        // Call once per process; setups persist across `Reset()`. A setup may add another, which runs in the
+        // state being set up too.
         void AddRuntimeSetup(std::function<void(LuaRuntime &)> setup);
 
         // Fires the timers that are due and wakes the coroutines whose sleep is over, then hands the manager the
-        // errors nobody waited for, outside any script. Call it from the game loop. Does nothing between Shutdown
-        // and Init.
+        // errors nobody waited for, outside any script. Call it from the game loop. Between Shutdown and Init it
+        // only closes the states a shutdown that came from inside a script left open.
         void Update();
 
         // Destroys every Lua state, and with it its handlers, timers and callables, and forgets the errors that

@@ -195,6 +195,8 @@ namespace Framework::Integrations::Client::Scripting {
         /**
          * Have `setup` run in every Lua state the client creates from now on, after the Framework's own builtins
          * are registered in it: where a project registers its Lua builtins. Call it before a resource starts.
+         * Call once per process; setups persist across `Reset()`. A setup may add another, which runs in the
+         * state being set up too.
          */
         void AddLuaRuntimeSetup(fu2::function<void(Framework::Scripting::LuaRuntime &) const> setup) {
             _lua->AddRuntimeSetup(std::move(setup));

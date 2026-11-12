@@ -195,8 +195,11 @@ namespace Framework::Integrations::Server::Scripting {
         Builtins::PendingConnection::RegisterLua(runtime);
 
         // What a project added, after the builtins it may build on.
+        // Each one is called through a copy: a setup may add another, which moves the ones in the list. The one it
+        // adds runs in this state too.
         for (size_t i = 0; i < _luaRuntimeSetups.size(); ++i) {
-            _luaRuntimeSetups[i](runtime);
+            const auto setup = _luaRuntimeSetups[i];
+            setup(runtime);
         }
     }
 

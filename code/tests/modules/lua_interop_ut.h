@@ -494,6 +494,31 @@ MODULE(lua_interop, {
         EQUALS(builtinsSeen, 2);
     });
 
+    IT("lets a Lua setup add another while it runs", {
+        Bus bus;
+        bus.server.files.Resource("nested", {{"main.lua", "x = 1"}});
+        EQUALS(bus.Init(), true);
+
+        // The setup goes on with what it holds after the list it is in has grown, and so moved.
+        std::string seen;
+        int added    = 0;
+        auto *module = &bus.server.module;
+        module->AddLuaRuntimeSetup([module, &seen, &added, label = std::string("a label long enough to live on the heap, and not in the string")](LuaRuntime &) {
+            if (added == 0) {
+                for (int i = 0; i < 64; ++i) {
+                    module->AddLuaRuntimeSetup([&added](LuaRuntime &) {
+                        ++added;
+                    });
+                }
+            }
+            seen = label;
+        });
+        EQUALS(bus.Start("nested"), "");
+        EQUALS(seen, "a label long enough to live on the heap, and not in the string");
+        // What it added ran in the state that was being set up.
+        EQUALS(added, 64);
+    });
+
     IT("takes the Lua setup of a project before the module is initialised", {
         ServerScriptingModule module;
         int states = 0;
