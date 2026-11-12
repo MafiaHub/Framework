@@ -13,6 +13,8 @@
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
 #include "networking/replication/world.h"
+#include "world/types/player.h"
+#include "world/types/streaming.h"
 
 #include <algorithm>
 #include <atomic>
@@ -598,6 +600,43 @@ MODULE(world, {
         manager->SetViewer(guid, first);
         EQUALS(world.Destroy(first), true);
         EQUALS(manager->GetViewerId(guid), uint64_t {0});
+    });
+
+    IT("sets a player's avatar and a streamed entity up through their handles", {
+        Fixture fixture;
+        World &world                  = fixture.world;
+        const MafiaNet::PeerGuid guid = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(91));
+        uint64_t avatar               = 0;
+        uint64_t prop                 = 0;
+        {
+            const Ref<Walker> created = world.Create<Walker>();
+            Framework::World::Archetypes::PlayerArchetype().SetupServer(created, guid);
+            avatar = created->GetNetworkID();
+        }
+        {
+            const Ref<Prop> created = world.Create<Prop>();
+            Framework::World::Archetypes::StreamingArchetype().SetupServer(created, guid);
+            prop = created->GetNetworkID();
+        }
+        // An empty handle is left alone.
+        Framework::World::Archetypes::PlayerArchetype().SetupServer(world.Write<Walker>(avatar + prop + 1), guid);
+
+        bool playerOwned  = false;
+        bool playerViewer = false;
+        if (const ConstRef<Walker> player = world.Read<Walker>(avatar)) {
+            playerOwned  = player->ownerGUID == guid;
+            playerViewer = player->streaming.isViewer;
+        }
+        bool propOwned  = false;
+        bool propViewer = true;
+        if (const ConstRef<Prop> streamed = world.Read<Prop>(prop)) {
+            propOwned  = streamed->ownerGUID == guid;
+            propViewer = streamed->streaming.isViewer;
+        }
+        EQUALS(playerOwned, true);
+        EQUALS(playerViewer, true);
+        EQUALS(propOwned, true);
+        EQUALS(propViewer, false);
     });
 
     IT("counts handles held by the thread", {

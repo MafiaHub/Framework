@@ -9,16 +9,19 @@
 #pragma once
 
 #include "networking/replication/network_entity.h"
+#include "networking/replication/world.h"
 
 #include <cstdint>
 
 namespace Framework::World::Archetypes {
     namespace Replication = Framework::Networking::Replication;
 
-    // Stamps ownership on a streamed entity.
+    // Stamps ownership on a streamed entity: on a server through the handle held on it, on a client
+    // by pointer.
     class StreamingArchetype final {
       public:
-        void SetupServer(Replication::NetworkEntity *entity, MafiaNet::PeerGuid guid) {
+        template <typename T>
+        void SetupServer(const Replication::Ref<T> &entity, MafiaNet::PeerGuid guid) {
             if (entity) {
                 entity->ownerGUID = guid;
             }
