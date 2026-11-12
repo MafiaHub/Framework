@@ -10,6 +10,7 @@
 
 #include <logging/logger.h>
 
+#include <scripting/bind/lua_definitions.h>
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/console.h>
 #include <scripting/builtins/events.h>
@@ -140,6 +141,11 @@ namespace Framework::Integrations::Client::Scripting {
 
         if (!v8pp::metadata::export_catalog_from_environment("framework-client", "FRAMEWORK_SCRIPTING_API_METADATA")) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export Framework client scripting API metadata");
+        }
+        if (!Framework::Scripting::Bind::ExportLuaDefinitionsFromEnvironment(Framework::Scripting::Builtins::SharedDefinitions({&Builtins::Web::Definition().Describe(), &Builtins::Keybinds::Definition().Describe(), &Builtins::Chat::Definition().Describe(),
+                                                                                 &Builtins::Discord::Definition().Describe(), &Builtins::Voice::Definition().Describe(), &Builtins::Nametags::Definition().Describe()}),
+                Framework::Scripting::Bind::Side::Client, "FRAMEWORK_SCRIPTING_LUA_DEFINITIONS")) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export the Framework client Lua definitions");
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Client scripting module initialized with the standalone V8 and Lua engines");

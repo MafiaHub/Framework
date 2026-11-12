@@ -71,6 +71,28 @@ namespace Framework::Scripting::Builtins {
         TextLabel::RegisterLua(runtime);
     }
 
+    std::vector<const Bind::ClassDesc *> SharedDefinitions(std::initializer_list<const Bind::ClassDesc *> more) {
+        std::vector<const Bind::ClassDesc *> definitions = {
+            &Vector2::Definition().Describe(),
+            &Vector3::Definition().Describe(),
+            &Vector4::Definition().Describe(),
+            &Quaternion::Definition().Describe(),
+            &Color::Definition().Describe(),
+            &Events::Definition().Describe(),
+            &Messages::Definition().Describe(),
+            &Imports::Definition().Describe(),
+            &Exports::Definition().Describe(),
+            &Console::Definition().Describe(),
+            &ExecutionEnvironment::Definition().Describe(),
+            &StateBag::Definition().Describe(),
+            &Entity::Definition().Describe(),
+            &Player::Definition().Describe(),
+            &TextLabel::Definition().Describe(),
+        };
+        definitions.insert(definitions.end(), more.begin(), more.end());
+        return definitions;
+    }
+
     void WatchLuaRuntimes(LuaEngine &engine) {
         Bind::WatchRuntimes(engine);
 

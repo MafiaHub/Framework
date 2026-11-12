@@ -14,6 +14,7 @@
 #include "vector3.h"
 #include "vector4.h"
 
+#include "../bind/descriptors.h"
 #include "../bind/doc.h"
 #include "../value_transfer.h"
 
@@ -24,6 +25,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -73,6 +75,13 @@ namespace Framework::Scripting::Builtins {
      * with (Bind::SetCallResourceManager). Call it from the setup callback of the Lua engine, which protects it.
      */
     void RegisterSharedLua(LuaRuntime &runtime, ResourceManager *manager, const std::string &modVersion);
+
+    /**
+     * The definitions of what RegisterSharedLua publishes, and of the bag `entity.state` answers, followed by
+     * `more`, the definitions of what a scripting module publishes itself: what the Lua definition file of its
+     * side is written from, in that order (Bind::WriteLuaDefinitions).
+     */
+    std::vector<const Bind::ClassDesc *> SharedDefinitions(std::initializer_list<const Bind::ClassDesc *> more = {});
 
     /**
      * Has what the shared builtins keep for a Lua runtime dropped as the engine disposes of it: its callables and

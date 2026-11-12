@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include <scripting/bind/descriptors.h>
 #include <scripting/lua/lua_engine.h>
 #include <scripting/module.h>
 #include <scripting/node_engine.h>
@@ -154,6 +155,12 @@ namespace Framework::Integrations::Server::Scripting {
          * runtime it creates, in a protected call.
          */
         void RegisterLuaBindings(Framework::Scripting::LuaRuntime &runtime);
+
+        /**
+         * The definitions of what RegisterLuaBindings publishes: what the Lua definition file of a server is
+         * written from (Bind::WriteLuaDefinitions).
+         */
+        static std::vector<const Framework::Scripting::Bind::ClassDesc *> LuaBuiltinDefinitions();
 
       private:
         // Hand uncaught errors the engines queued to the resource manager, outside any script.

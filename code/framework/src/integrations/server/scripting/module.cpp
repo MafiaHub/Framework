@@ -13,6 +13,7 @@
 
 #include <scripting/bind/call.h>
 #include <scripting/bind/callable.h>
+#include <scripting/bind/lua_definitions.h>
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/chat.h>
 
@@ -133,6 +134,9 @@ namespace Framework::Integrations::Server::Scripting {
         if (!v8pp::metadata::export_catalog_from_environment("framework-server", "FRAMEWORK_SCRIPTING_API_METADATA")) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export Framework server scripting API metadata");
         }
+        if (!Framework::Scripting::Bind::ExportLuaDefinitionsFromEnvironment(LuaBuiltinDefinitions(), Framework::Scripting::Bind::Side::Server, "FRAMEWORK_SCRIPTING_LUA_DEFINITIONS")) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export the Framework server Lua definitions");
+        }
 
         // Install uncaught exception handler to prevent async errors from
         // crashing the server process and route them to the resource system
@@ -189,6 +193,10 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Builtins::Chat::RegisterLua(runtime);
         Builtins::Voice::RegisterLua(runtime);
         Builtins::PendingConnection::RegisterLua(runtime);
+    }
+
+    std::vector<const Framework::Scripting::Bind::ClassDesc *> ServerScriptingModule::LuaBuiltinDefinitions() {
+        return Framework::Scripting::Builtins::SharedDefinitions({&Framework::Scripting::Builtins::Chat::Definition().Describe(), &Builtins::Voice::Definition().Describe(), &Builtins::PendingConnection::Definition().Describe()});
     }
 
     bool ServerScriptingModule::PreShutdown() {
