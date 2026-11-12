@@ -114,6 +114,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/resource_ut.h"
 #include "modules/timer_context_ut.h"
 // Starts and stops whole servers, which shuts the logger down with each: kept last.
+#include "modules/packet_thread_ut.h"
 #include "modules/server_threading_ut.h"
 #include "modules/server_script_thread_ut.h"
 #include "modules/server_packet_thread_ut.h"
@@ -203,6 +204,7 @@ int main() {
     UNIT_MODULE(cef_runtime_files);
     UNIT_MODULE(connection_admission);
     UNIT_MODULE(nametag);
+    UNIT_MODULE(packet_thread);
     UNIT_MODULE(server_threading);
     UNIT_MODULE(server_script_thread);
     UNIT_MODULE(server_packet_thread);

@@ -447,11 +447,23 @@ MODULE(voice_positions, {
             }
         });
         std::vector<Framework::Voice::TierChange> tiers;
+        // Every tier change the ticks are told of: who it names, and the last one.
+        bool strayChange = false;
+        int changes      = 0;
+        uint32_t lastTier = 0;
+        const auto note = [&] {
+            for (const Framework::Voice::TierChange &change : tiers) {
+                strayChange = strayChange || change.guid != static_cast<uint64_t>(alice) || static_cast<uint32_t>(change.tier) > 1;
+                lastTier    = static_cast<uint32_t>(change.tier);
+                ++changes;
+            }
+        };
         for (int tick = 0; tick < 300; ++tick) {
             voice.SyncAvatars(*serverManager);
             relay(voice, alice, alice);
             voice.Update();
             voice.DrainTierChanges(tiers);
+            note();
             (void)voice.IsPlayerTalking(static_cast<uint64_t>(alice));
             (void)voice.WithRouter([&](Framework::Voice::VoiceRouter &router) {
                 return router.GetPlayerTier(static_cast<uint64_t>(alice));
@@ -467,10 +479,23 @@ MODULE(voice_positions, {
         });
         const bool aliceTalking = voice.IsPlayerTalking(static_cast<uint64_t>(alice));
 
+        // And the tier the router ends on is the one the last change it reported said: requests are paced,
+        // so which of the two she asked for it is depends on timing, but the two always agree. Every change
+        // named the player who asked and a tier she asked for.
+        voice.Update();
+        voice.DrainTierChanges(tiers);
+        note();
+        const auto aliceTier = voice.WithRouter([&](Framework::Voice::VoiceRouter &router) {
+            return router.GetPlayerTier(static_cast<uint64_t>(alice));
+        });
+
         serverManager->ClearViewer(alice);
         serverManager->ClearViewer(bob);
         EQUALS(bobDisabled, true);
         EQUALS(aliceTalking, true);
+        EQUALS(static_cast<uint32_t>(aliceTier), lastTier);
+        GREATER(changes, 0);
+        EQUALS(strayChange, false);
     });
 
     IT("forgets a frame still waiting for the tick when its talker disconnects", {
