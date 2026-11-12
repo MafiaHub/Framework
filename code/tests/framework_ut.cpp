@@ -73,6 +73,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/task_scheduler_ut.h"
 #include "modules/text_label_ut.h"
 #include "modules/thread_budget_ut.h"
+#include "modules/token_bucket_ut.h"
 #include "modules/tick_breakdown_ut.h"
 #include "modules/logger_ut.h"
 #include "modules/transform_batch_ut.h"
@@ -144,6 +145,7 @@ int main() {
     UNIT_MODULE(fork_join_pool);
     UNIT_MODULE(task_scheduler);
     UNIT_MODULE(thread_budget);
+    UNIT_MODULE(token_bucket);
     UNIT_MODULE(webserver_main_thread);
     UNIT_MODULE(world_lock);
     UNIT_MODULE(world);

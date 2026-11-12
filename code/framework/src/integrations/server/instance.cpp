@@ -768,6 +768,7 @@ namespace Framework::Integrations::Server {
             // still have been registered in the router by a position push.
             _voiceServer.OnPlayerDisconnect(guid.g);
             _assetFileServer.Revoke(guid.g);
+            _clientEventLimits.erase(guid.g);
 
             // Player notification and avatar teardown run in ReplicationManager::OnClosedConnection,
             // which RakNet fires before this packet is delivered; here we just finalise the connection.
@@ -894,6 +895,10 @@ namespace Framework::Integrations::Server {
             if (senderId == 0) {
                 return;
             }
+            // Before it costs the script thread anything: a client can send these as fast as it likes.
+            if (!AllowClientEvent(sender)) {
+                return;
+            }
             // Handlers run where scripts run: a slow one holds up other scripts, not the packets behind this one.
             PostToScripts([this, senderId, name, eventPayload = payload.GetPayload()] {
                 OnClientEvent(senderId, name, eventPayload);
@@ -918,6 +923,35 @@ namespace Framework::Integrations::Server {
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
+    }
+
+    bool Instance::AllowClientEvent(Framework::Networking::Sender sender) {
+        const uint64_t guid = sender.Connection().g;
+        auto it             = _clientEventLimits.find(guid);
+        if (it == _clientEventLimits.end()) {
+            it = _clientEventLimits.emplace(guid, ClientEventLimit {Utils::TokenBucket(_opts.clientEventRate, _opts.clientEventBurst), Utils::TokenBucket(_opts.clientEventFloodRate, _opts.clientEventFloodBurst), false}).first;
+        }
+        if (it->second.dropped) {
+            return false;
+        }
+        if (it->second.events.Take()) {
+            return true;
+        }
+        _clientEventsDropped.fetch_add(1, std::memory_order_relaxed);
+        ++_clientEventsDroppedSinceWarning;
+        if (!it->second.flood.Take()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropping guid {}: it kept raising script events past the rate limit", guid);
+            it->second.dropped = true;
+            sender.Drop("Reliable network event overflow.");
+            return false;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= _nextClientEventWarning) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropped {} client script event(s) over the rate limit, last one from guid {}", _clientEventsDroppedSinceWarning, guid);
+            _clientEventsDroppedSinceWarning = 0;
+            _nextClientEventWarning          = now + std::chrono::seconds(1);
+        }
+        return false;
     }
 
     void Instance::OnSessionRequest(MafiaNet::RakNetGUID guid, const std::optional<Framework::Networking::RPC::ClientIdentity> &request) {

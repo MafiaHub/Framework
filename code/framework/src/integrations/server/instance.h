@@ -44,6 +44,7 @@
 #include <utils/fork_join_pool.h>
 #include <utils/lifecycle.h>
 #include <utils/task_scheduler.h>
+#include <utils/token_bucket.h>
 
 #include <atomic>
 #include <chrono>
@@ -97,6 +98,16 @@ namespace Framework::Integrations::Server {
         // An RPC handler that holds the packet thread at least this long logs a warning, at most once a second
         // (server.json "slow-packet-handler-ms"; 0 turns the warnings off). It delays the packets behind it.
         int32_t slowPacketHandlerWarnMs = 10;
+
+        // Script events a client may raise on the server (Events.emitServer): `clientEventRate` a
+        // second, with bursts of up to `clientEventBurst`. An event over that is dropped and counted.
+        // Each one dropped also counts against the flood limit (`clientEventFloodRate` a second,
+        // bursts of `clientEventFloodBurst`); a client past that is dropped from the server. The
+        // defaults are FiveM's for its network events. A rate of 0 turns that limit off.
+        double clientEventRate       = 50.0;
+        double clientEventBurst      = 200.0;
+        double clientEventFloodRate  = 75.0;
+        double clientEventFloodBurst = 300.0;
 
         // Threads beside the tick thread (server.json "replication-threads" and "background-threads", or
         // the flags of the same names). Negative, the default, sizes them to the host's cores (see
@@ -258,6 +269,22 @@ namespace Framework::Integrations::Server {
         // Connections that joined the world (ClientJoin): the ones holding a player slot.
         std::unordered_set<uint64_t> _joinedGuids;
 
+        // What each connection has left of its script-event allowance. The packet thread's own: read
+        // where the events are handled and forgotten where the disconnection is.
+        struct ClientEventLimit {
+            Utils::TokenBucket events;
+            Utils::TokenBucket flood;
+            // Dropped for flooding: what it had already sent is still in the queue, and gets nowhere.
+            bool dropped = false;
+        };
+        std::unordered_map<uint64_t, ClientEventLimit> _clientEventLimits;
+        std::atomic<uint64_t> _clientEventsDropped {0};
+        uint64_t _clientEventsDroppedSinceWarning = 0;
+        std::chrono::steady_clock::time_point _nextClientEventWarning {};
+        // Whether this event of that connection may go on to the scripts; drops the connection when
+        // it floods.
+        bool AllowClientEvent(Framework::Networking::Sender sender);
+
         // Holds each authenticated connection until the playerConnecting handlers answer.
         ConnectionGate _connectionGate;
         // Reused every tick so the drain never allocates.
@@ -388,6 +415,11 @@ namespace Framework::Integrations::Server {
 
         [[nodiscard]] Utils::Result<void, Error> Init(InstanceOptions &);
         void Shutdown() override;
+
+        // Client script events dropped by the rate limit since the server started.
+        uint64_t ClientEventsDropped() const {
+            return _clientEventsDropped.load(std::memory_order_relaxed);
+        }
 
         // Where the last tick's time went, by phase. The slow-tick warning prints it.
         const TickBreakdown &GetLastTickBreakdown() const {

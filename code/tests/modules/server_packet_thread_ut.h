@@ -9,6 +9,7 @@
 #pragma once
 
 #include "integrations/server/instance.h"
+#include "integrations/shared/rpc/emit_script_event.h"
 #include "networking/network_client.h"
 #include "networking/network_server.h"
 #include "networking/replication/client_entities.h"
@@ -136,6 +137,14 @@ namespace ServerPacketThreadTest {
         // Set before a join: the avatar is made while this resource's script is, as far as the scripting side says,
         // the one running.
         std::atomic<bool> claimForDemo {false};
+        // Set before Start to replace the script-event limits: rate, burst, flood rate, flood burst.
+        double eventLimits[4] = {-1.0, -1.0, -1.0, -1.0};
+        // Client script events that got past the limit to where scripts handle them.
+        std::atomic<int> clientEvents {0};
+
+        void OnClientEvent(uint64_t, const std::string &, const std::string &) override {
+            ++clientEvents;
+        }
 
         // --- Written by handlers, on the packet thread ---
         std::mutex mutex;
@@ -365,6 +374,12 @@ namespace ServerPacketThreadTest {
             opts.backgroundThreads  = 1;
             // Several clients of the storm come from this one address at once.
             opts.pendingConnectionsPerAddress = 16;
+            if (eventLimits[0] >= 0.0) {
+                opts.clientEventRate       = eventLimits[0];
+                opts.clientEventBurst      = eventLimits[1];
+                opts.clientEventFloodRate  = eventLimits[2];
+                opts.clientEventFloodBurst = eventLimits[3];
+            }
             opts.argc                         = 1;
             opts.argv                         = argv;
             auto result                       = Init(opts);
@@ -399,6 +414,7 @@ namespace ServerPacketThreadTest {
         Framework::Networking::NetworkClient net {"127.0.0.1"};
         bool connected      = false;
         bool disconnected   = false;
+        std::string disconnectReason;
         bool joined         = false;
         bool ready          = false;
         int32_t readyEvent  = -1;
@@ -414,8 +430,9 @@ namespace ServerPacketThreadTest {
                 connected = true;
                 server    = packet->guid;
             });
-            net.SetOnPlayerDisconnectedCallback([this](MafiaNet::Packet *, Framework::Networking::DisconnectionReason, const std::string &) {
-                disconnected = true;
+            net.SetOnPlayerDisconnectedCallback([this](MafiaNet::Packet *, Framework::Networking::DisconnectionReason, const std::string &reason) {
+                disconnected     = true;
+                disconnectReason = reason;
             });
             net.SetOnConnectionReadyCallback([this](int) {
                 ready = true;
@@ -471,6 +488,13 @@ namespace ServerPacketThreadTest {
                 }
             });
             return own;
+        }
+
+        // A script event, as Events.emitServer sends one.
+        void Emit(const std::string &name) {
+            Framework::Integrations::Shared::RPC::EmitScriptEvent event;
+            event.FromParameters(name, "{}");
+            net.SendRPC(event, server);
         }
 
         template <typename T>
@@ -1072,6 +1096,90 @@ MODULE(server_packet_thread, {
         // Neither writer waited for the script, which computes 300 ms at a time.
         LESSER(server.moodHandlerMs.load(), 300.0);
         LESSER(tickWriteMs, 300.0);
+        server.Stop();
+    });
+
+    IT("cuts a client's burst of script events at the limit, and leaves a client under it alone", {
+        Server server;
+        // Twenty at once and one more a second: a burst is cut where the test can count it. The flood limit is far.
+        server.eventLimits[0] = 1.0;
+        server.eventLimits[1] = 20.0;
+        server.eventLimits[2] = 1.0;
+        server.eventLimits[3] = 1000.0;
+        const bool up         = server.Start("fw_packet_thread_events");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        Client noisy;
+        Client quiet;
+        const bool in = Join(server, noisy) && Join(server, quiet, {&noisy});
+        EQUALS(in, true);
+        if (!in) {
+            break;
+        }
+        for (int i = 0; i < 60; ++i) {
+            noisy.Emit("poke");
+        }
+        for (int i = 0; i < 10; ++i) {
+            quiet.Emit("poke");
+        }
+        // A marker behind each client's events: once both are answered, every event before them was looked at.
+        noisy.Send<Ping>(1);
+        quiet.Send<Ping>(2);
+        EQUALS(Pump(server, {&noisy, &quiet}, [&] {
+            return !noisy.pongs.empty() && !quiet.pongs.empty();
+        }),
+            true);
+        PumpFor(server, {&noisy, &quiet}, 100ms);
+        const int handled   = server.clientEvents.load();
+        const uint64_t cut  = server.ClientEventsDropped();
+        fprintf(stderr, "server_packet_thread: of 60 script events from one client and 10 from another, %d reached scripts and %llu were dropped\n", handled, static_cast<unsigned long long>(cut));
+        // The quiet one's ten, and the noisy one's twenty plus what a second or two refilled.
+        GREATEREQ(handled, 30);
+        LESSEREQ(handled, 34);
+        EQUALS(static_cast<uint64_t>(handled) + cut, static_cast<uint64_t>(70));
+        EQUALS(noisy.disconnected, false);
+        EQUALS(quiet.disconnected, false);
+        server.Stop();
+    });
+
+    IT("drops a client that keeps flooding script events past the limit", {
+        Server server;
+        server.eventLimits[0] = 1.0;
+        server.eventLimits[1] = 20.0;
+        server.eventLimits[2] = 1.0;
+        server.eventLimits[3] = 30.0;
+        const bool up         = server.Start("fw_packet_thread_flood");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        Client flooder;
+        Client bystander;
+        const bool in = Join(server, flooder) && Join(server, bystander, {&flooder});
+        EQUALS(in, true);
+        if (!in) {
+            break;
+        }
+        for (int i = 0; i < 200; ++i) {
+            flooder.Emit("poke");
+        }
+        EQUALS(Pump(server, {&flooder, &bystander}, [&] {
+            return flooder.disconnected;
+        }),
+            true);
+        STREQUALS(flooder.disconnectReason.c_str(), "Reliable network event overflow.");
+        // Twenty got through, thirty or so were let off with a drop, and the next one ended it.
+        LESSEREQ(server.clientEvents.load(), 24);
+        // Nobody else pays for it.
+        bystander.Emit("poke");
+        bystander.Send<Ping>(3);
+        EQUALS(Pump(server, {&bystander}, [&] {
+            return !bystander.pongs.empty();
+        }),
+            true);
+        EQUALS(bystander.disconnected, false);
         server.Stop();
     });
 
