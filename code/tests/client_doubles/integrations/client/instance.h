@@ -23,6 +23,9 @@
 #include <string>
 #include <vector>
 
+// This is a second definition of Integrations::Client::Instance. It is sound only because nothing in the binary
+// sees the real one: code/tests/CMakeLists.txt fails the configuration if FrameworkClientScriptingTests ever
+// links FrameworkClient. Do not include this from, or add this directory to, any other target.
 namespace Framework::Integrations::Client {
     class Instance final {
       public:

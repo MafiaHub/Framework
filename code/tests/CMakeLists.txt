@@ -112,12 +112,35 @@ target_sources(FrameworkClientScriptingTests PRIVATE
     ../framework/src/integrations/client/scripting/builtins/chat.cpp
     ../framework/src/integrations/client/scripting/builtins/discord.cpp
     ../../vendors/discord/src/types.cpp)
+# The stand-in is another class under the name of the real one. That is sound only while the real one is not
+# in this binary: checked once everything in this directory has had its say.
+function(_fw_refuse_client_in_scripting_tests)
+    get_target_property(_linked FrameworkClientScriptingTests LINK_LIBRARIES)
+    foreach(_library FrameworkClient Framework::Client)
+        if(_library IN_LIST _linked)
+            message(FATAL_ERROR "FrameworkClientScriptingTests links ${_library}, and builds its client builtins against "
+                "the stand-in of code/tests/client_doubles for Integrations::Client::Instance: two definitions of one class. "
+                "Remove client_doubles from the target, and test against the real instance, before linking it.")
+        endif()
+    endforeach()
+endfunction()
+cmake_language(DEFER CALL _fw_refuse_client_in_scripting_tests)
 # Nametags reads the switches of the ImGui nametag widget, so it is tested where the headers of ImGui are:
-# with the Windows dependencies, or wherever FW_TEST_IMGUI_INCLUDE_DIR names a copy of them.
-find_path(FW_TEST_IMGUI_INCLUDE_DIR imgui.h)
+# in the vcpkg tree of this build, which has them on Windows, or where FW_TEST_IMGUI_INCLUDE_DIR is set to a
+# copy of them. Never a copy found on the host.
+set(FW_TEST_IMGUI_INCLUDE_DIR "" CACHE PATH "Directory of the ImGui headers the client Nametags builtin is tested with; empty for those of vcpkg")
+set(_fw_test_imgui "")
 if(FW_TEST_IMGUI_INCLUDE_DIR)
+    set(_fw_test_imgui "${FW_TEST_IMGUI_INCLUDE_DIR}")
+    if(NOT EXISTS "${_fw_test_imgui}/imgui.h")
+        message(FATAL_ERROR "FW_TEST_IMGUI_INCLUDE_DIR is '${_fw_test_imgui}', which has no imgui.h")
+    endif()
+elseif(VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET AND EXISTS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include/imgui.h")
+    set(_fw_test_imgui "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include")
+endif()
+if(_fw_test_imgui)
     target_sources(FrameworkClientScriptingTests PRIVATE ../framework/src/integrations/client/scripting/builtins/nametags.cpp)
-    target_include_directories(FrameworkClientScriptingTests PRIVATE "${FW_TEST_IMGUI_INCLUDE_DIR}")
+    target_include_directories(FrameworkClientScriptingTests PRIVATE "${_fw_test_imgui}")
     target_compile_definitions(FrameworkClientScriptingTests PRIVATE FW_TEST_CLIENT_NAMETAGS=1)
 endif()
 
