@@ -65,6 +65,7 @@ namespace Framework::Integrations::Client::Scripting {
         _lua = std::make_unique<Framework::Scripting::LuaClientHost>(Framework::Scripting::LuaEngineOptions::Client());
         // The builtins only a client has, next to the shared ones of every state.
         _lua->AddRuntimeSetup([](Framework::Scripting::LuaRuntime &runtime) {
+            Builtins::Web::RegisterLua(runtime);
             Builtins::Keybinds::RegisterLua(runtime);
             Builtins::Chat::RegisterLua(runtime);
             Builtins::Discord::RegisterLua(runtime);
