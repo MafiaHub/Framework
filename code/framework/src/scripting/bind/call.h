@@ -181,6 +181,10 @@ namespace Framework::Scripting::Bind {
         // (LuaRuntime::WriteOutput).
         virtual void WriteOutput(OutputLevel level, std::string_view line) = 0;
 
+        // The bytes of a line WriteOutput keeps, for who builds a line piece by piece and need not build what is
+        // cut: the bound of print() in Lua, the largest size_t in JavaScript, which has none.
+        virtual size_t OutputLineLimit() const = 0;
+
         // Makes the result of the call one that is settled later, through the Deferred this gives (callable.h),
         // which is the same one each time. What the function returns no longer counts. In JavaScript the script
         // gets a promise. In Lua the coroutine that called waits once the function has returned, unless the

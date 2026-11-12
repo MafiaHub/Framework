@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -1513,6 +1514,65 @@ MODULE(bind_call, {
         engine.Shutdown();
         EQUALS(registered, true);
         EQUALS(forgotten, true);
+    });
+
+    IT("writes a line to the output of the runtime of the caller", {
+        using Framework::Scripting::OutputLevel;
+        Bind::Namespace output("ProbeOutput", "Writes to the output of its runtime.");
+        output
+            .Function(
+                "write",
+                [](Call &call) {
+                    static constexpr OutputLevel levels[] = {OutputLevel::Debug, OutputLevel::Info, OutputLevel::Warning, OutputLevel::Error};
+                    call.WriteOutput(levels[call.Arg(0).AsInteger().value_or(1) & 3], call.Arg(1).AsString());
+                },
+                Doc("Writes a line.").Param("level", TypeOf<int>(), "0 for debug to 3 for error.").Param("line", TypeOf<std::string>(), "What to write."))
+            .Function(
+                "bounded",
+                [](Call &call) {
+                    call.Return(call.OutputLineLimit() == LuaRuntime::kMaxLineBytes ? "as print" : call.OutputLineLimit() == std::numeric_limits<size_t>::max() ? "not" : "otherwise");
+                },
+                Doc("Tells the bound of a line.").ReturnType(TypeOf<std::string>()));
+
+        Runtimes runtimes;
+        runtimes.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            output.MaterialiseV8(isolate, context, context->Global(), v8pp::metadata::catalog("bind_call/scratch"), Side::Server);
+        });
+        output.RegisterLuaGlobal(runtimes.LuaSide().State(), Side::Server);
+        ResourceManager manager(&runtimes.Engine());
+        Bind::SetCallResourceManager(runtimes.Isolate(), &manager);
+        manager.SetCurrentResourceContext("js-probe");
+
+        // The same calls in both languages, each under the name of its resource and at the level it gave.
+        LuaRuntimeTest::LogCapture log(spdlog::level::debug);
+        const std::string calls = "ProbeOutput.write(0, 'traced'); ProbeOutput.write(1, 'told'); ProbeOutput.write(2, 'warned'); ProbeOutput.write(3, 'failed')";
+        runtimes.Js(calls);
+        EQUALS(LuaRuntimeTest::Run(runtimes.LuaSide(), calls), "");
+        // JavaScript writes the line alone when it cannot tell the resource, and all of a long one.
+        manager.SetCurrentResourceContext("");
+        runtimes.Js("ProbeOutput.write(1, 'unnamed'); ProbeOutput.write(1, 'j'.repeat(5000))");
+        // Lua writes as print does: a long line is cut and a control character blanked.
+        EQUALS(LuaRuntimeTest::Run(runtimes.LuaSide(), "ProbeOutput.write(1, ('l'):rep(5000)) ProbeOutput.write(2, 'two\\nlines')"), "");
+
+        const std::vector<std::string> lines = log.LeveledLines();
+        std::string missing;
+        for (const std::string &expected : {std::string("debug [js-probe] traced"), std::string("info [js-probe] told"), std::string("warning [js-probe] warned"), std::string("error [js-probe] failed"), std::string("debug [lua-probe] traced"),
+                 std::string("info [lua-probe] told"), std::string("warning [lua-probe] warned"), std::string("error [lua-probe] failed"), std::string("info unnamed"), "info " + std::string(5000, 'j'),
+                 "info [lua-probe] " + std::string(LuaRuntime::kMaxLineBytes, 'l') + std::string(LuaRuntimeTest::kTruncated), std::string("warning [lua-probe] two lines")}) {
+            if (std::count(lines.begin(), lines.end(), expected) != 1) {
+                missing += "\n\t" + expected.substr(0, 60);
+            }
+        }
+        EQUALS(missing, "");
+        EQUALS(runtimes.Js("ProbeOutput.bounded()"), "not");
+        EQUALS(runtimes.Lua("ProbeOutput.bounded()"), "as print");
+
+        // A print handler of the Lua runtime gets the line, and the log does not.
+        LuaRuntimeTest::Printed printed(runtimes.LuaSide());
+        EQUALS(LuaRuntimeTest::Run(runtimes.LuaSide(), "ProbeOutput.write(3, 'handled')"), "");
+        EQUALS(printed.lines->size(), 1u);
+        EQUALS((*printed.lines)[0], "handled");
+        EQUALS(LuaRuntimeTest::CountStartingWith(log.LeveledLines(), "error [lua-probe] handled"), 0u);
     });
 
     // --- Namespace, materialised ---

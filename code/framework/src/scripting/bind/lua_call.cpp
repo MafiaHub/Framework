@@ -195,6 +195,10 @@ namespace Framework::Scripting::Bind {
                 LuaRuntime::From(_L)->WriteOutput(line, level);
             }
 
+            size_t OutputLineLimit() const override {
+                return LuaRuntime::kMaxLineBytes;
+            }
+
             Deferred Defer() override {
                 if (_deferred == nullptr) {
                     _deferred = Detail::LuaDefer(_L);

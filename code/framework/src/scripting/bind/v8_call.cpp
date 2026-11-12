@@ -24,6 +24,7 @@
 
 #include <cmath>
 #include <exception>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -227,6 +228,10 @@ namespace Framework::Scripting::Bind {
                 else {
                     logger->log(LogLevelOf(level), "{}", line);
                 }
+            }
+
+            size_t OutputLineLimit() const override {
+                return std::numeric_limits<size_t>::max();
             }
 
             // In an isolate that is being terminated there is no promise to make, and nobody to give one to.
