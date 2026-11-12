@@ -35,6 +35,7 @@
 #include "modules/lua_client_services_ut.h"
 #include "modules/lua_client_ut.h"
 #include "modules/lua_client_web_ut.h"
+#include "modules/lua_client_parity_ut.h"
 #ifdef _WIN32
 #include "modules/keybinds_ut.h"
 #endif
@@ -356,6 +357,7 @@ int main() {
     UNIT_MODULE(lua_client_builtins);
     UNIT_MODULE(lua_client_services);
     UNIT_MODULE(lua_client_web);
+    UNIT_MODULE(lua_client_parity);
 #ifdef _WIN32
     UNIT_MODULE(keybinds);
 #endif

@@ -69,6 +69,8 @@ target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
 # Committed files a test compares against, read from the source tree so that a test asked to
 # regenerate one rewrites the tracked copy.
 target_compile_definitions(FrameworkTests PRIVATE FW_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+# The Lua definition files the types package ships, which a test regenerates and compares.
+target_compile_definitions(FrameworkTests PRIVATE FW_TEST_LUA_TYPES_DIR="${CMAKE_SOURCE_DIR}/types/lua")
 
 add_custom_target(RunFrameworkTests
         COMMAND $<TARGET_FILE:FrameworkTests>
@@ -100,6 +102,7 @@ if(NOT TARGET miniaudio)
 endif()
 target_link_libraries(FrameworkClientScriptingTests Framework FrameworkServer libnode miniaudio)
 target_compile_definitions(FrameworkClientScriptingTests PRIVATE FW_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+target_compile_definitions(FrameworkClientScriptingTests PRIVATE FW_TEST_LUA_TYPES_DIR="${CMAKE_SOURCE_DIR}/types/lua")
 
 # The Chat and Discord builtins of a client reach their services through the client instance, which builds
 # on Windows only and with the whole of FrameworkClient. client_doubles has a stand-in for it, ahead of the

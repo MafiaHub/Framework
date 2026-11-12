@@ -122,6 +122,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/lua_builtins_player_ut.h"
 #include "modules/lua_builtins_server_ut.h"
 #include "modules/lua_interop_ut.h"
+#include "modules/lua_parity_ut.h"
 #include "modules/resource_monitor_ut.h"
 #include "modules/run_until_ut.h"
 #include "modules/resource_ut.h"
@@ -227,6 +228,7 @@ int main() {
     UNIT_MODULE(connection_admission);
     UNIT_MODULE(nametag);
     UNIT_MODULE(scripting_catalog_golden);
+    UNIT_MODULE(lua_parity);
 
     return UNIT_RUN();
 }
