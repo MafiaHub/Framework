@@ -150,7 +150,8 @@ what it needs, and nothing else diverges:
 
   A service API that is declared once for JavaScript and Lua goes through
   `Bind::Namespace` (`scripting/bind/namespace.h`). `Console` and
-  `ExecutionEnvironment` are the worked examples. Each keeps its `Register`
+  `ExecutionEnvironment` are the worked examples, and `Chat` the one that
+  reads an option object and a handle argument. Each keeps its `Register`
   and has two entry points more:
 
   ```cpp
