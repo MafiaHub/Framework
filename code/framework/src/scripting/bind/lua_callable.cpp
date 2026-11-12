@@ -50,6 +50,7 @@ namespace Framework::Scripting::Bind {
         char callablesKey = 0;
         char standInKey   = 0;
         char standInsKey  = 0;
+        char holdersKey   = 0;
 
         struct Link final {
             // nullptr once the runtime is going.
@@ -179,6 +180,23 @@ namespace Framework::Scripting::Bind {
             lua_setmetatable(L, -2);
             lua_pushvalue(L, -1);
             lua_rawsetp(L, LUA_REGISTRYINDEX, &standInsKey);
+        }
+
+        // Pushes the table of the registry that maps a table a stand-in arrived in as a member to the set of those
+        // stand-ins, each under its userdata. Keys are weak in it and in every set, so neither a table nor a
+        // function is kept by having been noted.
+        void PushHolders(lua_State *L) {
+            if (lua_rawgetp(L, LUA_REGISTRYINDEX, &holdersKey) == LUA_TTABLE) {
+                return;
+            }
+            lua_pop(L, 1);
+            lua_createtable(L, 0, 0);
+            lua_createtable(L, 0, 1);
+            lua_pushstring(L, "k");
+            lua_setfield(L, -2, "__mode");
+            lua_setmetatable(L, -2);
+            lua_pushvalue(L, -1);
+            lua_rawsetp(L, LUA_REGISTRYINDEX, &holdersKey);
         }
 
         // What a call whose coroutine ended with its first result on top of `thread` tells its caller.
@@ -348,6 +366,24 @@ namespace Framework::Scripting::Bind {
                 return luaL_error(L, "function called while its state closes");
             }
             lua_pop(L, 1);
+            // Called as a method of the table it arrived in (api:method(x)): the table is not an argument.
+            if (lua_type(L, 1) == LUA_TTABLE) {
+                luaL_checkstack(L, 3, nullptr);
+                bool method = false;
+                if (lua_rawgetp(L, LUA_REGISTRYINDEX, &holdersKey) == LUA_TTABLE) {
+                    lua_pushvalue(L, 1);
+                    if (lua_rawget(L, -2) == LUA_TTABLE) {
+                        lua_pushvalue(L, lua_upvalueindex(1));
+                        method = lua_rawget(L, -2) != LUA_TNIL;
+                        lua_pop(L, 1);
+                    }
+                    lua_pop(L, 1);
+                }
+                lua_pop(L, 1);
+                if (method) {
+                    lua_remove(L, 1);
+                }
+            }
             return Detail::LuaInvokeNative(L, static_cast<StandIn *>(lua_touserdata(L, lua_upvalueindex(1)))->forward, false);
         }
 
@@ -556,6 +592,30 @@ namespace Framework::Scripting::Bind {
         lua_pushvalue(L, -1);
         lua_rawsetp(L, -3, callable.get());
         lua_remove(L, -2);
+    }
+
+    void LuaNoteHolder(lua_State *L, int holder, int function) {
+        holder   = lua_absindex(L, holder);
+        function = lua_absindex(L, function);
+        if (lua_tocfunction(L, function) != &CallStandIn) {
+            return;
+        }
+        luaL_checkstack(L, 5, "cannot note a function");
+        PushHolders(L);
+        lua_pushvalue(L, holder);
+        if (lua_rawget(L, -2) != LUA_TTABLE) {
+            lua_pop(L, 1);
+            lua_createtable(L, 0, 1);
+            lua_getmetatable(L, -2);
+            lua_setmetatable(L, -2);
+            lua_pushvalue(L, holder);
+            lua_pushvalue(L, -2);
+            lua_rawset(L, -4);
+        }
+        lua_getupvalue(L, function, 1);
+        lua_pushboolean(L, 1);
+        lua_rawset(L, -3);
+        lua_pop(L, 2);
     }
 
     void LuaRuntimeDisposing(LuaRuntime &runtime) {

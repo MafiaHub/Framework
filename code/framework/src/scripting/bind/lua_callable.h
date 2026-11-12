@@ -39,6 +39,16 @@ namespace Framework::Scripting::Bind {
     // as the same function each time. Raises a Lua error when Lua is out of memory or of stack.
     void LuaPushCallable(lua_State *L, const std::shared_ptr<ScriptCallable> &callable);
 
+    // Tells the function at `function` that it arrived as a member of the table at `holder`, which is what the
+    // rebuild of a copied object does for the functions in it (LuaTransfer::Rebuild). A function that stands for a
+    // callable of another runtime then takes a call on that table for a method call: called with the table as
+    // its first argument, as `api:method(x)` calls it, it forwards the arguments after it, so `api.method(x)` and
+    // `api:method(x)` are the same call. With any other first argument, and in a table it was put in by a
+    // script, it forwards everything. The function it stands for gets no receiver either way. The table is not
+    // kept alive by this. Nothing is done for a function of the state's own, which is called as the script wrote
+    // it. Raises a Lua error when Lua is out of memory or of stack.
+    void LuaNoteHolder(lua_State *L, int holder, int function);
+
     // Marks dead what is kept for `runtime`: its callables, whose calls that have not ended are told
     // kRuntimeStopped, and its deferred results. Call it while the state is open; a second call does nothing.
     void LuaRuntimeDisposing(LuaRuntime &runtime);

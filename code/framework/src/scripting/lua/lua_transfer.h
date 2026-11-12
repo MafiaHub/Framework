@@ -54,7 +54,9 @@ namespace Framework::Scripting {
      *
      * A function crosses as its callable (bind/callable.h), which keeps it alive in its state, and arrives as a
      * function that runs it there: bind/call.h, at Call::FromTransfer, says what calling it gives. In the state it
-     * came from it arrives as itself. This needs a state a LuaRuntime made, on both sides.
+     * came from it arrives as itself. This needs a state a LuaRuntime made, on both sides. One that arrives as a
+     * member of an object can be called as a method of the table it arrived in: `t:f(x)` is `t.f(x)` there
+     * (Bind::LuaNoteHolder).
      */
     class LuaTransfer final {
       public:

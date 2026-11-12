@@ -1348,6 +1348,53 @@ MODULE(script_callable, {
         EQUALS(stage.LuaValue("gamma", "Stage.take()(function(value) return value * 2 end, 20)"), "41");
     });
 
+    IT("takes a call on the table a function arrived in for a method call, in Lua", {
+        Stage stage;
+        stage.CreateJs("alpha");
+        stage.CreateLua("gamma");
+        stage.CreateLua("delta");
+        stage.Js("alpha", "Stage.give({ count: (...args) => args.length, kind: (first) => typeof first, nested: { count: (...args) => args.length } })");
+        EQUALS(stage.Lua("gamma", "api = Stage.take() bare = api.count other = { count = api.count }"), "");
+
+        // With a dot or a colon the function gets the same arguments.
+        EQUALS(stage.LuaValue("gamma", "api.count(1, 2)"), "2");
+        EQUALS(stage.LuaValue("gamma", "api:count(1, 2)"), "2");
+        EQUALS(stage.LuaValue("gamma", "api:kind()"), "undefined");
+        EQUALS(stage.LuaValue("gamma", "api:kind('text')"), "string");
+        EQUALS(stage.LuaValue("gamma", "api.nested:count(1)"), "1");
+        // The table is told by what it is, not by how the call was written.
+        EQUALS(stage.LuaValue("gamma", "api.count(api, 1)"), "1");
+
+        // Anything else in front is an argument: off the table, in a table of the script, with another table.
+        EQUALS(stage.LuaValue("gamma", "bare(1, 2)"), "2");
+        EQUALS(stage.LuaValue("gamma", "bare({}, 1)"), "2");
+        EQUALS(stage.LuaValue("gamma", "other:count(1)"), "2");
+        EQUALS(stage.LuaValue("gamma", "api.nested.count(api, 1)"), "2");
+        EQUALS(stage.LuaValue("gamma", "api.count(api.nested, 1)"), "2");
+
+        // The function is the same one in every table it arrives in, and a method of each.
+        EQUALS(stage.Lua("gamma", "again = Stage.take()"), "");
+        EQUALS(stage.LuaValue("gamma", "rawequal(again.count, api.count)"), "true");
+        EQUALS(stage.LuaValue("gamma", "again:count(1) + api:count(1)"), "2");
+
+        // A function that arrives on its own is a method of nothing.
+        stage.Js("alpha", "Stage.give((...args) => args.length)");
+        EQUALS(stage.LuaValue("gamma", "Stage.take()({}, 1)"), "2");
+
+        // The same for a function of another Lua state. In its own state it is itself, and called as written.
+        stage.Lua("delta", "Stage.give({ count = function(...) return select('#', ...) end })");
+        EQUALS(stage.LuaValue("gamma", "(function() local theirs = Stage.take() return theirs:count(1, 2) + theirs.count(1, 2) end)()"), "4");
+        EQUALS(stage.LuaValue("delta", "(function() local own = Stage.take() return own:count(1) end)()"), "2");
+
+        // Remembering the table keeps neither it nor the function.
+        EQUALS(stage.Lua("gamma", "probe = setmetatable({}, { __mode = 'k' }) probe[Stage.take()] = true probe[api] = true probe[again] = true"), "");
+        EQUALS(stage.Lua("gamma", "api = nil again = nil"), "");
+        lua_gc(stage.Runtime("gamma").State(), LUA_GCCOLLECT);
+        lua_gc(stage.Runtime("gamma").State(), LUA_GCCOLLECT);
+        EQUALS(stage.LuaValue("gamma", "next(probe)"), "nil");
+        EQUALS(lua_gettop(stage.Runtime("gamma").State()), 0);
+    });
+
     IT("calls between two Lua states and between two isolates", {
         Stage stage;
         stage.CreateJs("alpha");

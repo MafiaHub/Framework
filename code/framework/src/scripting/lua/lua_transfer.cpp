@@ -407,6 +407,10 @@ namespace Framework::Scripting {
                         return false;
                     }
                     _path.Leave();
+                    // A function of another runtime can be called as a method of this table from now on.
+                    if (field.kind == Kind::Function) {
+                        Bind::LuaNoteHolder(_L, -3, -1);
+                    }
                     lua_rawset(_L, -3);
                 }
                 --_depth;
