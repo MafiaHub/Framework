@@ -8,23 +8,32 @@
 
 #include "discord.h"
 
+#include "script_args.h"
+
 #include "integrations/client/instance.h"
 
 #include "core_modules.h"
 
+#include <external/discord/wrapper.h>
+#include <scripting/lua/lua_runtime.h>
 #include <scripting/scripting_catalog.h>
-
-#include <v8pp/convert.hpp>
 
 #include <discord.h>
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <iterator>
 #include <mutex>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
+    namespace Bind = Framework::Scripting::Bind;
+
     namespace {
         // Staged activity mutated by the setters, published on update()/setPresence().
         discord::Activity _activity;
@@ -57,10 +66,6 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return instance ? instance->GetPresence() : nullptr;
         }
 
-        void ThrowError(v8::Isolate *isolate, const char *message) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, message)));
-        }
-
         std::string ToLower(std::string s) {
             std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
@@ -68,12 +73,49 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return s;
         }
 
-        discord::ActivityType MapActivityType(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> value) {
-            if (value->IsNumber()) {
-                return static_cast<discord::ActivityType>(value->Int32Value(context).FromMaybe(0));
+        // ToInt32 of JavaScript, which is how an enum value and a party size were always read: the whole
+        // part, wrapped to 32 bits. 0 for what is not finite.
+        std::int32_t ToInt32(double number) {
+            if (!std::isfinite(number)) {
+                return 0;
             }
-            if (value->IsString()) {
-                const std::string name = ToLower(v8pp::from_v8<std::string>(isolate, value));
+            const double wrapped = std::fmod(std::trunc(number), 4294967296.0);
+            return static_cast<std::int32_t>(static_cast<std::uint32_t>(static_cast<std::int64_t>(wrapped)));
+        }
+
+        // One of the two sizes of a party, which JavaScript always converted to a number first: a boolean is
+        // 0 or 1, a string the number it spells. 0 for anything else.
+        std::int32_t ToPartySize(const Bind::Value &value) {
+            if (value.IsNumber()) {
+                return ToInt32(value.AsNumber());
+            }
+            if (value.IsBoolean()) {
+                return value.AsBoolean() ? 1 : 0;
+            }
+            if (!value.IsString()) {
+                return 0;
+            }
+            const std::string text = value.AsString();
+            const auto blank       = [](unsigned char c) {
+                return std::isspace(c) != 0;
+            };
+            const auto first = std::find_if_not(text.begin(), text.end(), blank);
+            const auto last  = std::find_if_not(text.rbegin(), std::make_reverse_iterator(first), blank).base();
+            if (first == last) {
+                return 0;
+            }
+            const std::string digits(first, last);
+            char *end           = nullptr;
+            const double number = std::strtod(digits.c_str(), &end);
+            return end == digits.c_str() + digits.size() ? ToInt32(number) : 0;
+        }
+
+        discord::ActivityType MapActivityType(const Bind::Value &value) {
+            if (value.IsNumber()) {
+                return static_cast<discord::ActivityType>(ToInt32(value.AsNumber()));
+            }
+            if (value.IsString()) {
+                const std::string name = ToLower(value.AsString());
                 if (name == "streaming") {
                     return discord::ActivityType::Streaming;
                 }
@@ -87,11 +129,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return discord::ActivityType::Playing;
         }
 
-        discord::ActivityPartyPrivacy MapPrivacy(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> value) {
-            if (value->IsNumber()) {
-                return static_cast<discord::ActivityPartyPrivacy>(value->Int32Value(context).FromMaybe(0));
+        discord::ActivityPartyPrivacy MapPrivacy(const Bind::Value &value) {
+            if (value.IsNumber()) {
+                return static_cast<discord::ActivityPartyPrivacy>(ToInt32(value.AsNumber()));
             }
-            if (value->IsString() && ToLower(v8pp::from_v8<std::string>(isolate, value)) == "public") {
+            if (value.IsString() && ToLower(value.AsString()) == "public") {
                 return discord::ActivityPartyPrivacy::Public;
             }
             return discord::ActivityPartyPrivacy::Private;
@@ -114,7 +156,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return 0;
         }
 
-        // Apply*/Read* require the caller to hold _mutex.
+        // Apply* require the caller to hold _mutex.
         void ApplyString(StringField field, const std::string &value) {
             const char *c = value.c_str();
             _written |= StringFieldBit(field);
@@ -142,6 +184,166 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
         }
 
+        // What one call stages, read from the script before anything is written: reading a member of an
+        // object may run a getter of the script, which may call Discord in turn, and _mutex is not held then.
+        class Staging final {
+          public:
+            void String(StringField field, std::string value) {
+                Edit edit;
+                edit.kind   = Edit::Kind::String;
+                edit.string = field;
+                edit.text   = std::move(value);
+                _edits.push_back(std::move(edit));
+            }
+
+            void Number(NumberField field, std::int64_t value) {
+                Edit edit;
+                edit.kind    = Edit::Kind::Number;
+                edit.number  = field;
+                edit.integer = value;
+                _edits.push_back(std::move(edit));
+            }
+
+            void Type(discord::ActivityType type) {
+                Edit edit;
+                edit.kind = Edit::Kind::Type;
+                edit.type = type;
+                _edits.push_back(std::move(edit));
+            }
+
+            void PartySize(std::int32_t current, std::int32_t max) {
+                Edit edit;
+                edit.kind    = Edit::Kind::PartySize;
+                edit.current = current;
+                edit.max     = max;
+                _edits.push_back(std::move(edit));
+            }
+
+            void Privacy(discord::ActivityPartyPrivacy privacy) {
+                Edit edit;
+                edit.kind    = Edit::Kind::Privacy;
+                edit.privacy = privacy;
+                _edits.push_back(std::move(edit));
+            }
+
+            void Instance(bool instance) {
+                Edit edit;
+                edit.kind = Edit::Kind::Instance;
+                edit.flag = instance;
+                _edits.push_back(std::move(edit));
+            }
+
+            // The member `key` of `options` when it is a string, as `field`.
+            void ReadString(const Bind::Value &options, const char *key, StringField field) {
+                const Bind::Value value = options.Member(key);
+                if (value.IsString()) {
+                    String(field, value.AsString());
+                }
+            }
+
+            void ReadNumber(const Bind::Value &options, const char *key, NumberField field) {
+                const Bind::Value value = options.Member(key);
+                if (value.IsNumber()) {
+                    Number(field, ToInt64(value));
+                }
+            }
+
+            // { id?, size?: [current, max], privacy? }
+            void ReadParty(const Bind::Value &party) {
+                ReadString(party, "id", StringField::PartyId);
+
+                const Bind::Value size = party.Member("size");
+                if (size.IsArray() && size.Length() >= 2) {
+                    PartySize(ToPartySize(size.At(0)), ToPartySize(size.At(1)));
+                }
+
+                // A privacy that is given and is no name and no number is private, null included.
+                const Bind::Value privacy = party.Member("privacy");
+                if (!privacy.IsNil() || privacy.IsNull()) {
+                    Privacy(MapPrivacy(privacy));
+                }
+            }
+
+            // { match?, join?, spectate? }
+            void ReadSecrets(const Bind::Value &secrets) {
+                ReadString(secrets, "match", StringField::MatchSecret);
+                ReadString(secrets, "join", StringField::JoinSecret);
+                ReadString(secrets, "spectate", StringField::SpectateSecret);
+            }
+
+            void ReadAssets(const Bind::Value &assets) {
+                ReadString(assets, "largeImage", StringField::LargeImage);
+                ReadString(assets, "largeText", StringField::LargeText);
+                ReadString(assets, "smallImage", StringField::SmallImage);
+                ReadString(assets, "smallText", StringField::SmallText);
+            }
+
+            // Writes what was read onto the staged activity, in the order it was read.
+            void Commit() const {
+                std::scoped_lock lock(_mutex);
+                for (const Edit &edit : _edits) {
+                    switch (edit.kind) {
+                    case Edit::Kind::String: ApplyString(edit.string, edit.text); break;
+                    case Edit::Kind::Number: ApplyNumber(edit.number, edit.integer); break;
+                    case Edit::Kind::Type:
+                        _activity.SetType(edit.type);
+                        _written |= External::Discord::PresenceField::Type;
+                        break;
+                    case Edit::Kind::PartySize:
+                        _activity.GetParty().GetSize().SetCurrentSize(edit.current);
+                        _activity.GetParty().GetSize().SetMaxSize(edit.max);
+                        _written |= External::Discord::PresenceField::Party;
+                        break;
+                    case Edit::Kind::Privacy:
+                        _activity.GetParty().SetPrivacy(edit.privacy);
+                        _written |= External::Discord::PresenceField::Party;
+                        break;
+                    case Edit::Kind::Instance:
+                        _activity.SetInstance(edit.flag);
+                        _written |= External::Discord::PresenceField::Instance;
+                        break;
+                    }
+                }
+            }
+
+          private:
+            struct Edit final {
+                enum class Kind {
+                    String,
+                    Number,
+                    Type,
+                    PartySize,
+                    Privacy,
+                    Instance,
+                };
+
+                Kind kind          = Kind::String;
+                StringField string = StringField::Name;
+                NumberField number = NumberField::StartTimestamp;
+                std::string text;
+                std::int64_t integer                  = 0;
+                discord::ActivityType type            = discord::ActivityType::Playing;
+                discord::ActivityPartyPrivacy privacy = discord::ActivityPartyPrivacy::Private;
+                std::int32_t current                  = 0;
+                std::int32_t max                      = 0;
+                bool flag                             = false;
+            };
+
+            std::vector<Edit> _edits;
+        };
+
+        // What JavaScript calls an object: a plain object or a table, an array, a function, an instance of a
+        // bound class. Members are read off the first two and off a bound instance; a function has none here.
+        bool IsObject(const Bind::Value &value) {
+            switch (value.Kind()) {
+            case Bind::ValueKind::Object:
+            case Bind::ValueKind::Array:
+            case Bind::ValueKind::Function:
+            case Bind::ValueKind::Bound: return true;
+            default: return false;
+            }
+        }
+
         bool Publish() {
             auto *presence = ResolvePresence();
             if (!presence || !presence->IsInitialized()) {
@@ -158,397 +360,272 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return true;
         }
 
-        bool ReadString(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> opts, const char *key, StringField field) {
-            v8::Local<v8::Value> value;
-            if (opts->Get(context, v8pp::to_v8(isolate, key)).ToLocal(&value) && value->IsString()) {
-                ApplyString(field, v8pp::from_v8<std::string>(isolate, value));
-                return true;
-            }
-            return false;
+        void ResetStaged() {
+            std::scoped_lock lock(_mutex);
+            _activity = discord::Activity {};
+            _written  = 0;
         }
 
-        bool ReadNumber(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> opts, const char *key, NumberField field) {
-            v8::Local<v8::Value> value;
-            if (opts->Get(context, v8pp::to_v8(isolate, key)).ToLocal(&value) && value->IsNumber()) {
-                ApplyNumber(field, value->IntegerValue(context).FromMaybe(0));
-                return true;
+        void SetStringField(Bind::Call &call, StringField field) {
+            if (!call.Arg(0).IsString()) {
+                call.ThrowError("Discord: expected a string argument");
+                return;
             }
-            return false;
+            const std::string value = call.Arg(0).AsString();
+            std::scoped_lock lock(_mutex);
+            ApplyString(field, value);
+        }
+
+        void SetNumberField(Bind::Call &call, NumberField field) {
+            if (!call.Arg(0).IsNumber()) {
+                call.ThrowError("Discord: expected a numeric argument");
+                return;
+            }
+            const std::int64_t value = ToInt64(call.Arg(0));
+            std::scoped_lock lock(_mutex);
+            ApplyNumber(field, value);
+        }
+
+        Bind::NativeFunction StringSetter(StringField field) {
+            return [field](Bind::Call &call) {
+                SetStringField(call, field);
+            };
+        }
+
+        Bind::NativeFunction NumberSetter(NumberField field) {
+            return [field](Bind::Call &call) {
+                SetNumberField(call, field);
+            };
+        }
+
+        void SetType(Bind::Call &call) {
+            if (call.ArgCount() < 1) {
+                call.ThrowError("Discord.setType: expected (type)");
+                return;
+            }
+            Staging staging;
+            staging.Type(MapActivityType(call.Arg(0)));
+            staging.Commit();
+        }
+
+        void SetPartySize(Bind::Call &call) {
+            if (!call.Arg(0).IsNumber() || !call.Arg(1).IsNumber()) {
+                call.ThrowError("Discord.setPartySize: expected (current, max)");
+                return;
+            }
+            Staging staging;
+            staging.PartySize(ToInt32(call.Arg(0).AsNumber()), ToInt32(call.Arg(1).AsNumber()));
+            staging.Commit();
+        }
+
+        void SetPartyPrivacy(Bind::Call &call) {
+            if (call.ArgCount() < 1) {
+                call.ThrowError("Discord.setPartyPrivacy: expected (privacy)");
+                return;
+            }
+            Staging staging;
+            staging.Privacy(MapPrivacy(call.Arg(0)));
+            staging.Commit();
+        }
+
+        void SetInstance(Bind::Call &call) {
+            if (call.ArgCount() < 1) {
+                call.ThrowError("Discord.setInstance: expected (bool)");
+                return;
+            }
+            Staging staging;
+            staging.Instance(ReadFlag(call, 0));
+            staging.Commit();
+        }
+
+        void SetAssets(Bind::Call &call) {
+            if (!IsObject(call.Arg(0))) {
+                call.ThrowError("Discord.setAssets: expected an object");
+                return;
+            }
+            Staging staging;
+            staging.ReadAssets(call.Arg(0));
+            staging.Commit();
+        }
+
+        void SetParty(Bind::Call &call) {
+            if (!IsObject(call.Arg(0))) {
+                call.ThrowError("Discord.setParty: expected an object");
+                return;
+            }
+            Staging staging;
+            staging.ReadParty(call.Arg(0));
+            staging.Commit();
+        }
+
+        void SetSecrets(Bind::Call &call) {
+            if (!IsObject(call.Arg(0))) {
+                call.ThrowError("Discord.setSecrets: expected an object");
+                return;
+            }
+            Staging staging;
+            staging.ReadSecrets(call.Arg(0));
+            staging.Commit();
+        }
+
+        void SetPresence(Bind::Call &call) {
+            const Bind::Value options = call.Arg(0);
+            if (!IsObject(options)) {
+                call.ThrowError("Discord.setPresence: expected an options object");
+                return;
+            }
+
+            Staging staging;
+            // A type that is given and is no name and no number is "playing", null included.
+            const Bind::Value type = options.Member("type");
+            if (!type.IsNil() || type.IsNull()) {
+                staging.Type(MapActivityType(type));
+            }
+
+            staging.ReadString(options, "name", StringField::Name);
+            staging.ReadString(options, "details", StringField::Details);
+            staging.ReadString(options, "state", StringField::State);
+
+            staging.ReadNumber(options, "startTimestamp", NumberField::StartTimestamp);
+            staging.ReadNumber(options, "endTimestamp", NumberField::EndTimestamp);
+            staging.ReadNumber(options, "supportedPlatforms", NumberField::SupportedPlatforms);
+
+            staging.ReadAssets(options);
+
+            const Bind::Value instance = options.Member("instance");
+            if (instance.IsBoolean()) {
+                staging.Instance(instance.AsBoolean());
+            }
+
+            const Bind::Value party = options.Member("party");
+            if (IsObject(party)) {
+                staging.ReadParty(party);
+            }
+
+            const Bind::Value secrets = options.Member("secrets");
+            if (IsObject(secrets)) {
+                staging.ReadSecrets(secrets);
+            }
+
+            staging.Commit();
+            call.Return(Publish());
+        }
+
+        void Update(Bind::Call &call) {
+            call.Return(Publish());
+        }
+
+        void Clear(Bind::Call &call) {
+            ResetStaged();
+            auto *presence = ResolvePresence();
+            if (!presence || !presence->IsInitialized()) {
+                call.Return(false);
+                return;
+            }
+            presence->ClearScriptActivity();
+            call.Return(true);
+        }
+
+        void Reset(Bind::Call &) {
+            ResetStaged();
+        }
+
+        void GetUserId(Bind::Call &call) {
+            auto *presence = ResolvePresence();
+            call.Return(presence ? presence->GetUserId() : std::string {});
+        }
+
+        void GetUsername(Bind::Call &call) {
+            auto *presence = ResolvePresence();
+            call.Return(presence ? presence->GetUsername() : std::string {});
+        }
+
+        void IsAvailable(Bind::Call &call) {
+            auto *presence = ResolvePresence();
+            call.Return(presence && presence->IsInitialized());
         }
     } // anonymous namespace
 
-    void Discord::SetStringFieldCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        if (args.Length() < 1 || !args[0]->IsString()) {
-            ThrowError(isolate, "Discord: expected a string argument");
-            return;
-        }
-        const auto field = static_cast<StringField>(args.Data()->Int32Value(isolate->GetCurrentContext()).FromMaybe(0));
-        std::scoped_lock lock(_mutex);
-        ApplyString(field, v8pp::from_v8<std::string>(isolate, args[0]));
-    }
-
-    void Discord::SetNumberFieldCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        if (args.Length() < 1 || !args[0]->IsNumber()) {
-            ThrowError(isolate, "Discord: expected a numeric argument");
-            return;
-        }
-        const auto field = static_cast<NumberField>(args.Data()->Int32Value(context).FromMaybe(0));
-        std::scoped_lock lock(_mutex);
-        ApplyNumber(field, args[0]->IntegerValue(context).FromMaybe(0));
-    }
-
-    void Discord::SetTypeCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        if (args.Length() < 1) {
-            ThrowError(isolate, "Discord.setType: expected (type)");
-            return;
-        }
-        const discord::ActivityType type = MapActivityType(isolate, context, args[0]);
-        std::scoped_lock lock(_mutex);
-        _activity.SetType(type);
-        _written |= External::Discord::PresenceField::Type;
-    }
-
-    void Discord::SetPartySizeCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        if (args.Length() < 2 || !args[0]->IsNumber() || !args[1]->IsNumber()) {
-            ThrowError(isolate, "Discord.setPartySize: expected (current, max)");
-            return;
-        }
-        const std::int32_t current = args[0]->Int32Value(context).FromMaybe(0);
-        const std::int32_t max     = args[1]->Int32Value(context).FromMaybe(0);
-        std::scoped_lock lock(_mutex);
-        _activity.GetParty().GetSize().SetCurrentSize(current);
-        _activity.GetParty().GetSize().SetMaxSize(max);
-        _written |= External::Discord::PresenceField::Party;
-    }
-
-    void Discord::SetPartyPrivacyCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        if (args.Length() < 1) {
-            ThrowError(isolate, "Discord.setPartyPrivacy: expected (privacy)");
-            return;
-        }
-        const discord::ActivityPartyPrivacy privacy = MapPrivacy(isolate, context, args[0]);
-        std::scoped_lock lock(_mutex);
-        _activity.GetParty().SetPrivacy(privacy);
-        _written |= External::Discord::PresenceField::Party;
-    }
-
-    void Discord::SetInstanceCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        if (args.Length() < 1) {
-            ThrowError(isolate, "Discord.setInstance: expected (bool)");
-            return;
-        }
-        const bool instance = args[0]->BooleanValue(isolate);
-        std::scoped_lock lock(_mutex);
-        _activity.SetInstance(instance);
-        _written |= External::Discord::PresenceField::Instance;
-    }
-
-    void Discord::SetAssetsCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        if (args.Length() < 1 || !args[0]->IsObject()) {
-            ThrowError(isolate, "Discord.setAssets: expected an object");
-            return;
-        }
-        v8::Local<v8::Object> opts = args[0].As<v8::Object>();
-        std::scoped_lock lock(_mutex);
-        ReadString(isolate, context, opts, "largeImage", StringField::LargeImage);
-        ReadString(isolate, context, opts, "largeText", StringField::LargeText);
-        ReadString(isolate, context, opts, "smallImage", StringField::SmallImage);
-        ReadString(isolate, context, opts, "smallText", StringField::SmallText);
-    }
-
-    void Discord::SetPartyCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        if (args.Length() < 1 || !args[0]->IsObject()) {
-            ThrowError(isolate, "Discord.setParty: expected an object");
-            return;
-        }
-        v8::Local<v8::Object> opts = args[0].As<v8::Object>();
-        std::scoped_lock lock(_mutex);
-        ReadString(isolate, context, opts, "id", StringField::PartyId);
-
-        // size: [current, max]
-        v8::Local<v8::Value> sizeVal;
-        if (opts->Get(context, v8pp::to_v8(isolate, "size")).ToLocal(&sizeVal) && sizeVal->IsArray()) {
-            v8::Local<v8::Array> arr = sizeVal.As<v8::Array>();
-            if (arr->Length() >= 2) {
-                v8::Local<v8::Value> cur;
-                v8::Local<v8::Value> max;
-                if (arr->Get(context, 0).ToLocal(&cur) && arr->Get(context, 1).ToLocal(&max)) {
-                    _activity.GetParty().GetSize().SetCurrentSize(cur->Int32Value(context).FromMaybe(0));
-                    _activity.GetParty().GetSize().SetMaxSize(max->Int32Value(context).FromMaybe(0));
-                    _written |= External::Discord::PresenceField::Party;
-                }
-            }
-        }
-
-        v8::Local<v8::Value> privacyVal;
-        if (opts->Get(context, v8pp::to_v8(isolate, "privacy")).ToLocal(&privacyVal) && !privacyVal->IsUndefined()) {
-            _activity.GetParty().SetPrivacy(MapPrivacy(isolate, context, privacyVal));
-            _written |= External::Discord::PresenceField::Party;
-        }
-    }
-
-    void Discord::SetSecretsCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        if (args.Length() < 1 || !args[0]->IsObject()) {
-            ThrowError(isolate, "Discord.setSecrets: expected an object");
-            return;
-        }
-        v8::Local<v8::Object> opts = args[0].As<v8::Object>();
-        std::scoped_lock lock(_mutex);
-        ReadString(isolate, context, opts, "match", StringField::MatchSecret);
-        ReadString(isolate, context, opts, "join", StringField::JoinSecret);
-        ReadString(isolate, context, opts, "spectate", StringField::SpectateSecret);
-    }
-
-    void Discord::SetPresenceCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        if (args.Length() < 1 || !args[0]->IsObject()) {
-            ThrowError(isolate, "Discord.setPresence: expected an options object");
-            return;
-        }
-        v8::Local<v8::Object> opts = args[0].As<v8::Object>();
-
-        {
-            std::scoped_lock lock(_mutex);
-
-            v8::Local<v8::Value> typeVal;
-            if (opts->Get(context, v8pp::to_v8(isolate, "type")).ToLocal(&typeVal) && !typeVal->IsUndefined()) {
-                _activity.SetType(MapActivityType(isolate, context, typeVal));
-                _written |= External::Discord::PresenceField::Type;
-            }
-
-            ReadString(isolate, context, opts, "name", StringField::Name);
-            ReadString(isolate, context, opts, "details", StringField::Details);
-            ReadString(isolate, context, opts, "state", StringField::State);
-
-            ReadNumber(isolate, context, opts, "startTimestamp", NumberField::StartTimestamp);
-            ReadNumber(isolate, context, opts, "endTimestamp", NumberField::EndTimestamp);
-            ReadNumber(isolate, context, opts, "supportedPlatforms", NumberField::SupportedPlatforms);
-
-            ReadString(isolate, context, opts, "largeImage", StringField::LargeImage);
-            ReadString(isolate, context, opts, "largeText", StringField::LargeText);
-            ReadString(isolate, context, opts, "smallImage", StringField::SmallImage);
-            ReadString(isolate, context, opts, "smallText", StringField::SmallText);
-
-            v8::Local<v8::Value> instanceVal;
-            if (opts->Get(context, v8pp::to_v8(isolate, "instance")).ToLocal(&instanceVal) && instanceVal->IsBoolean()) {
-                _activity.SetInstance(instanceVal->BooleanValue(isolate));
-                _written |= External::Discord::PresenceField::Instance;
-            }
-
-            // Nested party: { id?, size?: [current, max], privacy? }
-            v8::Local<v8::Value> partyVal;
-            if (opts->Get(context, v8pp::to_v8(isolate, "party")).ToLocal(&partyVal) && partyVal->IsObject()) {
-                v8::Local<v8::Object> party = partyVal.As<v8::Object>();
-                ReadString(isolate, context, party, "id", StringField::PartyId);
-                v8::Local<v8::Value> sizeVal;
-                if (party->Get(context, v8pp::to_v8(isolate, "size")).ToLocal(&sizeVal) && sizeVal->IsArray()) {
-                    v8::Local<v8::Array> arr = sizeVal.As<v8::Array>();
-                    if (arr->Length() >= 2) {
-                        v8::Local<v8::Value> cur;
-                        v8::Local<v8::Value> max;
-                        if (arr->Get(context, 0).ToLocal(&cur) && arr->Get(context, 1).ToLocal(&max)) {
-                            _activity.GetParty().GetSize().SetCurrentSize(cur->Int32Value(context).FromMaybe(0));
-                            _activity.GetParty().GetSize().SetMaxSize(max->Int32Value(context).FromMaybe(0));
-                            _written |= External::Discord::PresenceField::Party;
-                        }
-                    }
-                }
-                v8::Local<v8::Value> privacyVal;
-                if (party->Get(context, v8pp::to_v8(isolate, "privacy")).ToLocal(&privacyVal) && !privacyVal->IsUndefined()) {
-                    _activity.GetParty().SetPrivacy(MapPrivacy(isolate, context, privacyVal));
-                    _written |= External::Discord::PresenceField::Party;
-                }
-            }
-
-            // Nested secrets: { match?, join?, spectate? }
-            v8::Local<v8::Value> secretsVal;
-            if (opts->Get(context, v8pp::to_v8(isolate, "secrets")).ToLocal(&secretsVal) && secretsVal->IsObject()) {
-                v8::Local<v8::Object> secrets = secretsVal.As<v8::Object>();
-                ReadString(isolate, context, secrets, "match", StringField::MatchSecret);
-                ReadString(isolate, context, secrets, "join", StringField::JoinSecret);
-                ReadString(isolate, context, secrets, "spectate", StringField::SpectateSecret);
-            }
-        }
-
-        args.GetReturnValue().Set(Publish());
-    }
-
-    void Discord::UpdateCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        args.GetReturnValue().Set(Publish());
-    }
-
-    void Discord::ClearCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        {
-            std::scoped_lock lock(_mutex);
-            _activity = discord::Activity {};
-            _written  = 0;
-        }
-        auto *presence = ResolvePresence();
-        if (!presence || !presence->IsInitialized()) {
-            args.GetReturnValue().Set(false);
-            return;
-        }
-        presence->ClearScriptActivity();
-        args.GetReturnValue().Set(true);
-    }
-
-    void Discord::ResetCallback(const v8::FunctionCallbackInfo<v8::Value> &) {
-        std::scoped_lock lock(_mutex);
-        _activity = discord::Activity {};
-        _written  = 0;
-    }
-
     void Discord::Shutdown() {
-        {
-            std::scoped_lock lock(_mutex);
-            _activity = discord::Activity {};
-            _written  = 0;
-        }
+        ResetStaged();
         if (auto *presence = ResolvePresence()) {
             presence->ClearScriptActivity();
         }
     }
 
-    void Discord::GetUserIdCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        auto *presence = ResolvePresence();
-        args.GetReturnValue().Set(v8pp::to_v8(isolate, presence ? presence->GetUserId() : std::string {}));
-    }
+    const Bind::Namespace &Discord::Definition() {
+        using Bind::Doc;
+        using Bind::Side;
+        using Bind::TypeOf;
+        using Bind::Type::Custom;
 
-    void Discord::GetUsernameCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        auto *presence = ResolvePresence();
-        args.GetReturnValue().Set(v8pp::to_v8(isolate, presence ? presence->GetUsername() : std::string {}));
-    }
+        static const auto definition = [] {
+            const auto number  = TypeOf<double>();
+            const auto boolean = TypeOf<bool>();
+            const auto text    = TypeOf<std::string>();
+            const auto type    = Custom("\"playing\" | \"streaming\" | \"listening\" | \"watching\" | number", "'playing'|'streaming'|'listening'|'watching'|integer");
+            const auto privacy = Custom("\"private\" | \"public\" | number", "'private'|'public'|integer");
+            const auto assets  = Custom("{ largeImage?: string; largeText?: string; smallImage?: string; smallText?: string }", "{ largeImage: string?, largeText: string?, smallImage: string?, smallText: string? }");
+            const auto party   = Custom("{ id?: string; size?: [number, number]; privacy?: \"private\" | \"public\" | number }", "{ id: string?, size: integer[]?, privacy: ('private'|'public'|integer)? }");
+            const auto secrets = Custom("{ match?: string; join?: string; spectate?: string }", "{ match: string?, join: string?, spectate: string? }");
+            const auto options = Custom("Record<string, unknown>", "table<string, any>");
 
-    void Discord::IsAvailableCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        auto *presence = ResolvePresence();
-        args.GetReturnValue().Set(presence && presence->IsInitialized());
+            // A setter of one field: its summary is what its parameter is, staged.
+            const auto field = [](const Bind::TypeRef &of, const char *parameter, const char *description) {
+                return Doc(std::string("Stages ") + description).Param(parameter, of, description);
+            };
+
+            // Composition, then commit and lifecycle, then queries.
+            return Bind::Namespace("Discord", "Client-only Discord rich-presence composer exposed as the global Discord; setters stage values until update or setPresence publishes them.")
+                .Function("setType", &SetType, field(type, "type", "the Discord activity verb or numeric enum value."), Side::Client)
+                .Function("setName", StringSetter(StringField::Name), field(text, "name", "the activity name."), Side::Client)
+                .Function("setDetails", StringSetter(StringField::Details), field(text, "details", "the top presence line."), Side::Client)
+                .Function("setState", StringSetter(StringField::State), field(text, "state", "the bottom presence line."), Side::Client)
+                .Function("setStartTimestamp", NumberSetter(NumberField::StartTimestamp), field(number, "seconds", "the elapsed-time Unix timestamp in seconds; zero clears it."), Side::Client)
+                .Function("setEndTimestamp", NumberSetter(NumberField::EndTimestamp), field(number, "seconds", "the countdown Unix timestamp in seconds; zero clears it."), Side::Client)
+                .Function("setSupportedPlatforms", NumberSetter(NumberField::SupportedPlatforms), field(number, "flags", "the supported-platform bitmask: Desktop 1, Android 2, and iOS 4."), Side::Client)
+                .Function("setLargeImage", StringSetter(StringField::LargeImage), field(text, "assetKey", "the large image asset key."), Side::Client)
+                .Function("setLargeText", StringSetter(StringField::LargeText), field(text, "text", "the large image tooltip."), Side::Client)
+                .Function("setSmallImage", StringSetter(StringField::SmallImage), field(text, "assetKey", "the small image asset key."), Side::Client)
+                .Function("setSmallText", StringSetter(StringField::SmallText), field(text, "text", "the small image tooltip."), Side::Client)
+                .Function("setAssets", &SetAssets, Doc("Stages multiple Discord image fields at once.").Param("assets", assets, "Asset keys and tooltips to merge into the staged activity."), Side::Client)
+                .Function("setPartyId", StringSetter(StringField::PartyId), field(text, "id", "the party grouping identifier."), Side::Client)
+                .Function("setPartySize", &SetPartySize, Doc("Stages the party's current and maximum size.").Param("current", number, "Current party member count.").Param("max", number, "Maximum party capacity."), Side::Client)
+                .Function("setPartyPrivacy", &SetPartyPrivacy, field(privacy, "privacy", "the party join-privacy name or numeric enum value."), Side::Client)
+                .Function("setParty", &SetParty, Doc("Stages multiple Discord party fields at once.").Param("party", party, "Party fields to merge into the staged activity."), Side::Client)
+                .Function("setMatchSecret", StringSetter(StringField::MatchSecret), field(text, "secret", "the opaque match secret."), Side::Client)
+                .Function("setJoinSecret", StringSetter(StringField::JoinSecret), field(text, "secret", "the opaque join secret that enables invitations."), Side::Client)
+                .Function("setSpectateSecret", StringSetter(StringField::SpectateSecret), field(text, "secret", "the opaque spectate secret."), Side::Client)
+                .Function("setSecrets", &SetSecrets, Doc("Stages multiple Discord activity secrets at once.").Param("secrets", secrets, "Opaque secrets to merge into the staged activity."), Side::Client)
+                .Function("setInstance", &SetInstance, field(boolean, "instance", "whether the activity represents an instanced session."), Side::Client)
+                .Function("setPresence", &SetPresence,
+                    Doc("Merges a complete option batch into the staged activity and publishes it immediately.")
+                        .Param("options", options, "Batch of supported activity, timestamp, asset, party, secret, instance, and platform fields.")
+                        .ReturnType(boolean)
+                        .Returns("True when the update was dispatched; false when Discord is unavailable."),
+                    Side::Client)
+                .Function("update", &Update, Doc("Publishes the currently staged activity as one rate-limited Discord update.").ReturnType(boolean).Returns("True when dispatched; false when Discord is unavailable."), Side::Client)
+                .Function("clear", &Clear, Doc("Clears what scripts published and resets staged state.").ReturnType(boolean).Returns("True when dispatched; false when Discord is unavailable."), Side::Client)
+                .Function("reset", &Reset, Doc("Resets staged activity fields without publishing a Discord update."), Side::Client)
+                .Function("getUserId", &GetUserId, Doc("Returns the signed-in Discord user's snowflake.").ReturnType(text).Returns("User ID string, or an empty string until available."), Side::Client)
+                .Function("getUsername", &GetUsername, Doc("Returns the signed-in Discord user's username.").ReturnType(text).Returns("Username string, or an empty string until available."), Side::Client)
+                .Function("isAvailable", &IsAvailable, Doc("Checks whether Discord is connected and can publish presence.").ReturnType(boolean).Returns("True when rich presence is initialized."), Side::Client);
+        }();
+        return definition;
     }
 
     void Discord::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
-        (void)resourceManager;
         if (!isolate || context.IsEmpty() || target.IsEmpty()) {
             return;
         }
+        if (resourceManager != nullptr) {
+            Bind::SetCallResourceManager(isolate, resourceManager);
+        }
+        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Bind::Side::Client);
+    }
 
-        v8::Local<v8::Object> discordObj = v8::Object::New(isolate);
-
-        const auto attach = [&](const char *name, v8::FunctionCallback callback, v8::Local<v8::Value> data = v8::Local<v8::Value>()) {
-            v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(isolate, callback, data);
-            discordObj->Set(context, v8pp::to_v8(isolate, name), tmpl->GetFunction(context).ToLocalChecked()).Check();
-        };
-        const auto strField = [&](const char *name, StringField field) {
-            attach(name, &Discord::SetStringFieldCallback, v8::Integer::New(isolate, static_cast<int>(field)));
-        };
-        const auto numField = [&](const char *name, NumberField field) {
-            attach(name, &Discord::SetNumberFieldCallback, v8::Integer::New(isolate, static_cast<int>(field)));
-        };
-
-        // Composition
-        attach("setType", &Discord::SetTypeCallback);
-        strField("setName", StringField::Name);
-        strField("setDetails", StringField::Details);
-        strField("setState", StringField::State);
-        numField("setStartTimestamp", NumberField::StartTimestamp);
-        numField("setEndTimestamp", NumberField::EndTimestamp);
-        numField("setSupportedPlatforms", NumberField::SupportedPlatforms);
-        strField("setLargeImage", StringField::LargeImage);
-        strField("setLargeText", StringField::LargeText);
-        strField("setSmallImage", StringField::SmallImage);
-        strField("setSmallText", StringField::SmallText);
-        attach("setAssets", &Discord::SetAssetsCallback);
-        strField("setPartyId", StringField::PartyId);
-        attach("setPartySize", &Discord::SetPartySizeCallback);
-        attach("setPartyPrivacy", &Discord::SetPartyPrivacyCallback);
-        attach("setParty", &Discord::SetPartyCallback);
-        strField("setMatchSecret", StringField::MatchSecret);
-        strField("setJoinSecret", StringField::JoinSecret);
-        strField("setSpectateSecret", StringField::SpectateSecret);
-        attach("setSecrets", &Discord::SetSecretsCallback);
-        attach("setInstance", &Discord::SetInstanceCallback);
-
-        // Commit / lifecycle
-        attach("setPresence", &Discord::SetPresenceCallback);
-        attach("update", &Discord::UpdateCallback);
-        attach("clear", &Discord::ClearCallback);
-        attach("reset", &Discord::ResetCallback);
-
-        // Query
-        attach("getUserId", &Discord::GetUserIdCallback);
-        attach("getUsername", &Discord::GetUsernameCallback);
-        attach("isAvailable", &Discord::IsAvailableCallback);
-
-        target->Set(context, v8pp::to_v8(isolate, "Discord"), discordObj).Check();
-
-        auto &metadata   = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Discord", "Client-only Discord rich-presence composer exposed as the global Discord; setters stage values until update or setPresence publishes them.");
-        const auto field = [&](const char *name, const char *type, const char *parameter, const char *description) {
-            metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>(name, v8pp::metadata::docs("void", {v8pp::metadata::param(parameter, type, false, description)}, std::string("Stages ") + description)));
-        };
-        field("setType", "\"playing\" | \"streaming\" | \"listening\" | \"watching\" | number", "type", "the Discord activity verb or numeric enum value.");
-        field("setName", "string", "name", "the activity name.");
-        field("setDetails", "string", "details", "the top presence line.");
-        field("setState", "string", "state", "the bottom presence line.");
-        field("setStartTimestamp", "number", "seconds", "the elapsed-time Unix timestamp in seconds; zero clears it.");
-        field("setEndTimestamp", "number", "seconds", "the countdown Unix timestamp in seconds; zero clears it.");
-        field("setSupportedPlatforms", "number", "flags", "the supported-platform bitmask: Desktop 1, Android 2, and iOS 4.");
-        field("setLargeImage", "string", "assetKey", "the large image asset key.");
-        field("setLargeText", "string", "text", "the large image tooltip.");
-        field("setSmallImage", "string", "assetKey", "the small image asset key.");
-        field("setSmallText", "string", "text", "the small image tooltip.");
-        field("setPartyId", "string", "id", "the party grouping identifier.");
-        field("setPartyPrivacy", "\"private\" | \"public\" | number", "privacy", "the party join-privacy name or numeric enum value.");
-        field("setMatchSecret", "string", "secret", "the opaque match secret.");
-        field("setJoinSecret", "string", "secret", "the opaque join secret that enables invitations.");
-        field("setSpectateSecret", "string", "secret", "the opaque spectate secret.");
-        field("setInstance", "boolean", "instance", "whether the activity represents an instanced session.");
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setAssets",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("assets", "{ largeImage?: string; largeText?: string; smallImage?: string; smallText?: string }", false, "Asset keys and tooltips to merge into the staged activity.")},
-                "Stages multiple Discord image fields at once.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPartySize",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("current", "number", false, "Current party member count."), v8pp::metadata::param("max", "number", false, "Maximum party capacity.")}, "Stages the party's current and maximum size.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setParty",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("party", "{ id?: string; size?: [number, number]; privacy?: \"private\" | \"public\" | number }", false, "Party fields to merge into the staged activity.")}, "Stages multiple Discord party fields at once.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setSecrets",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("secrets", "{ match?: string; join?: string; spectate?: string }", false, "Opaque secrets to merge into the staged activity.")}, "Stages multiple Discord activity secrets at once.")));
-        metadata.record(
-            v8pp::metadata::function_of<v8::FunctionCallback>("setPresence", v8pp::metadata::docs("boolean", {v8pp::metadata::param("options", "Record<string, unknown>", false, "Batch of supported activity, timestamp, asset, party, secret, instance, and platform fields.")},
-                                                                                 "Merges a complete option batch into the staged activity and publishes it immediately.", "True when the update was dispatched; false when Discord is unavailable.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("update", v8pp::metadata::docs("boolean", {}, "Publishes the currently staged activity as one rate-limited Discord update.", "True when dispatched; false when Discord is unavailable.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("clear", v8pp::metadata::docs("boolean", {}, "Clears what scripts published and resets staged state.", "True when dispatched; false when Discord is unavailable.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("reset", v8pp::metadata::docs("void", {}, "Resets staged activity fields without publishing a Discord update.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getUserId", v8pp::metadata::docs("string", {}, "Returns the signed-in Discord user's snowflake.", "User ID string, or an empty string until available.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getUsername", v8pp::metadata::docs("string", {}, "Returns the signed-in Discord user's username.", "Username string, or an empty string until available.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isAvailable", v8pp::metadata::docs("boolean", {}, "Checks whether Discord is connected and can publish presence.", "True when rich presence is initialized.")));
+    void Discord::RegisterLua(Framework::Scripting::LuaRuntime &runtime) {
+        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
     }
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins
