@@ -16,6 +16,8 @@
 #include <logging/logger.h>
 #include <utils/profiler.h>
 
+#include <utility>
+
 namespace Framework::Scripting {
     LuaClientHost::LuaClientHost(LuaEngineOptions options): _engine(options) {
         // A value type or a handle crosses between a state and the isolate, and between two states, as itself. The
@@ -27,7 +29,14 @@ namespace Framework::Scripting {
         // The manager is asked for when a state is created, which only the manager of that moment does.
         _engine.SetRuntimeSetupCallback([this](LuaRuntime &runtime) {
             Builtins::RegisterSharedLua(runtime, _engine.GetResourceManager(), _modVersion);
+            for (const auto &setup : _setups) {
+                setup(runtime);
+            }
         });
+    }
+
+    void LuaClientHost::AddRuntimeSetup(std::function<void(LuaRuntime &)> setup) {
+        _setups.push_back(std::move(setup));
     }
 
     ScriptingError LuaClientHost::Init(ResourceManager &manager, const std::string &modVersion) {

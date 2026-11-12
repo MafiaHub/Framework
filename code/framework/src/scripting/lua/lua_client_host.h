@@ -12,9 +12,12 @@
 
 #include "../errors.h"
 
+#include <functional>
 #include <string>
+#include <vector>
 
 namespace Framework::Scripting {
+    class LuaRuntime;
     class ResourceManager;
 
     // The Lua half of a client's scripting: a Lua engine with the limits of a client, the shared builtins in every
@@ -30,6 +33,10 @@ namespace Framework::Scripting {
         // Brings the engine up and gives it to the manager, which then runs the `.lua` scripts of its resources in
         // it. Call it again after Shutdown, with the same manager or the next one.
         [[nodiscard]] ScriptingError Init(ResourceManager &manager, const std::string &modVersion);
+
+        // Has `setup` run in every state created from now on, after the shared builtins are in it: how the
+        // client scripting module adds the builtins only a client has. Call it before a resource starts.
+        void AddRuntimeSetup(std::function<void(LuaRuntime &)> setup);
 
         // Fires the timers that are due and wakes the coroutines whose sleep is over, then hands the manager the
         // errors nobody waited for, outside any script. Call it from the game loop. Does nothing between Shutdown
@@ -52,5 +59,6 @@ namespace Framework::Scripting {
       private:
         LuaEngine _engine;
         std::string _modVersion;
+        std::vector<std::function<void(LuaRuntime &)>> _setups;
     };
 } // namespace Framework::Scripting
