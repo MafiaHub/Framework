@@ -29,7 +29,10 @@ namespace Framework::Scripting::Builtins {
      * - console.error() -> error level
      * - console.debug() -> debug level
      *
-     * JavaScript writes to the Framework logger. Lua writes where its print() does (LuaRuntime::WriteOutput).
+     * JavaScript writes to the Framework logger. Lua writes where its print() does (LuaRuntime::WriteOutput), so
+     * a line of it is cut at the bound of a printed one, and the arguments past that bound are not formatted.
+     *
+     * console.info is console.log itself in JavaScript, as it always was. In Lua they are two functions.
      */
     class Console final {
       public:
@@ -40,8 +43,10 @@ namespace Framework::Scripting::Builtins {
          * Register the console override in a context.
          * @param isolate V8 isolate
          * @param context Target context
-         * @param resourceManager Resource manager for getting current resource context; null leaves the isolate with
-         *        the manager it answers with already (Bind::SetCallResourceManager)
+         * @param resourceManager Resource manager for getting current resource context. The console asks the
+         *        manager its isolate answers with (Bind::SetCallResourceManager), which this sets. Null sets none:
+         *        the console then names its resource through the manager the isolate was given before, or the
+         *        scripting module's, where a console registered without a manager used to write without a name.
          */
         static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *resourceManager);
 

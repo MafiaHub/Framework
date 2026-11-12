@@ -10,19 +10,25 @@
 #include "../lua/lua_runtime.h"
 #include "../scripting_catalog.h"
 
-#include <memory>
+#include <v8pp/convert.hpp>
+
 #include <sstream>
 
 namespace Framework::Scripting::Builtins {
 
     namespace {
         // What every function of the console does: the arguments, formatted and joined with spaces, as one line of
-        // the output of the runtime.
+        // the output of the runtime. Where a line has a bound, what lies past it is cut, so the arguments that
+        // would only add to that are not formatted: a script may pass more of them than the host has memory for.
         void Write(Bind::Call &call, OutputLevel level) {
+            const size_t limit = call.OutputLineLimit();
             std::string message;
             for (size_t i = 0; i < call.ArgCount(); ++i) {
                 if (i > 0) {
                     message += ' ';
+                }
+                if (message.size() > limit) {
+                    break;
                 }
                 message += Console::FormatValue(call.Arg(i));
             }
@@ -55,7 +61,13 @@ namespace Framework::Scripting::Builtins {
         if (resourceManager != nullptr) {
             Bind::SetCallResourceManager(isolate, resourceManager);
         }
-        Definition().MaterialiseV8(isolate, context, context->Global(), GetScriptingCatalog(isolate), ScriptingSide(isolate));
+        v8::Local<v8::Object> console = Definition().MaterialiseV8(isolate, context, context->Global(), GetScriptingCatalog(isolate), ScriptingSide(isolate));
+
+        // To JavaScript info is log itself under a second name, as it always was (console.log === console.info).
+        v8::Local<v8::Value> log;
+        if (console->Get(context, v8::String::NewFromUtf8Literal(isolate, "log")).ToLocal(&log)) {
+            console->Set(context, v8::String::NewFromUtf8Literal(isolate, "info"), log).Check();
+        }
     }
 
     void Console::RegisterLua(LuaRuntime &runtime) {
@@ -102,16 +114,25 @@ namespace Framework::Scripting::Builtins {
     }
 
     std::string Console::FormatValue(v8::Isolate *isolate, v8::Local<v8::Value> value) {
-        // The formatter reads a value of a call, so the value is handed to a function made for it.
+        // The formatter reads a value of a call, so the value is handed to a function. A context has one, kept on
+        // its global object under a name no script can read, and it goes with the context.
         v8::HandleScope scope(isolate);
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        const auto formatted           = std::make_shared<std::string>();
-        v8::Local<v8::Function> format = Bind::MakeV8Function(isolate, context, [formatted](Bind::Call &call) {
-            *formatted = FormatValue(call.Arg(0));
-        });
+        v8::Local<v8::Object> global   = context->Global();
+        v8::Local<v8::Private> key     = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.console.format"));
         v8::TryCatch tryCatch(isolate);
-        (void)format->Call(context, v8::Undefined(isolate), 1, &value);
-        return *formatted;
+        v8::Local<v8::Value> format;
+        if (!global->GetPrivate(context, key).ToLocal(&format) || !format->IsFunction()) {
+            format = Bind::MakeV8Function(isolate, context, [](Bind::Call &call) {
+                call.Return(call.String(FormatValue(call.Arg(0))));
+            });
+            global->SetPrivate(context, key, format).Check();
+        }
+        v8::Local<v8::Value> formatted;
+        if (!format.As<v8::Function>()->Call(context, v8::Undefined(isolate), 1, &value).ToLocal(&formatted)) {
+            return {};
+        }
+        return v8pp::from_v8<std::string>(isolate, formatted);
     }
 
 } // namespace Framework::Scripting::Builtins

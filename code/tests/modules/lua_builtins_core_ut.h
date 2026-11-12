@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "alloc_counter.h"
 #include "lua_resources_ut.h"
 #include "lua_runtime_ut.h"
 #include "node_test_helpers.h"
@@ -23,6 +24,7 @@
 #include "scripting/scripting_catalog.h"
 #include "utils/version.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -64,7 +66,8 @@ namespace LuaBuiltinsCoreTest {
     struct LuaSide final {
         LuaEngine engine;
 
-        explicit LuaSide(Bind::Side side = Bind::Side::Server, const std::string &modVersion = kModVersion): engine(Options(side)) {
+        // `memoryLimitBytes` is the cap of the state, or 0 for the one the engine gives by default.
+        explicit LuaSide(Bind::Side side = Bind::Side::Server, const std::string &modVersion = kModVersion, size_t memoryLimitBytes = 0): engine(Options(side, memoryLimitBytes)) {
             engine.SetRuntimeSetupCallback([side, modVersion](LuaRuntime &runtime) {
                 Builtins::RegisterValueTypesLua(runtime.State(), side);
                 Console::RegisterLua(runtime);
@@ -73,9 +76,12 @@ namespace LuaBuiltinsCoreTest {
             ready = engine.Init() == ScriptingError::SCRIPTING_NONE && engine.CreateResourceRuntime(kResource);
         }
 
-        static LuaEngineOptions Options(Bind::Side side) {
+        static LuaEngineOptions Options(Bind::Side side, size_t memoryLimitBytes = 0) {
             LuaEngineOptions options;
             options.side = side;
+            if (memoryLimitBytes != 0) {
+                options.memoryLimitBytes = memoryLimitBytes;
+            }
             return options;
         }
 
@@ -198,6 +204,10 @@ MODULE(lua_builtins_core, {
         }
         EQUALS(types, "function/function function/function function/function function/function function/function ");
 
+        // In JavaScript info is log itself under a second name, as it always was.
+        EQUALS(js.Eval("console.log === console.info"), "true");
+        EQUALS(js.Eval("console.log === console.warn || console.warn === console.error || console.error === console.debug || console.debug === console.log"), "false");
+
         // A script reads the console and cannot replace a function of it.
         EQUALS(lua.Eval("type(console.trace)"), "nil");
         EQUALS(lua.Eval("(function() console.log = print end)()"), "<error> eval:1: attempt to set 'log' on console");
@@ -273,6 +283,9 @@ MODULE(lua_builtins_core, {
         // function has no JSON in Lua, where JavaScript leaves the function out.
         EQUALS(lua.Printed("console.log({})"), "[]");
         EQUALS(lua.Printed("console.log({ callback = print })"), "[Object]");
+        // A function of a namespace is called with a dot. Called with a colon it is given the console as its
+        // first value, which is an empty table to it.
+        EQUALS(lua.Printed("console:log('x')"), "[] x");
 
         LogCapture rest(spdlog::level::debug);
         js.Eval("console.log(null, undefined, [], {}, { callback: () => {} }, 10n, Symbol('s')); 0");
@@ -298,6 +311,73 @@ MODULE(lua_builtins_core, {
         EQUALS(LuaRuntimeTest::CountStartingWith(lines, "info [core] more"), 150u);
         EQUALS(LuaRuntimeTest::CountStartingWith(lines, "error [core] less"), static_cast<size_t>(LuaRuntime::kMaxLinesPerSecond) - 152u);
         EQUALS(LuaRuntimeTest::CountStartingWith(lines, "warning [core] output suppressed"), 1u);
+    });
+
+    IT("formats no more of its arguments than a line takes", {
+        // A state of two megabytes, and lines whose arguments come to far more than that when they are all spelled:
+        // two thousand times a string of 64 KB, and as many times a table whose JSON is 20 KB.
+        LuaSide lua(Bind::Side::Server, kModVersion, 2u << 20);
+        EQUALS(lua.ready, true);
+        EQUALS(lua.Run("big = ('x'):rep(65536)\nstrings = setmetatable({}, { __index = function() return big end })\nheavy = {}\nfor i = 1, 200 do heavy['key' .. i] = ('x'):rep(100) end\ntables = setmetatable({}, { __index = function() return heavy end })"), "");
+
+        LuaRuntimeTest::Printed printed(lua.Runtime());
+        // What the host allocates while the chunk runs. The state has its own allocator, which is not counted.
+        const auto allocations = [&lua](const std::string &source) {
+            FrameworkTests::AllocationScope scope;
+            const std::string error = lua.Run(source);
+            return error.empty() ? scope.Count() : UINT64_MAX;
+        };
+        const uint64_t oneString   = allocations("console.log(strings[1])");
+        const uint64_t manyStrings = allocations("console.log(table.unpack(strings, 1, 2000))");
+        const uint64_t oneTable    = allocations("console.log(tables[1])");
+        const uint64_t manyTables  = allocations("console.log(table.unpack(tables, 1, 2000))");
+        NEQUALS(oneString, UINT64_MAX);
+        NEQUALS(oneTable, UINT64_MAX);
+        LESSER(manyStrings, oneString + 50);
+        LESSER(manyTables, oneTable + 50);
+
+        // Each is the line a print of the same values is cut to.
+        const std::string cut = std::string(LuaRuntime::kMaxLineBytes, 'x') + std::string(LuaRuntimeTest::kTruncated);
+        EQUALS(printed.lines->size(), 4u);
+        EQUALS((*printed.lines)[0], cut);
+        EQUALS((*printed.lines)[1], cut);
+        EQUALS((*printed.lines)[2].starts_with("{\"key1\":\"xxxx"), true);
+        EQUALS((*printed.lines)[3], (*printed.lines)[2]);
+
+        // A line that is full to the byte is whole, and one more value makes it a cut one.
+        EQUALS(lua.Run("console.log(('y'):rep(" + std::to_string(LuaRuntime::kMaxLineBytes) + "))\nconsole.log(('y'):rep(" + std::to_string(LuaRuntime::kMaxLineBytes) + "), '')\nconsole.log(('y'):rep(" + std::to_string(LuaRuntime::kMaxLineBytes - 1) + "), 'z', 'z')"), "");
+        EQUALS((*printed.lines)[4], std::string(LuaRuntime::kMaxLineBytes, 'y'));
+        EQUALS((*printed.lines)[5], std::string(LuaRuntime::kMaxLineBytes, 'y') + std::string(LuaRuntimeTest::kTruncated));
+        EQUALS((*printed.lines)[6], std::string(LuaRuntime::kMaxLineBytes - 1, 'y') + " " + std::string(LuaRuntimeTest::kTruncated));
+
+        // JavaScript has no bound, and gets every value.
+        LogCapture log(spdlog::level::debug);
+        JsSide js;
+        js.Eval("console.log('j'.repeat(3000), 'k'.repeat(3000), 'end'); 0");
+        EQUALS(Written(log), "info " + std::string(3000, 'j') + " " + std::string(3000, 'k') + " end");
+    });
+
+    IT("keeps one function to format a value of JavaScript with, in a context", {
+        JsRuntime js;
+        std::string number;
+        std::string text;
+        bool made = false;
+        bool kept = false;
+        js.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            // Where Console::FormatValue keeps it: on the global object, under a name no script can read.
+            const v8::Local<v8::Private> key = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.console.format"));
+            number                           = Console::FormatValue(isolate, v8::Number::New(isolate, 42).As<v8::Value>());
+            v8::Local<v8::Value> first;
+            made = context->Global()->GetPrivate(context, key).ToLocal(&first) && first->IsFunction();
+            text = Console::FormatValue(isolate, v8::String::NewFromUtf8Literal(isolate, "text").As<v8::Value>());
+            v8::Local<v8::Value> second;
+            kept = made && context->Global()->GetPrivate(context, key).ToLocal(&second) && second->StrictEquals(first);
+        });
+        EQUALS(number, "42");
+        EQUALS(text, "text");
+        EQUALS(made, true);
+        EQUALS(kept, true);
+        EQUALS(js.Eval("Object.getOwnPropertyNames(globalThis).concat(Object.getOwnPropertySymbols(globalThis).map(String)).filter((name) => name.includes('format')).length"), "0");
     });
 
     IT("names the resource its manager tells, and none without one", {

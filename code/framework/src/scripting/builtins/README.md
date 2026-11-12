@@ -136,7 +136,13 @@ what it needs, and nothing else diverges:
     version) is a `RuntimeConstant` of the definition, and `Register` and
     `RegisterLua` hand its value to the materialisation.
   - What a script writes goes through `Call::WriteOutput`: the scripting
-    logger in JavaScript, the path of `print()` in Lua.
+    logger in JavaScript, the path of `print()` in Lua. A line built from
+    many values stops at `Call::OutputLineLimit()`, as the console does: what
+    a Lua script passes is not bounded by the memory cap of its state once
+    the host copies it.
+  - What only one language's script can observe is done in that language's
+    registration, after the definition is materialised: `console.info` is the
+    function under `console.log` in JavaScript, as it was before the port.
 
 `RegisterValueTypes` registers **only** the pure value types — its name says so.
 It is the counterpart to `UnregisterAll`, which additionally drops the handle
