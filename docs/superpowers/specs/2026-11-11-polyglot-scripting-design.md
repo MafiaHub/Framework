@@ -400,11 +400,20 @@ for a wrong `this`, as the hand-written builtins did.
   `setTimeout(fn, 0)`) is due at the tick that armed it, not after it: it goes on at the next `Update()`,
   so a loop around `sleep(0)` goes round once for each tick of the server. What the engine queued as
   errors goes to `ResourceManager::HandleResourceRuntimeError` with Node's.
+- The client scripting module owns a Lua engine too, through `LuaClientHost` (`scripting/lua/lua_client_host.h`),
+  which is shared code so that it builds and is tested on every host: 128 MB a state, 5 000 ms an entry, the
+  bindings both sides have (`Builtins::RegisterSharedLua`) with the members of the client side, and the transfer
+  types, which nothing else registers on a client. It ticks the engine once in every `Update()` and hands what
+  it queued as errors to the manager. `Reset()` and `Shutdown()` destroy every state after the resources were
+  stopped; between a `Reset()` and the next `Init()` a `.lua` script fails its start with `Lua scripting is not
+  available`.
 
 ## 3. Resources
 
 - The manifest stays `package.json` with `mafiahub.clientScripts`, `serverScripts`, `sharedScripts`,
   `files`. Lua modules reached by `require` on the client are listed in `files` (shipped, not executed).
+  A resource that declares no `files` gets the scan a JavaScript one gets: every `.lua` file under the
+  directories of its client and shared scripts ships, but for those named in `serverScripts`.
 - Stop, restart, `ensure` and the development file watcher treat a Lua state as they treat a JavaScript
   runtime: handlers, timers, exports and subscriptions go with it.
 - Exports declared in the manifest may be registered from either language; a second registration of the
