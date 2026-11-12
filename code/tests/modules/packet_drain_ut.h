@@ -90,7 +90,7 @@ namespace PacketThreadTest {
     };
 } // namespace PacketThreadTest
 
-MODULE(packet_thread, {
+MODULE(packet_drain, {
     using namespace PacketThreadTest;
     using namespace std::chrono_literals;
 
@@ -261,7 +261,7 @@ MODULE(packet_thread, {
             outOfOrder += after[i].outOfOrder;
             steps += after[i].lastStep;
         }
-        fprintf(stderr, "packet_thread: %d clients, 2 workers, %d ticks: counters advanced by at least %u, poses by %.1f; %u steps handled, %u out of order; stopped in %.0f ms\n", kPlayers, ticks.load(), leastAdvance, leastMoved, steps, outOfOrder,
+        fprintf(stderr, "packet_drain: %d clients, 2 workers, %d ticks: counters advanced by at least %u, poses by %.1f; %u steps handled, %u out of order; stopped in %.0f ms\n", kPlayers, ticks.load(), leastAdvance, leastMoved, steps, outOfOrder,
             stopMs);
         GREATER(leastAdvance, 5u);
         GREATER(leastMoved, 2.0f);
