@@ -9,6 +9,7 @@
 #include "builtins.h"
 
 #include "entity.h"
+#include "events.h"
 #include "player.h"
 #include "state_bag.h"
 #include "text_label.h"
@@ -47,6 +48,9 @@ namespace Framework::Scripting::Builtins {
         // The functions the host kept of this isolate, and the results it still owes it: for an isolate no
         // disposing listener speaks for, and for what a listener that ran script left behind.
         Bind::V8RuntimeDisposing(isolate);
+
+        // The handlers and the waiting emissions of this isolate, whose handles go with it.
+        Events::UnregisterIsolate(isolate);
 
         // The address of the isolate may be the next one's, which is not to answer with this one's manager.
         Bind::SetCallResourceManager(isolate, nullptr);

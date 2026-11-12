@@ -77,6 +77,11 @@ namespace Framework::Scripting {
         //
         // A Lua handler settles its part of the promise from a tick of the Lua engine, when its coroutine ends: that
         // engine is ticked here too, so a handler that sleeps holds the transition up as one that awaits does.
+        //
+        // A Lua runtime that is executing is not ticked (LuaEngine::Tick): were a resource started or stopped from
+        // inside a Lua script, a handler of that same runtime that waits could not go on, and the wait would run
+        // to its timeout. No function the framework gives Lua starts or stops a resource; a host that adds one is
+        // to defer the transition to its next tick, outside the script.
         LifecyclePromiseResult AwaitLifecyclePromise(Engine *engine, LuaEngine *luaEngine, Builtins::Events &events, v8::Global<v8::Promise> &promise, int timeoutMs) {
             if (!engine || !engine->IsInitialized() || promise.IsEmpty()) {
                 return {};
@@ -146,7 +151,7 @@ namespace Framework::Scripting {
             args.push_back(std::move(name));
 
             const auto emission = std::make_shared<LifecycleEmission>();
-            events.EmitReserved(eventName, std::move(args), [emission](std::vector<std::string> &&errors) {
+            const auto pending  = events.EmitReserved(eventName, std::move(args), [emission](std::vector<std::string> &&errors) {
                 emission->settled = true;
                 emission->errors  = std::move(errors);
             });
@@ -154,6 +159,7 @@ namespace Framework::Scripting {
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(timeoutMs, 1));
             while (!emission->settled) {
                 if (std::chrono::steady_clock::now() >= deadline) {
+                    Builtins::Events::CancelPendingEmission(pending);
                     return {LifecyclePromiseStatus::TimedOut, {}};
                 }
                 luaEngine->Tick();

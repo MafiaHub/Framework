@@ -92,6 +92,12 @@ namespace Framework::Scripting::Builtins {
             return callable.GetLanguage() == Language::JavaScript ? static_cast<const Bind::V8Callable &>(callable).Isolate() : nullptr;
         }
 
+        // Why an emission could not copy one of its arguments: `index` counts the event arguments from zero, and
+        // the text from one.
+        std::string ArgumentError(std::string_view api, size_t index, const std::string &why) {
+            return std::string(api) + ": argument " + std::to_string(index + 1) + ": " + why;
+        }
+
         constexpr const char *kHandlersFailed      = "One or more event handlers failed";
         constexpr const char *kLocalHandlersFailed = "One or more local event handlers failed";
     } // namespace
@@ -101,16 +107,18 @@ namespace Framework::Scripting::Builtins {
         std::vector<TransferredValue> values;
         std::string error; // why they cannot cross; empty when they can
 
-        // Copies `args` out of the emitter's isolate the first time it is asked. False when they cannot cross.
-        bool Ensure(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::vector<v8::Local<v8::Value>> &args) {
+        // Copies `args` out of the emitter's isolate the first time it is asked. False when they cannot cross,
+        // which is logged that first time, once for the emission, under the resource of the handler that asked.
+        bool Ensure(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::vector<v8::Local<v8::Value>> &args, std::string_view api, const std::string &resourceName, const std::string &eventName) {
             if (!copied) {
                 copied = true;
                 values.reserve(args.size());
                 for (size_t i = 0; i < args.size(); ++i) {
                     auto value = ValueTransfer::Copy(isolate, context, args[i], Bind::V8CallableTransfer());
                     if (!value) {
-                        error = "Argument " + std::to_string(i) + ": " + value.GetError();
+                        error = ArgumentError(api, i, value.GetError());
                         values.clear();
+                        LogHandlerError(resourceName, eventName, error);
                         break;
                     }
                     values.push_back(std::move(value).GetValue());
@@ -177,7 +185,7 @@ namespace Framework::Scripting::Builtins {
             entry.once         = once;
             if (call.GetLanguage() == Language::JavaScript) {
                 entry.isolate = v8::Isolate::GetCurrent();
-                entry.callback.Reset(entry.isolate, Bind::V8ValueOf(call, call.Arg(1)).As<v8::Function>());
+                entry.callback = std::make_shared<v8::Global<v8::Function>>(entry.isolate, Bind::V8ValueOf(call, call.Arg(1)).As<v8::Function>());
             }
             return entry;
         }
@@ -230,9 +238,13 @@ namespace Framework::Scripting::Builtins {
                 binding.events->HandlerTable(scope)[eventName].push_back(std::move(entry));
             }
 
-            // The unsubscribe function removes what `off` would, given the same handler.
-            call.Return(call.NewFunction([self = binding.events->_self, scope, eventName, resourceName, callable](Bind::Call &) {
-                if (Events *events = *self) {
+            // The unsubscribe function removes what `off` would, given the same handler. It does not keep the handler:
+            // a handler that holds its own unsubscribe function would otherwise hold itself, through a native
+            // function no collector sees into, and never be let go of once it is removed.
+            call.Return(call.NewFunction([self = binding.events->_self, scope, eventName, resourceName, handler = std::weak_ptr<Bind::ScriptCallable>(callable)](Bind::Call &) {
+                Events *events                                       = *self;
+                const std::shared_ptr<Bind::ScriptCallable> callable = handler.lock();
+                if (events != nullptr && callable != nullptr) {
                     Remove(*events, scope, eventName, resourceName, *callable);
                 }
             }));
@@ -298,10 +310,13 @@ namespace Framework::Scripting::Builtins {
             Remove(*binding.events, scope, call.Arg(0).AsString(), resourceName, *callable);
         }
 
-        // Emits to `handlers` with the arguments of the call from `first` on. JavaScript gets the Promise of the
-        // emission. Lua waits for it: the call returns nothing once every handler has settled, or raises
-        // `failureMessage` and what the handlers failed with.
-        static void EmitTo(Bind::Call &call, Events &events, std::vector<CollectedHandler> handlers, const std::string &eventName, size_t first, const char *api, const char *failureMessage) {
+        // Picks the handlers of one emission, which takes the once handlers out of their table.
+        using Collector = fu2::function_view<std::vector<CollectedHandler>()>;
+
+        // Emits to what `collect` picks, with the arguments of the call from `first` on. JavaScript gets the
+        // Promise of the emission. Lua waits for it: the call returns nothing once every handler has settled, or
+        // raises `failureMessage` and what the handlers failed with.
+        static void EmitTo(Bind::Call &call, Events &events, Collector collect, const std::string &eventName, size_t first, const char *api, const char *failureMessage) {
             if (call.GetLanguage() == Language::JavaScript) {
                 v8::Isolate *isolate           = v8::Isolate::GetCurrent();
                 v8::Local<v8::Context> context = isolate->GetCurrentContext();
@@ -309,24 +324,26 @@ namespace Framework::Scripting::Builtins {
                 for (size_t i = first; i < call.ArgCount(); ++i) {
                     args.push_back(Bind::V8ValueOf(call, call.Arg(i)));
                 }
-                call.Return(Bind::V8ValueIn(call, events.EmitToHandlers(isolate, context, handlers, args, eventName, failureMessage)));
+                std::vector<CollectedHandler> handlers = collect();
+                call.Return(Bind::V8ValueIn(call, events.EmitToHandlers(isolate, context, handlers, args, eventName, failureMessage, api)));
                 return;
             }
 
-            // Copied once, whoever listens: what cannot cross is the emitter's mistake, heard of or not.
+            // Copied once, whoever listens, and before the handlers are picked: what cannot cross is the emitter's
+            // mistake, and an emit that fails on it has called nobody and used up no once handler.
             std::vector<TransferredValue> args;
             args.reserve(call.ArgCount() - first);
             for (size_t i = first; i < call.ArgCount(); ++i) {
                 auto copied = call.Arg(i).ToTransfer();
                 if (!copied) {
-                    call.ThrowTypeError(std::string(api) + ": argument " + std::to_string(i - first + 1) + ": " + copied.GetError());
+                    call.ThrowTypeError(ArgumentError(api, i - first, copied.GetError()));
                     return;
                 }
                 args.push_back(std::move(copied).GetValue());
             }
 
             Bind::Deferred deferred = call.Defer();
-            EmitCopied(std::move(handlers), args, eventName, [deferred, failureMessage](std::vector<std::string> &&errors) mutable {
+            EmitCopied(collect(), args, eventName, [deferred, failureMessage](std::vector<std::string> &&errors) mutable {
                 if (errors.empty()) {
                     deferred.Resolve();
                 }
@@ -353,7 +370,12 @@ namespace Framework::Scripting::Builtins {
             }
 
             const std::string eventName = call.Arg(0).AsString();
-            EmitTo(call, *binding.events, binding.events->CollectHandlers(eventName, "", HandlerScope::Global), eventName, 1, "Events.emit", kHandlersFailed);
+            EmitTo(
+                call, *binding.events,
+                [&] {
+                    return binding.events->CollectHandlers(eventName, "", HandlerScope::Global);
+                },
+                eventName, 1, "Events.emit", kHandlersFailed);
         }
 
         static void EmitToResource(Bind::Call &call) {
@@ -375,7 +397,12 @@ namespace Framework::Scripting::Builtins {
             const std::string resourceName = call.Arg(0).AsString();
             const std::string eventName    = call.Arg(1).AsString();
             // An empty name targets nobody in particular, as it always did: every handler of the event.
-            EmitTo(call, *binding.events, binding.events->CollectHandlers(eventName, resourceName, HandlerScope::Global), eventName, 2, "Events.emitTo", kHandlersFailed);
+            EmitTo(
+                call, *binding.events,
+                [&] {
+                    return binding.events->CollectHandlers(eventName, resourceName, HandlerScope::Global);
+                },
+                eventName, 2, "Events.emitTo", kHandlersFailed);
         }
 
         static void OnLocal(Bind::Call &call) {
@@ -418,7 +445,12 @@ namespace Framework::Scripting::Builtins {
             }
 
             const std::string eventName = call.Arg(0).AsString();
-            EmitTo(call, *binding.events, binding.events->CollectLocalHandlers(resourceName, eventName), eventName, 1, "Events.emitLocal", kLocalHandlersFailed);
+            EmitTo(
+                call, *binding.events,
+                [&] {
+                    return binding.events->CollectLocalHandlers(resourceName, eventName);
+                },
+                eventName, 1, "Events.emitLocal", kLocalHandlersFailed);
         }
 
         static void ListenerCount(Bind::Call &call) {
@@ -586,13 +618,17 @@ namespace Framework::Scripting::Builtins {
     }
 
     v8::MaybeLocal<v8::Value> Events::InvokeHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, std::optional<std::vector<TransferredValue>> &copied, std::string_view eventName) {
+        // Its isolate went since it was picked, with a resource an earlier handler stopped: there is nothing to call.
+        if (handler.callback->IsEmpty()) {
+            return {};
+        }
         auto *monitor        = ResourceMonitor::Current();
         const double charged = monitor ? monitor->ChargedMs(handler.isolate, ResourceMonitor::Clock::now()) : 0.0;
         v8::MaybeLocal<v8::Value> result;
         if (handler.isolate == isolate) {
             ResourceMonitor::Scope scope(isolate);
             std::vector<v8::Local<v8::Value>> argv(args.begin(), args.end());
-            result = handler.callback.Get(isolate)->Call(context, context->Global(), static_cast<int>(argv.size()), argv.empty() ? nullptr : argv.data());
+            result = handler.callback->Get(isolate)->Call(context, context->Global(), static_cast<int>(argv.size()), argv.empty() ? nullptr : argv.data());
         }
         else {
             // The handler's resource runs in a runtime of its own: call it there with the arguments copied across. What
@@ -608,7 +644,7 @@ namespace Framework::Scripting::Builtins {
                     return {};
                 }
             }
-            result = references->Call(isolate, handler.isolate, handler.callback, *copied, FunctionReferences::Returned::Outcome);
+            result = references->Call(isolate, handler.isolate, *handler.callback, *copied, FunctionReferences::Returned::Outcome);
         }
         // Its own time only: copying the arguments was the emitter's, and resources it called into are theirs.
         if (monitor) {
@@ -617,9 +653,8 @@ namespace Framework::Scripting::Builtins {
         return result;
     }
 
-    v8::Local<v8::Value> Events::InvokeCallable(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, CallableArguments &copied, const std::string &eventName) {
-        if (!copied.Ensure(isolate, context, args)) {
-            LogHandlerError(handler.resourceName, eventName, copied.error);
+    v8::Local<v8::Value> Events::InvokeCallable(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, CallableArguments &copied, const std::string &eventName, std::string_view api) {
+        if (!copied.Ensure(isolate, context, args, api, handler.resourceName, eventName)) {
             v8::Local<v8::Promise::Resolver> errResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
             errResolver->Reject(context, v8::Exception::Error(v8pp::to_v8(isolate, copied.error))).Check();
             return errResolver->GetPromise();
@@ -646,7 +681,7 @@ namespace Framework::Scripting::Builtins {
         return promise;
     }
 
-    v8::Local<v8::Array> Events::InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName) {
+    v8::Local<v8::Array> Events::InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName, std::string_view api) {
         v8::Local<v8::Array> promises = v8::Array::New(isolate, static_cast<int>(handlers.size()));
         std::optional<std::vector<TransferredValue>> copied;
         CallableArguments copiedForCallables;
@@ -660,7 +695,7 @@ namespace Framework::Scripting::Builtins {
             // A Lua handler: through its callable, unless its runtime went since it was picked.
             if (handlers[i].isolate == nullptr) {
                 if (handlers[i].callable->IsAlive()) {
-                    promises->Set(context, static_cast<uint32_t>(i), InvokeCallable(isolate, context, handlers[i], args, copiedForCallables, eventName)).Check();
+                    promises->Set(context, static_cast<uint32_t>(i), InvokeCallable(isolate, context, handlers[i], args, copiedForCallables, eventName, api)).Check();
                 }
                 else {
                     promises->Set(context, static_cast<uint32_t>(i), v8::Undefined(isolate)).Check();
@@ -951,6 +986,8 @@ namespace Framework::Scripting::Builtins {
             it->second.erase(it->second.begin() + static_cast<std::ptrdiff_t>(*rit));
         }
 
+        TrackDispatch(handlersToCall);
+
         return handlersToCall;
     }
 
@@ -970,10 +1007,26 @@ namespace Framework::Scripting::Builtins {
         for (const auto &handler : evtIt->second) {
             handlersToCall.emplace_back(handler);
         }
+        TrackDispatch(handlersToCall);
         return handlersToCall;
     }
 
-    v8::Local<v8::Promise> Events::EmitToHandlers(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName, const std::string &aggregateErrorMessage) {
+    void Events::TrackDispatch(const std::vector<CollectedHandler> &handlers) {
+        for (const CollectedHandler &handler : handlers) {
+            if (handler.isolate == nullptr) {
+                continue;
+            }
+            auto &live = _dispatching[handler.isolate];
+            // The emissions that ended since.
+            std::erase_if(live, [](const std::weak_ptr<v8::Global<v8::Function>> &function) {
+                return function.expired();
+            });
+            live.push_back(handler.callback);
+        }
+    }
+
+    v8::Local<v8::Promise> Events::EmitToHandlers(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName, const std::string &aggregateErrorMessage,
+        std::string_view api) {
         v8::EscapableHandleScope handleScope(isolate);
 
         // Create Promise resolver
@@ -986,7 +1039,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         // Invoke handlers and collect results as promises
-        v8::Local<v8::Array> promises = InvokeHandlersToPromiseArray(isolate, context, handlers, args, eventName);
+        v8::Local<v8::Array> promises = InvokeHandlersToPromiseArray(isolate, context, handlers, args, eventName, api);
 
         // Aggregate results using Promise.allSettled
         AggregateWithAllSettled(isolate, context, promises, resolver, aggregateErrorMessage);
@@ -994,43 +1047,44 @@ namespace Framework::Scripting::Builtins {
         return handleScope.Escape(promise);
     }
 
-    v8::Local<v8::Promise> Events::EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource, HandlerScope scope) {
+    v8::Local<v8::Promise> Events::EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource, HandlerScope scope, std::string_view api) {
         auto handlersToCall = CollectHandlers(eventName, targetResource, scope);
-        return EmitToHandlers(isolate, context, handlersToCall, args, eventName, kHandlersFailed);
+        return EmitToHandlers(isolate, context, handlersToCall, args, eventName, kHandlersFailed, api);
     }
 
-    void Events::EmitCopied(std::vector<CollectedHandler> handlers, const std::vector<TransferredValue> &args, const std::string &eventName, EmissionDone done) {
-        // What the handlers of one emission share: how many have not settled, and what those that failed threw.
-        struct Emission final {
-            size_t pending = 0;
-            std::vector<std::optional<std::string>> failures; // by handler
-            EmissionDone done;
+    // What the handlers of one emission with copied arguments share: how many have not settled, and what those
+    // that failed threw.
+    struct Events::CopiedEmission final {
+        size_t pending = 0;
+        std::vector<std::optional<std::string>> failures; // by handler
+        EmissionDone done;                                // empty once told, or once nobody waits any more
 
-            void Settle(size_t index, std::optional<std::string> failure) {
-                failures[index] = std::move(failure);
-                if (--pending > 0) {
-                    return;
-                }
-                std::vector<std::string> errors;
-                for (auto &entry : failures) {
-                    if (entry) {
-                        errors.push_back(std::move(*entry));
-                    }
-                }
-                if (EmissionDone told = std::move(done)) {
-                    told(std::move(errors));
+        void Settle(size_t index, std::optional<std::string> failure) {
+            failures[index] = std::move(failure);
+            if (--pending > 0) {
+                return;
+            }
+            std::vector<std::string> errors;
+            for (auto &entry : failures) {
+                if (entry) {
+                    errors.push_back(std::move(*entry));
                 }
             }
-        };
+            if (EmissionDone told = std::move(done)) {
+                told(std::move(errors));
+            }
+        }
+    };
 
+    Events::EmissionToken Events::EmitCopied(std::vector<CollectedHandler> handlers, const std::vector<TransferredValue> &args, const std::string &eventName, EmissionDone done) {
         if (handlers.empty()) {
             if (done) {
                 done({});
             }
-            return;
+            return nullptr;
         }
 
-        const auto emission = std::make_shared<Emission>();
+        const auto emission = std::make_shared<CopiedEmission>();
         emission->pending   = handlers.size();
         emission->failures.resize(handlers.size());
         emission->done = std::move(done);
@@ -1067,14 +1121,22 @@ namespace Framework::Scripting::Builtins {
                 monitor->ReportOwnTime(isolate, "handler for", eventName, charged, ResourceMonitor::Clock::now());
             }
         }
+        return emission;
     }
 
-    void Events::EmitReserved(const std::string &eventName, std::vector<TransferredValue> args, EmissionDone done) {
-        EmitCopied(CollectHandlers(eventName, "", HandlerScope::Global), args, eventName, std::move(done));
+    Events::EmissionToken Events::EmitReserved(const std::string &eventName, std::vector<TransferredValue> args, EmissionDone done) {
+        return EmitCopied(CollectHandlers(eventName, "", HandlerScope::Global), args, eventName, std::move(done));
+    }
+
+    void Events::CancelPendingEmission(const EmissionToken &emission) {
+        if (emission != nullptr) {
+            // Dropped, not told: the handlers that are still at it settle into nothing.
+            emission->done = nullptr;
+        }
     }
 
     v8::Local<v8::Promise> Events::EmitReserved(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args) {
-        return EmitInternal(isolate, context, eventName, args, "", HandlerScope::Global);
+        return EmitInternal(isolate, context, eventName, args, "", HandlerScope::Global, "Events::EmitReserved");
     }
 
     bool Events::EmitReservedSync(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args) {
@@ -1097,8 +1159,7 @@ namespace Framework::Scripting::Builtins {
                 if (!handler.callable->IsAlive()) {
                     continue;
                 }
-                if (!copiedForCallables.Ensure(isolate, context, args)) {
-                    LogHandlerError(logContext, eventName, copiedForCallables.error);
+                if (!copiedForCallables.Ensure(isolate, context, args, "Events::EmitReservedSync", logContext, eventName)) {
                     continue;
                 }
                 struct Verdict final {
@@ -1147,11 +1208,11 @@ namespace Framework::Scripting::Builtins {
     }
 
     v8::Local<v8::Promise> Events::EmitReservedTo(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &resourceName) {
-        return EmitInternal(isolate, context, eventName, args, resourceName, HandlerScope::Global);
+        return EmitInternal(isolate, context, eventName, args, resourceName, HandlerScope::Global, "Events::EmitReservedTo");
     }
 
     v8::Local<v8::Promise> Events::EmitClient(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args) {
-        return EmitInternal(isolate, context, eventName, args, "", HandlerScope::Client);
+        return EmitInternal(isolate, context, eventName, args, "", HandlerScope::Client, "Events::EmitClient");
     }
 
     void Events::CleanupResource(std::string_view resourceName) {
@@ -1173,6 +1234,20 @@ namespace Framework::Scripting::Builtins {
         }
     }
 
+    void Events::UnregisterIsolate(v8::Isolate *isolate) {
+        Events *events = nullptr;
+        {
+            std::scoped_lock lock(BindingsMutex());
+            const auto bound = Bindings().find(isolate);
+            if (bound != Bindings().end()) {
+                events = bound->second.events;
+            }
+        }
+        if (events != nullptr) {
+            events->ForgetIsolate(isolate);
+        }
+    }
+
     void Events::ForgetIsolate(v8::Isolate *isolate) {
         {
             // The address may be the next isolate's.
@@ -1184,19 +1259,34 @@ namespace Framework::Scripting::Builtins {
         }
         {
             std::scoped_lock lock(_handlersMutex);
+            // Emptied as they go: an emission in progress may hold the function too.
+            const auto ofIsolate = [isolate](const EventHandler &h) {
+                if (h.isolate != isolate) {
+                    return false;
+                }
+                h.callback->Reset();
+                return true;
+            };
             for (auto *table : {&_globalHandlers, &_clientHandlers}) {
                 for (auto &[eventName, handlers] : *table) {
-                    std::erase_if(handlers, [&](const EventHandler &h) {
-                        return h.isolate == isolate;
-                    });
+                    std::erase_if(handlers, ofIsolate);
                 }
             }
             for (auto &[resourceName, eventMap] : _localHandlers) {
                 for (auto &[eventName, handlers] : eventMap) {
-                    std::erase_if(handlers, [&](const EventHandler &h) {
-                        return h.isolate == isolate;
-                    });
+                    std::erase_if(handlers, ofIsolate);
                 }
+            }
+
+            // And those of handlers that left their table, by `off` or with their resource, while an emission
+            // that picked them is still at it.
+            if (const auto dispatching = _dispatching.find(isolate); dispatching != _dispatching.end()) {
+                for (const auto &held : dispatching->second) {
+                    if (const EventFunction function = held.lock()) {
+                        function->Reset();
+                    }
+                }
+                _dispatching.erase(dispatching);
             }
         }
 
@@ -1234,7 +1324,9 @@ namespace Framework::Scripting::Builtins {
         for (auto *table : {&_globalHandlers, &_clientHandlers}) {
             for (auto &[eventName, handlers] : *table) {
                 for (auto &handler : handlers) {
-                    handler.callback.Reset();
+                    if (handler.callback) {
+                        handler.callback->Reset();
+                    }
                 }
             }
             table->clear();
@@ -1243,7 +1335,9 @@ namespace Framework::Scripting::Builtins {
         for (auto &[resourceName, eventMap] : _localHandlers) {
             for (auto &[eventName, handlers] : eventMap) {
                 for (auto &handler : handlers) {
-                    handler.callback.Reset();
+                    if (handler.callback) {
+                        handler.callback->Reset();
+                    }
                 }
             }
         }
