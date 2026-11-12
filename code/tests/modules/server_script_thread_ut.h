@@ -284,15 +284,15 @@ MODULE(server_script_thread, {
         if (!up) {
             break;
         }
+        // Its content, not its existence: the file is there, empty, a moment before the script has written it.
         EQUALS(server.TickUntil([&] {
-            return std::filesystem::exists(server.Marker("busy"));
+            std::string heard;
+            std::ifstream(server.Marker("busy")) >> heard;
+            return heard == "3";
         }),
             true);
         fprintf(stderr, "server_script_thread: after a nested call, longest gap between ticks %.1f ms over %d ticks\n", server.longestGapMs, server.ticks);
         LESSER(server.longestGapMs, 300.0);
-        std::string heard;
-        std::ifstream(server.Marker("busy")) >> heard;
-        EQUALS(heard == "3", true);
         server.Stop();
     });
 
@@ -392,15 +392,15 @@ MODULE(server_script_thread, {
             server.EmitConsoleCommand("from-the-tick");
         });
         server.longestGapMs = 0.0;
+        // Its content, not its existence: the file is there, empty, a moment before the script has written it.
         EQUALS(server.TickUntil([&] {
-            return std::filesystem::exists(server.Marker("handled"));
+            std::string handled;
+            std::ifstream(server.Marker("handled")) >> handled;
+            return handled == "from-the-tick";
         }),
             true);
         EQUALS(postedElsewhere.load(), true);
         LESSER(server.longestGapMs, 300.0);
-        std::string handled;
-        std::ifstream(server.Marker("handled")) >> handled;
-        EQUALS(handled == "from-the-tick", true);
         server.Stop();
     });
 
@@ -422,12 +422,11 @@ MODULE(server_script_thread, {
         // The emit only hands the event over: the handler has not run, and the tick thread did not wait for the script.
         LESSER(emitMs, 100.0);
         EQUALS(server.TickUntil([&] {
-            return std::filesystem::exists(server.Marker("project"));
+            std::string text;
+            std::ifstream(server.Marker("project")) >> text;
+            return text == "from-a-project";
         }),
             true);
-        std::string text;
-        std::ifstream(server.Marker("project")) >> text;
-        EQUALS(text == "from-a-project", true);
         server.Stop();
     });
 
