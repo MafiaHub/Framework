@@ -22,12 +22,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
-#include <iterator>
 #include <mutex>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -84,7 +84,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         // One of the two sizes of a party, which JavaScript always converted to a number first: a boolean is
-        // 0 or 1, a string the number it spells. 0 for anything else.
+        // 0 or 1, a string the decimal number it spells, between spaces if any. 0 for anything else, a number
+        // in another notation included. Read without the locale of the process.
         std::int32_t ToPartySize(const Bind::Value &value) {
             if (value.IsNumber()) {
                 return ToInt32(value.AsNumber());
@@ -96,18 +97,24 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 return 0;
             }
             const std::string text = value.AsString();
-            const auto blank       = [](unsigned char c) {
-                return std::isspace(c) != 0;
+            const auto blank       = [](char c) {
+                return c == ' ' || (c >= '\t' && c <= '\r');
             };
-            const auto first = std::find_if_not(text.begin(), text.end(), blank);
-            const auto last  = std::find_if_not(text.rbegin(), std::make_reverse_iterator(first), blank).base();
-            if (first == last) {
-                return 0;
+            const char *first = text.data();
+            const char *last  = first + text.size();
+            while (first != last && blank(*first)) {
+                ++first;
             }
-            const std::string digits(first, last);
-            char *end           = nullptr;
-            const double number = std::strtod(digits.c_str(), &end);
-            return end == digits.c_str() + digits.size() ? ToInt32(number) : 0;
+            while (last != first && blank(last[-1])) {
+                --last;
+            }
+            // from_chars takes no plus sign, which JavaScript does, once and before a digit or a point.
+            if (last - first > 1 && first[0] == '+' && first[1] != '-') {
+                ++first;
+            }
+            double number     = 0.0;
+            const auto parsed = std::from_chars(first, last, number, std::chars_format::general);
+            return parsed.ec == std::errc() && parsed.ptr == last ? ToInt32(number) : 0;
         }
 
         discord::ActivityType MapActivityType(const Bind::Value &value) {
