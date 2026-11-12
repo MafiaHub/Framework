@@ -158,9 +158,12 @@ namespace Framework::Networking::Replication {
         // --- Entity lifecycle ---
         // Server: construct and start replicating an entity of the given type, nullptr if unknown.
         // Non-owning: the manager owns it; destroy via DestroyEntity.
-        NetworkEntity *CreateEntity(uint32_t typeId);
+        NetworkEntity *CreateEntity(uint32_t typeId) {
+            return CreateEntity(typeId, nullptr);
+        }
         // Broadcast destruction and delete the entity; once the last handle on it is released, if
-        // the world has given any out (see World::Destroy).
+        // the world has given any out (see World::Destroy). From then until it is deleted the entity
+        // is not returned by the lookups below nor as a viewer, and destroying it again does nothing.
         void DestroyEntity(NetworkEntity *entity);
         // Server: entities and registered state behind handles that lock them. See world.h.
         World &GetWorld() {
@@ -367,7 +370,8 @@ namespace Framework::Networking::Replication {
             _onClientDisconnect = std::move(callback);
         }
 
-        // Fired with the NetworkID at the end of CreateEntity / start of DestroyEntity.
+        // Fired with the NetworkID at the end of CreateEntity, before the world resolves the id, and
+        // when the entity is torn down (see DestroyEntity).
         void SetOnEntityCreated(fu2::function<void(uint64_t) const> callback) {
             _onEntityCreated = std::move(callback);
         }
@@ -396,6 +400,17 @@ namespace Framework::Networking::Replication {
         void ForgetSlot(uint32_t slot);
         // What DestroyEntity ends in, with nothing left holding the entity.
         void TeardownEntity(NetworkEntity *entity);
+        // Destroyed through the world and waiting on a handle to be torn down.
+        bool DestroyPending(NetworkEntity *entity) const {
+            return _world.AnyDoomed() && _world.IsDoomed(entity->GetNetworkID());
+        }
+        bool DestroyPending(uint64_t networkId) const {
+            return _world.IsDoomed(networkId);
+        }
+        // ForEachEntity with those included: the interest index keeps them until they are torn down.
+        void ForEachReferenced(const fu2::function<void(NetworkEntity *) const> &fn) const;
+        // CreateEntity, with the entity taken for `hold` as it enters the world.
+        NetworkEntity *CreateEntity(uint32_t typeId, Detail::WorldHold *hold);
         // Recomputes the viewers RebuildInterest found due, across the worker pool when it pays.
         void ComputeDueInterest();
         // The worker pool, started on first use, for `work` independent items; null when that is too

@@ -189,8 +189,16 @@ namespace Framework::Networking::Replication {
             // Destroyed here, not by the base: its delete skips DestroyEntity's bookkeeping and leaves
             // the viewer map and interest sets on freed memory. The base re-resolves the id after
             // this returns and finds it gone.
+            ReplicationManager *manager = Manager();
+            if (manager->DestroyPending(this)) {
+                return false;
+            }
             PreDestruction(sourceConnection);
-            Manager()->DestroyEntity(this);
+            const uint64_t id = GetNetworkID();
+            manager->DestroyEntity(this);
+            // Unless a handle still holds it: then it goes when that is released, and the base, which
+            // would find it and delete it, is told to keep it.
+            return !manager->DestroyPending(id);
         }
         return true;
     }

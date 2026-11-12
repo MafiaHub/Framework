@@ -697,7 +697,7 @@ namespace Framework::Networking::Replication {
         }
     }
 
-    NetworkEntity *ReplicationManager::CreateEntity(uint32_t typeId) {
+    NetworkEntity *ReplicationManager::CreateEntity(uint32_t typeId, Detail::WorldHold *hold) {
         NetworkEntity *entity = EntityRegistry::Get().Create(typeId);
         if (!entity) {
             return nullptr;
@@ -712,10 +712,13 @@ namespace Framework::Networking::Replication {
             // on it at its next query, by which time the caller has placed it.
             _interest.Sync(entity);
             Reevaluate(entity);
-            _world.Adopt(entity);
         }
         if (_onEntityCreated) {
             _onEntityCreated(entity->GetNetworkID());
+        }
+        // After the callback, which then runs with no handle held on the entity.
+        if (_isServer) {
+            _world.Adopt(entity, hold);
         }
         return entity;
     }
@@ -724,10 +727,13 @@ namespace Framework::Networking::Replication {
         if (!entity) {
             return;
         }
-        // An entity the world knows goes through it, so that a handle held on it stays valid.
-        if (!_world.Destroy(entity->GetNetworkID())) {
-            TeardownEntity(entity);
+        // An entity the world knows goes through it, so that a handle held on it stays valid. One
+        // already on its way out is left to that.
+        const uint64_t id = entity->GetNetworkID();
+        if (_world.Destroy(id) || _world.IsDoomed(id)) {
+            return;
         }
+        TeardownEntity(entity);
     }
 
     void ReplicationManager::TeardownEntity(NetworkEntity *entity) {
@@ -759,13 +765,21 @@ namespace Framework::Networking::Replication {
 
     NetworkEntity *ReplicationManager::GetEntityByNetworkID(MafiaNet::NetworkID networkId) const {
         auto *idm = GetNetworkIDManager();
-        if (!idm) {
+        if (!idm || _world.IsDoomed(networkId)) {
             return nullptr;
         }
         return idm->GET_OBJECT_FROM_ID<NetworkEntity *>(networkId);
     }
 
     void ReplicationManager::ForEachEntity(const fu2::function<void(NetworkEntity *) const> &fn) const {
+        ForEachReferenced([this, &fn](NetworkEntity *entity) {
+            if (!DestroyPending(entity)) {
+                fn(entity);
+            }
+        });
+    }
+
+    void ReplicationManager::ForEachReferenced(const fu2::function<void(NetworkEntity *) const> &fn) const {
         const unsigned count = GetReplicaCount();
         for (unsigned i = 0; i < count; ++i) {
             auto *entity = static_cast<NetworkEntity *>(GetReplicaAtIndex(i));
@@ -789,12 +803,12 @@ namespace Framework::Networking::Replication {
 
     NetworkEntity *ReplicationManager::GetViewer(MafiaNet::PeerGuid guid) const {
         const auto it = _viewers.find(guid);
-        return it != _viewers.end() ? it->second : nullptr;
+        return it != _viewers.end() && it->second && !DestroyPending(it->second) ? it->second : nullptr;
     }
 
     void ReplicationManager::ForEachViewer(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const {
         for (const auto &[guid, viewer] : _viewers) {
-            if (viewer != nullptr) {
+            if (viewer != nullptr && !DestroyPending(viewer)) {
                 fn(guid, viewer);
             }
         }
@@ -860,7 +874,7 @@ namespace Framework::Networking::Replication {
         {
             FW_PROFILE_SCOPE_N("Replication::SyncInterest");
             _interest.BeginSync();
-            ForEachEntity([this](NetworkEntity *entity) {
+            ForEachReferenced([this](NetworkEntity *entity) {
                 _interest.Sync(entity);
             });
             for (const uint32_t slot : _interest.EndSync()) {

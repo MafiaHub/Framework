@@ -14,6 +14,8 @@
 #include "networking/replication/replication_manager.h"
 #include "networking/replication/world.h"
 
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <thread>
@@ -91,35 +93,52 @@ MODULE(world, {
     });
 
     IT("takes several entities at once whatever order they are asked in", {
-        Fixture fixture;
-        World &world     = fixture.world;
-        const uint64_t a = fixture.Make<Walker>();
-        const uint64_t b = fixture.Make<Prop>();
+        // On the heap and left there if the threads never finish: a deadlock then fails the test
+        // instead of hanging it.
+        auto *fixture    = new Fixture;
+        auto *finished   = new std::atomic<int>(0);
+        World &world     = fixture->world;
+        const uint64_t a = fixture->Make<Walker>();
+        const uint64_t b = fixture->Make<Prop>();
 
         constexpr int kIterations = 20000;
-        const auto started        = std::chrono::steady_clock::now();
-        std::thread forward([&] {
+        std::thread forward([&world, finished, a, b] {
             for (int i = 0; i < kIterations; ++i) {
                 auto [walker, prop] = world.Write<Walker, Prop>(a, b);
                 ++walker->steps;
                 ++prop->uses;
             }
+            ++*finished;
         });
-        std::thread backward([&] {
+        std::thread backward([&world, finished, a, b] {
             for (int i = 0; i < kIterations; ++i) {
                 auto [prop, walker] = world.Write<Prop, Walker>(b, a);
                 ++walker->steps;
                 ++prop->uses;
             }
+            ++*finished;
         });
-        forward.join();
-        backward.join();
-        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
-
-        LESSER(elapsed, 10000);
-        auto [walker, prop] = world.Read<Walker, Prop>(a, b);
-        EQUALS(walker->steps, 2 * kIterations);
-        EQUALS(prop->uses, 2 * kIterations);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (*finished != 2 && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        const bool done = *finished == 2;
+        if (done) {
+            forward.join();
+            backward.join();
+        }
+        else {
+            forward.detach();
+            backward.detach();
+        }
+        EQUALS(done, true);
+        {
+            auto [walker, prop] = world.Read<Walker, Prop>(a, b);
+            EQUALS(walker->steps, 2 * kIterations);
+            EQUALS(prop->uses, 2 * kIterations);
+        }
+        delete finished;
+        delete fixture;
     });
 
     IT("fills the first handle and leaves the second empty when one id is asked for twice", {
@@ -161,7 +180,6 @@ MODULE(world, {
 
             EQUALS(tornDown, 0);
             EQUALS(handle->steps, 3);
-            EQUALS(fixture.manager->GetEntityByNetworkID(walker) != nullptr, true);
         }
         EQUALS(tornDown, 1);
         EQUALS(fixture.manager->GetEntityByNetworkID(walker) == nullptr, true);
@@ -172,6 +190,176 @@ MODULE(world, {
         EQUALS(world.Destroy(prop), true);
         EQUALS(tornDown, 2);
         EQUALS(fixture.manager->GetEntityByNetworkID(prop) == nullptr, true);
+    });
+
+    IT("hides an entity whose destruction waits on a handle from the raw lookups, and ignores a second destroy", {
+        Fixture fixture;
+        World &world                   = fixture.world;
+        ReplicationManager *manager    = fixture.manager;
+        const uint64_t walker          = fixture.Make<Walker>();
+        const uint64_t other           = fixture.Make<Walker>();
+        const MafiaNet::PeerGuid guid  = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(77));
+        const MafiaNet::PeerGuid guid2 = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(78));
+        manager->SetViewer(guid, manager->GetEntityByNetworkID(walker));
+        manager->SetViewer(guid2, manager->GetEntityByNetworkID(other));
+        int tornDown = 0;
+        manager->SetOnEntityDestroyed([&tornDown](uint64_t) {
+            ++tornDown;
+        });
+        const auto countEntities = [manager] {
+            int count = 0;
+            manager->ForEachEntity([&count](NetworkEntity *) {
+                ++count;
+            });
+            return count;
+        };
+        const auto countViewers = [manager] {
+            int count = 0;
+            manager->ForEachViewer([&count](MafiaNet::PeerGuid, NetworkEntity *) {
+                ++count;
+            });
+            return count;
+        };
+        const auto countAvatars = [manager] {
+            int count = 0;
+            manager->ForEachAvatar([&count](MafiaNet::PeerGuid, NetworkEntity *) {
+                ++count;
+            });
+            return count;
+        };
+        EQUALS(countEntities(), 2);
+        EQUALS(countViewers(), 2);
+        {
+            Ref<Walker> handle = world.Write<Walker>(walker);
+            NetworkEntity *raw = &*handle;
+            EQUALS(world.Destroy(walker), true);
+
+            EQUALS(manager->GetEntityByNetworkID(walker) == nullptr, true);
+            EQUALS(manager->GetViewer(guid) == nullptr, true);
+            EQUALS(manager->GetViewer(guid2) != nullptr, true);
+            EQUALS(countEntities(), 1);
+            EQUALS(countViewers(), 1);
+            EQUALS(countAvatars(), 1);
+
+            manager->DestroyEntity(raw);
+            EQUALS(tornDown, 0);
+            EQUALS(handle->GetNetworkID(), walker);
+        }
+        EQUALS(tornDown, 1);
+        EQUALS(countEntities(), 1);
+        EQUALS(manager->GetEntityByNetworkID(other) != nullptr, true);
+    });
+
+    IT("tears an entity down only once the thread holds nothing", {
+        Fixture fixture;
+        World &world         = fixture.world;
+        const uint64_t a     = fixture.Make<Walker>();
+        const uint64_t b     = fixture.Make<Prop>();
+        const uint64_t c     = fixture.Make<Prop>();
+        int tornDown         = 0;
+        size_t heldAtMost    = 0;
+        bool reachedTheWorld = false;
+        // What a script-facing callback may do: ask the world for something.
+        fixture.manager->SetOnEntityDestroyed([&](uint64_t) {
+            ++tornDown;
+            heldAtMost      = std::max(heldAtMost, World::HeldByThisThread());
+            reachedTheWorld = static_cast<bool>(world.Read<Prop>(c));
+        });
+        {
+            auto [walker, prop] = world.Write<Walker, Prop>(a, b);
+            EQUALS(world.Destroy(a), true);
+            {
+                const Ref<Walker> released = std::move(walker);
+            }
+            EQUALS(World::HeldByThisThread(), size_t {1});
+            EQUALS(tornDown, 0);
+        }
+        EQUALS(tornDown, 1);
+        EQUALS(heldAtMost, size_t {0});
+        EQUALS(reachedTheWorld, true);
+
+        // Nothing holds b, but the thread destroying it holds something else.
+        {
+            const ConstRef<Prop> unrelated = world.Read<Prop>(c);
+            EQUALS(world.Destroy(b), true);
+            EQUALS(tornDown, 1);
+            EQUALS(fixture.manager->GetEntityByNetworkID(b) == nullptr, true);
+        }
+        EQUALS(tornDown, 2);
+        EQUALS(heldAtMost, size_t {0});
+    });
+
+    IT("hands a created entity over already held, before any other thread can take it", {
+        Fixture fixture;
+        World &world = fixture.world;
+        {
+            const Ref<Walker> created = world.Create<Walker>();
+            EQUALS(static_cast<bool>(created), true);
+            EQUALS(World::HeldByThisThread(), size_t {1});
+            created->steps = 1;
+        }
+        EQUALS(World::HeldByThisThread(), size_t {0});
+
+        // The earliest another thread can hear of the entity: it cannot take it from its creator.
+        bool destroyedByOther = true;
+        fixture.manager->SetOnEntityCreated([&](uint64_t id) {
+            std::thread other([&, id] {
+                destroyedByOther = world.Destroy(id);
+            });
+            other.join();
+        });
+        {
+            const Ref<Walker> created = world.Create<Walker>();
+            EQUALS(destroyedByOther, false);
+            EQUALS(static_cast<bool>(created), true);
+            created->steps = 1;
+        }
+        fixture.manager->SetOnEntityCreated({});
+
+        // Another thread looks for a walker its creator has not finished with.
+        std::atomic<bool> stop {false};
+        std::atomic<int> sawUnfinished {0};
+        std::thread watcher([&] {
+            while (!stop) {
+                world.ForEach<Walker>([&](Ref<Walker> &walker) {
+                    if (walker->steps == 0) {
+                        ++sawUnfinished;
+                    }
+                });
+            }
+        });
+        for (int i = 0; i < 3000; ++i) {
+            const Ref<Walker> walker = world.Create<Walker>();
+            walker->steps            = 1;
+        }
+        stop = true;
+        watcher.join();
+        EQUALS(sawUnfinished.load(), 0);
+    });
+
+    IT("gives an empty handle to a thread that waited for an entity destroyed meanwhile", {
+        Fixture fixture;
+        World &world          = fixture.world;
+        const uint64_t walker = fixture.Make<Walker>();
+        std::atomic<bool> asking {false};
+        bool resolved = true;
+        std::thread waiter;
+        {
+            const Ref<Walker> handle = world.Write<Walker>(walker);
+            waiter                   = std::thread([&] {
+                asking   = true;
+                resolved = static_cast<bool>(world.Write<Walker>(walker));
+            });
+            while (!asking) {
+                std::this_thread::yield();
+            }
+            // Long enough for the waiter to be waiting on the entity's lock.
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            EQUALS(world.Destroy(walker), true);
+        }
+        waiter.join();
+        EQUALS(resolved, false);
+        EQUALS(fixture.manager->GetEntityByNetworkID(walker) == nullptr, true);
     });
 
     IT("visits every entity of a type one lock at a time", {

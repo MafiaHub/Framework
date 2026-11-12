@@ -13,6 +13,7 @@
 
 #include <function2/function2.hpp>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -37,9 +38,11 @@ namespace Framework::Networking::Replication {
         // which the client shares. Everything but the lock is guarded by the world's slot mutex.
         struct WorldEntitySlot final: WorldLockable {
             NetworkEntity *entity = nullptr;
+            uint64_t id           = 0;
             // Handles on the entity, counted from before they wait for its lock.
             uint32_t holders = 0;
-            bool destroyed   = false;
+            // Set once, under the slot mutex; read without it by a thread that waited for the lock.
+            std::atomic<bool> destroyed {false};
         };
 
         // One lock held for a handle, released with it.
@@ -226,15 +229,18 @@ namespace Framework::Networking::Replication {
             }
         }
 
-        // Creates a T and returns it held. Empty if the type is not registered.
+        // Creates a T and returns it held: no other thread reaches it before the caller lets go.
+        // Empty if the type is not registered.
         template <typename T>
         Ref<T> Create() {
             static_assert(std::is_base_of_v<NetworkEntity, T>, "World::Create<T>: T must derive from NetworkEntity");
-            const uint64_t id = CreateEntity(EntityTypeId<T>());
-            return id != 0 ? Write<T>(id) : Ref<T>();
+            Detail::WorldHold hold;
+            NetworkEntity *entity = CreateEntity(EntityTypeId<T>(), hold);
+            return entity ? Ref<T>(static_cast<T *>(entity), std::move(hold)) : Ref<T>();
         }
-        // The id stops resolving before this returns; false if it did not resolve. The entity itself
-        // goes once no handle holds it: now, or on the thread that releases the last one.
+        // The id stops resolving before this returns, here and through the manager; false if it did
+        // not resolve. The entity itself goes once no handle holds it and the thread that finds so
+        // holds no handle at all: now, or when the last of those is released.
         bool Destroy(uint64_t id);
 
         // One object per type, registered before the server starts and kept for the world's life.
@@ -307,14 +313,25 @@ namespace Framework::Networking::Replication {
         void Acquire(Detail::WorldRequest *requests, size_t count, bool exclusive);
         void Release(Detail::WorldLockable *lock, const std::shared_ptr<Detail::WorldEntitySlot> &slot, bool exclusive);
 
-        // The new entity's network id, 0 if the type is unknown.
-        uint64_t CreateEntity(uint32_t typeId);
+        // The new entity, held by `hold`; null if the type is unknown.
+        NetworkEntity *CreateEntity(uint32_t typeId, Detail::WorldHold &hold);
         std::vector<uint64_t> IdsOfType(uint32_t typeId);
         void AddState(const void *key, void *object, void (*destroy)(void *));
 
-        // From the manager: an entity it created, and one deleted by another way than Destroy.
-        void Adopt(NetworkEntity *entity);
+        // From the manager: an entity it created, taken for `hold` if there is one before any other
+        // thread can find it, and one deleted by another way than Destroy.
+        void Adopt(NetworkEntity *entity, Detail::WorldHold *hold);
         void Forget(NetworkEntity *entity);
+
+        // Destroyed, and still to be torn down.
+        bool AnyDoomed() const {
+            return _doomedCount.load(std::memory_order_acquire) != 0;
+        }
+        bool IsDoomed(uint64_t id) const;
+        // Tears down what this thread found nothing holding any more, once it holds nothing itself:
+        // the teardown calls out, and what it calls may ask a world for a handle.
+        static void FinishDoomed();
+        void Teardown(const std::shared_ptr<Detail::WorldEntitySlot> &slot);
 
         struct StateSlot final: Detail::WorldLockable {
             const void *key = nullptr;
@@ -322,8 +339,11 @@ namespace Framework::Networking::Replication {
         };
 
         ReplicationManager &_manager;
-        std::mutex _slotsMutex;
+        mutable std::mutex _slotsMutex;
         std::unordered_map<uint64_t, std::shared_ptr<Detail::WorldEntitySlot>> _slots;
+        // Out of _slots at Destroy, kept here until torn down so the manager can tell.
+        std::unordered_map<uint64_t, std::shared_ptr<Detail::WorldEntitySlot>> _doomed;
+        std::atomic<size_t> _doomedCount {0};
         // In registration order, which is their lock order. Fixed once the server runs.
         std::vector<std::unique_ptr<StateSlot>> _states;
     };
