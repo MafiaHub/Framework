@@ -62,35 +62,33 @@ namespace Framework::Scripting::Builtins {
     }
 
     const Bind::Class<Quaternion> &Quaternion::Definition() {
-        using Bind::Doc;
-        using Bind::LuaMetaEvent;
         static const auto definition =
             Bind::Class<Quaternion>("Quaternion", "Mutable quaternion for three-dimensional rotations. Components are scalar-first (w, x, y, z), matching GLM — not the x, y, z, w order some libraries use.")
-                .Constructor<float, float, float, float>(Doc("Creates a quaternion in scalar-first w, x, y, z component order. Watch the trap: the scalar w is the first argument, unlike the x, y, z, w order used by some other libraries.")
+                .Constructor<float, float, float, float>(Framework::Scripting::Bind::Doc("Creates a quaternion in scalar-first w, x, y, z component order. Watch the trap: the scalar w is the first argument, unlike the x, y, z, w order used by some other libraries.")
                         .Param("w", "Initial scalar component (comes first — this is not x, y, z, w order).")
                         .Param("x", "Initial X imaginary component.")
                         .Param("y", "Initial Y imaginary component.")
                         .Param("z", "Initial Z imaginary component."))
                 // Instance methods
                 // Named mul for parity with Vector.mul (was multiply).
-                .Method("mul", &Quaternion::multiply, Doc("Composes this rotation with another quaternion in place.").Param("other", "Rotation composed after this quaternion.").Returns("This mutated quaternion for chaining."))
-                .Method("normalize", &Quaternion::normalize, Doc("Normalizes this quaternion in place; a zero quaternion becomes the identity rotation instead of NaN.").Returns("This unit quaternion for chaining."))
-                .Method("conjugate", &Quaternion::conjugate, Doc("Computes the conjugate without changing this quaternion.").Returns("New conjugated quaternion."))
-                .Method("inverse", &Quaternion::inverse, Doc("Computes the inverse rotation without changing this quaternion.").Returns("New inverse quaternion."))
+                .Method("mul", &Quaternion::multiply, Framework::Scripting::Bind::Doc("Composes this rotation with another quaternion in place.").Param("other", "Rotation composed after this quaternion.").Returns("This mutated quaternion for chaining."))
+                .Method("normalize", &Quaternion::normalize, Framework::Scripting::Bind::Doc("Normalizes this quaternion in place; a zero quaternion becomes the identity rotation instead of NaN.").Returns("This unit quaternion for chaining."))
+                .Method("conjugate", &Quaternion::conjugate, Framework::Scripting::Bind::Doc("Computes the conjugate without changing this quaternion.").Returns("New conjugated quaternion."))
+                .Method("inverse", &Quaternion::inverse, Framework::Scripting::Bind::Doc("Computes the inverse rotation without changing this quaternion.").Returns("New inverse quaternion."))
                 .Method("slerp", &Quaternion::slerp,
-                    Doc("Spherically interpolates this quaternion toward a target in place.").Param("target", "Destination rotation.").Param("t", "Interpolation factor; 0 keeps the current rotation and 1 reaches target.").Returns("This mutated quaternion for chaining."))
-                .Method("dot", &Quaternion::dot, Doc("Computes the quaternion dot product.").Param("other", "Quaternion used for the dot product.").Returns("Scalar dot product."))
-                .Method("rotateVector", &Quaternion::rotateVector, Doc("Applies this rotation to a vector without mutating either value.").Param("vector", "Vector to rotate.").Returns("New rotated vector."))
-                .Method("toEuler", &Quaternion::toEuler, Doc("Converts this rotation to Euler angles in radians.").Returns("Pitch, yaw, and roll as a Vector3."))
+                    Framework::Scripting::Bind::Doc("Spherically interpolates this quaternion toward a target in place.").Param("target", "Destination rotation.").Param("t", "Interpolation factor; 0 keeps the current rotation and 1 reaches target.").Returns("This mutated quaternion for chaining."))
+                .Method("dot", &Quaternion::dot, Framework::Scripting::Bind::Doc("Computes the quaternion dot product.").Param("other", "Quaternion used for the dot product.").Returns("Scalar dot product."))
+                .Method("rotateVector", &Quaternion::rotateVector, Framework::Scripting::Bind::Doc("Applies this rotation to a vector without mutating either value.").Param("vector", "Vector to rotate.").Returns("New rotated vector."))
+                .Method("toEuler", &Quaternion::toEuler, Framework::Scripting::Bind::Doc("Converts this rotation to Euler angles in radians.").Returns("Pitch, yaw, and roll as a Vector3."))
                 .Method("set", &Quaternion::set,
-                    Doc("Replaces all quaternion components in place.")
+                    Framework::Scripting::Bind::Doc("Replaces all quaternion components in place.")
                         .Param("w", "Replacement scalar component.")
                         .Param("x", "Replacement X imaginary component.")
                         .Param("y", "Replacement Y imaginary component.")
                         .Param("z", "Replacement Z imaginary component.")
                         .Returns("This mutated quaternion for chaining."))
-                .Method("clone", &Quaternion::clone, Doc("Creates an independent copy of this quaternion.").Returns("New quaternion with the same components."))
-                .Method("toString", &Quaternion::toString, Doc("Formats this quaternion for logging and debugging.").Returns("Text in Quaternion(w, x, y, z) form."))
+                .Method("clone", &Quaternion::clone, Framework::Scripting::Bind::Doc("Creates an independent copy of this quaternion.").Returns("New quaternion with the same components."))
+                .Method("toString", &Quaternion::toString, Framework::Scripting::Bind::Doc("Formats this quaternion for logging and debugging.").Returns("Text in Quaternion(w, x, y, z) form."))
                 .Property("w", &Quaternion::getW, &Quaternion::setW, "Mutable scalar component.")
                 .Property("x", &Quaternion::getX, &Quaternion::setX, "Mutable X imaginary component.")
                 .Property("y", &Quaternion::getY, &Quaternion::setY, "Mutable Y imaginary component.")
@@ -98,9 +96,9 @@ namespace Framework::Scripting::Builtins {
                 .Property("length", &Quaternion::getLength, "Read-only magnitude (norm) of this quaternion; 1 for a unit rotation.")
                 .Property("lengthSquared", &Quaternion::getLengthSquared, "Read-only squared magnitude, avoiding a square-root calculation.")
                 // Static factory methods
-                .Static("identity", &Quaternion::identity, Doc("Creates the identity rotation.").Returns("New Quaternion(1, 0, 0, 0)."))
-                .Static("fromEuler", &Quaternion::fromEuler, Doc("Creates a rotation from Euler angles.").Param("pitch", "Pitch angle in radians.").Param("yaw", "Yaw angle in radians.").Param("roll", "Roll angle in radians.").Returns("New rotation quaternion."))
-                .Static("fromAxisAngle", &Quaternion::fromAxisAngle, Doc("Creates a rotation around an axis.").Param("axis", "Rotation axis; it is normalized internally.").Param("angle", "Rotation angle in radians.").Returns("New axis-angle rotation quaternion."))
+                .Static("identity", &Quaternion::identity, Framework::Scripting::Bind::Doc("Creates the identity rotation.").Returns("New Quaternion(1, 0, 0, 0)."))
+                .Static("fromEuler", &Quaternion::fromEuler, Framework::Scripting::Bind::Doc("Creates a rotation from Euler angles.").Param("pitch", "Pitch angle in radians.").Param("yaw", "Yaw angle in radians.").Param("roll", "Roll angle in radians.").Returns("New rotation quaternion."))
+                .Static("fromAxisAngle", &Quaternion::fromAxisAngle, Framework::Scripting::Bind::Doc("Creates a rotation around an axis.").Param("axis", "Rotation axis; it is normalized internally.").Param("angle", "Rotation angle in radians.").Returns("New axis-angle rotation quaternion."))
                 // What JSON.stringify asks a JavaScript object for. Lua writes the same object from JsonProperties.
                 .V8Hook([](v8pp::class_<Quaternion> &cls, v8::Isolate *) {
                     cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ w: number; x: number; y: number; z: number }", {}, "Converts this quaternion to a plain object for JSON.stringify.", "Object containing the current components."));
@@ -109,11 +107,11 @@ namespace Framework::Scripting::Builtins {
                 // Crosses between runtimes as its glm value.
                 .Transfer(&Quaternion::quat)
                 // Lua operators. The product is a new quaternion and leaves its operands as they were.
-                .LuaMeta(LuaMetaEvent::Mul,
+                .LuaMeta(Framework::Scripting::Bind::LuaMetaEvent::Mul,
                     [](const Quaternion &left, const Quaternion &right) {
                         return Quaternion(left.quat() * right.quat());
                     })
-                .LuaMeta(LuaMetaEvent::Eq, [](const Quaternion &left, const Quaternion &right) {
+                .LuaMeta(Framework::Scripting::Bind::LuaMetaEvent::Eq, [](const Quaternion &left, const Quaternion &right) {
                     return left.quat() == right.quat();
                 });
         return definition;

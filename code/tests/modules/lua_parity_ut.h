@@ -23,7 +23,6 @@
 // The acceptance gate of Lua scripting on a server: everything the JavaScript catalog documents is there in the Lua
 // state of a resource of a real server scripting module, and so is everything the Lua definition file declares.
 namespace LuaParityTest {
-    using Framework::Integrations::Server::Scripting::ServerScriptingModule;
 
     // What a server gives JavaScript and not Lua, each with its reason.
     inline const LuaParity::Exemptions &Exemptions() {
@@ -48,15 +47,11 @@ namespace LuaParityTest {
 } // namespace LuaParityTest
 
 MODULE(lua_parity, {
-    using Framework::Scripting::Bind::Side;
-    using LuaEventsTest::Bus;
-    using LuaParityTest::ServerScriptingModule;
-
     IT("gives Lua every member of every global the server catalog documents for JavaScript", {
         const nlohmann::json catalog = ScriptingCatalogGolden::BuildServerCatalog();
         EQUALS(catalog.is_object(), true);
 
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua", {{"main.lua", ""}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("lua"), "");
@@ -64,8 +59,8 @@ MODULE(lua_parity, {
         NEQUALS(runtime, nullptr);
         lua_State *L = runtime->State();
 
-        const auto builtins = ServerScriptingModule::LuaBuiltinDefinitions();
-        LuaParity::Gate gate(L, Side::Server, builtins, LuaParityTest::Exemptions());
+        const auto builtins = Framework::Integrations::Server::Scripting::ServerScriptingModule::LuaBuiltinDefinitions();
+        LuaParity::Gate gate(L, Framework::Scripting::Bind::Side::Server, builtins, LuaParityTest::Exemptions());
         const LuaParity::Report report = gate.Check(catalog);
 
         EQUALS(LuaParity::Join(report.missing), "");
@@ -76,12 +71,12 @@ MODULE(lua_parity, {
         EQUALS(report.dataTypes, 3);
         EQUALS(report.members >= 200, true);
         // A builtin registered for one language alone.
-        EQUALS(LuaParity::Join(LuaParity::OneSided(catalog, builtins, Side::Server)), "");
+        EQUALS(LuaParity::Join(LuaParity::OneSided(catalog, builtins, Framework::Scripting::Bind::Side::Server)), "");
         EQUALS(static_cast<size_t>(report.exempted), LuaParityTest::Exemptions().size());
     });
 
     IT("has in a Lua state everything the server definition file declares, and declares every global", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua", {{"main.lua", ""}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("lua"), "");
@@ -89,9 +84,9 @@ MODULE(lua_parity, {
         NEQUALS(runtime, nullptr);
         lua_State *L = runtime->State();
 
-        const auto builtins                = ServerScriptingModule::LuaBuiltinDefinitions();
-        const std::string definitions      = LuaParity::Generate(builtins, Side::Server);
-        const LuaParity::Declared declared = LuaParity::CheckDefinitions(definitions, L, Side::Server, builtins);
+        const auto builtins                = Framework::Integrations::Server::Scripting::ServerScriptingModule::LuaBuiltinDefinitions();
+        const std::string definitions      = LuaParity::Generate(builtins, Framework::Scripting::Bind::Side::Server);
+        const LuaParity::Declared declared = LuaParity::CheckDefinitions(definitions, L, Framework::Scripting::Bind::Side::Server, builtins);
 
         EQUALS(LuaParity::CompileError(definitions), "");
         EQUALS(LuaParity::Join(declared.missing), "");
@@ -119,7 +114,7 @@ MODULE(lua_parity, {
     });
 
     IT("the server definition file matches the committed one", {
-        const std::string generated = LuaParity::Generate(ServerScriptingModule::LuaBuiltinDefinitions(), Side::Server);
+        const std::string generated = LuaParity::Generate(Framework::Integrations::Server::Scripting::ServerScriptingModule::LuaBuiltinDefinitions(), Framework::Scripting::Bind::Side::Server);
         if (LuaParity::UpdateRequested()) {
             EQUALS(LuaParity::WriteDefinitions("server.d.lua", generated), true);
         }
@@ -127,50 +122,55 @@ MODULE(lua_parity, {
     });
 
     IT("writes a definition file from descriptions: sides, bases, operators, what waits and what is no global", {
-        using namespace Framework::Scripting::Bind;
-        const auto param = [](std::string name, TypeRef type, std::string description, bool optional = false, bool rest = false) {
-            return ParamDesc {std::move(name), std::move(type), optional, std::move(description), rest};
+        const auto param = [](std::string name, Framework::Scripting::Bind::TypeRef type, std::string description, bool optional = false, bool rest = false) {
+            return Framework::Scripting::Bind::ParamDesc {std::move(name), std::move(type), optional, std::move(description), rest};
         };
 
-        ClassDesc base;
+        Framework::Scripting::Bind::ClassDesc base;
         base.name        = "Shape";
         base.description = "A shape.\nOf any kind.";
         base.global      = false;
-        base.properties  = {{"sides", TypeOf<int>(), "How many sides.", true, false, Side::Shared}};
+        base.properties  = {{"sides", Framework::Scripting::Bind::TypeOf<int>(), "How many sides.", true, false, Framework::Scripting::Bind::Side::Shared}};
 
-        ClassDesc square;
+        Framework::Scripting::Bind::ClassDesc square;
         square.name        = "Square";
         square.description = "A square.";
         square.bases       = {"Shape"};
-        square.constructor = FunctionDesc {"constructor", "Makes a square.", {param("size", TypeOf<double>(), "Side length."), param("end", TypeOf<std::string>(), "A label.", true)}, {}, "", false, Side::Shared};
-        square.properties  = {{"size", TypeOf<double>(), "", false, false, Side::Shared}, {"owner", Type::Custom("Player | undefined", "Player?"), "Read-only. who owns it, or undefined.", true, false, Side::Server},
-            {"shade", TypeOf<int>(), "Drawn shade.", false, false, Side::Client}, {"count", TypeOf<int>(), "How many squares there are; null is not undefined, nullable stays.", true, true, Side::Shared}};
+        square.constructor = Framework::Scripting::Bind::FunctionDesc {"constructor", "Makes a square.", {param("size", Framework::Scripting::Bind::TypeOf<double>(), "Side length."), param("end", Framework::Scripting::Bind::TypeOf<std::string>(), "A label.", true)}, {}, "",
+            false, Framework::Scripting::Bind::Side::Shared};
+        square.properties  = {{"size", Framework::Scripting::Bind::TypeOf<double>(), "", false, false, Framework::Scripting::Bind::Side::Shared},
+            {"owner", Framework::Scripting::Bind::Type::Custom("Player | undefined", "Player?"), "Read-only. who owns it, or undefined.", true, false, Framework::Scripting::Bind::Side::Server},
+            {"shade", Framework::Scripting::Bind::TypeOf<int>(), "Drawn shade.", false, false, Framework::Scripting::Bind::Side::Client},
+            {"count", Framework::Scripting::Bind::TypeOf<int>(), "How many squares there are; null is not undefined, nullable stays.", true, true, Framework::Scripting::Bind::Side::Shared}};
         square.functions   = {
-            {"grow", "Grows it.\nIn place.", {param("by", TypeOf<double>(), "How much.")}, Type::This(), "This square.", false, Side::Shared},
-            {"save", "Saves it.", {}, Type::Custom("Promise<boolean>", "boolean"), "Whether it was saved.", false, Side::Server},
-            {"draw", "Draws it.", {}, {}, "", false, Side::Client},
-            {"unit", "A square of size 1.", {}, Type::Class("Square"), "", true, Side::Shared},
+            {"grow", "Grows it.\nIn place.", {param("by", Framework::Scripting::Bind::TypeOf<double>(), "How much.")}, Framework::Scripting::Bind::Type::This(), "This square.", false, Framework::Scripting::Bind::Side::Shared},
+            {"save", "Saves it.", {}, Framework::Scripting::Bind::Type::Custom("Promise<boolean>", "boolean"), "Whether it was saved.", false, Framework::Scripting::Bind::Side::Server},
+            {"draw", "Draws it.", {}, {}, "", false, Framework::Scripting::Bind::Side::Client},
+            {"unit", "A square of size 1.", {}, Framework::Scripting::Bind::Type::Class("Square"), "", true, Framework::Scripting::Bind::Side::Shared},
         };
-        square.luaOperators = {{"add", {Type::Class("Square"), Type::Class("Square")}, Type::Class("Square")}, {"mul", {TypeOf<double>(), Type::Class("Square")}, Type::Class("Square")}, {"unm", {Type::Class("Square")}, Type::Class("Square")},
-            {"lt", {Type::Class("Square"), Type::Class("Square")}, TypeOf<bool>()}};
+        square.luaOperators = {{"add", {Framework::Scripting::Bind::Type::Class("Square"), Framework::Scripting::Bind::Type::Class("Square")}, Framework::Scripting::Bind::Type::Class("Square")},
+            {"mul", {Framework::Scripting::Bind::TypeOf<double>(), Framework::Scripting::Bind::Type::Class("Square")}, Framework::Scripting::Bind::Type::Class("Square")},
+            {"unm", {Framework::Scripting::Bind::Type::Class("Square")}, Framework::Scripting::Bind::Type::Class("Square")},
+            {"lt", {Framework::Scripting::Bind::Type::Class("Square"), Framework::Scripting::Bind::Type::Class("Square")}, Framework::Scripting::Bind::TypeOf<bool>()}};
 
-        ClassDesc tools;
+        Framework::Scripting::Bind::ClassDesc tools;
         tools.name        = "Tools";
         tools.isNamespace = true;
-        tools.side        = Side::Server;
-        tools.properties  = {{"version", TypeOf<std::string>(), "The version.", true, true, Side::Shared}};
-        tools.functions   = {{"log", "Logs.", {param("level", TypeOf<int>(), "", true), param("values", Type::Custom("unknown[]", "any"), "What to log.", false, true)}, Type::Custom("Promise<void>", "nil"), "", true, Side::Shared}};
+        tools.side        = Framework::Scripting::Bind::Side::Server;
+        tools.properties  = {{"version", Framework::Scripting::Bind::TypeOf<std::string>(), "The version.", true, true, Framework::Scripting::Bind::Side::Shared}};
+        tools.functions   = {{"log", "Logs.", {param("level", Framework::Scripting::Bind::TypeOf<int>(), "", true), param("values", Framework::Scripting::Bind::Type::Custom("unknown[]", "any"), "What to log.", false, true)},
+            Framework::Scripting::Bind::Type::Custom("Promise<void>", "nil"), "", true, Framework::Scripting::Bind::Side::Shared}};
 
-        ClassDesc screen;
+        Framework::Scripting::Bind::ClassDesc screen;
         screen.name        = "Screen";
         screen.isNamespace = true;
-        screen.side        = Side::Client;
+        screen.side        = Framework::Scripting::Bind::Side::Client;
 
-        ApiCatalog catalog;
-        for (const ClassDesc *desc : {&base, &square, &tools, &screen}) {
+        Framework::Scripting::Bind::ApiCatalog catalog;
+        for (const Framework::Scripting::Bind::ClassDesc *desc : {&base, &square, &tools, &screen}) {
             catalog.Record(desc);
         }
-        const std::string server = WriteLuaDefinitions(catalog, Side::Server);
+        const std::string server = Framework::Scripting::Bind::WriteLuaDefinitions(catalog, Framework::Scripting::Bind::Side::Server);
 
         // After the header, each definition and then the globals of every state.
         const size_t start   = server.find("\n---A shape.");
@@ -232,13 +232,13 @@ Tools = {}
 ---@param ... any What to log.
 function Tools.log(level, ...) end
 )");
-        for (const FunctionDesc &global : LuaRuntimeGlobals()) {
+        for (const Framework::Scripting::Bind::FunctionDesc &global : Framework::Scripting::Bind::LuaRuntimeGlobals()) {
             EQUALS(server.find("\nfunction " + global.name + "(") != std::string::npos, true);
         }
         EQUALS(LuaParity::CompileError(server), "");
 
         // A client has the members of its side, and the namespace of its side for that of the server.
-        const std::string client = WriteLuaDefinitions(catalog, Side::Client);
+        const std::string client = Framework::Scripting::Bind::WriteLuaDefinitions(catalog, Framework::Scripting::Bind::Side::Client);
         EQUALS(client.find("---@field shade integer Drawn shade.\n") != std::string::npos, true);
         EQUALS(client.find("function Square:draw() end\n") != std::string::npos, true);
         EQUALS(client.find("\nScreen = {}\n") != std::string::npos, true);
@@ -247,8 +247,7 @@ function Tools.log(level, ...) end
     });
 
     IT("writes the definition file where the environment says, and nothing when it says nothing", {
-        using namespace Framework::Scripting::Bind;
-        const auto builtins              = ServerScriptingModule::LuaBuiltinDefinitions();
+        const auto builtins              = Framework::Integrations::Server::Scripting::ServerScriptingModule::LuaBuiltinDefinitions();
         const std::filesystem::path path = std::filesystem::temp_directory_path() / ("framework_lua_definitions_ut_" + std::to_string(std::random_device {}()) + ".d.lua");
         const char *const variable       = "FW_TEST_LUA_DEFINITIONS_PATH";
         const auto set                   = [variable](const std::string &value) {
@@ -260,32 +259,32 @@ function Tools.log(level, ...) end
         };
 
         set("");
-        EQUALS(ExportLuaDefinitionsFromEnvironment(builtins, Side::Server, variable), true);
+        EQUALS(Framework::Scripting::Bind::ExportLuaDefinitionsFromEnvironment(builtins, Framework::Scripting::Bind::Side::Server, variable), true);
         EQUALS(std::filesystem::exists(path), false);
 
         set(path.string());
-        EQUALS(ExportLuaDefinitionsFromEnvironment(builtins, Side::Server, variable), true);
+        EQUALS(Framework::Scripting::Bind::ExportLuaDefinitionsFromEnvironment(builtins, Framework::Scripting::Bind::Side::Server, variable), true);
         std::stringstream written;
         written << std::ifstream(path, std::ios::binary).rdbuf();
-        EQUALS(written.str() == LuaParity::Generate(builtins, Side::Server), true);
+        EQUALS(written.str() == LuaParity::Generate(builtins, Framework::Scripting::Bind::Side::Server), true);
         std::error_code ignored;
         std::filesystem::remove(path, ignored);
 
         // A file that cannot be written is reported.
         set((path / "below" / "a-file").string());
-        EQUALS(ExportLuaDefinitionsFromEnvironment(builtins, Side::Server, variable), false);
+        EQUALS(Framework::Scripting::Bind::ExportLuaDefinitionsFromEnvironment(builtins, Framework::Scripting::Bind::Side::Server, variable), false);
         set("");
     });
 
     IT("fails the gate for a member Lua lacks and for an exemption that excuses nothing", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua", {{"main.lua", ""}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("lua"), "");
         Framework::Scripting::LuaRuntime *runtime = bus.server.module.GetLuaEngine()->GetRuntime("lua");
         NEQUALS(runtime, nullptr);
         lua_State *L        = runtime->State();
-        const auto builtins = ServerScriptingModule::LuaBuiltinDefinitions();
+        const auto builtins = Framework::Integrations::Server::Scripting::ServerScriptingModule::LuaBuiltinDefinitions();
 
         const nlohmann::json catalog           = nlohmann::json::parse(R"({"symbols":[
             {"name":"Chat","kind":"globalObject","functions":[{"name":"sendToAll","static":false},{"name":"whisper","static":false}],"properties":[]},
@@ -296,7 +295,7 @@ function Tools.log(level, ...) end
             {"name":"Shape","kind":"dataType","functions":[],"properties":[{"name":"sides","readonly":false,"static":false}]}
         ],"functions":[{"name":"setTimeout"},{"name":"setImmediate"}]})");
         const LuaParity::Exemptions exemptions = {{"Vector3.add", "excuses what Lua has"}, {"Vector3.spin", "excuses what Lua lacks"}, {"Nothing.at", "names nothing"}};
-        LuaParity::Gate gate(L, Side::Server, builtins, exemptions);
+        LuaParity::Gate gate(L, Framework::Scripting::Bind::Side::Server, builtins, exemptions);
         const LuaParity::Report report = gate.Check(catalog);
 
         EQUALS(LuaParity::Join(report.missing), "Chat.whisper (function), Entity.new (Lua constructs what JavaScript cannot), Ghost (global), Ghost (no class of this name is defined for Lua), Vector3.length (property with a setter), Vector3.mass (read-only property), "
@@ -311,14 +310,15 @@ function Tools.log(level, ...) end
                                                                          "---Also has the operators `number * Vector3`, `Vector3 < Vector3`, `#Vector3`.\n---@class Vector3\n---@field x number [read-only] X.\n---@field length number [read-only]\n"
                                                                          "---@operator add(Vector3): Vector3\n---@operator concat(string): string\n---@overload fun(): Vector3\nVector3 = {}\nVector3.count = nil\n"
                                                                          "function Vector3:spin() end\nfunction Vector3.zero() end\n---@class StateBag\n---@overload fun(): StateBag\nStateBag = {}\n---@class Entity\nlocal Entity = {}\nfunction setImmediate(callback) end\n",
-            L, Side::Server, builtins);
+            L, Framework::Scripting::Bind::Side::Server, builtins);
         EQUALS(LuaParity::Join(declared.missing), "Chat.motd (constant), Chat.whisper (function), Entity (declared as no global, and is one), StateBag (callable class), StateBag (global), Vector3 __concat (operator), Vector3 __len (operator named in the description), "
                                                   "Vector3 __lt (operator named in the description), Vector3.count (static property), Vector3.x (read-only property), Vector3:spin (function), setImmediate (global function)");
         EQUALS(declared.operators, 5);
         EQUALS(declared.callable, 2);
 
         // And a builtin one language has alone.
-        EQUALS(LuaParity::Join(LuaParity::OneSided(catalog, {&Framework::Scripting::Builtins::Vector3::Definition().Describe(), &Framework::Scripting::Builtins::Color::Definition().Describe(), &Framework::Scripting::Builtins::StateBag::Definition().Describe()}, Side::Server)),
+        EQUALS(LuaParity::Join(LuaParity::OneSided(catalog, {&Framework::Scripting::Builtins::Vector3::Definition().Describe(), &Framework::Scripting::Builtins::Color::Definition().Describe(), &Framework::Scripting::Builtins::StateBag::Definition().Describe()},
+                   Framework::Scripting::Bind::Side::Server)),
             "Chat (JavaScript only), Color (Lua only), Entity (JavaScript only), Ghost (JavaScript only)");
         EQUALS(LuaParity::Join(LuaParity::UndeclaredGlobals(L, declared.globals)).find("Events") != std::string::npos, true);
     });

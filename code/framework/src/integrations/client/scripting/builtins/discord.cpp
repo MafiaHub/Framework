@@ -31,10 +31,6 @@
 #include <vector>
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
-    namespace Bind = Framework::Scripting::Bind;
-    using Framework::Scripting::Builtins::ReadFlag;
-    using Framework::Scripting::Builtins::ToInt32;
-    using Framework::Scripting::Builtins::ToInt64;
 
     namespace {
         // Staged activity mutated by the setters, published on update()/setPresence().
@@ -78,9 +74,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // One of the two sizes of a party, which JavaScript always converted to a number first: a boolean is
         // 0 or 1, a string the decimal number it spells, between spaces if any. 0 for anything else, a number
         // in another notation included. Read without the locale of the process.
-        std::int32_t ToPartySize(const Bind::Value &value) {
+        std::int32_t ToPartySize(const Framework::Scripting::Bind::Value &value) {
             if (value.IsNumber()) {
-                return ToInt32(value.AsNumber());
+                return Framework::Scripting::Builtins::ToInt32(value.AsNumber());
             }
             if (value.IsBoolean()) {
                 return value.AsBoolean() ? 1 : 0;
@@ -106,12 +102,12 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
             double number     = 0.0;
             const auto parsed = std::from_chars(first, last, number, std::chars_format::general);
-            return parsed.ec == std::errc() && parsed.ptr == last ? ToInt32(number) : 0;
+            return parsed.ec == std::errc() && parsed.ptr == last ? Framework::Scripting::Builtins::ToInt32(number) : 0;
         }
 
-        discord::ActivityType MapActivityType(const Bind::Value &value) {
+        discord::ActivityType MapActivityType(const Framework::Scripting::Bind::Value &value) {
             if (value.IsNumber()) {
-                return static_cast<discord::ActivityType>(ToInt32(value.AsNumber()));
+                return static_cast<discord::ActivityType>(Framework::Scripting::Builtins::ToInt32(value.AsNumber()));
             }
             if (value.IsString()) {
                 const std::string name = ToLower(value.AsString());
@@ -128,9 +124,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return discord::ActivityType::Playing;
         }
 
-        discord::ActivityPartyPrivacy MapPrivacy(const Bind::Value &value) {
+        discord::ActivityPartyPrivacy MapPrivacy(const Framework::Scripting::Bind::Value &value) {
             if (value.IsNumber()) {
-                return static_cast<discord::ActivityPartyPrivacy>(ToInt32(value.AsNumber()));
+                return static_cast<discord::ActivityPartyPrivacy>(Framework::Scripting::Builtins::ToInt32(value.AsNumber()));
             }
             if (value.IsString() && ToLower(value.AsString()) == "public") {
                 return discord::ActivityPartyPrivacy::Public;
@@ -233,44 +229,44 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
 
             // The member `key` of `options` when it is a string, as `field`.
-            void ReadString(const Bind::Value &options, const char *key, StringField field) {
-                const Bind::Value value = options.Member(key);
+            void ReadString(const Framework::Scripting::Bind::Value &options, const char *key, StringField field) {
+                const Framework::Scripting::Bind::Value value = options.Member(key);
                 if (value.IsString()) {
                     String(field, value.AsString());
                 }
             }
 
-            void ReadNumber(const Bind::Value &options, const char *key, NumberField field) {
-                const Bind::Value value = options.Member(key);
+            void ReadNumber(const Framework::Scripting::Bind::Value &options, const char *key, NumberField field) {
+                const Framework::Scripting::Bind::Value value = options.Member(key);
                 if (value.IsNumber()) {
-                    Number(field, ToInt64(value));
+                    Number(field, Framework::Scripting::Builtins::ToInt64(value));
                 }
             }
 
             // { id?, size?: [current, max], privacy? }
-            void ReadParty(const Bind::Value &party) {
+            void ReadParty(const Framework::Scripting::Bind::Value &party) {
                 ReadString(party, "id", StringField::PartyId);
 
-                const Bind::Value size = party.Member("size");
+                const Framework::Scripting::Bind::Value size = party.Member("size");
                 if (size.IsArray() && size.Length() >= 2) {
                     PartySize(ToPartySize(size.At(0)), ToPartySize(size.At(1)));
                 }
 
                 // A privacy that is given and is no name and no number is private, null included.
-                const Bind::Value privacy = party.Member("privacy");
+                const Framework::Scripting::Bind::Value privacy = party.Member("privacy");
                 if (!privacy.IsNil() || privacy.IsNull()) {
                     Privacy(MapPrivacy(privacy));
                 }
             }
 
             // { match?, join?, spectate? }
-            void ReadSecrets(const Bind::Value &secrets) {
+            void ReadSecrets(const Framework::Scripting::Bind::Value &secrets) {
                 ReadString(secrets, "match", StringField::MatchSecret);
                 ReadString(secrets, "join", StringField::JoinSecret);
                 ReadString(secrets, "spectate", StringField::SpectateSecret);
             }
 
-            void ReadAssets(const Bind::Value &assets) {
+            void ReadAssets(const Framework::Scripting::Bind::Value &assets) {
                 ReadString(assets, "largeImage", StringField::LargeImage);
                 ReadString(assets, "largeText", StringField::LargeText);
                 ReadString(assets, "smallImage", StringField::SmallImage);
@@ -333,12 +329,12 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         // What JavaScript calls an object: a plain object or a table, an array, a function, an instance of a
         // bound class. Members are read off the first two and off a bound instance; a function has none here.
-        bool IsObject(const Bind::Value &value) {
+        bool IsObject(const Framework::Scripting::Bind::Value &value) {
             switch (value.Kind()) {
-            case Bind::ValueKind::Object:
-            case Bind::ValueKind::Array:
-            case Bind::ValueKind::Function:
-            case Bind::ValueKind::Bound: return true;
+            case Framework::Scripting::Bind::ValueKind::Object:
+            case Framework::Scripting::Bind::ValueKind::Array:
+            case Framework::Scripting::Bind::ValueKind::Function:
+            case Framework::Scripting::Bind::ValueKind::Bound: return true;
             default: return false;
             }
         }
@@ -365,7 +361,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             _written  = 0;
         }
 
-        void SetStringField(Bind::Call &call, StringField field) {
+        void SetStringField(Framework::Scripting::Bind::Call &call, StringField field) {
             if (!call.Arg(0).IsString()) {
                 call.ThrowError("Discord: expected a string argument");
                 return;
@@ -375,29 +371,29 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             ApplyString(field, value);
         }
 
-        void SetNumberField(Bind::Call &call, NumberField field) {
+        void SetNumberField(Framework::Scripting::Bind::Call &call, NumberField field) {
             if (!call.Arg(0).IsNumber()) {
                 call.ThrowError("Discord: expected a numeric argument");
                 return;
             }
-            const std::int64_t value = ToInt64(call.Arg(0));
+            const std::int64_t value = Framework::Scripting::Builtins::ToInt64(call.Arg(0));
             std::scoped_lock lock(_mutex);
             ApplyNumber(field, value);
         }
 
-        Bind::NativeFunction StringSetter(StringField field) {
-            return [field](Bind::Call &call) {
+        Framework::Scripting::Bind::NativeFunction StringSetter(StringField field) {
+            return [field](Framework::Scripting::Bind::Call &call) {
                 SetStringField(call, field);
             };
         }
 
-        Bind::NativeFunction NumberSetter(NumberField field) {
-            return [field](Bind::Call &call) {
+        Framework::Scripting::Bind::NativeFunction NumberSetter(NumberField field) {
+            return [field](Framework::Scripting::Bind::Call &call) {
                 SetNumberField(call, field);
             };
         }
 
-        void SetType(Bind::Call &call) {
+        void SetType(Framework::Scripting::Bind::Call &call) {
             if (call.ArgCount() < 1) {
                 call.ThrowError("Discord.setType: expected (type)");
                 return;
@@ -407,17 +403,17 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             staging.Commit();
         }
 
-        void SetPartySize(Bind::Call &call) {
+        void SetPartySize(Framework::Scripting::Bind::Call &call) {
             if (!call.Arg(0).IsNumber() || !call.Arg(1).IsNumber()) {
                 call.ThrowError("Discord.setPartySize: expected (current, max)");
                 return;
             }
             Staging staging;
-            staging.PartySize(ToInt32(call.Arg(0).AsNumber()), ToInt32(call.Arg(1).AsNumber()));
+            staging.PartySize(Framework::Scripting::Builtins::ToInt32(call.Arg(0).AsNumber()), Framework::Scripting::Builtins::ToInt32(call.Arg(1).AsNumber()));
             staging.Commit();
         }
 
-        void SetPartyPrivacy(Bind::Call &call) {
+        void SetPartyPrivacy(Framework::Scripting::Bind::Call &call) {
             if (call.ArgCount() < 1) {
                 call.ThrowError("Discord.setPartyPrivacy: expected (privacy)");
                 return;
@@ -427,17 +423,17 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             staging.Commit();
         }
 
-        void SetInstance(Bind::Call &call) {
+        void SetInstance(Framework::Scripting::Bind::Call &call) {
             if (call.ArgCount() < 1) {
                 call.ThrowError("Discord.setInstance: expected (bool)");
                 return;
             }
             Staging staging;
-            staging.Instance(ReadFlag(call, 0));
+            staging.Instance(Framework::Scripting::Builtins::ReadFlag(call, 0));
             staging.Commit();
         }
 
-        void SetAssets(Bind::Call &call) {
+        void SetAssets(Framework::Scripting::Bind::Call &call) {
             if (!IsObject(call.Arg(0))) {
                 call.ThrowError("Discord.setAssets: expected an object");
                 return;
@@ -447,7 +443,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             staging.Commit();
         }
 
-        void SetParty(Bind::Call &call) {
+        void SetParty(Framework::Scripting::Bind::Call &call) {
             if (!IsObject(call.Arg(0))) {
                 call.ThrowError("Discord.setParty: expected an object");
                 return;
@@ -457,7 +453,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             staging.Commit();
         }
 
-        void SetSecrets(Bind::Call &call) {
+        void SetSecrets(Framework::Scripting::Bind::Call &call) {
             if (!IsObject(call.Arg(0))) {
                 call.ThrowError("Discord.setSecrets: expected an object");
                 return;
@@ -467,8 +463,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             staging.Commit();
         }
 
-        void SetPresence(Bind::Call &call) {
-            const Bind::Value options = call.Arg(0);
+        void SetPresence(Framework::Scripting::Bind::Call &call) {
+            const Framework::Scripting::Bind::Value options = call.Arg(0);
             if (!IsObject(options)) {
                 call.ThrowError("Discord.setPresence: expected an options object");
                 return;
@@ -476,7 +472,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
             Staging staging;
             // A type that is given and is no name and no number is "playing", null included.
-            const Bind::Value type = options.Member("type");
+            const Framework::Scripting::Bind::Value type = options.Member("type");
             if (!type.IsNil() || type.IsNull()) {
                 staging.Type(MapActivityType(type));
             }
@@ -491,17 +487,17 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
             staging.ReadAssets(options);
 
-            const Bind::Value instance = options.Member("instance");
+            const Framework::Scripting::Bind::Value instance = options.Member("instance");
             if (instance.IsBoolean()) {
                 staging.Instance(instance.AsBoolean());
             }
 
-            const Bind::Value party = options.Member("party");
+            const Framework::Scripting::Bind::Value party = options.Member("party");
             if (IsObject(party)) {
                 staging.ReadParty(party);
             }
 
-            const Bind::Value secrets = options.Member("secrets");
+            const Framework::Scripting::Bind::Value secrets = options.Member("secrets");
             if (IsObject(secrets)) {
                 staging.ReadSecrets(secrets);
             }
@@ -510,11 +506,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             call.Return(Publish());
         }
 
-        void Update(Bind::Call &call) {
+        void Update(Framework::Scripting::Bind::Call &call) {
             call.Return(Publish());
         }
 
-        void Clear(Bind::Call &call) {
+        void Clear(Framework::Scripting::Bind::Call &call) {
             ResetStaged();
             auto *presence = ResolvePresence();
             if (!presence || !presence->IsInitialized()) {
@@ -525,21 +521,21 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             call.Return(true);
         }
 
-        void Reset(Bind::Call &) {
+        void Reset(Framework::Scripting::Bind::Call &) {
             ResetStaged();
         }
 
-        void GetUserId(Bind::Call &call) {
+        void GetUserId(Framework::Scripting::Bind::Call &call) {
             auto *presence = ResolvePresence();
             call.Return(presence ? presence->GetUserId() : std::string {});
         }
 
-        void GetUsername(Bind::Call &call) {
+        void GetUsername(Framework::Scripting::Bind::Call &call) {
             auto *presence = ResolvePresence();
             call.Return(presence ? presence->GetUsername() : std::string {});
         }
 
-        void IsAvailable(Bind::Call &call) {
+        void IsAvailable(Framework::Scripting::Bind::Call &call) {
             auto *presence = ResolvePresence();
             call.Return(presence && presence->IsInitialized());
         }
@@ -552,63 +548,58 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
     }
 
-    const Bind::Namespace &Discord::Definition() {
-        using Bind::Doc;
-        using Bind::Side;
-        using Bind::TypeOf;
-        using Bind::Type::Custom;
-
+    const Framework::Scripting::Bind::Namespace &Discord::Definition() {
         static const auto definition = [] {
-            const auto number  = TypeOf<double>();
-            const auto boolean = TypeOf<bool>();
-            const auto text    = TypeOf<std::string>();
-            const auto type    = Custom("\"playing\" | \"streaming\" | \"listening\" | \"watching\" | number", "'playing'|'streaming'|'listening'|'watching'|integer");
-            const auto privacy = Custom("\"private\" | \"public\" | number", "'private'|'public'|integer");
-            const auto assets  = Custom("{ largeImage?: string; largeText?: string; smallImage?: string; smallText?: string }", "{ largeImage: string?, largeText: string?, smallImage: string?, smallText: string? }");
-            const auto party   = Custom("{ id?: string; size?: [number, number]; privacy?: \"private\" | \"public\" | number }", "{ id: string?, size: integer[]?, privacy: ('private'|'public'|integer)? }");
-            const auto secrets = Custom("{ match?: string; join?: string; spectate?: string }", "{ match: string?, join: string?, spectate: string? }");
-            const auto options = Custom("Record<string, unknown>", "table<string, any>");
+            const auto number  = Framework::Scripting::Bind::TypeOf<double>();
+            const auto boolean = Framework::Scripting::Bind::TypeOf<bool>();
+            const auto text    = Framework::Scripting::Bind::TypeOf<std::string>();
+            const auto type    = Framework::Scripting::Bind::Type::Custom("\"playing\" | \"streaming\" | \"listening\" | \"watching\" | number", "'playing'|'streaming'|'listening'|'watching'|integer");
+            const auto privacy = Framework::Scripting::Bind::Type::Custom("\"private\" | \"public\" | number", "'private'|'public'|integer");
+            const auto assets  = Framework::Scripting::Bind::Type::Custom("{ largeImage?: string; largeText?: string; smallImage?: string; smallText?: string }", "{ largeImage: string?, largeText: string?, smallImage: string?, smallText: string? }");
+            const auto party   = Framework::Scripting::Bind::Type::Custom("{ id?: string; size?: [number, number]; privacy?: \"private\" | \"public\" | number }", "{ id: string?, size: integer[]?, privacy: ('private'|'public'|integer)? }");
+            const auto secrets = Framework::Scripting::Bind::Type::Custom("{ match?: string; join?: string; spectate?: string }", "{ match: string?, join: string?, spectate: string? }");
+            const auto options = Framework::Scripting::Bind::Type::Custom("Record<string, unknown>", "table<string, any>");
 
             // A setter of one field: its summary is what its parameter is, staged.
-            const auto field = [](const Bind::TypeRef &of, const char *parameter, const char *description) {
-                return Doc(std::string("Stages ") + description).Param(parameter, of, description);
+            const auto field = [](const Framework::Scripting::Bind::TypeRef &of, const char *parameter, const char *description) {
+                return Framework::Scripting::Bind::Doc(std::string("Stages ") + description).Param(parameter, of, description);
             };
 
             // Composition, then commit and lifecycle, then queries.
-            return Bind::Namespace("Discord", "Client-only Discord rich-presence composer exposed as the global Discord; setters stage values until update or setPresence publishes them.", Side::Client)
-                .Function("setType", &SetType, field(type, "type", "the Discord activity verb or numeric enum value."), Side::Client)
-                .Function("setName", StringSetter(StringField::Name), field(text, "name", "the activity name."), Side::Client)
-                .Function("setDetails", StringSetter(StringField::Details), field(text, "details", "the top presence line."), Side::Client)
-                .Function("setState", StringSetter(StringField::State), field(text, "state", "the bottom presence line."), Side::Client)
-                .Function("setStartTimestamp", NumberSetter(NumberField::StartTimestamp), field(number, "seconds", "the elapsed-time Unix timestamp in seconds; zero clears it."), Side::Client)
-                .Function("setEndTimestamp", NumberSetter(NumberField::EndTimestamp), field(number, "seconds", "the countdown Unix timestamp in seconds; zero clears it."), Side::Client)
-                .Function("setSupportedPlatforms", NumberSetter(NumberField::SupportedPlatforms), field(number, "flags", "the supported-platform bitmask: Desktop 1, Android 2, and iOS 4."), Side::Client)
-                .Function("setLargeImage", StringSetter(StringField::LargeImage), field(text, "assetKey", "the large image asset key."), Side::Client)
-                .Function("setLargeText", StringSetter(StringField::LargeText), field(text, "text", "the large image tooltip."), Side::Client)
-                .Function("setSmallImage", StringSetter(StringField::SmallImage), field(text, "assetKey", "the small image asset key."), Side::Client)
-                .Function("setSmallText", StringSetter(StringField::SmallText), field(text, "text", "the small image tooltip."), Side::Client)
-                .Function("setAssets", &SetAssets, Doc("Stages multiple Discord image fields at once.").Param("assets", assets, "Asset keys and tooltips to merge into the staged activity."), Side::Client)
-                .Function("setPartyId", StringSetter(StringField::PartyId), field(text, "id", "the party grouping identifier."), Side::Client)
-                .Function("setPartySize", &SetPartySize, Doc("Stages the party's current and maximum size.").Param("current", number, "Current party member count.").Param("max", number, "Maximum party capacity."), Side::Client)
-                .Function("setPartyPrivacy", &SetPartyPrivacy, field(privacy, "privacy", "the party join-privacy name or numeric enum value."), Side::Client)
-                .Function("setParty", &SetParty, Doc("Stages multiple Discord party fields at once.").Param("party", party, "Party fields to merge into the staged activity."), Side::Client)
-                .Function("setMatchSecret", StringSetter(StringField::MatchSecret), field(text, "secret", "the opaque match secret."), Side::Client)
-                .Function("setJoinSecret", StringSetter(StringField::JoinSecret), field(text, "secret", "the opaque join secret that enables invitations."), Side::Client)
-                .Function("setSpectateSecret", StringSetter(StringField::SpectateSecret), field(text, "secret", "the opaque spectate secret."), Side::Client)
-                .Function("setSecrets", &SetSecrets, Doc("Stages multiple Discord activity secrets at once.").Param("secrets", secrets, "Opaque secrets to merge into the staged activity."), Side::Client)
-                .Function("setInstance", &SetInstance, field(boolean, "instance", "whether the activity represents an instanced session."), Side::Client)
+            return Framework::Scripting::Bind::Namespace("Discord", "Client-only Discord rich-presence composer exposed as the global Discord; setters stage values until update or setPresence publishes them.", Framework::Scripting::Bind::Side::Client)
+                .Function("setType", &SetType, field(type, "type", "the Discord activity verb or numeric enum value."), Framework::Scripting::Bind::Side::Client)
+                .Function("setName", StringSetter(StringField::Name), field(text, "name", "the activity name."), Framework::Scripting::Bind::Side::Client)
+                .Function("setDetails", StringSetter(StringField::Details), field(text, "details", "the top presence line."), Framework::Scripting::Bind::Side::Client)
+                .Function("setState", StringSetter(StringField::State), field(text, "state", "the bottom presence line."), Framework::Scripting::Bind::Side::Client)
+                .Function("setStartTimestamp", NumberSetter(NumberField::StartTimestamp), field(number, "seconds", "the elapsed-time Unix timestamp in seconds; zero clears it."), Framework::Scripting::Bind::Side::Client)
+                .Function("setEndTimestamp", NumberSetter(NumberField::EndTimestamp), field(number, "seconds", "the countdown Unix timestamp in seconds; zero clears it."), Framework::Scripting::Bind::Side::Client)
+                .Function("setSupportedPlatforms", NumberSetter(NumberField::SupportedPlatforms), field(number, "flags", "the supported-platform bitmask: Desktop 1, Android 2, and iOS 4."), Framework::Scripting::Bind::Side::Client)
+                .Function("setLargeImage", StringSetter(StringField::LargeImage), field(text, "assetKey", "the large image asset key."), Framework::Scripting::Bind::Side::Client)
+                .Function("setLargeText", StringSetter(StringField::LargeText), field(text, "text", "the large image tooltip."), Framework::Scripting::Bind::Side::Client)
+                .Function("setSmallImage", StringSetter(StringField::SmallImage), field(text, "assetKey", "the small image asset key."), Framework::Scripting::Bind::Side::Client)
+                .Function("setSmallText", StringSetter(StringField::SmallText), field(text, "text", "the small image tooltip."), Framework::Scripting::Bind::Side::Client)
+                .Function("setAssets", &SetAssets, Framework::Scripting::Bind::Doc("Stages multiple Discord image fields at once.").Param("assets", assets, "Asset keys and tooltips to merge into the staged activity."), Framework::Scripting::Bind::Side::Client)
+                .Function("setPartyId", StringSetter(StringField::PartyId), field(text, "id", "the party grouping identifier."), Framework::Scripting::Bind::Side::Client)
+                .Function("setPartySize", &SetPartySize, Framework::Scripting::Bind::Doc("Stages the party's current and maximum size.").Param("current", number, "Current party member count.").Param("max", number, "Maximum party capacity."), Framework::Scripting::Bind::Side::Client)
+                .Function("setPartyPrivacy", &SetPartyPrivacy, field(privacy, "privacy", "the party join-privacy name or numeric enum value."), Framework::Scripting::Bind::Side::Client)
+                .Function("setParty", &SetParty, Framework::Scripting::Bind::Doc("Stages multiple Discord party fields at once.").Param("party", party, "Party fields to merge into the staged activity."), Framework::Scripting::Bind::Side::Client)
+                .Function("setMatchSecret", StringSetter(StringField::MatchSecret), field(text, "secret", "the opaque match secret."), Framework::Scripting::Bind::Side::Client)
+                .Function("setJoinSecret", StringSetter(StringField::JoinSecret), field(text, "secret", "the opaque join secret that enables invitations."), Framework::Scripting::Bind::Side::Client)
+                .Function("setSpectateSecret", StringSetter(StringField::SpectateSecret), field(text, "secret", "the opaque spectate secret."), Framework::Scripting::Bind::Side::Client)
+                .Function("setSecrets", &SetSecrets, Framework::Scripting::Bind::Doc("Stages multiple Discord activity secrets at once.").Param("secrets", secrets, "Opaque secrets to merge into the staged activity."), Framework::Scripting::Bind::Side::Client)
+                .Function("setInstance", &SetInstance, field(boolean, "instance", "whether the activity represents an instanced session."), Framework::Scripting::Bind::Side::Client)
                 .Function("setPresence", &SetPresence,
-                    Doc("Merges a complete option batch into the staged activity and publishes it immediately.")
+                    Framework::Scripting::Bind::Doc("Merges a complete option batch into the staged activity and publishes it immediately.")
                         .Param("options", options, "Batch of supported activity, timestamp, asset, party, secret, instance, and platform fields.")
                         .ReturnType(boolean)
                         .Returns("True when the update was dispatched; false when Discord is unavailable."),
-                    Side::Client)
-                .Function("update", &Update, Doc("Publishes the currently staged activity as one rate-limited Discord update.").ReturnType(boolean).Returns("True when dispatched; false when Discord is unavailable."), Side::Client)
-                .Function("clear", &Clear, Doc("Clears what scripts published and resets staged state.").ReturnType(boolean).Returns("True when dispatched; false when Discord is unavailable."), Side::Client)
-                .Function("reset", &Reset, Doc("Resets staged activity fields without publishing a Discord update."), Side::Client)
-                .Function("getUserId", &GetUserId, Doc("Returns the signed-in Discord user's snowflake.").ReturnType(text).Returns("User ID string, or an empty string until available."), Side::Client)
-                .Function("getUsername", &GetUsername, Doc("Returns the signed-in Discord user's username.").ReturnType(text).Returns("Username string, or an empty string until available."), Side::Client)
-                .Function("isAvailable", &IsAvailable, Doc("Checks whether Discord is connected and can publish presence.").ReturnType(boolean).Returns("True when rich presence is initialized."), Side::Client);
+                    Framework::Scripting::Bind::Side::Client)
+                .Function("update", &Update, Framework::Scripting::Bind::Doc("Publishes the currently staged activity as one rate-limited Discord update.").ReturnType(boolean).Returns("True when dispatched; false when Discord is unavailable."), Framework::Scripting::Bind::Side::Client)
+                .Function("clear", &Clear, Framework::Scripting::Bind::Doc("Clears what scripts published and resets staged state.").ReturnType(boolean).Returns("True when dispatched; false when Discord is unavailable."), Framework::Scripting::Bind::Side::Client)
+                .Function("reset", &Reset, Framework::Scripting::Bind::Doc("Resets staged activity fields without publishing a Discord update."), Framework::Scripting::Bind::Side::Client)
+                .Function("getUserId", &GetUserId, Framework::Scripting::Bind::Doc("Returns the signed-in Discord user's snowflake.").ReturnType(text).Returns("User ID string, or an empty string until available."), Framework::Scripting::Bind::Side::Client)
+                .Function("getUsername", &GetUsername, Framework::Scripting::Bind::Doc("Returns the signed-in Discord user's username.").ReturnType(text).Returns("Username string, or an empty string until available."), Framework::Scripting::Bind::Side::Client)
+                .Function("isAvailable", &IsAvailable, Framework::Scripting::Bind::Doc("Checks whether Discord is connected and can publish presence.").ReturnType(boolean).Returns("True when rich presence is initialized."), Framework::Scripting::Bind::Side::Client);
         }();
         return definition;
     }
@@ -618,9 +609,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
         if (resourceManager != nullptr) {
-            Bind::SetCallResourceManager(isolate, resourceManager);
+            Framework::Scripting::Bind::SetCallResourceManager(isolate, resourceManager);
         }
-        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Bind::Side::Client);
+        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Client);
     }
 
     void Discord::RegisterLua(Framework::Scripting::LuaRuntime &runtime) {

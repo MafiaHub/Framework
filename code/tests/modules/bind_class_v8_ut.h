@@ -28,12 +28,6 @@
 #include <vector>
 
 namespace BindClassV8Test {
-    namespace Bind = Framework::Scripting::Bind;
-    using BindClassLuaTest::Counter;
-    using BindClassLuaTest::Sealed;
-    using BindClassLuaTest::SubCounter;
-    using BindClassLuaTest::Token;
-    using BindClassLuaTest::Tracked;
 
     class Gauge {
       public:
@@ -138,9 +132,6 @@ FW_SCRIPT_CLASS(BindClassV8Test::Bare, "Bare");
 FW_SCRIPT_CLASS(BindClassV8Test::Lenient, "Lenient");
 
 namespace BindClassV8Test {
-    using Framework::Scripting::ClassCache;
-    using Framework::Scripting::GetScriptingCatalog;
-    using Framework::Scripting::IsClientScripting;
 
     inline int gaugeHookRuns = 0;
 
@@ -166,62 +157,61 @@ namespace BindClassV8Test {
     }
 
     // The side of the runtime an isolate belongs to, as a builtin reads it.
-    inline Bind::Side SideOf(v8::Isolate *isolate) {
-        return IsClientScripting(isolate) ? Bind::Side::Client : Bind::Side::Server;
+    inline Framework::Scripting::Bind::Side SideOf(v8::Isolate *isolate) {
+        return Framework::Scripting::IsClientScripting(isolate) ? Framework::Scripting::Bind::Side::Client : Framework::Scripting::Bind::Side::Server;
     }
 
     template <typename T>
-    ClassCache<T> &CacheOf() {
-        static ClassCache<T> cache;
+    Framework::Scripting::ClassCache<T> &CacheOf() {
+        static Framework::Scripting::ClassCache<T> cache;
         return cache;
     }
 
     // The isolate's v8pp class of `definition`, built on first use: what the GetClass(isolate) of a builtin does.
     template <typename T>
-    v8pp::class_<T> &ClassOf(v8::Isolate *isolate, const Bind::Class<T> &definition) {
+    v8pp::class_<T> &ClassOf(v8::Isolate *isolate, const Framework::Scripting::Bind::Class<T> &definition) {
         return CacheOf<T>().Get(isolate, [&] {
-            return definition.MaterialiseV8(isolate, GetScriptingCatalog(isolate), SideOf(isolate));
+            return definition.MaterialiseV8(isolate, Framework::Scripting::GetScriptingCatalog(isolate), SideOf(isolate));
         });
     }
 
-    inline const Bind::Class<Gauge> &GaugeDefinition() {
-        using Bind::Doc;
-        static const auto definition = Bind::Class<Gauge>("Gauge", "Shows a level.")
-                                           .Constructor<int>(Doc("Creates a gauge.").Param("level", "Initial level."))
-                                           .V8Constructor(&MakeGauge)
-                                           .Method("raise", &Gauge::raise, Doc("Raises the level.").Param("amount", "Levels to add.").Returns("This gauge."))
-                                           .Static("of", &Gauge::of, Doc("Makes a gauge.").Param("level", "Its level.").Returns("New gauge."))
-                                           .Method("label", &Gauge::label, Doc("Labels the level.").Param("prefix", "Text put before the level.").Returns("The label.").ReturnType(Bind::Type::Custom("`${string}${number}`", "string")))
-                                           .Method("drain", &Drain, Doc("Empties the gauge."))
-                                           .Static("limit", &Gauge::limit, Doc("Reads the highest level.").Returns("The limit."))
-                                           .Property("level", &Gauge::level, &Gauge::setLevel, "Current level.")
-                                           .Property("full", &Gauge::full, "Whether the gauge is at its limit.")
-                                           .LuaMeta(Bind::LuaMetaEvent::Len,
-                                               [](const Gauge &gauge) {
-                                                   return gauge.level();
-                                               })
-                                           .LuaHook([](lua_State *L, int, int classTableIndex) {
-                                               lua_pushinteger(L, Gauge::limit());
-                                               lua_setfield(L, classTableIndex, "LIMIT");
-                                           })
-                                           .V8Hook([](v8pp::class_<Gauge> &cls, v8::Isolate *) {
-                                               ++gaugeHookRuns;
-                                               cls.prototype_function("toJSON", &GaugeToJson, GaugeToJsonDocs());
-                                           });
+    inline const Framework::Scripting::Bind::Class<Gauge> &GaugeDefinition() {
+        static const auto definition =
+            Framework::Scripting::Bind::Class<Gauge>("Gauge", "Shows a level.")
+                .Constructor<int>(Framework::Scripting::Bind::Doc("Creates a gauge.").Param("level", "Initial level."))
+                .V8Constructor(&MakeGauge)
+                .Method("raise", &Gauge::raise, Framework::Scripting::Bind::Doc("Raises the level.").Param("amount", "Levels to add.").Returns("This gauge."))
+                .Static("of", &Gauge::of, Framework::Scripting::Bind::Doc("Makes a gauge.").Param("level", "Its level.").Returns("New gauge."))
+                .Method("label", &Gauge::label, Framework::Scripting::Bind::Doc("Labels the level.").Param("prefix", "Text put before the level.").Returns("The label.").ReturnType(Framework::Scripting::Bind::Type::Custom("`${string}${number}`", "string")))
+                .Method("drain", &Drain, Framework::Scripting::Bind::Doc("Empties the gauge."))
+                .Static("limit", &Gauge::limit, Framework::Scripting::Bind::Doc("Reads the highest level.").Returns("The limit."))
+                .Property("level", &Gauge::level, &Gauge::setLevel, "Current level.")
+                .Property("full", &Gauge::full, "Whether the gauge is at its limit.")
+                .LuaMeta(Framework::Scripting::Bind::LuaMetaEvent::Len,
+                    [](const Gauge &gauge) {
+                        return gauge.level();
+                    })
+                .LuaHook([](lua_State *L, int, int classTableIndex) {
+                    lua_pushinteger(L, Gauge::limit());
+                    lua_setfield(L, classTableIndex, "LIMIT");
+                })
+                .V8Hook([](v8pp::class_<Gauge> &cls, v8::Isolate *) {
+                    ++gaugeHookRuns;
+                    cls.prototype_function("toJSON", &GaugeToJson, GaugeToJsonDocs());
+                });
         return definition;
     }
 
-    inline const Bind::Class<Dial> &DialDefinition() {
-        using Bind::Doc;
+    inline const Framework::Scripting::Bind::Class<Dial> &DialDefinition() {
         GaugeDefinition();
-        static const auto definition = Bind::Class<Dial>("Dial", "A gauge that turns.")
+        static const auto definition = Framework::Scripting::Bind::Class<Dial>("Dial", "A gauge that turns.")
                                            .Inherit<Gauge>()
                                            .V8EnsureBase([](v8::Isolate *isolate) {
                                                ClassOf(isolate, GaugeDefinition());
                                            })
-                                           .Constructor<int>(Doc("Creates a dial.").Param("level", "Initial level."))
-                                           .Method("turns", &Dial::turns, Doc("Counts the full turns.").Returns("One turn for ten levels."))
-                                           .Method("raiseBy", &Gauge::raise, Doc("Raises the level.").Param("amount", "Levels to add.").Returns("This dial."))
+                                           .Constructor<int>(Framework::Scripting::Bind::Doc("Creates a dial.").Param("level", "Initial level."))
+                                           .Method("turns", &Dial::turns, Framework::Scripting::Bind::Doc("Counts the full turns.").Returns("One turn for ten levels."))
+                                           .Method("raiseBy", &Gauge::raise, Framework::Scripting::Bind::Doc("Raises the level.").Param("amount", "Levels to add.").Returns("This dial."))
                                            .Property("reading", &Gauge::level, "Current level.")
                                            .Method(
                                                "fill",
@@ -229,7 +219,7 @@ namespace BindClassV8Test {
                                                    gauge.setLevel(Gauge::limit());
                                                    return gauge;
                                                },
-                                               Doc("Fills the dial.").Returns("This dial."))
+                                               Framework::Scripting::Bind::Doc("Fills the dial.").Returns("This dial."))
                                            .Property(
                                                "half",
                                                [](const Gauge &gauge) {
@@ -242,57 +232,52 @@ namespace BindClassV8Test {
         return definition;
     }
 
-    inline const Bind::Class<Span> &SpanDefinition() {
-        using Bind::Doc;
-        static const auto definition = Bind::Class<Span>("Span", "A range of integers.")
-                                           .Constructor<int, std::optional<int>>(Doc("Creates a span.").Param("from", "First value.").Param("to", "Last value; the first when omitted."))
-                                           .Method("length", &Span::length, Doc("Measures the span.").Returns("Last value minus first."))
+    inline const Framework::Scripting::Bind::Class<Span> &SpanDefinition() {
+        static const auto definition = Framework::Scripting::Bind::Class<Span>("Span", "A range of integers.")
+                                           .Constructor<int, std::optional<int>>(Framework::Scripting::Bind::Doc("Creates a span.").Param("from", "First value.").Param("to", "Last value; the first when omitted."))
+                                           .Method("length", &Span::length, Framework::Scripting::Bind::Doc("Measures the span.").Returns("Last value minus first."))
                                            .Static(
                                                "lengthOf",
                                                [](const Span *span) {
                                                    return span != nullptr ? span->length() : -1;
                                                },
-                                               Doc("Measures a span.").Param("span", "Span to measure.").Returns("Its length, or -1 without a span."));
+                                               Framework::Scripting::Bind::Doc("Measures a span.").Param("span", "Span to measure.").Returns("Its length, or -1 without a span."));
         return definition;
     }
 
     // Compass bound for V8 alone, member by member as Class<T> does. value_types_parity binds glm values through
     // Class<T>, for both languages.
     inline std::unique_ptr<v8pp::class_<Compass>> MaterialiseCompass(v8::Isolate *isolate, v8pp::metadata::registry &catalog) {
-        using Bind::Doc;
-        using Bind::Side;
-        namespace Detail = Bind::Detail;
-
-        Bind::ClassDesc desc;
+        Framework::Scripting::Bind::ClassDesc desc;
         desc.name        = "Compass";
         desc.description = "Points somewhere.";
 
-        Bind::PropertyDesc heading;
+        Framework::Scripting::Bind::PropertyDesc heading;
         heading.name        = "heading";
-        heading.type        = Bind::TypeOf<glm::vec3>();
+        heading.type        = Framework::Scripting::Bind::TypeOf<glm::vec3>();
         heading.description = "Where the compass points.";
 
-        Detail::V8Class<Compass> definition;
-        definition.constructor = Detail::V8ConstructorOf<Compass>(Detail::V8FunctionOptions(Bind::DescribeConstructor<>(Doc("Creates a compass."))));
-        definition.members.push_back(Detail::V8Method<Compass>(Detail::SignatureOf<decltype(&Compass::shift)>::Type {}, Side::Shared, desc.name, "shift", &Compass::shift,
-            Detail::V8FunctionOptions(Bind::DescribeFunction<decltype(&Compass::shift)>("shift", Doc("Shifts the heading.").Param("by", "Offset to add.").Returns("The shifted heading."), false, Side::Shared))));
-        definition.members.push_back(Detail::V8Static<Compass>(Detail::SignatureOf<decltype(&Compass::north)>::Type {}, Side::Shared, desc.name, "north", &Compass::north,
-            Detail::V8FunctionOptions(Bind::DescribeFunction<decltype(&Compass::north)>("north", Doc("Points north.").Returns("The north heading."), true, Side::Shared))));
-        definition.members.push_back(Detail::V8Property<Compass, glm::vec3>(Side::Shared, desc.name, "heading", &Compass::heading, &Compass::setHeading, Detail::V8PropertyOptions(heading)));
-        return Detail::V8MaterialiseClass(definition, desc, isolate, catalog, Side::Server);
+        Framework::Scripting::Bind::Detail::V8Class<Compass> definition;
+        definition.constructor = Framework::Scripting::Bind::Detail::V8ConstructorOf<Compass>(Framework::Scripting::Bind::Detail::V8FunctionOptions(Framework::Scripting::Bind::DescribeConstructor<>(Framework::Scripting::Bind::Doc("Creates a compass."))));
+        definition.members.push_back(Framework::Scripting::Bind::Detail::V8Method<Compass>(Framework::Scripting::Bind::Detail::SignatureOf<decltype(&Compass::shift)>::Type {}, Framework::Scripting::Bind::Side::Shared, desc.name, "shift", &Compass::shift,
+            Framework::Scripting::Bind::Detail::V8FunctionOptions(
+                Framework::Scripting::Bind::DescribeFunction<decltype(&Compass::shift)>("shift", Framework::Scripting::Bind::Doc("Shifts the heading.").Param("by", "Offset to add.").Returns("The shifted heading."), false, Framework::Scripting::Bind::Side::Shared))));
+        definition.members.push_back(Framework::Scripting::Bind::Detail::V8Static<Compass>(Framework::Scripting::Bind::Detail::SignatureOf<decltype(&Compass::north)>::Type {}, Framework::Scripting::Bind::Side::Shared, desc.name, "north", &Compass::north,
+            Framework::Scripting::Bind::Detail::V8FunctionOptions(Framework::Scripting::Bind::DescribeFunction<decltype(&Compass::north)>("north", Framework::Scripting::Bind::Doc("Points north.").Returns("The north heading."), true, Framework::Scripting::Bind::Side::Shared))));
+        definition.members.push_back(Framework::Scripting::Bind::Detail::V8Property<Compass, glm::vec3>(Framework::Scripting::Bind::Side::Shared, desc.name, "heading", &Compass::heading, &Compass::setHeading, Framework::Scripting::Bind::Detail::V8PropertyOptions(heading)));
+        return Framework::Scripting::Bind::Detail::V8MaterialiseClass(definition, desc, isolate, catalog, Framework::Scripting::Bind::Side::Server);
     }
 
     // Gauge and Dial bound the way a builtin is written by hand, to compare with what their definitions produce.
     inline void HandWrittenGaugeAndDial(v8::Isolate *isolate, v8pp::metadata::registry &catalog, std::vector<std::shared_ptr<void>> &keep) {
-        namespace metadata = v8pp::metadata;
 
         auto gauge = std::make_shared<v8pp::class_<Gauge>>(isolate, catalog, "Gauge", "Shows a level.");
         gauge->auto_wrap_objects(true);
-        gauge->ctor<int>(metadata::docs("void", {metadata::param("level", "number", false, "Initial level.")}, "Creates a gauge."), &MakeGauge)
-            .function("raise", &Gauge::raise, metadata::docs("this", {metadata::param("amount", "number", false, "Levels to add.")}, "Raises the level.", "This gauge."));
+        gauge->ctor<int>(v8pp::metadata::docs("void", {v8pp::metadata::param("level", "number", false, "Initial level.")}, "Creates a gauge."), &MakeGauge)
+            .function("raise", &Gauge::raise, v8pp::metadata::docs("this", {v8pp::metadata::param("amount", "number", false, "Levels to add.")}, "Raises the level.", "This gauge."));
         gauge->js_function_template()->Set(isolate, "of", v8pp::wrap_function_template(isolate, &Gauge::of));
-        catalog.constructor("Gauge").record(metadata::function_of<decltype(&Gauge::of)>("of", metadata::docs("Gauge", {metadata::param("level", "number", false, "Its level.")}, "Makes a gauge.", "New gauge."), true));
-        gauge->function("label", &Gauge::label, metadata::docs("`${string}${number}`", {metadata::param("prefix", "string", false, "Text put before the level.")}, "Labels the level.", "The label."));
+        catalog.constructor("Gauge").record(v8pp::metadata::function_of<decltype(&Gauge::of)>("of", v8pp::metadata::docs("Gauge", {v8pp::metadata::param("level", "number", false, "Its level.")}, "Makes a gauge.", "New gauge."), true));
+        gauge->function("label", &Gauge::label, v8pp::metadata::docs("`${string}${number}`", {v8pp::metadata::param("prefix", "string", false, "Text put before the level.")}, "Labels the level.", "The label."));
         gauge->prototype_function(
             "drain",
             [](const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -300,21 +285,21 @@ namespace BindClassV8Test {
                     Drain(*self);
                 }
             },
-            metadata::docs("void", {}, "Empties the gauge."));
+            v8pp::metadata::docs("void", {}, "Empties the gauge."));
         gauge->js_function_template()->Set(isolate, "limit", v8pp::wrap_function_template(isolate, static_cast<int (*)()>(&Gauge::limit)));
-        catalog.constructor("Gauge").record(metadata::function_of<int (*)()>("limit", metadata::docs("number", {}, "Reads the highest level.", "The limit."), true));
-        gauge->property("level", static_cast<int (Gauge::*)() const>(&Gauge::level), &Gauge::setLevel, metadata::property_docs("number", "Current level."));
-        gauge->property("full", &Gauge::full, metadata::property_options {"Whether the gauge is at its limit.", "boolean", true, false});
+        catalog.constructor("Gauge").record(v8pp::metadata::function_of<int (*)()>("limit", v8pp::metadata::docs("number", {}, "Reads the highest level.", "The limit."), true));
+        gauge->property("level", static_cast<int (Gauge::*)() const>(&Gauge::level), &Gauge::setLevel, v8pp::metadata::property_docs("number", "Current level."));
+        gauge->property("full", &Gauge::full, v8pp::metadata::property_options {"Whether the gauge is at its limit.", "boolean", true, false});
         gauge->prototype_function("toJSON", &GaugeToJson, GaugeToJsonDocs());
         keep.push_back(gauge);
 
         auto dial = std::make_shared<v8pp::class_<Dial>>(isolate, catalog, "Dial", "A gauge that turns.");
         dial->auto_wrap_objects(true);
         dial->inherit<Gauge>();
-        dial->ctor<int>(metadata::docs("void", {metadata::param("level", "number", false, "Initial level.")}, "Creates a dial."));
-        dial->function("turns", &Dial::turns, metadata::docs("number", {}, "Counts the full turns.", "One turn for ten levels."));
-        dial->function("raiseBy", &Gauge::raise, metadata::docs("this", {metadata::param("amount", "number", false, "Levels to add.")}, "Raises the level.", "This dial."));
-        dial->property("reading", static_cast<int (Gauge::*)() const>(&Gauge::level), metadata::property_options {"Current level.", "number", true, false});
+        dial->ctor<int>(v8pp::metadata::docs("void", {v8pp::metadata::param("level", "number", false, "Initial level.")}, "Creates a dial."));
+        dial->function("turns", &Dial::turns, v8pp::metadata::docs("number", {}, "Counts the full turns.", "One turn for ten levels."));
+        dial->function("raiseBy", &Gauge::raise, v8pp::metadata::docs("this", {v8pp::metadata::param("amount", "number", false, "Levels to add.")}, "Raises the level.", "This dial."));
+        dial->property("reading", static_cast<int (Gauge::*)() const>(&Gauge::level), v8pp::metadata::property_options {"Current level.", "number", true, false});
         dial->prototype_function(
             "fill",
             [](const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -323,7 +308,7 @@ namespace BindClassV8Test {
                     info.GetReturnValue().Set(info.This());
                 }
             },
-            metadata::docs("this", {}, "Fills the dial.", "This dial."));
+            v8pp::metadata::docs("this", {}, "Fills the dial.", "This dial."));
         dial->property(
             "half",
             [](const Dial &self) {
@@ -332,7 +317,7 @@ namespace BindClassV8Test {
             [](Dial &self, int half) {
                 self.setLevel(half * 2);
             },
-            metadata::property_docs("number", "Half the level."));
+            v8pp::metadata::property_docs("number", "Half the level."));
         keep.push_back(dial);
     }
 
@@ -352,18 +337,18 @@ namespace BindClassV8Test {
     // One isolate of side `side`, recording what it binds in a catalog no other runtime writes to.
     class Runtime final {
       public:
-        explicit Runtime(Host &host, Bind::Side side = Bind::Side::Server) {
+        explicit Runtime(Host &host, Framework::Scripting::Bind::Side side = Framework::Scripting::Bind::Side::Server) {
             static int count = 0;
             std::string error;
             _runtime     = host.engine.CreateRuntime(error);
             _catalogName = "bind_class_v8/" + std::to_string(++count);
             Framework::Scripting::SetScriptingCatalog(Isolate(), _catalogName);
-            Framework::Scripting::SetScriptingEnvironment(Isolate(), side == Bind::Side::Client);
+            Framework::Scripting::SetScriptingEnvironment(Isolate(), side == Framework::Scripting::Bind::Side::Client);
         }
 
         ~Runtime() {
             // The caches and the catalog are keyed by isolate address, which a later isolate may reuse.
-            Forget<Counter, SubCounter, Tracked, Token, Sealed, Gauge, Dial, Span>();
+            Forget<BindClassLuaTest::Counter, BindClassLuaTest::SubCounter, BindClassLuaTest::Tracked, BindClassLuaTest::Token, BindClassLuaTest::Sealed, Gauge, Dial, Span>();
             Framework::Scripting::Builtins::UnregisterAll(Isolate());
             Framework::Scripting::ClearScriptingCatalog(Isolate());
             _runtime.reset();
@@ -387,7 +372,7 @@ namespace BindClassV8Test {
 
         // Materialises `definition` for the side of the runtime and publishes it as a global.
         template <typename T>
-        void Publish(const Bind::Class<T> &definition) {
+        void Publish(const Framework::Scripting::Bind::Class<T> &definition) {
             Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
                 v8pp::class_<T> &cls = ClassOf(isolate, definition);
                 context->Global()->Set(context, v8pp::to_v8(isolate, definition.Describe().name), cls.js_function_template()->GetFunction(context).ToLocalChecked()).Check();
@@ -456,26 +441,12 @@ namespace BindClassV8Test {
 } // namespace BindClassV8Test
 
 MODULE(bind_class_v8, {
-    using namespace Framework::Scripting::Bind;
-    using BindClassLuaTest::CounterDefinition;
-    using BindClassLuaTest::SealedDefinition;
-    using BindClassLuaTest::SubCounterDefinition;
-    using BindClassLuaTest::TokenDefinition;
-    using BindClassLuaTest::TrackedDefinition;
-    using BindClassV8Test::ClassOf;
-    using BindClassV8Test::Counter;
-    using BindClassV8Test::DialDefinition;
-    using BindClassV8Test::GaugeDefinition;
-    using BindClassV8Test::Host;
-    using BindClassV8Test::MessageOf;
-    using BindClassV8Test::Runtime;
-    using BindClassV8Test::SpanDefinition;
 
     // --- Construction and methods ---
 
     IT("constructs with new and chains on the receiver", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         EQUALS(runtime.Eval("typeof Counter"), "function");
@@ -487,8 +458,8 @@ MODULE(bind_class_v8, {
     });
 
     IT("puts methods on the prototype and statics on the constructor", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         EQUALS(runtime.Eval("Counter.make(4).get()"), "4");
@@ -500,8 +471,8 @@ MODULE(bind_class_v8, {
     });
 
     IT("reads and writes a property and ignores a write to a read-only one", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         EQUALS(runtime.Eval("var c = new Counter(2); c.value"), "2");
@@ -516,10 +487,10 @@ MODULE(bind_class_v8, {
     });
 
     IT("leaves string conversion to JavaScript", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
-        runtime.Publish(TrackedDefinition());
+        runtime.Publish(BindClassLuaTest::TrackedDefinition());
 
         // A method named toString is one JavaScript itself calls; a class without it gets nothing in its place.
         EQUALS(runtime.Eval("new Counter(2).toString()"), "Counter(2)");
@@ -528,10 +499,10 @@ MODULE(bind_class_v8, {
     });
 
     IT("turns a C++ exception into a JavaScript error and stays usable", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
-        runtime.Publish(TrackedDefinition());
+        runtime.Publish(BindClassLuaTest::TrackedDefinition());
 
         EQUALS(runtime.Eval("new Counter(1).throws()"), "<threw> Error: boom");
         EQUALS(runtime.Eval("new Counter(1).fragile"), "<threw> Error: getter failed");
@@ -543,8 +514,8 @@ MODULE(bind_class_v8, {
     });
 
     IT("reports a wrong argument the way v8pp does", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         EQUALS(runtime.Eval("new Counter(1).add()"), "<threw> Error: Argument count does not match function definition. Expected 1 but got 0");
@@ -557,8 +528,8 @@ MODULE(bind_class_v8, {
     });
 
     IT("lets a trailing optional argument be omitted", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         EQUALS(runtime.Eval("var c = new Counter(3); c.scaled(2)"), "6");
@@ -568,8 +539,8 @@ MODULE(bind_class_v8, {
     });
 
     IT("returns the object a reference or a pointer designates and copies a value", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         EQUALS(runtime.Eval("var c = new Counter(1); var other = new Counter(9); c.view() === c"), "true");
@@ -582,8 +553,8 @@ MODULE(bind_class_v8, {
     });
 
     IT("calls a function that takes the receiver first as a method of this", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         EQUALS(runtime.Eval("var c = new Counter(4); c.reset(); c.get()"), "0");
@@ -600,8 +571,8 @@ MODULE(bind_class_v8, {
     });
 
     IT("converts vectors, optionals and pointers of bound objects", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         EQUALS(runtime.Eval("Counter.sum([new Counter(1), new Counter(2), new SubCounter(4)])"), "7");
@@ -613,9 +584,9 @@ MODULE(bind_class_v8, {
     });
 
     IT("lets a trailing optional argument of the constructor be omitted, as Lua does", {
-        Host host;
-        Runtime runtime(host);
-        runtime.Publish(SpanDefinition());
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
+        runtime.Publish(BindClassV8Test::SpanDefinition());
 
         EQUALS(runtime.Eval("new Span(1).length()"), "0");
         EQUALS(runtime.Eval("new Span(1, undefined).length()"), "0");
@@ -627,15 +598,15 @@ MODULE(bind_class_v8, {
         EQUALS(runtime.Symbol("Span")["constructor"]["parameters"][1]["type"].dump(), R"({"cppName":"","name":"number","optional":true})");
 
         LuaTest::State state;
-        BindClassLuaTest::Publish(state.L, SpanDefinition(), Side::Server);
+        BindClassLuaTest::Publish(state.L, BindClassV8Test::SpanDefinition(), Framework::Scripting::Bind::Side::Server);
         EQUALS(LuaTest::Eval(state.L, "Span.new(1):length()"), "0");
         EQUALS(LuaTest::Eval(state.L, "Span.new(1, 4):length()"), "3");
     });
 
     IT("gives a pointer parameter a null pointer for anything that is not a bound object, where Lua refuses", {
-        Host host;
-        Runtime runtime(host);
-        runtime.Publish(SpanDefinition());
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
+        runtime.Publish(BindClassV8Test::SpanDefinition());
 
         EQUALS(runtime.Eval("Span.lengthOf(new Span(1, 4))"), "3");
         EQUALS(runtime.Eval("Span.lengthOf(5)"), "-1");
@@ -645,14 +616,14 @@ MODULE(bind_class_v8, {
         EQUALS(runtime.Eval("Span.lengthOf({})"), "-1");
 
         LuaTest::State state;
-        BindClassLuaTest::Publish(state.L, SpanDefinition(), Side::Server);
+        BindClassLuaTest::Publish(state.L, BindClassV8Test::SpanDefinition(), Framework::Scripting::Bind::Side::Server);
         EQUALS(LuaTest::Eval(state.L, "Span.lengthOf(Span.new(1, 4))"), "3");
         EQUALS(LuaTest::Eval(state.L, "Span.lengthOf(5)"), "<error> eval:1: bad argument #1 to 'Span.lengthOf' (Span expected, got number)");
     });
 
     IT("takes and returns glm values as the builtin vector classes", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
 
         std::unique_ptr<v8pp::class_<BindClassV8Test::Compass>> compass;
         runtime.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
@@ -668,20 +639,20 @@ MODULE(bind_class_v8, {
         EQUALS(runtime.Eval("Compass.north().toString()"), "Vector3(0, 1, 0)");
         EQUALS(runtime.Eval("c.shift(5)"), "<threw> Error: expected object for vec3");
 
-        const nlohmann::json shift = Runtime::Named(runtime.Symbol("Compass")["functions"], "shift");
+        const nlohmann::json shift = BindClassV8Test::Runtime::Named(runtime.Symbol("Compass")["functions"], "shift");
         EQUALS(shift["parameters"][0]["type"]["name"], "Vector3");
         EQUALS(shift["returns"]["type"]["name"], "Vector3");
-        EQUALS(Runtime::Named(runtime.Symbol("Compass")["properties"], "heading")["type"]["name"], "Vector3");
+        EQUALS(BindClassV8Test::Runtime::Named(runtime.Symbol("Compass")["properties"], "heading")["type"]["name"], "Vector3");
     });
 
     IT("wraps an object made in C++", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         runtime.Enter([](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-            v8pp::class_<Counter> &cls = ClassOf(isolate, CounterDefinition());
-            context->Global()->Set(context, v8pp::to_v8(isolate, "made"), cls.import_external(isolate, new Counter(5))).Check();
+            v8pp::class_<BindClassLuaTest::Counter> &cls = BindClassV8Test::ClassOf(isolate, BindClassLuaTest::CounterDefinition());
+            context->Global()->Set(context, v8pp::to_v8(isolate, "made"), cls.import_external(isolate, new BindClassLuaTest::Counter(5))).Check();
         });
 
         EQUALS(runtime.Eval("made instanceof Counter"), "true");
@@ -691,8 +662,8 @@ MODULE(bind_class_v8, {
     // --- Inheritance ---
 
     IT("gives a derived class the methods and properties of its base", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         EQUALS(runtime.Eval("var s = new SubCounter(2); s.add(3).get()"), "5");
@@ -710,8 +681,8 @@ MODULE(bind_class_v8, {
     });
 
     IT("passes a derived object where its base is expected, wherever the base lies in it", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         EQUALS(runtime.Eval("new Counter(1).plus(new SubCounter(4))"), "5");
@@ -722,8 +693,8 @@ MODULE(bind_class_v8, {
     // v8pp finds the wrapper of a returned object by its address, and the Counter part of a SubCounter does not
     // lie at the address of the SubCounter. Lua returns the receiver here.
     IT("returns a copy typed as the base from a base method called on an object whose base part is not first", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         EQUALS(runtime.Eval("var s = new SubCounter(2); var r = s.add(1); r === s"), "false");
@@ -736,9 +707,9 @@ MODULE(bind_class_v8, {
     });
 
     IT("materialises the bases a definition ensures before the class", {
-        Host host;
-        Runtime runtime(host);
-        runtime.Publish(DialDefinition());
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
+        runtime.Publish(BindClassV8Test::DialDefinition());
 
         EQUALS(runtime.Eval("typeof Gauge"), "undefined");
         EQUALS(runtime.Eval("var d = new Dial(42); d.turns()"), "4");
@@ -750,24 +721,24 @@ MODULE(bind_class_v8, {
         EQUALS(runtime.Symbol("Gauge")["description"], "Shows a level.");
 
         // The class of the base is the one its own cache holds.
-        runtime.Publish(GaugeDefinition());
+        runtime.Publish(BindClassV8Test::GaugeDefinition());
         EQUALS(runtime.Eval("d instanceof Gauge"), "true");
     });
 
     IT("fails as v8pp does when nothing made the base exist", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
 
-        const std::string message = MessageOf<std::runtime_error>([&] {
-            runtime.Publish(SubCounterDefinition());
+        const std::string message = BindClassV8Test::MessageOf<std::runtime_error>([&] {
+            runtime.Publish(BindClassLuaTest::SubCounterDefinition());
         });
         EQUALS(message.find("is not registered in isolate") != std::string::npos, true);
     });
 
     IT("calls a function that takes a base of the receiver, by reference or by pointer", {
-        Host host;
-        Runtime runtime(host);
-        runtime.Publish(DialDefinition());
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
+        runtime.Publish(BindClassV8Test::DialDefinition());
 
         EQUALS(runtime.Eval("var d = new Dial(30); d.half"), "15");
         EQUALS(runtime.Eval("d.half = 21; d.level"), "42");
@@ -778,9 +749,9 @@ MODULE(bind_class_v8, {
     });
 
     IT("binds a member function of a base as a member of the derived class", {
-        Host host;
-        Runtime runtime(host);
-        runtime.Publish(DialDefinition());
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
+        runtime.Publish(BindClassV8Test::DialDefinition());
 
         EQUALS(runtime.Eval("var d = new Dial(30); d.raiseBy(5) === d"), "true");
         EQUALS(runtime.Eval("d.reading"), "35");
@@ -790,9 +761,9 @@ MODULE(bind_class_v8, {
     // --- Sides ---
 
     IT("materialises the members of the runtime's side only", {
-        Host host;
-        Runtime server(host, Side::Server);
-        Runtime client(host, Side::Client);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime server(host, Framework::Scripting::Bind::Side::Server);
+        BindClassV8Test::Runtime client(host, Framework::Scripting::Bind::Side::Client);
         server.PublishCounters();
         client.PublishCounters();
 
@@ -805,18 +776,18 @@ MODULE(bind_class_v8, {
         EQUALS(client.Eval("new Counter(3).client"), "3");
         EQUALS(client.Eval("new Counter(3).add(1).get()"), "4");
 
-        EQUALS(Runtime::Named(server.Symbol("Counter")["functions"], "kick").is_null(), false);
-        EQUALS(Runtime::Named(server.Symbol("Counter")["functions"], "restricted").is_null(), false);
-        EQUALS(Runtime::Named(server.Symbol("Counter")["properties"], "client").is_null(), true);
-        EQUALS(Runtime::Named(client.Symbol("Counter")["functions"], "kick").is_null(), true);
-        EQUALS(Runtime::Named(client.Symbol("Counter")["functions"], "restricted").is_null(), true);
-        EQUALS(Runtime::Named(client.Symbol("Counter")["properties"], "client").is_null(), false);
+        EQUALS(BindClassV8Test::Runtime::Named(server.Symbol("Counter")["functions"], "kick").is_null(), false);
+        EQUALS(BindClassV8Test::Runtime::Named(server.Symbol("Counter")["functions"], "restricted").is_null(), false);
+        EQUALS(BindClassV8Test::Runtime::Named(server.Symbol("Counter")["properties"], "client").is_null(), true);
+        EQUALS(BindClassV8Test::Runtime::Named(client.Symbol("Counter")["functions"], "kick").is_null(), true);
+        EQUALS(BindClassV8Test::Runtime::Named(client.Symbol("Counter")["functions"], "restricted").is_null(), true);
+        EQUALS(BindClassV8Test::Runtime::Named(client.Symbol("Counter")["properties"], "client").is_null(), false);
     });
 
     IT("builds a class of its own in each isolate", {
-        Host host;
-        Runtime first(host);
-        Runtime second(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime first(host);
+        BindClassV8Test::Runtime second(host);
         first.PublishCounters();
         second.PublishCounters();
 
@@ -828,8 +799,8 @@ MODULE(bind_class_v8, {
     // --- Catalog ---
 
     IT("records the class, its constructor and its members in the catalog", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
 
         const nlohmann::json counter = runtime.Symbol("Counter");
@@ -842,50 +813,50 @@ MODULE(bind_class_v8, {
         EQUALS(counter["constructor"]["parameters"].dump(), R"([{"description":"Initial value.","name":"value","type":{"cppName":"","name":"number","optional":false}}])");
         EQUALS(counter["constructor"]["returns"]["type"]["name"], "void");
 
-        const nlohmann::json add = Runtime::Named(counter["functions"], "add");
+        const nlohmann::json add = BindClassV8Test::Runtime::Named(counter["functions"], "add");
         EQUALS(add["description"], "Adds to the counter.");
         EQUALS(add["static"], false);
         EQUALS(add["parameters"].dump(), R"([{"description":"Amount to add.","name":"amount","type":{"cppName":"","name":"number","optional":false}}])");
         EQUALS(add["returns"].dump(), R"({"description":"This counter.","type":{"cppName":"","name":"this","optional":false}})");
 
-        const nlohmann::json make = Runtime::Named(counter["functions"], "make");
+        const nlohmann::json make = BindClassV8Test::Runtime::Named(counter["functions"], "make");
         EQUALS(make["static"], true);
         EQUALS(make["returns"]["type"]["name"], "Counter");
 
-        const nlohmann::json scaled = Runtime::Named(counter["functions"], "scaled");
+        const nlohmann::json scaled = BindClassV8Test::Runtime::Named(counter["functions"], "scaled");
         EQUALS(scaled["parameters"][1]["type"].dump(), R"({"cppName":"","name":"number","optional":true})");
-        EQUALS(Runtime::Named(counter["functions"], "sum")["parameters"][0]["type"]["name"], "Counter[]");
-        EQUALS(Runtime::Named(counter["functions"], "get")["returns"]["type"]["name"], "number");
-        EQUALS(Runtime::Named(counter["functions"], "throws")["returns"]["type"]["name"], "void");
+        EQUALS(BindClassV8Test::Runtime::Named(counter["functions"], "sum")["parameters"][0]["type"]["name"], "Counter[]");
+        EQUALS(BindClassV8Test::Runtime::Named(counter["functions"], "get")["returns"]["type"]["name"], "number");
+        EQUALS(BindClassV8Test::Runtime::Named(counter["functions"], "throws")["returns"]["type"]["name"], "void");
 
-        EQUALS(Runtime::Named(counter["properties"], "value").dump(), R"({"description":"Current value.","name":"value","readonly":false,"static":false,"type":{"cppName":"","name":"number","optional":false}})");
-        EQUALS(Runtime::Named(counter["properties"], "doubled").dump(), R"({"description":"Twice the value.","name":"doubled","readonly":true,"static":false,"type":{"cppName":"","name":"number","optional":false}})");
+        EQUALS(BindClassV8Test::Runtime::Named(counter["properties"], "value").dump(), R"({"description":"Current value.","name":"value","readonly":false,"static":false,"type":{"cppName":"","name":"number","optional":false}})");
+        EQUALS(BindClassV8Test::Runtime::Named(counter["properties"], "doubled").dump(), R"({"description":"Twice the value.","name":"doubled","readonly":true,"static":false,"type":{"cppName":"","name":"number","optional":false}})");
 
         EQUALS(runtime.Symbol("SubCounter")["bases"].dump(), "[\"Counter\"]");
         EQUALS(runtime.Symbol("SubCounter")["description"], "A counter that does more.");
     });
 
     IT("records the members in the order they were declared, and nothing for what exists in Lua only", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
-        runtime.Publish(GaugeDefinition());
+        runtime.Publish(BindClassV8Test::GaugeDefinition());
 
-        EQUALS(Runtime::Names(runtime.Symbol("Counter")["functions"]), "add get toString throws kick kind plus scaled clone pick view self reset addTwice make sum maybe bump fail restricted");
-        EQUALS(Runtime::Names(runtime.Symbol("Counter")["properties"]), "value doubled negated fragile");
-        EQUALS(Runtime::Names(runtime.Symbol("SubCounter")["functions"]), "twice absorb kind");
-        EQUALS(Runtime::Names(runtime.Symbol("Gauge")["functions"]), "raise of label drain limit toJSON");
-        EQUALS(Runtime::Names(runtime.Symbol("Gauge")["properties"]), "level full");
+        EQUALS(BindClassV8Test::Runtime::Names(runtime.Symbol("Counter")["functions"]), "add get toString throws kick kind plus scaled clone pick view self reset addTwice make sum maybe bump fail restricted");
+        EQUALS(BindClassV8Test::Runtime::Names(runtime.Symbol("Counter")["properties"]), "value doubled negated fragile");
+        EQUALS(BindClassV8Test::Runtime::Names(runtime.Symbol("SubCounter")["functions"]), "twice absorb kind");
+        EQUALS(BindClassV8Test::Runtime::Names(runtime.Symbol("Gauge")["functions"]), "raise of label drain limit toJSON");
+        EQUALS(BindClassV8Test::Runtime::Names(runtime.Symbol("Gauge")["properties"]), "level full");
         EQUALS(runtime.Eval("Object.getOwnPropertyNames(Object.getPrototypeOf(new Gauge(1))).filter(name => name !== 'constructor').join(' ')"), "raise label drain level full toJSON");
         EQUALS(runtime.Eval("typeof Gauge.LIMIT"), "undefined");
     });
 
     IT("records and binds what a hand-written v8pp class does", {
-        Host host;
-        Runtime bound(host);
-        Runtime written(host);
-        bound.Publish(GaugeDefinition());
-        bound.Publish(DialDefinition());
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime bound(host);
+        BindClassV8Test::Runtime written(host);
+        bound.Publish(BindClassV8Test::GaugeDefinition());
+        bound.Publish(BindClassV8Test::DialDefinition());
 
         std::vector<std::shared_ptr<void>> keep;
         written.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
@@ -930,9 +901,9 @@ MODULE(bind_class_v8, {
     // --- What exists in JavaScript only ---
 
     IT("builds the object with the V8 constructor and documents the declared one", {
-        Host host;
-        Runtime runtime(host);
-        runtime.Publish(GaugeDefinition());
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
+        runtime.Publish(BindClassV8Test::GaugeDefinition());
 
         EQUALS(runtime.Eval("new Gauge(3).level"), "3");
         EQUALS(runtime.Eval("new Gauge().level"), "0");
@@ -945,7 +916,7 @@ MODULE(bind_class_v8, {
 
     IT("keeps the declared constructor and what exists in Lua only for Lua", {
         LuaTest::State state;
-        BindClassLuaTest::Publish(state.L, GaugeDefinition(), Side::Server);
+        BindClassLuaTest::Publish(state.L, BindClassV8Test::GaugeDefinition(), Framework::Scripting::Bind::Side::Server);
 
         EQUALS(LuaTest::Eval(state.L, "Gauge.new(3):raise(4).level"), "7");
         EQUALS(LuaTest::Eval(state.L, "Gauge.new()"), "<error> eval:1: wrong number of arguments to 'Gauge.new' (1..1 expected, got 0)");
@@ -955,14 +926,14 @@ MODULE(bind_class_v8, {
     });
 
     IT("runs a V8 hook at each materialisation, after the declared members", {
-        Host host;
-        Runtime first(host);
-        Runtime second(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime first(host);
+        BindClassV8Test::Runtime second(host);
 
         BindClassV8Test::gaugeHookRuns = 0;
-        first.Publish(GaugeDefinition());
+        first.Publish(BindClassV8Test::GaugeDefinition());
         EQUALS(BindClassV8Test::gaugeHookRuns, 1);
-        second.Publish(GaugeDefinition());
+        second.Publish(BindClassV8Test::GaugeDefinition());
         EQUALS(BindClassV8Test::gaugeHookRuns, 2);
 
         EQUALS(second.Eval("JSON.stringify({ gauge: new Gauge(3) })"), "{\"gauge\":{\"level\":3}}");
@@ -972,30 +943,27 @@ MODULE(bind_class_v8, {
     });
 
     IT("binds a function declared noexcept", {
-        Host host;
-        Runtime runtime(host);
-        runtime.Publish(GaugeDefinition());
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
+        runtime.Publish(BindClassV8Test::GaugeDefinition());
 
         EQUALS(runtime.Eval("Gauge.limit()"), "100");
         EQUALS(runtime.Eval("new Gauge(3).level"), "3");
     });
 
     IT("refuses a V8 constructor for a class that declares none, and a second one", {
-        using BindClassV8Test::Bare;
-        using BindClassV8Test::Lenient;
-
-        EQUALS(MessageOf<std::logic_error>([] {
-            Class<Bare>("Bare", "Has no constructor.").V8Constructor([](const v8::FunctionCallbackInfo<v8::Value> &) {
-                return new Bare();
+        EQUALS(BindClassV8Test::MessageOf<std::logic_error>([] {
+            Framework::Scripting::Bind::Class<BindClassV8Test::Bare>("Bare", "Has no constructor.").V8Constructor([](const v8::FunctionCallbackInfo<v8::Value> &) {
+                return new BindClassV8Test::Bare();
             });
         }),
             "Bind: 'Bare' is given a V8 constructor before it declares a constructor");
 
-        EQUALS(MessageOf<std::logic_error>([] {
+        EQUALS(BindClassV8Test::MessageOf<std::logic_error>([] {
             const auto make = [](const v8::FunctionCallbackInfo<v8::Value> &) {
-                return new Lenient(0);
+                return new BindClassV8Test::Lenient(0);
             };
-            Class<Lenient>("Lenient", "Has two.").Constructor<int>(Doc("Creates one.").Param("value", "Ignored.")).V8Constructor(make).V8Constructor(make);
+            Framework::Scripting::Bind::Class<BindClassV8Test::Lenient>("Lenient", "Has two.").Constructor<int>(Framework::Scripting::Bind::Doc("Creates one.").Param("value", "Ignored.")).V8Constructor(make).V8Constructor(make);
         }),
             "Bind: 'Lenient' is given a second V8 constructor");
     });
@@ -1004,30 +972,32 @@ MODULE(bind_class_v8, {
 
     // A caller keeps a reference to the class it is given, so there is no quiet way to give none.
     IT("refuses to materialise a class in a runtime of a side it does not exist in", {
-        const auto *definition = Class<BindClassLuaTest::ServerOnly>::Find();
+        const auto *definition = Framework::Scripting::Bind::Class<BindClassLuaTest::ServerOnly>::Find();
         EQUALS(definition != nullptr, true);
-        Host host;
-        Runtime client(host, Side::Client);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime client(host, Framework::Scripting::Bind::Side::Client);
         v8::Isolate *isolate = client.Isolate();
-        EQUALS(ExistsIn(definition->Describe(), Side::Client), false);
+        EQUALS(Framework::Scripting::Bind::ExistsIn(definition->Describe(), Framework::Scripting::Bind::Side::Client), false);
         const std::string before = v8pp::metadata::to_json(client.Catalog());
         std::string message;
         try {
-            definition->MaterialiseV8(isolate, client.Catalog(), Side::Client);
+            definition->MaterialiseV8(isolate, client.Catalog(), Framework::Scripting::Bind::Side::Client);
         }
         catch (const std::logic_error &error) {
             message = error.what();
         }
         EQUALS(message, "Bind: 'ServerOnly' does not exist in a client runtime");
         EQUALS(v8pp::metadata::to_json(client.Catalog()) == before, true);
-        EQUALS(SideName(Side::Server) == "server" && SideName(Side::Client) == "client" && SideName(Side::Shared) == "shared", true);
+        EQUALS(Framework::Scripting::Bind::SideName(Framework::Scripting::Bind::Side::Server) == "server" && Framework::Scripting::Bind::SideName(Framework::Scripting::Bind::Side::Client) == "client"
+                   && Framework::Scripting::Bind::SideName(Framework::Scripting::Bind::Side::Shared) == "shared",
+            true);
     });
 
     IT("constructs no object of a class that declares no constructor", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
         runtime.PublishCounters();
-        runtime.Publish(SealedDefinition());
+        runtime.Publish(BindClassLuaTest::SealedDefinition());
 
         EQUALS(runtime.Eval("new Sealed()").find("has no constructor") != std::string::npos, true);
         EQUALS(runtime.Eval("Sealed()").find("has no constructor") != std::string::npos, true);
@@ -1037,11 +1007,11 @@ MODULE(bind_class_v8, {
     });
 
     IT("refuses to materialise a member that returns a class that cannot be copied", {
-        Host host;
-        Runtime runtime(host);
+        BindClassV8Test::Host host;
+        BindClassV8Test::Runtime runtime(host);
 
-        EQUALS(MessageOf<std::logic_error>([&] {
-            runtime.Publish(TokenDefinition());
+        EQUALS(BindClassV8Test::MessageOf<std::logic_error>([&] {
+            runtime.Publish(BindClassLuaTest::TokenDefinition());
         }),
             "Bind: 'Token.make' returns an object of a class that cannot be copied, which JavaScript cannot receive");
         EQUALS(runtime.Symbol("Token").is_null(), true);

@@ -30,14 +30,6 @@
 // manager of the web views and the views are the stand-ins of client_doubles/gui: they keep what the builtin
 // told them, and a test plays the page and the browser.
 namespace ClientWebTest {
-    using namespace Framework::Scripting;
-    using Framework::GUI::ViewEvent;
-    using Framework::GUI::ViewEventData;
-    using Framework::Integrations::Client::Scripting::Builtins::Web;
-    using Framework::Utils::Vfs;
-    using LuaClientTest::Contains;
-    using LuaClientTest::Mount;
-
     // What each language's resource starts with: `show` spells a value the same way in both, `rec(name)` makes
     // a handler that notes what it was given, and `seen()` gives the notes and forgets them.
     inline const char *kJavaScript = "globalThis.show = (v) => v === undefined || v === null ? 'nil' : typeof v === 'string' ? '\"' + v + '\"' : typeof v !== 'object' ? String(v)"
@@ -72,12 +64,12 @@ namespace ClientWebTest {
         bool ready = false;
 
         // Without `cleanupOnStop` nobody tells Web that a resource stopped, as the module does.
-        explicit Stage(bool cleanupOnStop = true, LuaEngineOptions options = LuaEngineOptions::Client()): client(Vfs::kResourceMountRoot, options) {
+        explicit Stage(bool cleanupOnStop = true, Framework::Scripting::LuaEngineOptions options = Framework::Scripting::LuaEngineOptions::Client()): client(Framework::Utils::Vfs::kResourceMountRoot, options) {
             current = this;
             Framework::CoreModules::SetWebManager(gui.get());
             gui->Start();
-            client.lua.AddRuntimeSetup([](LuaRuntime &runtime) {
-                Web::RegisterLua(runtime);
+            client.lua.AddRuntimeSetup([](Framework::Scripting::LuaRuntime &runtime) {
+                Framework::Integrations::Client::Scripting::Builtins::Web::RegisterLua(runtime);
                 // What the host can do to the scripting while a handler runs.
                 lua_pushcfunction(runtime.State(), [](lua_State *L) {
                     current->client.manager->StopResource(lua_tostring(L, 1));
@@ -85,13 +77,13 @@ namespace ClientWebTest {
                 });
                 lua_setglobal(runtime.State(), "stopResource");
                 lua_pushcfunction(runtime.State(), [](lua_State *) {
-                    Web::Shutdown();
+                    Framework::Integrations::Client::Scripting::Builtins::Web::Shutdown();
                     return 0;
                 });
                 lua_setglobal(runtime.State(), "shutdownWeb");
                 lua_pushcfunction(runtime.State(), [](lua_State *) {
                     current->client.manager->Reset();
-                    Web::Shutdown();
+                    Framework::Integrations::Client::Scripting::Builtins::Web::Shutdown();
                     return 0;
                 });
                 lua_setglobal(runtime.State(), "resetScripting");
@@ -99,7 +91,7 @@ namespace ClientWebTest {
             ready = Register();
             if (ready && cleanupOnStop) {
                 client.manager->AddOnResourceStopped([](const std::string &resourceName) {
-                    Web::CleanupResource(resourceName);
+                    Framework::Integrations::Client::Scripting::Builtins::Web::CleanupResource(resourceName);
                 });
             }
             ready = ready && Start("js", "client.js", kJavaScript).empty() && Start("lua", "client.lua", kLua).empty();
@@ -111,9 +103,9 @@ namespace ClientWebTest {
             if (!client.Init()) {
                 return false;
             }
-            EngineScope scope(&client.v8);
+            Framework::Scripting::EngineScope scope(&client.v8);
             const auto context = scope.Context();
-            Web::Register(scope.Isolate(), context, context->Global(), client.manager.get());
+            Framework::Integrations::Client::Scripting::Builtins::Web::Register(scope.Isolate(), context, context->Global(), client.manager.get());
             const auto expose = [&](const char *name, v8::FunctionCallback callback) {
                 context->Global()->Set(context, v8pp::to_v8(scope.Isolate(), name), v8::Function::New(context, callback).ToLocalChecked()).Check();
             };
@@ -121,11 +113,11 @@ namespace ClientWebTest {
                 current->client.manager->StopResource(v8pp::from_v8<std::string>(info.GetIsolate(), info[0]));
             });
             expose("shutdownWeb", [](const v8::FunctionCallbackInfo<v8::Value> &) {
-                Web::Shutdown();
+                Framework::Integrations::Client::Scripting::Builtins::Web::Shutdown();
             });
             expose("resetScripting", [](const v8::FunctionCallbackInfo<v8::Value> &) {
                 current->client.manager->Reset();
-                Web::Shutdown();
+                Framework::Integrations::Client::Scripting::Builtins::Web::Shutdown();
             });
             return true;
         }
@@ -134,7 +126,7 @@ namespace ClientWebTest {
         void Reset() {
             client.manager->Reset();
             client.lua.Shutdown();
-            Web::Shutdown();
+            Framework::Integrations::Client::Scripting::Builtins::Web::Shutdown();
             client.v8.ResetContext();
         }
 
@@ -143,20 +135,20 @@ namespace ClientWebTest {
             if (client.manager) {
                 client.manager->StopAll();
             }
-            Web::Shutdown();
+            Framework::Integrations::Client::Scripting::Builtins::Web::Shutdown();
             client.manager.reset();
             client.lua.Shutdown();
             client.v8.Shutdown();
             Framework::CoreModules::SetWebManager(nullptr);
             current = nullptr;
             for (const std::string &name : mounted) {
-                Vfs::Get().Unmount(name + ".zip");
+                Framework::Utils::Vfs::Get().Unmount(name + ".zip");
             }
         }
 
         // Mounts and starts a resource of one client script. Empty when it started.
         std::string Start(const std::string &name, const std::string &file, const std::string &source, const std::string &manifest = "") {
-            if (const std::string error = Mount(name, "\"clientScripts\":[\"" + file + "\"]" + manifest, {{file, source}}); !error.empty()) {
+            if (const std::string error = LuaClientTest::Mount(name, "\"clientScripts\":[\"" + file + "\"]" + manifest, {{file, source}}); !error.empty()) {
                 return error;
             }
             mounted.push_back(name);
@@ -165,7 +157,7 @@ namespace ClientWebTest {
 
         // A tick of the scripting: the browser events are drained, then the engines are updated.
         void Frame() {
-            Web::Update();
+            Framework::Integrations::Client::Scripting::Builtins::Web::Update();
             client.Update();
         }
 
@@ -176,7 +168,7 @@ namespace ClientWebTest {
             if (!client.v8.Execute("globalThis.__result = (() => { try { return String(" + expression + "); } catch (e) { return '<error> ' + e.name + ': ' + e.message; } })();", origin)) {
                 return "<did not run>";
             }
-            EngineScope scope(&client.v8);
+            Framework::Scripting::EngineScope scope(&client.v8);
             const auto context = scope.Context();
             return v8pp::from_v8<std::string>(scope.Isolate(), context->Global()->Get(context, v8pp::to_v8(scope.Isolate(), "__result")).ToLocalChecked());
         }
@@ -226,14 +218,14 @@ namespace ClientWebTest {
         }
 
         // The browser of a view reports something.
-        void Raise(int id, const ViewEventData &data) const {
+        void Raise(int id, const Framework::GUI::ViewEventData &data) const {
             if (const auto *view = View(id)) {
                 view->Raise(data);
             }
         }
 
-        void Raise(int id, ViewEvent event) const {
-            ViewEventData data;
+        void Raise(int id, Framework::GUI::ViewEvent event) const {
+            Framework::GUI::ViewEventData data;
             data.event = event;
             Raise(id, data);
         }
@@ -270,8 +262,8 @@ namespace ClientWebTest {
     }
 
     // An event of each kind with every field set, for a view of each language.
-    inline ViewEventData Filled(ViewEvent event) {
-        ViewEventData data;
+    inline Framework::GUI::ViewEventData Filled(Framework::GUI::ViewEvent event) {
+        Framework::GUI::ViewEventData data;
         data.event       = event;
         data.url         = "https://x.test/p";
         data.openerUrl   = "https://x.test/o";
@@ -295,19 +287,10 @@ namespace ClientWebTest {
 } // namespace ClientWebTest
 
 MODULE(lua_client_web, {
-    using namespace Framework::Scripting;
-    using ClientWebTest::Contains;
-    using ClientWebTest::Pair;
-    using ClientWebTest::Raised;
-    using ClientWebTest::Stage;
-    using Framework::GUI::ViewEvent;
-    using Framework::GUI::ViewEventData;
-    using Framework::Integrations::Client::Scripting::Builtins::Web;
-
     // ==================== Surface ====================
 
     IT("gives both languages the same Web, read-only in Lua and absent from a server state", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
 
         // The order the hand-written builtin attached them in.
@@ -322,35 +305,35 @@ MODULE(lua_client_web, {
         EQUALS(stage.Lua("Web.evaluate"), "nil");
 
         // And the definition declares exactly those, for the client alone.
-        const Bind::ClassDesc *described = Bind::ApiCatalog::Get().Find("Web", Bind::Side::Client);
+        const Framework::Scripting::Bind::ClassDesc *described = Framework::Scripting::Bind::ApiCatalog::Get().Find("Web", Framework::Scripting::Bind::Side::Client);
         EQUALS(described != nullptr, true);
-        EQUALS(described == &Web::Definition().Describe(), true);
-        EQUALS(Bind::ApiCatalog::Get().Find("Web", Bind::Side::Server) == nullptr, true);
+        EQUALS(described == &Framework::Integrations::Client::Scripting::Builtins::Web::Definition().Describe(), true);
+        EQUALS(Framework::Scripting::Bind::ApiCatalog::Get().Find("Web", Framework::Scripting::Bind::Side::Server) == nullptr, true);
         std::string declared;
-        for (const Bind::FunctionDesc &function : described->functions) {
-            EQUALS(function.side == Bind::Side::Client, true);
+        for (const Framework::Scripting::Bind::FunctionDesc &function : described->functions) {
+            EQUALS(function.side == Framework::Scripting::Bind::Side::Client, true);
             declared += (declared.empty() ? "" : ",") + function.name;
         }
         EQUALS(declared, members);
         EQUALS(described->properties.empty(), true);
 
-        LuaRuntime server(LuaRuntimeTest::Options());
-        EQUALS(server.Options().side == Bind::Side::Server, true);
-        Web::RegisterLua(server);
+        Framework::Scripting::LuaRuntime server(LuaRuntimeTest::Options());
+        EQUALS(server.Options().side == Framework::Scripting::Bind::Side::Server, true);
+        Framework::Integrations::Client::Scripting::Builtins::Web::RegisterLua(server);
         EQUALS(LuaRuntimeTest::Eval(server, "type(Web)"), "nil");
     });
 
     // ==================== Views ====================
 
     IT("creates a view from both languages: locked to its origin, collected with its resource, shaped by the options", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
 
         EQUALS(stage.Js("Web.createView('https://x.test/index.html')"), "1");
         EQUALS(stage.Lua("Web.createView('https://y.test/index.html')"), "2");
         EQUALS(stage.Lua("math.type(Web.createView('fw://ui/menu.html', { width = 800, height = 600, x = 10, y = 20, zIndex = 5, visible = false, focus = true }))"), "integer");
         EQUALS(stage.Js("Web.createView('fw://ui/menu.html', { width: 800, height: 600, x: 10, y: 20, zIndex: 5, visible: false, focus: true })"), "4");
-        EQUALS(Web::ViewCount(), 4u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 4u);
 
         // Without a size a view fills the client area and follows it; it shows, and has no focus.
         EQUALS(stage.Shape(1), "1920x1080+0+0 z=0 shown auto");
@@ -394,7 +377,7 @@ MODULE(lua_client_web, {
     });
 
     IT("refuses to create a view without a URL, a resource or a manager of the views", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
 
         for (const char *arguments : {"", "1", "nil", "{}", "true"}) {
@@ -411,7 +394,7 @@ MODULE(lua_client_web, {
         // What a getter of the options throws is the result, and no view is made.
         EQUALS(stage.Js("Web.createView('https://x.test/', { get width() { throw new RangeError('getter'); } })"), "<error> RangeError: getter");
         EQUALS(stage.gui->ViewCount(), 0u);
-        EQUALS(Web::ViewCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 0u);
 
         stage.gui->failCreate = true;
         EQUALS(stage.Lua("Web.createView('https://x.test/')"), "<error> eval:1: Web.createView: failed to create web view");
@@ -428,12 +411,12 @@ MODULE(lua_client_web, {
         EQUALS(stage.Js("Web.createView('https://x.test/')"), "<error> Error: Web.createView: web view manager is not available");
         EQUALS(stage.Lua("show(Web.getScreenSize())"), "{height=0,width=0}");
         Framework::CoreModules::SetWebManager(stage.gui.get());
-        EQUALS(Web::ViewCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 0u);
         EQUALS(stage.Lua("Web.createView('https://x.test/')"), "1");
     });
 
     IT("shows, hides, focuses and keeps a view painting from both languages", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Js("Web.createView('https://x.test/')"), "1");
         EQUALS(stage.Lua("Web.createView('https://y.test/')"), "2");
@@ -442,42 +425,42 @@ MODULE(lua_client_web, {
             return stage.Lua(lua) + " / " + stage.Js(js);
         };
 
-        EQUALS(both("Web.focusView(2)", "Web.focusView(1)"), Pair("true"));
-        EQUALS(both("Web.isViewVisible(2)", "Web.isViewVisible(1)"), Pair("true"));
+        EQUALS(both("Web.focusView(2)", "Web.focusView(1)"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.isViewVisible(2)", "Web.isViewVisible(1)"), ClientWebTest::Pair("true"));
         EQUALS(stage.Shape(2), "1920x1080+0+0 z=0 shown focused auto");
         EQUALS(stage.Shape(1), stage.Shape(2));
         // Hiding a view takes its focus too.
-        EQUALS(both("Web.hideView(2)", "Web.hideView(1)"), Pair("true"));
-        EQUALS(both("Web.isViewVisible(2)", "Web.isViewVisible(1)"), Pair("false"));
+        EQUALS(both("Web.hideView(2)", "Web.hideView(1)"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.isViewVisible(2)", "Web.isViewVisible(1)"), ClientWebTest::Pair("false"));
         EQUALS(stage.Shape(2), "1920x1080+0+0 z=0 hidden auto");
         EQUALS(stage.Shape(1), stage.Shape(2));
-        EQUALS(both("Web.showView(2)", "Web.showView(1)"), Pair("true"));
+        EQUALS(both("Web.showView(2)", "Web.showView(1)"), ClientWebTest::Pair("true"));
         EQUALS(stage.Shape(2), "1920x1080+0+0 z=0 shown auto");
         EQUALS(stage.Shape(1), stage.Shape(2));
 
         // The flag of focusView and of setViewOffscreen is a boolean or is left out: anything else is true.
-        EQUALS(both("Web.focusView(2, false)", "Web.focusView(1, false)"), Pair("true"));
+        EQUALS(both("Web.focusView(2, false)", "Web.focusView(1, false)"), ClientWebTest::Pair("true"));
         EQUALS((stage.View(1)->hasFocus || stage.View(2)->hasFocus), false);
-        EQUALS(both("Web.focusView(2, 0)", "Web.focusView(1, 0)"), Pair("true"));
+        EQUALS(both("Web.focusView(2, 0)", "Web.focusView(1, 0)"), ClientWebTest::Pair("true"));
         EQUALS((stage.View(1)->hasFocus && stage.View(2)->hasFocus), true);
-        EQUALS(both("Web.focusView(2, false)", "Web.focusView(1, false)"), Pair("true"));
-        EQUALS(both("Web.focusView(2, nil)", "Web.focusView(1, null)"), Pair("true"));
+        EQUALS(both("Web.focusView(2, false)", "Web.focusView(1, false)"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.focusView(2, nil)", "Web.focusView(1, null)"), ClientWebTest::Pair("true"));
         EQUALS((stage.View(1)->hasFocus && stage.View(2)->hasFocus), true);
 
-        EQUALS(both("Web.isViewOffscreen(2)", "Web.isViewOffscreen(1)"), Pair("false"));
-        EQUALS(both("Web.setViewOffscreen(2)", "Web.setViewOffscreen(1)"), Pair("true"));
-        EQUALS(both("Web.isViewOffscreen(2)", "Web.isViewOffscreen(1)"), Pair("true"));
-        EQUALS(both("Web.setViewOffscreen(2, false)", "Web.setViewOffscreen(1, false)"), Pair("true"));
-        EQUALS(both("Web.isViewOffscreen(2)", "Web.isViewOffscreen(1)"), Pair("false"));
-        EQUALS(both("Web.setViewOffscreen(2, 'yes')", "Web.setViewOffscreen(1, 'yes')"), Pair("true"));
-        EQUALS(both("Web.isViewOffscreen(2)", "Web.isViewOffscreen(1)"), Pair("true"));
+        EQUALS(both("Web.isViewOffscreen(2)", "Web.isViewOffscreen(1)"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.setViewOffscreen(2)", "Web.setViewOffscreen(1)"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.isViewOffscreen(2)", "Web.isViewOffscreen(1)"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.setViewOffscreen(2, false)", "Web.setViewOffscreen(1, false)"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.isViewOffscreen(2)", "Web.isViewOffscreen(1)"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.setViewOffscreen(2, 'yes')", "Web.setViewOffscreen(1, 'yes')"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.isViewOffscreen(2)", "Web.isViewOffscreen(1)"), ClientWebTest::Pair("true"));
 
         // The id is read as JavaScript reads one: the whole part, wrapped to 32 bits.
-        EQUALS(both("Web.isViewVisible(2.9)", "Web.isViewVisible(1.9)"), Pair("true"));
-        EQUALS(both("Web.isViewVisible(2^32 + 2)", "Web.isViewVisible(2**32 + 1)"), Pair("true"));
-        EQUALS(both("Web.isViewVisible(0/0)", "Web.isViewVisible(NaN)"), Pair("false"));
-        EQUALS(both("Web.isViewVisible(-1)", "Web.isViewVisible(-1)"), Pair("false"));
-        EQUALS(both("Web.showView(999)", "Web.showView(999)"), Pair("false"));
+        EQUALS(both("Web.isViewVisible(2.9)", "Web.isViewVisible(1.9)"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.isViewVisible(2^32 + 2)", "Web.isViewVisible(2**32 + 1)"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.isViewVisible(0/0)", "Web.isViewVisible(NaN)"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.isViewVisible(-1)", "Web.isViewVisible(-1)"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.showView(999)", "Web.showView(999)"), ClientWebTest::Pair("false"));
 
         for (const char *method : {"destroyView", "showView", "hideView", "focusView", "isViewVisible", "setViewOffscreen", "isViewOffscreen"}) {
             const std::string message = std::string("Web.") + method + ": first argument must be a view id";
@@ -490,7 +473,7 @@ MODULE(lua_client_web, {
     });
 
     IT("navigates, sizes and places a view from both languages", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Js("Web.createView('https://x.test/')"), "1");
         EQUALS(stage.Lua("Web.createView('https://x.test/')"), "2");
@@ -500,9 +483,9 @@ MODULE(lua_client_web, {
         };
 
         // A view is locked again to the origin of what it is sent to: the URL goes to the view as it was given.
-        EQUALS(both("Web.loadURL(2, 'https://z.test/next')", "Web.loadURL(1, 'https://z.test/next')"), Pair("true"));
-        EQUALS(both("Web.loadURL(2, 'javascript:alert(1)')", "Web.loadURL(1, 'javascript:alert(1)')"), Pair("true"));
-        EQUALS(both("Web.loadURL(2, '')", "Web.loadURL(1, '')"), Pair("true"));
+        EQUALS(both("Web.loadURL(2, 'https://z.test/next')", "Web.loadURL(1, 'https://z.test/next')"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.loadURL(2, 'javascript:alert(1)')", "Web.loadURL(1, 'javascript:alert(1)')"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.loadURL(2, '')", "Web.loadURL(1, '')"), ClientWebTest::Pair("true"));
         for (const int id : {1, 2}) {
             const auto *view = stage.View(id);
             EQUALS(view->loaded.size(), 3u);
@@ -512,7 +495,7 @@ MODULE(lua_client_web, {
             EQUALS(view->lockedTo, "");
             EQUALS(std::count(view->calls.begin(), view->calls.end(), "LockToOrigin"), 4);
         }
-        EQUALS(both("Web.loadURL(999, 'https://z.test/')", "Web.loadURL(999, 'https://z.test/')"), Pair("false"));
+        EQUALS(both("Web.loadURL(999, 'https://z.test/')", "Web.loadURL(999, 'https://z.test/')"), ClientWebTest::Pair("false"));
         for (const char *arguments : {"", "2", "2, 5", "'2', 'https://z.test/'", "2, nil"}) {
             EQUALS(stage.Lua(std::string("Web.loadURL(") + arguments + ")"), "<error> eval:1: Web.loadURL requires 2 arguments: viewId, url");
         }
@@ -523,14 +506,14 @@ MODULE(lua_client_web, {
         EQUALS(stage.View(2)->loaded.size(), 3u);
 
         // A size is two positive numbers, and ends the following of the client area.
-        EQUALS(both("Web.resizeView(2, 640, 480)", "Web.resizeView(1, 640, 480)"), Pair("true"));
+        EQUALS(both("Web.resizeView(2, 640, 480)", "Web.resizeView(1, 640, 480)"), ClientWebTest::Pair("true"));
         EQUALS(stage.Shape(2), "640x480+0+0 z=0 shown");
         EQUALS(stage.Shape(1), stage.Shape(2));
-        EQUALS(both("Web.resizeView(2, 0, 480)", "Web.resizeView(1, 0, 480)"), Pair("false"));
-        EQUALS(both("Web.resizeView(2, 640, -1)", "Web.resizeView(1, 640, -1)"), Pair("false"));
-        EQUALS(both("Web.resizeView(2, 2^32, 480)", "Web.resizeView(1, 2**32, 480)"), Pair("false"));
-        EQUALS(both("Web.resizeView(999, 10, 10)", "Web.resizeView(999, 10, 10)"), Pair("false"));
-        EQUALS(both("Web.resizeView(2, 100.7, 2^32 + 50)", "Web.resizeView(1, 100.7, 2**32 + 50)"), Pair("true"));
+        EQUALS(both("Web.resizeView(2, 0, 480)", "Web.resizeView(1, 0, 480)"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.resizeView(2, 640, -1)", "Web.resizeView(1, 640, -1)"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.resizeView(2, 2^32, 480)", "Web.resizeView(1, 2**32, 480)"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.resizeView(999, 10, 10)", "Web.resizeView(999, 10, 10)"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.resizeView(2, 100.7, 2^32 + 50)", "Web.resizeView(1, 100.7, 2**32 + 50)"), ClientWebTest::Pair("true"));
         EQUALS(stage.Shape(2), "100x50+0+0 z=0 shown");
         EQUALS(stage.Shape(1), stage.Shape(2));
         for (const char *arguments : {"", "1, 100", "1, '100', 100", "1, 100, {}", "'1', 100, 100"}) {
@@ -538,34 +521,34 @@ MODULE(lua_client_web, {
             EQUALS(stage.Js(std::string("Web.resizeView(") + arguments + ")"), "<error> Error: Web.resizeView requires 3 arguments: viewId, width, height");
         }
 
-        EQUALS(both("Web.setViewPosition(2, 5, 6)", "Web.setViewPosition(1, 5, 6)"), Pair("true"));
+        EQUALS(both("Web.setViewPosition(2, 5, 6)", "Web.setViewPosition(1, 5, 6)"), ClientWebTest::Pair("true"));
         EQUALS(stage.Shape(2), "100x50+5+6 z=0 shown");
-        EQUALS(both("Web.setViewPosition(2, -5.9, 0/0)", "Web.setViewPosition(1, -5.9, NaN)"), Pair("true"));
+        EQUALS(both("Web.setViewPosition(2, -5.9, 0/0)", "Web.setViewPosition(1, -5.9, NaN)"), ClientWebTest::Pair("true"));
         EQUALS(stage.Shape(2), "100x50+-5+0 z=0 shown");
         EQUALS(stage.Shape(1), stage.Shape(2));
-        EQUALS(both("Web.setViewPosition(999, 1, 1)", "Web.setViewPosition(999, 1, 1)"), Pair("false"));
+        EQUALS(both("Web.setViewPosition(999, 1, 1)", "Web.setViewPosition(999, 1, 1)"), ClientWebTest::Pair("false"));
         for (const char *arguments : {"", "1, 5", "1, 5, '6'", "'1', 5, 6"}) {
             EQUALS(stage.Lua(std::string("Web.setViewPosition(") + arguments + ")"), "<error> eval:1: Web.setViewPosition requires 3 arguments: viewId, x, y");
             EQUALS(stage.Js(std::string("Web.setViewPosition(") + arguments + ")"), "<error> Error: Web.setViewPosition requires 3 arguments: viewId, x, y");
         }
 
-        EQUALS(both("show(Web.getScreenSize())", "show(Web.getScreenSize())"), Pair("{height=1080,width=1920}"));
+        EQUALS(both("show(Web.getScreenSize())", "show(Web.getScreenSize())"), ClientWebTest::Pair("{height=1080,width=1920}"));
         EQUALS(stage.Lua("math.type(Web.getScreenSize().width)"), "integer");
         stage.gui->viewport = {1280, 720};
-        EQUALS(both("show(Web.getScreenSize(1, 2))", "show(Web.getScreenSize(1, 2))"), Pair("{height=720,width=1280}"));
+        EQUALS(both("show(Web.getScreenSize(1, 2))", "show(Web.getScreenSize(1, 2))"), ClientWebTest::Pair("{height=720,width=1280}"));
 
-        EQUALS(both("Web.destroyView(2)", "Web.destroyView(1)"), Pair("true"));
-        EQUALS(both("Web.destroyView(2)", "Web.destroyView(1)"), Pair("false"));
-        EQUALS(both("Web.showView(2)", "Web.showView(1)"), Pair("false"));
+        EQUALS(both("Web.destroyView(2)", "Web.destroyView(1)"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.destroyView(2)", "Web.destroyView(1)"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.showView(2)", "Web.showView(1)"), ClientWebTest::Pair("false"));
         EQUALS(stage.gui->ViewCount(), 0u);
         EQUALS(stage.gui->destroyed.size(), 2u);
-        EQUALS(Web::ViewCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 0u);
     });
 
     // ==================== Ownership ====================
 
     IT("lets a resource reach its own views only, whatever its language", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Start("other", "client.lua", ClientWebTest::kLua), "");
         EQUALS(stage.Js("Web.createView('https://x.test/')"), "1");
@@ -618,7 +601,7 @@ MODULE(lua_client_web, {
         EQUALS((stage.View(1)->scripts.empty() && stage.View(2)->scripts.empty()), true);
         EQUALS((stage.View(1)->loaded.empty() && stage.View(2)->loaded.empty()), true);
         EQUALS(stage.gui->destroyed.empty(), true);
-        EQUALS(Web::HandlerCount(), 2u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 2u);
         stage.Page(1, "ev", "1");
         stage.Page(2, "ev", "2");
         EQUALS(stage.Js("seen()"), "mine:1");
@@ -628,7 +611,7 @@ MODULE(lua_client_web, {
     // ==================== Script to page ====================
 
     IT("dispatches an event into a page as the same script from both languages", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Js("Web.createView('https://x.test/')"), "1");
         EQUALS(stage.Lua("Web.createView('https://x.test/')"), "2");
@@ -705,7 +688,7 @@ MODULE(lua_client_web, {
     // ==================== Page to script ====================
 
     IT("gives a Lua handler the payload of a page event under the rules a JavaScript handler has", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Js("Web.createView('https://x.test/')"), "1");
         EQUALS(stage.Lua("Web.createView('https://x.test/')"), "2");
@@ -720,20 +703,33 @@ MODULE(lua_client_web, {
             stage.Page(2, "ev", payload);
             return stage.Lua("seen()") + " / " + stage.Js("seen()");
         };
-        EQUALS(given(""), Pair("h:" "nil"));
-        EQUALS(given("null"), Pair("h:" "nil"));
-        EQUALS(given("{\"a\":1,\"b\":[true,\"x\"],\"c\":{\"d\":1.5}}"), Pair("h:" "{a=1,b={1=true,2=\"x\"},c={d=1.5}}"));
-        EQUALS(given("not json"), Pair("h:" "\"not json\""));
-        EQUALS(given("{\"cut\":"), Pair("h:" "\"{\"cut\":\""));
-        EQUALS(given("\"text\""), Pair("h:" "\"text\""));
-        EQUALS(given("12.5"), Pair("h:" "12.5"));
-        EQUALS(given("3"), Pair("h:" "3"));
-        EQUALS(given("true"), Pair("h:" "true"));
-        EQUALS(given("[1,2,3]"), Pair("h:" "{1=1,2=2,3=3}"));
-        EQUALS(given("  {\"spaced\" : 1}  "), Pair("h:" "{spaced=1}"));
+        EQUALS(given(""), ClientWebTest::Pair("h:"
+                                              "nil"));
+        EQUALS(given("null"), ClientWebTest::Pair("h:"
+                                                  "nil"));
+        EQUALS(given("{\"a\":1,\"b\":[true,\"x\"],\"c\":{\"d\":1.5}}"), ClientWebTest::Pair("h:"
+                                                                                            "{a=1,b={1=true,2=\"x\"},c={d=1.5}}"));
+        EQUALS(given("not json"), ClientWebTest::Pair("h:"
+                                                      "\"not json\""));
+        EQUALS(given("{\"cut\":"), ClientWebTest::Pair("h:"
+                                                       "\"{\"cut\":\""));
+        EQUALS(given("\"text\""), ClientWebTest::Pair("h:"
+                                                      "\"text\""));
+        EQUALS(given("12.5"), ClientWebTest::Pair("h:"
+                                                  "12.5"));
+        EQUALS(given("3"), ClientWebTest::Pair("h:"
+                                               "3"));
+        EQUALS(given("true"), ClientWebTest::Pair("h:"
+                                                  "true"));
+        EQUALS(given("[1,2,3]"), ClientWebTest::Pair("h:"
+                                                     "{1=1,2=2,3=3}"));
+        EQUALS(given("  {\"spaced\" : 1}  "), ClientWebTest::Pair("h:"
+                                                                  "{spaced=1}"));
         // Of two members of one name the last counts.
-        EQUALS(given("{\"a\":1,\"a\":2}"), Pair("h:" "{a=2}"));
-        EQUALS(given("\"\\u00e9\""), Pair("h:" "\"\xc3\xa9\""));
+        EQUALS(given("{\"a\":1,\"a\":2}"), ClientWebTest::Pair("h:"
+                                                               "{a=2}"));
+        EQUALS(given("\"\\u00e9\""), ClientWebTest::Pair("h:"
+                                                         "\"\xc3\xa9\""));
 
         // A whole number is an integer to Lua, however the page spelled it.
         stage.Page(2, "ev", "[1, 2.0, 1e3, 0.5]");
@@ -747,7 +743,7 @@ MODULE(lua_client_web, {
         EQUALS(stage.Lua("seen()"), "h:\"" + deep + "\"");
         const std::string nested = std::string(128, '[') + "1" + std::string(128, ']');
         stage.Page(2, "ev", nested);
-        EQUALS(Contains(stage.Lua("seen()"), "h:{1={1={1="), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.Lua("seen()"), "h:{1={1={1="), true);
         stage.Page(2, "ev", "[" + nested + "]");
         EQUALS(stage.Lua("seen()"), "h:\"[" + nested + "]\"");
 
@@ -759,7 +755,7 @@ MODULE(lua_client_web, {
     });
 
     IT("calls the JavaScript handlers of an event on the global, with the one value the payload parses to", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Js("Web.createView('https://x.test/')"), "1");
         // A strict function sees the receiver it is given.
@@ -777,7 +773,7 @@ MODULE(lua_client_web, {
     });
 
     IT("registers and removes the handlers of a page event in both languages", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Js("Web.createView('https://x.test/')"), "1");
         EQUALS(stage.Lua("Web.createView('https://x.test/')"), "2");
@@ -793,13 +789,13 @@ MODULE(lua_client_web, {
         EQUALS(stage.Lua("Web.on(999, 'ev', print)"), "<error> eval:1: Web.on: unknown web view 999");
         EQUALS(stage.Js("Web.on(999, 'ev', () => {})"), "<error> Error: Web.on: unknown web view 999");
         EQUALS(stage.Js("Web.on(1, 'ev', () => {})", ""), "<error> Error: Web.on: must be called from within a resource");
-        EQUALS(Web::HandlerCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 0u);
         EQUALS(stage.Listeners(1) + stage.Listeners(2), "");
 
         const char *lua = "a, b = rec('a'), rec('b') Web.on(2, 'ev', a) Web.on(2, 'ev', a) Web.on(2, 'ev', b) Web.on(2, 'other', b)";
         EQUALS(stage.Lua(std::string("(function() ") + lua + " end)()"), "nil");
         EQUALS(stage.Js("(globalThis.a = rec('a'), globalThis.b = rec('b'), Web.on(1, 'ev', a), Web.on(1, 'ev', a), Web.on(1, 'ev', b), Web.on(1, 'other', b))"), "undefined");
-        EQUALS(Web::HandlerCount(), 8u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 8u);
         // One listener a name, whatever the number of handlers.
         for (const int id : {1, 2}) {
             EQUALS(stage.Listeners(id), "ev|other|");
@@ -814,28 +810,28 @@ MODULE(lua_client_web, {
             stage.Page(2, name, "1");
             return stage.Lua("seen()") + " / " + stage.Js("seen()");
         };
-        EQUALS(fired("ev"), Pair("a:1|a:1|b:1"));
+        EQUALS(fired("ev"), ClientWebTest::Pair("a:1|a:1|b:1"));
 
-        EQUALS(both("Web.off(2, 'none')", "Web.off(1, 'none')"), Pair("false"));
-        EQUALS(both("Web.off(999, 'ev')", "Web.off(999, 'ev')"), Pair("false"));
-        EQUALS(both("Web.off(2, 'ev', function() end)", "Web.off(1, 'ev', () => {})"), Pair("false"));
+        EQUALS(both("Web.off(2, 'none')", "Web.off(1, 'none')"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.off(999, 'ev')", "Web.off(999, 'ev')"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.off(2, 'ev', function() end)", "Web.off(1, 'ev', () => {})"), ClientWebTest::Pair("false"));
         // A handler registered twice goes twice.
-        EQUALS(both("Web.off(2, 'ev', a)", "Web.off(1, 'ev', a)"), Pair("true"));
-        EQUALS(both("Web.off(2, 'ev', a)", "Web.off(1, 'ev', a)"), Pair("false"));
-        EQUALS(fired("ev"), Pair("b:1"));
+        EQUALS(both("Web.off(2, 'ev', a)", "Web.off(1, 'ev', a)"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.off(2, 'ev', a)", "Web.off(1, 'ev', a)"), ClientWebTest::Pair("false"));
+        EQUALS(fired("ev"), ClientWebTest::Pair("b:1"));
         EQUALS(stage.Listeners(1) + stage.Listeners(2), "ev|other|ev|other|");
         // The listener of a name goes with its last handler.
-        EQUALS(both("Web.off(2, 'ev', b)", "Web.off(1, 'ev', b)"), Pair("true"));
+        EQUALS(both("Web.off(2, 'ev', b)", "Web.off(1, 'ev', b)"), ClientWebTest::Pair("true"));
         EQUALS(stage.Listeners(1) + stage.Listeners(2), "other|other|");
-        EQUALS(fired("ev"), Pair(""));
-        EQUALS(fired("other"), Pair("b:1"));
+        EQUALS(fired("ev"), ClientWebTest::Pair(""));
+        EQUALS(fired("other"), ClientWebTest::Pair("b:1"));
         // Without a handler, and with what is not a function, every handler of the name goes.
         EQUALS(both("(function() Web.on(2, 'other', a) Web.on(2, 'third', a) end)()", "(Web.on(1, 'other', a), Web.on(1, 'third', a))"), "nil / undefined");
-        EQUALS(both("Web.off(2, 'other')", "Web.off(1, 'other')"), Pair("true"));
-        EQUALS(both("Web.off(2, 'other')", "Web.off(1, 'other')"), Pair("false"));
-        EQUALS(both("Web.off(2, 'third', 'not a function')", "Web.off(1, 'third', 'not a function')"), Pair("true"));
+        EQUALS(both("Web.off(2, 'other')", "Web.off(1, 'other')"), ClientWebTest::Pair("true"));
+        EQUALS(both("Web.off(2, 'other')", "Web.off(1, 'other')"), ClientWebTest::Pair("false"));
+        EQUALS(both("Web.off(2, 'third', 'not a function')", "Web.off(1, 'third', 'not a function')"), ClientWebTest::Pair("true"));
         EQUALS(stage.Listeners(1) + stage.Listeners(2), "");
-        EQUALS(Web::HandlerCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 0u);
 
         for (const char *arguments : {"", "2", "2, 5", "'2', 'ev'"}) {
             EQUALS(stage.Lua(std::string("Web.off(") + arguments + ")"), "<error> eval:1: Web.off requires at least 2 arguments: viewId, eventName");
@@ -844,7 +840,7 @@ MODULE(lua_client_web, {
     });
 
     IT("lets a handler remove itself, add another and destroy its view while the event is dispatched", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Js("Web.createView('https://x.test/')"), "1");
         EQUALS(stage.Lua("Web.createView('https://x.test/')"), "2");
@@ -868,13 +864,13 @@ MODULE(lua_client_web, {
         EQUALS(stage.Js("seen()"), "destroyed:true|after:1");
         EQUALS(stage.Lua("seen()"), "destroyed:true|after:1");
         EQUALS(stage.gui->ViewCount(), 0u);
-        EQUALS(Web::HandlerCount(), 0u);
-        EQUALS(Web::ViewCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 0u);
         EQUALS(stage.Errors(), "");
     });
 
     IT("reports a handler of a page event that fails to the manager of its resource, and calls the others", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         const char *keepGoing = R"(,"errorBehavior":"continue")";
         EQUALS(stage.Start("js-fails", "client.js", "globalThis.failing = Web.createView('https://x.test/'); Web.on(failing, 'ev', (p) => log.push('js-before:' + p)); Web.on(failing, 'ev', () => { throw new Error('js boom'); }); Web.on(failing, 'ev', (p) => log.push('js-after:' + p));", keepGoing), "");
@@ -893,21 +889,21 @@ MODULE(lua_client_web, {
         // Nothing is acted on inside the dispatch: the manager hears of it at its next upkeep.
         EQUALS(stage.Errors(), "");
         stage.Frame();
-        EQUALS(Contains(stage.Errors(), "js-fails: Web view 1 event 'ev' handler error: Error: js boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.Errors(), "js-fails: Web view 1 event 'ev' handler error: Error: js boom"), true);
         // The name of an event is a script's: it takes one line of the log.
-        EQUALS(Contains(stage.Errors(), "lua-fails: Web view 2 event 'ev il' handler error: "), true);
-        EQUALS(Contains(stage.Errors(), "lua boom"), true);
-        EQUALS(Contains(stage.Errors(), "late boom"), false);
+        EQUALS(LuaRuntimeTest::Contains(stage.Errors(), "lua-fails: Web view 2 event 'ev il' handler error: "), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.Errors(), "lua boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.Errors(), "late boom"), false);
         stage.client.Wait(20);
         stage.Frame();
-        EQUALS(Contains(stage.Errors(), "later: Web view 3 event 'ev' handler error: "), true);
-        EQUALS(Contains(stage.Errors(), "late boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.Errors(), "later: Web view 3 event 'ev' handler error: "), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.Errors(), "late boom"), true);
         // A resource that goes on, in the state of one that failed, keeps its views and its handlers.
         for (const char *name : {"js-fails", "lua-fails", "later"}) {
-            EQUALS(stage.client.manager->GetResourceState(name) == ResourceState::Error, true);
+            EQUALS(stage.client.manager->GetResourceState(name) == Framework::Scripting::ResourceState::Error, true);
         }
         EQUALS(stage.gui->ViewCount(), 4u);
-        EQUALS(Web::HandlerCount(), 8u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 8u);
         // The next update starts over.
         stage.Page(1, "ev", "3");
         stage.Page(2, "ev\nil", "3");
@@ -919,16 +915,16 @@ MODULE(lua_client_web, {
         stage.Page(4, "ev", "1");
         EQUALS(stage.client.manager->IsResourceRunning("stops"), true);
         stage.Frame();
-        EQUALS(Contains(stage.Errors(), "stops: Web view 4 event 'ev' handler error: "), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.Errors(), "stops: Web view 4 event 'ev' handler error: "), true);
         EQUALS(stage.client.manager->IsResourceRunning("stops"), false);
         EQUALS(stage.View(4) == nullptr, true);
-        EQUALS(Web::HandlerCount(), 7u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 7u);
     });
 
     IT("charges a resource whose handlers all hang one deadline an update, whatever its page sends", {
-        LuaEngineOptions options = LuaEngineOptions::Client();
+        Framework::Scripting::LuaEngineOptions options = Framework::Scripting::LuaEngineOptions::Client();
         options.entryDeadline    = std::chrono::milliseconds(150);
-        Stage stage(/*cleanupOnStop*/ true, options);
+        ClientWebTest::Stage stage(/*cleanupOnStop*/ true, options);
         EQUALS(stage.ready, true);
         const char *keepGoing  = R"(,"errorBehavior":"continue")";
         const std::string spin = "local function spin() local stop = os.clock() + 20 while os.clock() < stop do end end ";
@@ -960,20 +956,20 @@ MODULE(lua_client_web, {
         EQUALS(stage.Lua("ran", "fine"), "6");
         stage.Frame();
         EQUALS(stage.client.errors.size(), 3u);
-        EQUALS(Web::HandlerCount(), 25u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 25u);
     });
 
     // ==================== Reentrancy ====================
 
     IT("calls no later handler of a resource that a handler stopped, in either language", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Start("js-quits", "client.js", "globalThis.quitLog = []; globalThis.quitView = Web.createView('https://x.test/'); Web.on(quitView, 'ev', () => { quitLog.push('quit'); stopResource('js-quits'); quitLog.push('on'); }); Web.on(quitView, 'ev', () => quitLog.push('after'));"), "");
         EQUALS(stage.Start("lua-quits", "client.lua", "view = Web.createView('https://x.test/') Web.on(view, 'ev', function() stopResource('lua-quits') error('still running') end) Web.on(view, 'ev', function() error('after') end)"), "");
         // A handler of another resource on the view of the one that stops: a JavaScript function is its maker's.
         EQUALS(stage.Js("(Web.createView('https://x.test/'), 1)"), "1");
         EQUALS(stage.Start("js-kills", "client.js", "globalThis.victimLog = []; globalThis.victimView = Web.createView('https://x.test/'); Web.on(victimView, 'ev', () => { stopResource('js'); }); Web.on(victimView, 'ev', rec('of-js')); Web.on(victimView, 'ev', () => victimLog.push('mine'));"), "");
-        EQUALS(Web::ViewCount(), 4u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 4u);
 
         stage.Page(1, "ev", "1");
         // The script that stopped its resource ran on to its end; the handler after it was not called.
@@ -984,8 +980,8 @@ MODULE(lua_client_web, {
         stage.Page(4, "ev", "1");
         EQUALS(stage.Js("victimLog.join() + '/' + log.length", ""), "mine/0");
         EQUALS(stage.View(3) == nullptr, true);
-        EQUALS(Web::ViewCount(), 1u);
-        EQUALS(Web::HandlerCount(), 2u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 1u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 2u);
         // A resource that is stopping has nothing reported.
         stage.Frame();
         EQUALS(stage.Errors(), "");
@@ -994,7 +990,7 @@ MODULE(lua_client_web, {
 
     IT("stops dispatching when a handler shuts Web down, and reports what fails afterwards to nobody", {
         for (const bool lua : {false, true}) {
-            Stage stage;
+            ClientWebTest::Stage stage;
             EQUALS(stage.ready, true);
             if (lua) {
                 EQUALS(stage.Lua("(function() view = Web.createView('https://x.test/') Web.on(view, 'ev', function() log[#log + 1] = 'first' shutdownWeb() error('after the shutdown') end) Web.on(view, 'ev', rec('second')) end)()"), "nil");
@@ -1004,7 +1000,7 @@ MODULE(lua_client_web, {
             }
             stage.Page(1, "ev", "1");
             EQUALS((lua ? stage.Lua("seen()") : stage.Js("seen()")), "first");
-            EQUALS(Web::ViewCount() + Web::HandlerCount(), 0u);
+            EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount() + Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 0u);
             // The manager the handler was registered under is no longer Web's to report to.
             stage.Frame();
             stage.Frame();
@@ -1018,7 +1014,7 @@ MODULE(lua_client_web, {
 
     IT("survives a reset of the scripting from inside a handler, and serves both languages afterwards", {
         for (const bool lua : {false, true}) {
-            Stage stage;
+            ClientWebTest::Stage stage;
             EQUALS(stage.ready, true);
             EQUALS(stage.Js("(globalThis.view = Web.createView('https://x.test/'), 1)"), "1");
             EQUALS(stage.Lua("(function() view = Web.createView('https://y.test/') end)()"), "nil");
@@ -1028,7 +1024,7 @@ MODULE(lua_client_web, {
             if (!lua) {
                 EQUALS(stage.Js("reached.join()", ""), "js,on");
             }
-            EQUALS(Web::ViewCount() + Web::HandlerCount(), 0u);
+            EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount() + Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 0u);
             EQUALS((stage.client.manager->IsResourceRunning("js") || stage.client.manager->IsResourceRunning("lua")), false);
 
             // The rest of ClientScriptingModule::Reset, then Init.
@@ -1051,7 +1047,7 @@ MODULE(lua_client_web, {
     // ==================== Cleanup ====================
 
     IT("destroys the views of a resource that stops and drops its handlers, in both languages", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Start("js-other", "client.js", "globalThis.otherHandler = function (p) { log.push('other:' + show(p)); }; globalThis.otherView = Web.createView('https://o.test/');"), "");
         EQUALS(stage.Js("Web.createView('https://x.test/')"), "2");
@@ -1062,23 +1058,23 @@ MODULE(lua_client_web, {
         EQUALS(stage.Lua("(function() Web.on(4, 'ev', rec('lua')) Web.on(5, 'ev', rec('lua')) end)()"), "nil");
         // A JavaScript function is its maker's, whoever registers it: here on a view of the one that registers.
         EQUALS(stage.Js("(Web.on(2, 'shared', otherHandler), Web.on(2, 'mixed', otherHandler), Web.on(2, 'mixed', rec('js')))"), "undefined");
-        EQUALS(Web::ViewCount(), 5u);
-        EQUALS(Web::HandlerCount(), 7u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 5u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 7u);
         EQUALS(stage.Listeners(2), "ev|mixed|shared|");
         // Events of the browser that nobody drained yet.
-        stage.Raise(4, ViewEvent::Tooltip);
-        stage.Raise(1, ViewEvent::Tooltip);
+        stage.Raise(4, Framework::GUI::ViewEvent::Tooltip);
+        stage.Raise(1, Framework::GUI::ViewEvent::Tooltip);
 
         EQUALS(static_cast<bool>(stage.client.manager->StopResource("lua")), true);
         EQUALS((stage.View(4) == nullptr && stage.View(5) == nullptr), true);
-        EQUALS(Web::ViewCount(), 3u);
-        EQUALS(Web::HandlerCount(), 5u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 3u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 5u);
 
         // The handlers of the resource that stops go from the views of the others, and a listener with its last.
         EQUALS(static_cast<bool>(stage.client.manager->StopResource("js-other")), true);
         EQUALS(stage.View(1) == nullptr, true);
-        EQUALS(Web::ViewCount(), 2u);
-        EQUALS(Web::HandlerCount(), 3u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 2u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 3u);
         EQUALS(stage.Listeners(2), "ev|mixed|");
         stage.Page(2, "mixed", "1");
         EQUALS(stage.Js("seen()"), "js:1");
@@ -1086,8 +1082,8 @@ MODULE(lua_client_web, {
         EQUALS(static_cast<bool>(stage.client.manager->StopResource("js")), true);
         EQUALS(stage.gui->ViewCount(), 0u);
         EQUALS(stage.gui->destroyed.size(), 5u);
-        EQUALS(Web::ViewCount(), 0u);
-        EQUALS(Web::HandlerCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 0u);
         // What was queued for views that are gone reaches nobody.
         stage.Frame();
         EQUALS(stage.Errors(), "");
@@ -1100,32 +1096,32 @@ MODULE(lua_client_web, {
 
     IT("never calls a Lua handler whose state is gone", {
         // Nobody tells Web that the resource stopped.
-        Stage stage(false);
+        ClientWebTest::Stage stage(false);
         EQUALS(stage.ready, true);
         EQUALS(stage.Lua("Web.createView('https://y.test/')"), "1");
         EQUALS(stage.Lua("Web.on(1, 'ev', rec('lua'))"), "nil");
         EQUALS(static_cast<bool>(stage.client.manager->StopResource("lua")), true);
-        EQUALS(Web::HandlerCount(), 1u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 1u);
         stage.Page(1, "ev", "1");
         stage.Frame();
         EQUALS(stage.Errors(), "");
-        Web::CleanupResource("lua");
-        EQUALS(Web::HandlerCount(), 0u);
+        Framework::Integrations::Client::Scripting::Builtins::Web::CleanupResource("lua");
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 0u);
         EQUALS(stage.gui->ViewCount(), 0u);
     });
 
     IT("forgets every view and handler on a shutdown, and serves both languages again after a reset", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Js("Web.createView('https://x.test/')"), "1");
         EQUALS(stage.Lua("Web.createView('https://y.test/')"), "2");
         EQUALS(stage.Js("Web.on(1, 'ev', rec('js'))"), "undefined");
         EQUALS(stage.Lua("Web.on(2, 'ev', rec('lua'))"), "nil");
-        stage.Raise(2, ViewEvent::Tooltip);
+        stage.Raise(2, Framework::GUI::ViewEvent::Tooltip);
 
-        Web::Shutdown();
-        EQUALS(Web::ViewCount(), 0u);
-        EQUALS(Web::HandlerCount(), 0u);
+        Framework::Integrations::Client::Scripting::Builtins::Web::Shutdown();
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::ViewCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::HandlerCount(), 0u);
         // The views are the manager's of the views to collect; scripts no longer reach them.
         stage.Page(1, "ev", "1");
         stage.Page(2, "ev", "1");
@@ -1158,7 +1154,7 @@ MODULE(lua_client_web, {
     // ==================== Browser events ====================
 
     IT("gives the events of a browser to the resource that owns the view, with the same fields in both languages", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         const char *names[] = {"browserCreated", "browserLoadingStart", "browserDocumentReady", "browserLoadingFailed", "browserNavigate", "browserPopup", "browserCursorChange", "browserTooltip", "browserInputFocusChange", "browserResourceBlocked",
             "browserConsoleMessage", "browserOriginChange"};
@@ -1194,8 +1190,8 @@ MODULE(lua_client_web, {
         };
         EQUALS(stage.Lua("type(Events.on('browserConsoleMessage', function(e) kinds = math.type(e.line) .. ',' .. math.type(e.viewId) end))"), "function");
         for (int kind = 0; kind < 12; ++kind) {
-            stage.Raise(1, ClientWebTest::Filled(static_cast<ViewEvent>(kind)));
-            stage.Raise(2, ClientWebTest::Filled(static_cast<ViewEvent>(kind)));
+            stage.Raise(1, ClientWebTest::Filled(static_cast<Framework::GUI::ViewEvent>(kind)));
+            stage.Raise(2, ClientWebTest::Filled(static_cast<Framework::GUI::ViewEvent>(kind)));
             stage.Frame();
             EQUALS(stage.Js("seen()"), with(expected[kind], '1'));
             EQUALS(stage.Lua("seen()"), with(expected[kind], '2'));
@@ -1205,8 +1201,8 @@ MODULE(lua_client_web, {
 
         // The names of a cursor and of a severity, and what has none.
         const auto cursor = [&stage](int type) {
-            ViewEventData data;
-            data.event      = ViewEvent::CursorChange;
+            Framework::GUI::ViewEventData data;
+            data.event      = Framework::GUI::ViewEvent::CursorChange;
             data.cursorType = type;
             stage.Raise(2, data);
             stage.Frame();
@@ -1218,8 +1214,8 @@ MODULE(lua_client_web, {
         EQUALS(cursor(CT_MIDDLEPANNING), "browserCursorChange:{cursor=\"custom\",cursorType=20,viewId=2}");
         EQUALS(cursor(500), "browserCursorChange:{cursor=\"custom\",cursorType=500,viewId=2}");
         const auto severity = [&stage](int level) {
-            ViewEventData data;
-            data.event    = ViewEvent::ConsoleMessage;
+            Framework::GUI::ViewEventData data;
+            data.event    = Framework::GUI::ViewEvent::ConsoleMessage;
             data.severity = level;
             stage.Raise(2, data);
             stage.Frame();
@@ -1235,7 +1231,7 @@ MODULE(lua_client_web, {
     });
 
     IT("keeps the events of a browser apart from what a page names, bounded, and from views that are gone", {
-        Stage stage;
+        ClientWebTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Lua("type(Events.on('browserTooltip', function(e) log[#log + 1] = 'browser:' .. show(e) end))"), "function");
         EQUALS(stage.Js("typeof Events.on('browserTooltip', (e) => { log.push('browser:' + show(e)); })"), "function");
@@ -1248,14 +1244,14 @@ MODULE(lua_client_web, {
         stage.Frame();
         EQUALS(stage.Lua("seen()"), "page:{text=\"forged\",viewId=1}");
         // And what the browser reports reaches the listeners of the owner alone, not those of Web.on.
-        stage.Raise(1, ClientWebTest::Filled(ViewEvent::Tooltip));
+        stage.Raise(1, ClientWebTest::Filled(Framework::GUI::ViewEvent::Tooltip));
         stage.Frame();
         EQUALS(stage.Lua("seen()"), "browser:{text=\"tip\",viewId=1}");
         EQUALS(stage.Js("seen()"), "");
 
         // The queue keeps the last 1024 of what a tick did not drain.
-        ViewEventData numbered;
-        numbered.event = ViewEvent::Tooltip;
+        Framework::GUI::ViewEventData numbered;
+        numbered.event = Framework::GUI::ViewEvent::Tooltip;
         for (int i = 0; i < 1030; ++i) {
             numbered.tooltip = std::to_string(i);
             stage.Raise(1, numbered);
@@ -1270,18 +1266,18 @@ MODULE(lua_client_web, {
         EQUALS(stage.Lua("Web.createView('https://y.test/2')"), "2");
         stage.Frame();
         EQUALS(stage.Lua("seen()"), "");
-        EQUALS(Web::PendingEventCount(), 0u);
-        stage.Raise(1, ClientWebTest::Filled(ViewEvent::Tooltip));
-        stage.Raise(2, ClientWebTest::Filled(ViewEvent::Tooltip));
-        stage.Raise(1, ClientWebTest::Filled(ViewEvent::Tooltip));
-        EQUALS(Web::PendingEventCount(), 3u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::PendingEventCount(), 0u);
+        stage.Raise(1, ClientWebTest::Filled(Framework::GUI::ViewEvent::Tooltip));
+        stage.Raise(2, ClientWebTest::Filled(Framework::GUI::ViewEvent::Tooltip));
+        stage.Raise(1, ClientWebTest::Filled(Framework::GUI::ViewEvent::Tooltip));
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::PendingEventCount(), 3u);
         EQUALS(stage.Lua("Web.destroyView(1)"), "true");
-        EQUALS(Web::PendingEventCount(), 1u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::PendingEventCount(), 1u);
         stage.Frame();
         EQUALS(stage.Lua("seen()"), "browser:{text=\"tip\",viewId=2}");
-        stage.Raise(2, ClientWebTest::Filled(ViewEvent::Tooltip));
+        stage.Raise(2, ClientWebTest::Filled(Framework::GUI::ViewEvent::Tooltip));
         EQUALS(static_cast<bool>(stage.client.manager->StopResource("lua")), true);
-        EQUALS(Web::PendingEventCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Web::PendingEventCount(), 0u);
         stage.Frame();
         EQUALS(stage.Errors(), "");
     });

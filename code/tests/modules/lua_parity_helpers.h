@@ -32,10 +32,6 @@
 // by member, and the Lua definition file held against the same state. The server and the client module each bring
 // their catalog, their state and their exemptions (lua_parity_ut.h, lua_client_parity_ut.h).
 namespace LuaParity {
-    using Framework::Scripting::Bind::ApiCatalog;
-    using Framework::Scripting::Bind::ClassDesc;
-    using Framework::Scripting::Bind::Side;
-    namespace BindDetail = Framework::Scripting::Bind::Detail;
 
     // What JavaScript has and Lua has not, by design: "<global>", "<Symbol>.<member>" or "<Class>.new", with the
     // reason. Nothing else may be missing, and an entry that excuses nothing fails the gate too.
@@ -59,8 +55,8 @@ namespace LuaParity {
     }
 
     // The builtin named `name` that a runtime of `side` has, or nullptr.
-    inline const ClassDesc *FindBuiltin(const std::vector<const ClassDesc *> &builtins, const std::string &name, Side side) {
-        for (const ClassDesc *desc : builtins) {
+    inline const Framework::Scripting::Bind::ClassDesc *FindBuiltin(const std::vector<const Framework::Scripting::Bind::ClassDesc *> &builtins, const std::string &name, Framework::Scripting::Bind::Side side) {
+        for (const Framework::Scripting::Bind::ClassDesc *desc : builtins) {
             if (desc->name == name && ExistsIn(*desc, side)) {
                 return desc;
             }
@@ -88,9 +84,9 @@ namespace LuaParity {
 
     // The type of what the class table of `definition` has under `field`: a static, or `new`. A class has its
     // table in a state whether or not a global names it.
-    inline int ClassFieldType(lua_State *L, const BindDetail::LuaClass &definition, const std::string &field) {
+    inline int ClassFieldType(lua_State *L, const Framework::Scripting::Bind::Detail::LuaClass &definition, const std::string &field) {
         int type = LUA_TNONE;
-        if (BindDetail::LuaPushClassTable(L, definition)) {
+        if (Framework::Scripting::Bind::Detail::LuaPushClassTable(L, definition)) {
             type = lua_getfield(L, -1, field.c_str());
             lua_pop(L, 1);
         }
@@ -99,9 +95,9 @@ namespace LuaParity {
     }
 
     // The type of what the metatable of the objects of `definition` has under `event`: "__add".
-    inline int MetaType(lua_State *L, const BindDetail::LuaClass &definition, const std::string &event) {
+    inline int MetaType(lua_State *L, const Framework::Scripting::Bind::Detail::LuaClass &definition, const std::string &event) {
         int type = LUA_TNONE;
-        if (BindDetail::LuaPushInstanceMetatable(L, definition)) {
+        if (Framework::Scripting::Bind::Detail::LuaPushInstanceMetatable(L, definition)) {
             lua_pushstring(L, event.c_str());
             type = lua_rawget(L, -2);
             lua_pop(L, 1);
@@ -111,9 +107,9 @@ namespace LuaParity {
     }
 
     // Whether calling the class table of `definition` constructs: it has a constructor, and its table a __call.
-    inline bool IsCallable(lua_State *L, const BindDetail::LuaClass &definition) {
+    inline bool IsCallable(lua_State *L, const Framework::Scripting::Bind::Detail::LuaClass &definition) {
         bool callable = false;
-        if (BindDetail::LuaPushClassTable(L, definition) && lua_getmetatable(L, -1) != 0) {
+        if (Framework::Scripting::Bind::Detail::LuaPushClassTable(L, definition) && lua_getmetatable(L, -1) != 0) {
             lua_pushstring(L, "__call");
             callable = lua_rawget(L, -2) == LUA_TFUNCTION;
             lua_pop(L, 2);
@@ -134,7 +130,7 @@ namespace LuaParity {
 
     class Gate final {
       public:
-        Gate(lua_State *L, Side side, const std::vector<const ClassDesc *> &builtins, const Exemptions &exemptions): _L(L), _side(side), _builtins(builtins), _exemptions(exemptions) {}
+        Gate(lua_State *L, Framework::Scripting::Bind::Side side, const std::vector<const Framework::Scripting::Bind::ClassDesc *> &builtins, const Exemptions &exemptions): _L(L), _side(side), _builtins(builtins), _exemptions(exemptions) {}
 
         // Holds every symbol and global function of a normalised JavaScript catalog against the state.
         Report Check(const nlohmann::json &catalog) {
@@ -182,8 +178,8 @@ namespace LuaParity {
                 CheckNamespace(symbol, name);
                 return;
             }
-            const ClassDesc *desc                  = FindBuiltin(_builtins, name, _side);
-            const BindDetail::LuaClass *definition = desc != nullptr ? BindDetail::LuaClassDescribedBy(*desc) : nullptr;
+            const Framework::Scripting::Bind::ClassDesc *desc              = FindBuiltin(_builtins, name, _side);
+            const Framework::Scripting::Bind::Detail::LuaClass *definition = desc != nullptr ? Framework::Scripting::Bind::Detail::LuaClassDescribedBy(*desc) : nullptr;
             if (kind == "dataType" && definition == nullptr) {
                 ++_report.dataTypes;
                 return;
@@ -216,15 +212,14 @@ namespace LuaParity {
             }
         }
 
-        void CheckClass(const nlohmann::json &symbol, const std::string &name, const BindDetail::LuaClass &definition) {
-            using BindDetail::LuaInstanceMember;
+        void CheckClass(const nlohmann::json &symbol, const std::string &name, const Framework::Scripting::Bind::Detail::LuaClass &definition) {
             for (const nlohmann::json &function : symbol.value("functions", nlohmann::json::array())) {
                 const std::string member = function.value("name", std::string());
                 if (function.value("static", false)) {
                     Expect(name + "." + member, ClassFieldType(_L, definition, member) == LUA_TFUNCTION, "static");
                 }
                 else {
-                    Expect(name + "." + member, BindDetail::LuaFindInstanceMember(_L, definition, member) == LuaInstanceMember::Method, "method");
+                    Expect(name + "." + member, Framework::Scripting::Bind::Detail::LuaFindInstanceMember(_L, definition, member) == Framework::Scripting::Bind::Detail::LuaInstanceMember::Method, "method");
                 }
             }
             for (const nlohmann::json &property : symbol.value("properties", nlohmann::json::array())) {
@@ -234,9 +229,9 @@ namespace LuaParity {
                     Expect(name + "." + member, type != LUA_TNONE && type != LUA_TNIL, "static property");
                     continue;
                 }
-                const LuaInstanceMember found = BindDetail::LuaFindInstanceMember(_L, definition, member);
-                const bool writable           = !property.value("readonly", false);
-                Expect(name + "." + member, found == (writable ? LuaInstanceMember::Property : LuaInstanceMember::ReadOnlyProperty), writable ? "property with a setter" : "read-only property");
+                const Framework::Scripting::Bind::Detail::LuaInstanceMember found = Framework::Scripting::Bind::Detail::LuaFindInstanceMember(_L, definition, member);
+                const bool writable                                               = !property.value("readonly", false);
+                Expect(name + "." + member, found == (writable ? Framework::Scripting::Bind::Detail::LuaInstanceMember::Property : Framework::Scripting::Bind::Detail::LuaInstanceMember::ReadOnlyProperty), writable ? "property with a setter" : "read-only property");
             }
             // Every class table has `new`, which refuses when the class declares no constructor.
             const bool constructible = symbol.contains("constructor") && symbol["constructor"].is_object();
@@ -249,8 +244,8 @@ namespace LuaParity {
         }
 
         lua_State *_L;
-        Side _side;
-        const std::vector<const ClassDesc *> &_builtins;
+        Framework::Scripting::Bind::Side _side;
+        const std::vector<const Framework::Scripting::Bind::ClassDesc *> &_builtins;
         const Exemptions &_exemptions;
         Report _report;
         std::set<std::string> _used;
@@ -267,16 +262,15 @@ namespace LuaParity {
     };
 
     // Reads a definition file as WriteLuaDefinitions writes it and looks for all of it in the state.
-    inline Declared CheckDefinitions(const std::string &text, lua_State *L, Side side, const std::vector<const ClassDesc *> &builtins) {
-        using BindDetail::LuaInstanceMember;
+    inline Declared CheckDefinitions(const std::string &text, lua_State *L, Framework::Scripting::Bind::Side side, const std::vector<const Framework::Scripting::Bind::ClassDesc *> &builtins) {
         Declared declared;
         std::string current; // the class the annotations being read belong to
         std::set<std::string> local;
         std::vector<std::string> pendingOperators; // named in a description, for the class it leads to
 
-        const auto classOf = [&](const std::string &name) -> const BindDetail::LuaClass * {
-            const ClassDesc *desc = FindBuiltin(builtins, name, side);
-            return desc != nullptr ? BindDetail::LuaClassDescribedBy(*desc) : nullptr;
+        const auto classOf = [&](const std::string &name) -> const Framework::Scripting::Bind::Detail::LuaClass * {
+            const Framework::Scripting::Bind::ClassDesc *desc = FindBuiltin(builtins, name, side);
+            return desc != nullptr ? Framework::Scripting::Bind::Detail::LuaClassDescribedBy(*desc) : nullptr;
         };
         const auto word = [](std::string_view text) {
             size_t length = 0;
@@ -292,7 +286,7 @@ namespace LuaParity {
             if (view.starts_with("---@class ")) {
                 current = word(view.substr(10));
                 declared.tables.insert(current);
-                const BindDetail::LuaClass *definition = classOf(current);
+                const Framework::Scripting::Bind::Detail::LuaClass *definition = classOf(current);
                 for (const std::string &event : pendingOperators) {
                     ++declared.operators;
                     if (definition == nullptr || MetaType(L, *definition, event) != LUA_TFUNCTION) {
@@ -304,9 +298,9 @@ namespace LuaParity {
             else if (view.starts_with("---@field ") && !current.empty()) {
                 const std::string field = word(view.substr(10));
                 ++declared.members;
-                if (const BindDetail::LuaClass *definition = classOf(current)) {
+                if (const Framework::Scripting::Bind::Detail::LuaClass *definition = classOf(current)) {
                     const bool readonly = view.find(" " + std::string(Framework::Scripting::Bind::kReadOnlyMarker)) != std::string_view::npos;
-                    if (BindDetail::LuaFindInstanceMember(L, *definition, field) != (readonly ? LuaInstanceMember::ReadOnlyProperty : LuaInstanceMember::Property)) {
+                    if (Framework::Scripting::Bind::Detail::LuaFindInstanceMember(L, *definition, field) != (readonly ? Framework::Scripting::Bind::Detail::LuaInstanceMember::ReadOnlyProperty : Framework::Scripting::Bind::Detail::LuaInstanceMember::Property)) {
                         declared.missing.insert(current + "." + field + (readonly ? " (read-only property)" : " (property with a setter)"));
                     }
                 }
@@ -315,8 +309,8 @@ namespace LuaParity {
                 }
             }
             else if (view.starts_with("---@operator ") && !current.empty()) {
-                const std::string event                = "__" + word(view.substr(13));
-                const BindDetail::LuaClass *definition = classOf(current);
+                const std::string event                                        = "__" + word(view.substr(13));
+                const Framework::Scripting::Bind::Detail::LuaClass *definition = classOf(current);
                 ++declared.operators;
                 if (definition == nullptr || MetaType(L, *definition, event) != LUA_TFUNCTION) {
                     declared.missing.insert(current + " " + event + " (operator)");
@@ -351,16 +345,16 @@ namespace LuaParity {
                 }
             }
             else if (view.starts_with("---@overload ") && !current.empty()) {
-                const BindDetail::LuaClass *definition = classOf(current);
+                const Framework::Scripting::Bind::Detail::LuaClass *definition = classOf(current);
                 ++declared.callable;
                 if (definition == nullptr || !IsCallable(L, *definition)) {
                     declared.missing.insert(current + " (callable class)");
                 }
             }
             else if (view.ends_with(" = nil") && view.find('.') != std::string_view::npos) {
-                const std::string owner                = word(view);
-                const std::string field                = word(view.substr(owner.size() + 1));
-                const BindDetail::LuaClass *definition = classOf(owner);
+                const std::string owner                                        = word(view);
+                const std::string field                                        = word(view.substr(owner.size() + 1));
+                const Framework::Scripting::Bind::Detail::LuaClass *definition = classOf(owner);
                 ++declared.members;
                 if (const int type = definition != nullptr ? ClassFieldType(L, *definition, field) : LUA_TNONE; type == LUA_TNONE || type == LUA_TNIL) {
                     declared.missing.insert(owner + "." + field + " (static property)");
@@ -371,7 +365,7 @@ namespace LuaParity {
                 const std::string name = word(view.substr(isLocal ? 6 : 0));
                 if (isLocal) {
                     local.insert(name);
-                    const BindDetail::LuaClass *definition = classOf(name);
+                    const Framework::Scripting::Bind::Detail::LuaClass *definition = classOf(name);
                     if (definition == nullptr || ClassFieldType(L, *definition, "new") != LUA_TFUNCTION) {
                         declared.missing.insert(name + " (class)");
                     }
@@ -396,12 +390,12 @@ namespace LuaParity {
                     }
                     continue;
                 }
-                const std::string member               = word(view.substr(after + 1));
-                const BindDetail::LuaClass *definition = classOf(owner);
+                const std::string member                                       = word(view.substr(after + 1));
+                const Framework::Scripting::Bind::Detail::LuaClass *definition = classOf(owner);
                 ++declared.members;
                 bool present = false;
                 if (view[after] == ':') {
-                    present = definition != nullptr && BindDetail::LuaFindInstanceMember(L, *definition, member) == LuaInstanceMember::Method;
+                    present = definition != nullptr && Framework::Scripting::Bind::Detail::LuaFindInstanceMember(L, *definition, member) == Framework::Scripting::Bind::Detail::LuaInstanceMember::Method;
                 }
                 else if (definition != nullptr) {
                     present = ClassFieldType(L, *definition, member) == LUA_TFUNCTION && (member != "new" || definition->constructor.has_value());
@@ -431,7 +425,7 @@ namespace LuaParity {
     // What separates the globals the JavaScript catalog documents from the definitions Lua is set up from: a
     // global object or a class of the catalog that no definition is listed for, and a listed namespace or global
     // class the catalog does not have. A builtin added to one language alone shows here.
-    inline std::set<std::string> OneSided(const nlohmann::json &catalog, const std::vector<const ClassDesc *> &builtins, Side side) {
+    inline std::set<std::string> OneSided(const nlohmann::json &catalog, const std::vector<const Framework::Scripting::Bind::ClassDesc *> &builtins, Framework::Scripting::Bind::Side side) {
         std::set<std::string> documented;
         for (const nlohmann::json &symbol : catalog.value("symbols", nlohmann::json::array())) {
             if (symbol.value("kind", std::string()) != "dataType") {
@@ -444,7 +438,7 @@ namespace LuaParity {
                 names.insert(name + " (JavaScript only)");
             }
         }
-        for (const ClassDesc *desc : builtins) {
+        for (const Framework::Scripting::Bind::ClassDesc *desc : builtins) {
             if (ExistsIn(*desc, side) && (desc->isNamespace || desc->global) && !documented.contains(desc->name)) {
                 names.insert(desc->name + " (Lua only)");
             }
@@ -532,9 +526,9 @@ namespace LuaParity {
         }
     }
 
-    inline std::string Generate(const std::vector<const ClassDesc *> &builtins, Side side) {
-        ApiCatalog catalog;
-        for (const ClassDesc *desc : builtins) {
+    inline std::string Generate(const std::vector<const Framework::Scripting::Bind::ClassDesc *> &builtins, Framework::Scripting::Bind::Side side) {
+        Framework::Scripting::Bind::ApiCatalog catalog;
+        for (const Framework::Scripting::Bind::ClassDesc *desc : builtins) {
             catalog.Record(desc);
         }
         return WriteLuaDefinitions(catalog, side);

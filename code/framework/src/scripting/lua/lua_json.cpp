@@ -25,10 +25,6 @@
 
 namespace Framework::Scripting::LuaJson {
     namespace {
-        using Bind::Detail::LuaClass;
-        using Bind::Detail::LuaFunction;
-        using LuaValues::kMaxDepth;
-
         // Between quotes, escaped as JSON.stringify escapes: the quote, the backslash and the control characters,
         // those with a short form in that form. Everything else is written as it is.
         //
@@ -295,11 +291,11 @@ namespace Framework::Scripting::LuaJson {
 
             // An object of a bound class is the object of the properties its class names for JSON.
             bool EncodeObject(int index) {
-                const LuaClass *definition = Bind::Detail::LuaClassAt(_L, index);
+                const Framework::Scripting::Bind::Detail::LuaClass *definition = Bind::Detail::LuaClassAt(_L, index);
                 if (definition == nullptr) {
                     return Fail("a userdata cannot be encoded as JSON");
                 }
-                const std::vector<const LuaFunction *> *getters = Bind::Detail::LuaJsonProperties(*definition);
+                const std::vector<const Framework::Scripting::Bind::Detail::LuaFunction *> *getters = Bind::Detail::LuaJsonProperties(*definition);
                 if (getters == nullptr) {
                     return Fail(definition->desc.name + " cannot be encoded as JSON");
                 }
@@ -313,7 +309,7 @@ namespace Framework::Scripting::LuaJson {
                 _valuesLeft -= getters->size();
                 _out += '{';
                 bool first = true;
-                for (const LuaFunction *getter : *getters) {
+                for (const Framework::Scripting::Bind::Detail::LuaFunction *getter : *getters) {
                     if (!BeginMember(getter->name, first)) {
                         return false;
                     }
@@ -354,7 +350,7 @@ namespace Framework::Scripting::LuaJson {
             // A table or an object is about to be written: a key and its value while its keys are read, then the
             // value being written and what reading a property takes.
             bool Enter() {
-                if (_depth >= kMaxDepth) {
+                if (_depth >= Framework::Scripting::LuaValues::kMaxDepth) {
                     return Fail("it is nested too deeply");
                 }
                 if (lua_checkstack(_L, 6) == 0) {
@@ -506,7 +502,7 @@ namespace Framework::Scripting::LuaJson {
 
             // The table, the key of a member and its value, and room for what pushes a scalar.
             bool Open(bool array) {
-                if (_open.size() >= kMaxDepth) {
+                if (_open.size() >= Framework::Scripting::LuaValues::kMaxDepth) {
                     _error = Where() + ": it is nested too deeply";
                     return false;
                 }

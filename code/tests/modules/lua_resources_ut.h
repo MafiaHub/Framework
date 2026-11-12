@@ -30,9 +30,6 @@
 #include <vector>
 
 namespace LuaResourcesTest {
-    using namespace Framework::Scripting;
-    using Framework::Integrations::Server::Scripting::ServerScriptingModule;
-    using LuaRuntimeTest::Contains;
 
     using Scripts = std::vector<std::pair<std::string, std::string>>;
 
@@ -122,10 +119,10 @@ namespace LuaResourcesTest {
         // What the manager told its listeners: "<resource>" for each stop, "<resource>: <first line>" for each error.
         std::vector<std::string> stopped;
         std::vector<std::string> errors;
-        NodeEngine node;
-        LuaEngine lua;
+        Framework::Scripting::NodeEngine node;
+        Framework::Scripting::LuaEngine lua;
         // Last, so that it goes first: it stops what still runs, with both engines and the lists above still there.
-        ResourceManager manager;
+        Framework::Scripting::ResourceManager manager;
 
         struct Options final {
             bool withLua  = true;
@@ -137,7 +134,7 @@ namespace LuaResourcesTest {
 
         explicit Rig(Options options): manager(&node, Config(files, options)) {
             Log().clear();
-            ready = node.Init() == ScriptingError::SCRIPTING_NONE && lua.Init() == ScriptingError::SCRIPTING_NONE;
+            ready = node.Init() == Framework::Scripting::ScriptingError::SCRIPTING_NONE && lua.Init() == Framework::Scripting::ScriptingError::SCRIPTING_NONE;
             if (!ready) {
                 return;
             }
@@ -145,7 +142,7 @@ namespace LuaResourcesTest {
                 InstallJavaScriptLog(isolate, context);
                 context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "stop"), v8::Function::New(context, JavaScriptStop, v8::External::New(isolate, this)).ToLocalChecked()).Check();
             });
-            lua.SetRuntimeSetupCallback([this](LuaRuntime &runtime) {
+            lua.SetRuntimeSetupCallback([this](Framework::Scripting::LuaRuntime &runtime) {
                 lua_State *L = runtime.State();
                 lua_pushcfunction(L, LuaLog);
                 lua_setglobal(L, "log");
@@ -167,8 +164,8 @@ namespace LuaResourcesTest {
             });
         }
 
-        static ResourceManagerConfig Config(const Files &files, const Options &options) {
-            ResourceManagerConfig config;
+        static Framework::Scripting::ResourceManagerConfig Config(const Files &files, const Options &options) {
+            Framework::Scripting::ResourceManagerConfig config;
             config.resourcesPath       = files.root.string();
             config.isClient            = options.isClient;
             config.devMode             = options.devMode;
@@ -224,7 +221,7 @@ namespace LuaResourcesTest {
 
         // The value of `expression` in the Lua runtime of the resource, as tostring() spells it.
         std::string Eval(const std::string &resource, const std::string &expression) const {
-            LuaRuntime *runtime = lua.GetRuntime(resource);
+            Framework::Scripting::LuaRuntime *runtime = lua.GetRuntime(resource);
             return runtime != nullptr ? LuaRuntimeTest::Eval(*runtime, expression) : "<no runtime>";
         }
     };
@@ -232,23 +229,23 @@ namespace LuaResourcesTest {
     // A server scripting module over a resources directory of its own.
     struct Server final {
         Files files;
-        ServerScriptingModule module;
+        Framework::Integrations::Server::Scripting::ServerScriptingModule module;
 
         // Brings the module up and starts what was written. False when either failed.
         bool Start() {
             module.SetResourcesPath(files.root.string());
-            return module.Init() == ScriptingError::SCRIPTING_NONE && module.StartAllResources();
+            return module.Init() == Framework::Scripting::ScriptingError::SCRIPTING_NONE && module.StartAllResources();
         }
 
         std::string Eval(const std::string &resource, const std::string &expression) const {
-            LuaEngine *engine   = module.GetLuaEngine();
-            LuaRuntime *runtime = engine != nullptr ? engine->GetRuntime(resource) : nullptr;
+            Framework::Scripting::LuaEngine *engine   = module.GetLuaEngine();
+            Framework::Scripting::LuaRuntime *runtime = engine != nullptr ? engine->GetRuntime(resource) : nullptr;
             return runtime != nullptr ? LuaRuntimeTest::Eval(*runtime, expression) : "<no runtime>";
         }
 
         // The value of `expression` in the JavaScript runtime of the resource, as a string.
         std::string EvalJavaScript(const std::string &resource, const std::string &expression) const {
-            NodeRuntime *runtime = module.GetEngine()->GetResourceRuntime(resource);
+            Framework::Scripting::NodeRuntime *runtime = module.GetEngine()->GetResourceRuntime(resource);
             return runtime != nullptr ? NodeTest::Eval(*runtime, expression) : "<no runtime>";
         }
 
@@ -278,22 +275,15 @@ namespace LuaResourcesTest {
 } // namespace LuaResourcesTest
 
 MODULE(lua_resources, {
-    using namespace Framework::Scripting;
-    using LuaResourcesTest::Contains;
-    using LuaResourcesTest::Log;
-    using LuaResourcesTest::LogText;
-    using LuaResourcesTest::Rig;
-    using LuaResourcesTest::Server;
-
     // ==================== Runtimes ====================
 
     IT("runs a Lua-only resource in a Lua runtime and gives it no JavaScript one", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("lua-only", {{"main.lua", "log('main ran for ' .. resource())"}});
 
         EQUALS(rig.Start("lua-only"), "");
-        EQUALS(LogText(), "main ran for lua-only");
+        EQUALS(LuaResourcesTest::LogText(), "main ran for lua-only");
         EQUALS(rig.manager.IsResourceRunning("lua-only"), true);
         EQUALS(rig.HasLuaRuntime("lua-only"), true);
         EQUALS(rig.HasJavaScriptRuntime("lua-only"), false);
@@ -302,24 +292,24 @@ MODULE(lua_resources, {
     });
 
     IT("gives a JavaScript-only resource no Lua runtime", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("js-only", {{"main.js", "log('main ran')"}});
 
         EQUALS(rig.Start("js-only"), "");
-        EQUALS(LogText(), "main ran");
+        EQUALS(LuaResourcesTest::LogText(), "main ran");
         EQUALS(rig.HasJavaScriptRuntime("js-only"), true);
         EQUALS(rig.HasLuaRuntime("js-only"), false);
     });
 
     IT("gives a resource with no script for this side no Lua runtime", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Manifest("idle", "\"clientScripts\":[\"client.lua\"]");
         rig.files.Write("idle", "client.lua", "log('client ran')");
 
         EQUALS(rig.Start("idle"), "");
-        EQUALS(LogText(), "");
+        EQUALS(LuaResourcesTest::LogText(), "");
         EQUALS(rig.manager.IsResourceRunning("idle"), true);
         EQUALS(rig.HasLuaRuntime("idle"), false);
         // As before Lua: a resource with nothing to run still has its JavaScript runtime.
@@ -327,7 +317,7 @@ MODULE(lua_resources, {
     });
 
     IT("runs the scripts of a mixed resource in manifest order across languages", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Write("mixed", "shared.lua", "local name = 'shared' log(name)");
         rig.files.Write("mixed", "a.js", "log('a')");
@@ -336,7 +326,7 @@ MODULE(lua_resources, {
         rig.files.Manifest("mixed", R"("sharedScripts":["shared.lua"],"serverScripts":["a.js","b.lua","c.js"])");
 
         EQUALS(rig.Start("mixed"), "");
-        EQUALS(LogText(), "shared,a,b,c");
+        EQUALS(LuaResourcesTest::LogText(), "shared,a,b,c");
         EQUALS(rig.HasJavaScriptRuntime("mixed"), true);
         EQUALS(rig.HasLuaRuntime("mixed"), true);
 
@@ -349,11 +339,11 @@ MODULE(lua_resources, {
         LuaResourcesTest::Files files;
         files.Resource("lua-only", {{"main.lua", "greeting = 'hello'"}});
         files.Resource("js-only", {{"main.js", "globalThis.greeting = 'hello';"}});
-        LuaEngine lua;
-        EQUALS(lua.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::LuaEngine lua;
+        EQUALS(lua.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = files.root.string();
-        ResourceManager manager(nullptr, config);
+        Framework::Scripting::ResourceManager manager(nullptr, config);
         manager.SetLuaEngine(&lua);
         EQUALS(manager.DiscoverResources(), 2u);
 
@@ -368,7 +358,7 @@ MODULE(lua_resources, {
     });
 
     IT("tells the Lua engine which manager it works for", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         EQUALS(rig.lua.GetResourceManager() == &rig.manager, true);
         rig.manager.SetLuaEngine(nullptr);
@@ -377,63 +367,63 @@ MODULE(lua_resources, {
     });
 
     IT("runs the client scripts on a client", {
-        Rig rig(Rig::Options {.isClient = true});
+        LuaResourcesTest::Rig rig(LuaResourcesTest::Rig::Options {.isClient = true});
         EQUALS(rig.ready, true);
         rig.files.Write("sided", "client.lua", "local name = 'client' log(name)");
         rig.files.Write("sided", "server.js", "log('server')");
         rig.files.Manifest("sided", R"("clientScripts":["client.lua"],"serverScripts":["server.js"])");
 
         EQUALS(rig.Start("sided"), "");
-        EQUALS(LogText(), "client");
+        EQUALS(LuaResourcesTest::LogText(), "client");
         EQUALS(rig.HasLuaRuntime("sided"), true);
         EQUALS(rig.HasJavaScriptRuntime("sided"), false);
     });
 
     IT("gives the Lua engine the directory of the resource, for require and for chunk names", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Write("modular", "lib/greeting.lua", "return { text = 'hello from a module' }");
         rig.files.Resource("modular", {{"src/main.lua", "log(require('lib.greeting').text)\nwhere = select(2, pcall(function() error('x') end))"}});
 
         EQUALS(rig.Start("modular"), "");
-        EQUALS(LogText(), "hello from a module");
+        EQUALS(LuaResourcesTest::LogText(), "hello from a module");
         EQUALS(rig.Eval("modular", "where"), "modular/src/main.lua:2: x");
     });
 
     // ==================== Lifecycle ====================
 
     IT("destroys the Lua runtime on stop, and its interval fires no more", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("ticker", {{"main.lua", "setInterval(function() log('tick') end, 10)"}});
 
         EQUALS(rig.Start("ticker"), "");
         rig.Advance(1000);
-        EQUALS(LogText(), "tick");
+        EQUALS(LuaResourcesTest::LogText(), "tick");
 
         EQUALS((bool)rig.manager.StopResource("ticker"), true);
-        EQUALS(rig.manager.GetResourceState("ticker") == ResourceState::Stopped, true);
+        EQUALS(rig.manager.GetResourceState("ticker") == Framework::Scripting::ResourceState::Stopped, true);
         EQUALS(rig.HasLuaRuntime("ticker"), false);
         rig.Advance(1000);
         rig.Advance(1000);
-        EQUALS(LogText(), "tick");
+        EQUALS(LuaResourcesTest::LogText(), "tick");
         EQUALS(rig.stopped.size(), 1u);
     });
 
     IT("starts a stopped Lua resource again in a new state", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("again", {{"main.lua", "log('counter is ' .. tostring(counter))\ncounter = 1"}});
 
         EQUALS(rig.Start("again"), "");
         EQUALS((bool)rig.manager.StopResource("again"), true);
         EQUALS(rig.Start("again"), "");
-        EQUALS(LogText(), "counter is nil,counter is nil");
+        EQUALS(LuaResourcesTest::LogText(), "counter is nil,counter is nil");
         EQUALS(rig.Eval("again", "counter"), "1");
     });
 
     IT("reads an edited file again on restart", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("edited", {{"main.lua", "log('one')\nleftover = true"}});
         EQUALS(rig.Start("edited"), "");
@@ -442,25 +432,25 @@ MODULE(lua_resources, {
         const auto result = rig.manager.RestartResource("edited");
         EQUALS((bool)result, true);
         EQUALS(result.GetValue().size(), 1u);
-        EQUALS(LogText(), "one,two, leftover is nil");
+        EQUALS(LuaResourcesTest::LogText(), "one,two, leftover is nil");
         EQUALS(rig.manager.IsResourceRunning("edited"), true);
         EQUALS(rig.HasLuaRuntime("edited"), true);
     });
 
     IT("restarts both runtimes of a mixed resource", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("both", {{"a.js", "log('js ' + typeof globalThis.leftover); globalThis.leftover = 1;"}, {"b.lua", "log('lua ' .. tostring(leftover))\nleftover = 1"}});
         EQUALS(rig.Start("both"), "");
 
         EQUALS((bool)rig.manager.RestartResource("both"), true);
-        EQUALS(LogText(), "js undefined,lua nil,js undefined,lua nil");
+        EQUALS(LuaResourcesTest::LogText(), "js undefined,lua nil,js undefined,lua nil");
         EQUALS(rig.HasJavaScriptRuntime("both"), true);
         EQUALS(rig.HasLuaRuntime("both"), true);
     });
 
     IT("reloads a Lua resource on refresh, with the scripts its manifest names by then", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("ensured", {{"main.lua", "local name = 'main' log(name)"}});
         EQUALS(rig.Start("ensured"), "");
@@ -468,12 +458,12 @@ MODULE(lua_resources, {
         // What `ensure` does for a resource that is running.
         rig.files.Resource("ensured", {{"main.lua", "local name = 'main again' log(name)"}, {"extra.lua", "local name = 'extra' log(name)"}});
         EQUALS((bool)rig.manager.RefreshResource("ensured"), true);
-        EQUALS(LogText(), "main,main again,extra");
+        EQUALS(LuaResourcesTest::LogText(), "main,main again,extra");
         EQUALS(rig.manager.IsResourceRunning("ensured"), true);
     });
 
     IT("reloads a Lua resource when the development file watcher sees a .lua file change", {
-        Rig rig(Rig::Options {.devMode = true});
+        LuaResourcesTest::Rig rig(LuaResourcesTest::Rig::Options {.devMode = true});
         EQUALS(rig.ready, true);
         rig.files.Write("watched", "lib/words.lua", "return 'before'");
         rig.files.Resource("watched", {{"main.lua", "log(require('lib.words'))"}});
@@ -482,32 +472,32 @@ MODULE(lua_resources, {
         // The first poll only notes what is there.
         rig.manager.ProcessFileWatch();
         rig.manager.ProcessFileWatch();
-        EQUALS(LogText(), "before");
+        EQUALS(LuaResourcesTest::LogText(), "before");
 
         // A module, which no manifest names.
         rig.files.Write("watched", "lib/words.lua", "return 'after'");
         rig.manager.ProcessFileWatch();
-        EQUALS(LogText(), "before,after");
+        EQUALS(LuaResourcesTest::LogText(), "before,after");
         EQUALS(rig.manager.IsResourceRunning("watched"), true);
 
         rig.manager.ProcessFileWatch();
-        EQUALS(LogText(), "before,after");
+        EQUALS(LuaResourcesTest::LogText(), "before,after");
     });
 
     IT("puts off destroying the runtime of a Lua resource that stops itself", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("quitter", {{"main.lua", "setInterval(function() log('tick') end, 10)\nsetTimeout(function() stop('quitter') log('still here') end, 10)"}});
         EQUALS(rig.Start("quitter"), "");
 
         // The interval is the older timer: it fires, then the timeout stops the resource and runs to its end.
         rig.Advance(1000);
-        EQUALS(LogText(), "tick,still here");
-        EQUALS(rig.manager.GetResourceState("quitter") == ResourceState::Stopped, true);
+        EQUALS(LuaResourcesTest::LogText(), "tick,still here");
+        EQUALS(rig.manager.GetResourceState("quitter") == Framework::Scripting::ResourceState::Stopped, true);
         EQUALS(rig.HasLuaRuntime("quitter"), false);
 
         rig.Advance(1000);
-        EQUALS(LogText(), "tick,still here");
+        EQUALS(LuaResourcesTest::LogText(), "tick,still here");
 
         // The name was free at once.
         EQUALS(rig.Start("quitter"), "");
@@ -515,37 +505,37 @@ MODULE(lua_resources, {
     });
 
     IT("destroys the Lua runtime of a mixed resource that stops itself from JavaScript", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("quitter", {{"a.js", "setTimeout(() => { stop('quitter'); log('still here'); }, 1);"}, {"b.lua", "setInterval(function() log('tick') end, 10)"}});
         EQUALS(rig.Start("quitter"), "");
 
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-        while (Log().empty() && std::chrono::steady_clock::now() < deadline) {
+        while (LuaResourcesTest::Log().empty() && std::chrono::steady_clock::now() < deadline) {
             rig.node.Tick();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        EQUALS(LogText(), "still here");
-        EQUALS(rig.manager.GetResourceState("quitter") == ResourceState::Stopped, true);
+        EQUALS(LuaResourcesTest::LogText(), "still here");
+        EQUALS(rig.manager.GetResourceState("quitter") == Framework::Scripting::ResourceState::Stopped, true);
         EQUALS(rig.HasLuaRuntime("quitter"), false);
         EQUALS(rig.HasJavaScriptRuntime("quitter"), false);
 
         rig.Advance(1000);
         rig.node.Tick();
-        EQUALS(LogText(), "still here");
+        EQUALS(LuaResourcesTest::LogText(), "still here");
     });
 
     // ==================== A start that fails ====================
 
     IT("fails the start on a syntax error, naming the file and the line, and leaves no runtime", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("broken", {{"main.lua", "log('never')\nlocal = 5"}});
 
         const std::string error = rig.Start("broken");
-        EQUALS(Contains(error, "broken/main.lua:2:"), true);
-        EQUALS(LogText(), "");
-        EQUALS(rig.manager.GetResourceState("broken") == ResourceState::Error, true);
+        EQUALS(LuaRuntimeTest::Contains(error, "broken/main.lua:2:"), true);
+        EQUALS(LuaResourcesTest::LogText(), "");
+        EQUALS(rig.manager.GetResourceState("broken") == Framework::Scripting::ResourceState::Error, true);
         EQUALS(rig.HasLuaRuntime("broken"), false);
         EQUALS(rig.HasJavaScriptRuntime("broken"), false);
         EQUALS(rig.errors.size(), 1u);
@@ -554,17 +544,17 @@ MODULE(lua_resources, {
         // Mended, it starts.
         rig.files.Write("broken", "main.lua", "log('mended')");
         EQUALS(rig.Start("broken"), "");
-        EQUALS(LogText(), "mended");
+        EQUALS(LuaResourcesTest::LogText(), "mended");
     });
 
     IT("fails the start when a Lua file raises, and destroys both runtimes of a mixed resource", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("raises", {{"a.js", "log('a'); setInterval(() => log('js tick'), 1);"}, {"b.lua", "setInterval(function() log('lua tick') end, 10)\nerror('boom')"}, {"c.js", "log('c')"}});
 
         const std::string error = rig.Start("raises");
-        EQUALS(Contains(error, "raises/b.lua:2: boom"), true);
-        EQUALS(LogText(), "a");
+        EQUALS(LuaRuntimeTest::Contains(error, "raises/b.lua:2: boom"), true);
+        EQUALS(LuaResourcesTest::LogText(), "a");
         EQUALS(rig.HasLuaRuntime("raises"), false);
         EQUALS(rig.HasJavaScriptRuntime("raises"), false);
 
@@ -573,24 +563,24 @@ MODULE(lua_resources, {
             rig.node.Tick();
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
-        EQUALS(LogText(), "a");
+        EQUALS(LuaResourcesTest::LogText(), "a");
     });
 
     IT("fails the start of a resource with a .lua script when there is no Lua engine", {
-        Rig rig(Rig::Options {.withLua = false});
+        LuaResourcesTest::Rig rig(LuaResourcesTest::Rig::Options {.withLua = false});
         EQUALS(rig.ready, true);
         rig.files.Resource("lua-only", {{"main.lua", "log('never')"}});
         rig.files.Resource("mixed", {{"a.js", "log('a')"}, {"b.lua", "log('b')"}});
         EQUALS(rig.manager.GetLuaEngine() == nullptr, true);
 
         EQUALS(rig.Start("lua-only"), "Lua scripting is not available");
-        EQUALS(rig.manager.GetResourceState("lua-only") == ResourceState::Error, true);
+        EQUALS(rig.manager.GetResourceState("lua-only") == Framework::Scripting::ResourceState::Error, true);
         EQUALS(rig.HasJavaScriptRuntime("lua-only"), false);
 
         // Before any of its scripts ran.
         EQUALS(rig.Start("mixed"), "Lua scripting is not available");
         EQUALS(rig.HasJavaScriptRuntime("mixed"), false);
-        EQUALS(LogText(), "");
+        EQUALS(LuaResourcesTest::LogText(), "");
         EQUALS(rig.errors.size(), 2u);
     });
 
@@ -598,37 +588,37 @@ MODULE(lua_resources, {
         LuaResourcesTest::Files files;
         files.Resource("lua-only", {{"main.lua", "greeting = 'hello'"}});
         files.Resource("js-only", {{"main.js", "globalThis.greeting = 'hello';"}});
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = files.root.string();
 
         // A Lua engine that was never initialised.
-        LuaEngine idle;
-        ResourceManager withIdle(nullptr, config);
+        Framework::Scripting::LuaEngine idle;
+        Framework::Scripting::ResourceManager withIdle(nullptr, config);
         withIdle.SetLuaEngine(&idle);
         EQUALS(withIdle.DiscoverResources(), 2u);
         EQUALS(withIdle.StartResource("lua-only").GetError(), "Lua scripting is not available");
-        EQUALS(withIdle.GetResourceState("lua-only") == ResourceState::Error, true);
+        EQUALS(withIdle.GetResourceState("lua-only") == Framework::Scripting::ResourceState::Error, true);
         EQUALS(idle.GetRuntime("lua-only") == nullptr, true);
 
         // No engine at all: each script still says which one it lacks.
-        ResourceManager bare(nullptr, config);
+        Framework::Scripting::ResourceManager bare(nullptr, config);
         EQUALS(bare.DiscoverResources(), 2u);
         EQUALS(bare.StartResource("lua-only").GetError(), "Lua scripting is not available");
         EQUALS(bare.StartResource("js-only").GetError(), "JavaScript engine not initialized");
     });
 
     IT("destroys the JavaScript runtime of a resource whose Lua runtime cannot be created", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
-        rig.lua.SetRuntimeSetupCallback([](LuaRuntime &) {
+        rig.lua.SetRuntimeSetupCallback([](Framework::Scripting::LuaRuntime &) {
             throw std::runtime_error("no bindings today");
         });
         rig.files.Resource("unlucky", {{"a.js", "log('a')"}, {"b.lua", "log('b')"}});
 
         const std::string error = rig.Start("unlucky");
-        EQUALS(Contains(error, "no bindings today"), true);
-        EQUALS(LogText(), "");
-        EQUALS(rig.manager.GetResourceState("unlucky") == ResourceState::Error, true);
+        EQUALS(LuaRuntimeTest::Contains(error, "no bindings today"), true);
+        EQUALS(LuaResourcesTest::LogText(), "");
+        EQUALS(rig.manager.GetResourceState("unlucky") == Framework::Scripting::ResourceState::Error, true);
         EQUALS(rig.HasJavaScriptRuntime("unlucky"), false);
         EQUALS(rig.HasLuaRuntime("unlucky"), false);
     });
@@ -636,24 +626,24 @@ MODULE(lua_resources, {
     // ==================== Errors after the start ====================
 
     IT("stops a resource whose timer raises, as errorBehavior stop says", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("fragile", {{"main.lua", "setTimeout(function() error('boom') end, 10)\nsetInterval(function() log('tick') end, 2000)"}});
         EQUALS(rig.Start("fragile"), "");
 
         rig.Advance(1000);
         EQUALS(rig.errors.size(), 1u);
-        EQUALS(Contains(rig.errors[0], "fragile: fragile/main.lua:1: boom"), true);
-        EQUALS(rig.manager.GetResourceState("fragile") == ResourceState::Error, true);
+        EQUALS(LuaRuntimeTest::Contains(rig.errors[0], "fragile: fragile/main.lua:1: boom"), true);
+        EQUALS(rig.manager.GetResourceState("fragile") == Framework::Scripting::ResourceState::Error, true);
         EQUALS(rig.HasLuaRuntime("fragile"), false);
         EQUALS(rig.stopped.size(), 1u);
 
         rig.Advance(5000);
-        EQUALS(LogText(), "");
+        EQUALS(LuaResourcesTest::LogText(), "");
     });
 
     IT("keeps a resource whose timer raises running, as errorBehavior continue says", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("sturdy", {{"main.lua", "setTimeout(function() error('boom') end, 10)\nsetInterval(function() log('tick') end, 2000)"}}, R"(,"errorBehavior":"continue")");
         EQUALS(rig.Start("sturdy"), "");
@@ -664,11 +654,11 @@ MODULE(lua_resources, {
         EQUALS(rig.stopped.empty(), true);
 
         rig.Advance(5000);
-        EQUALS(LogText(), "tick");
+        EQUALS(LuaResourcesTest::LogText(), "tick");
     });
 
     IT("restarts a resource whose timer raises, as errorBehavior restart says", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("phoenix", {{"main.lua", "log('started')\nsetTimeout(function() error('boom') end, 10)"}}, R"(,"errorBehavior":"restart")");
         EQUALS(rig.Start("phoenix"), "");
@@ -684,40 +674,40 @@ MODULE(lua_resources, {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
         EQUALS(rig.manager.IsResourceRunning("phoenix"), true);
-        EQUALS(LogText(), "started,started");
+        EQUALS(LuaResourcesTest::LogText(), "started,started");
         EQUALS(rig.HasLuaRuntime("phoenix"), true);
     });
 
     // ==================== A resource with no JavaScript runtime ====================
 
     IT("tells JavaScript resources of the start and the stop of a Lua-only resource", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("listener", {{"main.js", "Events.on('resourceStart', (name) => log('start ' + name)); Events.on('resourceStop', (name) => log('stop ' + name));"}});
         rig.files.Resource("lua-only", {{"main.lua", "local name = 'main' log(name)"}});
         EQUALS(rig.Start("listener"), "");
-        Log().clear();
+        LuaResourcesTest::Log().clear();
 
         EQUALS(rig.Start("lua-only"), "");
         EQUALS((bool)rig.manager.StopResource("lua-only"), true);
-        EQUALS(LogText(), "main,start lua-only,stop lua-only");
+        EQUALS(LuaResourcesTest::LogText(), "main,start lua-only,stop lua-only");
     });
 
     IT("answers JavaScript that a Lua-only resource has no exports", {
-        Rig rig;
+        LuaResourcesTest::Rig rig;
         EQUALS(rig.ready, true);
         rig.files.Resource("lua-only", {{"main.lua", "local name = 'main' log(name)"}});
         rig.files.Resource("asker", {{"main.js", "try { Exports.get('lua-only', 'anything'); log('found'); } catch (error) { log(error.message); }"}});
         EQUALS(rig.Start("lua-only"), "");
 
         EQUALS(rig.Start("asker"), "");
-        EQUALS(LogText(), "main,Exports.get: export 'anything' not found in resource 'lua-only'");
+        EQUALS(LuaResourcesTest::LogText(), "main,Exports.get: export 'anything' not found in resource 'lua-only'");
     });
 
     // ==================== The server module ====================
 
     IT("gives the Lua resources of a server the value types", {
-        Server server;
+        LuaResourcesTest::Server server;
         server.files.Resource("vectors", {{"main.lua", "result = Vector3.new(1, 2, 3):add(Vector3.new(4, 5, 6)):toString()"}});
 
         EQUALS(server.Start(), true);
@@ -732,7 +722,7 @@ MODULE(lua_resources, {
     });
 
     IT("fires the Lua timers of a server from its update", {
-        Server server;
+        LuaResourcesTest::Server server;
         server.files.Resource("timed", {{"main.lua", "fired = 0\nsetInterval(function() fired = fired + 1 end, 1)"}});
 
         EQUALS(server.Start(), true);
@@ -741,7 +731,7 @@ MODULE(lua_resources, {
     });
 
     IT("hands a server the error of a Lua timer, which stops the resource", {
-        Server server;
+        LuaResourcesTest::Server server;
         server.files.Resource("fragile", {{"main.lua", "setTimeout(function() error('boom') end, 1)"}});
 
         EQUALS(server.Start(), true);
@@ -749,17 +739,17 @@ MODULE(lua_resources, {
         EQUALS(manager->IsResourceRunning("fragile"), true);
 
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-        while (manager->GetResourceState("fragile") != ResourceState::Error && std::chrono::steady_clock::now() < deadline) {
+        while (manager->GetResourceState("fragile") != Framework::Scripting::ResourceState::Error && std::chrono::steady_clock::now() < deadline) {
             server.module.Update();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        EQUALS(manager->GetResourceState("fragile") == ResourceState::Error, true);
-        EQUALS(Contains(manager->GetResource("fragile")->GetErrorMessage(), "fragile/main.lua:1: boom"), true);
+        EQUALS(manager->GetResourceState("fragile") == Framework::Scripting::ResourceState::Error, true);
+        EQUALS(LuaRuntimeTest::Contains(manager->GetResource("fragile")->GetErrorMessage(), "fragile/main.lua:1: boom"), true);
         EQUALS(server.module.GetLuaEngine()->GetRuntime("fragile") == nullptr, true);
     });
 
     IT("fires a Lua timer that comes due while a server waits for its next tick", {
-        Server server;
+        LuaResourcesTest::Server server;
         // The second timer is armed when the first fires: both only fire in one wait if Lua is ticked when a timer
         // is due, not once at the end.
         server.files.Resource("waiting", {{"main.lua", "fired = ''\nsetTimeout(function() fired = fired .. 'first' setTimeout(function() fired = fired .. ',second' end, 20) end, 20)\nsetTimeout(function() fired = fired .. ',late' end, 60000)"}});
@@ -776,16 +766,16 @@ MODULE(lua_resources, {
     });
 
     IT("hands a server the error of a Lua timer that comes due while it waits", {
-        Server server;
+        LuaResourcesTest::Server server;
         server.files.Resource("fragile", {{"main.lua", "setTimeout(function() error('boom') end, 10)"}});
         EQUALS(server.Start(), true);
 
         server.module.WaitUntil(std::chrono::steady_clock::now() + std::chrono::milliseconds(300));
-        EQUALS(server.module.GetResourceManager()->GetResourceState("fragile") == ResourceState::Error, true);
+        EQUALS(server.module.GetResourceManager()->GetResourceState("fragile") == Framework::Scripting::ResourceState::Error, true);
     });
 
     IT("sleeps through the wait of a server whose Lua timers are far off", {
-        Server server;
+        LuaResourcesTest::Server server;
         server.files.Resource("patient", {{"main.lua", "setTimeout(function() end, 60000)"}});
         EQUALS(server.Start(), true);
         server.module.Update();
@@ -796,7 +786,7 @@ MODULE(lua_resources, {
     });
 
     IT("leaves what Lua waits no time for to the next update of a server, once for each", {
-        Server server;
+        LuaResourcesTest::Server server;
         server.files.Resource("spinner", {{"main.lua", "turns = 0\nspawn(function() while true do turns = turns + 1 sleep(0) end end)\nfires = 0\nlocal function again() fires = fires + 1 setTimeout(again, 0) end\nsetTimeout(again, 0)"}});
         EQUALS(server.Start(), true);
         EQUALS(server.Eval("spinner", "turns .. ' ' .. fires"), "1 0");
@@ -818,7 +808,7 @@ MODULE(lua_resources, {
     });
 
     IT("ticks Lua every few milliseconds at most while a server waits", {
-        Server server;
+        LuaResourcesTest::Server server;
         // An interval fires once in a tick however late it is, so it counts the ticks.
         server.files.Resource("eager", {{"main.lua", "ticks = 0\nsetInterval(function() ticks = ticks + 1 end, 1)"}});
         EQUALS(server.Start(), true);
@@ -834,7 +824,7 @@ MODULE(lua_resources, {
     });
 
     IT("lets JavaScript run between the ticks of a server while Lua has timers that are always due", {
-        Server server;
+        LuaResourcesTest::Server server;
         server.files.Resource("busy", {{"main.lua", "turns = 0\nspawn(function() while true do turns = turns + 1 sleep(0) end end)\nticks = 0\nsetInterval(function() ticks = ticks + 1 end, 1)"}});
         server.files.Resource("clock", {{"main.js", "globalThis.fired = 'no'; setTimeout(() => { globalThis.fired = 'yes'; }, 20);"}});
         EQUALS(server.Start(), true);

@@ -159,9 +159,6 @@ namespace Framework::Scripting::Builtins {
     }
 
     const Bind::Class<Player> &Player::Definition() {
-        using Bind::Doc;
-        using Bind::Side;
-
         // The connection-level surface is the server's: NetworkPeer implements it only in NetworkServer. The
         // nametag getters stay on both sides, they read the replica.
         static const auto definition = [] {
@@ -169,29 +166,29 @@ namespace Framework::Scripting::Builtins {
             Entity::Definition();
             return Bind::Class<Player>("Player", "Framework-owned base handle for a connected player, extended by each game or mod.")
                 .Inherit<Entity>()
-                .Constructor<uint64_t>(Doc("Creates a wrapper for an existing connected player with this ID; it does not connect or spawn a player.").Param("id", "Network entity identifier."))
-                .Method("toString", &Player::ToString, Doc("Formats this player handle for logging and debugging.").Returns("Text containing the player's network entity ID."))
-                .Method("isNametagVisible", &Player::IsNametagVisible, Doc("Checks whether this player's nametag is shown to other players.").Returns("True unless the nametag was hidden; false also when this game has no nametags."))
-                .Method("isNametagHealthVisible", &Player::IsNametagHealthVisible, Doc("Checks whether the health bar under this player's nametag is shown.").Returns("True unless the health bar was hidden; false also when this game has no nametags."))
-                .Method("getNametagText", &Player::GetNametagText, Doc("Reads this player's nametag text override.").Returns("The override, or an empty string when the player's own name is drawn."))
-                .Method("getNametagColor", &Player::GetNametagColor, Doc("Reads this player's nametag color.").Returns("Packed 0xAARRGGBB color; opaque white when untinted."))
-                .Method("kick", &Player::Kick, Doc("Disconnects this player from the server.").OptionalParam("reason", "Optional reason shown to the disconnected player; omitting it uses the generic kicked reason."), Side::Server)
-                .Method("emit", &Player::Emit, Doc("Emits a named script event to this player's client connection.").Param("eventName", "Client event name.").OptionalParam("payloadJson", "Optional JSON payload forwarded verbatim to the owning client."), Side::Server)
-                .Method("getIP", &Player::GetAddress, Doc("Returns this player's current remote network address.").Returns("Address string, or an empty string when the player or peer is unavailable."), Side::Server)
+                .Constructor<uint64_t>(Framework::Scripting::Bind::Doc("Creates a wrapper for an existing connected player with this ID; it does not connect or spawn a player.").Param("id", "Network entity identifier."))
+                .Method("toString", &Player::ToString, Framework::Scripting::Bind::Doc("Formats this player handle for logging and debugging.").Returns("Text containing the player's network entity ID."))
+                .Method("isNametagVisible", &Player::IsNametagVisible, Framework::Scripting::Bind::Doc("Checks whether this player's nametag is shown to other players.").Returns("True unless the nametag was hidden; false also when this game has no nametags."))
+                .Method("isNametagHealthVisible", &Player::IsNametagHealthVisible, Framework::Scripting::Bind::Doc("Checks whether the health bar under this player's nametag is shown.").Returns("True unless the health bar was hidden; false also when this game has no nametags."))
+                .Method("getNametagText", &Player::GetNametagText, Framework::Scripting::Bind::Doc("Reads this player's nametag text override.").Returns("The override, or an empty string when the player's own name is drawn."))
+                .Method("getNametagColor", &Player::GetNametagColor, Framework::Scripting::Bind::Doc("Reads this player's nametag color.").Returns("Packed 0xAARRGGBB color; opaque white when untinted."))
+                .Method("kick", &Player::Kick, Framework::Scripting::Bind::Doc("Disconnects this player from the server.").OptionalParam("reason", "Optional reason shown to the disconnected player; omitting it uses the generic kicked reason."), Framework::Scripting::Bind::Side::Server)
+                .Method("emit", &Player::Emit, Framework::Scripting::Bind::Doc("Emits a named script event to this player's client connection.").Param("eventName", "Client event name.").OptionalParam("payloadJson", "Optional JSON payload forwarded verbatim to the owning client."), Framework::Scripting::Bind::Side::Server)
+                .Method("getIP", &Player::GetAddress, Framework::Scripting::Bind::Doc("Returns this player's current remote network address.").Returns("Address string, or an empty string when the player or peer is unavailable."), Framework::Scripting::Bind::Side::Server)
                 .Method("setNametagVisible", &Player::SetNametagVisible,
-                    Doc("Shows or hides the name over this player's head for every other player. The health bar has its own switch, and each player can still hide all nametags locally.").Param("visible", "True to show this player's nametag to everyone, false to hide it."),
-                    Side::Server)
-                .Method("setNametagHealthVisible", &Player::SetNametagHealthVisible, Doc("Shows or hides the health bar under this player's nametag, leaving the name itself alone.").Param("visible", "True to show the health bar under this player's name, false to hide it."),
-                    Side::Server)
-                .Method("setNametagText", &Player::SetNametagText, Doc("Overrides the text drawn on this player's nametag.").OptionalParam("text", "Text to show instead of the player's name, cut to 64 bytes; empty or omitted restores the name."), Side::Server)
-                .Method("setNametagColor", &Player::SetNametagColor, Doc("Tints the text on this player's nametag.").Param("color", "Packed 0xAARRGGBB color."), Side::Server)
-                .Property("steamId", &Player::GetSteamId, "Authenticated Steam identifier, or an empty string when unavailable.", Side::Server)
-                .Property("epicId", &Player::GetEpicId, "Epic Games account identifier the client reported, not verified by the server, or an empty string when unavailable.", Side::Server)
-                .Property("discordId", &Player::GetDiscordId, "Authenticated Discord identifier, or an empty string when unavailable.", Side::Server)
-                .Property("discordName", &Player::GetDiscordName, "Discord username the client reported, not verified by the server, or an empty string when unavailable.", Side::Server)
-                .Property("hardwareId", &Player::GetHardwareId, "Framework hardware identifier, or an empty string when unavailable.", Side::Server)
-                .Property("ping", &Player::GetPing, "Current round-trip latency in milliseconds, or -1 when unavailable.", Side::Server)
-                .Property("ip", &Player::GetAddress, "Current remote network address, or an empty string when unavailable.", Side::Server)
+                    Framework::Scripting::Bind::Doc("Shows or hides the name over this player's head for every other player. The health bar has its own switch, and each player can still hide all nametags locally.").Param("visible", "True to show this player's nametag to everyone, false to hide it."),
+                    Framework::Scripting::Bind::Side::Server)
+                .Method("setNametagHealthVisible", &Player::SetNametagHealthVisible, Framework::Scripting::Bind::Doc("Shows or hides the health bar under this player's nametag, leaving the name itself alone.").Param("visible", "True to show the health bar under this player's name, false to hide it."),
+                    Framework::Scripting::Bind::Side::Server)
+                .Method("setNametagText", &Player::SetNametagText, Framework::Scripting::Bind::Doc("Overrides the text drawn on this player's nametag.").OptionalParam("text", "Text to show instead of the player's name, cut to 64 bytes; empty or omitted restores the name."), Framework::Scripting::Bind::Side::Server)
+                .Method("setNametagColor", &Player::SetNametagColor, Framework::Scripting::Bind::Doc("Tints the text on this player's nametag.").Param("color", "Packed 0xAARRGGBB color."), Framework::Scripting::Bind::Side::Server)
+                .Property("steamId", &Player::GetSteamId, "Authenticated Steam identifier, or an empty string when unavailable.", Framework::Scripting::Bind::Side::Server)
+                .Property("epicId", &Player::GetEpicId, "Epic Games account identifier the client reported, not verified by the server, or an empty string when unavailable.", Framework::Scripting::Bind::Side::Server)
+                .Property("discordId", &Player::GetDiscordId, "Authenticated Discord identifier, or an empty string when unavailable.", Framework::Scripting::Bind::Side::Server)
+                .Property("discordName", &Player::GetDiscordName, "Discord username the client reported, not verified by the server, or an empty string when unavailable.", Framework::Scripting::Bind::Side::Server)
+                .Property("hardwareId", &Player::GetHardwareId, "Framework hardware identifier, or an empty string when unavailable.", Framework::Scripting::Bind::Side::Server)
+                .Property("ping", &Player::GetPing, "Current round-trip latency in milliseconds, or -1 when unavailable.", Framework::Scripting::Bind::Side::Server)
+                .Property("ip", &Player::GetAddress, "Current remote network address, or an empty string when unavailable.", Framework::Scripting::Bind::Side::Server)
                 // Crosses between runtimes as its network id.
                 .Transfer(&Player::GetId);
         }();

@@ -16,33 +16,32 @@ namespace Framework::Scripting::Builtins {
     // its operands as they were. V wraps a glm vector: it is built from one and gives it with vec().
     template <typename V>
     Bind::Class<V> &AddVectorOperators(Bind::Class<V> &definition) {
-        using Bind::LuaMetaEvent;
         return definition
-            .LuaMeta(LuaMetaEvent::Add,
+            .LuaMeta(Framework::Scripting::Bind::LuaMetaEvent::Add,
                 [](const V &left, const V &right) {
                     return V(left.vec() + right.vec());
                 })
-            .LuaMeta(LuaMetaEvent::Sub,
+            .LuaMeta(Framework::Scripting::Bind::LuaMetaEvent::Sub,
                 [](const V &left, const V &right) {
                     return V(left.vec() - right.vec());
                 })
-            .LuaMeta(LuaMetaEvent::Mul,
+            .LuaMeta(Framework::Scripting::Bind::LuaMetaEvent::Mul,
                 [](const V &vector, float scalar) {
                     return V(vector.vec() * scalar);
                 })
-            .LuaMeta(LuaMetaEvent::Mul,
+            .LuaMeta(Framework::Scripting::Bind::LuaMetaEvent::Mul,
                 [](float scalar, const V &vector) {
                     return V(scalar * vector.vec());
                 })
-            .LuaMeta(LuaMetaEvent::Div,
+            .LuaMeta(Framework::Scripting::Bind::LuaMetaEvent::Div,
                 [](const V &vector, float scalar) {
                     return V(vector.vec() / scalar);
                 })
-            .LuaMeta(LuaMetaEvent::Unm,
+            .LuaMeta(Framework::Scripting::Bind::LuaMetaEvent::Unm,
                 [](const V &vector) {
                     return V(-vector.vec());
                 })
-            .LuaMeta(LuaMetaEvent::Eq, [](const V &left, const V &right) {
+            .LuaMeta(Framework::Scripting::Bind::LuaMetaEvent::Eq, [](const V &left, const V &right) {
                 return left.vec() == right.vec();
             });
     }

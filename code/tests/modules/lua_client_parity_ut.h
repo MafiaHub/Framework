@@ -38,50 +38,46 @@
 // registers in its isolate, what it adds to every Lua state and what it writes its definition file from are the
 // functions of integrations/client/scripting/builtins/builtins.h, which are what is used here.
 namespace LuaClientParityTest {
-    using namespace Framework::Scripting;
-    using Framework::Utils::Vfs;
-    namespace ClientBuiltins = Framework::Integrations::Client::Scripting::Builtins;
-
     // What the client builtins keep is let go of in the order of ClientScriptingModule::Shutdown: what names the
     // manager before the manager goes, what holds V8 globals after the Lua host and before the engine.
     inline void ShutdownManagerBuiltins() {
-        ClientBuiltins::Web::Shutdown();
-        ClientBuiltins::Keybinds::Shutdown();
+        Framework::Integrations::Client::Scripting::Builtins::Web::Shutdown();
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::Shutdown();
     }
 
     inline void ShutdownIsolateBuiltins() {
-        ClientBuiltins::Discord::Shutdown();
-        ClientBuiltins::Nametags::Shutdown();
+        Framework::Integrations::Client::Scripting::Builtins::Discord::Shutdown();
+        Framework::Integrations::Client::Scripting::Builtins::Nametags::Shutdown();
     }
 
     // What a client records for JavaScript: what ClientScriptingModule::RegisterFrameworkBindings registers,
     // through the two functions it registers it with, and the handle classes a game publishes on top of it.
     // Normalised; null when the engine does not start.
     inline nlohmann::json BuildCatalog() {
-        V8Engine engine;
-        if (engine.Init() != ScriptingError::SCRIPTING_NONE) {
+        Framework::Scripting::V8Engine engine;
+        if (engine.Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
             return nullptr;
         }
         nlohmann::json catalog;
         {
-            ResourceManagerConfig config;
+            Framework::Scripting::ResourceManagerConfig config;
             config.isClient = true;
-            ResourceManager manager(&engine, config);
+            Framework::Scripting::ResourceManager manager(&engine, config);
             {
-                EngineScope scope(&engine);
+                Framework::Scripting::EngineScope scope(&engine);
                 v8::Isolate *isolate                 = scope.Isolate();
                 const v8::Local<v8::Context> context = scope.Context();
                 const v8::Local<v8::Object> global   = context->Global();
-                SetScriptingCatalog(isolate, "parity-client");
-                v8pp::metadata::registry &registry = GetScriptingCatalog(isolate);
+                Framework::Scripting::SetScriptingCatalog(isolate, "parity-client");
+                v8pp::metadata::registry &registry = Framework::Scripting::GetScriptingCatalog(isolate);
 
-                ClientBuiltins::RegisterSharedBuiltins(isolate, context, global, &manager, "");
-                ClientBuiltins::RegisterClientBuiltins(isolate, context, global, &manager);
+                Framework::Integrations::Client::Scripting::Builtins::RegisterSharedBuiltins(isolate, context, global, &manager, "");
+                Framework::Integrations::Client::Scripting::Builtins::RegisterClientBuiltins(isolate, context, global, &manager);
 
-                Builtins::Entity::GetClass(isolate);
-                Builtins::Player::GetClass(isolate);
-                Builtins::StateBag::GetClass(isolate);
-                Builtins::TextLabel::Register(isolate, global);
+                Framework::Scripting::Builtins::Entity::GetClass(isolate);
+                Framework::Scripting::Builtins::Player::GetClass(isolate);
+                Framework::Scripting::Builtins::StateBag::GetClass(isolate);
+                Framework::Scripting::Builtins::TextLabel::Register(isolate, global);
 
                 catalog = nlohmann::json::parse(v8pp::metadata::to_json(registry), nullptr, /*allow_exceptions*/ false);
             }
@@ -98,7 +94,7 @@ namespace LuaClientParityTest {
         bool ready = false;
 
         Stage() {
-            client.lua.AddRuntimeSetup(&ClientBuiltins::RegisterClientBuiltinsLua);
+            client.lua.AddRuntimeSetup(&Framework::Integrations::Client::Scripting::Builtins::RegisterClientBuiltinsLua);
             ready = client.Init() && LuaClientTest::Mount("lua", R"("clientScripts":["client.lua"])", {{"client.lua", ""}}).empty() && client.Start("lua").empty();
         }
 
@@ -111,11 +107,11 @@ namespace LuaClientParityTest {
             client.lua.Shutdown();
             ShutdownIsolateBuiltins();
             client.v8.Shutdown();
-            Vfs::Get().Unmount("lua.zip");
+            Framework::Utils::Vfs::Get().Unmount("lua.zip");
         }
 
         lua_State *State() {
-            LuaRuntime *runtime = client.lua.GetEngine().GetRuntime("lua");
+            Framework::Scripting::LuaRuntime *runtime = client.lua.GetEngine().GetRuntime("lua");
             return runtime != nullptr ? runtime->State() : nullptr;
         }
     };
@@ -137,21 +133,17 @@ namespace LuaClientParityTest {
 } // namespace LuaClientParityTest
 
 MODULE(lua_client_parity, {
-    using Framework::Scripting::Bind::Side;
-    using LuaClientParityTest::Stage;
-    namespace ClientBuiltins = Framework::Integrations::Client::Scripting::Builtins;
-
     IT("gives Lua every member of every global the client catalog documents for JavaScript", {
         const nlohmann::json catalog = LuaClientParityTest::BuildCatalog();
         EQUALS(catalog.is_object(), true);
 
-        Stage stage;
+        LuaClientParityTest::Stage stage;
         EQUALS(stage.ready, true);
         lua_State *L = stage.State();
         NEQUALS(L, nullptr);
 
-        const auto builtins = ClientBuiltins::ClientLuaDefinitions();
-        LuaParity::Gate gate(L, Side::Client, builtins, LuaClientParityTest::Exemptions());
+        const auto builtins = Framework::Integrations::Client::Scripting::Builtins::ClientLuaDefinitions();
+        LuaParity::Gate gate(L, Framework::Scripting::Bind::Side::Client, builtins, LuaClientParityTest::Exemptions());
         const LuaParity::Report report = gate.Check(catalog);
 
         EQUALS(LuaParity::Join(report.missing), "");
@@ -164,18 +156,18 @@ MODULE(lua_client_parity, {
         EQUALS(static_cast<size_t>(report.exempted), LuaClientParityTest::Exemptions().size());
         EQUALS(ScriptingCatalogGolden::HasSymbol(catalog, "Nametags"), true);
         // A builtin registered for one language alone.
-        EQUALS(LuaParity::Join(LuaParity::OneSided(catalog, builtins, Side::Client)), "");
+        EQUALS(LuaParity::Join(LuaParity::OneSided(catalog, builtins, Framework::Scripting::Bind::Side::Client)), "");
     });
 
     IT("has in a Lua state everything the client definition file declares, and declares every global", {
-        Stage stage;
+        LuaClientParityTest::Stage stage;
         EQUALS(stage.ready, true);
         lua_State *L = stage.State();
         NEQUALS(L, nullptr);
 
-        const auto builtins                = ClientBuiltins::ClientLuaDefinitions();
-        const std::string definitions      = LuaParity::Generate(builtins, Side::Client);
-        const LuaParity::Declared declared = LuaParity::CheckDefinitions(definitions, L, Side::Client, builtins);
+        const auto builtins                = Framework::Integrations::Client::Scripting::Builtins::ClientLuaDefinitions();
+        const std::string definitions      = LuaParity::Generate(builtins, Framework::Scripting::Bind::Side::Client);
+        const LuaParity::Declared declared = LuaParity::CheckDefinitions(definitions, L, Framework::Scripting::Bind::Side::Client, builtins);
 
         EQUALS(LuaParity::CompileError(definitions), "");
         EQUALS(LuaParity::Join(declared.missing), "");
@@ -190,7 +182,7 @@ MODULE(lua_client_parity, {
     });
 
     IT("the client definition file matches the committed one", {
-        const std::string generated = LuaParity::Generate(ClientBuiltins::ClientLuaDefinitions(), Side::Client);
+        const std::string generated = LuaParity::Generate(Framework::Integrations::Client::Scripting::Builtins::ClientLuaDefinitions(), Framework::Scripting::Bind::Side::Client);
         EQUALS(generated.find("---@class Nametags\n") != std::string::npos, true);
 
         if (LuaParity::UpdateRequested()) {

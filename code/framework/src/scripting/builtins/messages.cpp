@@ -428,26 +428,23 @@ namespace Framework::Scripting::Builtins {
     };
 
     const Bind::Namespace &Messages::Definition() {
-        using Bind::Doc;
-        using Bind::Type::Custom;
-
         static const Bind::Namespace definition = Bind::Namespace("Messages", "Typed request and notification channel between local resources through the global Messages object.")
                                                       .Function("handle", &Script::Handle,
-                                                          Doc("Registers or replaces a message handler owned by the calling resource.")
+                                                          Framework::Scripting::Bind::Doc("Registers or replaces a message handler owned by the calling resource.")
                                                               .Param("messageType", Bind::TypeOf<std::string>(), "Message type unique within the receiving resource.")
-                                                              .Param("handler", Custom("MessageHandler", "fun(payload: any, reply: fun(response?: any))"), "Handler invoked with the payload and a reply callback; the reply is ignored for notifications."))
+                                                              .Param("handler", Framework::Scripting::Bind::Type::Custom("MessageHandler", "fun(payload: any, reply: fun(response?: any))"), "Handler invoked with the payload and a reply callback; the reply is ignored for notifications."))
                                                       .Function("request", &Script::Request,
-                                                          Doc("Sends a request to another local resource and waits for its handler to call reply.")
+                                                          Framework::Scripting::Bind::Doc("Sends a request to another local resource and waits for its handler to call reply.")
                                                               .Param("resourceName", Bind::TypeOf<std::string>(), "Destination running resource.")
                                                               .Param("messageType", Bind::TypeOf<std::string>(), "Handler type registered by the destination.")
-                                                              .OptionalParam("payload", Custom("unknown", "any"), "Optional payload delivered to the handler.")
-                                                              .ReturnType(Custom("Promise<unknown>", "any"))
+                                                              .OptionalParam("payload", Framework::Scripting::Bind::Type::Custom("unknown", "any"), "Optional payload delivered to the handler.")
+                                                              .ReturnType(Framework::Scripting::Bind::Type::Custom("Promise<unknown>", "any"))
                                                               .Returns("Promise resolved with the reply value or rejected when delivery or handling fails."))
                                                       .Function("send", &Script::Send,
-                                                          Doc("Sends a fire-and-forget notification to another local resource.")
+                                                          Framework::Scripting::Bind::Doc("Sends a fire-and-forget notification to another local resource.")
                                                               .Param("resourceName", Bind::TypeOf<std::string>(), "Destination running resource.")
                                                               .Param("messageType", Bind::TypeOf<std::string>(), "Handler type registered by the destination.")
-                                                              .OptionalParam("payload", Custom("unknown", "any"), "Optional payload delivered to the handler."));
+                                                              .OptionalParam("payload", Framework::Scripting::Bind::Type::Custom("unknown", "any"), "Optional payload delivered to the handler."));
         return definition;
     }
 

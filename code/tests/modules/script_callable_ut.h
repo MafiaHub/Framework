@@ -37,18 +37,7 @@
 #include <vector>
 
 namespace ScriptCallableTest {
-    namespace Bind = Framework::Scripting::Bind;
-    using Bind::Call;
-    using Bind::CallOutcome;
-    using Bind::Deferred;
-    using Bind::ReturnMode;
-    using Bind::ScriptCallable;
-    using Framework::Scripting::Language;
-    using Framework::Scripting::LuaRuntime;
-    using Framework::Scripting::TransferredValue;
-    using LuaRuntimeTest::Contains;
-    using LuaRuntimeTest::FirstLine;
-    using Kind = TransferredValue::Kind;
+    using Kind = Framework::Scripting::TransferredValue::Kind;
 
     class Stage;
 
@@ -57,17 +46,17 @@ namespace ScriptCallableTest {
         int calls  = 0;
         bool threw = false;
         std::string error;
-        TransferredValue value;
+        Framework::Scripting::TransferredValue value;
     };
 
     // What the functions of Stage keep of a script's call, for the test to use once the call has returned.
     struct Kept final {
-        std::vector<std::shared_ptr<ScriptCallable>> callables;
-        std::vector<Deferred> deferreds;
+        std::vector<std::shared_ptr<Framework::Scripting::Bind::ScriptCallable>> callables;
+        std::vector<Framework::Scripting::Bind::Deferred> deferreds;
         // What the calls Stage.run made were told.
         std::vector<std::shared_ptr<Told>> told;
         // What Stage.give was given, and Stage.take hands out.
-        TransferredValue value;
+        Framework::Scripting::TransferredValue value;
     };
 
     inline Kept &Held() {
@@ -80,29 +69,29 @@ namespace ScriptCallableTest {
 
     void DestroyRuntime(const std::string &resource);
 
-    inline TransferredValue Number(double number) {
-        TransferredValue value;
+    inline Framework::Scripting::TransferredValue Number(double number) {
+        Framework::Scripting::TransferredValue value;
         value.kind   = Kind::Number;
         value.number = number;
         return value;
     }
 
-    inline TransferredValue Text(std::string text) {
-        TransferredValue value;
+    inline Framework::Scripting::TransferredValue Text(std::string text) {
+        Framework::Scripting::TransferredValue value;
         value.kind = Kind::String;
         value.text = std::move(text);
         return value;
     }
 
-    inline TransferredValue List(std::vector<TransferredValue> items) {
-        TransferredValue value;
+    inline Framework::Scripting::TransferredValue List(std::vector<Framework::Scripting::TransferredValue> items) {
+        Framework::Scripting::TransferredValue value;
         value.kind  = Kind::Array;
         value.items = std::move(items);
         return value;
     }
 
     // A copied value as JSON spells it, with what JSON has no word for by name.
-    inline std::string Spell(const TransferredValue &value) {
+    inline std::string Spell(const Framework::Scripting::TransferredValue &value) {
         switch (value.kind) {
         case Kind::Undefined: return "undefined";
         case Kind::Null: return "null";
@@ -112,7 +101,7 @@ namespace ScriptCallableTest {
         case Kind::Function: return value.callable != nullptr ? "<function>" : "<function without a callable>";
         case Kind::Array: {
             std::string text = "[";
-            for (const TransferredValue &item : value.items) {
+            for (const Framework::Scripting::TransferredValue &item : value.items) {
                 text += (text.size() > 1 ? "," : "") + Spell(item);
             }
             return text + "]";
@@ -128,9 +117,10 @@ namespace ScriptCallableTest {
         }
     }
 
-    inline std::shared_ptr<Told> Invoke(const std::shared_ptr<ScriptCallable> &callable, const std::vector<TransferredValue> &arguments = {}, ReturnMode mode = ReturnMode::Value) {
+    inline std::shared_ptr<Told> Invoke(const std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> &callable, const std::vector<Framework::Scripting::TransferredValue> &arguments = {},
+        Framework::Scripting::Bind::ReturnMode mode = Framework::Scripting::Bind::ReturnMode::Value) {
         auto told = std::make_shared<Told>();
-        callable->Invoke(arguments, mode, [told](CallOutcome &&outcome) {
+        callable->Invoke(arguments, mode, [told](Framework::Scripting::Bind::CallOutcome &&outcome) {
             ++told->calls;
             told->threw = outcome.threw;
             told->error = std::move(outcome.error);
@@ -141,78 +131,75 @@ namespace ScriptCallableTest {
 
     // Stage, the same functions in both languages: what a builtin does with a function it is handed, with a result
     // it settles later, and with a value that crosses between runtimes.
-    inline const Bind::Namespace &StageDefinition() {
-        using Bind::Doc;
-        using Bind::TypeOf;
-        namespace Type               = Bind::Type;
-        static const auto definition = Bind::Namespace("Stage", "What a builtin does with callables and deferred results.")
+    inline const Framework::Scripting::Bind::Namespace &StageDefinition() {
+        static const auto definition = Framework::Scripting::Bind::Namespace("Stage", "What a builtin does with callables and deferred results.")
                                            .Function(
                                                "keep",
-                                               [](Call &call) {
-                                                   std::shared_ptr<ScriptCallable> callable = call.Arg(0).ToCallable();
+                                               [](Framework::Scripting::Bind::Call &call) {
+                                                   std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callable = call.Arg(0).ToCallable();
                                                    call.Return(callable != nullptr);
                                                    if (callable != nullptr) {
                                                        Held().callables.push_back(std::move(callable));
                                                    }
                                                },
-                                               Doc("Keeps a function.").Param("handler", Type::Any(), "Function to keep.").ReturnType(TypeOf<bool>()))
+                                               Framework::Scripting::Bind::Doc("Keeps a function.").Param("handler", Framework::Scripting::Bind::Type::Any(), "Function to keep.").ReturnType(Framework::Scripting::Bind::TypeOf<bool>()))
                                            .Function(
                                                "same",
-                                               [](Call &call) {
-                                                   const std::shared_ptr<ScriptCallable> first  = call.Arg(0).ToCallable();
-                                                   const std::shared_ptr<ScriptCallable> second = call.Arg(1).ToCallable();
+                                               [](Framework::Scripting::Bind::Call &call) {
+                                                   const std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> first  = call.Arg(0).ToCallable();
+                                                   const std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> second = call.Arg(1).ToCallable();
                                                    call.Return(first != nullptr && second != nullptr && first->Equals(*second) && second->Equals(*first));
                                                },
-                                               Doc("Tells whether two functions are one.").Param("first", Type::Any(), "A function.").Param("second", Type::Any(), "Another.").ReturnType(TypeOf<bool>()))
+                                               Framework::Scripting::Bind::Doc("Tells whether two functions are one.").Param("first", Framework::Scripting::Bind::Type::Any(), "A function.").Param("second", Framework::Scripting::Bind::Type::Any(), "Another.").ReturnType(Framework::Scripting::Bind::TypeOf<bool>()))
                                            .Function(
                                                "owner",
-                                               [](Call &call) {
-                                                   const std::shared_ptr<ScriptCallable> callable = call.Arg(0).ToCallable();
+                                               [](Framework::Scripting::Bind::Call &call) {
+                                                   const std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callable = call.Arg(0).ToCallable();
                                                    call.Return(callable != nullptr ? callable->ResourceName() : std::string("<none>"));
                                                },
-                                               Doc("Names the resource of a function.").Param("handler", Type::Any(), "A function.").ReturnType(TypeOf<std::string>()))
+                                               Framework::Scripting::Bind::Doc("Names the resource of a function.").Param("handler", Framework::Scripting::Bind::Type::Any(), "A function.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                                            .Function(
                                                "now",
-                                               [](Call &call) {
-                                                   Deferred deferred = call.Defer();
+                                               [](Framework::Scripting::Bind::Call &call) {
+                                                   Framework::Scripting::Bind::Deferred deferred = call.Defer();
                                                    deferred.Resolve(call.Arg(0).ToTransfer().GetValue());
                                                    // What a deferred call returns is not what the script gets.
                                                    call.Return("dropped");
                                                    Held().deferreds.push_back(deferred);
                                                },
-                                               Doc("Resolves before it returns.").Param("value", Type::Any(), "Value to resolve with.").ReturnType(Type::Any()))
+                                               Framework::Scripting::Bind::Doc("Resolves before it returns.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to resolve with.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                                            .Function(
                                                "later",
-                                               [](Call &call) {
+                                               [](Framework::Scripting::Bind::Call &call) {
                                                    Held().deferreds.push_back(call.Defer());
                                                },
-                                               Doc("Resolves when the test says.").ReturnType(Type::Any()))
+                                               Framework::Scripting::Bind::Doc("Resolves when the test says.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                                            .Function(
                                                "refuse",
-                                               [](Call &call) {
+                                               [](Framework::Scripting::Bind::Call &call) {
                                                    call.Defer().Reject("Stage.refuse: " + call.Arg(0).AsString());
                                                },
-                                               Doc("Rejects before it returns.").Param("reason", TypeOf<std::string>(), "Why.").ReturnType(Type::Any()))
+                                               Framework::Scripting::Bind::Doc("Rejects before it returns.").Param("reason", Framework::Scripting::Bind::TypeOf<std::string>(), "Why.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                                            .Function(
                                                "laterAndThrow",
-                                               [](Call &call) {
+                                               [](Framework::Scripting::Bind::Call &call) {
                                                    Held().deferreds.push_back(call.Defer());
                                                    call.ThrowError("Stage.laterAndThrow: thrown all the same");
                                                },
-                                               Doc("Defers, then throws.").ReturnType(Type::Any()))
+                                               Framework::Scripting::Bind::Doc("Defers, then throws.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                                            .Function(
                                                "give",
-                                               [](Call &call) {
+                                               [](Framework::Scripting::Bind::Call &call) {
                                                    auto copied = call.Arg(0).ToTransfer();
                                                    if (copied) {
                                                        Held().value = std::move(copied).GetValue();
                                                    }
                                                    call.Return(static_cast<bool>(copied));
                                                },
-                                               Doc("Copies a value out of the runtime.").Param("value", Type::Any(), "Value to copy.").ReturnType(TypeOf<bool>()))
+                                               Framework::Scripting::Bind::Doc("Copies a value out of the runtime.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to copy.").ReturnType(Framework::Scripting::Bind::TypeOf<bool>()))
                                            .Function(
                                                "take",
-                                               [](Call &call) {
+                                               [](Framework::Scripting::Bind::Call &call) {
                                                    const auto built = call.FromTransfer(Held().value);
                                                    if (!built) {
                                                        call.ThrowError(built.GetError());
@@ -220,24 +207,24 @@ namespace ScriptCallableTest {
                                                    }
                                                    call.Return(built.GetValue());
                                                },
-                                               Doc("Builds the value Stage.give copied.").ReturnType(Type::Any()))
+                                               Framework::Scripting::Bind::Doc("Builds the value Stage.give copied.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                                            .Function(
                                                "box",
-                                               [](Call &call) {
-                                                   Bind::Value box = call.NewObject();
+                                               [](Framework::Scripting::Bind::Call &call) {
+                                                   Framework::Scripting::Bind::Value box = call.NewObject();
                                                    if (const auto built = call.FromTransfer(Held().value)) {
                                                        box.Set("item", built.GetValue());
                                                    }
                                                    call.Return(box);
                                                },
-                                               Doc("Builds the value Stage.give copied as the item of a new object.").ReturnType(Type::Any()))
+                                               Framework::Scripting::Bind::Doc("Builds the value Stage.give copied as the item of a new object.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                                            .Function(
                                                "run",
-                                               [](Call &call) {
+                                               [](Framework::Scripting::Bind::Call &call) {
                                                    // As a builtin that dispatches to a handler does, from inside a script's call.
-                                                   const std::shared_ptr<ScriptCallable> callable = call.Arg(0).ToCallable();
+                                                   const std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callable = call.Arg(0).ToCallable();
                                                    const auto told                                = std::make_shared<Told>();
-                                                   callable->Invoke({call.Arg(1).ToTransfer().GetValue()}, ReturnMode::Value, [told](CallOutcome &&outcome) {
+                                                   callable->Invoke({call.Arg(1).ToTransfer().GetValue()}, Framework::Scripting::Bind::ReturnMode::Value, [told](Framework::Scripting::Bind::CallOutcome &&outcome) {
                                                        ++told->calls;
                                                        told->threw = outcome.threw;
                                                        told->error = std::move(outcome.error);
@@ -257,13 +244,13 @@ namespace ScriptCallableTest {
                                                        call.ThrowError(built.GetError());
                                                    }
                                                },
-                                               Doc("Invokes a function with a value.").Param("handler", Type::Any(), "Function to invoke.").Param("value", Type::Any(), "Its argument.").ReturnType(Type::Any()))
+                                               Framework::Scripting::Bind::Doc("Invokes a function with a value.").Param("handler", Framework::Scripting::Bind::Type::Any(), "Function to invoke.").Param("value", Framework::Scripting::Bind::Type::Any(), "Its argument.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                                            .Function(
                                                "destroy",
-                                               [](Call &call) {
+                                               [](Framework::Scripting::Bind::Call &call) {
                                                    DestroyRuntime(call.Arg(0).AsString());
                                                },
-                                               Doc("Destroys the runtime of a resource.").Param("resource", TypeOf<std::string>(), "The resource."));
+                                               Framework::Scripting::Bind::Doc("Destroys the runtime of a resource.").Param("resource", Framework::Scripting::Bind::TypeOf<std::string>(), "The resource."));
         return definition;
     }
 
@@ -272,25 +259,24 @@ namespace ScriptCallableTest {
     class Stage final {
       public:
         explicit Stage(const Framework::Scripting::LuaEngineOptions &luaOptions = {}): _lua(luaOptions) {
-            using namespace Framework::Scripting;
             static int count = 0;
             _catalog         = "script_callable/" + std::to_string(++count);
             Held()           = {};
             current          = this;
 
             (void)_node.Init();
-            Bind::WatchRuntimes(_node);
-            _node.SetRuntimeSetupCallback([this](Engine *engine) {
+            Framework::Scripting::Bind::WatchRuntimes(_node);
+            _node.SetRuntimeSetupCallback([this](Framework::Scripting::Engine *engine) {
                 v8::Isolate *isolate           = engine->GetIsolate();
                 v8::Local<v8::Context> context = engine->GetContext();
                 // A catalog of its own, so that Stage stays out of the one the framework exports.
-                SetScriptingCatalog(isolate, _catalog);
-                StageDefinition().MaterialiseV8(isolate, context, context->Global(), v8pp::metadata::catalog(_catalog), Bind::Side::Server);
+                Framework::Scripting::SetScriptingCatalog(isolate, _catalog);
+                StageDefinition().MaterialiseV8(isolate, context, context->Global(), v8pp::metadata::catalog(_catalog), Framework::Scripting::Bind::Side::Server);
             });
 
-            Bind::WatchRuntimes(_lua);
-            _lua.SetRuntimeSetupCallback([](LuaRuntime &runtime) {
-                StageDefinition().RegisterLuaGlobal(runtime.State(), Bind::Side::Server);
+            Framework::Scripting::Bind::WatchRuntimes(_lua);
+            _lua.SetRuntimeSetupCallback([](Framework::Scripting::LuaRuntime &runtime) {
+                StageDefinition().RegisterLuaGlobal(runtime.State(), Framework::Scripting::Bind::Side::Server);
             });
             (void)_lua.Init();
         }
@@ -325,7 +311,7 @@ namespace ScriptCallableTest {
             return _node.GetResourceRuntime(resource)->GetIsolate();
         }
 
-        LuaRuntime &Runtime(const std::string &resource) {
+        Framework::Scripting::LuaRuntime &Runtime(const std::string &resource) {
             return *_lua.GetRuntime(resource);
         }
 
@@ -394,50 +380,49 @@ namespace ScriptCallableTest {
 } // namespace ScriptCallableTest
 
 MODULE(script_callable, {
-    using namespace ScriptCallableTest;
 
     // --- A JavaScript function ---
 
     IT("calls a JavaScript function with copies of the arguments and tells done what it returned", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         EQUALS(stage.CreateJs("alpha"), true);
         EQUALS(stage.Js("alpha", "Stage.keep((a, b, list) => ({ sum: a + b, list: list.concat('!') }))"), "true");
         EQUALS(stage.Js("alpha", "Stage.keep('not a function')"), "false");
-        EQUALS(Held().callables.size(), 1u);
+        EQUALS(ScriptCallableTest::Held().callables.size(), 1u);
 
-        const std::shared_ptr<ScriptCallable> callable = Held().callables.at(0);
-        EQUALS(callable->GetLanguage() == Language::JavaScript, true);
+        const std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callable = ScriptCallableTest::Held().callables.at(0);
+        EQUALS(callable->GetLanguage() == Framework::Scripting::Language::JavaScript, true);
         EQUALS(callable->IsAlive(), true);
 
-        const auto told = Invoke(callable, {Number(2), Number(3), List({Text("a")})});
+        const auto told = ScriptCallableTest::Invoke(callable, {ScriptCallableTest::Number(2), ScriptCallableTest::Number(3), ScriptCallableTest::List({ScriptCallableTest::Text("a")})});
         EQUALS(told->calls, 1);
         EQUALS(told->threw, false);
-        EQUALS(Spell(told->value), R"({"sum":5,"list":["a","!"]})");
+        EQUALS(ScriptCallableTest::Spell(told->value), R"({"sum":5,"list":["a","!"]})");
 
         // Missing arguments are undefined, and a function that returns nothing gives undefined.
         EQUALS(stage.Js("alpha", "Stage.keep((a) => { globalThis.got = String(a); })"), "true");
-        const auto nothing = Invoke(Held().callables.at(1));
+        const auto nothing = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1));
         EQUALS(nothing->calls, 1);
-        EQUALS(Spell(nothing->value), "undefined");
+        EQUALS(ScriptCallableTest::Spell(nothing->value), "undefined");
         EQUALS(stage.Js("alpha", "got"), "undefined");
     });
 
     // As the builtins written by hand called a handler: a strict function sees the global object, not undefined.
     IT("calls a JavaScript function on the global object of its context", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.Js("alpha", "Stage.keep(function () { 'use strict'; return this === globalThis; })");
         stage.Js("alpha", "Stage.keep(function () { return this === globalThis; })");
-        EQUALS(Spell(Invoke(Held().callables.at(0))->value), "true");
-        EQUALS(Spell(Invoke(Held().callables.at(1))->value), "true");
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0))->value), "true");
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1))->value), "true");
     });
 
     IT("exposes the isolate and the function of a JavaScript callable", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.Js("alpha", "globalThis.kept = () => 1; Stage.keep(kept)");
-        const std::shared_ptr<ScriptCallable> callable = Held().callables.at(0);
-        const auto *javascript                         = static_cast<const Bind::V8Callable *>(callable.get());
+        const std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callable = ScriptCallableTest::Held().callables.at(0);
+        const auto *javascript                                                     = static_cast<const Framework::Scripting::Bind::V8Callable *>(callable.get());
         EQUALS(javascript->Isolate() == stage.Isolate("alpha"), true);
 
         v8::Isolate *isolate = javascript->Isolate();
@@ -451,10 +436,10 @@ MODULE(script_callable, {
     });
 
     IT("tells done later what the promise of a JavaScript function settles with", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.Js("alpha", "Stage.keep(async (value) => { await new Promise((resolve) => setTimeout(resolve, 2)); return value * 2; })");
-        const auto told = Invoke(Held().callables.at(0), {Number(21)});
+        const auto told = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0), {ScriptCallableTest::Number(21)});
         EQUALS(told->calls, 0);
         EQUALS(stage.TickUntil([&] {
             return told->calls > 0;
@@ -462,42 +447,42 @@ MODULE(script_callable, {
             true);
         EQUALS(told->calls, 1);
         EQUALS(told->threw, false);
-        EQUALS(Spell(told->value), "42");
+        EQUALS(ScriptCallableTest::Spell(told->value), "42");
         stage.Node().Tick();
         EQUALS(told->calls, 1);
 
         // A promise that settles as the call leaves the runtime has told done by the time Invoke returns.
         stage.Js("alpha", "Stage.keep(async () => 'at once')");
-        const auto atOnce = Invoke(Held().callables.at(1));
+        const auto atOnce = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1));
         EQUALS(atOnce->calls, 1);
-        EQUALS(Spell(atOnce->value), "\"at once\"");
+        EQUALS(ScriptCallableTest::Spell(atOnce->value), "\"at once\"");
     });
 
     IT("reports what a JavaScript function throws and what its promise is rejected with", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.Js("alpha", "Stage.keep(function failing() { throw new Error('boom'); })");
-        const auto thrown = Invoke(Held().callables.at(0));
+        const auto thrown = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0));
         EQUALS(thrown->calls, 1);
         EQUALS(thrown->threw, true);
-        EQUALS(FirstLine(thrown->error), "Error: boom");
-        EQUALS(Contains(thrown->error, "at failing"), true);
-        EQUALS(Spell(thrown->value), "undefined");
+        EQUALS(LuaRuntimeTest::FirstLine(thrown->error), "Error: boom");
+        EQUALS(LuaRuntimeTest::Contains(thrown->error, "at failing"), true);
+        EQUALS(ScriptCallableTest::Spell(thrown->value), "undefined");
 
         stage.Js("alpha", "Stage.keep(async function refusing() { await new Promise((resolve) => setTimeout(resolve, 2)); throw new TypeError('locked'); })");
-        const auto rejected = Invoke(Held().callables.at(1));
+        const auto rejected = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1));
         EQUALS(rejected->calls, 0);
         EQUALS(stage.TickUntil([&] {
             return rejected->calls > 0;
         }),
             true);
         EQUALS(rejected->threw, true);
-        EQUALS(FirstLine(rejected->error), "TypeError: locked");
-        EQUALS(Contains(rejected->error, "at refusing"), true);
+        EQUALS(LuaRuntimeTest::FirstLine(rejected->error), "TypeError: locked");
+        EQUALS(LuaRuntimeTest::Contains(rejected->error, "at refusing"), true);
 
         // What is thrown need not be an error.
         stage.Js("alpha", "Stage.keep(() => Promise.reject('just text'))");
-        const auto text = Invoke(Held().callables.at(2));
+        const auto text = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(2));
         EQUALS(text->calls, 1);
         EQUALS(text->threw, true);
         EQUALS(text->error, "just text");
@@ -506,36 +491,36 @@ MODULE(script_callable, {
     // --- A Lua function ---
 
     IT("calls a Lua function with copies of the arguments and tells done its first result", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         EQUALS(stage.CreateLua("gamma"), true);
         EQUALS(stage.Lua("gamma", "kept = Stage.keep(function(a, b, list) list[#list + 1] = '!' return { sum = a + b, list = list }, 'second' end)"), "");
         EQUALS(stage.LuaValue("gamma", "kept"), "true");
         EQUALS(stage.LuaValue("gamma", "Stage.keep('not a function')"), "false");
-        EQUALS(Held().callables.size(), 1u);
+        EQUALS(ScriptCallableTest::Held().callables.size(), 1u);
 
-        const std::shared_ptr<ScriptCallable> callable = Held().callables.at(0);
-        EQUALS(callable->GetLanguage() == Language::Lua, true);
+        const std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callable = ScriptCallableTest::Held().callables.at(0);
+        EQUALS(callable->GetLanguage() == Framework::Scripting::Language::Lua, true);
         EQUALS(callable->ResourceName(), "gamma");
         EQUALS(callable->IsAlive(), true);
 
-        const auto told = Invoke(callable, {Number(2), Number(3), List({Text("a")})});
+        const auto told = ScriptCallableTest::Invoke(callable, {ScriptCallableTest::Number(2), ScriptCallableTest::Number(3), ScriptCallableTest::List({ScriptCallableTest::Text("a")})});
         EQUALS(told->calls, 1);
         EQUALS(told->threw, false);
-        EQUALS(Spell(told->value), R"({"list":["a","!"],"sum":5})");
+        EQUALS(ScriptCallableTest::Spell(told->value), R"({"list":["a","!"],"sum":5})");
 
         stage.Lua("gamma", "Stage.keep(function(a) got = tostring(a) end)");
-        const auto nothing = Invoke(Held().callables.at(1));
+        const auto nothing = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1));
         EQUALS(nothing->calls, 1);
-        EQUALS(Spell(nothing->value), "undefined");
+        EQUALS(ScriptCallableTest::Spell(nothing->value), "undefined");
         EQUALS(stage.LuaValue("gamma", "got"), "nil");
         EQUALS(lua_gettop(stage.Runtime("gamma").State()), 0);
     });
 
     IT("tells done when a Lua function that waited has ended", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateLua("gamma");
         stage.Lua("gamma", "Stage.keep(function(value) sleep(10) sleep(10) return value * 2 end)");
-        const auto told = Invoke(Held().callables.at(0), {Number(21)});
+        const auto told = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0), {ScriptCallableTest::Number(21)});
         EQUALS(told->calls, 0);
         EQUALS(stage.Suspended("gamma"), 1u);
         stage.At(10);
@@ -543,31 +528,31 @@ MODULE(script_callable, {
         stage.At(20);
         EQUALS(told->calls, 1);
         EQUALS(told->threw, false);
-        EQUALS(Spell(told->value), "42");
+        EQUALS(ScriptCallableTest::Spell(told->value), "42");
         EQUALS(stage.Suspended("gamma"), 0u);
         stage.At(30);
         EQUALS(told->calls, 1);
     });
 
     IT("reports what a Lua function raises, with the traceback", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateLua("gamma");
         stage.Lua("gamma", "function failing() error('boom') end Stage.keep(failing)");
-        const auto raised = Invoke(Held().callables.at(0));
+        const auto raised = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0));
         EQUALS(raised->calls, 1);
         EQUALS(raised->threw, true);
-        EQUALS(FirstLine(raised->error), "test:1: boom");
-        EQUALS(Contains(raised->error, "\nstack traceback:\n"), true);
-        EQUALS(Contains(raised->error, "in function 'failing'"), true);
-        EQUALS(Spell(raised->value), "undefined");
+        EQUALS(LuaRuntimeTest::FirstLine(raised->error), "test:1: boom");
+        EQUALS(LuaRuntimeTest::Contains(raised->error, "\nstack traceback:\n"), true);
+        EQUALS(LuaRuntimeTest::Contains(raised->error, "in function 'failing'"), true);
+        EQUALS(ScriptCallableTest::Spell(raised->value), "undefined");
 
         stage.Lua("gamma", "Stage.keep(function() sleep(10) error('boom later') end)");
-        const auto later = Invoke(Held().callables.at(1));
+        const auto later = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1));
         EQUALS(later->calls, 0);
         stage.At(10);
         EQUALS(later->calls, 1);
         EQUALS(later->threw, true);
-        EQUALS(FirstLine(later->error), "test:1: boom later");
+        EQUALS(LuaRuntimeTest::FirstLine(later->error), "test:1: boom later");
         // The error went to done and to nobody else.
         EQUALS(stage.LuaEngine().DrainPendingErrors().size(), 0u);
     });
@@ -575,46 +560,46 @@ MODULE(script_callable, {
     // --- What comes back, and what goes in ---
 
     IT("copies back a boolean and nothing else when only the outcome is asked for", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Js("alpha", "Stage.keep(() => false); Stage.keep(() => Symbol('cannot cross')); Stage.keep(async () => true); Stage.keep(async () => ({ big: 1 }))");
-        EQUALS(Spell(Invoke(Held().callables.at(0), {}, ReturnMode::Outcome)->value), "false");
-        const auto symbol = Invoke(Held().callables.at(1), {}, ReturnMode::Outcome);
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0), {}, Framework::Scripting::Bind::ReturnMode::Outcome)->value), "false");
+        const auto symbol = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1), {}, Framework::Scripting::Bind::ReturnMode::Outcome);
         EQUALS(symbol->threw, false);
-        EQUALS(Spell(symbol->value), "undefined");
-        EQUALS(Spell(Invoke(Held().callables.at(2), {}, ReturnMode::Outcome)->value), "true");
-        EQUALS(Spell(Invoke(Held().callables.at(3), {}, ReturnMode::Outcome)->value), "undefined");
+        EQUALS(ScriptCallableTest::Spell(symbol->value), "undefined");
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(2), {}, Framework::Scripting::Bind::ReturnMode::Outcome)->value), "true");
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(3), {}, Framework::Scripting::Bind::ReturnMode::Outcome)->value), "undefined");
 
-        Held().callables.clear();
+        ScriptCallableTest::Held().callables.clear();
         stage.Lua("gamma", "Stage.keep(function() return false end) Stage.keep(function() return coroutine.create(print) end) Stage.keep(function() sleep(5) return true end)");
-        EQUALS(Spell(Invoke(Held().callables.at(0), {}, ReturnMode::Outcome)->value), "false");
-        const auto coroutine = Invoke(Held().callables.at(1), {}, ReturnMode::Outcome);
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0), {}, Framework::Scripting::Bind::ReturnMode::Outcome)->value), "false");
+        const auto coroutine = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1), {}, Framework::Scripting::Bind::ReturnMode::Outcome);
         EQUALS(coroutine->threw, false);
-        EQUALS(Spell(coroutine->value), "undefined");
-        const auto slept = Invoke(Held().callables.at(2), {}, ReturnMode::Outcome);
+        EQUALS(ScriptCallableTest::Spell(coroutine->value), "undefined");
+        const auto slept = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(2), {}, Framework::Scripting::Bind::ReturnMode::Outcome);
         stage.At(5);
         EQUALS(slept->calls, 1);
-        EQUALS(Spell(slept->value), "true");
+        EQUALS(ScriptCallableTest::Spell(slept->value), "true");
     });
 
     IT("fails the call whose result cannot cross", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Js("alpha", "Stage.keep(() => ({ id: Symbol('cannot cross') })); Stage.keep(async () => new WeakMap())");
-        const auto symbol = Invoke(Held().callables.at(0));
+        const auto symbol = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0));
         EQUALS(symbol->calls, 1);
         EQUALS(symbol->threw, true);
         EQUALS(symbol->error, "Cannot copy value.id: a symbol cannot be copied");
-        const auto weak = Invoke(Held().callables.at(1));
+        const auto weak = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1));
         EQUALS(weak->calls, 1);
         EQUALS(weak->threw, true);
         EQUALS(weak->error, "Cannot copy value: this kind of object cannot be copied");
 
-        Held().callables.clear();
+        ScriptCallableTest::Held().callables.clear();
         stage.Lua("gamma", "Stage.keep(function() return { job = coroutine.create(print) } end)");
-        const auto coroutine = Invoke(Held().callables.at(0));
+        const auto coroutine = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0));
         EQUALS(coroutine->calls, 1);
         EQUALS(coroutine->threw, true);
         EQUALS(coroutine->error, "Cannot copy value.job: a coroutine cannot be copied");
@@ -622,22 +607,22 @@ MODULE(script_callable, {
     });
 
     IT("fails the call whose argument cannot be built in the runtime of the function", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Js("alpha", "globalThis.ran = 0; Stage.keep(() => { ++ran; })");
         stage.Lua("gamma", "ran = 0 Stage.keep(function() ran = ran + 1 end)");
 
-        TransferredValue unknown;
-        unknown.kind          = Kind::HostObject;
+        Framework::Scripting::TransferredValue unknown;
+        unknown.kind          = ScriptCallableTest::Kind::HostObject;
         unknown.text          = "NoSuchType";
-        const auto javascript = Invoke(Held().callables.at(0), {Number(1), unknown});
+        const auto javascript = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0), {ScriptCallableTest::Number(1), unknown});
         EQUALS(javascript->calls, 1);
         EQUALS(javascript->threw, true);
-        EQUALS(FirstLine(javascript->error), "Argument 1: Error: Unknown host type NoSuchType");
+        EQUALS(LuaRuntimeTest::FirstLine(javascript->error), "Argument 1: Error: Unknown host type NoSuchType");
         EQUALS(stage.Js("alpha", "ran"), "0");
 
-        const auto lua = Invoke(Held().callables.at(1), {Number(1), unknown});
+        const auto lua = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1), {ScriptCallableTest::Number(1), unknown});
         EQUALS(lua->calls, 1);
         EQUALS(lua->threw, true);
         EQUALS(lua->error, "Argument 2: Cannot copy value: host type 'NoSuchType' is not available in Lua");
@@ -648,48 +633,48 @@ MODULE(script_callable, {
     // --- One callable for a function ---
 
     IT("gives one callable for a function, however often it is taken", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Js("alpha", "globalThis.handler = () => 1; Stage.keep(handler); Stage.keep(handler); Stage.keep(() => 1)");
         stage.Lua("gamma", "function handler() return 1 end Stage.keep(handler) Stage.keep(handler) Stage.keep(function() return 1 end)");
         for (const size_t first : {size_t {0}, size_t {3}}) {
-            const auto &callables = Held().callables;
+            const auto &callables = ScriptCallableTest::Held().callables;
             EQUALS(callables.at(first).get() == callables.at(first + 1).get(), true);
             EQUALS(callables.at(first)->Equals(*callables.at(first + 1)), true);
             EQUALS(callables.at(first)->Equals(*callables.at(first + 2)), false);
             EQUALS(callables.at(first + 2)->Equals(*callables.at(first)), false);
         }
-        EQUALS(Held().callables.at(0)->Equals(*Held().callables.at(3)), false);
-        EQUALS(Held().callables.at(3)->Equals(*Held().callables.at(0)), false);
+        EQUALS(ScriptCallableTest::Held().callables.at(0)->Equals(*ScriptCallableTest::Held().callables.at(3)), false);
+        EQUALS(ScriptCallableTest::Held().callables.at(3)->Equals(*ScriptCallableTest::Held().callables.at(0)), false);
 
         EQUALS(stage.Js("alpha", "[Stage.same(handler, handler), Stage.same(handler, () => 1), Stage.same(handler, 1)].join()"), "true,false,false");
         EQUALS(stage.LuaValue("gamma", "tostring(Stage.same(handler, handler)) .. tostring(Stage.same(handler, print)) .. tostring(Stage.same(handler, 1))"), "truefalsefalse");
 
         // Once nobody holds it the function gets a new one, which works like the first.
-        Held().callables.clear();
+        ScriptCallableTest::Held().callables.clear();
         stage.Js("alpha", "Stage.keep(handler)");
         stage.Lua("gamma", "Stage.keep(handler)");
-        EQUALS(Spell(Invoke(Held().callables.at(0))->value), "1");
-        EQUALS(Spell(Invoke(Held().callables.at(1))->value), "1");
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0))->value), "1");
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1))->value), "1");
         EQUALS(stage.Js("alpha", "Stage.same(handler, handler)"), "true");
         EQUALS(stage.LuaValue("gamma", "Stage.same(handler, handler)"), "true");
     });
 
     IT("names the resource a function belongs to", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         // JavaScript asks the resource manager, when the function is taken.
         EQUALS(stage.Js("alpha", "Stage.owner(() => 1)"), "");
         {
             Framework::Scripting::ResourceManager manager(&stage.Node());
-            Bind::SetCallResourceManager(stage.Isolate("alpha"), &manager);
+            Framework::Scripting::Bind::SetCallResourceManager(stage.Isolate("alpha"), &manager);
             EQUALS(stage.Js("alpha", "Stage.owner(() => 1)"), "alpha");
             stage.Js("alpha", "Stage.keep(() => 1)");
-            Bind::SetCallResourceManager(stage.Isolate("alpha"), nullptr);
+            Framework::Scripting::Bind::SetCallResourceManager(stage.Isolate("alpha"), nullptr);
         }
-        EQUALS(Held().callables.at(0)->ResourceName(), "alpha");
+        EQUALS(ScriptCallableTest::Held().callables.at(0)->ResourceName(), "alpha");
         EQUALS(stage.LuaValue("gamma", "Stage.owner(print)"), "gamma");
         EQUALS(stage.LuaValue("gamma", "Stage.owner(1)"), "<none>");
     });
@@ -697,7 +682,7 @@ MODULE(script_callable, {
     // --- A runtime that goes ---
 
     IT("marks the callables of a destroyed runtime dead and answers for them at once", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateJs("beta");
         stage.CreateLua("gamma");
@@ -706,7 +691,7 @@ MODULE(script_callable, {
         stage.Js("beta", "Stage.keep(() => 2)");
         stage.Lua("gamma", "Stage.keep(function() return 3 end)");
         stage.Lua("delta", "Stage.keep(function() return 4 end)");
-        const std::vector<std::shared_ptr<ScriptCallable>> callables = Held().callables;
+        const std::vector<std::shared_ptr<Framework::Scripting::Bind::ScriptCallable>> callables = ScriptCallableTest::Held().callables;
 
         // A listener added after WatchRuntimes finds them dead already, with the runtime still there. The engines
         // keep the listeners, which hear of the other runtimes as the stage goes.
@@ -714,7 +699,7 @@ MODULE(script_callable, {
         stage.Node().AddRuntimeDisposingListener([heard, callables](v8::Isolate *isolate) {
             *heard += std::string(" javascript:") + (isolate->IsInUse() ? "open:" : "closed:") + (callables.at(0)->IsAlive() ? "alive" : "dead");
         });
-        stage.LuaEngine().AddRuntimeDisposingListener([heard, callables](LuaRuntime &runtime) {
+        stage.LuaEngine().AddRuntimeDisposingListener([heard, callables](Framework::Scripting::LuaRuntime &runtime) {
             *heard += std::string(" lua:") + (lua_gettop(runtime.State()) == 0 ? "open:" : "busy:") + (callables.at(2)->IsAlive() ? "alive" : "dead");
         });
 
@@ -723,35 +708,35 @@ MODULE(script_callable, {
         EQUALS(*heard, " javascript:open:dead lua:open:dead");
         for (const size_t gone : {size_t {0}, size_t {2}}) {
             EQUALS(callables.at(gone)->IsAlive(), false);
-            const auto told = Invoke(callables.at(gone), {Number(1)});
+            const auto told = ScriptCallableTest::Invoke(callables.at(gone), {ScriptCallableTest::Number(1)});
             EQUALS(told->calls, 1);
             EQUALS(told->threw, true);
             EQUALS(told->error, "runtime stopped");
-            EQUALS(Spell(told->value), "undefined");
+            EQUALS(ScriptCallableTest::Spell(told->value), "undefined");
             // It is still the callable it was, and what it was of.
             EQUALS(callables.at(gone)->Equals(*callables.at(gone)), true);
             EQUALS(callables.at(gone)->Equals(*callables.at(gone + 1)), false);
         }
         EQUALS(callables.at(0)->ResourceName(), "");
         EQUALS(callables.at(2)->ResourceName(), "gamma");
-        EQUALS(static_cast<const Bind::V8Callable *>(callables.at(0).get())->Isolate() == nullptr, true);
+        EQUALS(static_cast<const Framework::Scripting::Bind::V8Callable *>(callables.at(0).get())->Isolate() == nullptr, true);
 
         // The runtimes that stay are untouched.
         EQUALS(callables.at(1)->IsAlive(), true);
         EQUALS(callables.at(3)->IsAlive(), true);
-        EQUALS(Spell(Invoke(callables.at(1))->value), "2");
-        EQUALS(Spell(Invoke(callables.at(3))->value), "4");
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(callables.at(1))->value), "2");
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(callables.at(3))->value), "4");
     });
 
     IT("completes what a destroyed runtime still owed", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Js("alpha", "Stage.keep(() => new Promise(() => {}))");
         stage.Lua("gamma", "Stage.keep(function() sleep(1000) return 'never' end)");
-        const auto javascript = Invoke(Held().callables.at(0));
-        const auto lua        = Invoke(Held().callables.at(1));
-        const auto again      = Invoke(Held().callables.at(1));
+        const auto javascript = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0));
+        const auto lua        = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1));
+        const auto again      = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1));
         EQUALS(javascript->calls + lua->calls + again->calls, 0);
 
         stage.Node().DestroyResourceRuntime("alpha");
@@ -772,21 +757,21 @@ MODULE(script_callable, {
     });
 
     IT("takes a Lua runtime that was destroyed from its own script for gone at once", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateLua("gamma");
         stage.Lua("gamma", "Stage.keep(function() ran = true return 1 end) Stage.keep(function() sleep(10) end)");
-        const std::vector<std::shared_ptr<ScriptCallable>> callables = Held().callables;
-        const auto waiting                                           = Invoke(callables.at(1));
+        const std::vector<std::shared_ptr<Framework::Scripting::Bind::ScriptCallable>> callables = ScriptCallableTest::Held().callables;
+        const auto waiting                                                                       = ScriptCallableTest::Invoke(callables.at(1));
         EQUALS(waiting->calls, 0);
 
         // The state stays open until the script that destroyed it has returned and the engine ticks.
-        std::shared_ptr<Told> inside;
-        Held().callables.clear();
+        std::shared_ptr<ScriptCallableTest::Told> inside;
+        ScriptCallableTest::Held().callables.clear();
         stage.Lua("gamma", "Stage.destroy('gamma') Stage.keep(function() return 2 end)");
         EQUALS(stage.LuaEngine().GetRuntime("gamma") == nullptr, true);
         EQUALS(callables.at(0)->IsAlive(), false);
-        EQUALS(Held().callables.at(0)->IsAlive(), false);
-        inside = Invoke(callables.at(0));
+        EQUALS(ScriptCallableTest::Held().callables.at(0)->IsAlive(), false);
+        inside = ScriptCallableTest::Invoke(callables.at(0));
         EQUALS(inside->calls, 1);
         EQUALS(inside->error, "runtime stopped");
         EQUALS(waiting->calls, 0);
@@ -798,7 +783,7 @@ MODULE(script_callable, {
     });
 
     IT("takes a JavaScript runtime that was stopped from its own script for gone at once", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         const auto disposed = std::make_shared<int>(0);
@@ -808,46 +793,46 @@ MODULE(script_callable, {
         stage.Js("alpha", "Stage.give(() => 'still here'); Stage.keep(() => 1); Stage.keep(() => new Promise(() => {})); Stage.later()");
         EQUALS(stage.Lua("gamma", "remote = Stage.take() before = remote()"), "");
         EQUALS(stage.LuaValue("gamma", "before"), "still here");
-        const std::vector<std::shared_ptr<ScriptCallable>> callables = Held().callables;
-        const auto waiting                                           = Invoke(callables.at(1));
+        const std::vector<std::shared_ptr<Framework::Scripting::Bind::ScriptCallable>> callables = ScriptCallableTest::Held().callables;
+        const auto waiting                                                                       = ScriptCallableTest::Invoke(callables.at(1));
         EQUALS(waiting->calls, 0);
 
         // The resource stops itself. Its runtime outlives the script that stopped it, until the engine ticks, but
         // to everyone who kept a function of it, it is gone now.
-        Held().callables.clear();
+        ScriptCallableTest::Held().callables.clear();
         EQUALS(stage.Js("alpha", "Stage.destroy('alpha'); Stage.keep(() => 2); Stage.later(); typeof Stage.take()"), "function");
         EQUALS(stage.Node().GetResourceRuntime("alpha") == nullptr, true);
         EQUALS(*disposed, 0);
         EQUALS(callables.at(0)->IsAlive(), false);
-        EQUALS(static_cast<const Bind::V8Callable *>(callables.at(0).get())->Isolate() == nullptr, true);
+        EQUALS(static_cast<const Framework::Scripting::Bind::V8Callable *>(callables.at(0).get())->Isolate() == nullptr, true);
         EQUALS(waiting->calls, 1);
         EQUALS(waiting->error, "runtime stopped");
-        EQUALS(Invoke(callables.at(0))->error, "runtime stopped");
+        EQUALS(ScriptCallableTest::Invoke(callables.at(0))->error, "runtime stopped");
         EQUALS(stage.LuaValue("gamma", "remote()"), "<error> eval:1: runtime stopped");
 
         // What it kept of itself after it stopped is dead from the start, and what it still owes is not settled.
-        EQUALS(Held().callables.at(0)->IsAlive(), false);
-        EQUALS(Invoke(Held().callables.at(0))->error, "runtime stopped");
-        EQUALS(Held().deferreds.size(), 2u);
-        for (Deferred &deferred : Held().deferreds) {
-            deferred.Resolve(Text("nobody is there"));
+        EQUALS(ScriptCallableTest::Held().callables.at(0)->IsAlive(), false);
+        EQUALS(ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0))->error, "runtime stopped");
+        EQUALS(ScriptCallableTest::Held().deferreds.size(), 2u);
+        for (Framework::Scripting::Bind::Deferred &deferred : ScriptCallableTest::Held().deferreds) {
+            deferred.Resolve(ScriptCallableTest::Text("nobody is there"));
         }
 
         EQUALS(*disposed, 0);
         stage.Node().Tick();
         EQUALS(*disposed, 1);
         EQUALS(callables.at(0)->IsAlive(), false);
-        EQUALS(Invoke(callables.at(0))->error, "runtime stopped");
+        EQUALS(ScriptCallableTest::Invoke(callables.at(0))->error, "runtime stopped");
         EQUALS(waiting->calls, 1);
     });
 
     IT("answers runtime stopped for a JavaScript function that ends its runtime", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.Js("alpha", "Stage.keep(() => { process.exit(3); }); Stage.keep(() => 1); Stage.keep(() => new Promise(() => {}))");
-        const std::vector<std::shared_ptr<ScriptCallable>> callables = Held().callables;
-        const auto waiting                                           = Invoke(callables.at(2));
-        const auto exited                                            = Invoke(callables.at(0));
+        const std::vector<std::shared_ptr<Framework::Scripting::Bind::ScriptCallable>> callables = ScriptCallableTest::Held().callables;
+        const auto waiting                                                                       = ScriptCallableTest::Invoke(callables.at(2));
+        const auto exited                                                                        = ScriptCallableTest::Invoke(callables.at(0));
         EQUALS(exited->calls, 1);
         EQUALS(exited->threw, true);
         EQUALS(exited->error, "runtime stopped");
@@ -855,7 +840,7 @@ MODULE(script_callable, {
         // next tick.
         EQUALS(stage.Node().GetResourceRuntime("alpha") != nullptr, true);
         EQUALS(callables.at(1)->IsAlive(), false);
-        EQUALS(Invoke(callables.at(1))->error, "runtime stopped");
+        EQUALS(ScriptCallableTest::Invoke(callables.at(1))->error, "runtime stopped");
         EQUALS(waiting->calls, 1);
         EQUALS(waiting->error, "runtime stopped");
 
@@ -868,65 +853,65 @@ MODULE(script_callable, {
     IT("tells done of a Lua function the deadline stopped", {
         Framework::Scripting::LuaEngineOptions options;
         options.entryDeadline = std::chrono::milliseconds(50);
-        Stage stage(options);
+        ScriptCallableTest::Stage stage(options);
         stage.CreateLua("gamma");
         stage.Lua("gamma", "Stage.keep(function() while true do end end) Stage.keep(function() return 'fine' end)");
-        const auto stopped = Invoke(Held().callables.at(0));
+        const auto stopped = ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(0));
         EQUALS(stopped->calls, 1);
         EQUALS(stopped->threw, true);
-        EQUALS(Contains(FirstLine(stopped->error), "script ran too long"), true);
-        EQUALS(Spell(stopped->value), "undefined");
+        EQUALS(LuaRuntimeTest::Contains(LuaRuntimeTest::FirstLine(stopped->error), "script ran too long"), true);
+        EQUALS(ScriptCallableTest::Spell(stopped->value), "undefined");
         // The runtime goes on.
-        EQUALS(Held().callables.at(0)->IsAlive(), true);
-        EQUALS(Spell(Invoke(Held().callables.at(1))->value), "\"fine\"");
+        EQUALS(ScriptCallableTest::Held().callables.at(0)->IsAlive(), true);
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(1))->value), "\"fine\"");
         EQUALS(lua_gettop(stage.Runtime("gamma").State()), 0);
     });
 
     IT("leaves what outlives its engine harmless", {
-        std::vector<Deferred> deferreds;
-        std::vector<std::shared_ptr<ScriptCallable>> callables;
-        TransferredValue value;
+        std::vector<Framework::Scripting::Bind::Deferred> deferreds;
+        std::vector<std::shared_ptr<Framework::Scripting::Bind::ScriptCallable>> callables;
+        Framework::Scripting::TransferredValue value;
         {
-            Stage stage;
+            ScriptCallableTest::Stage stage;
             stage.CreateJs("alpha");
             stage.CreateLua("gamma");
             stage.Js("alpha", "Stage.later(); Stage.later(); Stage.keep(() => 1); Stage.give({ on: () => 2 })");
             stage.Lua("gamma", "spawn(function() Stage.later() end) Stage.keep(function() return 1 end) Stage.later()");
-            deferreds = Held().deferreds;
-            callables = Held().callables;
-            value     = Held().value;
+            deferreds = ScriptCallableTest::Held().deferreds;
+            callables = ScriptCallableTest::Held().callables;
+            value     = ScriptCallableTest::Held().value;
         }
         EQUALS(deferreds.size(), 4u);
-        deferreds.at(0).Resolve(Text("late"));
+        deferreds.at(0).Resolve(ScriptCallableTest::Text("late"));
         deferreds.at(2).Reject("late");
         EQUALS(deferreds.at(0).Settled(), true);
         EQUALS(deferreds.at(1).Settled(), false);
-        EQUALS(Invoke(callables.at(0))->error, "runtime stopped");
-        EQUALS(Invoke(callables.at(1))->error, "runtime stopped");
-        EQUALS(Invoke(value.properties.at(0).second.callable)->error, "runtime stopped");
+        EQUALS(ScriptCallableTest::Invoke(callables.at(0))->error, "runtime stopped");
+        EQUALS(ScriptCallableTest::Invoke(callables.at(1))->error, "runtime stopped");
+        EQUALS(ScriptCallableTest::Invoke(value.properties.at(0).second.callable)->error, "runtime stopped");
         deferreds.clear();
         callables.clear();
         value = {};
     });
 
     IT("lets done destroy the runtime of the function and invoke another", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Js("alpha", "Stage.keep(() => 'javascript'); Stage.keep(() => 'more')");
         stage.Lua("gamma", "Stage.keep(function() return 'lua' end) Stage.keep(function() return 'more' end)");
-        const std::vector<std::shared_ptr<ScriptCallable>> callables = Held().callables;
+        const std::vector<std::shared_ptr<Framework::Scripting::Bind::ScriptCallable>> callables = ScriptCallableTest::Held().callables;
 
         std::string order;
-        callables.at(2)->Invoke({}, ReturnMode::Value, [&](CallOutcome &&outcome) {
-            order += Spell(outcome.value);
+        callables.at(2)->Invoke({}, Framework::Scripting::Bind::ReturnMode::Value, [&](Framework::Scripting::Bind::CallOutcome &&outcome) {
+            order += ScriptCallableTest::Spell(outcome.value);
             stage.LuaEngine().DestroyResourceRuntime("gamma");
             // Gone for everyone, though its state outlives this call.
-            callables.at(3)->Invoke({}, ReturnMode::Value, [&](CallOutcome &&nested) {
+            callables.at(3)->Invoke({}, Framework::Scripting::Bind::ReturnMode::Value, [&](Framework::Scripting::Bind::CallOutcome &&nested) {
                 order += " " + nested.error;
             });
-            callables.at(0)->Invoke({}, ReturnMode::Value, [&](CallOutcome &&nested) {
-                order += " " + Spell(nested.value);
+            callables.at(0)->Invoke({}, Framework::Scripting::Bind::ReturnMode::Value, [&](Framework::Scripting::Bind::CallOutcome &&nested) {
+                order += " " + ScriptCallableTest::Spell(nested.value);
                 stage.Node().DestroyResourceRuntime("alpha");
             });
         });
@@ -935,14 +920,14 @@ MODULE(script_callable, {
         EQUALS(callables.at(2)->IsAlive(), false);
         stage.At(1);
         stage.Node().Tick();
-        EQUALS(Invoke(callables.at(1))->error, "runtime stopped");
+        EQUALS(ScriptCallableTest::Invoke(callables.at(1))->error, "runtime stopped");
     });
 
     IT("forgets the callables of an isolate no engine speaks for when its builtins are unregistered", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         std::string error;
         std::unique_ptr<Framework::Scripting::NodeRuntime> bare = stage.Node().CreateRuntime(error);
-        std::shared_ptr<ScriptCallable> callable;
+        std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callable;
         {
             v8::Isolate *isolate = bare->GetIsolate();
             v8::Locker locker(isolate);
@@ -951,76 +936,76 @@ MODULE(script_callable, {
             v8::Local<v8::Context> context = bare->GetContext();
             v8::Context::Scope contextScope(context);
             v8::Local<v8::Value> function = v8::Script::Compile(context, v8::String::NewFromUtf8Literal(isolate, "(() => new Promise(() => {}))")).ToLocalChecked()->Run(context).ToLocalChecked();
-            callable                      = Bind::V8ToCallable(isolate, context, function.As<v8::Function>());
+            callable                      = Framework::Scripting::Bind::V8ToCallable(isolate, context, function.As<v8::Function>());
         }
-        const auto pending = Invoke(callable);
+        const auto pending = ScriptCallableTest::Invoke(callable);
         EQUALS(pending->calls, 0);
         Framework::Scripting::Builtins::UnregisterAll(bare->GetIsolate());
         EQUALS(callable->IsAlive(), false);
         EQUALS(pending->calls, 1);
         EQUALS(pending->error, "runtime stopped");
         bare.reset();
-        EQUALS(Invoke(callable)->error, "runtime stopped");
+        EQUALS(ScriptCallableTest::Invoke(callable)->error, "runtime stopped");
     });
 
     IT("marks the callables of a Lua runtime no engine owns dead when its state closes", {
-        std::shared_ptr<ScriptCallable> callable;
-        std::shared_ptr<Told> pending;
+        std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callable;
+        std::shared_ptr<ScriptCallableTest::Told> pending;
         {
-            LuaRuntime runtime(LuaRuntimeTest::Options());
-            StageDefinition().RegisterLuaGlobal(runtime.State(), Bind::Side::Server);
-            Held() = {};
+            Framework::Scripting::LuaRuntime runtime(LuaRuntimeTest::Options());
+            ScriptCallableTest::StageDefinition().RegisterLuaGlobal(runtime.State(), Framework::Scripting::Bind::Side::Server);
+            ScriptCallableTest::Held() = {};
             EQUALS(LuaRuntimeTest::Run(runtime, "Stage.keep(function() sleep(10) end)"), "");
-            callable = Held().callables.at(0);
-            Held()   = {};
-            pending  = Invoke(callable);
+            callable                   = ScriptCallableTest::Held().callables.at(0);
+            ScriptCallableTest::Held() = {};
+            pending                    = ScriptCallableTest::Invoke(callable);
             EQUALS(pending->calls, 0);
             EQUALS(callable->IsAlive(), true);
         }
         EQUALS(callable->IsAlive(), false);
         EQUALS(pending->calls, 1);
         EQUALS(pending->error, "runtime stopped");
-        EQUALS(Invoke(callable)->error, "runtime stopped");
+        EQUALS(ScriptCallableTest::Invoke(callable)->error, "runtime stopped");
     });
 
     IT("invokes a function from inside a call of its own runtime", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         EQUALS(stage.Js("alpha", "Stage.run((value) => value + 1, 1)"), "2");
         EQUALS(stage.Js("alpha", "try { Stage.run(() => { throw new Error('inside'); }) } catch (error) { error.message.split('\\n')[0] }"), "Error: inside");
         EQUALS(stage.Js("alpha", "Stage.run(() => new Promise((resolve) => setTimeout(() => resolve('late'), 2)))"), "not yet");
         EQUALS(stage.TickUntil([&] {
-            return Held().told.at(2)->calls > 0;
+            return ScriptCallableTest::Held().told.at(2)->calls > 0;
         }),
             true);
-        EQUALS(Spell(Held().told.at(2)->value), "\"late\"");
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Held().told.at(2)->value), "\"late\"");
 
         // On the main thread of Lua and in a coroutine, where the function may wait and the caller does not.
-        Held().told.clear();
+        ScriptCallableTest::Held().told.clear();
         EQUALS(stage.LuaValue("gamma", "Stage.run(function(value) return value + 1 end, 1)"), "2");
         EQUALS(stage.Lua("gamma", "result = Stage.run(function(value) return value + 1 end, 2) waited = Stage.run(function() sleep(5) return 'late' end)"), "");
         EQUALS(stage.LuaValue("gamma", "result .. ' ' .. waited"), "3 not yet");
         EQUALS(stage.LuaValue("gamma", "select(2, pcall(Stage.run, function() error('inside') end)):match('^[^\\n]*')"), "eval:1: inside");
-        EQUALS(Held().told.at(2)->calls, 0);
+        EQUALS(ScriptCallableTest::Held().told.at(2)->calls, 0);
         stage.At(5);
-        EQUALS(Spell(Held().told.at(2)->value), "\"late\"");
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Held().told.at(2)->value), "\"late\"");
         EQUALS(lua_gettop(stage.Runtime("gamma").State()), 0);
 
         // Nobody has to wait on a call.
         stage.Js("alpha", "globalThis.ran = 0; Stage.keep(() => { ++ran; })");
         stage.Lua("gamma", "ran = 0 Stage.keep(function() ran = ran + 1 end)");
-        Held().callables.at(0)->Invoke({}, ReturnMode::Value, {});
-        Held().callables.at(1)->Invoke({}, ReturnMode::Outcome, {});
+        ScriptCallableTest::Held().callables.at(0)->Invoke({}, Framework::Scripting::Bind::ReturnMode::Value, {});
+        ScriptCallableTest::Held().callables.at(1)->Invoke({}, Framework::Scripting::Bind::ReturnMode::Outcome, {});
         EQUALS(stage.Js("alpha", "ran"), "1");
         EQUALS(stage.LuaValue("gamma", "ran"), "1");
     });
 
     IT("keeps a Lua function for as long as its callable is held, and no longer", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateLua("gamma");
         stage.CreateLua("delta");
-        LuaRuntime &gamma = stage.Runtime("gamma");
+        Framework::Scripting::LuaRuntime &gamma = stage.Runtime("gamma");
         lua_gc(gamma.State(), LUA_GCCOLLECT);
         const size_t before = gamma.MemoryInUse();
 
@@ -1028,17 +1013,17 @@ MODULE(script_callable, {
         EQUALS(stage.Lua("gamma", "for i = 1, 100 do local big = string.rep(tostring(i), 20000) Stage.keep(function() return #big end) end"), "");
         lua_gc(gamma.State(), LUA_GCCOLLECT);
         EQUALS(gamma.MemoryInUse() > before + 2000000, true);
-        EQUALS(Spell(Invoke(Held().callables.at(99))->value), "60000");
+        EQUALS(ScriptCallableTest::Spell(ScriptCallableTest::Invoke(ScriptCallableTest::Held().callables.at(99))->value), "60000");
 
-        Held().callables.clear();
+        ScriptCallableTest::Held().callables.clear();
         lua_gc(gamma.State(), LUA_GCCOLLECT);
         EQUALS(gamma.MemoryInUse() < before + 100000, true);
 
         // A function another runtime stands in for is held by the stand-in, until that is collected.
         stage.Lua("gamma", "Stage.give(function() return 1 end)");
-        const std::weak_ptr<ScriptCallable> given = Held().value.callable;
+        const std::weak_ptr<Framework::Scripting::Bind::ScriptCallable> given = ScriptCallableTest::Held().value.callable;
         stage.Lua("delta", "standIn = Stage.take()");
-        Held().value = {};
+        ScriptCallableTest::Held().value = {};
         lua_gc(stage.Runtime("delta").State(), LUA_GCCOLLECT);
         EQUALS(given.expired(), false);
         stage.Lua("delta", "standIn = nil");
@@ -1050,7 +1035,7 @@ MODULE(script_callable, {
     // --- Deferred results ---
 
     IT("returns a promise the deferred settles, in JavaScript", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         // Resolved before the function returned, it is a promise all the same.
         EQUALS(stage.Js("alpha", "globalThis.out = []; globalThis.first = Stage.now({ n: 5 }); first instanceof Promise"), "true");
@@ -1059,18 +1044,18 @@ MODULE(script_callable, {
             return stage.Js("alpha", "out.join()") == "now 5";
         }),
             true);
-        EQUALS(Held().deferreds.at(0).Settled(), true);
+        EQUALS(ScriptCallableTest::Held().deferreds.at(0).Settled(), true);
 
         EQUALS(stage.Js("alpha", "(async () => { out.push('later ' + await Stage.later()); })(); out.length"), "1");
-        Deferred later = Held().deferreds.at(1);
+        Framework::Scripting::Bind::Deferred later = ScriptCallableTest::Held().deferreds.at(1);
         EQUALS(later.Settled(), false);
-        later.Resolve(Text("done"));
+        later.Resolve(ScriptCallableTest::Text("done"));
         EQUALS(later.Settled(), true);
         // The continuation ran as the runtime was left.
         EQUALS(stage.Js("alpha", "out.join()"), "now 5,later done");
 
         stage.Js("alpha", "Stage.later().catch((error) => out.push(error instanceof Error, error.message))");
-        Held().deferreds.at(2).Reject("Stage.later: refused");
+        ScriptCallableTest::Held().deferreds.at(2).Reject("Stage.later: refused");
         EQUALS(stage.Js("alpha", "out.slice(2).join()"), "true,Stage.later: refused");
 
         stage.Js("alpha", "Stage.refuse('at once').catch((error) => out.push(error.message))");
@@ -1083,7 +1068,7 @@ MODULE(script_callable, {
     });
 
     IT("returns to Lua the value of a deferred that was resolved before the function returned", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateLua("gamma");
         EQUALS(stage.Lua("gamma", "local value = Stage.now({ n = 5 }) result = value.n count = select('#', Stage.now(nil))"), "");
         EQUALS(stage.LuaValue("gamma", "result"), "5");
@@ -1093,40 +1078,40 @@ MODULE(script_callable, {
         EQUALS(stage.Lua("gamma", "ok, message = pcall(Stage.refuse, 'at once')"), "");
         EQUALS(stage.LuaValue("gamma", "ok"), "false");
         EQUALS(stage.LuaValue("gamma", "message"), "Stage.refuse: at once");
-        EQUALS(FirstLine(stage.Lua("gamma", "Stage.refuse('in the open')")), "test:1: Stage.refuse: in the open");
+        EQUALS(LuaRuntimeTest::FirstLine(stage.Lua("gamma", "Stage.refuse('in the open')")), "test:1: Stage.refuse: in the open");
         EQUALS(lua_gettop(stage.Runtime("gamma").State()), 0);
     });
 
     IT("suspends the Lua coroutine that called until the deferred is settled", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateLua("gamma");
         EQUALS(stage.Lua("gamma", "steps = 'before' local value = Stage.later() steps = steps .. ' ' .. value.word .. ' ' .. select('#', Stage.later())"), "");
         EQUALS(stage.LuaValue("gamma", "steps"), "before");
         EQUALS(stage.Suspended("gamma"), 1u);
 
-        TransferredValue word;
-        word.kind = Kind::Object;
-        word.properties.emplace_back("word", Text("after"));
-        Held().deferreds.at(0).Resolve(word);
+        Framework::Scripting::TransferredValue word;
+        word.kind = ScriptCallableTest::Kind::Object;
+        word.properties.emplace_back("word", ScriptCallableTest::Text("after"));
+        ScriptCallableTest::Held().deferreds.at(0).Resolve(word);
         EQUALS(stage.LuaValue("gamma", "steps"), "before");
         EQUALS(stage.Suspended("gamma"), 1u);
         // Resolved with nothing, the call still returns one value.
-        Held().deferreds.at(1).Resolve();
+        ScriptCallableTest::Held().deferreds.at(1).Resolve();
         EQUALS(stage.LuaValue("gamma", "steps"), "before after 1");
         EQUALS(stage.Suspended("gamma"), 0u);
 
         EQUALS(stage.Lua("gamma", "ok, message = pcall(Stage.later) after = 'went on'"), "");
         EQUALS(stage.LuaValue("gamma", "after"), "nil");
-        Held().deferreds.at(2).Reject("Stage.later: refused");
+        ScriptCallableTest::Held().deferreds.at(2).Reject("Stage.later: refused");
         EQUALS(stage.LuaValue("gamma", "ok"), "false");
         EQUALS(stage.LuaValue("gamma", "message"), "Stage.later: refused");
         EQUALS(stage.LuaValue("gamma", "after"), "went on");
 
         // A value Lua cannot have is the error of the call.
         EQUALS(stage.Lua("gamma", "ok, message = pcall(Stage.later)"), "");
-        TransferredValue regexp;
-        regexp.kind = Kind::RegExp;
-        Held().deferreds.at(3).Resolve(regexp);
+        Framework::Scripting::TransferredValue regexp;
+        regexp.kind = ScriptCallableTest::Kind::RegExp;
+        ScriptCallableTest::Held().deferreds.at(3).Resolve(regexp);
         EQUALS(stage.LuaValue("gamma", "ok"), "false");
         EQUALS(stage.LuaValue("gamma", "message"), "Cannot copy value: a RegExp cannot be copied to Lua");
         EQUALS(stage.Suspended("gamma"), 0u);
@@ -1134,7 +1119,7 @@ MODULE(script_callable, {
     });
 
     IT("raises in Lua where the caller cannot wait, unless the deferred is settled by then", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateLua("gamma");
         // On the main thread, and in a coroutine the script made itself.
         EQUALS(stage.LuaValue("gamma", "Stage.now(5)"), "5");
@@ -1144,85 +1129,85 @@ MODULE(script_callable, {
         EQUALS(stage.LuaValue("gamma", "Stage.later()"), "<error> eval:1: Stage.later: cannot wait here");
         EQUALS(stage.LuaValue("gamma", "coroutine.wrap(function() return Stage.later() end)()"), "<error> eval:1: eval:1: Stage.later: cannot wait here: called inside a coroutine the script created");
         // Settling them afterwards finds nobody.
-        for (Deferred &deferred : Held().deferreds) {
-            deferred.Resolve(Number(1));
+        for (Framework::Scripting::Bind::Deferred &deferred : ScriptCallableTest::Held().deferreds) {
+            deferred.Resolve(ScriptCallableTest::Number(1));
         }
         EQUALS(stage.Suspended("gamma"), 0u);
         EQUALS(lua_gettop(stage.Runtime("gamma").State()), 0);
     });
 
     IT("tells whether anybody still waits for a deferred result", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
-        EQUALS(Deferred().Awaited(), false);
+        EQUALS(Framework::Scripting::Bind::Deferred().Awaited(), false);
 
         // A promise a script holds and a coroutine that waits are waited for, until they are settled.
         stage.Js("alpha", "Stage.later(); 0");
         EQUALS(stage.Lua("gamma", "Stage.later()"), "");
-        EQUALS(Held().deferreds.at(0).Awaited(), true);
-        EQUALS(Held().deferreds.at(1).Awaited(), true);
-        Held().deferreds.at(0).Resolve();
-        Held().deferreds.at(1).Reject("no");
-        EQUALS(Held().deferreds.at(0).Awaited(), false);
-        EQUALS(Held().deferreds.at(1).Awaited(), false);
+        EQUALS(ScriptCallableTest::Held().deferreds.at(0).Awaited(), true);
+        EQUALS(ScriptCallableTest::Held().deferreds.at(1).Awaited(), true);
+        ScriptCallableTest::Held().deferreds.at(0).Resolve();
+        ScriptCallableTest::Held().deferreds.at(1).Reject("no");
+        EQUALS(ScriptCallableTest::Held().deferreds.at(0).Awaited(), false);
+        EQUALS(ScriptCallableTest::Held().deferreds.at(1).Awaited(), false);
 
         // A call that threw, and a Lua call that could not wait, left nobody.
         stage.Js("alpha", "try { Stage.laterAndThrow(); } catch (e) {} 0");
         stage.LuaValue("gamma", "pcall(Stage.laterAndThrow)");
         stage.LuaValue("gamma", "pcall(Stage.later)");
-        EQUALS(Held().deferreds.at(2).Awaited(), false);
-        EQUALS(Held().deferreds.at(3).Awaited(), false);
-        EQUALS(Held().deferreds.at(4).Awaited(), false);
+        EQUALS(ScriptCallableTest::Held().deferreds.at(2).Awaited(), false);
+        EQUALS(ScriptCallableTest::Held().deferreds.at(3).Awaited(), false);
+        EQUALS(ScriptCallableTest::Held().deferreds.at(4).Awaited(), false);
 
         // Nor does a runtime that went.
         stage.Js("alpha", "Stage.later(); 0");
         EQUALS(stage.Lua("gamma", "Stage.later()"), "");
-        EQUALS(Held().deferreds.at(5).Awaited(), true);
-        EQUALS(Held().deferreds.at(6).Awaited(), true);
-        DestroyRuntime("alpha");
-        DestroyRuntime("gamma");
-        EQUALS(Held().deferreds.at(5).Awaited(), false);
-        EQUALS(Held().deferreds.at(6).Awaited(), false);
+        EQUALS(ScriptCallableTest::Held().deferreds.at(5).Awaited(), true);
+        EQUALS(ScriptCallableTest::Held().deferreds.at(6).Awaited(), true);
+        ScriptCallableTest::DestroyRuntime("alpha");
+        ScriptCallableTest::DestroyRuntime("gamma");
+        EQUALS(ScriptCallableTest::Held().deferreds.at(5).Awaited(), false);
+        EQUALS(ScriptCallableTest::Held().deferreds.at(6).Awaited(), false);
     });
 
     IT("settles a deferred once, and not at all once its runtime is gone", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Js("alpha", "globalThis.out = []; Stage.later().then((value) => out.push('resolved ' + value), (error) => out.push('rejected ' + error.message))");
         stage.Lua("gamma", "out = '' out = out .. tostring(Stage.later())");
-        Deferred javascript = Held().deferreds.at(0);
-        Deferred lua        = Held().deferreds.at(1);
+        Framework::Scripting::Bind::Deferred javascript = ScriptCallableTest::Held().deferreds.at(0);
+        Framework::Scripting::Bind::Deferred lua        = ScriptCallableTest::Held().deferreds.at(1);
         // A copy is the same deferred.
-        Deferred copy = lua;
-        javascript.Resolve(Number(1));
+        Framework::Scripting::Bind::Deferred copy = lua;
+        javascript.Resolve(ScriptCallableTest::Number(1));
         javascript.Reject("too late");
-        javascript.Resolve(Number(2));
-        copy.Resolve(Number(1));
+        javascript.Resolve(ScriptCallableTest::Number(2));
+        copy.Resolve(ScriptCallableTest::Number(1));
         EQUALS(lua.Settled(), true);
         lua.Reject("too late");
-        lua.Resolve(Number(2));
+        lua.Resolve(ScriptCallableTest::Number(2));
         EQUALS(stage.Js("alpha", "out.join()"), "resolved 1");
         EQUALS(stage.LuaValue("gamma", "out"), "1");
 
         // One that was never given a call is settled, and does nothing.
-        Deferred none;
+        Framework::Scripting::Bind::Deferred none;
         EQUALS(none.Settled(), true);
-        none.Resolve(Number(1));
+        none.Resolve(ScriptCallableTest::Number(1));
         none.Reject("nobody");
 
         stage.Js("alpha", "Stage.later(); Stage.later()");
         stage.Lua("gamma", "spawn(function() Stage.later() end) Stage.later()");
-        const std::vector<Deferred> orphans(Held().deferreds.begin() + 2, Held().deferreds.end());
+        const std::vector<Framework::Scripting::Bind::Deferred> orphans(ScriptCallableTest::Held().deferreds.begin() + 2, ScriptCallableTest::Held().deferreds.end());
         EQUALS(orphans.size(), 4u);
         stage.Node().DestroyResourceRuntime("alpha");
         stage.LuaEngine().DestroyResourceRuntime("gamma");
         for (size_t i = 0; i < orphans.size(); ++i) {
-            Deferred orphan = orphans[i];
+            Framework::Scripting::Bind::Deferred orphan = orphans[i];
             EQUALS(orphan.Settled(), false);
             if (i % 2 == 0) {
-                orphan.Resolve(Text("nobody is there"));
+                orphan.Resolve(ScriptCallableTest::Text("nobody is there"));
             }
             else {
                 orphan.Reject("nobody is there");
@@ -1232,14 +1217,14 @@ MODULE(script_callable, {
     });
 
     IT("throws what the function threw, whatever it deferred", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         EQUALS(stage.Js("alpha", "Stage.laterAndThrow()"), "<threw> Error: Stage.laterAndThrow: thrown all the same");
         EQUALS(stage.LuaValue("gamma", "Stage.laterAndThrow()"), "<error> eval:1: Stage.laterAndThrow: thrown all the same");
-        EQUALS(FirstLine(stage.Lua("gamma", "Stage.laterAndThrow()")), "test:1: Stage.laterAndThrow: thrown all the same");
+        EQUALS(LuaRuntimeTest::FirstLine(stage.Lua("gamma", "Stage.laterAndThrow()")), "test:1: Stage.laterAndThrow: thrown all the same");
         // Nobody is left to hear of them: a rejection finds no promise to leave unhandled.
-        for (Deferred &deferred : Held().deferreds) {
+        for (Framework::Scripting::Bind::Deferred &deferred : ScriptCallableTest::Held().deferreds) {
             deferred.Reject("nobody hears this");
         }
         stage.Node().Tick();
@@ -1250,18 +1235,18 @@ MODULE(script_callable, {
     // --- Functions between runtimes ---
 
     IT("copies a function out of a runtime as its callable", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         EQUALS(stage.Js("alpha", "globalThis.handler = () => 'javascript'; Stage.keep(handler); Stage.give({ on: handler })"), "true");
-        EQUALS(Held().value.properties.at(0).second.kind == Kind::Function, true);
-        EQUALS(Held().value.properties.at(0).second.callable == Held().callables.at(0), true);
-        EQUALS(Held().value.properties.at(0).second.reference, 0u);
+        EQUALS(ScriptCallableTest::Held().value.properties.at(0).second.kind == ScriptCallableTest::Kind::Function, true);
+        EQUALS(ScriptCallableTest::Held().value.properties.at(0).second.callable == ScriptCallableTest::Held().callables.at(0), true);
+        EQUALS(ScriptCallableTest::Held().value.properties.at(0).second.reference, 0u);
 
         EQUALS(stage.Lua("gamma", "function handler() return 'lua' end Stage.keep(handler) given = Stage.give({ on = handler })"), "");
         EQUALS(stage.LuaValue("gamma", "given"), "true");
-        EQUALS(Held().value.properties.at(0).second.kind == Kind::Function, true);
-        EQUALS(Held().value.properties.at(0).second.callable == Held().callables.at(1), true);
+        EQUALS(ScriptCallableTest::Held().value.properties.at(0).second.kind == ScriptCallableTest::Kind::Function, true);
+        EQUALS(ScriptCallableTest::Held().value.properties.at(0).second.callable == ScriptCallableTest::Held().callables.at(1), true);
 
         // The transfer of Lua does so on its own.
         lua_State *L = stage.Runtime("gamma").State();
@@ -1269,22 +1254,22 @@ MODULE(script_callable, {
         const auto copied = Framework::Scripting::LuaTransfer::Copy(L, -1);
         lua_pop(L, 1);
         EQUALS(static_cast<bool>(copied), true);
-        EQUALS(copied.GetValue().kind == Kind::Function, true);
-        EQUALS(copied.GetValue().callable == Held().callables.at(1), true);
+        EQUALS(copied.GetValue().kind == ScriptCallableTest::Kind::Function, true);
+        EQUALS(copied.GetValue().callable == ScriptCallableTest::Held().callables.at(1), true);
 
         // A function without a callable cannot be built anywhere.
-        TransferredValue bare;
-        bare.kind = Kind::Function;
+        Framework::Scripting::TransferredValue bare;
+        bare.kind = ScriptCallableTest::Kind::Function;
         std::string error;
         EQUALS(Framework::Scripting::LuaTransfer::Rebuild(L, bare, error), false);
         EQUALS(error, "Cannot copy value: a function cannot be copied");
-        Held().value = bare;
+        ScriptCallableTest::Held().value = bare;
         EQUALS(stage.Js("alpha", "Stage.take()"), "<threw> Error: A function cannot be rebuilt here");
         EQUALS(lua_gettop(L), 0);
     });
 
     IT("calls a Lua function from JavaScript", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Lua("gamma", "calls = 0 Stage.give(function(a, b) calls = calls + 1 return { joined = a .. b.word, n = select('#', a, b) } end)");
@@ -1297,7 +1282,7 @@ MODULE(script_callable, {
     });
 
     IT("hands JavaScript a promise for a Lua function that waits", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Lua("gamma", "Stage.give(function(value) sleep(10) if value < 0 then error('negative') end return value * 2 end)");
@@ -1309,7 +1294,7 @@ MODULE(script_callable, {
     });
 
     IT("calls a JavaScript function from Lua", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Js("alpha", "globalThis.calls = 0; Stage.give((a, b) => { ++calls; return { joined: a + b.word, n: [a, b].length }; })");
@@ -1323,7 +1308,7 @@ MODULE(script_callable, {
     });
 
     IT("suspends Lua until the promise of a JavaScript function settles", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Js("alpha", "Stage.give(async (value) => { await new Promise((resolve) => setTimeout(resolve, 2)); if (value < 0) { throw new Error('negative'); } return value * 2; })");
@@ -1344,7 +1329,7 @@ MODULE(script_callable, {
     });
 
     IT("raises in the caller what the function of another runtime raised", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Lua("gamma", "Stage.give(function() error('lua says no') end)");
@@ -1363,7 +1348,7 @@ MODULE(script_callable, {
     });
 
     IT("gives a function back to its owner as itself", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         // Out of JavaScript, through Lua, and home.
@@ -1381,12 +1366,12 @@ MODULE(script_callable, {
         // A stand-in is the function it stands for, to whoever keeps it.
         stage.Js("alpha", "Stage.keep(standIn)");
         stage.Lua("gamma", "Stage.keep(original)");
-        EQUALS(Held().callables.at(0) == Held().callables.at(1), true);
+        EQUALS(ScriptCallableTest::Held().callables.at(0) == ScriptCallableTest::Held().callables.at(1), true);
         EQUALS(stage.LuaValue("gamma", "Stage.same(original, original)"), "true");
     });
 
     IT("passes callbacks along with the arguments, both ways", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.Lua("gamma", "Stage.give(function(callback, value) return callback(value) + 1 end)");
@@ -1397,7 +1382,7 @@ MODULE(script_callable, {
     });
 
     IT("takes a call on the table a function arrived in for a method call, in Lua", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.CreateLua("delta");
@@ -1448,7 +1433,7 @@ MODULE(script_callable, {
     });
 
     IT("calls between two Lua states and between two isolates", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateJs("beta");
         stage.CreateLua("gamma");
@@ -1468,18 +1453,18 @@ MODULE(script_callable, {
     });
 
     IT("gives a runtime one function for a function of another, for as long as it keeps it", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.CreateLua("delta");
         v8::Isolate *alpha = stage.Isolate("alpha");
         stage.Lua("gamma", "Stage.give(function(value) return value + 1 end)");
-        const std::weak_ptr<ScriptCallable> given = Held().value.callable;
+        const std::weak_ptr<Framework::Scripting::Bind::ScriptCallable> given = ScriptCallableTest::Held().value.callable;
 
         // The same function each time it arrives, in both languages.
         EQUALS(stage.Js("alpha", "globalThis.first = Stage.take(); first === Stage.take() && Stage.take() === first"), "true");
         EQUALS(stage.LuaValue("delta", "(function() local first = Stage.take() return rawequal(first, Stage.take()) end)()"), "true");
-        EQUALS(Bind::V8StandInCount(alpha), 1u);
+        EQUALS(Framework::Scripting::Bind::V8StandInCount(alpha), 1u);
 
         // Arriving on every frame, with nobody keeping it, it leaves nothing behind: what stood for it goes when it
         // is collected, though the function itself is still held where it came from.
@@ -1489,14 +1474,14 @@ MODULE(script_callable, {
             results = stage.Js("alpha", "Stage.take()(" + std::to_string(frame) + ")");
         }
         EQUALS(results, "200");
-        EQUALS(Bind::V8StandInCount(alpha) <= 1, true);
+        EQUALS(Framework::Scripting::Bind::V8StandInCount(alpha) <= 1, true);
         stage.CollectJs("alpha");
-        EQUALS(Bind::V8StandInCount(alpha), 0u);
+        EQUALS(Framework::Scripting::Bind::V8StandInCount(alpha), 0u);
         EQUALS(given.expired(), false);
         EQUALS(stage.Js("alpha", "globalThis.again = Stage.take(); again(41)"), "42");
-        EQUALS(Bind::V8StandInCount(alpha), 1u);
+        EQUALS(Framework::Scripting::Bind::V8StandInCount(alpha), 1u);
         stage.CollectJs("alpha");
-        EQUALS(Bind::V8StandInCount(alpha), 1u);
+        EQUALS(Framework::Scripting::Bind::V8StandInCount(alpha), 1u);
 
         // Each function has its own, and each goes with it.
         stage.Js("alpha", "globalThis.again = undefined");
@@ -1506,7 +1491,7 @@ MODULE(script_callable, {
         }
         EQUALS(results, "49");
         stage.CollectJs("alpha");
-        EQUALS(Bind::V8StandInCount(alpha), 0u);
+        EQUALS(Framework::Scripting::Bind::V8StandInCount(alpha), 0u);
         // The last of them is the one copy still held. The first went with what stood for it, here and in Lua,
         // where the next arrival is a new function.
         EQUALS(given.expired(), false);
@@ -1517,7 +1502,7 @@ MODULE(script_callable, {
     });
 
     IT("answers for a function whose runtime is gone", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateLua("gamma");
         stage.CreateLua("delta");
@@ -1532,13 +1517,13 @@ MODULE(script_callable, {
     });
 
     IT("keeps to the function references of JavaScript where a value has both", {
-        Stage stage;
+        ScriptCallableTest::Stage stage;
         stage.CreateJs("alpha");
         stage.CreateJs("beta");
         Framework::Scripting::FunctionReferences *references = stage.Node().GetFunctionReferences();
         stage.Js("alpha", "Stage.keep(() => 'the callable')");
 
-        TransferredValue copied;
+        Framework::Scripting::TransferredValue copied;
         {
             v8::Isolate *isolate = stage.Isolate("alpha");
             v8::Locker locker(isolate);
@@ -1549,8 +1534,8 @@ MODULE(script_callable, {
             v8::Local<v8::Value> value = v8::Script::Compile(context, v8::String::NewFromUtf8Literal(isolate, "({ word: 'the reference', read() { return this.word; } })")).ToLocalChecked()->Run(context).ToLocalChecked();
             copied                     = Framework::Scripting::ValueTransfer::Copy(isolate, context, value, references->For(references->FindRuntime(isolate))).GetValue();
         }
-        TransferredValue &read = copied.properties.at(1).second;
-        EQUALS(read.kind == Kind::Function, true);
+        Framework::Scripting::TransferredValue &read = copied.properties.at(1).second;
+        EQUALS(read.kind == ScriptCallableTest::Kind::Function, true);
         EQUALS(read.reference != 0, true);
         EQUALS(read.callable == nullptr, true);
 
@@ -1578,7 +1563,7 @@ MODULE(script_callable, {
         EQUALS(stage.Js("beta", "received.read()"), "the reference");
         EQUALS(rebuildInBeta(false), "<threw> Error: A function cannot be rebuilt here");
 
-        read.callable = Held().callables.at(0);
+        read.callable = ScriptCallableTest::Held().callables.at(0);
         EQUALS(rebuildInBeta(true), "");
         EQUALS(stage.Js("beta", "received.read()"), "the reference");
         EQUALS(rebuildInBeta(false), "");

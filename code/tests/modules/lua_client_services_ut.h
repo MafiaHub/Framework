@@ -37,11 +37,6 @@
 // registers them. The instance of the client is the stand-in of client_doubles: a real chat box, the lines a
 // script sent, and a Discord wrapper that keeps what it was told to publish.
 namespace ClientServicesTest {
-    using namespace Framework::Scripting;
-    using Framework::Utils::Vfs;
-    using LuaClientTest::Mount;
-    namespace ClientBuiltins = Framework::Integrations::Client::Scripting::Builtins;
-
     // The scripting of a client with a JavaScript resource `js` and a Lua resource `lua`, both empty.
     struct Stage final {
         // On the heap: the tests of a module share one stack frame.
@@ -61,22 +56,22 @@ namespace ClientServicesTest {
             if (withInstance) {
                 Framework::CoreModules::SetClientInstance(instance.get());
             }
-            client.lua.AddRuntimeSetup([](LuaRuntime &runtime) {
-                ClientBuiltins::Chat::RegisterLua(runtime);
-                ClientBuiltins::Discord::RegisterLua(runtime);
-                ClientBuiltins::Nametags::RegisterLua(runtime);
+            client.lua.AddRuntimeSetup([](Framework::Scripting::LuaRuntime &runtime) {
+                Framework::Integrations::Client::Scripting::Builtins::Chat::RegisterLua(runtime);
+                Framework::Integrations::Client::Scripting::Builtins::Discord::RegisterLua(runtime);
+                Framework::Integrations::Client::Scripting::Builtins::Nametags::RegisterLua(runtime);
             });
             if (!client.Init()) {
                 return;
             }
             {
-                EngineScope scope(&client.v8);
+                Framework::Scripting::EngineScope scope(&client.v8);
                 const auto context = scope.Context();
-                ClientBuiltins::Chat::Register(scope.Isolate(), context, context->Global(), client.manager.get());
-                ClientBuiltins::Discord::Register(scope.Isolate(), context, context->Global(), client.manager.get());
-                ClientBuiltins::Nametags::Register(scope.Isolate(), context, context->Global(), client.manager.get());
+                Framework::Integrations::Client::Scripting::Builtins::Chat::Register(scope.Isolate(), context, context->Global(), client.manager.get());
+                Framework::Integrations::Client::Scripting::Builtins::Discord::Register(scope.Isolate(), context, context->Global(), client.manager.get());
+                Framework::Integrations::Client::Scripting::Builtins::Nametags::Register(scope.Isolate(), context, context->Global(), client.manager.get());
             }
-            ready = Mount("js", R"("clientScripts":["client.js"])", {{"client.js", ""}}).empty() && client.Start("js").empty() && Mount("lua", R"("clientScripts":["client.lua"])", {{"client.lua", ""}}).empty() && client.Start("lua").empty();
+            ready = LuaClientTest::Mount("js", R"("clientScripts":["client.js"])", {{"client.js", ""}}).empty() && client.Start("js").empty() && LuaClientTest::Mount("lua", R"("clientScripts":["client.lua"])", {{"client.lua", ""}}).empty() && client.Start("lua").empty();
         }
 
         // In the order of ClientScriptingModule::Shutdown.
@@ -86,12 +81,12 @@ namespace ClientServicesTest {
                 client.manager.reset();
             }
             client.lua.Shutdown();
-            ClientBuiltins::Discord::Shutdown();
-            ClientBuiltins::Nametags::Shutdown();
+            Framework::Integrations::Client::Scripting::Builtins::Discord::Shutdown();
+            Framework::Integrations::Client::Scripting::Builtins::Nametags::Shutdown();
             client.v8.Shutdown();
             Framework::CoreModules::SetClientInstance(nullptr);
-            Vfs::Get().Unmount("js.zip");
-            Vfs::Get().Unmount("lua.zip");
+            Framework::Utils::Vfs::Get().Unmount("js.zip");
+            Framework::Utils::Vfs::Get().Unmount("lua.zip");
         }
 
         // What a JavaScript expression gives, as String() spells it, or "<error> " with the name and the message
@@ -100,7 +95,7 @@ namespace ClientServicesTest {
             if (!client.v8.Execute("globalThis.__result = (() => { try { return String(" + expression + "); } catch (e) { return '<error> ' + e.name + ': ' + e.message; } })();", "/resources/js/client.js")) {
                 return "<did not run>";
             }
-            EngineScope scope(&client.v8);
+            Framework::Scripting::EngineScope scope(&client.v8);
             const auto context = scope.Context();
             return v8pp::from_v8<std::string>(scope.Isolate(), context->Global()->Get(context, v8pp::to_v8(scope.Isolate(), "__result")).ToLocalChecked());
         }
@@ -134,17 +129,13 @@ namespace ClientServicesTest {
 } // namespace ClientServicesTest
 
 MODULE(lua_client_services, {
-    using namespace Framework::Scripting;
-    using ClientServicesTest::Stage;
-    namespace ClientBuiltins = Framework::Integrations::Client::Scripting::Builtins;
-
     // What Published() gives for an activity nobody wrote a field of.
     const std::string blank = "type=0 name= details= state= start=0 end=0 platforms=0 large=/ small=/ party= 0/0 privacy=0 secrets=|| instance=0 written=0x0";
 
     // ==================== Surface ====================
 
     IT("gives both languages the same Chat and Discord, read-only in Lua", {
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
 
         const std::string chat    = "send,setUIVisible,isUIVisible,open,close,isOpen";
@@ -169,144 +160,144 @@ MODULE(lua_client_services, {
 
     // The server has a Chat too: another definition of the same name, with other members.
     IT("keeps the Chat of a client and the Chat of a server apart", {
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Lua("type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "function,nil");
         EQUALS(stage.Js("typeof Chat.send + ',' + typeof Chat.sendToAll"), "function,undefined");
 
         // A state of the server, with its Chat registered as ServerScriptingModule registers it.
-        LuaRuntime server(LuaRuntimeTest::Options());
-        EQUALS(server.Options().side == Bind::Side::Server, true);
-        Builtins::Chat::RegisterLua(server);
+        Framework::Scripting::LuaRuntime server(LuaRuntimeTest::Options());
+        EQUALS(server.Options().side == Framework::Scripting::Bind::Side::Server, true);
+        Framework::Scripting::Builtins::Chat::RegisterLua(server);
         EQUALS(LuaRuntimeTest::Eval(server, "type(Chat.send) .. ',' .. type(Chat.sendToAll) .. ',' .. type(Chat.sendToPlayer)"), "nil,function,function");
         // And the client state still has its own.
         EQUALS(stage.Lua("type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "function,nil");
 
         // Registering a Chat in a state of the other side does nothing, so the order of registration cannot
         // matter: the Chat of the server never shows in a client state, nor replaces the one that is there.
-        LuaRuntimeOptions options = LuaRuntimeTest::Options();
-        options.side              = Bind::Side::Client;
+        Framework::Scripting::LuaRuntimeOptions options = LuaRuntimeTest::Options();
+        options.side                                    = Framework::Scripting::Bind::Side::Client;
         {
-            LuaRuntime client(options);
-            Builtins::Chat::RegisterLua(client);
+            Framework::Scripting::LuaRuntime client(options);
+            Framework::Scripting::Builtins::Chat::RegisterLua(client);
             EQUALS(LuaRuntimeTest::Eval(client, "type(Chat)"), "nil");
-            ClientBuiltins::Chat::RegisterLua(client);
+            Framework::Integrations::Client::Scripting::Builtins::Chat::RegisterLua(client);
             EQUALS(LuaRuntimeTest::Eval(client, "type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "function,nil");
         }
         {
-            LuaRuntime client(options);
-            ClientBuiltins::Chat::RegisterLua(client);
-            Builtins::Chat::RegisterLua(client);
+            Framework::Scripting::LuaRuntime client(options);
+            Framework::Integrations::Client::Scripting::Builtins::Chat::RegisterLua(client);
+            Framework::Scripting::Builtins::Chat::RegisterLua(client);
             EQUALS(LuaRuntimeTest::Eval(client, "type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "function,nil");
         }
-        ClientBuiltins::Chat::RegisterLua(server);
+        Framework::Integrations::Client::Scripting::Builtins::Chat::RegisterLua(server);
         EQUALS(LuaRuntimeTest::Eval(server, "type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "nil,function");
         {
-            LuaRuntime fresh(LuaRuntimeTest::Options());
-            ClientBuiltins::Chat::RegisterLua(fresh);
+            Framework::Scripting::LuaRuntime fresh(LuaRuntimeTest::Options());
+            Framework::Integrations::Client::Scripting::Builtins::Chat::RegisterLua(fresh);
             EQUALS(LuaRuntimeTest::Eval(fresh, "type(Chat)"), "nil");
         }
 
         // The same in JavaScript: materialised for the other side, a Chat sets nothing and records nothing.
         {
-            EngineScope scope(&stage.client.v8);
+            Framework::Scripting::EngineScope scope(&stage.client.v8);
             const auto context = scope.Context();
-            const auto before  = v8pp::metadata::to_json(GetScriptingCatalog(scope.Isolate()));
-            EQUALS(Builtins::Chat::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), GetScriptingCatalog(scope.Isolate()), Bind::Side::Client).IsEmpty(), true);
-            EQUALS(ClientBuiltins::Chat::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), GetScriptingCatalog(scope.Isolate()), Bind::Side::Server).IsEmpty(), true);
-            EQUALS(v8pp::metadata::to_json(GetScriptingCatalog(scope.Isolate())) == before, true);
+            const auto before  = v8pp::metadata::to_json(Framework::Scripting::GetScriptingCatalog(scope.Isolate()));
+            EQUALS(Framework::Scripting::Builtins::Chat::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), Framework::Scripting::GetScriptingCatalog(scope.Isolate()), Framework::Scripting::Bind::Side::Client).IsEmpty(), true);
+            EQUALS(Framework::Integrations::Client::Scripting::Builtins::Chat::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), Framework::Scripting::GetScriptingCatalog(scope.Isolate()), Framework::Scripting::Bind::Side::Server).IsEmpty(), true);
+            EQUALS(v8pp::metadata::to_json(Framework::Scripting::GetScriptingCatalog(scope.Isolate())) == before, true);
         }
         EQUALS(stage.Js("typeof Chat.send + ',' + typeof Chat.sendToAll"), "function,undefined");
 
-        const Bind::ClassDesc &ofClient = ClientBuiltins::Chat::Definition().Describe();
-        const Bind::ClassDesc &ofServer = Builtins::Chat::Definition().Describe();
+        const Framework::Scripting::Bind::ClassDesc &ofClient = Framework::Integrations::Client::Scripting::Builtins::Chat::Definition().Describe();
+        const Framework::Scripting::Bind::ClassDesc &ofServer = Framework::Scripting::Builtins::Chat::Definition().Describe();
         EQUALS(&ofClient != &ofServer, true);
         EQUALS(ofClient.name, ofServer.name);
-        EQUALS(Bind::ApiCatalog::Get().Find("Chat", Bind::Side::Client) == &ofClient, true);
-        EQUALS(Bind::ApiCatalog::Get().Find("Chat", Bind::Side::Server) == &ofServer, true);
-        EQUALS(ofClient.side == Bind::Side::Client && ofServer.side == Bind::Side::Server, true);
+        EQUALS(Framework::Scripting::Bind::ApiCatalog::Get().Find("Chat", Framework::Scripting::Bind::Side::Client) == &ofClient, true);
+        EQUALS(Framework::Scripting::Bind::ApiCatalog::Get().Find("Chat", Framework::Scripting::Bind::Side::Server) == &ofServer, true);
+        EQUALS(ofClient.side == Framework::Scripting::Bind::Side::Client && ofServer.side == Framework::Scripting::Bind::Side::Server, true);
     });
 
     // Voice is the other name both sides have. Each definition declares its side, as every builtin of one side does.
     IT("keeps the Voice of a client and the Voice of a server apart", {
-        namespace ServerBuiltins = Framework::Integrations::Server::Scripting::Builtins;
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
-        const Bind::ClassDesc &ofClient = ClientBuiltins::Voice::Definition().Describe();
-        const Bind::ClassDesc &ofServer = ServerBuiltins::Voice::Definition().Describe();
+        const Framework::Scripting::Bind::ClassDesc &ofClient = Framework::Integrations::Client::Scripting::Builtins::Voice::Definition().Describe();
+        const Framework::Scripting::Bind::ClassDesc &ofServer = Framework::Integrations::Server::Scripting::Builtins::Voice::Definition().Describe();
         EQUALS(&ofClient != &ofServer, true);
         EQUALS(ofClient.name, ofServer.name);
-        EQUALS(ofClient.side == Bind::Side::Client && ofServer.side == Bind::Side::Server, true);
-        EQUALS(Bind::ApiCatalog::Get().Find("Voice", Bind::Side::Client) == &ofClient, true);
-        EQUALS(Bind::ApiCatalog::Get().Find("Voice", Bind::Side::Server) == &ofServer, true);
+        EQUALS(ofClient.side == Framework::Scripting::Bind::Side::Client && ofServer.side == Framework::Scripting::Bind::Side::Server, true);
+        EQUALS(Framework::Scripting::Bind::ApiCatalog::Get().Find("Voice", Framework::Scripting::Bind::Side::Client) == &ofClient, true);
+        EQUALS(Framework::Scripting::Bind::ApiCatalog::Get().Find("Voice", Framework::Scripting::Bind::Side::Server) == &ofServer, true);
 
         // setTier is the client's, setRange the server's.
         const std::string members = "type(Voice.setTier) .. ',' .. type(Voice.setRange)";
-        LuaRuntimeOptions options = LuaRuntimeTest::Options();
-        options.side              = Bind::Side::Client;
+        Framework::Scripting::LuaRuntimeOptions options = LuaRuntimeTest::Options();
+        options.side                                    = Framework::Scripting::Bind::Side::Client;
         {
-            LuaRuntime client(options);
-            ServerBuiltins::Voice::RegisterLua(client);
+            Framework::Scripting::LuaRuntime client(options);
+            Framework::Integrations::Server::Scripting::Builtins::Voice::RegisterLua(client);
             EQUALS(LuaRuntimeTest::Eval(client, "type(Voice)"), "nil");
-            ClientBuiltins::Voice::RegisterLua(client);
+            Framework::Integrations::Client::Scripting::Builtins::Voice::RegisterLua(client);
             EQUALS(LuaRuntimeTest::Eval(client, members), "function,nil");
         }
         {
-            LuaRuntime client(options);
-            ClientBuiltins::Voice::RegisterLua(client);
-            ServerBuiltins::Voice::RegisterLua(client);
+            Framework::Scripting::LuaRuntime client(options);
+            Framework::Integrations::Client::Scripting::Builtins::Voice::RegisterLua(client);
+            Framework::Integrations::Server::Scripting::Builtins::Voice::RegisterLua(client);
             EQUALS(LuaRuntimeTest::Eval(client, members), "function,nil");
         }
         {
-            LuaRuntime server(LuaRuntimeTest::Options());
-            ClientBuiltins::Voice::RegisterLua(server);
+            Framework::Scripting::LuaRuntime server(LuaRuntimeTest::Options());
+            Framework::Integrations::Client::Scripting::Builtins::Voice::RegisterLua(server);
             EQUALS(LuaRuntimeTest::Eval(server, "type(Voice)"), "nil");
-            ServerBuiltins::Voice::RegisterLua(server);
+            Framework::Integrations::Server::Scripting::Builtins::Voice::RegisterLua(server);
             EQUALS(LuaRuntimeTest::Eval(server, members), "nil,function");
         }
         {
-            LuaRuntime server(LuaRuntimeTest::Options());
-            ServerBuiltins::Voice::RegisterLua(server);
-            ClientBuiltins::Voice::RegisterLua(server);
+            Framework::Scripting::LuaRuntime server(LuaRuntimeTest::Options());
+            Framework::Integrations::Server::Scripting::Builtins::Voice::RegisterLua(server);
+            Framework::Integrations::Client::Scripting::Builtins::Voice::RegisterLua(server);
             EQUALS(LuaRuntimeTest::Eval(server, members), "nil,function");
         }
 
         // In JavaScript each materialised for the other side sets nothing and records nothing, before and after
         // the one of the runtime is there.
         {
-            EngineScope scope(&stage.client.v8);
+            Framework::Scripting::EngineScope scope(&stage.client.v8);
             const auto context = scope.Context();
-            auto &catalog      = GetScriptingCatalog(scope.Isolate());
+            auto &catalog      = Framework::Scripting::GetScriptingCatalog(scope.Isolate());
             const auto before  = v8pp::metadata::to_json(catalog);
-            EQUALS(ServerBuiltins::Voice::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), catalog, Bind::Side::Client).IsEmpty(), true);
-            EQUALS(ClientBuiltins::Voice::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), catalog, Bind::Side::Server).IsEmpty(), true);
+            EQUALS(Framework::Integrations::Server::Scripting::Builtins::Voice::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), catalog, Framework::Scripting::Bind::Side::Client).IsEmpty(), true);
+            EQUALS(Framework::Integrations::Client::Scripting::Builtins::Voice::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), catalog, Framework::Scripting::Bind::Side::Server).IsEmpty(), true);
             EQUALS(v8pp::metadata::to_json(catalog) == before, true);
         }
         EQUALS(stage.Js("typeof Voice"), "undefined");
         {
-            EngineScope scope(&stage.client.v8);
+            Framework::Scripting::EngineScope scope(&stage.client.v8);
             const auto context = scope.Context();
-            ClientBuiltins::Voice::Register(scope.Isolate(), context, context->Global(), stage.client.manager.get());
-            EQUALS(ServerBuiltins::Voice::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), GetScriptingCatalog(scope.Isolate()), Bind::Side::Client).IsEmpty(), true);
+            Framework::Integrations::Client::Scripting::Builtins::Voice::Register(scope.Isolate(), context, context->Global(), stage.client.manager.get());
+            EQUALS(Framework::Integrations::Server::Scripting::Builtins::Voice::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), Framework::Scripting::GetScriptingCatalog(scope.Isolate()), Framework::Scripting::Bind::Side::Client).IsEmpty(), true);
         }
         EQUALS(stage.Js("typeof Voice.setTier + ',' + typeof Voice.setRange"), "function,undefined");
 
         // What only a client has is nowhere on a server, whatever the sides of its members.
-        for (const Bind::ClassDesc *desc : {&ClientBuiltins::Keybinds::Definition().Describe(), &ClientBuiltins::Discord::Definition().Describe(), &ClientBuiltins::Chat::Definition().Describe(), &ofClient}) {
-            EQUALS(Bind::ExistsIn(*desc, Bind::Side::Client), true);
-            EQUALS(Bind::ExistsIn(*desc, Bind::Side::Server), false);
-            EQUALS(Bind::ApiCatalog::Get().Find(desc->name, Bind::Side::Server) != desc, true);
+        for (const Framework::Scripting::Bind::ClassDesc *desc : {&Framework::Integrations::Client::Scripting::Builtins::Keybinds::Definition().Describe(), &Framework::Integrations::Client::Scripting::Builtins::Discord::Definition().Describe(),
+                 &Framework::Integrations::Client::Scripting::Builtins::Chat::Definition().Describe(), &ofClient}) {
+            EQUALS(Framework::Scripting::Bind::ExistsIn(*desc, Framework::Scripting::Bind::Side::Client), true);
+            EQUALS(Framework::Scripting::Bind::ExistsIn(*desc, Framework::Scripting::Bind::Side::Server), false);
+            EQUALS(Framework::Scripting::Bind::ApiCatalog::Get().Find(desc->name, Framework::Scripting::Bind::Side::Server) != desc, true);
         }
-        EQUALS(Bind::ApiCatalog::Get().Find("Key", Bind::Side::Server) == nullptr, true);
-        EQUALS(Bind::ApiCatalog::Get().Find("Discord", Bind::Side::Server) == nullptr, true);
-        EQUALS(Bind::ApiCatalog::Get().Find("Nametags", Bind::Side::Server) == nullptr, true);
-        EQUALS(Bind::ApiCatalog::Get().Find("Nametags", Bind::Side::Client) == &ClientBuiltins::Nametags::Definition().Describe(), true);
+        EQUALS(Framework::Scripting::Bind::ApiCatalog::Get().Find("Key", Framework::Scripting::Bind::Side::Server) == nullptr, true);
+        EQUALS(Framework::Scripting::Bind::ApiCatalog::Get().Find("Discord", Framework::Scripting::Bind::Side::Server) == nullptr, true);
+        EQUALS(Framework::Scripting::Bind::ApiCatalog::Get().Find("Nametags", Framework::Scripting::Bind::Side::Server) == nullptr, true);
+        EQUALS(Framework::Scripting::Bind::ApiCatalog::Get().Find("Nametags", Framework::Scripting::Bind::Side::Client) == &Framework::Integrations::Client::Scripting::Builtins::Nametags::Definition().Describe(), true);
     });
 
     // ==================== Chat ====================
 
     IT("sends a chat line and refuses what is not text, in both languages", {
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
 
         EQUALS(stage.Js("Chat.send('hello')"), "undefined");
@@ -327,7 +318,7 @@ MODULE(lua_client_services, {
     });
 
     IT("shows, hides, opens and closes the chat box from both languages", {
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
         auto &box = stage.instance->GetChatBox();
 
@@ -377,7 +368,7 @@ MODULE(lua_client_services, {
     });
 
     IT("leaves Chat and Discord silent while there is no client instance", {
-        Stage stage(/*withInstance*/ false);
+        ClientServicesTest::Stage stage(/*withInstance*/ false);
         EQUALS(stage.ready, true);
         for (const bool lua : {false, true}) {
             const auto run = [&](const std::string &expression) {
@@ -411,7 +402,7 @@ MODULE(lua_client_services, {
     // ==================== Discord ====================
 
     IT("stages one activity for both languages, and publishes it on update", {
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
         ClientDoubles::Presence().userId   = "1234567890123456789";
         ClientDoubles::Presence().username = "tester";
@@ -432,27 +423,27 @@ MODULE(lua_client_services, {
         EQUALS(stage.Lua("Discord.update()"), "true");
         EQUALS(ClientDoubles::Presence().published, 1);
         const std::string all = "type=1 name=N details=D state=S start=10 end=20 platforms=5 large=LI/LT small=SI/ST party=P 2/8 privacy=1 secrets=m|j|s instance=1 written=0x7ff";
-        EQUALS(Stage::Published(), all);
+        EQUALS(ClientServicesTest::Stage::Published(), all);
         EQUALS(stage.Js("Discord.update(1, 2)"), "true");
         EQUALS(ClientDoubles::Presence().published, 2);
-        EQUALS(Stage::Published(), all);
+        EQUALS(ClientServicesTest::Stage::Published(), all);
 
         // reset forgets what was staged without publishing; clear also takes back what was published.
         EQUALS(stage.Lua("Discord.reset()"), "nil");
         EQUALS(ClientDoubles::Presence().published, 2);
         EQUALS(stage.Js("Discord.update()"), "true");
-        EQUALS(Stage::Published(), blank);
+        EQUALS(ClientServicesTest::Stage::Published(), blank);
         EQUALS(stage.Js("Discord.setName('again')"), "undefined");
         EQUALS(stage.Lua("Discord.clear()"), "true");
         EQUALS(ClientDoubles::Presence().cleared, 1);
         EQUALS(stage.Js("Discord.clear()"), "true");
         EQUALS(ClientDoubles::Presence().cleared, 2);
         EQUALS(stage.Lua("Discord.update()"), "true");
-        EQUALS(Stage::Published(), blank);
+        EQUALS(ClientServicesTest::Stage::Published(), blank);
     });
 
     IT("reads the type, the privacy, the numbers and the flag of an activity the same way in both languages", {
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
         struct Case final {
             const char *js;
@@ -508,50 +499,50 @@ MODULE(lua_client_services, {
                 // Published from the other language.
                 const std::string updated = lua ? stage.Js("Discord.update()") : stage.Lua("Discord.update()");
                 EQUALS(updated, "true");
-                const bool staged = LuaClientTest::Contains(Stage::Published(), entry.field);
+                const bool staged = LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), entry.field);
                 if (!staged) {
-                    EQUALS(std::string(lua ? entry.lua : entry.js) + " -> " + Stage::Published(), entry.field);
+                    EQUALS(std::string(lua ? entry.lua : entry.js) + " -> " + ClientServicesTest::Stage::Published(), entry.field);
                 }
             }
-            EQUALS(LuaClientTest::Contains(Stage::Published(), "written=0x693"), true);
+            EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), "written=0x693"), true);
             EQUALS(stage.Js("Discord.reset()"), "undefined");
         }
 
         // A flag that is 0 or empty is false to JavaScript and true to Lua.
         EQUALS(stage.Js("(Discord.setInstance(0), Discord.update())"), "true");
-        EQUALS(LuaClientTest::Contains(Stage::Published(), " instance=0 "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), " instance=0 "), true);
         EQUALS(stage.Lua("(function() Discord.setInstance(0) return Discord.update() end)()"), "true");
-        EQUALS(LuaClientTest::Contains(Stage::Published(), " instance=1 "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), " instance=1 "), true);
 
         // A whole number of Lua is read whole, where the same digits are a double to JavaScript.
         EQUALS(stage.Lua("(function() Discord.setStartTimestamp(9007199254740993) return Discord.update() end)()"), "true");
-        EQUALS(LuaClientTest::Contains(Stage::Published(), " start=9007199254740993 "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), " start=9007199254740993 "), true);
         EQUALS(stage.Js("(Discord.setStartTimestamp(9007199254740993), Discord.update())"), "true");
-        EQUALS(LuaClientTest::Contains(Stage::Published(), " start=9007199254740992 "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), " start=9007199254740992 "), true);
     });
 
     IT("merges assets, a party, secrets and a whole presence from an object or a table", {
         const std::string full = "type=3 name=N details=D state=S start=10 end=20 platforms=3 large=LI/LT small=SI/ST party=P 1/2 privacy=1 secrets=m|j|s instance=1 written=0x7ff";
         {
-            Stage stage;
+            ClientServicesTest::Stage stage;
             EQUALS(stage.ready, true);
             EQUALS(stage.Js("Discord.setPresence({type: 'watching', name: 'N', details: 'D', state: 'S', startTimestamp: 10, endTimestamp: 20.7, supportedPlatforms: 3, largeImage: 'LI', largeText: 'LT', smallImage: 'SI', smallText: 'ST', instance: true, "
                             "party: {id: 'P', size: [1, 2], privacy: 'public'}, secrets: {match: 'm', join: 'j', spectate: 's'}})"),
                 "true");
-            EQUALS(Stage::Published(), full);
+            EQUALS(ClientServicesTest::Stage::Published(), full);
             EQUALS(ClientDoubles::Presence().published, 1);
         }
         {
-            Stage stage;
+            ClientServicesTest::Stage stage;
             EQUALS(stage.ready, true);
             EQUALS(stage.Lua("Discord.setPresence({type = 'watching', name = 'N', details = 'D', state = 'S', startTimestamp = 10, endTimestamp = 20.7, supportedPlatforms = 3, largeImage = 'LI', largeText = 'LT', smallImage = 'SI', smallText = 'ST', "
                              "instance = true, party = {id = 'P', size = {1, 2}, privacy = 'public'}, secrets = {match = 'm', join = 'j', spectate = 's'}})"),
                 "true");
-            EQUALS(Stage::Published(), full);
+            EQUALS(ClientServicesTest::Stage::Published(), full);
             EQUALS(ClientDoubles::Presence().published, 1);
         }
 
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
         struct Case final {
             const char *js;
@@ -605,8 +596,8 @@ MODULE(lua_client_services, {
                 if (!publishes) {
                     EQUALS(stage.Lua("Discord.update()"), "true");
                 }
-                if (!LuaClientTest::Contains(Stage::Published(), entry.published)) {
-                    EQUALS(code + " -> " + Stage::Published(), entry.published);
+                if (!LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), entry.published)) {
+                    EQUALS(code + " -> " + ClientServicesTest::Stage::Published(), entry.published);
                 }
             }
         }
@@ -615,22 +606,22 @@ MODULE(lua_client_services, {
         EQUALS(stage.Js("Discord.reset()"), "undefined");
         EQUALS(stage.Js("Discord.setPresence({name: 'kept', party: {id: 'kept'}})"), "true");
         EQUALS(stage.Lua("Discord.setPresence({details = 'added', party = {size = {1, 4}}})"), "true");
-        EQUALS(LuaClientTest::Contains(Stage::Published(), "name=kept details=added "), true);
-        EQUALS(LuaClientTest::Contains(Stage::Published(), "party=kept 1/4 "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), "name=kept details=added "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), "party=kept 1/4 "), true);
 
         // null is a value JavaScript can give where Lua has none to give: it is "playing" and "private".
         EQUALS(stage.Js("Discord.setPresence({type: 2, party: {privacy: 1}})"), "true");
         EQUALS(stage.Js("Discord.setPresence({type: null, party: {privacy: null}})"), "true");
-        EQUALS(LuaClientTest::Contains(Stage::Published(), "type=0 "), true);
-        EQUALS(LuaClientTest::Contains(Stage::Published(), "privacy=0 "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), "type=0 "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), "privacy=0 "), true);
         EQUALS(stage.Js("Discord.setPresence({type: 2, party: {privacy: 1}})"), "true");
         EQUALS(stage.Js("Discord.setPresence({type: undefined, party: {privacy: undefined}})"), "true");
-        EQUALS(LuaClientTest::Contains(Stage::Published(), "type=2 "), true);
-        EQUALS(LuaClientTest::Contains(Stage::Published(), "privacy=1 "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), "type=2 "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), "privacy=1 "), true);
     });
 
     IT("throws the same errors for a wrong Discord call in both languages, and stages nothing", {
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
         struct Case final {
             const char *js;
@@ -680,15 +671,15 @@ MODULE(lua_client_services, {
         }
         EQUALS(ClientDoubles::Presence().published, 0);
         EQUALS(stage.Js("Discord.update()"), "true");
-        EQUALS(Stage::Published(), blank);
+        EQUALS(ClientServicesTest::Stage::Published(), blank);
     });
 
     // Reading a member may run the script: nothing of Discord is locked while it does.
     IT("lets a getter of an options object call Discord, and passes on what it throws", {
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Js("Discord.setPresence({get name() { Discord.setDetails('from the getter'); return 'outer'; }})"), "true");
-        EQUALS(LuaClientTest::Contains(Stage::Published(), "name=outer details=from the getter "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), "name=outer details=from the getter "), true);
         EQUALS(stage.Js("Discord.setAssets(Object.create({largeImage: 'inherited'}))"), "undefined");
 
         // The members read after the one that threw are staged all the same, as they always were. Nothing is
@@ -697,11 +688,11 @@ MODULE(lua_client_services, {
         EQUALS(stage.Js("Discord.setAssets({get largeText() { throw new RangeError('boom'); }, smallImage: 'after'})"), "<error> RangeError: boom");
         EQUALS(ClientDoubles::Presence().published, published);
         EQUALS(stage.Lua("Discord.update()"), "true");
-        EQUALS(LuaClientTest::Contains(Stage::Published(), "large=inherited/ small=after/ "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), "large=inherited/ small=after/ "), true);
     });
 
     IT("answers false and an empty name while the mod has no Discord, and stages all the same", {
-        Stage stage(/*withInstance*/ true, /*withPresence*/ false);
+        ClientServicesTest::Stage stage(/*withInstance*/ true, /*withPresence*/ false);
         EQUALS(stage.ready, true);
         EQUALS(stage.Js("Discord.isAvailable()"), "false");
         EQUALS(stage.Lua("Discord.isAvailable()"), "false");
@@ -717,7 +708,7 @@ MODULE(lua_client_services, {
         (void)stage.wrapper->Init(0);
         stage.instance->presence = stage.wrapper.get();
         EQUALS(stage.Lua("Discord.update()"), "true");
-        EQUALS(LuaClientTest::Contains(Stage::Published(), "name=early details=early too "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), "name=early details=early too "), true);
 
         // And goes: clear forgets what was staged, though nothing can be taken back.
         stage.wrapper->Shutdown();
@@ -725,33 +716,33 @@ MODULE(lua_client_services, {
         EQUALS(ClientDoubles::Presence().cleared, 0);
         (void)stage.wrapper->Init(0);
         EQUALS(stage.Js("Discord.update()"), "true");
-        EQUALS(Stage::Published(), blank);
+        EQUALS(ClientServicesTest::Stage::Published(), blank);
     });
 
     // What ClientScriptingModule does when the client disconnects or closes.
     IT("forgets the staged activity and takes back the published one on a shutdown", {
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
         EQUALS(stage.Js("Discord.setPresence({name: 'js'})"), "true");
         EQUALS(stage.Lua("Discord.setDetails('lua')"), "nil");
         EQUALS(ClientDoubles::Presence().cleared, 0);
 
-        ClientBuiltins::Discord::Shutdown();
+        Framework::Integrations::Client::Scripting::Builtins::Discord::Shutdown();
         EQUALS(ClientDoubles::Presence().cleared, 1);
         EQUALS(stage.Lua("Discord.update()"), "true");
-        EQUALS(Stage::Published(), blank);
+        EQUALS(ClientServicesTest::Stage::Published(), blank);
 
         // A resource that stops takes nothing with it: the activity is the client's, not a resource's.
         EQUALS(stage.Lua("Discord.setName('of lua')"), "nil");
         EQUALS(static_cast<bool>(stage.client.manager->StopResource("lua")), true);
         EQUALS(stage.Js("Discord.update()"), "true");
-        EQUALS(LuaClientTest::Contains(Stage::Published(), "name=of lua "), true);
+        EQUALS(LuaRuntimeTest::Contains(ClientServicesTest::Stage::Published(), "name=of lua "), true);
     });
 
     // ==================== Nametags ====================
 
     IT("gives both languages the same Nametags, read-only in Lua", {
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
         const std::string names = "setVisible,isVisible,setHealthVisible,isHealthVisible,setSelfVisible,isSelfVisible,setLabel,clearLabel,clearLabels";
         EQUALS(stage.Js("Object.keys(Nametags).join()"), names);
@@ -760,18 +751,18 @@ MODULE(lua_client_services, {
     });
 
     IT("switches the nametags, their health bars and the player's own from both languages", {
-        using Framework::External::ImGUI::Widgets::NameTagView;
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
-        NameTagView::showTags   = true;
-        NameTagView::showHealth = true;
-        NameTagView::showSelf   = false;
+        Framework::External::ImGUI::Widgets::NameTagView::showTags   = true;
+        Framework::External::ImGUI::Widgets::NameTagView::showHealth = true;
+        Framework::External::ImGUI::Widgets::NameTagView::showSelf   = false;
         struct Switch final {
             const char *set;
             const char *is;
             bool *value;
         };
-        const Switch switches[] = {{"Nametags.setVisible", "Nametags.isVisible", &NameTagView::showTags}, {"Nametags.setHealthVisible", "Nametags.isHealthVisible", &NameTagView::showHealth}, {"Nametags.setSelfVisible", "Nametags.isSelfVisible", &NameTagView::showSelf}};
+        const Switch switches[] = {{"Nametags.setVisible", "Nametags.isVisible", &Framework::External::ImGUI::Widgets::NameTagView::showTags}, {"Nametags.setHealthVisible", "Nametags.isHealthVisible", &Framework::External::ImGUI::Widgets::NameTagView::showHealth},
+            {"Nametags.setSelfVisible", "Nametags.isSelfVisible", &Framework::External::ImGUI::Widgets::NameTagView::showSelf}};
         for (const Switch &entry : switches) {
             const std::string set = entry.set;
             const std::string is  = std::string(entry.is) + "()";
@@ -804,13 +795,13 @@ MODULE(lua_client_services, {
         // Each switch is its own.
         EQUALS(stage.Js("Nametags.setHealthVisible(false)"), "undefined");
         EQUALS(stage.Lua("tostring(Nametags.isVisible()) .. tostring(Nametags.isHealthVisible()) .. tostring(Nametags.isSelfVisible())"), "truefalsetrue");
-        NameTagView::showTags   = true;
-        NameTagView::showHealth = true;
-        NameTagView::showSelf   = false;
+        Framework::External::ImGUI::Widgets::NameTagView::showTags   = true;
+        Framework::External::ImGUI::Widgets::NameTagView::showHealth = true;
+        Framework::External::ImGUI::Widgets::NameTagView::showSelf   = false;
     });
 
     IT("hangs a label on a nametag and takes it off, from both languages", {
-        Stage stage;
+        ClientServicesTest::Stage stage;
         EQUALS(stage.ready, true);
         auto &notes = Framework::Integrations::Client::UI::Nametags::Notes();
         notes.ClearAll();
@@ -889,7 +880,7 @@ MODULE(lua_client_services, {
         // What ClientScriptingModule does when the client disconnects or closes.
         EQUALS(stage.Js("Nametags.setLabel(1, 'js')"), "undefined");
         EQUALS(stage.Lua("Nametags.setLabel(2, 'lua')"), "nil");
-        ClientBuiltins::Nametags::Shutdown();
+        Framework::Integrations::Client::Scripting::Builtins::Nametags::Shutdown();
         EQUALS(notes.Empty(), true);
     });
 })

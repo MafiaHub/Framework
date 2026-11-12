@@ -34,8 +34,6 @@
 
 namespace {
     using Clock = std::chrono::steady_clock;
-    using namespace Framework::Scripting;
-    using Framework::Integrations::Server::Scripting::ServerScriptingModule;
 
     // Every resource counts what it hears on its own event and runs a named loop `n` times.
     const char *const kJavaScript = R"(
@@ -64,7 +62,7 @@ namespace {
 
     struct Server final {
         std::filesystem::path root = std::filesystem::temp_directory_path() / ("framework_binding_bench_" + std::to_string(std::random_device {}()));
-        ServerScriptingModule module;
+        Framework::Integrations::Server::Scripting::ServerScriptingModule module;
 
         ~Server() {
             module.PreShutdown();
@@ -86,7 +84,7 @@ namespace {
             Resource("lua-a", true);
             Resource("lua-b", true);
             module.SetResourcesPath(root.string());
-            return module.Init() == ScriptingError::SCRIPTING_NONE && module.StartAllResources();
+            return module.Init() == Framework::Scripting::ScriptingError::SCRIPTING_NONE && module.StartAllResources();
         }
 
         static bool IsLua(const std::string &resource) {
@@ -96,7 +94,7 @@ namespace {
         // The number `expression` gives in the resource, or -1 when it failed.
         double Eval(const std::string &resource, const std::string &expression) {
             if (IsLua(resource)) {
-                LuaRuntime *runtime     = module.GetLuaEngine()->GetRuntime(resource);
+                Framework::Scripting::LuaRuntime *runtime = module.GetLuaEngine()->GetRuntime(resource);
                 lua_State *L            = runtime->State();
                 const std::string chunk = "return " + expression;
                 std::string error;
@@ -114,7 +112,7 @@ namespace {
                 return result;
             }
 
-            NodeRuntime *runtime = module.GetEngine()->GetResourceRuntime(resource);
+            Framework::Scripting::NodeRuntime *runtime = module.GetEngine()->GetResourceRuntime(resource);
             v8::Isolate *isolate = runtime->GetIsolate();
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);

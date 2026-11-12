@@ -35,13 +35,10 @@
 
 namespace Framework::Scripting::Builtins {
     namespace {
-        using Networking::Replication::StateScope;
-        using Networking::Replication::StateValue;
-
         // An unrecognised scope name is reported rather than defaulted: silently broadcasting a key
         // meant for one client is the failure this option exists to prevent.
-        bool ParseScope(Bind::Call &call, const Bind::Value &options, StateScope &out) {
-            out = StateScope::Broadcast;
+        bool ParseScope(Bind::Call &call, const Bind::Value &options, Framework::Networking::Replication::StateScope &out) {
+            out = Framework::Networking::Replication::StateScope::Broadcast;
             if (options.IsNil()) {
                 return true;
             }
@@ -69,15 +66,15 @@ namespace Framework::Scripting::Builtins {
 
             const std::string name = scope.AsString();
             if (name == "broadcast") {
-                out = StateScope::Broadcast;
+                out = Framework::Networking::Replication::StateScope::Broadcast;
                 return true;
             }
             if (name == "owner") {
-                out = StateScope::Owner;
+                out = Framework::Networking::Replication::StateScope::Owner;
                 return true;
             }
             if (name == "server") {
-                out = StateScope::Server;
+                out = Framework::Networking::Replication::StateScope::Server;
                 return true;
             }
             call.ThrowTypeError(fmt::format("StateBag.set: unknown scope '{}', expected 'broadcast', 'owner' or 'server'", name));
@@ -95,11 +92,11 @@ namespace Framework::Scripting::Builtins {
 
         // Scalars map directly; anything else is serialized to JSON, the same text from either language.
         // Returns false, having thrown, when the value cannot be represented — a cycle, chiefly.
-        bool ReadStateValue(Bind::Call &call, const Bind::Value &input, StateValue &out) {
-            using Type = StateValue::Type;
+        bool ReadStateValue(Bind::Call &call, const Bind::Value &input, Framework::Networking::Replication::StateValue &out) {
+            using Type = Framework::Networking::Replication::StateValue::Type;
 
             if (input.IsNil()) {
-                out = StateValue {};
+                out = Framework::Networking::Replication::StateValue {};
                 return true;
             }
             if (input.IsBoolean()) {
@@ -174,8 +171,8 @@ namespace Framework::Scripting::Builtins {
         // A stored value as the copy any runtime builds its value from: what `get` returns and what a
         // change handler is given. A document that does not parse is its text rather than an error, so a
         // script never has to guard a read: malformed JSON means a peer sent something broken.
-        TransferredValue ToTransfer(const StateValue &value) {
-            using Type = StateValue::Type;
+        TransferredValue ToTransfer(const Framework::Networking::Replication::StateValue &value) {
+            using Type = Framework::Networking::Replication::StateValue::Type;
 
             TransferredValue out;
             switch (value.type) {
@@ -199,7 +196,7 @@ namespace Framework::Scripting::Builtins {
 
         // A stored value as a script reads it: the same copy a handler is given, built in the calling
         // runtime.
-        Bind::Value MakeValue(Bind::Call &call, const StateValue &value) {
+        Bind::Value MakeValue(Bind::Call &call, const Framework::Networking::Replication::StateValue &value) {
             auto built = call.FromTransfer(ToTransfer(value));
             return built ? built.GetValue() : call.Nil();
         }
@@ -492,12 +489,12 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        StateScope scope = StateScope::Broadcast;
+        Framework::Networking::Replication::StateScope scope = Framework::Networking::Replication::StateScope::Broadcast;
         if (!ParseScope(call, call.Arg(2), scope)) {
             return;
         }
 
-        StateValue value;
+        Framework::Networking::Replication::StateValue value;
         if (!ReadStateValue(call, call.Arg(1), value)) {
             return;
         }
@@ -525,36 +522,32 @@ namespace Framework::Scripting::Builtins {
     }
 
     const Bind::Class<StateBag> &StateBag::Definition() {
-        using Bind::Doc;
-        using Bind::TypeOf;
-        namespace Type = Bind::Type;
-
         static const auto definition =
             Bind::Class<StateBag>("StateBag", "Arbitrary key/value state attached to one replicated entity, reached as `entity.state`. Keys set on the server replicate to every client that can currently see the entity.")
                 // Reached as `entity.state` and never by name.
                 .ValueOnly()
-                .Method("get", &StateBag::Get, Doc("Reads one key from this entity's state.").Param("key", TypeOf<std::string>(), "Key to read.").ReturnType(Type::Any()).Returns("The stored value, or undefined when the key is not set."))
-                .Method("has", &StateBag::Has, Doc("Checks whether this entity's state holds a key.").Param("key", TypeOf<std::string>(), "Key to test.").ReturnType(TypeOf<bool>()).Returns("True when the key is set."))
-                .Method("keys", &StateBag::Keys, Doc("Lists the keys this entity's state holds, sorted.").ReturnType(TypeOf<std::vector<std::string>>()).Returns("Every key currently set, in ascending order."))
-                .Method("toObject", &StateBag::ToObject, Doc("Copies this entity's whole state into a plain object.").ReturnType(Type::Custom("Record<string, any>", "table<string, any>")).Returns("Every key and value currently set. The copy does not track later changes."))
+                .Method("get", &StateBag::Get, Framework::Scripting::Bind::Doc("Reads one key from this entity's state.").Param("key", Framework::Scripting::Bind::TypeOf<std::string>(), "Key to read.").ReturnType(Framework::Scripting::Bind::Type::Any()).Returns("The stored value, or undefined when the key is not set."))
+                .Method("has", &StateBag::Has, Framework::Scripting::Bind::Doc("Checks whether this entity's state holds a key.").Param("key", Framework::Scripting::Bind::TypeOf<std::string>(), "Key to test.").ReturnType(Framework::Scripting::Bind::TypeOf<bool>()).Returns("True when the key is set."))
+                .Method("keys", &StateBag::Keys, Framework::Scripting::Bind::Doc("Lists the keys this entity's state holds, sorted.").ReturnType(Framework::Scripting::Bind::TypeOf<std::vector<std::string>>()).Returns("Every key currently set, in ascending order."))
+                .Method("toObject", &StateBag::ToObject, Framework::Scripting::Bind::Doc("Copies this entity's whole state into a plain object.").ReturnType(Framework::Scripting::Bind::Type::Custom("Record<string, any>", "table<string, any>")).Returns("Every key and value currently set. The copy does not track later changes."))
                 .Method("onChange", &StateBag::OnChange,
-                    Doc("Watches this entity's state. The filter is applied before the handler runs, so a listener watching one key of one entity is not woken by unrelated changes. The subscription is dropped when the registering resource stops.")
-                        .Param("key", Type::Custom("string | null", "string?"), "Only report this key, or null to report every key of this entity.")
-                        .Param("handler", Type::Custom("Function", "fun(key: string, value: any, previous: any)"),
+                    Framework::Scripting::Bind::Doc("Watches this entity's state. The filter is applied before the handler runs, so a listener watching one key of one entity is not woken by unrelated changes. The subscription is dropped when the registering resource stops.")
+                        .Param("key", Framework::Scripting::Bind::Type::Custom("string | null", "string?"), "Only report this key, or null to report every key of this entity.")
+                        .Param("handler", Framework::Scripting::Bind::Type::Custom("Function", "fun(key: string, value: any, previous: any)"),
                             "Called as (key: string, value: any, previous: any) with the changed key, its new value and the value before it. `value` is undefined when the key was removed and `previous` is undefined when it held nothing.")
-                        .ReturnType(Type::Custom("Function", "fun()"))
+                        .ReturnType(Framework::Scripting::Bind::Type::Custom("Function", "fun()"))
                         .Returns("A zero-argument function that cancels this subscription."))
                 // Writes are the server's — the same split Entity draws around setVirtualWorld.
                 .Method("set", &StateBag::Set,
-                    Doc("Writes one key of this entity's state and replicates it to whoever the scope names. Throws when a limit is reached.")
-                        .Param("key", TypeOf<std::string>(), "Key to write; at most 64 UTF-8 bytes.")
-                        .Param("value", Type::Any(), "Value to store. Booleans, numbers and strings travel as themselves; anything else is serialized as JSON. At most 4096 bytes.")
-                        .OptionalParam("options", Type::Custom("{ scope?: 'broadcast' | 'owner' | 'server' }", "{ scope?: 'broadcast'|'owner'|'server' }"),
+                    Framework::Scripting::Bind::Doc("Writes one key of this entity's state and replicates it to whoever the scope names. Throws when a limit is reached.")
+                        .Param("key", Framework::Scripting::Bind::TypeOf<std::string>(), "Key to write; at most 64 UTF-8 bytes.")
+                        .Param("value", Framework::Scripting::Bind::Type::Any(), "Value to store. Booleans, numbers and strings travel as themselves; anything else is serialized as JSON. At most 4096 bytes.")
+                        .OptionalParam("options", Framework::Scripting::Bind::Type::Custom("{ scope?: 'broadcast' | 'owner' | 'server' }", "{ scope?: 'broadcast'|'owner'|'server' }"),
                             "Who the key reaches: every client that can see the entity (the default), only its owning client, or nobody -- server-side storage that never goes on the wire.")
-                        .ReturnType(TypeOf<bool>())
+                        .ReturnType(Framework::Scripting::Bind::TypeOf<bool>())
                         .Returns("True when the value changed, false when it was already stored."),
                     Bind::Side::Server)
-                .Method("remove", &StateBag::Remove, Doc("Removes one key from this entity's state, telling every client that held it.").Param("key", TypeOf<std::string>(), "Key to drop.").ReturnType(TypeOf<bool>()).Returns("True when the key was set and has been removed."),
+                .Method("remove", &StateBag::Remove, Framework::Scripting::Bind::Doc("Removes one key from this entity's state, telling every client that held it.").Param("key", Framework::Scripting::Bind::TypeOf<std::string>(), "Key to drop.").ReturnType(Framework::Scripting::Bind::TypeOf<bool>()).Returns("True when the key was set and has been removed."),
                     Bind::Side::Server)
                 // Crosses between runtimes as the id of its entity.
                 .Transfer(&StateBag::GetId);

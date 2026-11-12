@@ -137,16 +137,13 @@ namespace Framework::Scripting::Builtins {
     } // namespace
 
     const Bind::Class<Entity> &Entity::Definition() {
-        using Bind::Doc;
-        namespace Type = Bind::Type;
-
         static const auto definition = Bind::Class<Entity>("Entity", "Base handle for a live replicated network entity.")
-                                           .Constructor<uint64_t>(Doc("Creates a script wrapper for an existing entity with this ID; it does not spawn an entity.").Param("id", "Network entity identifier."))
-                                           .Method("toString", &Entity::ToString, Doc("Formats this entity handle for logging and debugging.").Returns("Text containing the network entity ID."))
+                                           .Constructor<uint64_t>(Framework::Scripting::Bind::Doc("Creates a script wrapper for an existing entity with this ID; it does not spawn an entity.").Param("id", "Network entity identifier."))
+                                           .Method("toString", &Entity::ToString, Framework::Scripting::Bind::Doc("Formats this entity handle for logging and debugging.").Returns("Text containing the network entity ID."))
                                            .Property("id", &Entity::GetId, "Immutable network entity identifier.")
                                            .Property("virtualWorld", &Entity::GetVirtualWorld, "Current virtual-world identifier.")
                                            .Property("position", &Entity::GetPosition, &Entity::SetPosition, "Authoritative world-space position; assignment forces replicated state.")
-                                           .Property("rotation", Type::Custom("Quaternion | Vector3", "Quaternion|Vector3"), &ReadRotation, &WriteRotation, "Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees.")
+                                           .Property("rotation", Framework::Scripting::Bind::Type::Custom("Quaternion | Vector3", "Quaternion|Vector3"), &ReadRotation, &WriteRotation, "Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees.")
                                            // Property: state. Read-only handle onto this entity's state bag — the bag itself is mutable,
                                            // the binding between entity and bag is not, so there is no setter.
                                            .Property(
@@ -156,10 +153,10 @@ namespace Framework::Scripting::Builtins {
                                                },
                                                "Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag.")
                                            // Replication placement is the server's to decide; a client writes only its own replica.
-                                           .Method("setVirtualWorld", &Entity::SetVirtualWorld, Doc("Moves this entity into another virtual world.").Param("world", "Virtual-world identifier used to partition replication and visibility."), Bind::Side::Server)
+                                           .Method("setVirtualWorld", &Entity::SetVirtualWorld, Framework::Scripting::Bind::Doc("Moves this entity into another virtual world.").Param("world", "Virtual-world identifier used to partition replication and visibility."), Bind::Side::Server)
                                            .Method("setVisibleTo", &SetVisibleToPlayer,
-                                               Doc("Restricts replication of this entity to one owning connection while preserving normal range and visibility checks.")
-                                                   .Param("player", Type::Custom("Entity | null", "Entity?"), "Player-owned entity whose connection should exclusively receive this entity, or null to clear the restriction."),
+                                               Framework::Scripting::Bind::Doc("Restricts replication of this entity to one owning connection while preserving normal range and visibility checks.")
+                                                   .Param("player", Framework::Scripting::Bind::Type::Custom("Entity | null", "Entity?"), "Player-owned entity whose connection should exclusively receive this entity, or null to clear the restriction."),
                                                Bind::Side::Server)
                                            // Crosses between runtimes as its network id.
                                            .Transfer(&Entity::GetId);

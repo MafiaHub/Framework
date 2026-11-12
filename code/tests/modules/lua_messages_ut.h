@@ -18,7 +18,6 @@
 #include <vector>
 
 namespace LuaMessagesTest {
-    using namespace Framework::Scripting;
 
     // A Lua resource that asks: try(target, type, payload, slot) leaves "<ok>|<answer or error>" in outcome[slot].
     inline const char *kLuaAsker = R"(
@@ -55,15 +54,15 @@ namespace LuaMessagesTest {
         LuaEventsTest::StopRig stops;
 
         StopRig() {
-            stops.rig.lua.SetRuntimeSetupCallback([&rig = stops.rig](LuaRuntime &runtime) {
+            stops.rig.lua.SetRuntimeSetupCallback([&rig = stops.rig](Framework::Scripting::LuaRuntime &runtime) {
                 lua_State *L = runtime.State();
                 lua_pushcfunction(L, LuaResourcesTest::LuaLog);
                 lua_setglobal(L, "log");
                 lua_pushlightuserdata(L, &rig);
                 lua_pushcclosure(L, LuaResourcesTest::Rig::Stop, 1);
                 lua_setglobal(L, "stop");
-                Bind::SetCallResourceManager(&runtime, &rig.manager);
-                Builtins::Messages::RegisterLua(runtime);
+                Framework::Scripting::Bind::SetCallResourceManager(&runtime, &rig.manager);
+                Framework::Scripting::Builtins::Messages::RegisterLua(runtime);
             });
         }
 
@@ -72,20 +71,20 @@ namespace LuaMessagesTest {
             for (int i = 0; i < 4; ++i) {
                 stops.rig.node.Tick();
                 stops.rig.Advance(1);
-                Builtins::Messages::ProcessPendingResponses();
+                Framework::Scripting::Builtins::Messages::ProcessPendingResponses();
             }
         }
 
         // Runs a chunk in a coroutine of the resource. Empty, or the first line of what it raised.
         std::string Run(const std::string &resource, const std::string &source) {
-            LuaRuntime *runtime = stops.rig.lua.GetRuntime(resource);
+            Framework::Scripting::LuaRuntime *runtime = stops.rig.lua.GetRuntime(resource);
             return runtime != nullptr ? LuaRuntimeTest::FirstLine(LuaRuntimeTest::Run(*runtime, source)) : "<no runtime>";
         }
     };
 
     inline bool AnyContains(const std::vector<std::string> &lines, const std::string &part) {
         for (const std::string &line : lines) {
-            if (LuaResourcesTest::Contains(line, part)) {
+            if (LuaRuntimeTest::Contains(line, part)) {
                 return true;
             }
         }
@@ -94,14 +93,10 @@ namespace LuaMessagesTest {
 } // namespace LuaMessagesTest
 
 MODULE(lua_messages, {
-    using namespace Framework::Scripting;
-    using LuaEventsTest::Bus;
-    using LuaEventsTest::Contains;
-
     // ==================== Request and reply ====================
 
     IT("answers a Lua request from a Lua handler, with copies, once the reply is processed", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", R"(
             Messages.handle('next', function(payload, reply)
                 payload.seen = true
@@ -135,7 +130,7 @@ MODULE(lua_messages, {
     });
 
     IT("answers across the languages, in both directions", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-provider", {{"main.lua", "Messages.handle('next', function(payload, reply) payload.seen = true reply({n = payload.n + 1, list = {1, 2}}) end)"}});
         bus.server.files.Resource("js-provider", {{"main.js", "Messages.handle('next', (payload, reply) => { payload.seen = true; reply({n: payload.n + 1, list: [1, 2]}); });"}});
         bus.server.files.Resource("lua-asker", {{"main.lua", R"(
@@ -184,7 +179,7 @@ MODULE(lua_messages, {
     });
 
     IT("hands a JavaScript handler of the requester's own isolate the payload itself", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("own", {{"main.js", R"(
             Messages.handle('same', (payload, reply) => { payload.touched = true; reply(payload); });
             globalThis.same = 'pending';
@@ -206,7 +201,7 @@ MODULE(lua_messages, {
     });
 
     IT("keeps one handler for a type of a resource, whichever language registered it last", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("mixed", {{"a.js", "Messages.handle('who', (payload, reply) => reply('js')); Messages.handle('js-only', (payload, reply) => reply('js:' + payload));"},
                                                {"b.lua", "Messages.handle('who', function(payload, reply) reply('lua') end) function ask(messageType) answer = Messages.request('mixed', messageType, 'x') end"}});
         EQUALS(bus.Init(), true);
@@ -229,7 +224,7 @@ MODULE(lua_messages, {
     });
 
     IT("waits for a handler that answers later", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-provider", {{"main.lua", "Messages.handle('slow', function(payload, reply) sleep(30) answered = true reply(payload * 2) end)"}});
         bus.server.files.Resource("js-provider", {{"main.js", R"(
             globalThis.answered = false;
@@ -263,7 +258,7 @@ MODULE(lua_messages, {
     });
 
     IT("counts the first reply only, and takes one from a handler that then goes on", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-provider", {{"main.lua", "Messages.handle('twice', function(payload, reply) reply('first') reply('second') sleep(10) reply('third') done = true end)"}});
         bus.server.files.Resource("js-provider", {{"main.js", "Messages.handle('twice', (payload, reply) => { reply('first'); reply('second'); });"}});
         bus.server.files.Resource("lua-asker", {{"main.lua", LuaMessagesTest::kLuaAsker}});
@@ -284,14 +279,14 @@ MODULE(lua_messages, {
     });
 
     IT("says that a Lua script cannot wait for a reply where it cannot wait", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", "calls = 0 Messages.handle('ping', function(payload, reply) calls = calls + 1 reply(1) end)"}});
         bus.server.files.Resource("asker", {{"main.lua", ""}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.StartAll({"provider", "asker"}), true);
 
         // On the main thread: the handler was called, and its reply has nobody to go to.
-        EQUALS(Contains(bus.Lua("asker", "select(2, pcall(Messages.request, 'provider', 'ping'))"), "cannot wait here"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("asker", "select(2, pcall(Messages.request, 'provider', 'ping'))"), "cannot wait here"), true);
         EQUALS(bus.Lua("provider", "calls"), "1");
         bus.server.module.Update();
         EQUALS(bus.Lua("provider", "calls"), "1");
@@ -300,7 +295,7 @@ MODULE(lua_messages, {
     // ==================== What fails a request ====================
 
     IT("fails a request nobody handles the way a promise is rejected", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-provider", {{"main.lua", "Messages.handle('known', function(payload, reply) reply(1) end)"}});
         bus.server.files.Resource("lua-asker", {{"main.lua", ""}});
         bus.server.files.Resource("js-asker", {{"main.js", LuaMessagesTest::kJsAsker}});
@@ -308,8 +303,8 @@ MODULE(lua_messages, {
         EQUALS(bus.StartAll({"lua-provider", "lua-asker", "js-asker"}), true);
 
         // Known at once, so raised at once, also where a script cannot wait.
-        EQUALS(Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.request, 'nobody', 'known'))"), "Target resource not found"), true);
-        EQUALS(Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.request, 'lua-provider', 'unknown'))"), "No handler for message type"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.request, 'nobody', 'known'))"), "Target resource not found"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.request, 'lua-provider', 'unknown'))"), "No handler for message type"), true);
         EQUALS(bus.Lua("lua-asker", "(pcall(Messages.request, 'js-asker', 'known'))"), "false");
 
         EQUALS(bus.Js("js-asker", "tryIt('lua-provider', 'unknown', 1, 1)"), "asked");
@@ -323,7 +318,7 @@ MODULE(lua_messages, {
     });
 
     IT("fails the request of a handler that fails before it answers", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-provider", {{"main.lua", R"(
             Messages.handle('explode', function() error('lua boom') end)
             Messages.handle('late', function() sleep(10) error('late boom') end)
@@ -343,11 +338,11 @@ MODULE(lua_messages, {
 
         // A handler that failed at once fails the request at once.
         EQUALS(bus.Run("lua-asker", "try('lua-provider', 'explode', nil, 1)"), "");
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[1]"), "false|"), true);
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[1]"), "lua boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[1]"), "false|"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[1]"), "lua boom"), true);
         EQUALS(bus.Run("lua-asker", "try('js-provider', 'explode', nil, 2)"), "");
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[2]"), "false|"), true);
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[2]"), "js boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[2]"), "false|"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[2]"), "js boom"), true);
 
         EQUALS(bus.Run("lua-asker", "try('lua-provider', 'late', nil, 3)"), "");
         EQUALS(bus.Run("lua-asker", "try('js-provider', 'late', nil, 4)"), "");
@@ -357,14 +352,14 @@ MODULE(lua_messages, {
             return bus.Lua("lua-asker", "outcome[3] and outcome[4] and true") == "true" && bus.Js("js-asker", "outcome[1]") != "pending" && bus.Js("js-asker", "outcome[2]") != "pending";
         }),
             true);
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[3]"), "false|"), true);
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[3]"), "late boom"), true);
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[4]"), "false|"), true);
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[4]"), "late js boom"), true);
-        EQUALS(Contains(bus.Js("js-asker", "outcome[1]"), "rejected|Error|"), true);
-        EQUALS(Contains(bus.Js("js-asker", "outcome[1]"), "lua boom"), true);
-        EQUALS(Contains(bus.Js("js-asker", "outcome[2]"), "rejected|Error|"), true);
-        EQUALS(Contains(bus.Js("js-asker", "outcome[2]"), "late boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[3]"), "false|"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[3]"), "late boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[4]"), "false|"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[4]"), "late js boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Js("js-asker", "outcome[1]"), "rejected|Error|"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Js("js-asker", "outcome[1]"), "lua boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Js("js-asker", "outcome[2]"), "rejected|Error|"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Js("js-asker", "outcome[2]"), "late boom"), true);
 
         // The requester was told: the handler's resource is not failed for it.
         bus.server.module.Update();
@@ -372,7 +367,7 @@ MODULE(lua_messages, {
     });
 
     IT("reports a handler that fails once nobody waits for it", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-provider", {{"main.lua", R"(
             Messages.handle('after', function(payload, reply) reply('fine') error('after boom') end)
             Messages.handle('note', function() error('note boom') end)
@@ -411,7 +406,7 @@ MODULE(lua_messages, {
     });
 
     IT("refuses a payload that cannot be copied before anything happens", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-provider", {{"main.lua", "calls = 0 Messages.handle('count', function(payload, reply) calls = calls + 1 reply(calls) end)"}});
         bus.server.files.Resource("lua-asker", {{"main.lua", LuaMessagesTest::kLuaAsker}});
         bus.server.files.Resource("js-asker", {{"main.js", LuaMessagesTest::kJsAsker}});
@@ -419,9 +414,9 @@ MODULE(lua_messages, {
         EQUALS(bus.StartAll({"lua-provider", "lua-asker", "js-asker"}), true);
 
         // A Lua caller is told as it calls, whoever would have handled it, and also when nobody would.
-        EQUALS(Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.request, 'lua-provider', 'count', coroutine.create(function() end)))"), "Messages.request: payload: "), true);
-        EQUALS(Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.send, 'lua-provider', 'count', coroutine.create(function() end)))"), "Messages.send: payload: "), true);
-        EQUALS(Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.send, 'nobody', 'count', coroutine.create(function() end)))"), "Messages.send: payload: "), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.request, 'lua-provider', 'count', coroutine.create(function() end)))"), "Messages.request: payload: "), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.send, 'lua-provider', 'count', coroutine.create(function() end)))"), "Messages.send: payload: "), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.send, 'nobody', 'count', coroutine.create(function() end)))"), "Messages.send: payload: "), true);
 
         // A JavaScript caller's promise is rejected, as it is when the handler is JavaScript of another runtime;
         // its notification is dropped.
@@ -431,7 +426,7 @@ MODULE(lua_messages, {
             return bus.Js("js-asker", "outcome[1]") != "pending";
         }),
             true);
-        EQUALS(Contains(bus.Js("js-asker", "outcome[1]"), "rejected|TypeError|Messages.request: payload: "), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Js("js-asker", "outcome[1]"), "rejected|TypeError|Messages.request: payload: "), true);
         EQUALS(bus.Lua("lua-provider", "calls"), "0");
 
         // Nothing was left behind: the next request is the first the handler sees, and is answered.
@@ -444,27 +439,27 @@ MODULE(lua_messages, {
     });
 
     IT("words the errors of a wrong call as JavaScript does", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("script", {{"main.lua", "function why(f, ...) return select(2, pcall(f, ...)) end"}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("script"), "");
 
-        EQUALS(Contains(bus.Lua("script", "why(Messages.handle, 'x')"), "Messages.handle requires 2 arguments: messageType, handler"), true);
-        EQUALS(Contains(bus.Lua("script", "why(Messages.handle, 1, function() end)"), "Messages.handle: messageType must be a string"), true);
-        EQUALS(Contains(bus.Lua("script", "why(Messages.handle, 'x', 1)"), "Messages.handle: handler must be a function"), true);
-        EQUALS(Contains(bus.Lua("script", "why(Messages.request, 'x')"), "Messages.request requires at least 2 arguments: resourceName, messageType"), true);
-        EQUALS(Contains(bus.Lua("script", "why(Messages.request, 1, 'x')"), "Messages.request: resourceName must be a string"), true);
-        EQUALS(Contains(bus.Lua("script", "why(Messages.request, 'x', 1)"), "Messages.request: messageType must be a string"), true);
-        EQUALS(Contains(bus.Lua("script", "why(Messages.send, 'x')"), "Messages.send requires at least 2 arguments: resourceName, messageType"), true);
-        EQUALS(Contains(bus.Lua("script", "why(Messages.send, 1, 'x')"), "Messages.send: resourceName must be a string"), true);
-        EQUALS(Contains(bus.Lua("script", "why(Messages.send, 'x', 1)"), "Messages.send: messageType must be a string"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("script", "why(Messages.handle, 'x')"), "Messages.handle requires 2 arguments: messageType, handler"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("script", "why(Messages.handle, 1, function() end)"), "Messages.handle: messageType must be a string"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("script", "why(Messages.handle, 'x', 1)"), "Messages.handle: handler must be a function"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("script", "why(Messages.request, 'x')"), "Messages.request requires at least 2 arguments: resourceName, messageType"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("script", "why(Messages.request, 1, 'x')"), "Messages.request: resourceName must be a string"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("script", "why(Messages.request, 'x', 1)"), "Messages.request: messageType must be a string"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("script", "why(Messages.send, 'x')"), "Messages.send requires at least 2 arguments: resourceName, messageType"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("script", "why(Messages.send, 1, 'x')"), "Messages.send: resourceName must be a string"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("script", "why(Messages.send, 'x', 1)"), "Messages.send: messageType must be a string"), true);
         EQUALS(bus.Lua("script", "Messages.handle('x', function() end)"), "nil");
     });
 
     // ==================== Notifications ====================
 
     IT("sends a notification to a handler of either language", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-listener", {{"main.lua", "Messages.handle('note', function(payload, reply) got = payload.text .. '|' .. type(reply) .. '|' .. tostring(reply('ignored')) end)"}});
         bus.server.files.Resource("js-listener", {{"main.js", "Messages.handle('note', (payload, reply) => { globalThis.got = payload.text + '|' + typeof reply + '|' + reply('ignored'); });"}});
         bus.server.files.Resource("lua-sender", {{"main.lua", ""}});
@@ -488,7 +483,7 @@ MODULE(lua_messages, {
     // ==================== Lifetime ====================
 
     IT("answers the next request with the handler a handler put in its own place", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-provider", {{"main.lua", R"(
             Messages.handle('swap', function(payload, reply)
                 Messages.handle('swap', function(payload, reply) reply('second') end)
@@ -524,7 +519,7 @@ MODULE(lua_messages, {
     });
 
     IT("fails the requests a resource owes an answer to when it stops", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-provider", {{"main.lua", "Messages.handle('never', function(payload, reply) saved = reply end) Messages.handle('asleep', function() sleep(60000) end)"}});
         bus.server.files.Resource("js-provider", {{"main.js", "Messages.handle('never', (payload, reply) => { globalThis.saved = reply; });"}});
         bus.server.files.Resource("lua-asker", {{"main.lua", LuaMessagesTest::kLuaAsker}});
@@ -547,9 +542,9 @@ MODULE(lua_messages, {
             return bus.Lua("lua-asker", "outcome[1] and outcome[2] and true") == "true" && bus.Js("js-asker", "outcome[1]") != "pending";
         }),
             true);
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[1]"), "false|"), true);
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[1]"), "Messages.request: resource 'lua-provider' stopped before reply"), true);
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[2]"), "Messages.request: resource 'lua-provider' stopped before reply"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[1]"), "false|"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[1]"), "Messages.request: resource 'lua-provider' stopped before reply"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[2]"), "Messages.request: resource 'lua-provider' stopped before reply"), true);
         EQUALS(bus.Js("js-asker", "outcome[1]"), "rejected|string|Messages.request: resource 'lua-provider' stopped before reply");
         EQUALS(bus.Lua("lua-asker", "outcome[3]"), "nil");
 
@@ -558,15 +553,15 @@ MODULE(lua_messages, {
             return bus.Lua("lua-asker", "outcome[3]") != "nil";
         }),
             true);
-        EQUALS(Contains(bus.Lua("lua-asker", "outcome[3]"), "Messages.request: resource 'js-provider' stopped before reply"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "outcome[3]"), "Messages.request: resource 'js-provider' stopped before reply"), true);
 
         // Its handlers went with it.
-        EQUALS(Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.request, 'lua-provider', 'never'))"), "Target resource not found"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-asker", "select(2, pcall(Messages.request, 'lua-provider', 'never'))"), "Target resource not found"), true);
         EQUALS(bus.Lua("lua-asker", "Messages.send('lua-provider', 'never')"), "nil");
     });
 
     IT("lets a handler answer a requester that has stopped, to no effect", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-provider", {{"main.lua", R"(
             saved = {}
             Messages.handle('hold', function(payload, reply) saved[payload] = reply end)
@@ -628,10 +623,10 @@ MODULE(lua_messages, {
         // stopped, so the reply it then makes finds nothing. Lua asks Lua, then JavaScript.
         LuaResourcesTest::Log().clear();
         EQUALS(messages.Run("lua-asker", "try('lua-self', 'halt', nil, 1)"), "");
-        EQUALS(Contains(rig.Eval("lua-asker", "outcome[1]"), stopped + "lua-self' stopped before reply"), true);
+        EQUALS(LuaRuntimeTest::Contains(rig.Eval("lua-asker", "outcome[1]"), stopped + "lua-self' stopped before reply"), true);
         EQUALS(stops.Said(), "lua handler,lua after");
         EQUALS(messages.Run("lua-asker", "try('js-self', 'halt', nil, 2)"), "");
-        EQUALS(Contains(rig.Eval("lua-asker", "outcome[2]"), stopped + "js-self' stopped before reply"), true);
+        EQUALS(LuaRuntimeTest::Contains(rig.Eval("lua-asker", "outcome[2]"), stopped + "js-self' stopped before reply"), true);
         EQUALS(stops.Said(), "lua handler,lua after,js handler,js after");
         messages.Pump();
         EQUALS(rig.HasLuaRuntime("lua-self"), false);
@@ -664,7 +659,7 @@ MODULE(lua_messages, {
         EQUALS(rig.Start("lua-asker"), "");
         EQUALS(rig.Start("js-asker"), "");
         rig.lua.DestroyResourceRuntime("killer");
-        EQUALS(Contains(rig.Eval("lua-asker", "select(2, pcall(Messages.request, 'killer', 'kill', 'js-asker'))"), "No handler for message type"), true);
+        EQUALS(LuaRuntimeTest::Contains(rig.Eval("lua-asker", "select(2, pcall(Messages.request, 'killer', 'kill', 'js-asker'))"), "No handler for message type"), true);
         EQUALS(rig.Eval("lua-asker", "Messages.send('killer', 'kill', 'js-asker')"), "nil");
         EQUALS(stops.Js("js-asker", "tryIt('killer', 'kill', 'lua-asker')"), "asked");
         messages.Pump();
@@ -674,42 +669,42 @@ MODULE(lua_messages, {
     });
 
     IT("keeps no request of a Lua runtime that went, or of a call that could not wait", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", "calls = 0 Messages.handle('never', function() calls = calls + 1 end) Messages.handle('ping', function(payload, reply) calls = calls + 1 reply(1) end)"}});
         bus.server.files.Resource("asker", {{"main.lua", LuaMessagesTest::kLuaAsker}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.StartAll({"provider", "asker"}), true);
-        EQUALS(Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
+        EQUALS(Framework::Scripting::Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
 
         // On the main thread a request cannot wait. Its handler was called all the same; whether it answered or
         // not, nothing is kept for the request once the server has updated.
-        EQUALS(Contains(bus.Lua("asker", "select(2, pcall(Messages.request, 'provider', 'never'))"), "cannot wait here"), true);
-        EQUALS(Contains(bus.Lua("asker", "select(2, pcall(Messages.request, 'provider', 'ping'))"), "cannot wait here"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("asker", "select(2, pcall(Messages.request, 'provider', 'never'))"), "cannot wait here"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("asker", "select(2, pcall(Messages.request, 'provider', 'ping'))"), "cannot wait here"), true);
         EQUALS(bus.Lua("provider", "calls"), "2");
         bus.server.module.Update();
-        EQUALS(Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
+        EQUALS(Framework::Scripting::Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
 
         // A request that waits is kept, until its runtime goes: here without its resource being stopped.
         EQUALS(bus.Run("asker", "try('provider', 'never')"), "");
         bus.server.module.Update();
-        EQUALS(Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(1));
+        EQUALS(Framework::Scripting::Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(1));
         bus.server.module.GetLuaEngine()->DestroyResourceRuntime("asker");
-        EQUALS(Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
+        EQUALS(Framework::Scripting::Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
         EQUALS(bus.Manager().IsResourceRunning("provider"), true);
     });
 
     IT("rejects the promise of a reply its runtime cannot be given", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", ""}});
         bus.server.files.Resource("asker", {{"main.js", LuaMessagesTest::kJsAsker}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.StartAll({"provider", "asker"}), true);
 
         // A handle the provider's Lua runtime has and the requester's JavaScript one does not.
-        LuaTransferTest::TicketDefinition().RegisterLuaGlobal(bus.server.module.GetLuaEngine()->GetRuntime("provider")->State(), Bind::Side::Server);
+        LuaTransferTest::TicketDefinition().RegisterLuaGlobal(bus.server.module.GetLuaEngine()->GetRuntime("provider")->State(), Framework::Scripting::Bind::Side::Server);
         // It leaves Lua as a host type JavaScript was never told of, or is told of no more.
-        ValueTransfer::UnregisterHostType("TransferTicket");
-        LuaTransfer::RegisterHostType(
+        Framework::Scripting::ValueTransfer::UnregisterHostType("TransferTicket");
+        Framework::Scripting::LuaTransfer::RegisterHostType(
             "TransferTicket",
             [](lua_State *, int, std::vector<uint8_t> &bytes) {
                 bytes = {7};
@@ -725,18 +720,18 @@ MODULE(lua_messages, {
             return bus.Js("asker", "outcome[1]") != "pending";
         }),
             true);
-        LuaTransfer::UnregisterHostType("TransferTicket");
+        Framework::Scripting::LuaTransfer::UnregisterHostType("TransferTicket");
         EQUALS(bus.Lua("provider", "answered"), "true");
         EQUALS(bus.Js("asker", "outcome[1]"), "rejected|Error|Unknown host type TransferTicket");
-        EQUALS(Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
+        EQUALS(Framework::Scripting::Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
     });
 
     IT("needs a resource manager to handle and to request, in a runtime that was given none", {
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
         {
-            EngineScope scope(&engine);
-            Builtins::Messages::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), nullptr);
+            Framework::Scripting::EngineScope scope(&engine);
+            Framework::Scripting::Builtins::Messages::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), nullptr);
         }
         const auto why = [&engine](const std::string &call) {
             return RunJSString(engine, ("(() => { try { " + call + "; return 'ok'; } catch (e) { return e.constructor.name + ': ' + e.message; } })()").c_str());
@@ -756,26 +751,26 @@ MODULE(lua_messages, {
         // Two servers' worth of scripting in one process, Lua alone: each a manager over an engine of its own.
         struct Host final {
             LuaResourcesTest::Files files;
-            LuaEngine lua;
-            std::unique_ptr<ResourceManager> manager;
+            Framework::Scripting::LuaEngine lua;
+            std::unique_ptr<Framework::Scripting::ResourceManager> manager;
             std::vector<std::string> errors;
             std::chrono::steady_clock::time_point clock = std::chrono::steady_clock::now();
 
             bool Init() {
-                if (lua.Init() != ScriptingError::SCRIPTING_NONE) {
+                if (lua.Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
                     return false;
                 }
-                Bind::WatchRuntimes(lua);
-                ResourceManagerConfig config;
+                Framework::Scripting::Bind::WatchRuntimes(lua);
+                Framework::Scripting::ResourceManagerConfig config;
                 config.resourcesPath = files.root.string();
-                manager              = std::make_unique<ResourceManager>(nullptr, config);
+                manager              = std::make_unique<Framework::Scripting::ResourceManager>(nullptr, config);
                 manager->SetLuaEngine(&lua);
-                lua.SetRuntimeSetupCallback([this](LuaRuntime &runtime) {
-                    Bind::SetCallResourceManager(&runtime, manager.get());
-                    Builtins::Messages::RegisterLua(runtime);
+                lua.SetRuntimeSetupCallback([this](Framework::Scripting::LuaRuntime &runtime) {
+                    Framework::Scripting::Bind::SetCallResourceManager(&runtime, manager.get());
+                    Framework::Scripting::Builtins::Messages::RegisterLua(runtime);
                 });
-                lua.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
-                    Bind::SetCallResourceManager(&runtime, nullptr);
+                lua.AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
+                    Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);
                 });
                 manager->AddOnResourceError([this](const std::string &name, const std::string &error) {
                     errors.push_back(name + ": " + LuaRuntimeTest::FirstLine(error));
@@ -829,7 +824,7 @@ MODULE(lua_messages, {
         handlers.manager.reset();
         handlers.Frame(30);
         EQUALS(handlers.errors.size(), static_cast<size_t>(2));
-        Builtins::Messages::Shutdown();
+        Framework::Scripting::Builtins::Messages::Shutdown();
     });
 
     IT("answers and cleans up under a manager that has no JavaScript engine", {
@@ -837,19 +832,19 @@ MODULE(lua_messages, {
         files.Resource("provider", {{"main.lua", "Messages.handle('next', function(payload, reply) sleep(5) reply(payload + 1) end) Messages.handle('never', function() end)"}});
         files.Resource("asker", {{"main.lua", LuaMessagesTest::kLuaAsker}});
 
-        LuaEngine lua;
-        EQUALS(lua.Init(), ScriptingError::SCRIPTING_NONE);
-        Bind::WatchRuntimes(lua);
-        ResourceManagerConfig config;
+        Framework::Scripting::LuaEngine lua;
+        EQUALS(lua.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::Bind::WatchRuntimes(lua);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = files.root.string();
-        ResourceManager manager(nullptr, config);
+        Framework::Scripting::ResourceManager manager(nullptr, config);
         manager.SetLuaEngine(&lua);
-        lua.SetRuntimeSetupCallback([&manager](LuaRuntime &runtime) {
-            Bind::SetCallResourceManager(&runtime, &manager);
-            Builtins::Messages::RegisterLua(runtime);
+        lua.SetRuntimeSetupCallback([&manager](Framework::Scripting::LuaRuntime &runtime) {
+            Framework::Scripting::Bind::SetCallResourceManager(&runtime, &manager);
+            Framework::Scripting::Builtins::Messages::RegisterLua(runtime);
         });
-        lua.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
-            Bind::SetCallResourceManager(&runtime, nullptr);
+        lua.AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
+            Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);
         });
         EQUALS(manager.DiscoverResources(), 2u);
         EQUALS((bool)manager.StartResource("provider"), true);
@@ -862,7 +857,7 @@ MODULE(lua_messages, {
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
             while (outcome(slot) == "nil" && std::chrono::steady_clock::now() < deadline) {
                 lua.Tick();
-                Builtins::Messages::ProcessPendingResponses();
+                Framework::Scripting::Builtins::Messages::ProcessPendingResponses();
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
             return outcome(slot);
@@ -873,10 +868,10 @@ MODULE(lua_messages, {
 
         EQUALS(LuaRuntimeTest::Run(*lua.GetRuntime("asker"), "try('provider', 'never', nil, 2)"), "");
         EQUALS((bool)manager.StopResource("provider"), true);
-        EQUALS(Contains(until("2"), "Messages.request: resource 'provider' stopped before reply"), true);
-        EQUALS(Contains(LuaRuntimeTest::Eval(*lua.GetRuntime("asker"), "select(2, pcall(Messages.request, 'provider', 'next', 1))"), "Target resource not found"), true);
+        EQUALS(LuaRuntimeTest::Contains(until("2"), "Messages.request: resource 'provider' stopped before reply"), true);
+        EQUALS(LuaRuntimeTest::Contains(LuaRuntimeTest::Eval(*lua.GetRuntime("asker"), "select(2, pcall(Messages.request, 'provider', 'next', 1))"), "Target resource not found"), true);
 
         manager.StopAll();
-        Builtins::Messages::Shutdown();
+        Framework::Scripting::Builtins::Messages::Shutdown();
     });
 })

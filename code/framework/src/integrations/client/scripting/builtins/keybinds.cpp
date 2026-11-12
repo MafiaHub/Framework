@@ -28,8 +28,6 @@
 #include <utility>
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
-    namespace Bind = Framework::Scripting::Bind;
-
     namespace {
         Framework::Scripting::TransferredValue Text(std::string text) {
             Framework::Scripting::TransferredValue value;
@@ -75,45 +73,40 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     uint32_t Keybinds::_wheelCursor      = 0;
     std::optional<uint32_t> Keybinds::_dispatchNotch;
 
-    const Bind::Namespace &Keybinds::Definition() {
-        using Bind::Doc;
-        using Bind::Side;
-        using Bind::TypeOf;
-        using Bind::Type::Custom;
-
+    const Framework::Scripting::Bind::Namespace &Keybinds::Definition() {
         static const auto definition = [] {
-            const auto text    = TypeOf<std::string>();
-            const auto boolean = TypeOf<bool>();
-            const auto handler = Custom("KeyHandler", "fun(key: string, state: string)");
-            return Bind::Namespace("Key", "Client-only, resource-owned physical key bindings exposed as the global Key.", Side::Client)
+            const auto text    = Framework::Scripting::Bind::TypeOf<std::string>();
+            const auto boolean = Framework::Scripting::Bind::TypeOf<bool>();
+            const auto handler = Framework::Scripting::Bind::Type::Custom("KeyHandler", "fun(key: string, state: string)");
+            return Framework::Scripting::Bind::Namespace("Key", "Client-only, resource-owned physical key bindings exposed as the global Key.", Framework::Scripting::Bind::Side::Client)
                 .Function("getLabel", &GetLabel,
-                    Doc("Returns the current layout's label for a physical key, even while UI owns input. Query again when refreshing prompts. Throws for unknown keys or non-string arguments.")
+                    Framework::Scripting::Bind::Doc("Returns the current layout's label for a physical key, even while UI owns input. Query again when refreshing prompts. Throws for unknown keys or non-string arguments.")
                         .Param("key", text, "Case-insensitive physical key name, using the same names as bind.")
                         .ReturnType(text)
                         .Returns("Uppercase printable text, or an English name such as Enter or Mouse 1. Falls back to the uppercase canonical key name when translation is unavailable."),
-                    Side::Client)
+                    Framework::Scripting::Bind::Side::Client)
                 .Function("bind", &BindKey,
-                    Doc("Binds a resource-owned handler that fires while the game has foreground input and no UI is capturing it. Each wheelup/wheeldown notch fires down, then up.")
+                    Framework::Scripting::Bind::Doc("Binds a resource-owned handler that fires while the game has foreground input and no UI is capturing it. Each wheelup/wheeldown notch fires down, then up.")
                         .Param("key", text, "Case-insensitive supported keyboard or mouse key name.")
-                        .Param("stateOrHandler", Custom("\"down\" | \"up\" | \"both\" | KeyHandler", "\"down\" | \"up\" | \"both\" | fun(key: string, state: string)"), "Trigger state, or the handler itself to use the default down state.")
+                        .Param("stateOrHandler", Framework::Scripting::Bind::Type::Custom("\"down\" | \"up\" | \"both\" | KeyHandler", "\"down\" | \"up\" | \"both\" | fun(key: string, state: string)"), "Trigger state, or the handler itself to use the default down state.")
                         .OptionalParam("handler", handler, "Handler required when an explicit trigger state is provided.")
                         .ReturnType(boolean)
                         .Returns("True after the binding is installed; invalid keys or states throw."),
-                    Side::Client)
+                    Framework::Scripting::Bind::Side::Client)
                 .Function("unbind", &UnbindKey,
-                    Doc("Removes matching bindings owned by the calling resource; omitting filters removes every binding for the key.")
+                    Framework::Scripting::Bind::Doc("Removes matching bindings owned by the calling resource; omitting filters removes every binding for the key.")
                         .Param("key", text, "Case-insensitive supported key name.")
-                        .OptionalParam("state", Custom("\"down\" | \"up\" | \"both\"", "\"down\" | \"up\" | \"both\""), "Optional trigger-state filter.")
+                        .OptionalParam("state", Framework::Scripting::Bind::Type::Custom("\"down\" | \"up\" | \"both\"", "\"down\" | \"up\" | \"both\""), "Optional trigger-state filter.")
                         .OptionalParam("handler", handler, "Optional exact handler filter.")
                         .ReturnType(boolean)
                         .Returns("True when at least one binding was removed."),
-                    Side::Client)
+                    Framework::Scripting::Bind::Side::Client)
                 .Function("isDown", &IsDown,
-                    Doc("Queries live physical key state using the same foreground and UI-input gate as binding dispatch.")
+                    Framework::Scripting::Bind::Doc("Queries live physical key state using the same foreground and UI-input gate as binding dispatch.")
                         .Param("key", text, "Case-insensitive supported key name.")
                         .ReturnType(boolean)
                         .Returns("False when the key is up, the game is backgrounded, UI owns input, or the key name is invalid. Always false for the wheel, which is never held."),
-                    Side::Client);
+                    Framework::Scripting::Bind::Side::Client);
         }();
         return definition;
     }
@@ -127,15 +120,15 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         _wheelCursor          = GetLastWheelNotch();
 
         // So the calls of this isolate name their resource and its manager.
-        Bind::SetCallResourceManager(isolate, resourceManager);
-        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Bind::Side::Client);
+        Framework::Scripting::Bind::SetCallResourceManager(isolate, resourceManager);
+        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Client);
     }
 
     void Keybinds::RegisterLua(Framework::Scripting::LuaRuntime &runtime) {
         Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
     }
 
-    void Keybinds::GetLabel(Bind::Call &call) {
+    void Keybinds::GetLabel(Framework::Scripting::Bind::Call &call) {
         if (call.ArgCount() < 1 || !call.Arg(0).IsString()) {
             call.ThrowError("Key.getLabel requires a key name");
             return;
@@ -184,7 +177,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         return link;
     }
 
-    void Keybinds::BindKey(Bind::Call &call) {
+    void Keybinds::BindKey(Framework::Scripting::Bind::Call &call) {
         if (call.ArgCount() < 2 || !call.Arg(0).IsString()) {
             call.ThrowError("Key.bind requires (key, state, handler) or (key, handler)");
             return;
@@ -224,7 +217,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        std::shared_ptr<Bind::ScriptCallable> callback = call.Arg(handlerSlot).ToCallable();
+        std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callback = call.Arg(handlerSlot).ToCallable();
         if (callback == nullptr) {
             call.ThrowError("Key.bind: expected a handler function");
             return;
@@ -250,7 +243,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(true);
     }
 
-    void Keybinds::UnbindKey(Bind::Call &call) {
+    void Keybinds::UnbindKey(Framework::Scripting::Bind::Call &call) {
         if (call.ArgCount() < 1 || !call.Arg(0).IsString()) {
             call.ThrowError("Key.unbind requires (key, state?, handler?)");
             return;
@@ -261,7 +254,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // Optional state filter, optional handler filter (in either order after the key).
         bool hasStateFilter = false;
         State stateFilter   = State::Down;
-        Bind::Value handlerValue;
+        Framework::Scripting::Bind::Value handlerValue;
         for (size_t i = 1; i < call.ArgCount(); ++i) {
             if (call.Arg(i).IsString()) {
                 if (!ParseState(call.Arg(i).AsString(), stateFilter)) {
@@ -287,7 +280,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
         // The same function gives the same callable, so the handler is found again by it.
-        const std::shared_ptr<Bind::ScriptCallable> handler = handlerValue.ToCallable();
+        const std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> handler = handlerValue.ToCallable();
 
         bool removed = false;
         {
@@ -318,7 +311,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(removed);
     }
 
-    void Keybinds::IsDown(Bind::Call &call) {
+    void Keybinds::IsDown(Framework::Scripting::Bind::Call &call) {
         if (call.ArgCount() < 1 || !call.Arg(0).IsString()) {
             call.ThrowError("Key.isDown requires a key name");
             return;
@@ -407,7 +400,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         // Phase 2: dispatch matching handlers, each in the runtime that owns it.
         struct Pending {
-            std::shared_ptr<Bind::ScriptCallable> callback;
+            std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callback;
             std::string resourceName;
             std::shared_ptr<ManagerLink> manager;
         };
@@ -460,8 +453,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 // A handler that fails is reported to the manager of its resource, when it threw and when
                 // what it waited on failed later; one cut short because its runtime stopped has nothing
                 // to report.
-                p.callback->Invoke(args, Bind::ReturnMode::Outcome, [failed, manager = p.manager, resourceName = p.resourceName, keyName = edge.keyName, stateStr](Bind::CallOutcome &&outcome) {
-                    if (!outcome.threw || outcome.error == Bind::kRuntimeStopped) {
+                p.callback->Invoke(args, Framework::Scripting::Bind::ReturnMode::Outcome, [failed, manager = p.manager, resourceName = p.resourceName, keyName = edge.keyName, stateStr](Framework::Scripting::Bind::CallOutcome &&outcome) {
+                    if (!outcome.threw || outcome.error == Framework::Scripting::Bind::kRuntimeStopped) {
                         return;
                     }
                     failed->emplace_back(manager, resourceName);

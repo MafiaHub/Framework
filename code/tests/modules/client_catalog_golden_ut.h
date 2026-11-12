@@ -40,33 +40,30 @@ namespace ClientCatalogGolden {
     // What the client-only builtins record in the one isolate of a client, in the order ClientScriptingModule
     // registers them, normalised. Null when the engine does not start.
     inline nlohmann::json BuildCatalog() {
-        using namespace Framework::Scripting;
-        namespace ClientBuiltins = Framework::Integrations::Client::Scripting::Builtins;
-
-        V8Engine engine;
-        if (engine.Init() != ScriptingError::SCRIPTING_NONE) {
+        Framework::Scripting::V8Engine engine;
+        if (engine.Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
             return nullptr;
         }
         nlohmann::json catalog;
         {
-            ResourceManagerConfig config;
+            Framework::Scripting::ResourceManagerConfig config;
             config.isClient = true;
-            ResourceManager manager(&engine, config);
+            Framework::Scripting::ResourceManager manager(&engine, config);
             {
-                EngineScope scope(&engine);
-                SetScriptingCatalog(scope.Isolate(), "golden-client");
-                SetScriptingEnvironment(scope.Isolate(), /*isClient*/ true);
-                ClientBuiltins::Web::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-                ClientBuiltins::Keybinds::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-                ClientBuiltins::Chat::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-                ClientBuiltins::Discord::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-                ClientBuiltins::Voice::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-                ClientBuiltins::Nametags::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-                catalog = nlohmann::json::parse(v8pp::metadata::to_json(GetScriptingCatalog(scope.Isolate())), nullptr, /*allow_exceptions*/ false);
+                Framework::Scripting::EngineScope scope(&engine);
+                Framework::Scripting::SetScriptingCatalog(scope.Isolate(), "golden-client");
+                Framework::Scripting::SetScriptingEnvironment(scope.Isolate(), /*isClient*/ true);
+                Framework::Integrations::Client::Scripting::Builtins::Web::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
+                Framework::Integrations::Client::Scripting::Builtins::Keybinds::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
+                Framework::Integrations::Client::Scripting::Builtins::Chat::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
+                Framework::Integrations::Client::Scripting::Builtins::Discord::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
+                Framework::Integrations::Client::Scripting::Builtins::Voice::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
+                Framework::Integrations::Client::Scripting::Builtins::Nametags::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
+                catalog = nlohmann::json::parse(v8pp::metadata::to_json(Framework::Scripting::GetScriptingCatalog(scope.Isolate())), nullptr, /*allow_exceptions*/ false);
             }
-            ClientBuiltins::Web::Shutdown();
-            ClientBuiltins::Keybinds::Shutdown();
-            ClientBuiltins::Discord::Shutdown();
+            Framework::Integrations::Client::Scripting::Builtins::Web::Shutdown();
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Shutdown();
+            Framework::Integrations::Client::Scripting::Builtins::Discord::Shutdown();
         }
         engine.Shutdown();
         return ScriptingCatalogGolden::Normalise(std::move(catalog));

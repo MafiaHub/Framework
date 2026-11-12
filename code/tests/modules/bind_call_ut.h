@@ -37,14 +37,6 @@
 #include <vector>
 
 namespace BindCallTest {
-    namespace Bind = Framework::Scripting::Bind;
-    using Bind::Call;
-    using Bind::Side;
-    using Bind::Value;
-    using Bind::ValueKind;
-    using Framework::Scripting::LuaRuntime;
-    using Framework::Scripting::LuaRuntimeOptions;
-    using Framework::Scripting::ResourceManager;
 
     class Counter {
       public:
@@ -83,7 +75,7 @@ namespace BindCallTest {
     inline int reachedEnd = 0;
 
     // The manager the test registered, for Probe.manager() to compare with.
-    inline ResourceManager *expectedManager = nullptr;
+    inline Framework::Scripting::ResourceManager *expectedManager = nullptr;
 
     // Counts the functions a Lua error unwound, and those that got to their end all the same.
     inline int unwound = 0;
@@ -100,116 +92,113 @@ namespace BindCallTest {
     // Whether Probe.spell had thrown once it had spelled its first argument.
     inline bool thrownAfterDisplay = false;
 
-    inline const char *KindName(ValueKind kind) {
+    inline const char *KindName(Framework::Scripting::Bind::ValueKind kind) {
         switch (kind) {
-        case ValueKind::Nil: return "Nil";
-        case ValueKind::Boolean: return "Boolean";
-        case ValueKind::Number: return "Number";
-        case ValueKind::String: return "String";
-        case ValueKind::Function: return "Function";
-        case ValueKind::Array: return "Array";
-        case ValueKind::Object: return "Object";
-        case ValueKind::Bound: return "Bound";
-        case ValueKind::Other: return "Other";
+        case Framework::Scripting::Bind::ValueKind::Nil: return "Nil";
+        case Framework::Scripting::Bind::ValueKind::Boolean: return "Boolean";
+        case Framework::Scripting::Bind::ValueKind::Number: return "Number";
+        case Framework::Scripting::Bind::ValueKind::String: return "String";
+        case Framework::Scripting::Bind::ValueKind::Function: return "Function";
+        case Framework::Scripting::Bind::ValueKind::Array: return "Array";
+        case Framework::Scripting::Bind::ValueKind::Object: return "Object";
+        case Framework::Scripting::Bind::ValueKind::Bound: return "Bound";
+        case Framework::Scripting::Bind::ValueKind::Other: return "Other";
         }
         return "?";
     }
 
-    inline const Bind::Class<Counter> &CounterDefinition() {
-        using Bind::Doc;
-        using Bind::TypeOf;
-        namespace Type               = Bind::Type;
-        static const auto definition = Bind::Class<Counter>("CallCounter", "Counts, through context functions.")
-                                           .Constructor<int>(Doc("Creates a counter.").Param("value", "Initial value."))
-                                           .Method("get", &Counter::get, Doc("Reads the counter.").Returns("Current value."))
-                                           .Method(
-                                               "bump",
-                                               [](Call &call) {
-                                                   Counter *self = call.Self<Counter>();
-                                                   if (self == nullptr) {
-                                                       return;
-                                                   }
-                                                   self->set(self->get() + static_cast<int>(call.Arg(0).AsInteger().value_or(1)));
-                                                   call.Return(call.ArgCount());
-                                               },
-                                               Doc("Adds to the counter.").OptionalParam("amount", TypeOf<int>(), "Amount to add, 1 when absent.").ReturnType(TypeOf<int>()).Returns("How many arguments it was given."))
-                                           .Method(
-                                               "chain",
-                                               [](Call &call) {
-                                                   if (Counter *self = call.Self<Counter>()) {
-                                                       self->set(self->get() + 1);
-                                                   }
-                                                   call.Return(call.This());
-                                               },
-                                               Doc("Adds one.").ReturnType(Type::This()).Returns("This counter."))
-                                           .Method(
-                                               "serverBump",
-                                               [](Call &call) {
-                                                   if (Counter *self = call.Self<Counter>()) {
-                                                       self->set(self->get() + 100);
-                                                   }
-                                               },
-                                               Doc("Adds a hundred."), Side::Server)
-                                           .Method(
-                                               "late",
-                                               [](Call &call) {
-                                                   // What it makes first is where Lua would have put a receiver.
-                                                   const Value made = call.Wrap(Counter(1000));
-                                                   Counter *self    = call.Self<Counter>();
-                                                   if (self != nullptr) {
-                                                       self->set(self->get() + 1);
-                                                   }
-                                                   call.Return(std::string(self != nullptr ? "receiver" : "none") + ":" + KindName(call.This().Kind()) + ":" + KindName(made.Kind()));
-                                               },
-                                               Doc("Makes a counter, then looks for its receiver.").ReturnType(TypeOf<std::string>()))
-                                           .Static(
-                                               "receiver",
-                                               [](Call &call) {
-                                                   call.Return(call.Self<Counter>() != nullptr);
-                                               },
-                                               Doc("Tells whether a static has a receiver.").ReturnType(TypeOf<bool>()))
-                                           .Property(
-                                               "level", Type::Custom("number | string", "number|string"),
-                                               [](Call &call) {
-                                                   if (const Counter *self = call.Self<Counter>()) {
-                                                       call.Return(self->get());
-                                                   }
-                                               },
-                                               [](Call &call) {
-                                                   Counter *self = call.Self<Counter>();
-                                                   if (self == nullptr) {
-                                                       return;
-                                                   }
-                                                   if (const auto number = call.Arg(0).AsInteger()) {
-                                                       self->set(static_cast<int>(*number));
-                                                   }
-                                                   else if (call.Arg(0).IsString()) {
-                                                       self->set(static_cast<int>(call.Arg(0).AsString().size()));
-                                                   }
-                                                   else {
-                                                       call.ThrowTypeError("CallCounter.level: expected a number or a string");
-                                                   }
-                                               },
-                                               "The value, set from a number or from the length of a string.")
-                                           .Property(
-                                               "doubled", TypeOf<int>(),
-                                               [](Call &call) {
-                                                   if (const Counter *self = call.Self<Counter>()) {
-                                                       call.Return(self->get() * 2);
-                                                   }
-                                               },
-                                               {}, "Twice the value.", Side::Server);
+    inline const Framework::Scripting::Bind::Class<Counter> &CounterDefinition() {
+        static const auto definition =
+            Framework::Scripting::Bind::Class<Counter>("CallCounter", "Counts, through context functions.")
+                .Constructor<int>(Framework::Scripting::Bind::Doc("Creates a counter.").Param("value", "Initial value."))
+                .Method("get", &Counter::get, Framework::Scripting::Bind::Doc("Reads the counter.").Returns("Current value."))
+                .Method(
+                    "bump",
+                    [](Framework::Scripting::Bind::Call &call) {
+                        Counter *self = call.Self<Counter>();
+                        if (self == nullptr) {
+                            return;
+                        }
+                        self->set(self->get() + static_cast<int>(call.Arg(0).AsInteger().value_or(1)));
+                        call.Return(call.ArgCount());
+                    },
+                    Framework::Scripting::Bind::Doc("Adds to the counter.").OptionalParam("amount", Framework::Scripting::Bind::TypeOf<int>(), "Amount to add, 1 when absent.").ReturnType(Framework::Scripting::Bind::TypeOf<int>()).Returns("How many arguments it was given."))
+                .Method(
+                    "chain",
+                    [](Framework::Scripting::Bind::Call &call) {
+                        if (Counter *self = call.Self<Counter>()) {
+                            self->set(self->get() + 1);
+                        }
+                        call.Return(call.This());
+                    },
+                    Framework::Scripting::Bind::Doc("Adds one.").ReturnType(Framework::Scripting::Bind::Type::This()).Returns("This counter."))
+                .Method(
+                    "serverBump",
+                    [](Framework::Scripting::Bind::Call &call) {
+                        if (Counter *self = call.Self<Counter>()) {
+                            self->set(self->get() + 100);
+                        }
+                    },
+                    Framework::Scripting::Bind::Doc("Adds a hundred."), Framework::Scripting::Bind::Side::Server)
+                .Method(
+                    "late",
+                    [](Framework::Scripting::Bind::Call &call) {
+                        // What it makes first is where Lua would have put a receiver.
+                        const Framework::Scripting::Bind::Value made = call.Wrap(Counter(1000));
+                        Counter *self                                = call.Self<Counter>();
+                        if (self != nullptr) {
+                            self->set(self->get() + 1);
+                        }
+                        call.Return(std::string(self != nullptr ? "receiver" : "none") + ":" + KindName(call.This().Kind()) + ":" + KindName(made.Kind()));
+                    },
+                    Framework::Scripting::Bind::Doc("Makes a counter, then looks for its receiver.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
+                .Static(
+                    "receiver",
+                    [](Framework::Scripting::Bind::Call &call) {
+                        call.Return(call.Self<Counter>() != nullptr);
+                    },
+                    Framework::Scripting::Bind::Doc("Tells whether a static has a receiver.").ReturnType(Framework::Scripting::Bind::TypeOf<bool>()))
+                .Property(
+                    "level", Framework::Scripting::Bind::Type::Custom("number | string", "number|string"),
+                    [](Framework::Scripting::Bind::Call &call) {
+                        if (const Counter *self = call.Self<Counter>()) {
+                            call.Return(self->get());
+                        }
+                    },
+                    [](Framework::Scripting::Bind::Call &call) {
+                        Counter *self = call.Self<Counter>();
+                        if (self == nullptr) {
+                            return;
+                        }
+                        if (const auto number = call.Arg(0).AsInteger()) {
+                            self->set(static_cast<int>(*number));
+                        }
+                        else if (call.Arg(0).IsString()) {
+                            self->set(static_cast<int>(call.Arg(0).AsString().size()));
+                        }
+                        else {
+                            call.ThrowTypeError("CallCounter.level: expected a number or a string");
+                        }
+                    },
+                    "The value, set from a number or from the length of a string.")
+                .Property(
+                    "doubled", Framework::Scripting::Bind::TypeOf<int>(),
+                    [](Framework::Scripting::Bind::Call &call) {
+                        if (const Counter *self = call.Self<Counter>()) {
+                            call.Return(self->get() * 2);
+                        }
+                    },
+                    {}, "Twice the value.", Framework::Scripting::Bind::Side::Server);
         return definition;
     }
 
-    inline const Bind::Class<Stepper> &StepperDefinition() {
-        using Bind::Doc;
+    inline const Framework::Scripting::Bind::Class<Stepper> &StepperDefinition() {
         CounterDefinition();
-        static const auto definition = Bind::Class<Stepper>("CallStepper", "A counter with a label.").Inherit<Counter>().Constructor<int>(Doc("Creates a stepper.").Param("value", "Initial value."));
+        static const auto definition = Framework::Scripting::Bind::Class<Stepper>("CallStepper", "A counter with a label.").Inherit<Counter>().Constructor<int>(Framework::Scripting::Bind::Doc("Creates a stepper.").Param("value", "Initial value."));
         return definition;
     }
 
-    inline std::string Flags(const Value &value) {
+    inline std::string Flags(const Framework::Scripting::Bind::Value &value) {
         std::string flags;
         flags += value.IsNil() ? 'n' : '-';
         flags += value.IsBoolean() ? 'b' : '-';
@@ -232,284 +221,281 @@ namespace BindCallTest {
         return HeldSlot();
     }
 
-    inline const Bind::Namespace &ProbeDefinition() {
-        using Bind::Doc;
-        using Bind::TypeOf;
-        namespace Type = Bind::Type;
-        static const Bind::Namespace definition =
-            Bind::Namespace("Probe", "Exercises the dynamic interface.")
+    inline const Framework::Scripting::Bind::Namespace &ProbeDefinition() {
+        static const Framework::Scripting::Bind::Namespace definition =
+            Framework::Scripting::Bind::Namespace("Probe", "Exercises the dynamic interface.")
                 .Function(
                     "kind",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(KindName(call.Arg(0).Kind()));
                     },
-                    Doc("Names the kind of a value.").Param("value", Type::Any(), "Value to inspect.").ReturnType(TypeOf<std::string>()).Returns("Name of its kind."))
+                    Framework::Scripting::Bind::Doc("Names the kind of a value.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to inspect.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()).Returns("Name of its kind."))
                 .Function(
                     "member",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Arg(0).Member(call.Arg(1).AsString()));
                         ++reachedEnd;
                     },
-                    Doc("Reads a member as a script does.").Param("value", Type::Any(), "Value to read.").Param("key", TypeOf<std::string>(), "Member to read.").ReturnType(Type::Any()))
+                    Framework::Scripting::Bind::Doc("Reads a member as a script does.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to read.").Param("key", Framework::Scripting::Bind::TypeOf<std::string>(), "Member to read.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                 .Function(
                     "isNull",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Arg(0).IsNull());
                     },
-                    Doc("Tells null from a value left out.").Param("value", Type::Any(), "Value to inspect.").ReturnType(TypeOf<bool>()))
+                    Framework::Scripting::Bind::Doc("Tells null from a value left out.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to inspect.").ReturnType(Framework::Scripting::Bind::TypeOf<bool>()))
                 .Function(
                     "flags",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(Flags(call.Arg(0)));
                     },
-                    Doc("Spells the kind shorthands of a value.").Param("value", Type::Any(), "Value to inspect.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Spells the kind shorthands of a value.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to inspect.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "sum",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         double total = 0.0;
                         for (size_t i = 0; i < call.ArgCount(); ++i) {
                             total += call.Arg(i).AsNumber();
                         }
                         call.Return(total);
                     },
-                    Doc("Adds numbers up.").RestParam("values", Type::Custom("number[]", "number"), "Numbers to add.").ReturnType(TypeOf<double>()).Returns("Their sum."))
+                    Framework::Scripting::Bind::Doc("Adds numbers up.").RestParam("values", Framework::Scripting::Bind::Type::Custom("number[]", "number"), "Numbers to add.").ReturnType(Framework::Scripting::Bind::TypeOf<double>()).Returns("Their sum."))
                 .Function(
                     "argc",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Arg(call.ArgCount()).IsNil() && call.Arg(99).IsNil() ? static_cast<int64_t>(call.ArgCount()) : int64_t {-1});
                     },
-                    Doc("Counts its arguments.").RestParam("values", Type::Custom("unknown[]", "any"), "Anything.").ReturnType(TypeOf<int>()))
+                    Framework::Scripting::Bind::Doc("Counts its arguments.").RestParam("values", Framework::Scripting::Bind::Type::Custom("unknown[]", "any"), "Anything.").ReturnType(Framework::Scripting::Bind::TypeOf<int>()))
                 .Function(
                     "echo",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Arg(0));
                     },
-                    Doc("Returns its argument.").Param("value", Type::Any(), "Value to return.").ReturnType(Type::Any()))
+                    Framework::Scripting::Bind::Doc("Returns its argument.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to return.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                 .Function(
                     "handle",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         // Out as a V8 handle and back in: the same object in JavaScript, nothing in Lua.
-                        const v8::Local<v8::Value> handle = Bind::V8ValueOf(call, call.Arg(0));
+                        const v8::Local<v8::Value> handle = Framework::Scripting::Bind::V8ValueOf(call, call.Arg(0));
                         if (call.GetLanguage() == Framework::Scripting::Language::JavaScript) {
-                            call.Return(Bind::V8ValueIn(call, handle));
+                            call.Return(Framework::Scripting::Bind::V8ValueIn(call, handle));
                         }
                         else {
-                            call.Return(handle.IsEmpty() && Bind::V8ValueIn(call, handle).IsNil());
+                            call.Return(handle.IsEmpty() && Framework::Scripting::Bind::V8ValueIn(call, handle).IsNil());
                         }
                     },
-                    Doc("Returns its argument by its V8 handle.").Param("value", Type::Any(), "Value to return.").ReturnType(Type::Any()))
+                    Framework::Scripting::Bind::Doc("Returns its argument by its V8 handle.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to return.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                 .Function(
                     "nothing",
-                    [](Call &) {},
-                    Doc("Returns nothing."))
+                    [](Framework::Scripting::Bind::Call &) {},
+                    Framework::Scripting::Bind::Doc("Returns nothing."))
                 .Function(
                     "none",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Nil());
                     },
-                    Doc("Returns no value on purpose.").ReturnType(Type::Any()))
+                    Framework::Scripting::Bind::Doc("Returns no value on purpose.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                 .Function(
                     "last",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(1);
                         call.Return("last");
                     },
-                    Doc("Returns twice.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Returns twice.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "make",
-                    [](Call &call) {
-                        Value list = call.NewArray();
+                    [](Framework::Scripting::Bind::Call &call) {
+                        Framework::Scripting::Bind::Value list = call.NewArray();
                         list.Append(call.Integer(1));
                         list.Append(call.Integer(2));
                         list.Append(call.Integer(3));
-                        Value nested = call.NewObject();
+                        Framework::Scripting::Bind::Value nested = call.NewObject();
                         nested.Set("b", call.String("x"));
-                        Value made = call.NewObject();
+                        Framework::Scripting::Bind::Value made = call.NewObject();
                         made.Set("a", call.Integer(1));
                         made.Set("list", list);
                         made.Set("nested", nested);
                         call.Return(made);
                     },
-                    Doc("Builds an object.").ReturnType(Type::Custom("{ a: number; list: number[]; nested: { b: string } }", "table")))
+                    Framework::Scripting::Bind::Doc("Builds an object.").ReturnType(Framework::Scripting::Bind::Type::Custom("{ a: number; list: number[]; nested: { b: string } }", "table")))
                 .Function(
                     "scalars",
-                    [](Call &call) {
-                        Value list = call.NewArray();
+                    [](Framework::Scripting::Bind::Call &call) {
+                        Framework::Scripting::Bind::Value list = call.NewArray();
                         list.Append(call.Boolean(true));
                         list.Append(call.Number(1.5));
                         list.Append(call.Integer(-7));
                         list.Append(call.String(std::string_view("a\0b", 3)));
                         call.Return(list);
                     },
-                    Doc("Builds one value of each scalar kind.").ReturnType(Type::Custom("unknown[]", "any[]")))
+                    Framework::Scripting::Bind::Doc("Builds one value of each scalar kind.").ReturnType(Framework::Scripting::Bind::Type::Custom("unknown[]", "any[]")))
                 .Function(
                     "keys",
-                    [](Call &call) {
-                        Value keys = call.NewArray();
+                    [](Framework::Scripting::Bind::Call &call) {
+                        Framework::Scripting::Bind::Value keys = call.NewArray();
                         for (const std::string &key : call.Arg(0).Keys()) {
                             keys.Append(call.String(key));
                         }
                         call.Return(keys);
                     },
-                    Doc("Lists the keys of an object.").Param("object", Type::Any(), "Object to list.").ReturnType(TypeOf<std::vector<std::string>>()))
+                    Framework::Scripting::Bind::Doc("Lists the keys of an object.").Param("object", Framework::Scripting::Bind::Type::Any(), "Object to list.").ReturnType(Framework::Scripting::Bind::TypeOf<std::vector<std::string>>()))
                 .Function(
                     "get",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Arg(0).Get(call.Arg(1).AsString()));
                         ++reachedEnd;
                     },
-                    Doc("Reads a key.").Param("object", Type::Any(), "Object to read.").Param("key", TypeOf<std::string>(), "Key to read.").ReturnType(Type::Any()))
+                    Framework::Scripting::Bind::Doc("Reads a key.").Param("object", Framework::Scripting::Bind::Type::Any(), "Object to read.").Param("key", Framework::Scripting::Bind::TypeOf<std::string>(), "Key to read.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                 .Function(
                     "set",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Arg(0).Set(call.Arg(1).AsString(), call.Arg(2));
                         call.Return(call.Arg(0));
                     },
-                    Doc("Writes a key.").Param("object", Type::Any(), "Object to write.").Param("key", TypeOf<std::string>(), "Key to write.").Param("value", Type::Any(), "Value to store.").ReturnType(Type::Any()))
+                    Framework::Scripting::Bind::Doc("Writes a key.").Param("object", Framework::Scripting::Bind::Type::Any(), "Object to write.").Param("key", Framework::Scripting::Bind::TypeOf<std::string>(), "Key to write.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to store.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                 .Function(
                     "length",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Arg(0).Length());
                     },
-                    Doc("Measures an array.").Param("array", Type::Any(), "Array to measure.").ReturnType(TypeOf<int>()))
+                    Framework::Scripting::Bind::Doc("Measures an array.").Param("array", Framework::Scripting::Bind::Type::Any(), "Array to measure.").ReturnType(Framework::Scripting::Bind::TypeOf<int>()))
                 .Function(
                     "at",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Arg(0).At(static_cast<size_t>(call.Arg(1).AsInteger().value_or(0))));
                     },
-                    Doc("Reads an element.").Param("array", Type::Any(), "Array to read.").Param("index", TypeOf<int>(), "Zero-based index.").ReturnType(Type::Any()))
+                    Framework::Scripting::Bind::Doc("Reads an element.").Param("array", Framework::Scripting::Bind::Type::Any(), "Array to read.").Param("index", Framework::Scripting::Bind::TypeOf<int>(), "Zero-based index.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                 .Function(
                     "append",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Arg(0).Append(call.Arg(1));
                         call.Return(call.Arg(0));
                     },
-                    Doc("Appends an element.").Param("array", Type::Any(), "Array to grow.").Param("value", Type::Any(), "Element to add.").ReturnType(Type::Any()))
+                    Framework::Scripting::Bind::Doc("Appends an element.").Param("array", Framework::Scripting::Bind::Type::Any(), "Array to grow.").Param("value", Framework::Scripting::Bind::Type::Any(), "Element to add.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                 .Function(
                     "integer",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         const std::optional<int64_t> integer = call.Arg(0).AsInteger();
                         call.Return(integer ? std::to_string(*integer) : std::string("none"));
                     },
-                    Doc("Reads an integer.").Param("value", Type::Any(), "Value to read.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Reads an integer.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to read.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "strict",
-                    [](Call &call) {
-                        const Value value = call.Arg(0);
+                    [](Framework::Scripting::Bind::Call &call) {
+                        const Framework::Scripting::Bind::Value value = call.Arg(0);
                         call.Return("[" + value.AsString() + "]" + (value.AsBoolean() ? "t" : "f") + (value.AsNumber() == 0.0 ? "0" : "n"));
                     },
-                    Doc("Reads a value as a string, a boolean and a number.").Param("value", Type::Any(), "Value to read.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Reads a value as a string, a boolean and a number.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to read.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "display",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Arg(0).ToDisplayString());
                         ++reachedEnd;
                     },
-                    Doc("Spells a value.").Param("value", Type::Any(), "Value to spell.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Spells a value.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to spell.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "isList",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Arg(0).IsList());
                     },
-                    Doc("Tells whether a value passes for a list.").Param("value", Type::Any(), "Value to inspect.").ReturnType(TypeOf<bool>()))
+                    Framework::Scripting::Bind::Doc("Tells whether a value passes for a list.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to inspect.").ReturnType(Framework::Scripting::Bind::TypeOf<bool>()))
                 .Function(
                     "null",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Null());
                     },
-                    Doc("Returns null.").ReturnType(Type::Any()))
+                    Framework::Scripting::Bind::Doc("Returns null.").ReturnType(Framework::Scripting::Bind::Type::Any()))
                 .Function(
                     "nullKind",
-                    [](Call &call) {
-                        Value object = call.NewObject();
+                    [](Framework::Scripting::Bind::Call &call) {
+                        Framework::Scripting::Bind::Value object = call.NewObject();
                         object.Set("k", call.Null());
                         call.Return(std::string(KindName(call.Null().Kind())) + KindName(object.Get("k").Kind()) + std::to_string(object.Keys().size()));
                     },
-                    Doc("Names the kind of null, alone and stored.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Names the kind of null, alone and stored.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "thisKind",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(KindName(call.This().Kind()));
                     },
-                    Doc("Names the kind of its receiver.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Names the kind of its receiver.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "capture",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         // The mistake a handle has to survive: it is kept beyond its call.
-                        call.Return(call.NewFunction([kept = call.Arg(0)](Call &inner) {
+                        call.Return(call.NewFunction([kept = call.Arg(0)](Framework::Scripting::Bind::Call &inner) {
                             inner.Return(kept);
                         }));
                     },
-                    Doc("Makes a function that returns a value it should not have kept.").Param("value", Type::Any(), "Value to keep.").ReturnType(Type::Custom("() => unknown", "fun(): any")))
+                    Framework::Scripting::Bind::Doc("Makes a function that returns a value it should not have kept.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to keep.").ReturnType(Framework::Scripting::Bind::Type::Custom("() => unknown", "fun(): any")))
                 .Function(
                     "stale",
-                    [](Call &call) {
-                        call.Return(call.NewFunction([kept = call.Arg(0)](Call &inner) {
-                            Value object = inner.NewObject();
+                    [](Framework::Scripting::Bind::Call &call) {
+                        call.Return(call.NewFunction([kept = call.Arg(0)](Framework::Scripting::Bind::Call &inner) {
+                            Framework::Scripting::Bind::Value object = inner.NewObject();
                             object.Set("k", inner.Integer(1));
                             object.Set("k", kept);
-                            Value list = inner.NewArray();
+                            Framework::Scripting::Bind::Value list = inner.NewArray();
                             list.Append(kept);
                             inner.Return(std::string(KindName(kept.Kind())) + "[" + kept.AsString() + kept.ToDisplayString() + "]" + std::to_string(kept.Length()) + std::to_string(kept.Keys().size()) + KindName(kept.Get("a").Kind()) + KindName(kept.At(0).Kind()) + ":"
                                          + KindName(object.Get("k").Kind()) + KindName(list.At(0).Kind()));
                         }));
                     },
-                    Doc("Makes a function that reads a value it should not have kept.").Param("value", Type::Any(), "Value to keep.").ReturnType(Type::Custom("(...args: unknown[]) => string", "fun(...): string")))
+                    Framework::Scripting::Bind::Doc("Makes a function that reads a value it should not have kept.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to keep.").ReturnType(Framework::Scripting::Bind::Type::Custom("(...args: unknown[]) => string", "fun(...): string")))
                 .Function(
                     "nested",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         // The object spells itself by calling `peek`, which runs inside this call and reads its handle.
-                        const Value outer = call.Arg(1);
-                        call.Arg(0).Set("peek", call.NewFunction([outer](Call &inner) {
+                        const Framework::Scripting::Bind::Value outer = call.Arg(1);
+                        call.Arg(0).Set("peek", call.NewFunction([outer](Framework::Scripting::Bind::Call &inner) {
                             inner.Return(KindName(outer.Kind()));
                         }));
                         const std::string during = call.Arg(0).ToDisplayString();
                         call.Return(during + ":" + KindName(outer.Kind()));
                     },
-                    Doc("Reads a handle of this call from a call nested in it, then from this one.").Param("object", Type::Any(), "Object that spells itself with peek().").Param("value", Type::Any(), "Value to read.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Reads a handle of this call from a call nested in it, then from this one.").Param("object", Framework::Scripting::Bind::Type::Any(), "Object that spells itself with peek().").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to read.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "spell",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Arg(0).ToDisplayString();
                         thrownAfterDisplay = call.HasThrown();
                         call.Arg(1).Get("a");
                         ++reachedEnd;
                     },
-                    Doc("Spells a value, then reads a key of another.").Param("value", Type::Any(), "Value to spell.").Param("object", Type::Any(), "Object to read.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Spells a value, then reads a key of another.").Param("value", Framework::Scripting::Bind::Type::Any(), "Value to spell.").Param("object", Framework::Scripting::Bind::Type::Any(), "Object to read.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "keep",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         Stepper stepper(1);
                         stepper.text = std::string(64, 's');
                         call.Wrap(std::move(stepper));
                         leftAfterWrap = stepper.text.size();
                     },
-                    Doc("Wraps a stepper and notes what is left of it."))
+                    Framework::Scripting::Bind::Doc("Wraps a stepper and notes what is left of it."))
                 .Function(
                     "adder",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         const int64_t amount = call.Arg(0).AsInteger().value_or(0);
-                        call.Return(call.NewFunction([amount](Call &inner) {
+                        call.Return(call.NewFunction([amount](Framework::Scripting::Bind::Call &inner) {
                             inner.Return(amount + inner.Arg(0).AsInteger().value_or(0));
                         }));
                     },
-                    Doc("Makes a function that adds.").Param("amount", TypeOf<int>(), "What it adds.").ReturnType(Type::Custom("(value: number) => number", "fun(value: integer): integer")))
+                    Framework::Scripting::Bind::Doc("Makes a function that adds.").Param("amount", Framework::Scripting::Bind::TypeOf<int>(), "What it adds.").ReturnType(Framework::Scripting::Bind::Type::Custom("(value: number) => number", "fun(value: integer): integer")))
                 .Function(
                     "hold",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         // The function keeps `held` alive for as long as it lives itself.
-                        call.Return(call.NewFunction([held = Held()](Call &inner) {
+                        call.Return(call.NewFunction([held = Held()](Framework::Scripting::Bind::Call &inner) {
                             inner.Return(*held);
                         }));
                     },
-                    Doc("Makes a function that holds a value.").ReturnType(Type::Custom("() => number", "fun(): integer")))
+                    Framework::Scripting::Bind::Doc("Makes a function that holds a value.").ReturnType(Framework::Scripting::Bind::Type::Custom("() => number", "fun(): integer")))
                 .Function(
                     "carry",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         // The function carries its argument and gives it back, with the kind Data has outside it.
                         const std::string outside = KindName(call.Data().Kind());
                         call.Return(call.NewFunction(
-                            [outside](Call &inner) {
+                            [outside](Framework::Scripting::Bind::Call &inner) {
                                 if (inner.ArgCount() > 0) {
                                     inner.Return(outside + KindName(inner.Data().Kind()));
                                 }
@@ -519,10 +505,10 @@ namespace BindCallTest {
                             },
                             call.Arg(0)));
                     },
-                    Doc("Makes a function that carries a value.").Param("value", Type::Any(), "What it carries.").ReturnType(Type::Custom("(kind?: boolean) => unknown", "fun(kind?: boolean): any")))
+                    Framework::Scripting::Bind::Doc("Makes a function that carries a value.").Param("value", Framework::Scripting::Bind::Type::Any(), "What it carries.").ReturnType(Framework::Scripting::Bind::Type::Custom("(kind?: boolean) => unknown", "fun(kind?: boolean): any")))
                 .Function(
                     "failType",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         const bool before = call.HasThrown();
                         call.ThrowTypeError("Probe.failType: expected (text)");
                         call.ThrowError("Probe.failType: thrown second");
@@ -531,105 +517,105 @@ namespace BindCallTest {
                             ++reachedEnd;
                         }
                     },
-                    Doc("Fails as a wrong argument does."))
+                    Framework::Scripting::Bind::Doc("Fails as a wrong argument does."))
                 .Function(
                     "failRange",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.ThrowRangeError("Probe.failRange: expected a tier from 0 to 2");
                         call.ThrowError("Probe.failRange: thrown second");
                         call.Return(1);
                     },
-                    Doc("Fails as a number out of range does."))
+                    Framework::Scripting::Bind::Doc("Fails as a number out of range does."))
                 .Function(
                     "fail",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(1);
                         call.ThrowError("Probe.fail: network peer unavailable");
                         call.ThrowTypeError("Probe.fail: thrown second");
                         ++reachedEnd;
                     },
-                    Doc("Fails as a missing subsystem does."))
+                    Framework::Scripting::Bind::Doc("Fails as a missing subsystem does."))
                 .Function(
                     "raise",
-                    [](Call &) {
+                    [](Framework::Scripting::Bind::Call &) {
                         throw std::runtime_error("Probe.raise: exception");
                     },
-                    Doc("Throws a C++ exception."))
+                    Framework::Scripting::Bind::Doc("Throws a C++ exception."))
                 .Function(
                     "bound",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         const Counter *counter = call.Arg(0).AsBound<Counter>();
                         call.Return(counter != nullptr ? counter->get() : -1);
                     },
-                    Doc("Reads a counter.").Param("counter", Type::Any(), "Counter to read.").ReturnType(TypeOf<int>()))
+                    Framework::Scripting::Bind::Doc("Reads a counter.").Param("counter", Framework::Scripting::Bind::Type::Any(), "Counter to read.").ReturnType(Framework::Scripting::Bind::TypeOf<int>()))
                 .Function(
                     "wrap",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.Wrap(Counter(static_cast<int>(call.Arg(0).AsInteger().value_or(0)))));
                         ++reachedEnd;
                     },
-                    Doc("Makes a counter.").Param("value", TypeOf<int>(), "Initial value.").ReturnType(Type::Class("CallCounter")))
+                    Framework::Scripting::Bind::Doc("Makes a counter.").Param("value", Framework::Scripting::Bind::TypeOf<int>(), "Initial value.").ReturnType(Framework::Scripting::Bind::Type::Class("CallCounter")))
                 .Function(
                     "copy",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         if (const Counter *counter = call.Arg(0).AsBound<Counter>()) {
                             call.Return(call.Wrap(*counter));
                         }
                     },
-                    Doc("Copies a counter.").Param("counter", Type::Class("CallCounter"), "Counter to copy.").ReturnType(Type::Class("CallCounter")))
+                    Framework::Scripting::Bind::Doc("Copies a counter.").Param("counter", Framework::Scripting::Bind::Type::Class("CallCounter"), "Counter to copy.").ReturnType(Framework::Scripting::Bind::Type::Class("CallCounter")))
                 .Function(
                     "side",
-                    [](Call &call) {
-                        call.Return(call.GetSide() == Side::Client ? "client" : "server");
+                    [](Framework::Scripting::Bind::Call &call) {
+                        call.Return(call.GetSide() == Framework::Scripting::Bind::Side::Client ? "client" : "server");
                     },
-                    Doc("Names the side of the runtime.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Names the side of the runtime.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "language",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.GetLanguage() == Framework::Scripting::Language::Lua ? "lua" : "javascript");
                     },
-                    Doc("Names the language of the caller.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Names the language of the caller.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "resource",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.ResourceName());
                     },
-                    Doc("Names the calling resource.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Names the calling resource.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "ownerOf",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(call.OwnerOf(call.Arg(0)));
                     },
-                    Doc("Names the resource that owns a function.").Param("value", Type::Any(), "The function.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Names the resource that owns a function.").Param("value", Framework::Scripting::Bind::Type::Any(), "The function.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "manager",
-                    [](Call &call) {
-                        const ResourceManager *manager = call.GetResourceManager();
+                    [](Framework::Scripting::Bind::Call &call) {
+                        const Framework::Scripting::ResourceManager *manager = call.GetResourceManager();
                         call.Return(manager == nullptr ? "none" : manager == expectedManager ? "registered" : "other");
                     },
-                    Doc("Tells which resource manager the call has.").ReturnType(TypeOf<std::string>()))
+                    Framework::Scripting::Bind::Doc("Tells which resource manager the call has.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()))
                 .Function(
                     "twice",
                     [](int value) {
                         return value * 2;
                     },
-                    Doc("Doubles a number.").Param("value", "Number to double.").Returns("Twice the number."))
+                    Framework::Scripting::Bind::Doc("Doubles a number.").Param("value", "Number to double.").Returns("Twice the number."))
                 .Function(
                     "serverOnly",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(true);
                     },
-                    Doc("Exists on the server.").ReturnType(TypeOf<bool>()), Side::Server)
+                    Framework::Scripting::Bind::Doc("Exists on the server.").ReturnType(Framework::Scripting::Bind::TypeOf<bool>()), Framework::Scripting::Bind::Side::Server)
                 .Function(
                     "clientOnly",
-                    [](Call &call) {
+                    [](Framework::Scripting::Bind::Call &call) {
                         call.Return(true);
                     },
-                    Doc("Exists on the client.").ReturnType(TypeOf<bool>()), Side::Client)
+                    Framework::Scripting::Bind::Doc("Exists on the client.").ReturnType(Framework::Scripting::Bind::TypeOf<bool>()), Framework::Scripting::Bind::Side::Client)
                 .Constant("answer", 42.0, "The answer.")
                 .Constant("ratio", 0.5, "A ratio.")
                 .Constant("label", std::string("probe"), "A label.")
-                .Constant("serverLabel", std::string("server"), "A label of the server.", Side::Server)
+                .Constant("serverLabel", std::string("server"), "A label of the server.", Framework::Scripting::Bind::Side::Server)
                 .Constant("enabled", true, "A switch.")
                 .Constant("count", 3, "A count.")
                 .Constant("word", "literal", "A word.");
@@ -642,8 +628,8 @@ namespace BindCallTest {
         return module != nullptr && module->GetResourceManager() != nullptr ? "other" : "none";
     }
 
-    inline LuaRuntimeOptions LuaOptions(Side side) {
-        LuaRuntimeOptions options = LuaRuntimeTest::Options();
+    inline Framework::Scripting::LuaRuntimeOptions LuaOptions(Framework::Scripting::Bind::Side side) {
+        Framework::Scripting::LuaRuntimeOptions options = LuaRuntimeTest::Options();
         options.resourceName      = "lua-probe";
         options.side              = side;
         return options;
@@ -653,19 +639,18 @@ namespace BindCallTest {
     // globals. Lua also has dump(value), which spells a table the way JSON.stringify spells an object.
     class Runtimes final {
       public:
-        explicit Runtimes(Side side = Side::Server, bool withCounters = true): _lua(LuaOptions(side)) {
-            using namespace Framework::Scripting;
+        explicit Runtimes(Framework::Scripting::Bind::Side side = Framework::Scripting::Bind::Side::Server, bool withCounters = true): _lua(LuaOptions(side)) {
             static int count = 0;
             _engine.Init();
             std::string error;
             _js          = _engine.CreateRuntime(error);
             _catalogName = "bind_call/" + std::to_string(++count);
-            SetScriptingCatalog(Isolate(), _catalogName);
-            SetScriptingEnvironment(Isolate(), side == Side::Client);
+            Framework::Scripting::SetScriptingCatalog(Isolate(), _catalogName);
+            Framework::Scripting::SetScriptingEnvironment(Isolate(), side == Framework::Scripting::Bind::Side::Client);
 
             Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
                 v8::Local<v8::Object> global = context->Global();
-                Builtins::RegisterValueTypes(isolate, global);
+                Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
                 if (withCounters) {
                     _counter = CounterDefinition().MaterialiseV8(isolate, Catalog(), side);
                     _stepper = StepperDefinition().MaterialiseV8(isolate, Catalog(), side);
@@ -676,7 +661,7 @@ namespace BindCallTest {
             });
 
             lua_State *L = _lua.State();
-            Builtins::RegisterValueTypesLua(L, side);
+            Framework::Scripting::Builtins::RegisterValueTypesLua(L, side);
             if (withCounters) {
                 CounterDefinition().RegisterLuaGlobal(L, side);
                 StepperDefinition().RegisterLuaGlobal(L, side);
@@ -701,8 +686,8 @@ namespace BindCallTest {
         }
 
         ~Runtimes() {
-            Bind::SetCallResourceManager(Isolate(), nullptr);
-            Bind::SetCallResourceManager(&_lua, nullptr);
+            Framework::Scripting::Bind::SetCallResourceManager(Isolate(), nullptr);
+            Framework::Scripting::Bind::SetCallResourceManager(&_lua, nullptr);
             _stepper.reset();
             _counter.reset();
             // The caches and the catalog are keyed by isolate address, which a later isolate may reuse.
@@ -716,7 +701,7 @@ namespace BindCallTest {
             return _js->GetIsolate();
         }
 
-        LuaRuntime &LuaSide() {
+        Framework::Scripting::LuaRuntime &LuaSide() {
             return _lua;
         }
 
@@ -769,7 +754,7 @@ namespace BindCallTest {
       private:
         Framework::Scripting::NodeEngine _engine;
         std::unique_ptr<Framework::Scripting::NodeRuntime> _js;
-        LuaRuntime _lua;
+        Framework::Scripting::LuaRuntime _lua;
         std::string _catalogName;
         std::unique_ptr<v8pp::class_<Counter>> _counter;
         std::unique_ptr<v8pp::class_<Stepper>> _stepper;
@@ -799,122 +784,124 @@ namespace BindCallTest {
 } // namespace BindCallTest
 
 MODULE(bind_call, {
-    using namespace BindCallTest;
-    using Bind::Doc;
-    using Bind::TypeOf;
-    namespace Type = Bind::Type;
 
     // --- Describing a context function ---
 
     IT("describes a context function from its Doc alone", {
-        const Doc doc = Doc("Writes a line.").Param("level", TypeOf<std::string>(), "How loud.").OptionalParam("tag", TypeOf<int>(), "A tag.").RestParam("values", Type::Custom("unknown[]", "any"), "What to write.").ReturnType(TypeOf<bool>()).Returns("Whether it was written.");
-        const Bind::FunctionDesc desc = Bind::DescribeFunction<Bind::NativeFunction>("write", doc, true, Side::Client);
+        const Framework::Scripting::Bind::Doc doc           = Framework::Scripting::Bind::Doc("Writes a line.")
+                                                                  .Param("level", Framework::Scripting::Bind::TypeOf<std::string>(), "How loud.")
+                                                                  .OptionalParam("tag", Framework::Scripting::Bind::TypeOf<int>(), "A tag.")
+                                                                  .RestParam("values", Framework::Scripting::Bind::Type::Custom("unknown[]", "any"), "What to write.")
+                                                                  .ReturnType(Framework::Scripting::Bind::TypeOf<bool>())
+                                                                  .Returns("Whether it was written.");
+        const Framework::Scripting::Bind::FunctionDesc desc = Framework::Scripting::Bind::DescribeFunction<Framework::Scripting::Bind::NativeFunction>("write", doc, true, Framework::Scripting::Bind::Side::Client);
 
         EQUALS(desc.name, "write");
         EQUALS(desc.description, "Writes a line.");
         EQUALS(desc.isStatic, true);
-        EQUALS(desc.side == Side::Client, true);
-        EQUALS(Bind::ToTypeScript(desc.returns), "boolean");
+        EQUALS(desc.side == Framework::Scripting::Bind::Side::Client, true);
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(desc.returns), "boolean");
         EQUALS(desc.returnsDescription, "Whether it was written.");
         EQUALS(desc.params.size(), 3u);
-        EQUALS(desc.params[0].name + ":" + Bind::ToTypeScript(desc.params[0].type) + ":" + desc.params[0].description, "level:string:How loud.");
+        EQUALS(desc.params[0].name + ":" + Framework::Scripting::Bind::ToTypeScript(desc.params[0].type) + ":" + desc.params[0].description, "level:string:How loud.");
         EQUALS(desc.params[0].optional || desc.params[0].rest, false);
-        EQUALS(desc.params[1].name + ":" + Bind::ToLuaAnnotation(desc.params[1].type), "tag:integer");
+        EQUALS(desc.params[1].name + ":" + Framework::Scripting::Bind::ToLuaAnnotation(desc.params[1].type), "tag:integer");
         EQUALS(desc.params[1].optional && !desc.params[1].rest, true);
-        EQUALS(desc.params[2].name + ":" + Bind::ToTypeScript(desc.params[2].type) + ":" + Bind::ToLuaAnnotation(desc.params[2].type), "values:unknown[]:any");
+        EQUALS(desc.params[2].name + ":" + Framework::Scripting::Bind::ToTypeScript(desc.params[2].type) + ":" + Framework::Scripting::Bind::ToLuaAnnotation(desc.params[2].type), "values:unknown[]:any");
         EQUALS(desc.params[2].rest && !desc.params[2].optional, true);
 
-        const auto lambda = [](Call &) {};
-        EQUALS(Bind::ToTypeScript(Bind::DescribeFunction<decltype(lambda)>("quiet", Doc("Does nothing."), false, Side::Shared).returns), "void");
+        const auto lambda = [](Framework::Scripting::Bind::Call &) {};
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(Framework::Scripting::Bind::DescribeFunction<decltype(lambda)>("quiet", Framework::Scripting::Bind::Doc("Does nothing."), false, Framework::Scripting::Bind::Side::Shared).returns), "void");
     });
 
     IT("refuses a Doc a function cannot have", {
-        EQUALS(LogicErrorOf([] {
-            Bind::DescribeFunction<Bind::NativeFunction>("Probe.write", Doc("Writes.").Param("level", "How loud."), true, Side::Shared);
+        EQUALS(BindCallTest::LogicErrorOf([] {
+            Framework::Scripting::Bind::DescribeFunction<Framework::Scripting::Bind::NativeFunction>("Probe.write", Framework::Scripting::Bind::Doc("Writes.").Param("level", "How loud."), true, Framework::Scripting::Bind::Side::Shared);
         }),
             "Bind: 'Probe.write' is a context function, so its Doc gives every parameter a type, and 'level' has none");
-        EQUALS(LogicErrorOf([] {
-            Doc("Writes.").RestParam("values", Type::Any(), "What to write.").Param("level", "How loud.");
+        EQUALS(BindCallTest::LogicErrorOf([] {
+            Framework::Scripting::Bind::Doc("Writes.").RestParam("values", Framework::Scripting::Bind::Type::Any(), "What to write.").Param("level", "How loud.");
         }),
             "Bind::Doc: 'level' comes after the rest parameter 'values', which is the last one");
-        EQUALS(LogicErrorOf([] {
-            Bind::DescribeFunction<int (*)(int)>("Probe.twice", Doc("Doubles.").RestParam("values", Type::Any(), "Numbers."), true, Side::Shared);
+        EQUALS(BindCallTest::LogicErrorOf([] {
+            Framework::Scripting::Bind::DescribeFunction<int (*)(int)>("Probe.twice", Framework::Scripting::Bind::Doc("Doubles.").RestParam("values", Framework::Scripting::Bind::Type::Any(), "Numbers."), true, Framework::Scripting::Bind::Side::Shared);
         }),
             "Bind: 'Probe.twice' documents the rest parameter 'values', which only a context function takes");
     });
 
     IT("keeps the type a Doc gives a parameter of a typed callable", {
-        const Bind::FunctionDesc desc = Bind::DescribeFunction<int (*)(int)>("pick", Doc("Picks.").Param("which", Type::Custom("0 | 1", "integer"), "Which one."), true, Side::Shared);
-        EQUALS(Bind::ToTypeScript(desc.params[0].type), "0 | 1");
+        const Framework::Scripting::Bind::FunctionDesc desc =
+            Framework::Scripting::Bind::DescribeFunction<int (*)(int)>("pick", Framework::Scripting::Bind::Doc("Picks.").Param("which", Framework::Scripting::Bind::Type::Custom("0 | 1", "integer"), "Which one."), true, Framework::Scripting::Bind::Side::Shared);
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(desc.params[0].type), "0 | 1");
     });
 
     // --- Namespace, as a definition ---
 
     IT("describes a namespace and records it in the catalog", {
-        const Bind::ClassDesc &desc = ProbeDefinition().Describe();
+        const Framework::Scripting::Bind::ClassDesc &desc = BindCallTest::ProbeDefinition().Describe();
         EQUALS(desc.name, "Probe");
         EQUALS(desc.description, "Exercises the dynamic interface.");
         EQUALS(desc.isNamespace, true);
-        EQUALS(Bind::ApiCatalog::Get().Find("Probe") == &desc, true);
+        EQUALS(Framework::Scripting::Bind::ApiCatalog::Get().Find("Probe") == &desc, true);
 
-        const auto sum = std::find_if(desc.functions.begin(), desc.functions.end(), [](const Bind::FunctionDesc &function) {
+        const auto sum = std::find_if(desc.functions.begin(), desc.functions.end(), [](const Framework::Scripting::Bind::FunctionDesc &function) {
             return function.name == "sum";
         });
         EQUALS(sum != desc.functions.end(), true);
         EQUALS(sum->isStatic, true);
         EQUALS(sum->params.size(), 1u);
         EQUALS(sum->params[0].rest, true);
-        EQUALS(Bind::ToLuaAnnotation(sum->returns), "number");
+        EQUALS(Framework::Scripting::Bind::ToLuaAnnotation(sum->returns), "number");
 
-        const auto twice = std::find_if(desc.functions.begin(), desc.functions.end(), [](const Bind::FunctionDesc &function) {
+        const auto twice = std::find_if(desc.functions.begin(), desc.functions.end(), [](const Framework::Scripting::Bind::FunctionDesc &function) {
             return function.name == "twice";
         });
         EQUALS(twice != desc.functions.end(), true);
-        EQUALS(twice->params[0].name + ":" + Bind::ToLuaAnnotation(twice->params[0].type) + "->" + Bind::ToLuaAnnotation(twice->returns), "value:integer->integer");
+        EQUALS(twice->params[0].name + ":" + Framework::Scripting::Bind::ToLuaAnnotation(twice->params[0].type) + "->" + Framework::Scripting::Bind::ToLuaAnnotation(twice->returns), "value:integer->integer");
 
-        const auto serverOnly = std::find_if(desc.functions.begin(), desc.functions.end(), [](const Bind::FunctionDesc &function) {
+        const auto serverOnly = std::find_if(desc.functions.begin(), desc.functions.end(), [](const Framework::Scripting::Bind::FunctionDesc &function) {
             return function.name == "serverOnly";
         });
-        EQUALS(serverOnly != desc.functions.end() && serverOnly->side == Side::Server, true);
+        EQUALS(serverOnly != desc.functions.end() && serverOnly->side == Framework::Scripting::Bind::Side::Server, true);
 
         EQUALS(desc.properties.size(), 7u);
-        EQUALS(desc.properties[4].name + ":" + Bind::ToTypeScript(desc.properties[4].type) + ":" + Bind::ToLuaAnnotation(desc.properties[4].type), "enabled:boolean:boolean");
-        EQUALS(desc.properties[5].name + ":" + Bind::ToTypeScript(desc.properties[5].type), "count:number");
-        EQUALS(desc.properties[6].name + ":" + Bind::ToTypeScript(desc.properties[6].type), "word:string");
-        EQUALS(desc.properties[0].name + ":" + Bind::ToTypeScript(desc.properties[0].type) + ":" + desc.properties[0].description, "answer:number:The answer.");
+        EQUALS(desc.properties[4].name + ":" + Framework::Scripting::Bind::ToTypeScript(desc.properties[4].type) + ":" + Framework::Scripting::Bind::ToLuaAnnotation(desc.properties[4].type), "enabled:boolean:boolean");
+        EQUALS(desc.properties[5].name + ":" + Framework::Scripting::Bind::ToTypeScript(desc.properties[5].type), "count:number");
+        EQUALS(desc.properties[6].name + ":" + Framework::Scripting::Bind::ToTypeScript(desc.properties[6].type), "word:string");
+        EQUALS(desc.properties[0].name + ":" + Framework::Scripting::Bind::ToTypeScript(desc.properties[0].type) + ":" + desc.properties[0].description, "answer:number:The answer.");
         EQUALS(desc.properties[0].readonly && desc.properties[0].isStatic, true);
-        EQUALS(desc.properties[2].name + ":" + Bind::ToTypeScript(desc.properties[2].type), "label:string");
-        EQUALS(desc.properties[3].side == Side::Server, true);
+        EQUALS(desc.properties[2].name + ":" + Framework::Scripting::Bind::ToTypeScript(desc.properties[2].type), "label:string");
+        EQUALS(desc.properties[3].side == Framework::Scripting::Bind::Side::Server, true);
     });
 
     IT("refuses a second member of the same name, function or constant", {
-        Bind::Namespace twice("ProbeTwice", "Declares members twice.");
-        twice.Function("run", [](Call &) {}, Doc("Runs.")).Constant("limit", 1.0, "A limit.");
+        Framework::Scripting::Bind::Namespace twice("ProbeTwice", "Declares members twice.");
+        twice.Function("run", [](Framework::Scripting::Bind::Call &) {}, Framework::Scripting::Bind::Doc("Runs.")).Constant("limit", 1.0, "A limit.");
 
         const std::string expected = "Bind: 'ProbeTwice.run' is declared twice, and a member cannot be overloaded";
-        EQUALS(LogicErrorOf([&] {
-            twice.Function("run", [](Call &) {}, Doc("Runs again."));
+        EQUALS(BindCallTest::LogicErrorOf([&] {
+            twice.Function("run", [](Framework::Scripting::Bind::Call &) {}, Framework::Scripting::Bind::Doc("Runs again."));
         }),
             expected);
-        EQUALS(LogicErrorOf([&] {
+        EQUALS(BindCallTest::LogicErrorOf([&] {
             twice.Function(
                 "run",
                 [](int value) {
                     return value;
                 },
-                Doc("Runs typed.").Param("value", "A value."));
+                Framework::Scripting::Bind::Doc("Runs typed.").Param("value", "A value."));
         }),
             expected);
-        EQUALS(LogicErrorOf([&] {
+        EQUALS(BindCallTest::LogicErrorOf([&] {
             twice.Constant("run", 2.0, "A constant.");
         }),
             expected);
-        EQUALS(LogicErrorOf([&] {
+        EQUALS(BindCallTest::LogicErrorOf([&] {
             twice.Constant("run", std::string("text"), "A constant.");
         }),
             expected);
-        EQUALS(LogicErrorOf([&] {
-            twice.Function("limit", [](Call &) {}, Doc("Limits."));
+        EQUALS(BindCallTest::LogicErrorOf([&] {
+            twice.Function("limit", [](Framework::Scripting::Bind::Call &) {}, Framework::Scripting::Bind::Doc("Limits."));
         }),
             "Bind: 'ProbeTwice.limit' is declared twice, and a member cannot be overloaded");
         EQUALS(twice.Describe().functions.size(), 1u);
@@ -924,7 +911,7 @@ MODULE(bind_call, {
     // --- Values ---
 
     IT("tells the kind of a value alike in both languages", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.kind()", "Nil");
         mismatches += runtimes.Both("Probe.kind(undefined)", "Probe.kind(nil)", "Nil");
@@ -965,7 +952,7 @@ MODULE(bind_call, {
     });
 
     IT("answers the kind shorthands", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.flags()", "n-------");
         mismatches += runtimes.Both("Probe.flags(false)", "-b------");
@@ -979,7 +966,7 @@ MODULE(bind_call, {
     });
 
     IT("tells a list from an object with keys", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         // The empty table of Lua is an Object, and a list all the same.
         mismatches += runtimes.Both("Probe.isList([])", "Probe.isList({})", "true");
@@ -1004,7 +991,7 @@ MODULE(bind_call, {
     });
 
     IT("reads a scalar strictly, without converting it", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.strict('text')", "[text]f0");
         mismatches += runtimes.Both("Probe.strict(true)", "[]t0");
@@ -1029,8 +1016,8 @@ MODULE(bind_call, {
     });
 
     IT("spells a value the way the language does", {
-        Runtimes runtimes;
-        reachedEnd = 0;
+        BindCallTest::Runtimes runtimes;
+        BindCallTest::reachedEnd = 0;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.display('text')", "text");
         mismatches += runtimes.Both("Probe.display(12)", "12");
@@ -1040,7 +1027,7 @@ MODULE(bind_call, {
         // A value that fails to spell itself is spelled as nothing, and the function goes on.
         mismatches += runtimes.Both("Probe.display({ toString() { throw new Error('no') } })", "Probe.display(setmetatable({}, { __tostring = function() error('no') end }))", "");
         EQUALS(mismatches, "");
-        EQUALS(reachedEnd, 12);
+        EQUALS(BindCallTest::reachedEnd, 12);
 
         EQUALS(runtimes.Js("Probe.display()"), "undefined");
         EQUALS(runtimes.Js("Probe.display(null)"), "null");
@@ -1049,7 +1036,7 @@ MODULE(bind_call, {
     });
 
     IT("passes a value through unchanged", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.echo('text')", "text");
         mismatches += runtimes.Both("Probe.echo(1.5)", "1.5");
@@ -1086,7 +1073,7 @@ MODULE(bind_call, {
     });
 
     IT("makes a function that carries a script value the collector sees", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("{ const o = {}; Probe.carry(o)() === o }", "(function() local o = {} return rawequal(Probe.carry(o)(), o) end)()", "true");
         mismatches += runtimes.Both("{ const f = () => 1; Probe.carry(f)() === f }", "(function() local f = function() end return rawequal(Probe.carry(f)(), f) end)()", "true");
@@ -1117,7 +1104,7 @@ MODULE(bind_call, {
     });
 
     IT("keeps what a function carries out of the reach of a script that tampers with the prototypes", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         // Accessors where an ordinary read or write of an array or an object would look: none of them is asked,
         // nothing is handed to the script, and the functions work.
         EQUALS(runtimes.Js(R"((() => {
@@ -1142,7 +1129,7 @@ MODULE(bind_call, {
     });
 
     IT("gives the V8 handle of a JavaScript value, and takes one back", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         EQUALS(runtimes.Js("{ const o = {}; Probe.handle(o) === o }"), "true");
         EQUALS(runtimes.Js("Probe.handle(7)"), "7");
         EQUALS(runtimes.Js("Probe.handle() === undefined"), "true");
@@ -1150,7 +1137,7 @@ MODULE(bind_call, {
     });
 
     IT("builds objects and arrays", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         const std::string made = R"({"a":1,"list":[1,2,3],"nested":{"b":"x"}})";
         EQUALS(runtimes.Both("JSON.stringify(Probe.make())", "dump(Probe.make())", made), "");
         EQUALS(runtimes.Both("Array.isArray(Probe.make().list)", "#Probe.make().list == 3", "true"), "");
@@ -1161,8 +1148,8 @@ MODULE(bind_call, {
     });
 
     IT("reads and writes the keys of an object", {
-        Runtimes runtimes;
-        reachedEnd = 0;
+        BindCallTest::Runtimes runtimes;
+        BindCallTest::reachedEnd = 0;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.keys({ a: 2, b: 1, c: 3 }).join()", "table.concat(Probe.keys({ b = 1, a = 2, c = 3 }), ',')", "a,b,c");
         mismatches += runtimes.Both("Probe.keys({}).length", "#Probe.keys({})", "0");
@@ -1176,11 +1163,11 @@ MODULE(bind_call, {
         mismatches += runtimes.Both("JSON.stringify(Probe.set({ a: 1 }, 'b', [true]))", "dump(Probe.set({ a = 1 }, 'b', { true }))", R"({"a":1,"b":[true]})");
         mismatches += runtimes.Both("Probe.set(5, 'k', 9)", "5");
         EQUALS(mismatches, "");
-        EQUALS(reachedEnd, 10);
+        EQUALS(BindCallTest::reachedEnd, 10);
     });
 
     IT("lists keys in one order, integers before strings", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         // JavaScript keeps the order strings were added in; Lua, which has none, sorts them.
         mismatches += runtimes.Both("Probe.keys({ x: 1, 10: 'j', y: 2, 2: 'b' }).join()", "table.concat(Probe.keys({ y = 2, [10] = 'j', x = 1, [2] = 'b' }), ',')", "2,10,x,y");
@@ -1191,7 +1178,7 @@ MODULE(bind_call, {
     });
 
     IT("counts the keys of an array from zero", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.keys(['a', 'b', 'c']).join()", "table.concat(Probe.keys({ 'a', 'b', 'c' }), ',')", "0,1,2");
         mismatches += runtimes.Both("Probe.get(['a', 'b', 'c'], '0')", "Probe.get({ 'a', 'b', 'c' }, '0')", "a");
@@ -1206,7 +1193,7 @@ MODULE(bind_call, {
     });
 
     IT("writes a Lua integer key under the text Keys gave it", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         const std::string roundTrip =
             "(function(t) for _, key in ipairs(Probe.keys(t)) do Probe.set(t, key, 'k') end local count, kinds = 0, '' for key, value in pairs(t) do count = count + 1 kinds = kinds .. (math.type(key) or type(key)) .. value end return count .. kinds end)";
         EQUALS(runtimes.Lua(roundTrip + "({ [10] = 'j' })"), "1integerk");
@@ -1220,7 +1207,7 @@ MODULE(bind_call, {
     });
 
     IT("finds no keys in a bound object or a function", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.kind(Probe.get(new Vector3(1, 2, 3), 'y'))", "Probe.kind(Probe.get(Vector3.new(1, 2, 3), 'y'))", "Nil");
         mismatches += runtimes.Both("Probe.kind(Probe.get(new Vector3(1, 2, 3), 'add'))", "Probe.kind(Probe.get(Vector3.new(1, 2, 3), 'add'))", "Nil");
@@ -1238,7 +1225,7 @@ MODULE(bind_call, {
     });
 
     IT("reads a member of a bound object as a script does, and of a table as its key", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         // A property of the class, of whatever class it is.
         mismatches += runtimes.Both("Probe.member(new Vector3(1, 2, 3), 'y')", "math.tointeger(Probe.member(Vector3.new(1, 2, 3), 'y'))", "2");
@@ -1264,13 +1251,13 @@ MODULE(bind_call, {
         EQUALS(runtimes.Lua("Probe.kind(Probe.member(setmetatable({}, { __index = function() error('ran') end }), 'a'))"), "Nil");
 
         // What reading throws is thrown once the function has returned.
-        reachedEnd = 0;
+        BindCallTest::reachedEnd = 0;
         EQUALS(runtimes.Js("{ const v = new Vector3(1, 2, 3); Object.defineProperty(v, 'id', { get() { throw new RangeError('accessor ran'); } }); Probe.member(v, 'id') }"), "<threw> RangeError: accessor ran");
-        EQUALS(reachedEnd, 1);
+        EQUALS(BindCallTest::reachedEnd, 1);
     });
 
     IT("tells the null of JavaScript from a value left out, and finds none in Lua", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         EQUALS(runtimes.Js("[Probe.isNull(null), Probe.isNull(undefined), Probe.isNull(), Probe.isNull(false), Probe.isNull(0), Probe.isNull({}), Probe.isNull(Probe.get({ a: null }, 'a')), Probe.isNull(Probe.get({}, 'a'))].join()"),
             "true,false,false,false,false,false,true,false");
         EQUALS(runtimes.Js("Probe.kind(null) + Probe.kind(undefined)"), "NilNil");
@@ -1278,8 +1265,8 @@ MODULE(bind_call, {
     });
 
     IT("reads a Lua table raw, and a JavaScript object as a script does", {
-        Runtimes runtimes;
-        reachedEnd = 0;
+        BindCallTest::Runtimes runtimes;
+        BindCallTest::reachedEnd = 0;
 
         // No metamethod runs inside the function: a proxy table shows what it holds itself.
         EQUALS(runtimes.Lua("Probe.kind(Probe.get(setmetatable({}, { __index = function() error('ran') end }), 'a'))"), "Nil");
@@ -1295,11 +1282,11 @@ MODULE(bind_call, {
         EQUALS(runtimes.Js("Probe.get({ get a() { throw new RangeError('getter ran') } }, 'a')"), "<threw> RangeError: getter ran");
         EQUALS(runtimes.Js("Probe.get({ get a() { return 7 } }, 'a')"), "7");
         EQUALS(runtimes.Js("Probe.kind(Probe.set(Object.freeze({}), 'a', 1).a)"), "Nil");
-        EQUALS(reachedEnd, 3);
+        EQUALS(BindCallTest::reachedEnd, 3);
     });
 
     IT("reads and grows an array from zero", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.length(['a', 'b', 'c'])", "Probe.length({ 'a', 'b', 'c' })", "3");
         mismatches += runtimes.Both("Probe.length({})", "0");
@@ -1317,7 +1304,7 @@ MODULE(bind_call, {
     // --- Functions ---
 
     IT("returns a function that calls a native one", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.adder(2)(3)", "5");
         mismatches += runtimes.Both("{ const add = Probe.adder(10); add(1) + add(2) }", "(function() local add = Probe.adder(10) return add(1) + add(2) end)()", "23");
@@ -1327,7 +1314,7 @@ MODULE(bind_call, {
     });
 
     IT("reads a handle kept beyond its call as nil", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         EQUALS(runtimes.Js("typeof Probe.capture('old')()"), "undefined");
         EQUALS(runtimes.Lua("type(Probe.capture('old')())"), "nil");
         // The call it is read in has another value in the same place.
@@ -1345,19 +1332,19 @@ MODULE(bind_call, {
     });
 
     IT("reads a handle only in the call it belongs to", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         // The call nested in it sees nil; back in its own call the handle is good again.
         EQUALS(runtimes.Js("Probe.nested({ toString() { return this.peek() } }, 'text')"), "Nil:String");
         EQUALS(runtimes.Lua("Probe.nested(setmetatable({}, { __tostring = function(self) return self.peek() end }), 'text')"), "Nil:String");
     });
 
     IT("keeps a native function for as long as the script function lives", {
-        HeldSlot()                     = std::make_shared<int>(7);
-        const std::weak_ptr<int> alive = HeldSlot();
+        BindCallTest::HeldSlot()       = std::make_shared<int>(7);
+        const std::weak_ptr<int> alive = BindCallTest::HeldSlot();
         {
-            Runtimes runtimes;
+            BindCallTest::Runtimes runtimes;
             EQUALS(runtimes.Both("globalThis.kept = Probe.hold(); kept()", "(function() kept = Probe.hold() return kept() end)()", "7"), "");
-            HeldSlot().reset();
+            BindCallTest::HeldSlot().reset();
             EQUALS(alive.expired(), false);
             EQUALS(runtimes.Both("kept()", "7"), "");
 
@@ -1368,13 +1355,13 @@ MODULE(bind_call, {
         }
         EQUALS(alive.expired(), true);
 
-        HeldSlot()                   = std::make_shared<int>(8);
-        const std::weak_ptr<int> lua = HeldSlot();
+        BindCallTest::HeldSlot()     = std::make_shared<int>(8);
+        const std::weak_ptr<int> lua = BindCallTest::HeldSlot();
         {
-            LuaRuntime runtime(LuaOptions(Side::Server));
-            ProbeDefinition().RegisterLuaGlobal(runtime.State(), Side::Server);
+            Framework::Scripting::LuaRuntime runtime(BindCallTest::LuaOptions(Framework::Scripting::Bind::Side::Server));
+            BindCallTest::ProbeDefinition().RegisterLuaGlobal(runtime.State(), Framework::Scripting::Bind::Side::Server);
             EQUALS(LuaRuntimeTest::Eval(runtime, "(function() kept = Probe.hold() return kept() end)()"), "8");
-            HeldSlot().reset();
+            BindCallTest::HeldSlot().reset();
             EQUALS(lua.expired(), false);
             LuaRuntimeTest::Run(runtime, "kept = nil");
             lua_gc(runtime.State(), LUA_GCCOLLECT);
@@ -1383,15 +1370,15 @@ MODULE(bind_call, {
     });
 
     IT("makes a function of a native one outside any call", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         runtimes.Enter([](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-            const v8::Local<v8::Function> function = Bind::MakeV8Function(isolate, context, [](Call &call) {
+            const v8::Local<v8::Function> function = Framework::Scripting::Bind::MakeV8Function(isolate, context, [](Framework::Scripting::Bind::Call &call) {
                 call.Return(call.Arg(0).AsString() + "!");
             });
             context->Global()->Set(context, v8pp::to_v8(isolate, "shout"), function).Check();
         });
         lua_State *L = runtimes.LuaSide().State();
-        Bind::PushLuaFunction(L, [](Call &call) {
+        Framework::Scripting::Bind::PushLuaFunction(L, [](Framework::Scripting::Bind::Call &call) {
             call.Return(call.Arg(0).AsString() + "!");
         });
         lua_setglobal(L, "shout");
@@ -1399,7 +1386,7 @@ MODULE(bind_call, {
 
         // A state no LuaRuntime made runs one too, as long as the function asks for nothing of the runtime.
         LuaTest::State plain;
-        Bind::PushLuaFunction(plain.L, [](Call &call) {
+        Framework::Scripting::Bind::PushLuaFunction(plain.L, [](Framework::Scripting::Bind::Call &call) {
             call.Return(call.ArgCount());
         });
         lua_setglobal(plain.L, "count");
@@ -1409,14 +1396,14 @@ MODULE(bind_call, {
     // --- Errors ---
 
     IT("throws when the function returns, and the first throw wins", {
-        Runtimes runtimes;
-        reachedEnd = 0;
+        BindCallTest::Runtimes runtimes;
+        BindCallTest::reachedEnd = 0;
 
         EQUALS(runtimes.Js("Probe.failType()"), "<threw> TypeError: Probe.failType: expected (text)");
         EQUALS(runtimes.Js("Probe.fail()"), "<threw> Error: Probe.fail: network peer unavailable");
         EQUALS(runtimes.Js("{ let caught; try { Probe.failType() } catch (error) { caught = error } caught instanceof TypeError }"), "true");
         EQUALS(runtimes.Js("{ let caught; try { Probe.fail() } catch (error) { caught = error } caught instanceof Error && !(caught instanceof TypeError) }"), "true");
-        EQUALS(reachedEnd, 4);
+        EQUALS(BindCallTest::reachedEnd, 4);
 
         // A number out of range is a RangeError in JavaScript, and the raised string every error is in Lua.
         EQUALS(runtimes.Js("Probe.failRange()"), "<threw> RangeError: Probe.failRange: expected a tier from 0 to 2");
@@ -1427,14 +1414,14 @@ MODULE(bind_call, {
         EQUALS(runtimes.Lua("Probe.fail()"), "<error> eval:1: Probe.fail: network peer unavailable");
         EQUALS(runtimes.Lua("(function() local ok, message = pcall(function() Probe.fail() end) return tostring(ok) .. ' ' .. type(message) .. ' ' .. message end)()"), "false string eval:1: Probe.fail: network peer unavailable");
         EQUALS(runtimes.Lua("select(2, pcall(Probe.failType))"), "Probe.failType: expected (text)");
-        EQUALS(reachedEnd, 8);
+        EQUALS(BindCallTest::reachedEnd, 8);
 
         // The runtimes are as good as before.
         EQUALS(runtimes.Both("Probe.twice(4)", "8"), "");
     });
 
     IT("turns a C++ exception into an error of the script", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         EQUALS(runtimes.Js("Probe.raise()"), "<threw> Error: Probe.raise: exception");
         EQUALS(runtimes.Lua("Probe.raise()"), "<error> eval:1: Probe.raise: exception");
         EQUALS(runtimes.Both("Probe.twice(4)", "8"), "");
@@ -1446,51 +1433,51 @@ MODULE(bind_call, {
     });
 
     IT("lets what Lua raises inside the function unwind it", {
-        LuaRuntime runtime(LuaRuntimeTest::Options(4u << 20));
-        Bind::PushLuaFunction(runtime.State(), [](Call &call) {
-            const Unwinding unwinding;
+        Framework::Scripting::LuaRuntime runtime(LuaRuntimeTest::Options(4u << 20));
+        Framework::Scripting::Bind::PushLuaFunction(runtime.State(), [](Framework::Scripting::Bind::Call &call) {
+            const BindCallTest::Unwinding unwinding;
             const std::string block(64 * 1024, 'x');
-            Value list = call.NewArray();
+            Framework::Scripting::Bind::Value list = call.NewArray();
             for (int i = 0; i < 1024; ++i) {
                 list.Append(call.String(block));
             }
-            ++reachedEnd;
+            ++BindCallTest::reachedEnd;
         });
         lua_setglobal(runtime.State(), "flood");
-        unwound    = 0;
-        reachedEnd = 0;
+        BindCallTest::unwound    = 0;
+        BindCallTest::reachedEnd = 0;
 
         EQUALS(LuaRuntimeTest::Eval(runtime, "flood()"), "<error> not enough memory");
-        EQUALS(unwound, 1);
-        EQUALS(reachedEnd, 0);
+        EQUALS(BindCallTest::unwound, 1);
+        EQUALS(BindCallTest::reachedEnd, 0);
         EQUALS(LuaRuntimeTest::Eval(runtime, "1 + 1"), "2");
     });
 
     IT("goes on when the deadline stops what it asked a script for, and the script is stopped after it", {
-        LuaRuntime runtime(LuaRuntimeTest::Options(0, 50));
+        Framework::Scripting::LuaRuntime runtime(LuaRuntimeTest::Options(0, 50));
         LuaRuntimeTest::AddSpin(runtime);
-        ProbeDefinition().RegisterLuaGlobal(runtime.State(), Side::Server);
-        reachedEnd = 0;
+        BindCallTest::ProbeDefinition().RegisterLuaGlobal(runtime.State(), Framework::Scripting::Bind::Side::Server);
+        BindCallTest::reachedEnd = 0;
 
         const std::string error = LuaRuntimeTest::Run(runtime, "Probe.display(setmetatable({}, { __tostring = function() spin() return 'late' end })) survived = true");
         EQUALS(LuaRuntimeTest::Contains(LuaRuntimeTest::FirstLine(error), "script ran too long"), true);
-        EQUALS(reachedEnd, 1);
+        EQUALS(BindCallTest::reachedEnd, 1);
         EQUALS(LuaRuntimeTest::Eval(runtime, "survived"), "nil");
     });
 
     IT("lets nothing more run in an isolate that is being terminated", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         runtimes.Enter([](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-            const v8::Local<v8::Function> stop = Bind::MakeV8Function(isolate, context, [isolate](Call &) {
+            const v8::Local<v8::Function> stop = Framework::Scripting::Bind::MakeV8Function(isolate, context, [isolate](Framework::Scripting::Bind::Call &) {
                 isolate->TerminateExecution();
             });
             context->Global()->Set(context, v8pp::to_v8(isolate, "stop"), stop).Check();
         });
-        reachedEnd = 0;
+        BindCallTest::reachedEnd = 0;
 
         // What a script is terminated with is no exception of its own: V8 has it as null.
         EQUALS(runtimes.Js("Probe.get({ get a() { stop(); for (;;) {} } }, 'a'); globalThis.survived = true"), "<threw> null");
-        EQUALS(reachedEnd, 1);
+        EQUALS(BindCallTest::reachedEnd, 1);
         runtimes.Enter([](v8::Isolate *isolate, v8::Local<v8::Context>) {
             isolate->CancelTerminateExecution();
         });
@@ -1498,11 +1485,11 @@ MODULE(bind_call, {
         EQUALS(runtimes.Both("Probe.twice(4)", "8"), "");
 
         // Terminated while it spells a value, the function is told as well, and asks the script for nothing more.
-        reachedEnd         = 0;
-        thrownAfterDisplay = false;
+        BindCallTest::reachedEnd         = 0;
+        BindCallTest::thrownAfterDisplay = false;
         EQUALS(runtimes.Js("Probe.spell({ toString() { stop(); for (;;) {} } }, { get a() { globalThis.asked = true; return 1 } })"), "<threw> null");
-        EQUALS(reachedEnd, 1);
-        EQUALS(thrownAfterDisplay, true);
+        EQUALS(BindCallTest::reachedEnd, 1);
+        EQUALS(BindCallTest::thrownAfterDisplay, true);
         runtimes.Enter([](v8::Isolate *isolate, v8::Local<v8::Context>) {
             isolate->CancelTerminateExecution();
         });
@@ -1513,7 +1500,7 @@ MODULE(bind_call, {
     // --- Bound classes ---
 
     IT("gives a method written as a context function its receiver", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("{ const c = new CallCounter(1); c.bump(); c.bump(5); c.get() }", "(function() local c = CallCounter.new(1) c:bump() c:bump(5) return c:get() end)()", "7");
         // The receiver is not an argument.
@@ -1550,7 +1537,7 @@ MODULE(bind_call, {
     });
 
     IT("reads and writes a property written as context functions", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("new CallCounter(4).level", "CallCounter.new(4).level", "4");
         mismatches += runtimes.Both("{ const c = new CallCounter(1); c.level = 9; c.get() }", "(function() local c = CallCounter.new(1) c.level = 9 return c:get() end)()", "9");
@@ -1567,14 +1554,15 @@ MODULE(bind_call, {
         EQUALS(runtimes.Js("{ const c = new CallCounter(2); c.doubled = 50; c.doubled }"), "4");
         EQUALS(runtimes.Lua("(function() local c = CallCounter.new(2) c.doubled = 50 end)()"), "<error> eval:1: attempt to set 'doubled' on CallCounter");
 
-        const Bind::ClassDesc &desc = CounterDefinition().Describe();
+        const Framework::Scripting::Bind::ClassDesc &desc = BindCallTest::CounterDefinition().Describe();
         EQUALS(desc.properties.size(), 2u);
-        EQUALS(desc.properties[0].name + ":" + Bind::ToTypeScript(desc.properties[0].type) + ":" + Bind::ToLuaAnnotation(desc.properties[0].type) + ":" + (desc.properties[0].readonly ? "readonly" : "writable"), "level:number | string:number|string:writable");
-        EQUALS(desc.properties[1].name + ":" + Bind::ToTypeScript(desc.properties[1].type) + ":" + (desc.properties[1].readonly ? "readonly" : "writable"), "doubled:number:readonly");
+        EQUALS(desc.properties[0].name + ":" + Framework::Scripting::Bind::ToTypeScript(desc.properties[0].type) + ":" + Framework::Scripting::Bind::ToLuaAnnotation(desc.properties[0].type) + ":" + (desc.properties[0].readonly ? "readonly" : "writable"),
+            "level:number | string:number|string:writable");
+        EQUALS(desc.properties[1].name + ":" + Framework::Scripting::Bind::ToTypeScript(desc.properties[1].type) + ":" + (desc.properties[1].readonly ? "readonly" : "writable"), "doubled:number:readonly");
     });
 
     IT("leaves a method of another side out", {
-        Runtimes runtimes(Side::Client);
+        BindCallTest::Runtimes runtimes(Framework::Scripting::Bind::Side::Client);
         EQUALS(runtimes.Js("typeof new CallCounter(1).serverBump"), "undefined");
         EQUALS(runtimes.Lua("type(CallCounter.new(1).serverBump)"), "nil");
         EQUALS(runtimes.Js("typeof new CallCounter(1).doubled + typeof new CallCounter(1).level"), "undefinednumber");
@@ -1583,7 +1571,7 @@ MODULE(bind_call, {
     });
 
     IT("finds the object in a bound value, through its bases", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.bound(new CallCounter(5))", "Probe.bound(CallCounter.new(5))", "5");
         mismatches += runtimes.Both("Probe.bound(new CallStepper(6))", "Probe.bound(CallStepper.new(6))", "6");
@@ -1595,30 +1583,30 @@ MODULE(bind_call, {
     });
 
     IT("wraps a C++ object as an instance of its class", {
-        Runtimes runtimes;
-        reachedEnd = 0;
+        BindCallTest::Runtimes runtimes;
+        BindCallTest::reachedEnd = 0;
         std::string mismatches;
         mismatches += runtimes.Both("Probe.wrap(5).get()", "Probe.wrap(5):get()", "5");
         mismatches += runtimes.Both("Probe.wrap(5) instanceof CallCounter", "Probe.kind(Probe.wrap(5)) == 'Bound'", "true");
         mismatches += runtimes.Both("{ const w = Probe.wrap(5); w.bump(2); w.get() }", "(function() local w = Probe.wrap(5) w:bump(2) return w:get() end)()", "7");
         mismatches += runtimes.Both("{ const a = new CallCounter(1); const b = Probe.copy(a); b.bump(1); a.get() * 10 + b.get() }", "(function() local a = CallCounter.new(1) local b = Probe.copy(a) b:bump(1) return a:get() * 10 + b:get() end)()", "12");
         EQUALS(mismatches, "");
-        EQUALS(reachedEnd, 6);
+        EQUALS(BindCallTest::reachedEnd, 6);
     });
 
     IT("throws for a class the runtime does not have", {
-        Runtimes runtimes(Side::Server, false);
-        reachedEnd = 0;
+        BindCallTest::Runtimes runtimes(Framework::Scripting::Bind::Side::Server, false);
+        BindCallTest::reachedEnd = 0;
         EQUALS(runtimes.Js("Probe.wrap(5)"), "<threw> Error: CallCounter is not available in this JavaScript runtime");
         EQUALS(runtimes.Lua("Probe.wrap(5)"), "<error> eval:1: CallCounter is not available in this Lua state");
-        EQUALS(reachedEnd, 2);
+        EQUALS(BindCallTest::reachedEnd, 2);
         // The object it was to move from is left whole.
-        leftAfterWrap = 0;
+        BindCallTest::leftAfterWrap = 0;
         EQUALS(runtimes.Js("Probe.keep()"), "<threw> Error: CallStepper is not available in this JavaScript runtime");
-        EQUALS(leftAfterWrap, 64u);
-        leftAfterWrap = 0;
+        EQUALS(BindCallTest::leftAfterWrap, 64u);
+        BindCallTest::leftAfterWrap = 0;
         EQUALS(runtimes.Lua("Probe.keep()"), "<error> eval:1: CallStepper is not available in this Lua state");
-        EQUALS(leftAfterWrap, 64u);
+        EQUALS(BindCallTest::leftAfterWrap, 64u);
         EQUALS(runtimes.Both("Probe.bound({})", "-1"), "");
     });
 
@@ -1626,19 +1614,19 @@ MODULE(bind_call, {
 
     IT("tells the language, the side and the resource of the caller", {
         {
-            Runtimes runtimes;
+            BindCallTest::Runtimes runtimes;
             EQUALS(runtimes.Js("Probe.language()"), "javascript");
             EQUALS(runtimes.Lua("Probe.language()"), "lua");
             EQUALS(runtimes.Both("Probe.side()", "server"), "");
 
             // Lua has the name its runtime was created with; JavaScript asks the resource manager.
             EQUALS(runtimes.Lua("Probe.resource()"), "lua-probe");
-            EQUALS(runtimes.Both("Probe.manager()", UnregisteredManager()), "");
+            EQUALS(runtimes.Both("Probe.manager()", BindCallTest::UnregisteredManager()), "");
 
-            ResourceManager manager(&runtimes.Engine());
-            expectedManager = &manager;
-            Bind::SetCallResourceManager(runtimes.Isolate(), &manager);
-            Bind::SetCallResourceManager(&runtimes.LuaSide(), &manager);
+            Framework::Scripting::ResourceManager manager(&runtimes.Engine());
+            BindCallTest::expectedManager = &manager;
+            Framework::Scripting::Bind::SetCallResourceManager(runtimes.Isolate(), &manager);
+            Framework::Scripting::Bind::SetCallResourceManager(&runtimes.LuaSide(), &manager);
             EQUALS(runtimes.Both("Probe.manager()", "registered"), "");
             EQUALS(runtimes.Js("Probe.resource()"), "");
             manager.SetCurrentResourceContext("js-probe");
@@ -1651,38 +1639,38 @@ MODULE(bind_call, {
             EQUALS(runtimes.Lua("Probe.resource()"), "lua-probe");
             EQUALS(runtimes.Lua("Probe.ownerOf(print) .. '|' .. Probe.ownerOf(5) .. '|' .. Probe.ownerOf()"), "lua-probe|lua-probe|lua-probe");
 
-            Bind::SetCallResourceManager(runtimes.Isolate(), nullptr);
-            Bind::SetCallResourceManager(&runtimes.LuaSide(), nullptr);
-            EQUALS(runtimes.Both("Probe.manager()", UnregisteredManager()), "");
+            Framework::Scripting::Bind::SetCallResourceManager(runtimes.Isolate(), nullptr);
+            Framework::Scripting::Bind::SetCallResourceManager(&runtimes.LuaSide(), nullptr);
+            EQUALS(runtimes.Both("Probe.manager()", BindCallTest::UnregisteredManager()), "");
         }
-        expectedManager = nullptr;
+        BindCallTest::expectedManager = nullptr;
 
-        Runtimes client(Side::Client);
+        BindCallTest::Runtimes client(Framework::Scripting::Bind::Side::Client);
         EQUALS(client.Both("Probe.side()", "client"), "");
     });
 
     IT("forgets the manager of a runtime when the manager or the isolate goes", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         {
-            ResourceManager manager(&runtimes.Engine());
-            Bind::SetCallResourceManager(runtimes.Isolate(), &manager);
-            Bind::SetCallResourceManager(&runtimes.LuaSide(), &manager);
-            expectedManager = &manager;
+            Framework::Scripting::ResourceManager manager(&runtimes.Engine());
+            Framework::Scripting::Bind::SetCallResourceManager(runtimes.Isolate(), &manager);
+            Framework::Scripting::Bind::SetCallResourceManager(&runtimes.LuaSide(), &manager);
+            BindCallTest::expectedManager = &manager;
             EQUALS(runtimes.Both("Probe.manager()", "registered"), "");
         }
-        expectedManager = nullptr;
-        EQUALS(runtimes.Both("Probe.manager()", UnregisteredManager()), "");
+        BindCallTest::expectedManager = nullptr;
+        EQUALS(runtimes.Both("Probe.manager()", BindCallTest::UnregisteredManager()), "");
 
         // An isolate that is unregistered is not found again under its address.
         Framework::Scripting::NodeEngine engine;
         engine.Init();
         std::string error;
         std::unique_ptr<Framework::Scripting::NodeRuntime> runtime = engine.CreateRuntime(error);
-        ResourceManager manager(&engine);
-        Bind::SetCallResourceManager(runtime->GetIsolate(), &manager);
-        const bool registered = Bind::Detail::CallResourceManager(runtime->GetIsolate()) == &manager;
+        Framework::Scripting::ResourceManager manager(&engine);
+        Framework::Scripting::Bind::SetCallResourceManager(runtime->GetIsolate(), &manager);
+        const bool registered = Framework::Scripting::Bind::Detail::CallResourceManager(runtime->GetIsolate()) == &manager;
         Framework::Scripting::Builtins::UnregisterAll(runtime->GetIsolate());
-        const bool forgotten = Bind::Detail::CallResourceManager(runtime->GetIsolate()) != &manager;
+        const bool forgotten = Framework::Scripting::Bind::Detail::CallResourceManager(runtime->GetIsolate()) != &manager;
         runtime.reset();
         engine.Shutdown();
         EQUALS(registered, true);
@@ -1690,30 +1678,29 @@ MODULE(bind_call, {
     });
 
     IT("writes a line to the output of the runtime of the caller", {
-        using Framework::Scripting::OutputLevel;
-        Bind::Namespace output("ProbeOutput", "Writes to the output of its runtime.");
+        Framework::Scripting::Bind::Namespace output("ProbeOutput", "Writes to the output of its runtime.");
         output
             .Function(
                 "write",
-                [](Call &call) {
-                    static constexpr OutputLevel levels[] = {OutputLevel::Debug, OutputLevel::Info, OutputLevel::Warning, OutputLevel::Error};
+                [](Framework::Scripting::Bind::Call &call) {
+                    static constexpr Framework::Scripting::OutputLevel levels[] = {Framework::Scripting::OutputLevel::Debug, Framework::Scripting::OutputLevel::Info, Framework::Scripting::OutputLevel::Warning, Framework::Scripting::OutputLevel::Error};
                     call.WriteOutput(levels[call.Arg(0).AsInteger().value_or(1) & 3], call.Arg(1).AsString());
                 },
-                Doc("Writes a line.").Param("level", TypeOf<int>(), "0 for debug to 3 for error.").Param("line", TypeOf<std::string>(), "What to write."))
+                Framework::Scripting::Bind::Doc("Writes a line.").Param("level", Framework::Scripting::Bind::TypeOf<int>(), "0 for debug to 3 for error.").Param("line", Framework::Scripting::Bind::TypeOf<std::string>(), "What to write."))
             .Function(
                 "bounded",
-                [](Call &call) {
-                    call.Return(call.OutputLineLimit() == LuaRuntime::kMaxLineBytes ? "as print" : call.OutputLineLimit() == std::numeric_limits<size_t>::max() ? "not" : "otherwise");
+                [](Framework::Scripting::Bind::Call &call) {
+                    call.Return(call.OutputLineLimit() == Framework::Scripting::LuaRuntime::kMaxLineBytes ? "as print" : call.OutputLineLimit() == std::numeric_limits<size_t>::max() ? "not" : "otherwise");
                 },
-                Doc("Tells the bound of a line.").ReturnType(TypeOf<std::string>()));
+                Framework::Scripting::Bind::Doc("Tells the bound of a line.").ReturnType(Framework::Scripting::Bind::TypeOf<std::string>()));
 
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         runtimes.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-            output.MaterialiseV8(isolate, context, context->Global(), v8pp::metadata::catalog("bind_call/scratch"), Side::Server);
+            output.MaterialiseV8(isolate, context, context->Global(), v8pp::metadata::catalog("bind_call/scratch"), Framework::Scripting::Bind::Side::Server);
         });
-        output.RegisterLuaGlobal(runtimes.LuaSide().State(), Side::Server);
-        ResourceManager manager(&runtimes.Engine());
-        Bind::SetCallResourceManager(runtimes.Isolate(), &manager);
+        output.RegisterLuaGlobal(runtimes.LuaSide().State(), Framework::Scripting::Bind::Side::Server);
+        Framework::Scripting::ResourceManager manager(&runtimes.Engine());
+        Framework::Scripting::Bind::SetCallResourceManager(runtimes.Isolate(), &manager);
         manager.SetCurrentResourceContext("js-probe");
 
         // The same calls in both languages, each under the name of its resource and at the level it gave.
@@ -1731,7 +1718,7 @@ MODULE(bind_call, {
         std::string missing;
         for (const std::string &expected : {std::string("debug [js-probe] traced"), std::string("info [js-probe] told"), std::string("warning [js-probe] warned"), std::string("error [js-probe] failed"), std::string("debug [lua-probe] traced"),
                  std::string("info [lua-probe] told"), std::string("warning [lua-probe] warned"), std::string("error [lua-probe] failed"), std::string("info unnamed"), "info " + std::string(5000, 'j'),
-                 "info [lua-probe] " + std::string(LuaRuntime::kMaxLineBytes, 'l') + std::string(LuaRuntimeTest::kTruncated), std::string("warning [lua-probe] two lines")}) {
+                 "info [lua-probe] " + std::string(Framework::Scripting::LuaRuntime::kMaxLineBytes, 'l') + std::string(LuaRuntimeTest::kTruncated), std::string("warning [lua-probe] two lines")}) {
             if (std::count(lines.begin(), lines.end(), expected) != 1) {
                 missing += "\n\t" + expected.substr(0, 60);
             }
@@ -1751,7 +1738,7 @@ MODULE(bind_call, {
     // --- Namespace, materialised ---
 
     IT("publishes constants, and the members of the side only", {
-        Runtimes server;
+        BindCallTest::Runtimes server;
         std::string mismatches;
         mismatches += server.Both("Probe.answer", "42");
         mismatches += server.Both("Probe.ratio", "0.5");
@@ -1767,14 +1754,14 @@ MODULE(bind_call, {
         EQUALS(server.Lua("type(Probe.clientOnly)"), "nil");
         EQUALS(server.Lua("math.type(Probe.answer) .. math.type(Probe.ratio)"), "integerfloat");
 
-        Runtimes client(Side::Client);
+        BindCallTest::Runtimes client(Framework::Scripting::Bind::Side::Client);
         EQUALS(client.Both("Probe.clientOnly()", "true"), "");
         EQUALS(client.Js("typeof Probe.serverOnly + typeof Probe.serverLabel"), "undefinedundefined");
         EQUALS(client.Lua("type(Probe.serverOnly) .. type(Probe.serverLabel)"), "nilnil");
     });
 
     IT("makes the namespace read-only", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         EQUALS(runtimes.Lua("(function() Probe.answer = 1 end)()"), "<error> eval:1: attempt to set 'answer' on Probe");
         EQUALS(runtimes.Lua("(function() Probe.extra = 1 end)()"), "<error> eval:1: attempt to set 'extra' on Probe");
         EQUALS(runtimes.Lua("getmetatable(Probe)"), "false");
@@ -1790,33 +1777,33 @@ MODULE(bind_call, {
     });
 
     IT("puts the namespace back under its name in a state that has it", {
-        LuaRuntime runtime(LuaOptions(Side::Server));
+        Framework::Scripting::LuaRuntime runtime(BindCallTest::LuaOptions(Framework::Scripting::Bind::Side::Server));
         lua_State *L = runtime.State();
-        ProbeDefinition().RegisterLuaGlobal(L, Side::Server);
+        BindCallTest::ProbeDefinition().RegisterLuaGlobal(L, Framework::Scripting::Bind::Side::Server);
         LuaRuntimeTest::Run(runtime, "first = Probe; rawset(_G, 'Probe', nil)");
         EQUALS(LuaRuntimeTest::Eval(runtime, "type(Probe)"), "nil");
-        ProbeDefinition().MaterialiseLua(L, Side::Client);
+        BindCallTest::ProbeDefinition().MaterialiseLua(L, Framework::Scripting::Bind::Side::Client);
         EQUALS(LuaRuntimeTest::Eval(runtime, "rawequal(first, Probe)"), "true");
         EQUALS(LuaRuntimeTest::Eval(runtime, "type(Probe.serverOnly) .. type(Probe.clientOnly)"), "functionnil");
         EQUALS(lua_gettop(L), 0);
     });
 
     IT("takes the value of a runtime constant from each materialisation", {
-        Bind::Namespace told("ProbeTold", "Says what its runtime was told.");
+        Framework::Scripting::Bind::Namespace told("ProbeTold", "Says what its runtime was told.");
         told.RuntimeConstant<bool>("flag", "A switch of the runtime.")
             .RuntimeConstant<double>("level", "A level of the runtime.")
             .Constant("fixed", 7, "The same in every runtime.")
             .RuntimeConstant<std::string>("label", "A label of the runtime.")
-            .RuntimeConstant<std::string>("serverLabel", "A label of a server.", Side::Server);
+            .RuntimeConstant<std::string>("serverLabel", "A label of a server.", Framework::Scripting::Bind::Side::Server);
 
         // A client is given no value for what only a server has.
-        const Bind::Namespace::RuntimeConstants first = {{"flag", true}, {"level", 3.0}, {"label", std::string("first")}};
-        Runtimes client(Side::Client);
+        const Framework::Scripting::Bind::Namespace::RuntimeConstants first = {{"flag", true}, {"level", 3.0}, {"label", std::string("first")}};
+        BindCallTest::Runtimes client(Framework::Scripting::Bind::Side::Client);
         v8pp::metadata::registry recorded;
         client.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-            told.MaterialiseV8(isolate, context, context->Global(), recorded, Side::Client, first);
+            told.MaterialiseV8(isolate, context, context->Global(), recorded, Framework::Scripting::Bind::Side::Client, first);
         });
-        told.RegisterLuaGlobal(client.LuaSide().State(), Side::Client, first);
+        told.RegisterLuaGlobal(client.LuaSide().State(), Framework::Scripting::Bind::Side::Client, first);
         std::string mismatches;
         mismatches += client.Both("ProbeTold.flag === true", "ProbeTold.flag == true", "true");
         mismatches += client.Both("ProbeTold.level", "3");
@@ -1833,7 +1820,7 @@ MODULE(bind_call, {
         EQUALS(client.Lua("(function() ProbeTold.label = 'x' end)()"), "<error> eval:1: attempt to set 'label' on ProbeTold");
         const nlohmann::json expected = {{"description", "A label of the runtime."}, {"name", "label"}, {"readonly", true}, {"static", false}, {"type", {{"cppName", ""}, {"name", "string"}, {"optional", false}}}};
         nlohmann::json label;
-        for (const nlohmann::json &property : SymbolOf(recorded, "ProbeTold")["properties"]) {
+        for (const nlohmann::json &property : BindCallTest::SymbolOf(recorded, "ProbeTold")["properties"]) {
             if (property["name"] == "label") {
                 label = property;
             }
@@ -1841,12 +1828,12 @@ MODULE(bind_call, {
         EQUALS(label.dump(), expected.dump());
 
         // Another runtime is told something else.
-        const Bind::Namespace::RuntimeConstants second = {{"serverLabel", std::string("behind")}, {"label", std::string("second")}, {"level", 0.5}, {"flag", false}};
-        Runtimes server;
+        const Framework::Scripting::Bind::Namespace::RuntimeConstants second = {{"serverLabel", std::string("behind")}, {"label", std::string("second")}, {"level", 0.5}, {"flag", false}};
+        BindCallTest::Runtimes server;
         server.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-            told.MaterialiseV8(isolate, context, context->Global(), recorded, Side::Server, second);
+            told.MaterialiseV8(isolate, context, context->Global(), recorded, Framework::Scripting::Bind::Side::Server, second);
         });
-        told.RegisterLuaGlobal(server.LuaSide().State(), Side::Server, second);
+        told.RegisterLuaGlobal(server.LuaSide().State(), Framework::Scripting::Bind::Side::Server, second);
         mismatches += server.Both("ProbeTold.flag === false", "ProbeTold.flag == false", "true");
         mismatches += server.Both("ProbeTold.level", "0.5");
         mismatches += server.Both("ProbeTold.label", "second");
@@ -1855,39 +1842,39 @@ MODULE(bind_call, {
         EQUALS(client.Both("ProbeTold.label", "first"), "");
 
         // A state that has the namespace keeps what it was first told.
-        told.MaterialiseLua(client.LuaSide().State(), Side::Client, second);
+        told.MaterialiseLua(client.LuaSide().State(), Framework::Scripting::Bind::Side::Client, second);
         EQUALS(client.Lua("ProbeTold.label"), "first");
     });
 
     IT("refuses a runtime constant that is given no value, or one of another type", {
-        Bind::Namespace told("ProbeUntold", "Says what its runtime was told.");
-        told.RuntimeConstant<bool>("flag", "A switch of the runtime.").RuntimeConstant<std::string>("label", "A label of the runtime.").RuntimeConstant<double>("serverLevel", "A level of a server.", Side::Server);
-        const std::string refusedTwice = LogicErrorOf([&] {
+        Framework::Scripting::Bind::Namespace told("ProbeUntold", "Says what its runtime was told.");
+        told.RuntimeConstant<bool>("flag", "A switch of the runtime.").RuntimeConstant<std::string>("label", "A label of the runtime.").RuntimeConstant<double>("serverLevel", "A level of a server.", Framework::Scripting::Bind::Side::Server);
+        const std::string refusedTwice = BindCallTest::LogicErrorOf([&] {
             told.RuntimeConstant<bool>("label", "Declared before.");
         });
         EQUALS(refusedTwice, "Bind: 'ProbeUntold.label' is declared twice, and a member cannot be overloaded");
 
-        const Bind::Namespace::RuntimeConstants missing = {{"flag", true}};
-        const Bind::Namespace::RuntimeConstants mistyped = {{"flag", true}, {"label", 1.0}};
-        const Bind::Namespace::RuntimeConstants whole    = {{"flag", true}, {"label", std::string("whole")}};
+        const Framework::Scripting::Bind::Namespace::RuntimeConstants missing  = {{"flag", true}};
+        const Framework::Scripting::Bind::Namespace::RuntimeConstants mistyped = {{"flag", true}, {"label", 1.0}};
+        const Framework::Scripting::Bind::Namespace::RuntimeConstants whole    = {{"flag", true}, {"label", std::string("whole")}};
         const std::string noValue                        = "Bind: 'ProbeUntold.label' is a runtime constant, and the runtime gives it no value";
         const std::string otherType                      = "Bind: 'ProbeUntold.label' is a runtime constant, and the runtime gives it a value of another type";
 
-        Runtimes runtimes(Side::Client);
+        BindCallTest::Runtimes runtimes(Framework::Scripting::Bind::Side::Client);
         std::string refusedMissing;
         std::string refusedMistyped;
         std::string refusedOtherSide;
         runtimes.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
             v8pp::metadata::registry &scratch = v8pp::metadata::catalog("bind_call/scratch");
-            refusedMissing                    = LogicErrorOf([&] {
-                told.MaterialiseV8(isolate, context, context->Global(), scratch, Side::Client, missing);
+            refusedMissing                    = BindCallTest::LogicErrorOf([&] {
+                told.MaterialiseV8(isolate, context, context->Global(), scratch, Framework::Scripting::Bind::Side::Client, missing);
             });
-            refusedMistyped = LogicErrorOf([&] {
-                told.MaterialiseV8(isolate, context, context->Global(), scratch, Side::Client, mistyped);
+            refusedMistyped                   = BindCallTest::LogicErrorOf([&] {
+                told.MaterialiseV8(isolate, context, context->Global(), scratch, Framework::Scripting::Bind::Side::Client, mistyped);
             });
             // What only the other side has needs no value here, and needs one there.
-            refusedOtherSide = LogicErrorOf([&] {
-                told.MaterialiseV8(isolate, context, context->Global(), scratch, Side::Server, whole);
+            refusedOtherSide = BindCallTest::LogicErrorOf([&] {
+                told.MaterialiseV8(isolate, context, context->Global(), scratch, Framework::Scripting::Bind::Side::Server, whole);
             });
         });
         EQUALS(refusedMissing, noValue);
@@ -1896,39 +1883,38 @@ MODULE(bind_call, {
         EQUALS(runtimes.Js("typeof ProbeUntold"), "undefined");
 
         lua_State *L = runtimes.LuaSide().State();
-        refusedMissing = LogicErrorOf([&] {
-            told.MaterialiseLua(L, Side::Client, missing);
+        refusedMissing  = BindCallTest::LogicErrorOf([&] {
+            told.MaterialiseLua(L, Framework::Scripting::Bind::Side::Client, missing);
         });
-        refusedMistyped = LogicErrorOf([&] {
-            told.MaterialiseLua(L, Side::Client, mistyped);
+        refusedMistyped = BindCallTest::LogicErrorOf([&] {
+            told.MaterialiseLua(L, Framework::Scripting::Bind::Side::Client, mistyped);
         });
         EQUALS(refusedMissing, noValue);
         EQUALS(refusedMistyped, otherType);
         EQUALS(lua_gettop(L), 0);
         EQUALS(runtimes.Lua("type(ProbeUntold)"), "nil");
 
-        told.MaterialiseLua(L, Side::Client, whole);
+        told.MaterialiseLua(L, Framework::Scripting::Bind::Side::Client, whole);
         EQUALS(runtimes.Lua("ProbeUntold.label"), "whole");
     });
 
     IT("refuses to give JavaScript a function it cannot receive the result of", {
-        using BindClassLuaTest::Token;
-        Bind::Namespace sealing("ProbeSealing", "Returns what cannot be copied.");
+        Framework::Scripting::Bind::Namespace sealing("ProbeSealing", "Returns what cannot be copied.");
         sealing.Function(
             "shared",
-            +[]() -> Token & {
-                static Token token(1);
+            +[]() -> BindClassLuaTest::Token & {
+                static BindClassLuaTest::Token token(1);
                 return token;
             },
-            Doc("Returns the one token."), Side::Server);
+            Framework::Scripting::Bind::Doc("Returns the one token."), Framework::Scripting::Bind::Side::Server);
 
-        Runtimes runtimes(Side::Client);
+        BindCallTest::Runtimes runtimes(Framework::Scripting::Bind::Side::Client);
         std::string refusal;
         runtimes.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
             // Not on the side it is declared for, so not refused.
-            sealing.MaterialiseV8(isolate, context, context->Global(), v8pp::metadata::catalog("bind_call/scratch"), Side::Client);
-            refusal = LogicErrorOf([&] {
-                sealing.MaterialiseV8(isolate, context, context->Global(), v8pp::metadata::catalog("bind_call/scratch"), Side::Server);
+            sealing.MaterialiseV8(isolate, context, context->Global(), v8pp::metadata::catalog("bind_call/scratch"), Framework::Scripting::Bind::Side::Client);
+            refusal = BindCallTest::LogicErrorOf([&] {
+                sealing.MaterialiseV8(isolate, context, context->Global(), v8pp::metadata::catalog("bind_call/scratch"), Framework::Scripting::Bind::Side::Server);
             });
         });
         EQUALS(refusal, "Bind: 'ProbeSealing.shared' returns an object of a class that cannot be copied, which JavaScript cannot receive");
@@ -1936,11 +1922,11 @@ MODULE(bind_call, {
     });
 
     IT("returns the object it sets on the target", {
-        Runtimes runtimes;
+        BindCallTest::Runtimes runtimes;
         bool same = false;
         runtimes.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
             v8::Local<v8::Object> target = v8::Object::New(isolate);
-            v8::Local<v8::Object> made   = ProbeDefinition().MaterialiseV8(isolate, context, target, v8pp::metadata::catalog("bind_call/scratch"), Side::Server);
+            v8::Local<v8::Object> made   = BindCallTest::ProbeDefinition().MaterialiseV8(isolate, context, target, v8pp::metadata::catalog("bind_call/scratch"), Framework::Scripting::Bind::Side::Server);
             v8::Local<v8::Value> set;
             same = target->Get(context, v8pp::to_v8(isolate, "Probe")).ToLocal(&set) && set->StrictEquals(made);
         });
@@ -1948,63 +1934,66 @@ MODULE(bind_call, {
     });
 
     IT("records the namespace in the catalog as a hand-written builtin does", {
-        using namespace v8pp::metadata;
-        Bind::Namespace written("ProbeWritten", "Server-side delivery of structured chat messages to connected clients.");
+        Framework::Scripting::Bind::Namespace written("ProbeWritten", "Server-side delivery of structured chat messages to connected clients.");
         written
             .Function(
-                "sendToAll", [](Call &) {},
-                Doc("Broadcasts a structured chat message to all clients.")
-                    .Param("text", TypeOf<std::string>(), "Message body broadcast to every connected client.")
-                    .OptionalParam("options", Type::Custom("{ author?: string; color?: number | Color }", "table"), "Optional author label and color: a Color or a packed 0xRRGGBBAA integer."))
+                "sendToAll", [](Framework::Scripting::Bind::Call &) {},
+                Framework::Scripting::Bind::Doc("Broadcasts a structured chat message to all clients.")
+                    .Param("text", Framework::Scripting::Bind::TypeOf<std::string>(), "Message body broadcast to every connected client.")
+                    .OptionalParam("options", Framework::Scripting::Bind::Type::Custom("{ author?: string; color?: number | Color }", "table"), "Optional author label and color: a Color or a packed 0xRRGGBBAA integer."))
             .Function(
-                "log", [](Call &) {}, Doc("Writes an informational log entry prefixed with the current resource name.").RestParam("values", Type::Custom("unknown[]", "any"), "Values formatted and joined with spaces."))
+                "log", [](Framework::Scripting::Bind::Call &) {},
+                Framework::Scripting::Bind::Doc("Writes an informational log entry prefixed with the current resource name.").RestParam("values", Framework::Scripting::Bind::Type::Custom("unknown[]", "any"), "Values formatted and joined with spaces."))
             .Function(
-                "emit", [](Call &) {},
-                Doc("Invokes every shared handler and waits for all synchronous and asynchronous results.")
-                    .Param("eventName", TypeOf<std::string>(), "Shared event name.")
-                    .RestParam("args", Type::Custom("unknown[]", "any"), "Arguments delivered to every matching handler.")
-                    .ReturnType(Type::Custom("Promise<void>", "nil"))
+                "emit", [](Framework::Scripting::Bind::Call &) {},
+                Framework::Scripting::Bind::Doc("Invokes every shared handler and waits for all synchronous and asynchronous results.")
+                    .Param("eventName", Framework::Scripting::Bind::TypeOf<std::string>(), "Shared event name.")
+                    .RestParam("args", Framework::Scripting::Bind::Type::Custom("unknown[]", "any"), "Arguments delivered to every matching handler.")
+                    .ReturnType(Framework::Scripting::Bind::Type::Custom("Promise<void>", "nil"))
                     .Returns("Promise rejected with an AggregateError when one or more handlers fail."))
             .Function(
                 "count",
                 [](const std::string &eventName) {
                     return static_cast<int>(eventName.size());
                 },
-                Doc("Counts persistent and one-shot shared handlers across resources.").Param("eventName", "Shared event name to inspect.").Returns("Number of matching handlers."))
+                Framework::Scripting::Bind::Doc("Counts persistent and one-shot shared handlers across resources.").Param("eventName", "Shared event name to inspect.").Returns("Number of matching handlers."))
             .Function(
-                "serverOnly", [](Call &) {}, Doc("Exists on the server."), Side::Server)
+                "serverOnly", [](Framework::Scripting::Bind::Call &) {}, Framework::Scripting::Bind::Doc("Exists on the server."), Framework::Scripting::Bind::Side::Server)
             .Constant("isClient", true, "True in the sandboxed client scripting runtime.")
             .Constant("frameworkVersion", std::string("1.0"), "Local Framework release version.");
 
-        registry byHand;
-        symbol &expected = byHand.global_object("ProbeWritten", "Server-side delivery of structured chat messages to connected clients.");
-        expected.record(function_of<v8::FunctionCallback>("sendToAll", docs("void",
-                                                                           {
-                                                                               param("text", "string", false, "Message body broadcast to every connected client."),
-                                                                               param("options", "{ author?: string; color?: number | Color }", true, "Optional author label and color: a Color or a packed 0xRRGGBBAA integer."),
-                                                                           },
-                                                                           "Broadcasts a structured chat message to all clients.")));
-        expected.record(function_of<v8::FunctionCallback>("log", docs("void", {rest_param("values", "unknown[]", "Values formatted and joined with spaces.")}, "Writes an informational log entry prefixed with the current resource name.")));
-        expected.record(function_of<v8::FunctionCallback>("emit", docs("Promise<void>", {param("eventName", "string", false, "Shared event name."), rest_param("args", "unknown[]", "Arguments delivered to every matching handler.")},
-                                                                      "Invokes every shared handler and waits for all synchronous and asynchronous results.", "Promise rejected with an AggregateError when one or more handlers fail.")));
-        expected.record(function_of<v8::FunctionCallback>("count", docs("number", {param("eventName", "string", false, "Shared event name to inspect.")}, "Counts persistent and one-shot shared handlers across resources.", "Number of matching handlers.")));
+        v8pp::metadata::registry byHand;
+        v8pp::metadata::symbol &expected = byHand.global_object("ProbeWritten", "Server-side delivery of structured chat messages to connected clients.");
+        expected.record(v8pp::metadata::function_of<v8::FunctionCallback>("sendToAll", v8pp::metadata::docs("void",
+                                                                                           {
+                                                                                               v8pp::metadata::param("text", "string", false, "Message body broadcast to every connected client."),
+                                                                                               v8pp::metadata::param("options", "{ author?: string; color?: number | Color }", true, "Optional author label and color: a Color or a packed 0xRRGGBBAA integer."),
+                                                                                           },
+                                                                                           "Broadcasts a structured chat message to all clients.")));
+        expected.record(
+            v8pp::metadata::function_of<v8::FunctionCallback>("log", v8pp::metadata::docs("void", {v8pp::metadata::rest_param("values", "unknown[]", "Values formatted and joined with spaces.")}, "Writes an informational log entry prefixed with the current resource name.")));
+        expected.record(v8pp::metadata::function_of<v8::FunctionCallback>("emit",
+            v8pp::metadata::docs("Promise<void>", {v8pp::metadata::param("eventName", "string", false, "Shared event name."), v8pp::metadata::rest_param("args", "unknown[]", "Arguments delivered to every matching handler.")},
+                "Invokes every shared handler and waits for all synchronous and asynchronous results.", "Promise rejected with an AggregateError when one or more handlers fail.")));
+        expected.record(v8pp::metadata::function_of<v8::FunctionCallback>("count",
+            v8pp::metadata::docs("number", {v8pp::metadata::param("eventName", "string", false, "Shared event name to inspect.")}, "Counts persistent and one-shot shared handlers across resources.", "Number of matching handlers.")));
         expected.add_property("isClient", "boolean", "True in the sandboxed client scripting runtime.", true);
         expected.add_property("frameworkVersion", "string", "Local Framework release version.", true);
 
-        Runtimes runtimes(Side::Client);
-        registry recorded;
+        BindCallTest::Runtimes runtimes(Framework::Scripting::Bind::Side::Client);
+        v8pp::metadata::registry recorded;
         runtimes.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-            written.MaterialiseV8(isolate, context, context->Global(), recorded, Side::Client);
+            written.MaterialiseV8(isolate, context, context->Global(), recorded, Framework::Scripting::Bind::Side::Client);
         });
-        EQUALS(SymbolOf(recorded, "ProbeWritten").dump(), SymbolOf(byHand, "ProbeWritten").dump());
+        EQUALS(BindCallTest::SymbolOf(recorded, "ProbeWritten").dump(), BindCallTest::SymbolOf(byHand, "ProbeWritten").dump());
         EQUALS(runtimes.Js("typeof ProbeWritten.sendToAll + typeof ProbeWritten.count + typeof ProbeWritten.serverOnly"), "functionfunctionundefined");
         EQUALS(runtimes.Js("ProbeWritten.count('four')"), "4");
         EQUALS(runtimes.Js("ProbeWritten.log.name"), "");
     });
 
     IT("records the functions and the parameters of Probe as a global object", {
-        Runtimes runtimes;
-        const nlohmann::json probe = SymbolOf(runtimes.Catalog(), "Probe");
+        BindCallTest::Runtimes runtimes;
+        const nlohmann::json probe = BindCallTest::SymbolOf(runtimes.Catalog(), "Probe");
         EQUALS(probe["kind"], "globalObject");
         EQUALS(probe["description"], "Exercises the dynamic interface.");
 
@@ -2030,7 +2019,7 @@ MODULE(bind_call, {
         EQUALS(named(probe["properties"], "answer")["readonly"], true);
 
         // A method and a static written as context functions are recorded as the typed ones are.
-        const nlohmann::json counter = SymbolOf(runtimes.Catalog(), "CallCounter");
+        const nlohmann::json counter = BindCallTest::SymbolOf(runtimes.Catalog(), "CallCounter");
         const nlohmann::json bump    = named(counter["functions"], "bump");
         EQUALS(bump["static"], false);
         EQUALS(bump["parameters"][0]["name"], "amount");

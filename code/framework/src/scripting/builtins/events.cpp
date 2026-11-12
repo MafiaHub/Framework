@@ -514,10 +514,6 @@ namespace Framework::Scripting::Builtins {
     };
 
     Bind::Namespace Events::Script::Define() {
-        using Bind::Doc;
-        using Bind::Side;
-        using Bind::Type::Custom;
-
         const auto scoped = [](void (*function)(Bind::Call &, HandlerScope), HandlerScope scope) -> Bind::NativeFunction {
             return [function, scope](Bind::Call &call) {
                 function(call, scope);
@@ -530,19 +526,19 @@ namespace Framework::Scripting::Builtins {
         };
 
         const Bind::TypeRef text        = Bind::TypeOf<std::string>();
-        const Bind::TypeRef unsubscribe = Custom("Unsubscribe", "fun()");
-        const Bind::TypeRef promise     = Custom("Promise<void>", "nil");
-        const Bind::TypeRef rest        = Custom("unknown[]", "any");
-        const Bind::TypeRef payload     = Custom("unknown", "any");
+        const Bind::TypeRef unsubscribe = Framework::Scripting::Bind::Type::Custom("Unsubscribe", "fun()");
+        const Bind::TypeRef promise     = Framework::Scripting::Bind::Type::Custom("Promise<void>", "nil");
+        const Bind::TypeRef rest        = Framework::Scripting::Bind::Type::Custom("unknown[]", "any");
+        const Bind::TypeRef payload     = Framework::Scripting::Bind::Type::Custom("unknown", "any");
 
         const auto handlerDocs = [&text](const char *description) {
-            return Doc(description).Param("eventName", text, "Case-sensitive event name.").Param("handler", Custom("EventHandler", "fun(...: any): any"), "Resource-owned callback invoked with the emitted arguments.");
+            return Framework::Scripting::Bind::Doc(description).Param("eventName", text, "Case-sensitive event name.").Param("handler", Framework::Scripting::Bind::Type::Custom("EventHandler", "fun(...: any): any"), "Resource-owned callback invoked with the emitted arguments.");
         };
         // Instance::OnClientEvent hands a client event's server handlers the sending player, then the payload it carried.
         const auto clientHandlerDocs = [&text](const char *description) {
-            return Doc(description)
+            return Framework::Scripting::Bind::Doc(description)
                 .Param("eventName", text, "Case-sensitive event name.")
-                .Param("handler", Custom("(player: Player, payload?: unknown) => unknown | Promise<unknown>", "fun(player: Player, payload?: any): any"),
+                .Param("handler", Framework::Scripting::Bind::Type::Custom("(player: Player, payload?: unknown) => unknown | Promise<unknown>", "fun(player: Player, payload?: any): any"),
                     "Resource-owned callback invoked with the sending player and the parsed payload, which is absent when the client sent none. The payload is untrusted.");
         };
 
@@ -551,13 +547,13 @@ namespace Framework::Scripting::Builtins {
             .Function("once", scoped(&Script::Once, HandlerScope::Global), handlerDocs("Registers a handler that is removed before its first invocation."))
             .Function("off", scoped(&Script::Off, HandlerScope::Global), handlerDocs("Removes a matching handler owned by the calling resource."))
             .Function("emit", &Script::Emit,
-                Doc("Invokes every shared handler and waits for all synchronous and asynchronous results.")
+                Framework::Scripting::Bind::Doc("Invokes every shared handler and waits for all synchronous and asynchronous results.")
                     .Param("eventName", text, "Shared event name.")
                     .RestParam("args", rest, "Arguments delivered to every matching handler.")
                     .ReturnType(promise)
                     .Returns("Promise rejected with an AggregateError when one or more handlers fail."))
             .Function("emitTo", &Script::EmitToResource,
-                Doc("Invokes matching handlers belonging only to one resource.")
+                Framework::Scripting::Bind::Doc("Invokes matching handlers belonging only to one resource.")
                     .Param("resourceName", text, "Destination running resource.")
                     .Param("eventName", text, "Shared event name.")
                     .RestParam("args", rest, "Arguments delivered to matching handlers owned by the destination.")
@@ -565,31 +561,31 @@ namespace Framework::Scripting::Builtins {
                     .Returns("Promise rejected when one or more destination handlers fail."))
             .Function("onLocal", &Script::OnLocal, handlerDocs("Registers a handler in the calling resource's private local-event namespace."))
             .Function("emitLocal", &Script::EmitLocal,
-                Doc("Emits an event only within the calling resource.")
+                Framework::Scripting::Bind::Doc("Emits an event only within the calling resource.")
                     .Param("eventName", text, "Private local event name.")
                     .RestParam("args", rest, "Arguments delivered only to handlers owned by the calling resource.")
                     .ReturnType(promise)
                     .Returns("Promise rejected when one or more local handlers fail."))
-            .Function("listenerCount", &Script::ListenerCount, Doc("Counts persistent and one-shot shared handlers across resources.").Param("eventName", text, "Shared event name to inspect.").ReturnType(Bind::TypeOf<double>()).Returns("Number of matching handlers."))
+            .Function("listenerCount", &Script::ListenerCount, Framework::Scripting::Bind::Doc("Counts persistent and one-shot shared handlers across resources.").Param("eventName", text, "Shared event name to inspect.").ReturnType(Bind::TypeOf<double>()).Returns("Number of matching handlers."))
             // Bridge, split by side: emitServer up (client), emitAllClients down (server).
             .Function("emitServer", broadcast("emitServer"),
-                Doc("Sends a named event from this client to the server's isolated onClient handlers.")
+                Framework::Scripting::Bind::Doc("Sends a named event from this client to the server's isolated onClient handlers.")
                     .Param("eventName", text, "Server-side client-event name.")
                     .OptionalParam("payload", payload, "Optional payload. A string is sent as is and must already be JSON text: the server parses it and drops an event that does not parse. Other values are JSON-serialized."),
-                Side::Client)
+                Framework::Scripting::Bind::Side::Client)
             .Function("emitAllClients", broadcast("emitAllClients"),
-                Doc("Broadcasts a named event to every connected client's shared Events handlers.")
+                Framework::Scripting::Bind::Doc("Broadcasts a named event to every connected client's shared Events handlers.")
                     .Param("eventName", text, "Client shared-event name.")
                     .OptionalParam("payload", payload, "Optional payload. A string is sent as is and must already be JSON text: each client parses it and drops an event that does not parse. Other values are JSON-serialized."),
-                Side::Server)
+                Framework::Scripting::Bind::Side::Server)
             // onClient/onceClient/offClient -- client-originated events (dispatched via EmitClient).
             // Backed by a table separate from on()/emit(), so a client can never target a native
             // handler. Server-only: only the server's instance ever dispatches into that table, so on
             // a client they would register handlers nothing can reach.
             .Function("onClient", scoped(&Script::On, HandlerScope::Client),
-                clientHandlerDocs("Registers a persistent server handler for events originating from clients; this namespace is isolated from native events.").ReturnType(unsubscribe).Returns("Function that removes this exact subscription."), Side::Server)
-            .Function("onceClient", scoped(&Script::Once, HandlerScope::Client), clientHandlerDocs("Registers a one-shot server handler for a client-originated event."), Side::Server)
-            .Function("offClient", scoped(&Script::Off, HandlerScope::Client), clientHandlerDocs("Removes a matching client-originated event handler owned by the calling resource."), Side::Server);
+                clientHandlerDocs("Registers a persistent server handler for events originating from clients; this namespace is isolated from native events.").ReturnType(unsubscribe).Returns("Function that removes this exact subscription."), Framework::Scripting::Bind::Side::Server)
+            .Function("onceClient", scoped(&Script::Once, HandlerScope::Client), clientHandlerDocs("Registers a one-shot server handler for a client-originated event."), Framework::Scripting::Bind::Side::Server)
+            .Function("offClient", scoped(&Script::Off, HandlerScope::Client), clientHandlerDocs("Removes a matching client-originated event handler owned by the calling resource."), Framework::Scripting::Bind::Side::Server);
     }
 
     const Bind::Namespace &Events::Definition() {

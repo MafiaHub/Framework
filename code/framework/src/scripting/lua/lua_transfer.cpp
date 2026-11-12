@@ -26,9 +26,6 @@
 
 namespace Framework::Scripting {
     namespace {
-        using Bind::Detail::LuaBase;
-        using Bind::Detail::LuaClass;
-        using LuaValues::kMaxDepth;
         using Kind = TransferredValue::Kind;
 
         static_assert(sizeof(lua_Integer) == sizeof(uint64_t), "a Lua integer is the one word of a BigInt that fits it");
@@ -165,7 +162,7 @@ namespace Framework::Scripting {
                 if (std::find(_ancestors.begin(), _ancestors.end(), table) != _ancestors.end()) {
                     return Fail("it refers back to itself");
                 }
-                if (_ancestors.size() >= kMaxDepth) {
+                if (_ancestors.size() >= Framework::Scripting::LuaValues::kMaxDepth) {
                     return Fail("it is nested too deeply");
                 }
                 // A key and its value while the keys are read, then the value being copied.
@@ -257,7 +254,7 @@ namespace Framework::Scripting {
 
             // The userdata is on the stack, which keeps the object a host type reads its payload from.
             bool CopyObject(int index, TransferredValue &out) {
-                const LuaClass *definition = Bind::Detail::LuaClassAt(_L, index);
+                const Framework::Scripting::Bind::Detail::LuaClass *definition = Bind::Detail::LuaClassAt(_L, index);
                 if (definition == nullptr) {
                     return Fail("a userdata cannot be copied");
                 }
@@ -268,7 +265,7 @@ namespace Framework::Scripting {
             }
 
             // As the host type of the class, or else of the first of its bases that has one.
-            bool CopyAs(const LuaClass &definition, int index, TransferredValue &out) {
+            bool CopyAs(const Framework::Scripting::Bind::Detail::LuaClass &definition, int index, TransferredValue &out) {
                 const auto &types = HostTypes();
                 const auto type   = types.find(definition.desc.name);
                 if (type != types.end() && type->second.copy(_L, index, out.bytes)) {
@@ -276,7 +273,7 @@ namespace Framework::Scripting {
                     out.text = type->first;
                     return true;
                 }
-                return std::any_of(definition.bases.begin(), definition.bases.end(), [&](const LuaBase &base) {
+                return std::any_of(definition.bases.begin(), definition.bases.end(), [&](const Framework::Scripting::Bind::Detail::LuaBase &base) {
                     return CopyAs(*base.definition, index, out);
                 });
             }
@@ -328,7 +325,7 @@ namespace Framework::Scripting {
           private:
             // A table is about to be built: it, a key and a value need room, and so does what builds a scalar in it.
             bool Enter() {
-                if (_depth >= kMaxDepth) {
+                if (_depth >= Framework::Scripting::LuaValues::kMaxDepth) {
                     return Fail("it is nested too deeply");
                 }
                 if (lua_checkstack(_L, 4) == 0) {

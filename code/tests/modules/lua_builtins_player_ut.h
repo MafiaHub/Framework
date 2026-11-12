@@ -40,12 +40,6 @@
 // Player and TextLabel, declared once for JavaScript and Lua: what a Lua script gets of them, held against what a
 // JavaScript one gets, over one replication manager both languages write to.
 namespace LuaBuiltinsPlayerTest {
-    using namespace Framework::Scripting;
-    using Builtins::Entity;
-    using Builtins::Player;
-    using Builtins::StateBag;
-    using Builtins::TextLabel;
-    using Framework::Networking::Replication::NetworkEntity;
     using LabelEntity = Framework::Networking::Replication::Entities::TextLabelEntity;
 
     constexpr const char *kLuaResource = "lua_side";
@@ -54,27 +48,27 @@ namespace LuaBuiltinsPlayerTest {
     // A Lua engine whose runtimes get the value types, Entity, Player and TextLabel the way the server module
     // gives them, with one runtime of the resource. A client has no TextLabel.
     struct LuaSide final {
-        LuaEngine engine;
+        Framework::Scripting::LuaEngine engine;
 
-        explicit LuaSide(Bind::Side side = Bind::Side::Server, ResourceManager *manager = nullptr): engine(LuaBuiltinsCoreTest::LuaSide::Options(side)) {
-            Bind::WatchRuntimes(engine);
-            engine.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
-                StateBag::DropDeadSubscriptions();
-                Bind::SetCallResourceManager(&runtime, nullptr);
+        explicit LuaSide(Framework::Scripting::Bind::Side side = Framework::Scripting::Bind::Side::Server, Framework::Scripting::ResourceManager *manager = nullptr): engine(LuaBuiltinsCoreTest::LuaSide::Options(side)) {
+            Framework::Scripting::Bind::WatchRuntimes(engine);
+            engine.AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
+                Framework::Scripting::Builtins::StateBag::DropDeadSubscriptions();
+                Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);
             });
-            engine.SetRuntimeSetupCallback([side, manager](LuaRuntime &runtime) {
-                Bind::SetCallResourceManager(&runtime, manager);
-                Builtins::RegisterValueTypesLua(runtime.State(), side);
-                Entity::RegisterLua(runtime);
-                Player::RegisterLua(runtime);
-                if (side == Bind::Side::Server) {
-                    TextLabel::RegisterLua(runtime);
+            engine.SetRuntimeSetupCallback([side, manager](Framework::Scripting::LuaRuntime &runtime) {
+                Framework::Scripting::Bind::SetCallResourceManager(&runtime, manager);
+                Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), side);
+                Framework::Scripting::Builtins::Entity::RegisterLua(runtime);
+                Framework::Scripting::Builtins::Player::RegisterLua(runtime);
+                if (side == Framework::Scripting::Bind::Side::Server) {
+                    Framework::Scripting::Builtins::TextLabel::RegisterLua(runtime);
                 }
             });
-            ready = engine.Init() == ScriptingError::SCRIPTING_NONE && engine.CreateResourceRuntime(kLuaResource);
+            ready = engine.Init() == Framework::Scripting::ScriptingError::SCRIPTING_NONE && engine.CreateResourceRuntime(kLuaResource);
         }
 
-        LuaRuntime &Runtime() {
+        Framework::Scripting::LuaRuntime &Runtime() {
             return *engine.GetRuntime(kLuaResource);
         }
 
@@ -100,20 +94,20 @@ namespace LuaBuiltinsPlayerTest {
     // A JavaScript runtime with the value types, Entity, Player and TextLabel registered through their Register.
     struct JsSide final {
         LuaBuiltinsCoreTest::JsRuntime js;
-        ResourceManager manager;
+        Framework::Scripting::ResourceManager manager;
 
         explicit JsSide(bool isClient = false): manager(&js.engine) {
             static int count = 0;
-            SetScriptingCatalog(js.Isolate(), "lua_builtins_player/" + std::to_string(++count));
-            SetScriptingEnvironment(js.Isolate(), isClient);
+            Framework::Scripting::SetScriptingCatalog(js.Isolate(), "lua_builtins_player/" + std::to_string(++count));
+            Framework::Scripting::SetScriptingEnvironment(js.Isolate(), isClient);
             js.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-                Builtins::RegisterValueTypes(isolate, context->Global());
-                Entity::Register(isolate, context->Global());
-                Player::Register(isolate, context->Global());
+                Framework::Scripting::Builtins::RegisterValueTypes(isolate, context->Global());
+                Framework::Scripting::Builtins::Entity::Register(isolate, context->Global());
+                Framework::Scripting::Builtins::Player::Register(isolate, context->Global());
                 if (!isClient) {
-                    TextLabel::Register(isolate, context->Global());
+                    Framework::Scripting::Builtins::TextLabel::Register(isolate, context->Global());
                 }
-                Bind::SetCallResourceManager(isolate, &manager);
+                Framework::Scripting::Bind::SetCallResourceManager(isolate, &manager);
             });
             manager.SetCurrentResourceContext(kJsResource);
         }
@@ -132,15 +126,15 @@ namespace LuaBuiltinsPlayerTest {
     // connection, the first of them as `p`.
     struct Stage final {
         TextLabelWorld world;
-        NetworkEntity *entity;
-        NetworkEntity *players[2];
+        Framework::Networking::Replication::NetworkEntity *entity;
+        Framework::Networking::Replication::NetworkEntity *players[2];
         std::string e;
         std::string a;
         std::string b;
         JsSide js;
         LuaSide lua;
 
-        Stage(): entity(world.Manager()->CreateEntity(world.targetType)), lua(Bind::Side::Server, &js.manager) {
+        Stage(): entity(world.Manager()->CreateEntity(world.targetType)), lua(Framework::Scripting::Bind::Side::Server, &js.manager) {
             for (int i = 0; i < 2; ++i) {
                 players[i]            = world.Manager()->CreateEntity(world.targetType);
                 players[i]->ownerGUID = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(71 + i));
@@ -235,17 +229,17 @@ namespace LuaBuiltinsPlayerTest {
 
         Owners() {
             TestManagerHelper::RegisterEvents(rig.node, rig.manager, [this](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-                Builtins::RegisterValueTypes(isolate, context->Global());
-                TextLabel::Register(isolate, context->Global());
-                Bind::SetCallResourceManager(isolate, &rig.manager);
+                Framework::Scripting::Builtins::RegisterValueTypes(isolate, context->Global());
+                Framework::Scripting::Builtins::TextLabel::Register(isolate, context->Global());
+                Framework::Scripting::Bind::SetCallResourceManager(isolate, &rig.manager);
             });
-            rig.lua.SetRuntimeSetupCallback([this](LuaRuntime &runtime) {
-                Bind::SetCallResourceManager(&runtime, &rig.manager);
-                Builtins::RegisterValueTypesLua(runtime.State(), Bind::Side::Server);
-                TextLabel::RegisterLua(runtime);
+            rig.lua.SetRuntimeSetupCallback([this](Framework::Scripting::LuaRuntime &runtime) {
+                Framework::Scripting::Bind::SetCallResourceManager(&runtime, &rig.manager);
+                Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), Framework::Scripting::Bind::Side::Server);
+                Framework::Scripting::Builtins::TextLabel::RegisterLua(runtime);
             });
-            rig.lua.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
-                Bind::SetCallResourceManager(&runtime, nullptr);
+            rig.lua.AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
+                Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);
             });
             world.Manager()->SetOnEntityCreated([this](uint64_t networkId) {
                 rig.manager.OnEntityCreated(networkId);
@@ -262,7 +256,7 @@ namespace LuaBuiltinsPlayerTest {
 
         // What `expression` gives in the JavaScript runtime of the resource.
         std::string Js(const std::string &resource, const std::string &expression) {
-            NodeRuntime *runtime = rig.node.GetResourceRuntime(resource);
+            Framework::Scripting::NodeRuntime *runtime = rig.node.GetResourceRuntime(resource);
             return runtime != nullptr ? NodeTest::Eval(*runtime, expression) : "<no runtime>";
         }
 
@@ -287,19 +281,10 @@ namespace LuaBuiltinsPlayerTest {
 } // namespace LuaBuiltinsPlayerTest
 
 MODULE(lua_builtins_player, {
-    using namespace Framework::Scripting;
-    using Framework::Networking::Replication::NametagComponent;
-    using Framework::Networking::Replication::NametagState;
-    using Framework::Scripting::Builtins::TextLabel;
-    using LuaBuiltinsPlayerTest::JsSide;
-    using LuaBuiltinsPlayerTest::LuaSide;
-    using LuaBuiltinsPlayerTest::Stage;
-    using LuaRuntimeTest::Contains;
-
     // ==================== Player ====================
 
     IT("gives Lua a Player that is an Entity, as JavaScript has it", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         EQUALS(stage.lua.ready, true);
 
         EQUALS(stage.lua.Eval("type(Player) .. ' ' .. p:toString() .. ' ' .. tostring(p) .. ' ' .. p.id"), "table Player{ id: " + stage.a + " } Player{ id: " + stage.a + " } " + stage.a);
@@ -324,7 +309,7 @@ MODULE(lua_builtins_player, {
     });
 
     IT("reads a connection that is not there as JavaScript does", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         // No network peer: the identity is empty and the calls do nothing.
         EQUALS(stage.lua.Eval("show == nil and table.concat({ p.steamId, p.epicId, p.discordId, p.discordName, p.hardwareId, p.ip, p:getIP() }, '|') .. ' ' .. p.ping"), "|||||| -1");
         EQUALS(stage.js.Eval("[p.steamId, p.epicId, p.discordId, p.discordName, p.hardwareId, p.ip, p.getIP()].join('|') + ' ' + p.ping"), "|||||| -1");
@@ -332,37 +317,37 @@ MODULE(lua_builtins_player, {
         EQUALS(stage.js.Thrown("p.kick('bye'); p.emit('hello', '{}')"), "no error");
 
         // The properties of a connection are read, not written.
-        EQUALS(Contains(stage.lua.Run("p.ping = 5"), "ping"), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.lua.Run("p.ping = 5"), "ping"), true);
     });
 
     IT("takes the arguments of a Player method as JavaScript does", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         // The reason is documented as optional and required by both languages.
-        EQUALS(Contains(stage.lua.Run("p:kick()"), "wrong number of arguments to 'Player:kick'"), true);
-        EQUALS(Contains(stage.js.Thrown("p.kick()"), "Argument count does not match function definition"), true);
-        EQUALS(Contains(stage.lua.Run("p:setNametagColor('red')"), "bad argument #1 to 'Player:setNametagColor'"), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.lua.Run("p:kick()"), "wrong number of arguments to 'Player:kick'"), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.js.Thrown("p.kick()"), "Argument count does not match function definition"), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.lua.Run("p:setNametagColor('red')"), "bad argument #1 to 'Player:setNametagColor'"), true);
         EQUALS(stage.js.Thrown("p.setNametagColor('red')") != "no error", true);
-        EQUALS(Contains(stage.lua.Run("p:setNametagVisible(1)"), "bad argument #1 to 'Player:setNametagVisible'"), true);
+        EQUALS(LuaRuntimeTest::Contains(stage.lua.Run("p:setNametagVisible(1)"), "bad argument #1 to 'Player:setNametagVisible'"), true);
     });
 
     IT("writes the nametag of a player from Lua and reads it in both languages", {
         NametagRig rig;
-        JsSide js;
-        LuaSide lua(Bind::Side::Server, &js.manager);
+        LuaBuiltinsPlayerTest::JsSide js;
+        LuaBuiltinsPlayerTest::LuaSide lua(Framework::Scripting::Bind::Side::Server, &js.manager);
         EQUALS(lua.Run("p = Player.new(1)"), "");
         js.Eval("globalThis.p = new Player(1); 0");
 
         EQUALS(lua.Eval("tostring(p:isNametagVisible()) .. tostring(p:isNametagHealthVisible()) .. '[' .. p:getNametagText() .. ']' .. tostring(p:getNametagColor() == 0xFFFFFFFF)"), "truetrue[]true");
 
         EQUALS(lua.Run("p:setNametagVisible(false)"), "");
-        EQUALS(rig.avatar.nametag.Has(NametagComponent::Name), false);
-        EQUALS(rig.avatar.nametag.Has(NametagComponent::Health), true);
+        EQUALS(rig.avatar.nametag.Has(Framework::Networking::Replication::NametagComponent::Name), false);
+        EQUALS(rig.avatar.nametag.Has(Framework::Networking::Replication::NametagComponent::Health), true);
         EQUALS(lua.Eval("tostring(p:isNametagVisible()) .. tostring(p:isNametagHealthVisible())"), "falsetrue");
         EQUALS(js.Eval("String(p.isNametagVisible()) + String(p.isNametagHealthVisible())"), "falsetrue");
 
         EQUALS(lua.Run("p:setNametagHealthVisible(false) p:setNametagVisible(true)"), "");
-        EQUALS(rig.avatar.nametag.Has(NametagComponent::Name), true);
-        EQUALS(rig.avatar.nametag.Has(NametagComponent::Health), false);
+        EQUALS(rig.avatar.nametag.Has(Framework::Networking::Replication::NametagComponent::Name), true);
+        EQUALS(rig.avatar.nametag.Has(Framework::Networking::Replication::NametagComponent::Health), false);
 
         EQUALS(lua.Run("p:setNametagText('Ministry') p:setNametagColor(0xFF33CC99)"), "");
         STREQUALS(rig.avatar.nametag.text.c_str(), "Ministry");
@@ -375,20 +360,20 @@ MODULE(lua_builtins_player, {
 
         // The text is cut to kMaxTextBytes without splitting a character, and replicates.
         EQUALS(lua.Run("p:setNametagText(string.rep('a', 63) .. '\\xC3\\xAD' .. 'tail')"), "");
-        EQUALS(rig.avatar.nametag.text == std::string(NametagState::kMaxTextBytes - 1, 'a'), true);
+        EQUALS(rig.avatar.nametag.text == std::string(Framework::Networking::Replication::NametagState::kMaxTextBytes - 1, 'a'), true);
         EQUALS(lua.Run("p:setNametagText('')"), "");
         EQUALS(rig.avatar.nametag.text.empty(), true);
         EQUALS(lua.Run("p:setNametagVisible(false)"), "");
         rig.OwnerTick();
         rig.ServerTick();
-        EQUALS(rig.viewer.nametag.Has(NametagComponent::Name), false);
+        EQUALS(rig.viewer.nametag.Has(Framework::Networking::Replication::NametagComponent::Name), false);
     });
 
     IT("leaves what the server decides out of a client runtime, in both languages", {
         TextLabelWorld world;
         const std::string id = std::to_string(world.Manager()->CreateEntity(world.targetType)->GetNetworkID());
-        LuaSide lua(Bind::Side::Client);
-        JsSide js(/*isClient*/ true);
+        LuaBuiltinsPlayerTest::LuaSide lua(Framework::Scripting::Bind::Side::Client);
+        LuaBuiltinsPlayerTest::JsSide js(/*isClient*/ true);
         EQUALS(lua.Run("p = Player.new(" + id + ")"), "");
         js.Eval("globalThis.p = new Player(" + id + "); 0");
 
@@ -408,8 +393,8 @@ MODULE(lua_builtins_player, {
 
     IT("checks the arguments and the options of TextLabel.create before it needs replication, in both languages", {
         Framework::CoreModules::SetReplication(nullptr);
-        JsSide js;
-        LuaSide lua(Bind::Side::Server, &js.manager);
+        LuaBuiltinsPlayerTest::JsSide js;
+        LuaBuiltinsPlayerTest::LuaSide lua(Framework::Scripting::Bind::Side::Server, &js.manager);
         EQUALS(lua.ready, true);
 
         EQUALS(lua.Raised("TextLabel.create(0, 0, 0)"), "TextLabel.create: expected (x, y, z, text, fontSize? | options?, drawDistance?, virtualWorld?)");
@@ -485,14 +470,14 @@ MODULE(lua_builtins_player, {
     });
 
     IT("creates a label from Lua, in the older form and with options", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         EQUALS(stage.lua.Run("l = TextLabel.create(1, 2, 3, 'hello')"), "");
         auto *label = stage.Label("l");
         EQUALS(label != nullptr, true);
         EQUALS(label->position == glm::vec3(1.0f, 2.0f, 3.0f), true);
         STREQUALS(label->text.c_str(), "hello");
-        EQUALS(label->drawDistance == TextLabel::kDefaultMetres, true);
-        EQUALS(label->streaming.range == TextLabel::kDefaultMetres, true);
+        EQUALS(label->drawDistance == Framework::Scripting::Builtins::TextLabel::kDefaultMetres, true);
+        EQUALS(label->streaming.range == Framework::Scripting::Builtins::TextLabel::kDefaultMetres, true);
         EQUALS(stage.lua.Eval("l:toString() .. ' ' .. tostring(l)"), "TextLabel{ id: " + std::to_string(label->GetNetworkID()) + ", text: \"hello\" } TextLabel{ id: " + std::to_string(label->GetNetworkID()) + ", text: \"hello\" }");
         EQUALS(stage.lua.Eval("l.text .. ' ' .. string.format('%x', l.color) .. ' ' .. l.fontSize .. ' ' .. l.drawDistance .. ' ' .. l.fadeDistance .. ' ' .. l.style .. ' ' .. l.virtualWorld"), "hello ffffffff 16.0 30.0 0.0 1 0");
 
@@ -517,29 +502,29 @@ MODULE(lua_builtins_player, {
     });
 
     IT("refuses a label past the limit of the server", {
-        Stage stage;
-        EQUALS(stage.lua.Run("for i = 1, " + std::to_string(TextLabel::kMaxLabels) + " do TextLabel.create(0, 0, 0, 'x') end"), "");
-        EQUALS(stage.LabelCount(), size_t(TextLabel::kMaxLabels));
+        LuaBuiltinsPlayerTest::Stage stage;
+        EQUALS(stage.lua.Run("for i = 1, " + std::to_string(Framework::Scripting::Builtins::TextLabel::kMaxLabels) + " do TextLabel.create(0, 0, 0, 'x') end"), "");
+        EQUALS(stage.LabelCount(), size_t(Framework::Scripting::Builtins::TextLabel::kMaxLabels));
         EQUALS(stage.lua.Raised("TextLabel.create(0, 0, 0, 'x')"), "TextLabel.create: label limit reached");
         EQUALS(stage.js.Thrown("TextLabel.create(0, 0, 0, 'x')"), "Error: TextLabel.create: label limit reached");
-        EQUALS(stage.LabelCount(), size_t(TextLabel::kMaxLabels));
+        EQUALS(stage.LabelCount(), size_t(Framework::Scripting::Builtins::TextLabel::kMaxLabels));
     });
 
     // ==================== TextLabel: changing ====================
 
     IT("changes a label through its setters from Lua", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         EQUALS(stage.lua.Run("l = TextLabel.create(0, 0, 0, 'x')"), "");
         auto *label = stage.Label("l");
 
         EQUALS(stage.lua.Run("l:setText('new') l:setFontSize(1000) l:setDrawDistance(55) l:setFadeDistance(-3) l:setStyle(3)"), "");
         STREQUALS(label->text.c_str(), "new");
-        EQUALS(label->fontSize == TextLabel::kMaxFontSize && label->drawDistance == 55.0f && label->streaming.range == 55.0f && label->fadeDistance == 0.0f, true);
+        EQUALS(label->fontSize == Framework::Scripting::Builtins::TextLabel::kMaxFontSize && label->drawDistance == 55.0f && label->streaming.range == 55.0f && label->fadeDistance == 0.0f, true);
         EQUALS(stage.lua.Eval("l.style .. ' ' .. l:getOptions().style"), "3 box");
         EQUALS(stage.lua.Run("l:setStyle(9)"), "");
         EQUALS(stage.lua.Eval("l.style"), "3");
         EQUALS(stage.lua.Run("l:setText(string.rep('a', 2000))"), "");
-        EQUALS(label->text.size(), TextLabel::kMaxTextBytes);
+        EQUALS(label->text.size(), Framework::Scripting::Builtins::TextLabel::kMaxTextBytes);
 
         // setColor takes a Color, or the bytes of one, alpha last and opaque when left out.
         EQUALS(stage.lua.Run("l:setColor(Color.fromRGB(17, 34, 51, 128))"), "");
@@ -566,7 +551,7 @@ MODULE(lua_builtins_player, {
     });
 
     IT("reads a label back as the options update() takes, the same in both languages", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         EQUALS(stage.lua.Run(LuaBuiltinsPlayerTest::kLuaShow), "");
         stage.js.Eval(LuaBuiltinsPlayerTest::kJsShow);
 
@@ -599,7 +584,7 @@ MODULE(lua_builtins_player, {
     });
 
     IT("changes nothing of a label when one option of an update is refused", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         EQUALS(stage.lua.Run(LuaBuiltinsPlayerTest::kLuaShow), "");
         EQUALS(stage.lua.Run("l = TextLabel.create(0, 0, 0, 'x', { maxSize = 10 })"), "");
         const std::string before = stage.lua.Eval("show(l:getOptions())");
@@ -624,7 +609,7 @@ MODULE(lua_builtins_player, {
     });
 
     IT("keeps null apart from a key left out in JavaScript, and takes false for it in Lua", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         stage.js.Eval(LuaBuiltinsPlayerTest::kJsShow);
         stage.js.Eval("globalThis.l = TextLabel.create(0, 0, 0, 'x', { attachTo: p, showTo: [p], hideFrom: [" + stage.b + "] }); 0");
 
@@ -666,7 +651,7 @@ MODULE(lua_builtins_player, {
     });
 
     IT("stops reading the options of JavaScript at the first getter that throws, and applies none", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         stage.js.Eval("globalThis.l = TextLabel.create(0, 0, 0, 'x'); globalThis.ran = []; 0");
         // The keys are read in the order of the options, not of the object: fontSize before opacity.
         EQUALS(stage.js.Thrown("l.update({ get opacity() { ran.push('opacity'); return 0.5; }, get fontSize() { ran.push('fontSize'); throw new RangeError('mine'); }, get text() { ran.push('text'); return 'read'; } })"), "RangeError: mine");
@@ -684,7 +669,7 @@ MODULE(lua_builtins_player, {
     // ==================== TextLabel: attaching ====================
 
     IT("attaches a label to an entity from Lua, follows it and returns when detached", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         stage.entity->position = glm::vec3(100.0f, 0.0f, 0.0f);
         stage.entity->SetVirtualWorld(5);
         EQUALS(stage.lua.Run("l = TextLabel.create(1, 2, 3, 'tag')"), "");
@@ -711,7 +696,7 @@ MODULE(lua_builtins_player, {
 
         // It follows its target on the server tick.
         stage.players[0]->position = glm::vec3(50.0f, 60.0f, 70.0f);
-        TextLabel::FollowTargets(*stage.world.Manager());
+        Framework::Scripting::Builtins::TextLabel::FollowTargets(*stage.world.Manager());
         EQUALS(label->position == glm::vec3(50.0f, 60.0f, 70.0f), true);
 
         // hideForTarget keeps it from the player it follows.
@@ -728,7 +713,7 @@ MODULE(lua_builtins_player, {
         EQUALS(stage.lua.Run("l:attachTo(e)"), "");
         const uint64_t id = label->GetNetworkID();
         stage.world.Manager()->DestroyEntity(stage.entity);
-        TextLabel::FollowTargets(*stage.world.Manager());
+        Framework::Scripting::Builtins::TextLabel::FollowTargets(*stage.world.Manager());
         EQUALS(stage.world.Manager()->GetEntityByNetworkID(id) == nullptr, true);
         EQUALS(stage.lua.Eval("tostring(l:getOptions())"), "nil");
     });
@@ -736,7 +721,7 @@ MODULE(lua_builtins_player, {
     // ==================== TextLabel: audience ====================
 
     IT("takes the players a label is for from Lua and reads them back as network ids", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         EQUALS(stage.lua.Run(LuaBuiltinsPlayerTest::kLuaShow), "");
         auto *npc           = stage.world.Manager()->CreateEntity(stage.world.targetType);
         const std::string n = std::to_string(npc->GetNetworkID());
@@ -879,7 +864,7 @@ MODULE(lua_builtins_player, {
     // ==================== Handles of other classes ====================
 
     IT("takes a handle a project bound by hand, with an id and no Entity behind it, as JavaScript always did", {
-        Stage stage;
+        LuaBuiltinsPlayerTest::Stage stage;
         stage.js.js.Enter([](v8::Isolate *isolate, v8::Local<v8::Context> context) {
             LuaBuiltinsPlayerTest::ForeignHandle::Register(isolate, context);
         });
@@ -913,8 +898,8 @@ MODULE(lua_builtins_player, {
     });
 
     IT("carries a Player and a TextLabel to another runtime as themselves, in both languages", {
-        Builtins::RegisterTransferTypes();
-        Stage stage;
+        Framework::Scripting::Builtins::RegisterTransferTypes();
+        LuaBuiltinsPlayerTest::Stage stage;
         lua_State *L = stage.lua.Runtime().State();
         EQUALS(stage.lua.Run("l = TextLabel.create(0, 0, 0, 'crossing')"), "");
         stage.js.Eval("globalThis.l = new TextLabel(" + stage.lua.Eval("math.tointeger(l.id)") + "); 0");
@@ -922,14 +907,14 @@ MODULE(lua_builtins_player, {
         // Lua to JavaScript.
         for (const std::string name : {"p", "l"}) {
             EQUALS(luaL_loadstring(L, ("return " + name).c_str()) == LUA_OK && lua_pcall(L, 0, 1, 0) == LUA_OK, true);
-            auto copied = LuaTransfer::Copy(L, -1);
+            auto copied = Framework::Scripting::LuaTransfer::Copy(L, -1);
             lua_pop(L, 1);
             EQUALS(static_cast<bool>(copied), true);
-            EQUALS(copied.GetValue().kind == TransferredValue::Kind::HostObject, true);
+            EQUALS(copied.GetValue().kind == Framework::Scripting::TransferredValue::Kind::HostObject, true);
             EQUALS(copied.GetValue().text, std::string(name == "p" ? "Player" : "TextLabel"));
             stage.js.js.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
                 v8::Local<v8::Value> rebuilt;
-                if (ValueTransfer::Rebuild(isolate, context, copied.GetValue()).ToLocal(&rebuilt)) {
+                if (Framework::Scripting::ValueTransfer::Rebuild(isolate, context, copied.GetValue()).ToLocal(&rebuilt)) {
                     context->Global()->Set(context, v8pp::to_v8(isolate, "arrived_" + name), rebuilt).Check();
                 }
             });
@@ -938,28 +923,28 @@ MODULE(lua_builtins_player, {
 
         // JavaScript to Lua.
         for (const std::string name : {"p", "l"}) {
-            auto copied = Framework::Utils::Result<TransferredValue, std::string>::Err("not copied");
+            auto copied = Framework::Utils::Result<Framework::Scripting::TransferredValue, std::string>::Err("not copied");
             stage.js.js.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
                 v8::Local<v8::Value> value;
                 if (context->Global()->Get(context, v8pp::to_v8(isolate, name)).ToLocal(&value)) {
-                    copied = ValueTransfer::Copy(isolate, context, value);
+                    copied = Framework::Scripting::ValueTransfer::Copy(isolate, context, value);
                 }
             });
             EQUALS(static_cast<bool>(copied), true);
             EQUALS(copied.GetValue().text, std::string(name == "p" ? "Player" : "TextLabel"));
             std::string error;
-            EQUALS(LuaTransfer::Rebuild(L, copied.GetValue(), error), true);
+            EQUALS(Framework::Scripting::LuaTransfer::Rebuild(L, copied.GetValue(), error), true);
             lua_setglobal(L, ("arrived_" + name).c_str());
         }
         EQUALS(stage.lua.Eval("arrived_p:toString() .. ' ' .. type(arrived_p.kick) .. ' ' .. arrived_l.text .. ' ' .. type(arrived_l.update)"), "Player{ id: " + stage.a + " } function crossing function");
 
         // A label that went on the way does not arrive.
         EQUALS(luaL_loadstring(L, "return l") == LUA_OK && lua_pcall(L, 0, 1, 0) == LUA_OK, true);
-        auto late = LuaTransfer::Copy(L, -1);
+        auto late = Framework::Scripting::LuaTransfer::Copy(L, -1);
         lua_pop(L, 1);
         EQUALS(stage.lua.Run("l:destroy()"), "");
         std::string error;
-        EQUALS(LuaTransfer::Rebuild(L, late.GetValue(), error), false);
-        EQUALS(Contains(error, "is not valid!"), true);
+        EQUALS(Framework::Scripting::LuaTransfer::Rebuild(L, late.GetValue(), error), false);
+        EQUALS(LuaRuntimeTest::Contains(error, "is not valid!"), true);
     });
 })

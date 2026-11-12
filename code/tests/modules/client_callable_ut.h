@@ -27,18 +27,11 @@
 // script_callable_ut.h has the callables of the server, where every JavaScript runtime is Node's. This is the
 // client's engine: one bare isolate, with no queue that drains as a call leaves it. Its tick runs the microtasks.
 namespace ClientCallableTest {
-    namespace Bind = Framework::Scripting::Bind;
-    using Bind::Call;
-    using Bind::CallOutcome;
-    using Bind::Deferred;
-    using Bind::ReturnMode;
-    using Bind::ScriptCallable;
-    using Framework::Scripting::TransferredValue;
-    using Kind = TransferredValue::Kind;
+    using Kind = Framework::Scripting::TransferredValue::Kind;
 
     struct Kept final {
-        std::vector<std::shared_ptr<ScriptCallable>> callables;
-        std::vector<Deferred> deferreds;
+        std::vector<std::shared_ptr<Framework::Scripting::Bind::ScriptCallable>> callables;
+        std::vector<Framework::Scripting::Bind::Deferred> deferreds;
     };
 
     inline Kept &Held() {
@@ -51,12 +44,12 @@ namespace ClientCallableTest {
         int calls  = 0;
         bool threw = false;
         std::string error;
-        TransferredValue value;
+        Framework::Scripting::TransferredValue value;
     };
 
-    inline std::shared_ptr<Told> Invoke(const std::shared_ptr<ScriptCallable> &callable, const std::vector<TransferredValue> &arguments = {}) {
+    inline std::shared_ptr<Told> Invoke(const std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> &callable, const std::vector<Framework::Scripting::TransferredValue> &arguments = {}) {
         auto told = std::make_shared<Told>();
-        callable->Invoke(arguments, ReturnMode::Value, [told](CallOutcome &&outcome) {
+        callable->Invoke(arguments, Framework::Scripting::Bind::ReturnMode::Value, [told](Framework::Scripting::Bind::CallOutcome &&outcome) {
             ++told->calls;
             told->threw = outcome.threw;
             told->error = std::move(outcome.error);
@@ -65,46 +58,41 @@ namespace ClientCallableTest {
         return told;
     }
 
-    inline TransferredValue Number(double number) {
-        TransferredValue value;
+    inline Framework::Scripting::TransferredValue Number(double number) {
+        Framework::Scripting::TransferredValue value;
         value.kind   = Kind::Number;
         value.number = number;
         return value;
     }
 
-    inline TransferredValue Text(std::string text) {
-        TransferredValue value;
+    inline Framework::Scripting::TransferredValue Text(std::string text) {
+        Framework::Scripting::TransferredValue value;
         value.kind = Kind::String;
         value.text = std::move(text);
         return value;
     }
 
-    inline const Bind::Namespace &BareDefinition() {
-        using Bind::Doc;
-        using Bind::TypeOf;
-        namespace Type               = Bind::Type;
-        static const auto definition = Bind::Namespace("Bare", "What a builtin of the client does with callables and deferred results.")
+    inline const Framework::Scripting::Bind::Namespace &BareDefinition() {
+        static const auto definition = Framework::Scripting::Bind::Namespace("Bare", "What a builtin of the client does with callables and deferred results.")
                                            .Function(
                                                "keep",
-                                               [](Call &call) {
+                                               [](Framework::Scripting::Bind::Call &call) {
                                                    Held().callables.push_back(call.Arg(0).ToCallable());
                                                },
-                                               Doc("Keeps a function.").Param("handler", Type::Any(), "Function to keep."))
+                                               Framework::Scripting::Bind::Doc("Keeps a function.").Param("handler", Framework::Scripting::Bind::Type::Any(), "Function to keep."))
                                            .Function(
                                                "later",
-                                               [](Call &call) {
+                                               [](Framework::Scripting::Bind::Call &call) {
                                                    Held().deferreds.push_back(call.Defer());
                                                },
-                                               Doc("Resolves when the test says.").ReturnType(Type::Any()));
+                                               Framework::Scripting::Bind::Doc("Resolves when the test says.").ReturnType(Framework::Scripting::Bind::Type::Any()));
         return definition;
     }
 } // namespace ClientCallableTest
 
 MODULE(client_callable, {
-    using namespace ClientCallableTest;
-
     IT("invokes callables and settles deferred results in an isolate with no Node around it", {
-        Held() = {};
+        ClientCallableTest::Held() = {};
         Framework::Scripting::V8Engine engine;
         EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
         {
@@ -116,7 +104,7 @@ MODULE(client_callable, {
             v8::Context::Scope contextScope(context);
             // A catalog of its own, so that Bare stays out of the one the framework exports.
             Framework::Scripting::SetScriptingCatalog(isolate, "client_callable");
-            BareDefinition().MaterialiseV8(isolate, context, context->Global(), v8pp::metadata::catalog("client_callable"), Bind::Side::Client);
+            ClientCallableTest::BareDefinition().MaterialiseV8(isolate, context, context->Global(), v8pp::metadata::catalog("client_callable"), Framework::Scripting::Bind::Side::Client);
         }
         const auto tick = [&]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -129,12 +117,12 @@ MODULE(client_callable, {
                               "Bare.keep((value) => new Promise((resolve) => setTimeout(() => resolve(value + '!'), 1)));"
                               "Bare.keep(async () => { await null; throw new Error('refused'); });"),
             true);
-        const std::vector<std::shared_ptr<ScriptCallable>> callables = Held().callables;
+        const std::vector<std::shared_ptr<Framework::Scripting::Bind::ScriptCallable>> callables = ClientCallableTest::Held().callables;
         EQUALS(callables.size(), 4u);
         EQUALS(callables.at(0)->GetLanguage() == Framework::Scripting::Language::JavaScript, true);
         EQUALS(callables.at(0)->IsAlive(), true);
 
-        const auto sum = Invoke(callables.at(0), {Number(2), Number(3)});
+        const auto sum = ClientCallableTest::Invoke(callables.at(0), {ClientCallableTest::Number(2), ClientCallableTest::Number(3)});
         EQUALS(sum->calls, 1);
         EQUALS(sum->threw, false);
         EQUALS(sum->value.number, 5.0);
@@ -142,21 +130,21 @@ MODULE(client_callable, {
         // No queue drains as the call leaves this isolate: what a promise settles with is told when the isolate
         // next runs its microtasks, also when it needed nothing else. That is the tick of the engine, or the next
         // call into the isolate.
-        const auto doubled = Invoke(callables.at(1), {Number(21)});
+        const auto doubled = ClientCallableTest::Invoke(callables.at(1), {ClientCallableTest::Number(21)});
         EQUALS(doubled->calls, 0);
         engine.Tick();
         EQUALS(doubled->calls, 1);
         EQUALS(doubled->threw, false);
         EQUALS(doubled->value.number, 42.0);
-        const auto refused = Invoke(callables.at(3));
+        const auto refused = ClientCallableTest::Invoke(callables.at(3));
         EQUALS(refused->calls, 0);
-        EQUALS(Invoke(callables.at(0), {Number(1), Number(1)})->calls, 1);
+        EQUALS(ClientCallableTest::Invoke(callables.at(0), {ClientCallableTest::Number(1), ClientCallableTest::Number(1)})->calls, 1);
         EQUALS(refused->calls, 1);
         EQUALS(refused->threw, true);
         EQUALS(refused->error.substr(0, refused->error.find('\n')), "Error: refused");
 
         // One that waits on a timer takes the tick that fires the timer.
-        const auto late = Invoke(callables.at(2), {Text("late")});
+        const auto late = ClientCallableTest::Invoke(callables.at(2), {ClientCallableTest::Text("late")});
         engine.Tick();
         EQUALS(late->calls, 0);
         for (int ticks = 0; ticks < 100 && late->calls == 0; ++ticks) {
@@ -172,9 +160,9 @@ MODULE(client_callable, {
         EQUALS(engine.Execute("globalThis.first = Bare.later(); first.then((value) => out.push('resolved ' + value)); Bare.later().catch((error) => out.push('rejected ' + error.message));"
                               "if (!(first instanceof Promise)) throw Error('not a promise');"),
             true);
-        EQUALS(Held().deferreds.size(), 2u);
-        Held().deferreds.at(0).Resolve(Text("now"));
-        Held().deferreds.at(1).Reject("Bare.later: no");
+        EQUALS(ClientCallableTest::Held().deferreds.size(), 2u);
+        ClientCallableTest::Held().deferreds.at(0).Resolve(ClientCallableTest::Text("now"));
+        ClientCallableTest::Held().deferreds.at(1).Reject("Bare.later: no");
         tick();
         EQUALS(engine.Execute("if (out.join() !== 'resolved now,rejected Bare.later: no') throw Error('got ' + out.join());"), true);
 
@@ -182,9 +170,9 @@ MODULE(client_callable, {
         Framework::Scripting::ClearScriptingCatalog(engine.GetIsolate());
         engine.Shutdown();
         EQUALS(callables.at(0)->IsAlive(), false);
-        const auto gone = Invoke(callables.at(0));
+        const auto gone = ClientCallableTest::Invoke(callables.at(0));
         EQUALS(gone->calls, 1);
         EQUALS(gone->error, "runtime stopped");
-        Held() = {};
+        ClientCallableTest::Held() = {};
     });
 });

@@ -23,12 +23,10 @@
 #include <utility>
 
 namespace Framework::Integrations::Server::Scripting::Builtins {
-    namespace Bind = Framework::Scripting::Bind;
-
     namespace {
         // The gate is missing only if the server never brought it up: a state error, not a stale
         // handle, so it throws.
-        ConnectionGate *ResolveGate(Bind::Call &call, const char *fn) {
+        ConnectionGate *ResolveGate(Framework::Scripting::Bind::Call &call, const char *fn) {
             ConnectionGate *gate = CoreModules::GetConnectionGate();
             if (!gate) {
                 call.ThrowError(std::string(fn) + ": the connection gate is not running");
@@ -38,9 +36,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
 
         // The three calls, on the connection `guid` names. A JavaScript object carries the guid in
         // each of its functions, a Lua handle in itself.
-        void Reject(Bind::Call &call, uint64_t guid) {
+        void Reject(Framework::Scripting::Bind::Call &call, uint64_t guid) {
             // A reason left out is none; null is not a reason.
-            const Bind::Value reason = call.Arg(0);
+            const Framework::Scripting::Bind::Value reason = call.Arg(0);
             if (!reason.IsString() && (!reason.IsNil() || reason.IsNull())) {
                 call.ThrowTypeError("PendingConnection.reject: expected a string reason");
                 return;
@@ -52,7 +50,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             gate->Refuse(guid, reason.AsString());
         }
 
-        void Update(Bind::Call &call, uint64_t guid) {
+        void Update(Framework::Scripting::Bind::Call &call, uint64_t guid) {
             if (!call.Arg(0).IsString()) {
                 call.ThrowTypeError("PendingConnection.update: expected a string message");
                 return;
@@ -64,7 +62,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             gate->SendStatus(guid, call.Arg(0).AsString());
         }
 
-        void IsPending(Bind::Call &call, uint64_t guid) {
+        void IsPending(Framework::Scripting::Bind::Call &call, uint64_t guid) {
             ConnectionGate *gate = ResolveGate(call, "PendingConnection.isPending");
             if (!gate) {
                 return;
@@ -73,17 +71,17 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         }
 
         // A call as a method of the class: on the connection of its receiver.
-        template <void (*Function)(Bind::Call &, uint64_t)>
-        void OnReceiver(Bind::Call &call) {
+        template <void (*Function)(Framework::Scripting::Bind::Call &, uint64_t)>
+        void OnReceiver(Framework::Scripting::Bind::Call &call) {
             if (const auto *self = call.Self<PendingConnection>()) {
                 Function(call, self->GetGuid());
             }
         }
 
         // A call as a function of the JavaScript object of a connection.
-        template <void (*Function)(Bind::Call &, uint64_t)>
+        template <void (*Function)(Framework::Scripting::Bind::Call &, uint64_t)>
         v8::Local<v8::Value> OnConnection(v8::Isolate *isolate, v8::Local<v8::Context> context, uint64_t guid) {
-            return Bind::MakeV8Function(isolate, context, [guid](Bind::Call &call) {
+            return Framework::Scripting::Bind::MakeV8Function(isolate, context, [guid](Framework::Scripting::Bind::Call &call) {
                 Function(call, guid);
             });
         }
@@ -172,37 +170,33 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         return PendingConnection(guid, identity, std::move(address));
     }
 
-    const Bind::Class<PendingConnection> &PendingConnection::Definition() {
-        using Bind::Doc;
-        using Bind::Side;
-        using Bind::TypeOf;
-
+    const Framework::Scripting::Bind::Class<PendingConnection> &PendingConnection::Definition() {
         static const auto definition =
-            Bind::Class<PendingConnection>("PendingConnection", "A player asking to join, handed to `playerConnecting`. Every identifier is reported by the player's own client and is not verified by the server.", Side::Server)
+            Framework::Scripting::Bind::Class<PendingConnection>("PendingConnection", "A player asking to join, handed to `playerConnecting`. Every identifier is reported by the player's own client and is not verified by the server.", Framework::Scripting::Bind::Side::Server)
                 // Handed to the handlers of `playerConnecting` and never reached by name.
                 .ValueOnly()
-                .Property("nickname", &PendingConnection::GetNickname, "The name the player asked to join under.", Side::Server)
-                .Property("steamId", &PendingConnection::GetSteamId, "Steam identifier the client reported, or an empty string when it had none.", Side::Server)
-                .Property("epicId", &PendingConnection::GetEpicId, "Epic Games account identifier the client reported, or an empty string when it had none.", Side::Server)
-                .Property("discordId", &PendingConnection::GetDiscordId, "Discord identifier the client reported, or an empty string when it had none.", Side::Server)
-                .Property("discordName", &PendingConnection::GetDiscordName, "Discord username the client reported, or an empty string when it had none.", Side::Server)
-                .Property("hardwareId", &PendingConnection::GetHardwareId, "Framework hardware identifier the client reported, or an empty string when it had none.", Side::Server)
+                .Property("nickname", &PendingConnection::GetNickname, "The name the player asked to join under.", Framework::Scripting::Bind::Side::Server)
+                .Property("steamId", &PendingConnection::GetSteamId, "Steam identifier the client reported, or an empty string when it had none.", Framework::Scripting::Bind::Side::Server)
+                .Property("epicId", &PendingConnection::GetEpicId, "Epic Games account identifier the client reported, or an empty string when it had none.", Framework::Scripting::Bind::Side::Server)
+                .Property("discordId", &PendingConnection::GetDiscordId, "Discord identifier the client reported, or an empty string when it had none.", Framework::Scripting::Bind::Side::Server)
+                .Property("discordName", &PendingConnection::GetDiscordName, "Discord username the client reported, or an empty string when it had none.", Framework::Scripting::Bind::Side::Server)
+                .Property("hardwareId", &PendingConnection::GetHardwareId, "Framework hardware identifier the client reported, or an empty string when it had none.", Framework::Scripting::Bind::Side::Server)
                 .Property("ticket", &PendingConnection::GetTicket,
                     "The string the client was launched with, as the `ticket` of its launch link, or an empty string. The framework passes it through untouched; checking it -- against a one-time join ticket your own launcher or website issued, typically -- is "
                     "the script's job.",
-                    Side::Server)
-                .Property("ip", &PendingConnection::GetIp, "The remote address the connection comes from, without its port.", Side::Server)
+                    Framework::Scripting::Bind::Side::Server)
+                .Property("ip", &PendingConnection::GetIp, "The remote address the connection comes from, without its port.", Framework::Scripting::Bind::Side::Server)
                 // Context functions: a reason may be left out, and each says in its own words what it was given instead.
                 .Method("reject", &OnReceiver<&Reject>,
-                    Doc("Turns the player away before they receive anything. Takes effect on the next server tick, whatever other handlers are still doing. Does nothing once the connection is decided or the player has left.")
-                        .OptionalParam("reason", TypeOf<std::string>(), "Shown to the player as written, up to 512 bytes. Omitted, they read that the server refused the connection."),
-                    Side::Server)
+                    Framework::Scripting::Bind::Doc("Turns the player away before they receive anything. Takes effect on the next server tick, whatever other handlers are still doing. Does nothing once the connection is decided or the player has left.")
+                        .OptionalParam("reason", Framework::Scripting::Bind::TypeOf<std::string>(), "Shown to the player as written, up to 512 bytes. Omitted, they read that the server refused the connection."),
+                    Framework::Scripting::Bind::Side::Server)
                 .Method("update", &OnReceiver<&Update>,
-                    Doc("Shows the waiting player a line of status and restarts the admission timeout, so a queue that keeps updating its players is never timed out. Does nothing once the connection is decided or the player has left.")
-                        .Param("message", TypeOf<std::string>(), "One line for the player's connecting screen, up to 256 bytes: 'Checking the whitelist', 'You are 4th in the queue'."),
-                    Side::Server)
-                .Method("isPending", &OnReceiver<&IsPending>, Doc("Checks whether this connection is still waiting on a decision.").ReturnType(TypeOf<bool>()).Returns("False once it was let in or turned away, or the player gave up and left; a queue drops such entries."),
-                    Side::Server)
+                    Framework::Scripting::Bind::Doc("Shows the waiting player a line of status and restarts the admission timeout, so a queue that keeps updating its players is never timed out. Does nothing once the connection is decided or the player has left.")
+                        .Param("message", Framework::Scripting::Bind::TypeOf<std::string>(), "One line for the player's connecting screen, up to 256 bytes: 'Checking the whitelist', 'You are 4th in the queue'."),
+                    Framework::Scripting::Bind::Side::Server)
+                .Method("isPending", &OnReceiver<&IsPending>, Framework::Scripting::Bind::Doc("Checks whether this connection is still waiting on a decision.").ReturnType(Framework::Scripting::Bind::TypeOf<bool>()).Returns("False once it was let in or turned away, or the player gave up and left; a queue drops such entries."),
+                    Framework::Scripting::Bind::Side::Server)
                 // Crosses between runtimes with its identity, so that one the gate has decided still arrives.
                 .Transfer(&PendingConnection::Encode, &PendingConnection::Decode);
         return definition;
@@ -284,7 +278,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
 
         // The type is described the way the definition declares it. It is recorded as a data type and
         // not as a class: JavaScript has no constructor of it, only the objects the gate hands out.
-        Bind::RecordV8DataType(catalog, Definition().Describe());
+        Framework::Scripting::Bind::RecordV8DataType(catalog, Definition().Describe());
     }
 
 } // namespace Framework::Integrations::Server::Scripting::Builtins

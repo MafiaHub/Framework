@@ -35,12 +35,6 @@
 // per resource, registered the way ClientScriptingModule registers them. keybinds_ut.h drives Key through a
 // window's messages, on Windows; here the input is a fake, so the same dispatch runs on every host.
 namespace ClientBuiltinsTest {
-    using namespace Framework::Scripting;
-    using Framework::Integrations::Client::Scripting::Builtins::Keybinds;
-    using Framework::Utils::Vfs;
-    using LuaClientTest::Contains;
-    using LuaClientTest::Mount;
-
     // Keys that are held and wheel notches that arrived, as a test says.
     class FakeInput final: public Framework::Input::IInput {
       public:
@@ -116,17 +110,16 @@ namespace ClientBuiltinsTest {
         std::vector<std::string> mounted;
 
         // Without `cleanupOnStop` nobody tells Key that a resource stopped, as the module does.
-        explicit Desk(bool cleanupOnStop = true, LuaEngineOptions options = LuaEngineOptions::Client()): client(Vfs::kResourceMountRoot, options) {
-            namespace ClientBuiltins = Framework::Integrations::Client::Scripting::Builtins;
+        explicit Desk(bool cleanupOnStop = true, Framework::Scripting::LuaEngineOptions options = Framework::Scripting::LuaEngineOptions::Client()): client(Framework::Utils::Vfs::kResourceMountRoot, options) {
             gateOpen                 = true;
             current                  = this;
             Framework::CoreModules::SetInput(&input);
-            Keybinds::SetActiveCallback([] {
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::SetActiveCallback([] {
                 return gateOpen;
             });
-            client.lua.AddRuntimeSetup([](LuaRuntime &runtime) {
-                ClientBuiltins::Keybinds::RegisterLua(runtime);
-                ClientBuiltins::Voice::RegisterLua(runtime);
+            client.lua.AddRuntimeSetup([](Framework::Scripting::LuaRuntime &runtime) {
+                Framework::Integrations::Client::Scripting::Builtins::Keybinds::RegisterLua(runtime);
+                Framework::Integrations::Client::Scripting::Builtins::Voice::RegisterLua(runtime);
                 lua_pushcfunction(runtime.State(), [](lua_State *) {
                     gateOpen = false;
                     return 0;
@@ -141,7 +134,7 @@ namespace ClientBuiltinsTest {
             ready = Register();
             if (ready && cleanupOnStop) {
                 client.manager->AddOnResourceStopped([manager = client.manager.get()](const std::string &resourceName) {
-                    Keybinds::CleanupResource(manager, resourceName);
+                    Framework::Integrations::Client::Scripting::Builtins::Keybinds::CleanupResource(manager, resourceName);
                 });
             }
         }
@@ -149,15 +142,14 @@ namespace ClientBuiltinsTest {
         // Brings the engines up and registers Key and Voice in the isolate, as the module's Init does: at the
         // start and after a Reset.
         bool Register() {
-            namespace ClientBuiltins = Framework::Integrations::Client::Scripting::Builtins;
             if (!client.Init()) {
                 return false;
             }
             {
-                EngineScope scope(&client.v8);
+                Framework::Scripting::EngineScope scope(&client.v8);
                 const auto context = scope.Context();
-                ClientBuiltins::Keybinds::Register(scope.Isolate(), context, context->Global(), client.manager.get());
-                ClientBuiltins::Voice::Register(scope.Isolate(), context, context->Global(), client.manager.get());
+                Framework::Integrations::Client::Scripting::Builtins::Keybinds::Register(scope.Isolate(), context, context->Global(), client.manager.get());
+                Framework::Integrations::Client::Scripting::Builtins::Voice::Register(scope.Isolate(), context, context->Global(), client.manager.get());
                 const auto closeGate = v8::Function::New(context, [](const v8::FunctionCallbackInfo<v8::Value> &) {
                     gateOpen = false;
                 }).ToLocalChecked();
@@ -174,7 +166,7 @@ namespace ClientBuiltinsTest {
         void Reset() {
             client.manager->Reset();
             client.lua.Shutdown();
-            Keybinds::Shutdown();
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Shutdown();
             client.v8.ResetContext();
         }
 
@@ -183,21 +175,21 @@ namespace ClientBuiltinsTest {
             if (client.manager) {
                 client.manager->StopAll();
             }
-            Keybinds::Shutdown();
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Shutdown();
             client.manager.reset();
             client.lua.Shutdown();
             client.v8.Shutdown();
             current = nullptr;
-            Keybinds::SetActiveCallback(nullptr);
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::SetActiveCallback(nullptr);
             Framework::CoreModules::SetInput(nullptr);
             for (const std::string &name : mounted) {
-                Vfs::Get().Unmount(name + ".zip");
+                Framework::Utils::Vfs::Get().Unmount(name + ".zip");
             }
         }
 
         // Mounts and starts a resource of one client script. Empty when it started.
         std::string Start(const std::string &name, const std::string &file, const std::string &source, const std::string &manifest = "") {
-            if (const std::string error = Mount(name, "\"clientScripts\":[\"" + file + "\"]" + manifest, {{file, source}}); !error.empty()) {
+            if (const std::string error = LuaClientTest::Mount(name, "\"clientScripts\":[\"" + file + "\"]" + manifest, {{file, source}}); !error.empty()) {
                 return error;
             }
             mounted.push_back(name);
@@ -206,7 +198,7 @@ namespace ClientBuiltinsTest {
 
         // A frame: the keys are polled, then the scripting is updated.
         void Frame() {
-            Keybinds::Update();
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
             client.Update();
         }
 
@@ -221,7 +213,7 @@ namespace ClientBuiltinsTest {
             if (!Run("globalThis.__result = (() => { try { return String(" + expression + "); } catch (e) { return '<error> ' + e.name + ': ' + e.message; } })();", resource)) {
                 return "<did not run>";
             }
-            EngineScope scope(&client.v8);
+            Framework::Scripting::EngineScope scope(&client.v8);
             const auto context = scope.Context();
             return v8pp::from_v8<std::string>(scope.Isolate(), context->Global()->Get(context, v8pp::to_v8(scope.Isolate(), "__result")).ToLocalChecked());
         }
@@ -310,7 +302,7 @@ namespace ClientBuiltinsTest {
             return failed;
         }
         call("reset");
-        return Keybinds::HandlerCount() == 0 ? std::string() : "handlers left: " + std::to_string(Keybinds::HandlerCount());
+        return Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount() == 0 ? std::string() : "handlers left: " + std::to_string(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount());
     }
 
     // A voice client that was never attached to a peer: its settings are kept, and no device is opened. On the
@@ -333,17 +325,10 @@ namespace ClientBuiltinsTest {
 } // namespace ClientBuiltinsTest
 
 MODULE(lua_client_builtins, {
-    using namespace Framework::Scripting;
-    using ClientBuiltinsTest::Contains;
-    using ClientBuiltinsTest::Desk;
-    using ClientBuiltinsTest::gateOpen;
-    using ClientBuiltinsTest::VoiceBooth;
-    using Framework::Integrations::Client::Scripting::Builtins::Keybinds;
-
     // ==================== Key: surface ====================
 
     IT("gives both languages the same Key and Voice, read-only in Lua", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.ready, true);
         EQUALS(desk.Start("js", "client.js", "0;"), "");
         EQUALS(desk.Start("lua", "client.lua", ""), "");
@@ -362,7 +347,7 @@ MODULE(lua_client_builtins, {
     });
 
     IT("labels a key and refuses what is not one, in both languages", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("js", "client.js", "0;"), "");
         EQUALS(desk.Start("lua", "client.lua", ""), "");
 
@@ -380,7 +365,7 @@ MODULE(lua_client_builtins, {
     });
 
     IT("throws the same errors for a wrong bind, unbind or isDown in both languages", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("js", "client.js", "0;"), "");
         EQUALS(desk.Start("lua", "client.lua", ""), "");
 
@@ -407,7 +392,7 @@ MODULE(lua_client_builtins, {
             EQUALS(desk.Js(item.js, "js"), std::string("<error> Error: ") + item.message);
             EQUALS(desk.Lua("lua", item.lua), std::string("<error> eval:1: ") + item.message);
         }
-        EQUALS(Keybinds::HandlerCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 0u);
 
         // A key nobody bound, and a key bound by nobody the caller is.
         EQUALS(desk.Js("Key.unbind('f5')", "js"), "false");
@@ -416,13 +401,13 @@ MODULE(lua_client_builtins, {
         // Outside a resource there is nobody to own a binding.
         EQUALS(desk.client.v8.Execute("globalThis.__outside = (() => { try { return Key.bind('f5', () => {}); } catch (e) { return e.message; } })();"), true);
         EQUALS(desk.Js("__outside", "js"), "Key.bind: must be called from within a resource");
-        EQUALS(Keybinds::HandlerCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 0u);
     });
 
     // ==================== Key: dispatch ====================
 
     IT("dispatches wheel notches to JavaScript in order, per edge and behind the gate", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("wheels", "client.js", ClientBuiltinsTest::kJavaScript), "");
         EQUALS(ClientBuiltinsTest::WheelScenario(desk,
                    [&](const std::string &function) {
@@ -432,7 +417,7 @@ MODULE(lua_client_builtins, {
     });
 
     IT("dispatches wheel notches to Lua in order, per edge and behind the gate", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("wheels", "client.lua", ClientBuiltinsTest::kLua), "");
         EQUALS(ClientBuiltinsTest::WheelScenario(desk,
                    [&](const std::string &function) {
@@ -442,7 +427,7 @@ MODULE(lua_client_builtins, {
     });
 
     IT("fires down, up and both handlers on the edges of a key, in both languages", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("js", "client.js",
                    "globalThis.jsLog = []; Key.bind('F5', (k, s) => jsLog.push('default:' + k + ':' + s)); Key.bind('f5', 'up', (k, s) => jsLog.push('up:' + s)); "
                    "globalThis.jsBound = Key.bind('f5', 'both', function (k, s) { 'use strict'; jsLog.push('both:' + s + ':' + arguments.length + ':' + (this === globalThis)); });"),
@@ -456,7 +441,7 @@ MODULE(lua_client_builtins, {
             "");
         EQUALS(desk.Js("jsBound", "js"), "true");
         EQUALS(desk.Lua("lua", "bound"), "true");
-        EQUALS(Keybinds::HandlerCount(), 6u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 6u);
 
         desk.Frame();
         EQUALS(desk.Js("jsLog.join()", "js"), "");
@@ -477,7 +462,7 @@ MODULE(lua_client_builtins, {
     });
 
     IT("keeps quiet behind the gate, for a key held when it was bound and for a chord with Alt", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("lua", "client.lua", "log = {} function watch(key) return Key.bind(key, 'both', function(k, s) log[#log + 1] = k .. ':' .. s end) end function seen() return table.concat(log, ',') end"), "");
         EQUALS(desk.Start("js", "client.js", "0;"), "");
 
@@ -491,12 +476,12 @@ MODULE(lua_client_builtins, {
         EQUALS(desk.Lua("lua", "seen()"), "f5:up");
 
         // Behind the gate an edge is seen and not told, and the key reads as up.
-        gateOpen = false;
+        ClientBuiltinsTest::gateOpen = false;
         desk.input.held.insert(FW_KEY_F5);
         desk.Frame();
         EQUALS(desk.Lua("lua", "tostring(Key.isDown('f5'))"), "false");
         EQUALS(desk.Js("Key.isDown('f5')", "js"), "false");
-        gateOpen = true;
+        ClientBuiltinsTest::gateOpen = true;
         desk.Frame();
         EQUALS(desk.Lua("lua", "seen()"), "f5:up");
         EQUALS(desk.Lua("lua", "tostring(Key.isDown('f5'))"), "true");
@@ -525,15 +510,15 @@ MODULE(lua_client_builtins, {
     // ==================== Key: ownership ====================
 
     IT("unbinds only the calling resource's handlers, across the two languages", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("alpha", "client.js", "globalThis.ran = []; Key.bind('f5', () => ran.push('a'));"), "");
         EQUALS(desk.Start("bravo", "client.lua", "ran = 0 Key.bind('f5', function() ran = ran + 1 end)"), "");
         EQUALS(desk.Start("charlie", "client.js", "Key.bind('f5', () => ran.push('c'));"), "");
-        EQUALS(Keybinds::HandlerCount(), 3u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 3u);
 
         EQUALS(desk.Lua("bravo", "tostring(Key.unbind('F5')) .. tostring(Key.unbind('f5'))"), "truefalse");
         EQUALS(desk.Js("Key.unbind('f5') + ' ' + Key.unbind('f5')", "charlie"), "true false");
-        EQUALS(Keybinds::HandlerCount(), 1u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 1u);
 
         desk.input.held.insert(FW_KEY_F5);
         desk.Frame();
@@ -542,12 +527,12 @@ MODULE(lua_client_builtins, {
     });
 
     IT("unbinds by state and by handler, in both languages", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("js", "client.js", "globalThis.one = () => {}; globalThis.two = () => {}; globalThis.fill = () => { Key.bind('f5', one); Key.bind('f5', 'up', one); Key.bind('f5', 'up', two); Key.bind('f6', two); };"), "");
         EQUALS(desk.Start("lua", "client.lua", "function one() end function two() end function fill() Key.bind('f5', one) Key.bind('f5', 'up', one) Key.bind('f5', 'up', two) Key.bind('f6', two) end"), "");
 
         const auto count = [] {
-            return Keybinds::HandlerCount();
+            return Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount();
         };
         const auto js = [&](const std::string &expression) {
             return desk.Js(expression, "js");
@@ -576,18 +561,18 @@ MODULE(lua_client_builtins, {
     });
 
     IT("drops the handlers of a resource that stops, whichever language bound them", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("alpha", "client.js", "globalThis.aRan = 0; globalThis.aHandler = () => ++aRan; Key.bind('f5', aHandler); Key.bind('wheelup', aHandler);"), "");
         EQUALS(desk.Start("bravo", "client.lua", "Key.bind('f5', function() end) Key.bind('f6', 'both', function() end)"), "");
         EQUALS(desk.Start("charlie", "client.js", "globalThis.cRan = 0; Key.bind('f5', () => ++cRan);"), "");
         // In the one isolate a handler belongs to the resource whose script made it, whoever binds it.
         EQUALS(desk.Js("Key.bind('f6', aHandler)", "charlie"), "true");
-        EQUALS(Keybinds::HandlerCount(), 6u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 6u);
 
         EQUALS(static_cast<bool>(desk.client.manager->StopResource("bravo")), true);
-        EQUALS(Keybinds::HandlerCount(), 4u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 4u);
         EQUALS(static_cast<bool>(desk.client.manager->StopResource("alpha")), true);
-        EQUALS(Keybinds::HandlerCount(), 1u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 1u);
 
         desk.input.held.insert(FW_KEY_F5);
         desk.input.held.insert(FW_KEY_F6);
@@ -596,38 +581,38 @@ MODULE(lua_client_builtins, {
         EQUALS(desk.Js("aRan + ' ' + cRan", "charlie"), "0 1");
 
         // The same name in another manager is another resource.
-        Keybinds::CleanupResource(nullptr, "nobody");
-        ResourceManager other(&desk.client.v8, {});
-        Keybinds::CleanupResource(&other, "charlie");
-        EQUALS(Keybinds::HandlerCount(), 1u);
-        Keybinds::CleanupResource("charlie");
-        EQUALS(Keybinds::HandlerCount(), 0u);
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::CleanupResource(nullptr, "nobody");
+        Framework::Scripting::ResourceManager other(&desk.client.v8, {});
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::CleanupResource(&other, "charlie");
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 1u);
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::CleanupResource("charlie");
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 0u);
     });
 
     IT("never calls a Lua handler whose state is gone, and lets go of it", {
         // Nobody tells Key of the stop: the handler is found dead when its key is next used.
-        Desk desk(/*cleanupOnStop*/ false);
+        ClientBuiltinsTest::Desk desk(/*cleanupOnStop*/ false);
         EQUALS(desk.Start("gone", "client.lua", "Key.bind('f5', function() error('called after the stop') end)"), "");
         EQUALS(desk.Start("stays", "client.lua", "ran = 0 Key.bind('f5', function() ran = ran + 1 end)"), "");
         EQUALS(static_cast<bool>(desk.client.manager->StopResource("gone")), true);
-        EQUALS(Keybinds::HandlerCount(), 2u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 2u);
 
         desk.input.held.insert(FW_KEY_F5);
         desk.Frame();
         desk.Frame();
-        EQUALS(Keybinds::HandlerCount(), 1u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 1u);
         EQUALS(desk.Lua("stays", "ran"), "1");
         EQUALS(desk.client.errors.size(), 0u);
     });
 
     IT("forgets every binding on a shutdown and keeps the gate of the host", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("js", "client.js", "globalThis.ran = 0; globalThis.bindOne = () => Key.bind('f5', () => ++ran); bindOne();"), "");
         EQUALS(desk.Start("lua", "client.lua", "ran = 0 function again() return Key.bind('f5', function() ran = ran + 1 end) end again()"), "");
-        EQUALS(Keybinds::HandlerCount(), 2u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 2u);
 
-        Keybinds::Shutdown();
-        EQUALS(Keybinds::HandlerCount(), 0u);
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::Shutdown();
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 0u);
         desk.input.held.insert(FW_KEY_F5);
         desk.Frame();
         EQUALS(desk.Js("ran", "js"), "0");
@@ -638,12 +623,12 @@ MODULE(lua_client_builtins, {
         // What binds afterwards is behind the gate the host installed before.
         EQUALS(desk.Js("bindOne()", "js"), "true");
         EQUALS(desk.Lua("lua", "again()"), "true");
-        gateOpen = false;
+        ClientBuiltinsTest::gateOpen = false;
         desk.input.held.insert(FW_KEY_F5);
         desk.Frame();
         EQUALS(desk.Js("ran", "js"), "0");
         EQUALS(desk.Lua("lua", "ran"), "0");
-        gateOpen = true;
+        ClientBuiltinsTest::gateOpen = true;
         desk.input.held.erase(FW_KEY_F5);
         desk.Frame();
         desk.input.held.insert(FW_KEY_F5);
@@ -653,17 +638,17 @@ MODULE(lua_client_builtins, {
     });
 
     IT("goes on when a handler stops its own resource or another one in the middle of an edge", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("js-quits", "client.js", "globalThis.jsQuit = 0; Key.bind('f5', 'both', () => { ++jsQuit; stopResource('js-quits'); });"), "");
         EQUALS(desk.Start("lua-quits", "client.lua", "Key.bind('f5', 'both', function() stopResource('lua-quits') error('still running') end)"), "");
         EQUALS(desk.Start("killer", "client.lua", "Key.bind('f5', function() stopResource('victim') end)"), "");
         EQUALS(desk.Start("victim", "client.lua", "Key.bind('f5', 'both', function() error('called after the stop') end)"), "");
         EQUALS(desk.Start("witness", "client.lua", "ran = 0 Key.bind('f5', 'both', function() ran = ran + 1 end)"), "");
-        EQUALS(Keybinds::HandlerCount(), 5u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 5u);
 
         desk.input.held.insert(FW_KEY_F5);
         desk.Frame();
-        EQUALS(Keybinds::HandlerCount(), 2u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 2u);
         EQUALS(desk.client.HasRuntime("lua-quits"), false);
         EQUALS(desk.client.HasRuntime("victim"), false);
         EQUALS(desk.Lua("witness", "ran"), "1");
@@ -680,7 +665,7 @@ MODULE(lua_client_builtins, {
     IT("does not call a JavaScript handler whose resource an earlier handler stopped on the same edge", {
         // The isolate of a stopped JavaScript resource lives on, so its handler stays callable: the state of the
         // resource is what holds it back.
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("js-killer", "client.js", "Key.bind('f5', () => stopResource('js-victim'));"), "");
         EQUALS(desk.Start("lua-killer", "client.lua", "Key.bind('f5', function() stopResource('other-victim') end)"), "");
         EQUALS(desk.Start("js-victim", "client.js", "globalThis.victimRan = 0; Key.bind('f5', () => ++victimRan);"), "");
@@ -696,7 +681,7 @@ MODULE(lua_client_builtins, {
     });
 
     IT("lets a handler unbind itself and a later one during an edge, which that edge still reaches", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("js", "client.js", "globalThis.jsLog = []; const second = () => jsLog.push('second'); const first = () => { jsLog.push('first'); Key.unbind('f5', first); Key.unbind('f5', second); }; Key.bind('f5', 'both', first); Key.bind('f5', 'both', second);"), "");
         EQUALS(desk.Start("lua", "client.lua", R"(
             log = {}
@@ -707,12 +692,12 @@ MODULE(lua_client_builtins, {
             Key.bind('f5', 'both', second)
         )"),
             "");
-        EQUALS(Keybinds::HandlerCount(), 4u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 4u);
 
         // The handlers of an edge are taken before the first runs, as they always were.
         desk.input.held.insert(FW_KEY_F5);
         desk.Frame();
-        EQUALS(Keybinds::HandlerCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 0u);
         desk.input.held.erase(FW_KEY_F5);
         desk.Frame();
         EQUALS(desk.Js("jsLog.join()", "js"), "first,second");
@@ -720,24 +705,24 @@ MODULE(lua_client_builtins, {
     });
 
     IT("has no handler left after a reset, and binds again in the next session", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         const std::string js  = "globalThis.ran = (globalThis.ran || 0); Key.bind('f5', () => ++ran);";
         const std::string lua = "ran = 0 Key.bind('f5', function() ran = ran + 1 end)";
         EQUALS(desk.Start("js", "client.js", js), "");
         EQUALS(desk.Start("lua", "client.lua", lua), "");
-        EQUALS(Keybinds::HandlerCount(), 2u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 2u);
 
         desk.Reset();
-        EQUALS(Keybinds::HandlerCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 0u);
         desk.input.held.insert(FW_KEY_F5);
-        Keybinds::Update();
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
         desk.input.held.erase(FW_KEY_F5);
-        Keybinds::Update();
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
 
         EQUALS(desk.Register(), true);
         EQUALS(desk.client.Start("js"), "");
         EQUALS(desk.client.Start("lua"), "");
-        EQUALS(Keybinds::HandlerCount(), 2u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 2u);
         desk.input.held.insert(FW_KEY_F5);
         desk.Frame();
         EQUALS(desk.Js("ran", "js"), "1");
@@ -748,7 +733,7 @@ MODULE(lua_client_builtins, {
     // ==================== Key: failures ====================
 
     IT("reports a handler that fails as an error of its resource, and goes on with the others", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("js-fails", "client.js", "Key.bind('f5', () => { throw Error('js boom'); });", R"(,"errorBehavior":"continue")"), "");
         EQUALS(desk.Start("lua-fails", "client.lua", "Key.bind('f5', function() error('lua boom') end)", R"(,"errorBehavior":"continue")"), "");
         EQUALS(desk.Start("later", "client.js", "Key.bind('f5', 'up', async () => { await null; throw Error('late boom'); });", R"(,"errorBehavior":"continue")"), "");
@@ -762,7 +747,7 @@ MODULE(lua_client_builtins, {
         EQUALS(desk.client.errors.size(), 2u);
         const auto reported = [&](const std::string &resource, const std::string &text) {
             return std::any_of(desk.client.errors.begin(), desk.client.errors.end(), [&](const std::string &error) {
-                return error.starts_with(resource + ": Key 'f5' (") && Contains(error, text);
+                return error.starts_with(resource + ": Key 'f5' (") && LuaRuntimeTest::Contains(error, text);
             });
         };
         EQUALS(reported("js-fails", "down) handler error: Error: js boom"), true);
@@ -777,11 +762,11 @@ MODULE(lua_client_builtins, {
         EQUALS(desk.Lua("fine", "ran"), "2");
 
         // Left running, as the manifests ask: the bindings are still there.
-        EQUALS(Keybinds::HandlerCount(), 4u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 4u);
     });
 
     IT("stops a resource whose handler fails when its manifest says so", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("fragile", "client.lua", "Key.bind('f5', 'both', function() error('lua boom') end)", R"(,"errorBehavior":"stop")"), "");
         desk.input.held.insert(FW_KEY_F5);
         desk.Frame();
@@ -792,16 +777,16 @@ MODULE(lua_client_builtins, {
         desk.input.held.erase(FW_KEY_F5);
         desk.Frame();
         desk.Frame();
-        EQUALS(Keybinds::HandlerCount(), 0u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 0u);
         EQUALS(desk.client.errors.size(), 1u);
     });
 
     // The deadline is for each entry into a state. Without the skip, forty handlers that hang would hold the
     // frame for forty deadlines, and a turn of the wheel for two a notch.
     IT("charges a resource whose handlers all hang one deadline a frame, and runs the others", {
-        LuaEngineOptions options = LuaEngineOptions::Client();
+        Framework::Scripting::LuaEngineOptions options = Framework::Scripting::LuaEngineOptions::Client();
         options.entryDeadline    = std::chrono::milliseconds(150);
-        Desk desk(/*cleanupOnStop*/ true, options);
+        ClientBuiltinsTest::Desk desk(/*cleanupOnStop*/ true, options);
         const std::string spin = "local function spin() local stop = os.clock() + 20 while os.clock() < stop do end end ";
         EQUALS(desk.Start("hangs", "client.lua", spin + "for i = 1, 40 do Key.bind('f5', 'both', spin) end Key.bind('wheelup', 'both', spin)", R"(,"errorBehavior":"continue")"), "");
         EQUALS(desk.Start("fine", "client.lua", "ran = 0 Key.bind('f5', 'both', function() ran = ran + 1 end) Key.bind('wheelup', 'both', function() ran = ran + 1 end)"), "");
@@ -810,7 +795,7 @@ MODULE(lua_client_builtins, {
         desk.input.held.insert(FW_KEY_F5);
         desk.input.Turn({1, 1, 1, 1, 1});
         const auto start = std::chrono::steady_clock::now();
-        Keybinds::Update();
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
         const auto took = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
         EQUALS(took >= 150, true);
         EQUALS(took < 1500, true);
@@ -822,17 +807,17 @@ MODULE(lua_client_builtins, {
         desk.client.Update();
         EQUALS(desk.client.errors.size(), 2u);
         desk.input.held.erase(FW_KEY_F5);
-        Keybinds::Update();
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
         desk.client.Update();
         EQUALS(desk.client.errors.size(), 3u);
         EQUALS(desk.Lua("fine", "ran"), "12");
-        EQUALS(Keybinds::HandlerCount(), 46u);
+        EQUALS(Framework::Integrations::Client::Scripting::Builtins::Keybinds::HandlerCount(), 46u);
     });
 
     // ==================== Voice ====================
 
     IT("answers with the defaults and takes every setting in silence while there is no voice client", {
-        Desk desk;
+        ClientBuiltinsTest::Desk desk;
         EQUALS(desk.Start("js", "client.js", "0;"), "");
         EQUALS(desk.Start("lua", "client.lua", ""), "");
 
@@ -873,8 +858,8 @@ MODULE(lua_client_builtins, {
     });
 
     IT("sets and reads the voice settings of the local player from both languages", {
-        Desk desk;
-        const VoiceBooth booth;
+        ClientBuiltinsTest::Desk desk;
+        const ClientBuiltinsTest::VoiceBooth booth;
         EQUALS(desk.Start("js", "client.js", "0;"), "");
         EQUALS(desk.Start("lua", "client.lua", ""), "");
         const auto js = [&](const std::string &expression) {
@@ -963,8 +948,8 @@ MODULE(lua_client_builtins, {
     });
 
     IT("throws the same errors for a wrong voice setting in both languages, and changes nothing", {
-        Desk desk;
-        const VoiceBooth booth;
+        ClientBuiltinsTest::Desk desk;
+        const ClientBuiltinsTest::VoiceBooth booth;
         EQUALS(desk.Start("js", "client.js", "0;"), "");
         EQUALS(desk.Start("lua", "client.lua", ""), "");
 

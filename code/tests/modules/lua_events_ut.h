@@ -27,8 +27,6 @@
 #include <vector>
 
 namespace LuaEventsTest {
-    using namespace Framework::Scripting;
-    using LuaResourcesTest::Contains;
 
     // A server scripting module over resources on disk: every resource in a runtime of its own for each language
     // it is written in, with Events registered the way the server registers it.
@@ -39,18 +37,18 @@ namespace LuaEventsTest {
         // needs them.
         bool Init() {
             server.module.SetResourcesPath(server.files.root.string());
-            if (server.module.Init() != ScriptingError::SCRIPTING_NONE) {
+            if (server.module.Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
                 return false;
             }
             Manager().DiscoverResources();
             return true;
         }
 
-        ResourceManager &Manager() {
+        Framework::Scripting::ResourceManager &Manager() {
             return *server.module.GetResourceManager();
         }
 
-        Builtins::Events &Events() {
+        Framework::Scripting::Builtins::Events &Events() {
             return Manager().GetEvents();
         }
 
@@ -76,7 +74,7 @@ namespace LuaEventsTest {
         // Runs a chunk in a coroutine of the resource, where it may wait. Empty, or what it raised before it
         // first waited.
         std::string Run(const std::string &resource, const std::string &source) const {
-            LuaRuntime *runtime = server.module.GetLuaEngine()->GetRuntime(resource);
+            Framework::Scripting::LuaRuntime *runtime = server.module.GetLuaEngine()->GetRuntime(resource);
             return runtime != nullptr ? LuaRuntimeTest::FirstLine(LuaRuntimeTest::Run(*runtime, source)) : "<no runtime>";
         }
 
@@ -107,19 +105,19 @@ namespace LuaEventsTest {
                 v8::Isolate::Scope isolateScope(isolate);
                 isolate->LowMemoryNotification();
             }
-            return Bind::V8CallableCount(isolate);
+            return Framework::Scripting::Bind::V8CallableCount(isolate);
         }
 
         size_t LuaCallables(const std::string &resource) {
-            LuaRuntime *runtime = server.module.GetLuaEngine()->GetRuntime(resource);
+            Framework::Scripting::LuaRuntime *runtime = server.module.GetLuaEngine()->GetRuntime(resource);
             lua_gc(runtime->State(), LUA_GCCOLLECT);
-            return Bind::LuaCallableCount(*runtime);
+            return Framework::Scripting::Bind::LuaCallableCount(*runtime);
         }
 
         // Runs `emit` in the isolate of the engine, as native code that emits does.
         template <typename F>
         auto Native(F &&emit) {
-            EngineScope scope(server.module.GetEngine());
+            Framework::Scripting::EngineScope scope(server.module.GetEngine());
             return emit(scope.Isolate(), scope.Context(), Events());
         }
     };
@@ -139,23 +137,23 @@ namespace LuaEventsTest {
         LuaResourcesTest::Rig rig;
 
         StopRig() {
-            Bind::WatchRuntimes(rig.node);
-            Bind::WatchRuntimes(rig.lua);
-            rig.lua.SetRuntimeSetupCallback([this](LuaRuntime &runtime) {
+            Framework::Scripting::Bind::WatchRuntimes(rig.node);
+            Framework::Scripting::Bind::WatchRuntimes(rig.lua);
+            rig.lua.SetRuntimeSetupCallback([this](Framework::Scripting::LuaRuntime &runtime) {
                 lua_State *L = runtime.State();
                 lua_pushcfunction(L, LuaResourcesTest::LuaLog);
                 lua_setglobal(L, "log");
                 lua_pushlightuserdata(L, &rig);
                 lua_pushcclosure(L, LuaResourcesTest::Rig::Stop, 1);
                 lua_setglobal(L, "stop");
-                Bind::SetCallResourceManager(&runtime, &rig.manager);
-                Builtins::Events::RegisterLua(runtime);
-                Builtins::Exports::RegisterLua(runtime);
+                Framework::Scripting::Bind::SetCallResourceManager(&runtime, &rig.manager);
+                Framework::Scripting::Builtins::Events::RegisterLua(runtime);
+                Framework::Scripting::Builtins::Exports::RegisterLua(runtime);
             });
             // Each runtime that is destroyed says so in the log, next to what the scripts wrote.
-            rig.lua.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
+            rig.lua.AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
                 LuaResourcesTest::Log().push_back("lua runtime of " + runtime.Options().resourceName + " destroyed");
-                Bind::SetCallResourceManager(&runtime, nullptr);
+                Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);
             });
             rig.node.AddRuntimeDisposingListener([](v8::Isolate *) {
                 LuaResourcesTest::Log().emplace_back("javascript runtime destroyed");
@@ -175,7 +173,7 @@ namespace LuaEventsTest {
 
         // The value of `expression` in the JavaScript runtime of the resource, as a string.
         std::string Js(const std::string &resource, const std::string &expression) {
-            NodeRuntime *runtime = rig.node.GetResourceRuntime(resource);
+            Framework::Scripting::NodeRuntime *runtime = rig.node.GetResourceRuntime(resource);
             return runtime != nullptr ? NodeTest::Eval(*runtime, expression) : "<no runtime>";
         }
     };
@@ -189,14 +187,11 @@ namespace LuaEventsTest {
 } // namespace LuaEventsTest
 
 MODULE(lua_events, {
-    using namespace Framework::Scripting;
-    using LuaEventsTest::Bus;
-    using LuaEventsTest::Contains;
 
     // ==================== Dispatch across languages ====================
 
     IT("delivers a Lua emit to Lua and JavaScript handlers, as copies", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-listener", {{"main.lua", LuaEventsTest::kLuaListener}});
         bus.server.files.Resource("js-listener", {{"main.js", LuaEventsTest::kJsListener}});
         bus.server.files.Resource("sender", {{"main.lua", R"(
@@ -216,7 +211,7 @@ MODULE(lua_events, {
     });
 
     IT("delivers a JavaScript emit to Lua handlers as copies, and resolves its promise", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-listener", {{"main.lua", LuaEventsTest::kLuaListener}});
         bus.server.files.Resource("js-listener", {{"main.js", LuaEventsTest::kJsListener}});
         bus.server.files.Resource("sender", {{"main.js", R"(
@@ -241,7 +236,7 @@ MODULE(lua_events, {
     });
 
     IT("passes the same objects to the JavaScript handlers of the emitter's own isolate", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-listener", {{"main.lua", "Events.on('share', function(o) o.lua = true seen = o.first end)"}});
         bus.server.files.Resource("sharing", {{"main.js", R"(
             Events.on('share', (o) => { o.first = true; globalThis.seen = o; });
@@ -262,7 +257,7 @@ MODULE(lua_events, {
     });
 
     IT("hands a function across as a function that calls the original", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("js-listener", {{"main.js", "Events.on('callback', (f) => { f(21); });"}});
         bus.server.files.Resource("lua-listener", {{"main.lua", "Events.on('callback', function(f) f(100) end)"}});
         bus.server.files.Resource("sender", {{"main.lua", "answers = {} function fire() Events.emit('callback', function(x) answers[#answers + 1] = x * 2 end) return table.concat(answers, ',') end"}});
@@ -273,7 +268,7 @@ MODULE(lua_events, {
     });
 
     IT("calls handlers of both languages in the order they were registered", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("mixed", {{"a.lua", "Events.on('order', function(list) order = (order or '') .. 'lua1,' end)"},
                                                {"b.js", "Events.on('order', () => { Events.emit('note', 'js'); });"},
                                                {"c.lua", "Events.on('order', function() order = order .. 'lua2' end) Events.on('note', function(who) order = order .. who .. ',' end)"}});
@@ -287,7 +282,7 @@ MODULE(lua_events, {
     // ==================== The surface in Lua ====================
 
     IT("fires a once handler one time", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("listener", {{"main.lua", "count = 0 Events.once('one', function() count = count + 1 end)"}});
         bus.server.files.Resource("sender", {{"main.lua", ""}, {"main.js", ""}});
         EQUALS(bus.Init(), true);
@@ -301,7 +296,7 @@ MODULE(lua_events, {
     });
 
     IT("removes a handler by its function and by the function on returned", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("listener", {{"main.lua", R"(
             hits = 0
             function handler() hits = hits + 1 end
@@ -332,7 +327,7 @@ MODULE(lua_events, {
     });
 
     IT("removes with the function on returned a handler that was registered again since", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("toggle", {{"main.lua", R"(
             function toggle()
                 local function handler() end
@@ -380,7 +375,7 @@ MODULE(lua_events, {
     });
 
     IT("unsubscribes for a script that tampered with the prototypes", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("hostile", {{"main.js", R"(
             globalThis.attempt = () => {
                 let result = 'none';
@@ -418,7 +413,7 @@ MODULE(lua_events, {
     });
 
     IT("emits to the handlers of one resource with emitTo", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.lua", "Events.on('targeted', function(x) got = x end)"}});
         bus.server.files.Resource("b", {{"main.lua", "Events.on('targeted', function(x) got = x end)"}, {"main.js", "Events.on('targeted', (x) => { globalThis.got = x; });"}});
         bus.server.files.Resource("c", {{"main.js", "Events.on('targeted', (x) => { globalThis.got = x; }); globalThis.got = 'none';"}});
@@ -438,7 +433,7 @@ MODULE(lua_events, {
     });
 
     IT("keeps local events inside their resource, across its languages", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         const std::string lua = "Events.onLocal('private', function(x) seen = x end) Events.on('private', function(x) shared = x end) function fire(x) Events.emitLocal('private', x) end";
         bus.server.files.Resource("a", {{"main.lua", lua}, {"main.js", "Events.onLocal('private', (x) => { globalThis.seen = x; }); globalThis.fire = (x) => { Events.emitLocal('private', x); };"}});
         bus.server.files.Resource("b", {{"main.lua", lua}});
@@ -462,7 +457,7 @@ MODULE(lua_events, {
     });
 
     IT("counts the handlers of both languages", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.lua", "Events.on('counted', function() end) Events.once('counted', function() end) Events.onClient('counted', function() end)"}});
         bus.server.files.Resource("b", {{"main.js", "Events.on('counted', () => {});"}});
         EQUALS(bus.Init(), true);
@@ -477,7 +472,7 @@ MODULE(lua_events, {
     });
 
     IT("has the server members in a server runtime and not the client one", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.lua", ""}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("a"), "");
@@ -489,7 +484,7 @@ MODULE(lua_events, {
     });
 
     IT("raises the errors of JavaScript for a wrong call", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.lua", "function try(f, ...) local ok, err = pcall(f, ...) return ok and 'ok' or err end"}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("a"), "");
@@ -513,13 +508,13 @@ MODULE(lua_events, {
         EQUALS(bus.Lua("a", "try(Events.emitAllClients)"), "Events.emitAllClients requires an eventName string");
 
         // What cannot be copied is the emitter's mistake, whether or not anybody listens.
-        EQUALS(Contains(bus.Lua("a", "try(Events.emit, 'e', 1, coroutine.create(function() end))"), "Events.emit: argument 2: "), true);
-        EQUALS(Contains(bus.Lua("a", "try(Events.emitTo, 'a', 'e', coroutine.create(function() end))"), "Events.emitTo: argument 1: "), true);
-        EQUALS(Contains(bus.Lua("a", "try(Events.emitLocal, 'e', coroutine.create(function() end))"), "Events.emitLocal: argument 1: "), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("a", "try(Events.emit, 'e', 1, coroutine.create(function() end))"), "Events.emit: argument 2: "), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("a", "try(Events.emitTo, 'a', 'e', coroutine.create(function() end))"), "Events.emitTo: argument 1: "), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("a", "try(Events.emitLocal, 'e', coroutine.create(function() end))"), "Events.emitLocal: argument 1: "), true);
     });
 
     IT("uses up no once handler for an emit whose arguments cannot be copied", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.lua", "calls = 0 Events.once('e', function() calls = calls + 1 end)"}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("a"), "");
@@ -532,7 +527,7 @@ MODULE(lua_events, {
     });
 
     IT("names the argument a JavaScript emit cannot copy for a Lua handler, counting from one", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("listener", {{"main.lua", "Events.on('e', function() called = true end) Events.on('e', function() called = true end)"}});
         bus.server.files.Resource("sender", {{"main.js", R"(
             globalThis.settled = 'pending';
@@ -557,7 +552,7 @@ MODULE(lua_events, {
     });
 
     IT("sends a network payload as JSON, and a string as it is", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.lua", "function try(f, ...) local ok, err = pcall(f, ...) return ok and 'ok' or err end"}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("a"), "");
@@ -568,12 +563,12 @@ MODULE(lua_events, {
         EQUALS(bus.Lua("a", "try(Events.emitAllClients, 'named')"), "Events.emitAllClients: network peer unavailable");
         // An empty name is nothing to send.
         EQUALS(bus.Lua("a", "try(Events.emitAllClients, '', {a = 1})"), "ok");
-        EQUALS(Contains(bus.Lua("a", "try(Events.emitAllClients, 'named', {f = function() end})"), "Events.emitAllClients: "), true);
-        EQUALS(Contains(bus.Lua("a", "try(Events.emitAllClients, 'named', {f = function() end})"), "network peer"), false);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("a", "try(Events.emitAllClients, 'named', {f = function() end})"), "Events.emitAllClients: "), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("a", "try(Events.emitAllClients, 'named', {f = function() end})"), "network peer"), false);
     });
 
     IT("refuses a JavaScript payload that has no JSON before it sends anything", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.js", "globalThis.attempt = (payload) => { try { Events.emitAllClients('named', payload); return 'sent'; } catch (e) { return e.constructor.name + ': ' + e.message; } };"}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("a"), "");
@@ -590,7 +585,7 @@ MODULE(lua_events, {
     // ==================== Outcomes ====================
 
     IT("lets a Lua handler veto a synchronous emit by returning false", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.lua", R"(
             Events.on('allow', function() calls = (calls or 0) + 1 end)
             Events.on('allow', function() calls = calls + 1 return true end)
@@ -604,7 +599,7 @@ MODULE(lua_events, {
         EQUALS(bus.Start("a"), "");
 
         const auto ask = [&](const char *event) {
-            return bus.Native([&](v8::Isolate *isolate, v8::Local<v8::Context> context, Builtins::Events &events) {
+            return bus.Native([&](v8::Isolate *isolate, v8::Local<v8::Context> context, Framework::Scripting::Builtins::Events &events) {
                 return events.EmitReservedSync(isolate, context, event, {v8pp::to_v8(isolate, "because")});
             });
         };
@@ -625,7 +620,7 @@ MODULE(lua_events, {
     });
 
     IT("makes the emitter wait for a Lua handler that sleeps", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("listener", {{"main.lua", "Events.on('slow', function() sleep(30) finished = true end)"}});
         bus.server.files.Resource("js-sender", {{"main.js", "globalThis.settled = 'pending'; globalThis.fire = () => { Events.emit('slow').then(() => { settled = 'resolved'; }, () => { settled = 'rejected'; }); return 'emitted'; };"}});
         bus.server.files.Resource("lua-sender", {{"main.lua", ""}});
@@ -660,11 +655,11 @@ MODULE(lua_events, {
         EQUALS(early, false);
 
         // Where a Lua script cannot wait, an emit that would have to says so.
-        EQUALS(Contains(bus.Lua("lua-sender", "select(2, pcall(Events.emit, 'slow'))"), "cannot wait here"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-sender", "select(2, pcall(Events.emit, 'slow'))"), "cannot wait here"), true);
     });
 
     IT("makes a Lua emitter wait for a JavaScript handler that returns a promise", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("listener", {{"main.js", "globalThis.finished = false; Events.on('slow', () => new Promise((resolve) => setTimeout(() => { finished = true; resolve(); }, 30)));"}});
         bus.server.files.Resource("sender", {{"main.lua", ""}});
         EQUALS(bus.Init(), true);
@@ -684,7 +679,7 @@ MODULE(lua_events, {
     });
 
     IT("rejects the promise of a JavaScript emitter when a Lua handler raises", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("listener", {{"main.lua", "Events.on('explode', function() error('boom') end) Events.on('explode', function() ran = true end)"}});
         bus.server.files.Resource("sender", {{"main.js", R"(
             globalThis.settled = 'pending';
@@ -709,7 +704,7 @@ MODULE(lua_events, {
     });
 
     IT("raises in a Lua emitter what the handlers failed with", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-listener", {{"main.lua", "Events.on('explode', function() error('lua boom') end) Events.on('explode', function() ran = true end) Events.on('later', function() sleep(10) error('late boom') end)"}});
         bus.server.files.Resource("js-listener", {{"main.js", "Events.on('explode', () => { throw new Error('js boom'); });"}});
         bus.server.files.Resource("sender", {{"main.lua", "Events.onLocal('mine', function() error('local boom') end)"}});
@@ -718,15 +713,15 @@ MODULE(lua_events, {
 
         const std::string raised = bus.Lua("sender", "select(2, pcall(Events.emit, 'explode'))");
         EQUALS(raised.starts_with("One or more event handlers failed: "), true);
-        EQUALS(Contains(raised, "lua boom"), true);
-        EQUALS(Contains(raised, "js boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(raised, "lua boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(raised, "js boom"), true);
         EQUALS(raised.find("lua boom") < raised.find("js boom"), true);
         EQUALS(bus.Lua("lua-listener", "ran"), "true");
         EQUALS(bus.Lua("sender", "tostring(pcall(Events.emit, 'explode'))"), "false");
 
         const std::string local = bus.Lua("sender", "select(2, pcall(Events.emitLocal, 'mine'))");
         EQUALS(local.starts_with("One or more local event handlers failed: "), true);
-        EQUALS(Contains(local, "local boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(local, "local boom"), true);
 
         // A handler that fails after it waited fails the emit that waits on it.
         EQUALS(bus.Run("sender", "local ok, err = pcall(Events.emit, 'later') outcome = tostring(ok) .. '|' .. err"), "");
@@ -735,13 +730,13 @@ MODULE(lua_events, {
         }),
             true);
         EQUALS(bus.Lua("sender", "outcome").starts_with("false|One or more event handlers failed: "), true);
-        EQUALS(Contains(bus.Lua("sender", "outcome"), "late boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("sender", "outcome"), "late boom"), true);
     });
 
     // ==================== Resources that go ====================
 
     IT("drops the Lua handlers of a resource that stops", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("listener", {{"main.lua", "Events.on('e', function() end) Events.once('e', function() end) Events.onClient('e', function() end) Events.onLocal('e', function() end)"}});
         bus.server.files.Resource("other", {{"main.lua", "Events.on('e', function() count = (count or 0) + 1 end)"}});
         EQUALS(bus.Init(), true);
@@ -761,7 +756,7 @@ MODULE(lua_events, {
     });
 
     IT("fails the emit that waits on a handler whose resource stops", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("sleeper", {{"main.lua", "Events.on('wait', function() sleep(60000) end)"}});
         bus.server.files.Resource("js-sender", {{"main.js", "globalThis.settled = 'pending'; Events.emit('wait').then(() => { settled = 'resolved'; }, (e) => { settled = e.errors[0].message; });"}});
         bus.server.files.Resource("lua-sender", {{"main.lua", "spawn(function() local ok, err = pcall(Events.emit, 'wait') outcome = tostring(ok) .. '|' .. err end)"}});
@@ -783,7 +778,7 @@ MODULE(lua_events, {
     // ==================== Handlers that change what is being dispatched ====================
 
     IT("lets go of a handler that unsubscribed itself, in both languages", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("churn", {{"main.lua", R"(
             alive = setmetatable({}, {__mode = 'k'})
             function churn(n)
@@ -823,7 +818,7 @@ MODULE(lua_events, {
     });
 
     IT("calls every handler picked for an emission, also one an earlier handler removed", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua", {{"main.lua", R"(
             seen = ''
             local offSelf
@@ -922,20 +917,20 @@ MODULE(lua_events, {
     });
 
     IT("calls none of the JavaScript handlers picked after one that cleared the bus", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.js", "globalThis.seen = ''; Events.on('wipe', () => { seen += '1'; clearAll(); }); Events.on('wipe', () => { seen += '2'; });"}});
         bus.server.files.Resource("b", {{"main.js", "globalThis.seen = ''; Events.on('wipe', () => { seen += 'b'; });"}, {"main.lua", "Events.on('wipe', function() seen = 'lua' end)"}});
         bus.server.files.Resource("emitter", {{"main.js", "globalThis.settled = 'pending'; globalThis.fire = () => { Events.emit('wipe').then(() => { settled = 'resolved'; }, () => { settled = 'rejected'; }); return 0; };"}});
         EQUALS(bus.Init(), true);
         // A host function that clears every handler, as a project's session reset does, reachable from a script.
-        bus.server.module.GetEngine()->SetRuntimeSetupCallback([&bus](Engine *engine) {
+        bus.server.module.GetEngine()->SetRuntimeSetupCallback([&bus](Framework::Scripting::Engine *engine) {
             bus.server.module.RegisterFrameworkBindings();
             engine->InitFrameworkSDK();
-            EngineScope scope(engine);
+            Framework::Scripting::EngineScope scope(engine);
             v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
             const auto clear               = [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                static_cast<Builtins::Events *>(info.Data().As<v8::External>()->Value())->ClearAll();
+                static_cast<Framework::Scripting::Builtins::Events *>(info.Data().As<v8::External>()->Value())->ClearAll();
             };
             context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "clearAll"), v8::Function::New(context, clear, v8::External::New(isolate, &bus.Events())).ToLocalChecked()).Check();
         });
@@ -1016,7 +1011,7 @@ MODULE(lua_events, {
     });
 
     IT("drops an emission whose emitter stops while a handler is still at it", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("listener", {{"main.lua", "finished = 0 Events.on('slow', function() while not open do sleep(1) end finished = finished + 1 end)"}});
         bus.server.files.Resource("lua-sender", {{"main.lua", "spawn(function() Events.emit('slow') resumed = true end)"}});
         bus.server.files.Resource("js-sender", {{"main.js", "Events.emit('slow').then(() => { globalThis.settled = true; });"}});
@@ -1026,13 +1021,13 @@ MODULE(lua_events, {
         EQUALS(bus.StartAll({"lua-sender", "js-sender"}), true);
         bus.server.module.Update();
         EQUALS(bus.Lua("listener", "finished"), "0");
-        EQUALS(Builtins::Events::GetWaitingEmissionCount(), (size_t)1);
+        EQUALS(Framework::Scripting::Builtins::Events::GetWaitingEmissionCount(), (size_t)1);
 
         // The Lua emitter waits in a runtime that goes, the JavaScript one holds a promise in an isolate that
         // goes. The handlers run on to their end, with nobody to tell.
         EQUALS((bool)bus.Manager().StopResource("lua-sender"), true);
         EQUALS((bool)bus.Manager().StopResource("js-sender"), true);
-        EQUALS(Builtins::Events::GetWaitingEmissionCount(), (size_t)0);
+        EQUALS(Framework::Scripting::Builtins::Events::GetWaitingEmissionCount(), (size_t)0);
         // The handlers are held until here, whatever time the stops took.
         bus.server.module.Update();
         EQUALS(bus.Lua("listener", "finished"), "0");
@@ -1042,7 +1037,7 @@ MODULE(lua_events, {
         }),
             true);
         bus.server.module.Update();
-        EQUALS(Builtins::Events::GetWaitingEmissionCount(), (size_t)0);
+        EQUALS(Framework::Scripting::Builtins::Events::GetWaitingEmissionCount(), (size_t)0);
         EQUALS(bus.LuaCallables("listener"), callables);
         EQUALS(bus.Events().GetListenerCount("slow"), (size_t)1);
 
@@ -1057,25 +1052,25 @@ MODULE(lua_events, {
     IT("forgets the handlers and the emissions of an isolate its engine disposes of", {
         LuaResourcesTest::Files files;
         {
-            NodeEngine engine({});
-            EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-            ResourceManagerConfig config;
+            Framework::Scripting::NodeEngine engine({});
+            EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+            Framework::Scripting::ResourceManagerConfig config;
             config.resourcesPath = files.root.string();
-            ResourceManager manager(&engine, config);
+            Framework::Scripting::ResourceManager manager(&engine, config);
             TestManagerHelper::RegisterEvents(engine, manager);
             manager.SetCurrentResourceContext("testResource");
 
             // Handlers of the engine's own isolate, which no runtime listener speaks for, and an emission that
             // waits on one of them.
             EQUALS(TestManagerHelper::EvalInt(engine, "Events.on('kept', () => new Promise(() => {})); Events.onClient('kept', () => {}); Events.onLocal('kept', () => {}); Events.emit('kept'); Events.listenerCount('kept')"), 1);
-            EQUALS(Builtins::Events::GetWaitingEmissionCount(), (size_t)1);
+            EQUALS(Framework::Scripting::Builtins::Events::GetWaitingEmissionCount(), (size_t)1);
             manager.SetCurrentResourceContext("");
 
             // Nothing cleaned the resource up: the engine goes with the handlers still registered.
             engine.Shutdown();
             EQUALS(manager.GetEvents().GetListenerCount("kept"), (size_t)0);
             EQUALS(manager.GetEvents().GetClientListenerCount("kept"), (size_t)0);
-            EQUALS(Builtins::Events::GetWaitingEmissionCount(), (size_t)0);
+            EQUALS(Framework::Scripting::Builtins::Events::GetWaitingEmissionCount(), (size_t)0);
             // No handle of the dead isolate is left for these to touch.
             manager.GetEvents().ClearAll();
             manager.GetEvents().Reset();
@@ -1083,7 +1078,7 @@ MODULE(lua_events, {
     });
 
     IT("stops telling an emission with copied arguments that was cancelled", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("listener", {{"main.lua", "finished = 0 Events.on('slow', function() sleep(20) finished = finished + 1 end)"}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("listener"), "");
@@ -1096,7 +1091,7 @@ MODULE(lua_events, {
             told += errors.empty() ? 10 : 100;
         });
         EQUALS(cancelled != nullptr && awaited != nullptr, true);
-        Builtins::Events::CancelPendingEmission(cancelled);
+        Framework::Scripting::Builtins::Events::CancelPendingEmission(cancelled);
         EQUALS(bus.Until([&] {
             return bus.Lua("listener", "finished") == "2";
         }),
@@ -1109,13 +1104,13 @@ MODULE(lua_events, {
         }) == nullptr,
             true);
         EQUALS(told, 1010);
-        Builtins::Events::CancelPendingEmission(nullptr);
+        Framework::Scripting::Builtins::Events::CancelPendingEmission(nullptr);
     });
 
     // ==================== Native events ====================
 
     IT("fires the onClient handlers of Lua for a client event only", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.lua", "Events.onClient('c', function(x) client = x end) Events.on('c', function(x) shared = x end) Events.onceClient('once', function() onces = (onces or 0) + 1 end)"}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("a"), "");
@@ -1125,7 +1120,7 @@ MODULE(lua_events, {
         EQUALS(bus.Lua("a", "tostring(client) .. '|' .. tostring(shared)"), "nil|1");
 
         const auto emit = [&](bool client, const char *event, int value) {
-            bus.Native([&](v8::Isolate *isolate, v8::Local<v8::Context> context, Builtins::Events &events) {
+            bus.Native([&](v8::Isolate *isolate, v8::Local<v8::Context> context, Framework::Scripting::Builtins::Events &events) {
                 const std::vector<v8::Local<v8::Value>> args = {v8pp::to_v8(isolate, value)};
                 if (client) {
                     events.EmitClient(isolate, context, event, args);
@@ -1149,13 +1144,13 @@ MODULE(lua_events, {
     });
 
     IT("brings a console command to a Lua handler", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.lua", "Events.on('consoleCommand', function(command, args) said = command .. ':' .. table.concat(args, ',') .. ':' .. #args end)"}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("a"), "");
 
         // As the server instance emits it: the command, then the rest of the line as an array.
-        bus.Native([&](v8::Isolate *isolate, v8::Local<v8::Context> context, Builtins::Events &events) {
+        bus.Native([&](v8::Isolate *isolate, v8::Local<v8::Context> context, Framework::Scripting::Builtins::Events &events) {
             v8::Local<v8::Array> rest = v8::Array::New(isolate, 2);
             rest->Set(context, 0, v8pp::to_v8(isolate, "gold")).Check();
             rest->Set(context, 1, v8pp::to_v8(isolate, "5")).Check();
@@ -1166,13 +1161,13 @@ MODULE(lua_events, {
     });
 
     IT("emits a native event to the Lua handlers of one resource", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("a", {{"main.lua", "Events.on('owned', function(x) got = x end)"}});
         bus.server.files.Resource("b", {{"main.lua", "Events.on('owned', function(x) got = x end)"}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.StartAll({"a", "b"}), true);
 
-        bus.Native([&](v8::Isolate *isolate, v8::Local<v8::Context> context, Builtins::Events &events) {
+        bus.Native([&](v8::Isolate *isolate, v8::Local<v8::Context> context, Framework::Scripting::Builtins::Events &events) {
             events.EmitReservedTo(isolate, context, "owned", {v8pp::to_v8(isolate, 4)}, "b");
             return 0;
         });
@@ -1183,7 +1178,7 @@ MODULE(lua_events, {
     // ==================== Lifecycle ====================
 
     IT("tells Lua handlers of resourceStart and resourceStop, a Lua-only resource of its own", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("watcher", {{"main.lua", "seen = '' Events.on('resourceStart', function(name) seen = seen .. 'start ' .. name .. ',' end) Events.on('resourceStop', function(name) seen = seen .. 'stop ' .. name .. ',' end)"}});
         bus.server.files.Resource("solo", {{"main.lua", "Events.on('resourceStart', function(name) own = (own or '') .. name end)"}});
         EQUALS(bus.Init(), true);
@@ -1196,7 +1191,7 @@ MODULE(lua_events, {
     });
 
     IT("waits for a Lua handler of resourceStart and resourceStop that sleeps", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("watcher", {{"main.lua", R"(
             Events.on('resourceStart', function(name) if name == 'late' then sleep(40) started = name end end)
             Events.on('resourceStop', function(name) if name == 'late' then sleep(40) stopped = name end end)
@@ -1220,7 +1215,7 @@ MODULE(lua_events, {
     });
 
     IT("fails a start that a Lua handler of resourceStart refuses or holds up too long", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("watcher", {{"main.lua", R"(
             Events.on('resourceStart', function(name)
                 if name == 'refused' then error('not this one') end
@@ -1237,8 +1232,8 @@ MODULE(lua_events, {
 
         const std::string refused = bus.Start("refused");
         EQUALS(refused.starts_with("resourceStart rejected: "), true);
-        EQUALS(Contains(refused, "One or more event handlers failed"), true);
-        EQUALS(Contains(refused, "not this one"), true);
+        EQUALS(LuaRuntimeTest::Contains(refused, "One or more event handlers failed"), true);
+        EQUALS(LuaRuntimeTest::Contains(refused, "not this one"), true);
         EQUALS(bus.Manager().IsResourceRunning("refused"), false);
 
         EQUALS(bus.Start("stuck"), "resourceStart timed out after 50ms");
@@ -1256,22 +1251,22 @@ MODULE(lua_events, {
         files.Resource("stuck", {{"main.lua", ""}});
         LuaResourcesTest::Log().clear();
 
-        LuaEngine lua;
-        EQUALS(lua.Init(), ScriptingError::SCRIPTING_NONE);
-        Bind::WatchRuntimes(lua);
-        ResourceManagerConfig config;
+        Framework::Scripting::LuaEngine lua;
+        EQUALS(lua.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::Bind::WatchRuntimes(lua);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath          = files.root.string();
         config.resourceStartTimeoutMs = 400;
-        ResourceManager manager(nullptr, config);
+        Framework::Scripting::ResourceManager manager(nullptr, config);
         manager.SetLuaEngine(&lua);
-        lua.SetRuntimeSetupCallback([&manager](LuaRuntime &runtime) {
-            Bind::SetCallResourceManager(&runtime, &manager);
-            Builtins::Events::RegisterLua(runtime);
+        lua.SetRuntimeSetupCallback([&manager](Framework::Scripting::LuaRuntime &runtime) {
+            Framework::Scripting::Bind::SetCallResourceManager(&runtime, &manager);
+            Framework::Scripting::Builtins::Events::RegisterLua(runtime);
             lua_pushcfunction(runtime.State(), LuaResourcesTest::LuaLog);
             lua_setglobal(runtime.State(), "log");
         });
-        lua.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
-            Bind::SetCallResourceManager(&runtime, nullptr);
+        lua.AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
+            Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);
         });
         EQUALS(manager.DiscoverResources(), 4u);
 
@@ -1285,7 +1280,7 @@ MODULE(lua_events, {
         const auto refused = manager.StartResource("refused");
         EQUALS((bool)refused, false);
         EQUALS(refused.GetError().starts_with("resourceStart rejected: One or more event handlers failed: "), true);
-        EQUALS(Contains(refused.GetError(), "not this one"), true);
+        EQUALS(LuaRuntimeTest::Contains(refused.GetError(), "not this one"), true);
         EQUALS(manager.StartResource("stuck").GetError(), "resourceStart timed out after 400ms");
         EQUALS(manager.IsResourceRunning("stuck"), false);
 

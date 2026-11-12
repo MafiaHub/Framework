@@ -20,8 +20,6 @@
 #include <cctype>
 #include <filesystem>
 
-using namespace Framework::Scripting::V8EngineCallbacks;
-
 namespace Framework::Scripting {
 
     std::unique_ptr<v8::Platform> V8Engine::_platform = nullptr;
@@ -118,7 +116,6 @@ namespace Framework::Scripting {
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolateScope(_isolate);
 
-        namespace fs = std::filesystem;
         std::string rootStr;
         if (Utils::Vfs::IsVirtualPath(rootPath)) {
             // Cache keys are the virtual paths, so canonicalising would never match them.
@@ -126,8 +123,8 @@ namespace Framework::Scripting {
         }
         else {
             std::error_code ec;
-            fs::path canonicalRoot = fs::weakly_canonical(fs::path(rootPath), ec);
-            rootStr                = (ec ? fs::path(rootPath) : canonicalRoot).string();
+            std::filesystem::path canonicalRoot = std::filesystem::weakly_canonical(std::filesystem::path(rootPath), ec);
+            rootStr                = (ec ? std::filesystem::path(rootPath) : canonicalRoot).string();
         }
         if (rootStr.empty()) {
             return;
@@ -151,7 +148,7 @@ namespace Framework::Scripting {
             // Require a directory boundary so /res/a doesn't match /res/ab.
             if (p.size() > r.size()) {
                 char next = p[r.size()];
-                char sep  = static_cast<char>(fs::path::preferred_separator);
+                char sep  = static_cast<char>(std::filesystem::path::preferred_separator);
                 if (next != sep && next != '/' && r.back() != sep) {
                     return false;
                 }
@@ -252,7 +249,7 @@ namespace Framework::Scripting {
         }
 
         // Install promise rejection callback
-        _isolate->SetPromiseRejectCallback(PromiseRejectCallback);
+        _isolate->SetPromiseRejectCallback(Framework::Scripting::V8EngineCallbacks::PromiseRejectCallback);
 
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolateScope(_isolate);
@@ -261,7 +258,7 @@ namespace Framework::Scripting {
         // Before the hook, which reads them for every promise.
         _promiseOwnerKey.Set(_isolate, v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseOwner")));
         _promiseGenerationKey.Set(_isolate, v8::Private::ForApi(_isolate, v8::String::NewFromUtf8Literal(_isolate, "Framework.promiseGeneration")));
-        _isolate->SetPromiseHook(PromiseHook);
+        _isolate->SetPromiseHook(Framework::Scripting::V8EngineCallbacks::PromiseHook);
 
         // Create context
         v8::Local<v8::Context> context = v8::Context::New(_isolate);
@@ -301,7 +298,7 @@ namespace Framework::Scripting {
         InstallRequireFunction();
 
         // Install queueMicrotask
-        v8::Local<v8::FunctionTemplate> queueMicrotaskTmpl = v8::FunctionTemplate::New(_isolate, QueueMicrotaskCallback);
+        v8::Local<v8::FunctionTemplate> queueMicrotaskTmpl = v8::FunctionTemplate::New(_isolate, Framework::Scripting::V8EngineCallbacks::QueueMicrotaskCallback);
         global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "queueMicrotask"), queueMicrotaskTmpl->GetFunction(context).ToLocalChecked()).Check();
     }
 
@@ -318,15 +315,15 @@ namespace Framework::Scripting {
         v8::Local<v8::External> engineExternal = v8::External::New(_isolate, this);
 
         // setTimeout
-        v8::Local<v8::FunctionTemplate> setTimeoutTmpl = v8::FunctionTemplate::New(_isolate, SetTimerCallback, setTimeoutExternal);
+        v8::Local<v8::FunctionTemplate> setTimeoutTmpl = v8::FunctionTemplate::New(_isolate, Framework::Scripting::V8EngineCallbacks::SetTimerCallback, setTimeoutExternal);
         global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "setTimeout"), setTimeoutTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // setInterval
-        v8::Local<v8::FunctionTemplate> setIntervalTmpl = v8::FunctionTemplate::New(_isolate, SetTimerCallback, setIntervalExternal);
+        v8::Local<v8::FunctionTemplate> setIntervalTmpl = v8::FunctionTemplate::New(_isolate, Framework::Scripting::V8EngineCallbacks::SetTimerCallback, setIntervalExternal);
         global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "setInterval"), setIntervalTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // clearTimeout / clearInterval (same implementation)
-        v8::Local<v8::FunctionTemplate> clearTimerTmpl = v8::FunctionTemplate::New(_isolate, ClearTimerCallback, engineExternal);
+        v8::Local<v8::FunctionTemplate> clearTimerTmpl = v8::FunctionTemplate::New(_isolate, Framework::Scripting::V8EngineCallbacks::ClearTimerCallback, engineExternal);
         v8::Local<v8::Function> clearTimerFn           = clearTimerTmpl->GetFunction(context).ToLocalChecked();
 
         global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "clearTimeout"), clearTimerFn).Check();
@@ -340,7 +337,7 @@ namespace Framework::Scripting {
         // Default require uses cwd as the reference directory
         const std::string cwd                       = std::filesystem::current_path().string();
         v8::Local<v8::String> requireDir            = v8::String::NewFromUtf8(_isolate, cwd.c_str(), v8::NewStringType::kNormal, static_cast<int>(cwd.size())).ToLocalChecked();
-        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, requireDir);
+        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, Framework::Scripting::V8EngineCallbacks::RequireCallback, requireDir);
         global->Set(context, v8::String::NewFromUtf8Literal(_isolate, "require"), requireTmpl->GetFunction(context).ToLocalChecked()).Check();
     }
 
@@ -442,8 +439,6 @@ namespace Framework::Scripting {
     }
 
     std::string V8Engine::ResolveModulePath(std::string_view requested, std::string_view fromDir) {
-        namespace fs = std::filesystem;
-
         // Lexical; PhysicsFS cannot address anything outside its mounts, so the module-root check
         // is a prefix test.
         if (Utils::Vfs::IsVirtualPath(std::string(fromDir)) || Utils::Vfs::IsVirtualPath(std::string(requested))) {
@@ -480,25 +475,25 @@ namespace Framework::Scripting {
             return "";
         }
 
-        fs::path base(fromDir);
-        fs::path resolved;
+        std::filesystem::path base(fromDir);
+        std::filesystem::path resolved;
 
         if (requested.starts_with("./") || requested.starts_with("../")) {
             resolved = base / requested;
         }
-        else if (fs::path(requested).is_absolute()) {
-            resolved = fs::path(requested);
+        else if (std::filesystem::path(requested).is_absolute()) {
+            resolved = std::filesystem::path(requested);
         }
         else {
             // Bare specifier — rejected by RequireCallback before reaching here
             return "";
         }
 
-        resolved = fs::weakly_canonical(resolved);
+        resolved = std::filesystem::weakly_canonical(resolved);
 
         // Security: validate against moduleRootPath if set
         if (!_options.moduleRootPath.empty()) {
-            fs::path root           = fs::weakly_canonical(fs::path(_options.moduleRootPath));
+            std::filesystem::path root           = std::filesystem::weakly_canonical(std::filesystem::path(_options.moduleRootPath));
             std::string rootStr     = root.string();
             std::string resolvedStr = resolved.string();
 
@@ -529,12 +524,12 @@ namespace Framework::Scripting {
         }
 
         const auto &vfs = Utils::Vfs::Get();
-        auto resolvesTo = [&vfs](const fs::path &candidate) {
+        auto resolvesTo = [&vfs](const std::filesystem::path &candidate) {
             if (vfs.Contains(candidate.string())) {
                 return true;
             }
             std::error_code ec;
-            return fs::exists(candidate, ec) && !ec && fs::is_regular_file(candidate, ec) && !ec;
+            return std::filesystem::exists(candidate, ec) && !ec && std::filesystem::is_regular_file(candidate, ec) && !ec;
         };
 
         // Try exact path
@@ -543,14 +538,14 @@ namespace Framework::Scripting {
         }
 
         // Try with .js extension
-        fs::path withJs = resolved;
+        std::filesystem::path withJs = resolved;
         withJs += ".js";
         if (resolvesTo(withJs)) {
             return withJs.string();
         }
 
         // Try as directory with index.js
-        fs::path indexJs = resolved / "index.js";
+        std::filesystem::path indexJs = resolved / "index.js";
         if (resolvesTo(indexJs)) {
             return indexJs.string();
         }
@@ -581,7 +576,7 @@ namespace Framework::Scripting {
 
         // Read the file
         std::string source;
-        if (!ReadFileContents(resolvedPath, source)) {
+        if (!Framework::Scripting::V8EngineCallbacks::ReadFileContents(resolvedPath, source)) {
             std::string msg = "Cannot read module '" + resolvedPath + "'";
             _isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(_isolate, msg.c_str()).ToLocalChecked()));
             return v8::MaybeLocal<v8::Value>();
@@ -604,7 +599,7 @@ namespace Framework::Scripting {
         // A require function bound to this module's directory. The directory is the function's
         // own data, so the function stays valid however long script keeps it.
         v8::Local<v8::String> requireDir            = v8::String::NewFromUtf8(_isolate, moduleDir.c_str(), v8::NewStringType::kNormal, static_cast<int>(moduleDir.size())).ToLocalChecked();
-        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, RequireCallback, requireDir);
+        v8::Local<v8::FunctionTemplate> requireTmpl = v8::FunctionTemplate::New(_isolate, Framework::Scripting::V8EngineCallbacks::RequireCallback, requireDir);
         v8::Local<v8::Function> requireFn           = requireTmpl->GetFunction(context).ToLocalChecked();
 
         // Wrap source in CommonJS function

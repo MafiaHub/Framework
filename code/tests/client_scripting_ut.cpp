@@ -214,7 +214,6 @@ MODULE(client_scripting, {
         EQUALS(mount("owner-a", "globalThis.aCalls = 0; globalThis.aHandler = () => ++aCalls; new Entity(" + id + ").state.onChange(null, () => ++aCalls);"), true);
         EQUALS(mount("owner-b", "globalThis.bCalls = 0; new Entity(" + id + ").state.onChange(null, () => ++bCalls); globalThis.bRegisters = (handler) => new Entity(" + id + ").state.onChange(null, handler);"), true);
 
-        using Framework::Scripting::Builtins::StateBag;
         Framework::Scripting::V8Engine engine;
         engine.SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
         EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
@@ -232,21 +231,21 @@ MODULE(client_scripting, {
             }
             EQUALS(manager.DiscoverResources(), 2u);
             EQUALS(static_cast<bool>(manager.StartAll()), true);
-            EQUALS(StateBag::SubscriptionCount(), 2u);
+            EQUALS(Framework::Scripting::Builtins::StateBag::SubscriptionCount(), 2u);
 
             // A function of owner-a that owner-b registers is owner-a's: the function is asked before the caller.
             EQUALS(engine.Execute("bRegisters(aHandler);", "/resources/owner-b/client.js"), true);
-            EQUALS(StateBag::SubscriptionCount(), 3u);
+            EQUALS(Framework::Scripting::Builtins::StateBag::SubscriptionCount(), 3u);
             write(1);
             EQUALS(engine.Execute("if (aCalls !== 2 || bCalls !== 1) throw Error('first write: ' + aCalls + ' ' + bCalls);"), true);
 
             EQUALS(static_cast<bool>(manager.StopResource("owner-a")), true);
-            EQUALS(StateBag::SubscriptionCount(), 1u);
+            EQUALS(Framework::Scripting::Builtins::StateBag::SubscriptionCount(), 1u);
             write(2);
             EQUALS(engine.Execute("if (aCalls !== 2 || bCalls !== 2) throw Error('after the stop: ' + aCalls + ' ' + bCalls);"), true);
 
             EQUALS(static_cast<bool>(manager.StopResource("owner-b")), true);
-            EQUALS(StateBag::SubscriptionCount(), 0u);
+            EQUALS(Framework::Scripting::Builtins::StateBag::SubscriptionCount(), 0u);
             write(3);
             EQUALS(engine.Execute("if (aCalls !== 2 || bCalls !== 2) throw Error('after both stopped: ' + aCalls + ' ' + bCalls);"), true);
             manager.StopAll();

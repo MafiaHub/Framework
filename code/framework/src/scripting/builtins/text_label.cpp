@@ -1169,27 +1169,23 @@ namespace Framework::Scripting::Builtins {
     }
 
     const Bind::Class<TextLabel> &TextLabel::Definition() {
-        using Bind::Doc;
-        using Bind::TypeOf;
-        namespace Type = Bind::Type;
-
         static const auto definition = [] {
             // Inherit looks the definition of the base up.
             Entity::Definition();
 
-            const auto options = Type::Custom("TextLabelOptions", "table");
-            const auto vector  = Type::Custom("Vector3 | { x: number; y: number; z: number }", "Vector3|{ x: number, y: number, z: number }");
+            const auto options = Framework::Scripting::Bind::Type::Custom("TextLabelOptions", "table");
+            const auto vector  = Framework::Scripting::Bind::Type::Custom("Vector3 | { x: number; y: number; z: number }", "Vector3|{ x: number, y: number, z: number }");
             return Bind::Class<TextLabel>("TextLabel", "Server-created replicated world-space text label.")
                 .Inherit<Entity>()
-                .Constructor<uint64_t>(Doc("Creates a wrapper for an existing text label; use TextLabel.create to spawn one.").Param("id", "Existing text-label network entity identifier."))
-                .Method("toString", &TextLabel::ToString, Doc("Formats this label for logging and debugging.").Returns("Text containing the label ID and current text."))
-                .Method("destroy", &TextLabel::Destroy, Doc("Destroys this replicated label; stale wrappers no longer resolve afterward."))
-                .Method("setText", &TextLabel::SetText, Doc("Changes the label's displayed text.").Param("text", "Replacement text replicated to clients; at most 1024 bytes."))
-                .Method("setFontSize", &TextLabel::SetFontSize, Doc("Changes the rendered font size.").Param("size", "Font size in pixels, clamped from 1 to 512."))
-                .Method("setDrawDistance", &TextLabel::SetDrawDistance, Doc("Changes how far away clients can render the label.").Param("distance", "Maximum rendering distance in world units, clamped from 1 to 1000 metres' worth."))
-                .Method("setFadeDistance", &TextLabel::SetFadeDistance, Doc("Changes where the label starts fading out.").Param("distance", "Distance in world units where fading starts; 0 starts it at 75% of the draw distance."))
-                .Method("setStyle", &TextLabel::SetStyle, Doc("Resets the outline, shadow and background to a preset.").Param("style", "0 none, 1 shadow, 2 outline, 3 box; unsupported values are ignored."))
-                .Method("detach", &TextLabel::Detach, Doc("Stops following an entity; the label returns to its own position."))
+                .Constructor<uint64_t>(Framework::Scripting::Bind::Doc("Creates a wrapper for an existing text label; use TextLabel.create to spawn one.").Param("id", "Existing text-label network entity identifier."))
+                .Method("toString", &TextLabel::ToString, Framework::Scripting::Bind::Doc("Formats this label for logging and debugging.").Returns("Text containing the label ID and current text."))
+                .Method("destroy", &TextLabel::Destroy, Framework::Scripting::Bind::Doc("Destroys this replicated label; stale wrappers no longer resolve afterward."))
+                .Method("setText", &TextLabel::SetText, Framework::Scripting::Bind::Doc("Changes the label's displayed text.").Param("text", "Replacement text replicated to clients; at most 1024 bytes."))
+                .Method("setFontSize", &TextLabel::SetFontSize, Framework::Scripting::Bind::Doc("Changes the rendered font size.").Param("size", "Font size in pixels, clamped from 1 to 512."))
+                .Method("setDrawDistance", &TextLabel::SetDrawDistance, Framework::Scripting::Bind::Doc("Changes how far away clients can render the label.").Param("distance", "Maximum rendering distance in world units, clamped from 1 to 1000 metres' worth."))
+                .Method("setFadeDistance", &TextLabel::SetFadeDistance, Framework::Scripting::Bind::Doc("Changes where the label starts fading out.").Param("distance", "Distance in world units where fading starts; 0 starts it at 75% of the draw distance."))
+                .Method("setStyle", &TextLabel::SetStyle, Framework::Scripting::Bind::Doc("Resets the outline, shadow and background to a preset.").Param("style", "0 none, 1 shadow, 2 outline, 3 box; unsupported values are ignored."))
+                .Method("detach", &TextLabel::Detach, Framework::Scripting::Bind::Doc("Stops following an entity; the label returns to its own position."))
                 .Property("text", &TextLabel::GetText, "Current replicated label text.")
                 .Property("color", &TextLabel::GetColor, "Current packed ARGB color.")
                 .Property("fontSize", &TextLabel::GetFontSize, "Current font size.")
@@ -1199,34 +1195,34 @@ namespace Framework::Scripting::Builtins {
                 // A context function, as are the ones below: a signature cannot say Color | number, an options
                 // object or a player given as a handle or an id.
                 .Method("setColor", &CallSetColor,
-                    Doc("Changes the label's packed ARGB color from a Color or byte components.")
-                        .Param("colorOrR", Type::Custom("Color | number", "Color|integer"), "A Color, or the red byte (0-255) when passing components.")
-                        .OptionalParam("g", TypeOf<int>(), "Green byte (0-255) when passing components.")
-                        .OptionalParam("b", TypeOf<int>(), "Blue byte (0-255) when passing components.")
-                        .OptionalParam("a", TypeOf<int>(), "Alpha byte (0-255) when passing components; defaults to 255."))
-                .Method("update", &CallUpdate, Doc("Changes any part of the label at once. A bad key throws and changes nothing.").Param("options", options, "Only the keys given change; outline, shadow, background, showTo and hideFrom are replaced whole."))
+                    Framework::Scripting::Bind::Doc("Changes the label's packed ARGB color from a Color or byte components.")
+                        .Param("colorOrR", Framework::Scripting::Bind::Type::Custom("Color | number", "Color|integer"), "A Color, or the red byte (0-255) when passing components.")
+                        .OptionalParam("g", Framework::Scripting::Bind::TypeOf<int>(), "Green byte (0-255) when passing components.")
+                        .OptionalParam("b", Framework::Scripting::Bind::TypeOf<int>(), "Blue byte (0-255) when passing components.")
+                        .OptionalParam("a", Framework::Scripting::Bind::TypeOf<int>(), "Alpha byte (0-255) when passing components; defaults to 255."))
+                .Method("update", &CallUpdate, Framework::Scripting::Bind::Doc("Changes any part of the label at once. A bad key throws and changes nothing.").Param("options", options, "Only the keys given change; outline, shadow, background, showTo and hideFrom are replaced whole."))
                 .Method("attachTo", &CallAttachTo,
-                    Doc("Follows another live entity instead of staying at the label's own position. It streams from where the target is, moves into its virtual world and is destroyed with it.")
-                        .Param("target", Type::Custom("Entity | number", "Entity|integer"), "The entity to follow, or its network id.")
+                    Framework::Scripting::Bind::Doc("Follows another live entity instead of staying at the label's own position. It streams from where the target is, moves into its virtual world and is destroyed with it.")
+                        .Param("target", Framework::Scripting::Bind::Type::Custom("Entity | number", "Entity|integer"), "The entity to follow, or its network id.")
                         .OptionalParam("offset", vector, "Where to draw relative to it; the game decides the reference point (a player's head, say)."))
-                .Method("getOptions", &CallGetOptions, Doc("The label's current look and placement, in the shape update() takes. The audience is left out: see getAudience().").ReturnType(options))
+                .Method("getOptions", &CallGetOptions, Framework::Scripting::Bind::Doc("The label's current look and placement, in the shape update() takes. The audience is left out: see getAudience().").ReturnType(options))
                 .Method("getAudience", &CallGetAudience,
-                    Doc("Who the label is for, with players as network ids. For reading: a connected player with no avatar right now has no id and is left out, though the label stays as set for them, so passing this to update() would drop them.")
-                        .ReturnType(Type::Custom("{ showTo: number[] | null; hideFrom: number[]; hideForTarget: boolean }", "{ showTo: integer[]?, hideFrom: integer[], hideForTarget: boolean }")))
+                    Framework::Scripting::Bind::Doc("Who the label is for, with players as network ids. For reading: a connected player with no avatar right now has no id and is left out, though the label stays as set for them, so passing this to update() would drop them.")
+                        .ReturnType(Framework::Scripting::Bind::Type::Custom("{ showTo: number[] | null; hideFrom: number[]; hideForTarget: boolean }", "{ showTo: integer[]?, hideFrom: integer[], hideForTarget: boolean }")))
                 .Method("setVisibleFor", &CallSetVisibleFor,
-                    Doc("Shows or hides the label for one player. A hidden player's client is never sent it; hideForTarget still applies.")
-                        .Param("player", Type::Custom("Player | number", "Player|integer"), "A connected player, or their network id.")
-                        .Param("visible", TypeOf<bool>(), "false adds them to hideFrom and takes them off showTo; true undoes both, adding them to showTo while it is set."))
+                    Framework::Scripting::Bind::Doc("Shows or hides the label for one player. A hidden player's client is never sent it; hideForTarget still applies.")
+                        .Param("player", Framework::Scripting::Bind::Type::Custom("Player | number", "Player|integer"), "A connected player, or their network id.")
+                        .Param("visible", Framework::Scripting::Bind::TypeOf<bool>(), "false adds them to hideFrom and takes them off showTo; true undoes both, adding them to showTo while it is set."))
                 .Static("create", &CallCreate,
-                    Doc("Creates and replicates a world-space text label, up to the server-wide limit of 512. A bad option throws and creates nothing.")
-                        .Param("x", TypeOf<double>(), "World-space X coordinate.")
-                        .Param("y", TypeOf<double>(), "World-space Y coordinate.")
-                        .Param("z", TypeOf<double>(), "World-space Z coordinate.")
-                        .Param("text", TypeOf<std::string>(), "Initial displayed text.")
-                        .OptionalParam("fontSizeOrOptions", Type::Custom("number | TextLabelOptions", "number|table"), "Look and placement, or (the older form) the font size from 1 to 512.")
-                        .OptionalParam("drawDistance", TypeOf<double>(), "Older form only: the draw distance in world units.")
-                        .OptionalParam("virtualWorld", TypeOf<uint32_t>(), "Older form only: the virtual-world identifier.")
-                        .ReturnType(Type::Class("TextLabel"))
+                    Framework::Scripting::Bind::Doc("Creates and replicates a world-space text label, up to the server-wide limit of 512. A bad option throws and creates nothing.")
+                        .Param("x", Framework::Scripting::Bind::TypeOf<double>(), "World-space X coordinate.")
+                        .Param("y", Framework::Scripting::Bind::TypeOf<double>(), "World-space Y coordinate.")
+                        .Param("z", Framework::Scripting::Bind::TypeOf<double>(), "World-space Z coordinate.")
+                        .Param("text", Framework::Scripting::Bind::TypeOf<std::string>(), "Initial displayed text.")
+                        .OptionalParam("fontSizeOrOptions", Framework::Scripting::Bind::Type::Custom("number | TextLabelOptions", "number|table"), "Look and placement, or (the older form) the font size from 1 to 512.")
+                        .OptionalParam("drawDistance", Framework::Scripting::Bind::TypeOf<double>(), "Older form only: the draw distance in world units.")
+                        .OptionalParam("virtualWorld", Framework::Scripting::Bind::TypeOf<uint32_t>(), "Older form only: the virtual-world identifier.")
+                        .ReturnType(Framework::Scripting::Bind::Type::Class("TextLabel"))
                         .Returns("Handle for the newly created label."))
                 // Crosses between runtimes as its network id.
                 .Transfer(&TextLabel::GetId);

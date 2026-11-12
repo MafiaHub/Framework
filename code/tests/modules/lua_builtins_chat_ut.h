@@ -26,18 +26,12 @@
 // Chat, declared once for JavaScript and Lua: what a Lua script sends with it, held against what a JavaScript one
 // sends, as the clients of a real server receive it.
 namespace LuaBuiltinsChatTest {
-    using namespace Framework::Scripting;
-    using Builtins::Chat;
-    using Framework::Networking::NetworkServer;
-    using Framework::Networking::Replication::NetworkEntity;
-    using Framework::Networking::RPC::ChatMessage;
-
     // Gives the runtimes of a stage of the Player tests the Chat of the server module.
     inline void GiveChat(LuaBuiltinsPlayerTest::JsSide &js, LuaBuiltinsPlayerTest::LuaSide &lua) {
         js.js.Enter([](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-            Chat::Register(isolate, context->Global());
+            Framework::Scripting::Builtins::Chat::Register(isolate, context->Global());
         });
-        Chat::RegisterLua(lua.Runtime());
+        Framework::Scripting::Builtins::Chat::RegisterLua(lua.Runtime());
     }
 
     // A server two clients are connected to over loopback, published as the network peer the builtins send
@@ -45,17 +39,17 @@ namespace LuaBuiltinsChatTest {
     // of them as a plain Entity.
     struct Wire final {
         TextLabelWorld world;
-        NetworkServer clients[2];
-        std::vector<ChatMessage> received[2];
-        NetworkEntity *avatars[2] = {nullptr, nullptr};
+        Framework::Networking::NetworkServer clients[2];
+        std::vector<Framework::Networking::RPC::ChatMessage> received[2];
+        Framework::Networking::Replication::NetworkEntity *avatars[2] = {nullptr, nullptr};
         LuaBuiltinsPlayerTest::JsSide js;
         LuaBuiltinsPlayerTest::LuaSide lua;
         bool ready = false;
 
-        Wire(): lua(Bind::Side::Server, &js.manager) {
+        Wire(): lua(Framework::Scripting::Bind::Side::Server, &js.manager) {
             GiveChat(js, lua);
 
-            NetworkServer &server = world.peer;
+            Framework::Networking::NetworkServer &server = world.peer;
             world.Manager()->SetAutoManageConnections(false, true);
             MafiaNet::SocketDescriptor serverSocket(0, "127.0.0.1");
             if (server.GetPeer()->Startup(2, &serverSocket, 1) != MafiaNet::RAKNET_STARTED) {
@@ -63,10 +57,10 @@ namespace LuaBuiltinsChatTest {
             }
             server.GetPeer()->SetMaximumIncomingConnections(2);
 
-            std::vector<NetworkEntity *> connected;
+            std::vector<Framework::Networking::Replication::NetworkEntity *> connected;
             server.SetOnPlayerConnectCallback([&](MafiaNet::Packet *packet) {
                 server.PushReplicationConnection(packet->guid);
-                NetworkEntity *avatar = world.Manager()->CreateEntity(world.targetType);
+                Framework::Networking::Replication::NetworkEntity *avatar = world.Manager()->CreateEntity(world.targetType);
                 avatar->ownerGUID     = MafiaNet::ToPeerGuid(packet->guid);
                 world.Manager()->SetViewer(avatar->ownerGUID, avatar);
                 connected.push_back(avatar);
@@ -79,7 +73,7 @@ namespace LuaBuiltinsChatTest {
                     return;
                 }
                 clients[i].GetReplicationManager()->Init(&clients[i], false);
-                clients[i].RegisterRPC<ChatMessage>([this, i](const ChatMessage &message, MafiaNet::Packet *) {
+                clients[i].RegisterRPC<Framework::Networking::RPC::ChatMessage>([this, i](const Framework::Networking::RPC::ChatMessage &message, MafiaNet::Packet *) {
                     received[i].push_back(message);
                 });
                 if (clients[i].GetPeer()->Connect("127.0.0.1", port, nullptr, 0) != MafiaNet::CONNECTION_ATTEMPT_STARTED) {
@@ -95,7 +89,7 @@ namespace LuaBuiltinsChatTest {
             }
             for (int i = 0; i < 2; ++i) {
                 const auto guid = MafiaNet::ToPeerGuid(clients[i].GetPeer()->GetMyGUID());
-                for (NetworkEntity *avatar : connected) {
+                for (Framework::Networking::Replication::NetworkEntity *avatar : connected) {
                     if (avatar->ownerGUID == guid) {
                         avatars[i] = avatar;
                     }
@@ -116,7 +110,7 @@ namespace LuaBuiltinsChatTest {
 
         ~Wire() {
             Framework::CoreModules::SetNetworkPeer(nullptr);
-            for (NetworkServer &client : clients) {
+            for (Framework::Networking::NetworkServer &client : clients) {
                 client.GetPeer()->Shutdown(0);
                 client.GetReplicationManager()->Clear();
             }
@@ -154,7 +148,7 @@ namespace LuaBuiltinsChatTest {
             });
             std::string out;
             for (int i = 0; i < 2; ++i) {
-                for (const ChatMessage &message : received[i]) {
+                for (const Framework::Networking::RPC::ChatMessage &message : received[i]) {
                     char color[16];
                     std::snprintf(color, sizeof(color), "%08x", message.color);
                     out += (out.empty() ? "" : " ") + std::to_string(i) + "<" + message.text + "|" + message.author + "|" + color + (message.senderNetworkId != 0 ? "|sender" : "") + ">";
@@ -167,15 +161,12 @@ namespace LuaBuiltinsChatTest {
 } // namespace LuaBuiltinsChatTest
 
 MODULE(lua_builtins_chat, {
-    using namespace LuaBuiltinsChatTest;
-    using LuaBuiltinsCoreTest::Members;
-
     IT("gives a Lua state the Chat of JavaScript, under the same names", {
-        EQUALS(Members(Chat::Definition()), "sendToAll(),sendToPlayer()");
+        EQUALS(LuaBuiltinsCoreTest::Members(Framework::Scripting::Builtins::Chat::Definition()), "sendToAll(),sendToPlayer()");
 
         LuaBuiltinsPlayerTest::Stage stage;
         EQUALS(stage.lua.ready, true);
-        GiveChat(stage.js, stage.lua);
+        LuaBuiltinsChatTest::GiveChat(stage.js, stage.lua);
 
         EQUALS(stage.lua.Eval("type(Chat) .. ' ' .. type(Chat.sendToAll) .. ' ' .. type(Chat.sendToPlayer)"), "table function function");
         EQUALS(stage.js.Eval("typeof Chat + ' ' + typeof Chat.sendToAll + ' ' + typeof Chat.sendToPlayer"), "object function function");
@@ -189,9 +180,9 @@ MODULE(lua_builtins_chat, {
 
     IT("refuses a call that names no text or no player, in the words of JavaScript", {
         LuaBuiltinsPlayerTest::Stage stage;
-        GiveChat(stage.js, stage.lua);
+        LuaBuiltinsChatTest::GiveChat(stage.js, stage.lua);
         // A handle outlives its entity.
-        NetworkEntity *leaver = stage.world.Manager()->CreateEntity(stage.world.targetType);
+        Framework::Networking::Replication::NetworkEntity *leaver = stage.world.Manager()->CreateEntity(stage.world.targetType);
         const std::string id  = std::to_string(leaver->GetNetworkID());
         stage.lua.Run("stale = Player.new(" + id + ")");
         stage.js.Eval("globalThis.stale = new Player(" + id + "); 0");
@@ -232,7 +223,7 @@ MODULE(lua_builtins_chat, {
     });
 
     IT("broadcasts a line to every client, with the author and the color of its options", {
-        Wire wire;
+        LuaBuiltinsChatTest::Wire wire;
         EQUALS(wire.ready, true);
 
         // One list of calls for each language: the options are spelled as the language spells an object.
@@ -270,7 +261,7 @@ MODULE(lua_builtins_chat, {
     });
 
     IT("reads the options as JavaScript always did: what is not an author or a color is left out", {
-        Wire wire;
+        LuaBuiltinsChatTest::Wire wire;
         EQUALS(wire.ready, true);
 
         // Options that are not an object, an author that is not a string and a color that is neither a number
@@ -313,7 +304,7 @@ MODULE(lua_builtins_chat, {
     });
 
     IT("sends a line to the connection of one player and to no other", {
-        Wire wire;
+        LuaBuiltinsChatTest::Wire wire;
         EQUALS(wire.ready, true);
 
         // A Player and a plain Entity both name the connection that owns the entity.
@@ -341,7 +332,7 @@ MODULE(lua_builtins_chat, {
         EQUALS(wire.Delivered(6), "0<once||00000000> 0<twice||00000000> 0<once||00000000> 0<twice||00000000> 1<once||00000000> 1<once||00000000>");
 
         // An entity no connection owns is a player nobody hears: the call is valid and reaches no one.
-        NetworkEntity *prop  = wire.world.Manager()->CreateEntity(wire.world.targetType);
+        Framework::Networking::Replication::NetworkEntity *prop = wire.world.Manager()->CreateEntity(wire.world.targetType);
         const std::string id = std::to_string(prop->GetNetworkID());
         EQUALS(wire.lua.Run("Chat.sendToPlayer(Entity.new(" + id + "), 'to nobody')"), "");
         EQUALS(wire.js.Eval("Chat.sendToPlayer(new Entity(" + id + "), 'to nobody'); 0"), "0");

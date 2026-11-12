@@ -21,16 +21,13 @@
 #include <string>
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
-    namespace Bind = Framework::Scripting::Bind;
-    using Framework::Scripting::Builtins::ReadFlag;
-
     namespace {
         UI::ChatBox *ResolveBox() {
             auto *instance = CoreModules::GetClientInstance();
             return instance ? &instance->GetChatBox() : nullptr;
         }
 
-        void Send(Bind::Call &call) {
+        void Send(Framework::Scripting::Bind::Call &call) {
             if (!call.Arg(0).IsString()) {
                 call.ThrowError("Chat.send: expected (text)");
                 return;
@@ -40,56 +37,52 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
         }
 
-        void SetUIVisible(Bind::Call &call) {
+        void SetUIVisible(Framework::Scripting::Bind::Call &call) {
             if (call.ArgCount() < 1) {
                 call.ThrowError("Chat.setUIVisible: expected (visible)");
                 return;
             }
             if (auto *box = ResolveBox()) {
-                box->SetVisible(ReadFlag(call, 0));
+                box->SetVisible(Framework::Scripting::Builtins::ReadFlag(call, 0));
             }
         }
 
-        void IsUIVisible(Bind::Call &call) {
+        void IsUIVisible(Framework::Scripting::Bind::Call &call) {
             auto *box = ResolveBox();
             call.Return(box && box->IsVisible());
         }
 
-        void Open(Bind::Call &) {
+        void Open(Framework::Scripting::Bind::Call &) {
             if (auto *box = ResolveBox()) {
                 box->OpenInput();
             }
         }
 
-        void Close(Bind::Call &) {
+        void Close(Framework::Scripting::Bind::Call &) {
             if (auto *box = ResolveBox()) {
                 box->CloseInput(false);
             }
         }
 
-        void IsOpen(Bind::Call &call) {
+        void IsOpen(Framework::Scripting::Bind::Call &call) {
             auto *box = ResolveBox();
             call.Return(box && box->IsInputActive());
         }
     } // namespace
 
-    const Bind::Namespace &Chat::Definition() {
-        using Bind::Doc;
-        using Bind::Side;
-        using Bind::TypeOf;
-
+    const Framework::Scripting::Bind::Namespace &Chat::Definition() {
         static const auto definition = [] {
-            const auto boolean = TypeOf<bool>();
-            return Bind::Namespace("Chat", "Client chat transport and native chat-box controls.", Side::Client)
-                .Function("send", &Send, Doc("Sends a chat line to the server, bypassing the chatSend event; incoming lines arrive through the reserved chatMessage event.").Param("text", TypeOf<std::string>(), "Player-authored chat text sent to the server."), Side::Client)
+            const auto boolean = Framework::Scripting::Bind::TypeOf<bool>();
+            return Framework::Scripting::Bind::Namespace("Chat", "Client chat transport and native chat-box controls.", Framework::Scripting::Bind::Side::Client)
+                .Function("send", &Send, Framework::Scripting::Bind::Doc("Sends a chat line to the server, bypassing the chatSend event; incoming lines arrive through the reserved chatMessage event.").Param("text", Framework::Scripting::Bind::TypeOf<std::string>(), "Player-authored chat text sent to the server."), Framework::Scripting::Bind::Side::Client)
                 .Function("setUIVisible", &SetUIVisible,
-                    Doc("Changes visibility of the native chat overlay without opening its input field. Hidden, the overlay also stops opening on its key. The choice holds for the rest of the session and resets to visible on disconnect, so a resource that replaces the chat calls this once at startup.")
+                    Framework::Scripting::Bind::Doc("Changes visibility of the native chat overlay without opening its input field. Hidden, the overlay also stops opening on its key. The choice holds for the rest of the session and resets to visible on disconnect, so a resource that replaces the chat calls this once at startup.")
                         .Param("visible", boolean, "Whether the chat overlay is rendered."),
-                    Side::Client)
-                .Function("isUIVisible", &IsUIVisible, Doc("Checks whether the native chat overlay is visible.").ReturnType(boolean).Returns("True when the overlay is currently rendered."), Side::Client)
-                .Function("open", &Open, Doc("Opens and focuses the native chat input field."), Side::Client)
-                .Function("close", &Close, Doc("Closes the native chat input field without submitting its contents."), Side::Client)
-                .Function("isOpen", &IsOpen, Doc("Checks whether the native chat input field is active.").ReturnType(boolean).Returns("True while chat is capturing keyboard input."), Side::Client);
+                    Framework::Scripting::Bind::Side::Client)
+                .Function("isUIVisible", &IsUIVisible, Framework::Scripting::Bind::Doc("Checks whether the native chat overlay is visible.").ReturnType(boolean).Returns("True when the overlay is currently rendered."), Framework::Scripting::Bind::Side::Client)
+                .Function("open", &Open, Framework::Scripting::Bind::Doc("Opens and focuses the native chat input field."), Framework::Scripting::Bind::Side::Client)
+                .Function("close", &Close, Framework::Scripting::Bind::Doc("Closes the native chat input field without submitting its contents."), Framework::Scripting::Bind::Side::Client)
+                .Function("isOpen", &IsOpen, Framework::Scripting::Bind::Doc("Checks whether the native chat input field is active.").ReturnType(boolean).Returns("True while chat is capturing keyboard input."), Framework::Scripting::Bind::Side::Client);
         }();
         return definition;
     }
@@ -99,9 +92,9 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
         if (resourceManager != nullptr) {
-            Bind::SetCallResourceManager(isolate, resourceManager);
+            Framework::Scripting::Bind::SetCallResourceManager(isolate, resourceManager);
         }
-        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Bind::Side::Client);
+        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Client);
 
         auto &events = Framework::Scripting::GetScriptingCatalog(isolate).data_type("EventMap");
         events.add_property("chatMessage", "[message: { author: string; text: string; color: number }]", "Dispatched for every chat line the server sends. An empty author is a notice line; color is packed 0xRRGGBBAA, 0 for the chat box's default.");

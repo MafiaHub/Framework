@@ -45,35 +45,34 @@ namespace Framework::Scripting::Builtins {
     }
 
     const Bind::Class<Vector3> &Vector3::Definition() {
-        using Bind::Doc;
         // AddVectorOperators gives the class its Lua operators.
         static const auto definition = AddVectorOperators(Bind::Class<Vector3>("Vector3", "Mutable three-dimensional vector for positions, directions, and Euler angles.")
-                .Constructor<float, float, float>(Doc("Creates a vector from three numeric components.").Param("x", "Initial X component.").Param("y", "Initial Y component.").Param("z", "Initial Z component."))
+                .Constructor<float, float, float>(Framework::Scripting::Bind::Doc("Creates a vector from three numeric components.").Param("x", "Initial X component.").Param("y", "Initial Y component.").Param("z", "Initial Z component."))
                 // Instance methods
-                .Method("add", &Vector3::add, Doc("Adds another vector to this vector in place.").Param("other", "Vector to add component-wise.").Returns("This mutated vector for chaining."))
-                .Method("sub", &Vector3::sub, Doc("Subtracts another vector from this vector in place.").Param("other", "Vector to subtract component-wise.").Returns("This mutated vector for chaining."))
-                .Method("mul", &Vector3::mul, Doc("Multiplies this vector by a scalar in place.").Param("scalar", "Multiplier applied to every component.").Returns("This mutated vector for chaining."))
-                .Method("div", &Vector3::div, Doc("Divides this vector by a scalar in place.").Param("scalar", "Divisor applied to every component; must be non-zero.").Returns("This mutated vector for chaining."))
-                .Method("dot", &Vector3::dot, Doc("Computes the dot product without changing either vector.").Param("other", "Vector used for the dot product.").Returns("Scalar dot product."))
-                .Method("cross", &Vector3::cross, Doc("Replaces this vector with its cross product against another vector.").Param("other", "Second vector in the cross product.").Returns("This mutated perpendicular vector for chaining."))
-                .Method("normalize", &Vector3::normalize, Doc("Normalizes this vector in place; a zero vector remains unchanged.").Returns("This mutated vector for chaining."))
+                .Method("add", &Vector3::add, Framework::Scripting::Bind::Doc("Adds another vector to this vector in place.").Param("other", "Vector to add component-wise.").Returns("This mutated vector for chaining."))
+                .Method("sub", &Vector3::sub, Framework::Scripting::Bind::Doc("Subtracts another vector from this vector in place.").Param("other", "Vector to subtract component-wise.").Returns("This mutated vector for chaining."))
+                .Method("mul", &Vector3::mul, Framework::Scripting::Bind::Doc("Multiplies this vector by a scalar in place.").Param("scalar", "Multiplier applied to every component.").Returns("This mutated vector for chaining."))
+                .Method("div", &Vector3::div, Framework::Scripting::Bind::Doc("Divides this vector by a scalar in place.").Param("scalar", "Divisor applied to every component; must be non-zero.").Returns("This mutated vector for chaining."))
+                .Method("dot", &Vector3::dot, Framework::Scripting::Bind::Doc("Computes the dot product without changing either vector.").Param("other", "Vector used for the dot product.").Returns("Scalar dot product."))
+                .Method("cross", &Vector3::cross, Framework::Scripting::Bind::Doc("Replaces this vector with its cross product against another vector.").Param("other", "Second vector in the cross product.").Returns("This mutated perpendicular vector for chaining."))
+                .Method("normalize", &Vector3::normalize, Framework::Scripting::Bind::Doc("Normalizes this vector in place; a zero vector remains unchanged.").Returns("This mutated vector for chaining."))
                 .Method("lerp", &Vector3::lerp,
-                    Doc("Linearly interpolates this vector toward a target in place.").Param("target", "Destination vector.").Param("t", "Interpolation factor; 0 keeps the current value and 1 reaches target.").Returns("This mutated vector for chaining."))
-                .Method("set", &Vector3::set, Doc("Replaces all components in place.").Param("x", "Replacement X component.").Param("y", "Replacement Y component.").Param("z", "Replacement Z component.").Returns("This mutated vector for chaining."))
-                .Method("distance", &Vector3::distance, Doc("Computes Euclidean distance to another vector.").Param("other", "Vector to measure from this vector.").Returns("Distance between the two vectors."))
-                .Method("clone", &Vector3::clone, Doc("Creates an independent copy of this vector.").Returns("New vector with the same components."))
-                .Method("toString", &Vector3::toString, Doc("Formats this vector for logging and debugging.").Returns("Text in Vector3(x, y, z) form."))
+                    Framework::Scripting::Bind::Doc("Linearly interpolates this vector toward a target in place.").Param("target", "Destination vector.").Param("t", "Interpolation factor; 0 keeps the current value and 1 reaches target.").Returns("This mutated vector for chaining."))
+                .Method("set", &Vector3::set, Framework::Scripting::Bind::Doc("Replaces all components in place.").Param("x", "Replacement X component.").Param("y", "Replacement Y component.").Param("z", "Replacement Z component.").Returns("This mutated vector for chaining."))
+                .Method("distance", &Vector3::distance, Framework::Scripting::Bind::Doc("Computes Euclidean distance to another vector.").Param("other", "Vector to measure from this vector.").Returns("Distance between the two vectors."))
+                .Method("clone", &Vector3::clone, Framework::Scripting::Bind::Doc("Creates an independent copy of this vector.").Returns("New vector with the same components."))
+                .Method("toString", &Vector3::toString, Framework::Scripting::Bind::Doc("Formats this vector for logging and debugging.").Returns("Text in Vector3(x, y, z) form."))
                 .Property("x", &Vector3::getX, &Vector3::setX, "Mutable X component.")
                 .Property("y", &Vector3::getY, &Vector3::setY, "Mutable Y component.")
                 .Property("z", &Vector3::getZ, &Vector3::setZ, "Mutable Z component.")
                 .Property("length", &Vector3::getLength, "Read-only Euclidean magnitude of this vector.")
                 .Property("lengthSquared", &Vector3::getLengthSquared, "Read-only squared magnitude, avoiding a square-root calculation.")
                 // Static factory methods
-                .Static("zero", &Vector3::zero, Doc("Creates a zero vector.").Returns("New Vector3(0, 0, 0)."))
-                .Static("one", &Vector3::one, Doc("Creates a vector whose components are one.").Returns("New Vector3(1, 1, 1)."))
-                .Static("up", &Vector3::up, Doc("Creates the framework's positive-Y unit direction.").Returns("New Vector3(0, 1, 0)."))
-                .Static("forward", &Vector3::forward, Doc("Creates the framework's positive-Z unit direction.").Returns("New Vector3(0, 0, 1)."))
-                .Static("right", &Vector3::right, Doc("Creates the framework's positive-X unit direction.").Returns("New Vector3(1, 0, 0)."))
+                .Static("zero", &Vector3::zero, Framework::Scripting::Bind::Doc("Creates a zero vector.").Returns("New Vector3(0, 0, 0)."))
+                .Static("one", &Vector3::one, Framework::Scripting::Bind::Doc("Creates a vector whose components are one.").Returns("New Vector3(1, 1, 1)."))
+                .Static("up", &Vector3::up, Framework::Scripting::Bind::Doc("Creates the framework's positive-Y unit direction.").Returns("New Vector3(0, 1, 0)."))
+                .Static("forward", &Vector3::forward, Framework::Scripting::Bind::Doc("Creates the framework's positive-Z unit direction.").Returns("New Vector3(0, 0, 1)."))
+                .Static("right", &Vector3::right, Framework::Scripting::Bind::Doc("Creates the framework's positive-X unit direction.").Returns("New Vector3(1, 0, 0)."))
                 // What JSON.stringify asks a JavaScript object for. Lua writes the same object from JsonProperties.
                 .V8Hook([](v8pp::class_<Vector3> &cls, v8::Isolate *) {
                     cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ x: number; y: number; z: number }", {}, "Converts this vector to a plain object for JSON.stringify.", "Object containing the current components."));

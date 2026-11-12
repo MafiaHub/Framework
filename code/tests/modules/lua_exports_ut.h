@@ -57,14 +57,11 @@ namespace LuaExportsTest {
 } // namespace LuaExportsTest
 
 MODULE(lua_exports, {
-    using namespace Framework::Scripting;
-    using LuaEventsTest::Bus;
-    using LuaEventsTest::Contains;
 
     // ==================== Lua exports ====================
 
     IT("gives a Lua resource the function and the table of functions another Lua resource exports", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", LuaExportsTest::kLuaProvider}}, LuaExportsTest::kLuaProviderExports);
         bus.server.files.Resource("consumer", {{"main.lua", "add = Exports.get('provider', 'add') bank = Exports.get('provider', 'bank')"}});
         EQUALS(bus.Init(), true);
@@ -91,7 +88,7 @@ MODULE(lua_exports, {
     });
 
     IT("gives a JavaScript resource what a Lua resource exports", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", LuaExportsTest::kLuaProvider}}, LuaExportsTest::kLuaProviderExports);
         bus.server.files.Resource("consumer", {{"main.js", "globalThis.add = Exports.get('provider', 'add'); globalThis.bank = Exports.get('provider', 'bank');"}});
         EQUALS(bus.Init(), true);
@@ -109,7 +106,7 @@ MODULE(lua_exports, {
     });
 
     IT("gives a JavaScript caller a Promise for a Lua export that sleeps", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", LuaExportsTest::kLuaProvider}}, LuaExportsTest::kLuaProviderExports);
         bus.server.files.Resource("consumer", {{"main.js", R"(
             globalThis.settled = 'pending';
@@ -136,12 +133,12 @@ MODULE(lua_exports, {
             return bus.Js("consumer", "settled") != "pending";
         }),
             true);
-        EQUALS(Contains(bus.Js("consumer", "settled"), "rejected true"), true);
-        EQUALS(Contains(bus.Js("consumer", "settled"), "lua late failure"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Js("consumer", "settled"), "rejected true"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Js("consumer", "settled"), "lua late failure"), true);
     });
 
     IT("makes a Lua caller wait for a Lua export that sleeps", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", LuaExportsTest::kLuaProvider}}, LuaExportsTest::kLuaProviderExports);
         bus.server.files.Resource("consumer", {{"main.lua", ""}});
         EQUALS(bus.Init(), true);
@@ -161,11 +158,11 @@ MODULE(lua_exports, {
         }),
             true);
         EQUALS(bus.Lua("consumer", "ok"), "false");
-        EQUALS(Contains(bus.Lua("consumer", "failure"), "lua late failure"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("consumer", "failure"), "lua late failure"), true);
     });
 
     IT("tells the caller, in either language, what a Lua export raised", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", LuaExportsTest::kLuaProvider}}, LuaExportsTest::kLuaProviderExports);
         bus.server.files.Resource("lua-consumer", {{"main.lua", ""}});
         bus.server.files.Resource("js-consumer", {{"main.js", "globalThis.attempt = () => { try { Exports.get('provider', 'fail')(); return 'returned'; } catch (error) { return (error instanceof Error) + ' ' + error.message; } };"}});
@@ -173,15 +170,15 @@ MODULE(lua_exports, {
         EQUALS(bus.StartAll({"provider", "lua-consumer", "js-consumer"}), true);
 
         EQUALS(bus.Lua("lua-consumer", "select(1, pcall(Exports.get('provider', 'fail')))"), "false");
-        EQUALS(Contains(bus.Lua("lua-consumer", "select(2, pcall(Exports.get('provider', 'fail')))"), "lua export failed"), true);
-        EQUALS(Contains(bus.Js("js-consumer", "attempt()"), "true "), true);
-        EQUALS(Contains(bus.Js("js-consumer", "attempt()"), "lua export failed"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-consumer", "select(2, pcall(Exports.get('provider', 'fail')))"), "lua export failed"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Js("js-consumer", "attempt()"), "true "), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Js("js-consumer", "attempt()"), "lua export failed"), true);
     });
 
     // ==================== JavaScript exports ====================
 
     IT("gives a Lua resource what a JavaScript resource exports", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.js", LuaExportsTest::kJsProvider}}, LuaExportsTest::kJsProviderExports);
         bus.server.files.Resource("consumer", {{"main.lua", "add = Exports.get('provider', 'add') api = Exports.get('provider', 'api')"}});
         EQUALS(bus.Init(), true);
@@ -209,7 +206,7 @@ MODULE(lua_exports, {
     });
 
     IT("makes a Lua caller wait for the promise of a JavaScript export, and raises its rejection", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.js", LuaExportsTest::kJsProvider}}, LuaExportsTest::kJsProviderExports);
         bus.server.files.Resource("consumer", {{"main.lua", "api = Exports.get('provider', 'api')"}});
         EQUALS(bus.Init(), true);
@@ -229,15 +226,15 @@ MODULE(lua_exports, {
         }),
             true);
         EQUALS(bus.Lua("consumer", "ok"), "false");
-        EQUALS(Contains(bus.Lua("consumer", "failure"), "js refused"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("consumer", "failure"), "js refused"), true);
 
         // What it throws at once is raised at once.
         EQUALS(bus.Lua("consumer", "select(1, pcall(api.boom))"), "false");
-        EQUALS(Contains(bus.Lua("consumer", "select(2, pcall(api.boom))"), "js boom"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("consumer", "select(2, pcall(api.boom))"), "js boom"), true);
     });
 
     IT("keeps JavaScript exports between JavaScript resources as they were, next to Lua ones", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.js", LuaExportsTest::kJsProvider}, {"more.lua", "Exports.register('fromLua', function() return 'lua' end)"}}, R"(,"exports":["add","api","fromLua"])");
         bus.server.files.Resource("consumer", {{"main.js", "globalThis.api = Exports.get('provider', 'api');"}});
         EQUALS(bus.Init(), true);
@@ -257,7 +254,7 @@ MODULE(lua_exports, {
     // ==================== Rules ====================
 
     IT("does not keep an export the manifest does not declare", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", "registered = Exports.register('hidden', function() end)"}});
         bus.server.files.Resource("lua-consumer", {{"main.lua", ""}});
         bus.server.files.Resource("js-consumer", {{"main.js", "globalThis.attempt = () => { try { Exports.get('provider', 'hidden'); return 'found'; } catch (error) { return error.message; } };"}});
@@ -268,14 +265,14 @@ MODULE(lua_exports, {
         EQUALS(bus.Lua("provider", "registered"), "true");
         EQUALS(bus.Manager().GetResource("provider")->HasRegisteredExport("hidden"), false);
         // Nor is the function it was called with.
-        EQUALS(Bind::LuaCallableCount(*bus.server.module.GetLuaEngine()->GetRuntime("provider")), 0u);
+        EQUALS(Framework::Scripting::Bind::LuaCallableCount(*bus.server.module.GetLuaEngine()->GetRuntime("provider")), 0u);
         EQUALS(bus.Lua("lua-consumer", "select(2, pcall(Exports.get, 'provider', 'hidden'))"), "Exports.get: export 'hidden' not found in resource 'provider'");
         EQUALS(bus.Js("js-consumer", "attempt()"), "Exports.get: export 'hidden' not found in resource 'provider'");
         EQUALS(bus.Lua("lua-consumer", "next(Imports.get('provider'))"), "nil");
     });
 
     IT("refuses a second registration of a name where Lua is involved", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", R"(
             Exports.register('value', 'first')
             ok, failure = pcall(Exports.register, 'value', 'second')
@@ -300,7 +297,7 @@ MODULE(lua_exports, {
     });
 
     IT("drops the exports of a resource that stops, in both languages", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("lua-provider", {{"main.lua", LuaExportsTest::kLuaProvider}}, LuaExportsTest::kLuaProviderExports);
         bus.server.files.Resource("js-provider", {{"main.js", LuaExportsTest::kJsProvider}}, LuaExportsTest::kJsProviderExports);
         bus.server.files.Resource("lua-consumer", {{"main.lua", "luaAdd = Exports.get('lua-provider', 'add') jsAdd = Exports.get('js-provider', 'add')"}});
@@ -335,9 +332,9 @@ MODULE(lua_exports, {
 
         // A function taken before the stop no longer runs anything.
         EQUALS(bus.Lua("lua-consumer", "select(1, pcall(luaAdd, 1, 2))"), "false");
-        EQUALS(Contains(bus.Lua("lua-consumer", "select(2, pcall(luaAdd, 1, 2))"), Bind::kRuntimeStopped), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-consumer", "select(2, pcall(luaAdd, 1, 2))"), Framework::Scripting::Bind::kRuntimeStopped), true);
         EQUALS(bus.Lua("lua-consumer", "select(1, pcall(jsAdd, 1, 2))"), "false");
-        EQUALS(Contains(bus.Lua("lua-consumer", "select(2, pcall(jsAdd, 1, 2))"), Bind::kRuntimeStopped), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("lua-consumer", "select(2, pcall(jsAdd, 1, 2))"), Framework::Scripting::Bind::kRuntimeStopped), true);
         EQUALS(bus.Js("js-consumer", "settle(() => luaAdd(1, 2))"), "called");
         EQUALS(bus.Until([&] {
             return bus.Js("js-consumer", "outcome") != "pending";
@@ -346,7 +343,7 @@ MODULE(lua_exports, {
         const std::string outcome = bus.Js("js-consumer", "outcome");
         const bool failed = outcome.starts_with("threw ") || outcome.starts_with("rejected ");
         EQUALS(failed, true);
-        EQUALS(Contains(outcome, Bind::kRuntimeStopped), true);
+        EQUALS(LuaRuntimeTest::Contains(outcome, Framework::Scripting::Bind::kRuntimeStopped), true);
 
         // Started again, it exports again.
         EQUALS(bus.Start("lua-provider"), "");
@@ -363,7 +360,7 @@ MODULE(lua_exports, {
     });
 
     IT("has no exports for a resource that failed to start", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("broken-js", {{"main.js", "Exports.register('add', (a, b) => a + b); throw new Error('broken on purpose');"}}, R"(,"exports":["add"])");
         bus.server.files.Resource("broken-lua", {{"main.lua", "Exports.register('add', function(a, b) return a + b end) error('broken on purpose')"}}, R"(,"exports":["add"])");
         bus.server.files.Resource("lua-consumer", {{"main.lua", ""}});
@@ -386,7 +383,7 @@ MODULE(lua_exports, {
     });
 
     IT("words a wrong call from Lua as JavaScript does", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.lua", ""}}, R"(,"exports":["thread"])");
         EQUALS(bus.Init(), true);
         EQUALS(bus.StartAll({"provider"}), true);
@@ -405,21 +402,21 @@ MODULE(lua_exports, {
         EQUALS(failure("Imports.get, 'nobody'"), "Imports.get: resource 'nobody' not found");
 
         // A value that cannot leave its runtime is refused when it is registered.
-        EQUALS(Contains(failure("Exports.register, 'thread', coroutine.create(function() end)"), "Exports.register: value"), true);
+        EQUALS(LuaRuntimeTest::Contains(failure("Exports.register, 'thread', coroutine.create(function() end)"), "Exports.register: value"), true);
         EQUALS(bus.Manager().GetResource("provider")->HasRegisteredExport("thread"), false);
         // Declared or not.
         EQUALS(failure("Exports.register, 'undeclared', coroutine.create(function() end)"), failure("Exports.register, 'thread', coroutine.create(function() end)"));
     });
 
     IT("refuses a JavaScript export that cannot be copied for Lua", {
-        Bus bus;
+        LuaEventsTest::Bus bus;
         bus.server.files.Resource("provider", {{"main.js", "Exports.register('symbol', Symbol('s')); Exports.register('fine', 1);"}}, R"(,"exports":["symbol","fine"])");
         bus.server.files.Resource("consumer", {{"main.lua", ""}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.StartAll({"provider", "consumer"}), true);
 
-        EQUALS(Contains(bus.Lua("consumer", "select(2, pcall(Exports.get, 'provider', 'symbol'))"), "Exports.get: export 'symbol' of resource 'provider'"), true);
-        EQUALS(Contains(bus.Lua("consumer", "select(2, pcall(Imports.get, 'provider'))"), "Imports.get: export 'symbol' of resource 'provider'"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("consumer", "select(2, pcall(Exports.get, 'provider', 'symbol'))"), "Exports.get: export 'symbol' of resource 'provider'"), true);
+        EQUALS(LuaRuntimeTest::Contains(bus.Lua("consumer", "select(2, pcall(Imports.get, 'provider'))"), "Imports.get: export 'symbol' of resource 'provider'"), true);
         EQUALS(bus.Lua("consumer", "Exports.get('provider', 'fine')"), "1");
     });
 })

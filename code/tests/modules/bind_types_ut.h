@@ -23,7 +23,6 @@
 #include <vector>
 
 namespace BindTypesTest {
-    namespace Bind = Framework::Scripting::Bind;
 
     enum class Mode : uint8_t {
         Off,
@@ -80,12 +79,12 @@ namespace BindTypesTest {
 
     template <typename T>
     std::string TypeScript() {
-        return Bind::ToTypeScript(Bind::TypeOf<T>());
+        return Framework::Scripting::Bind::ToTypeScript(Framework::Scripting::Bind::TypeOf<T>());
     }
 
     template <typename T>
     std::string Lua() {
-        return Bind::ToLuaAnnotation(Bind::TypeOf<T>());
+        return Framework::Scripting::Bind::ToLuaAnnotation(Framework::Scripting::Bind::TypeOf<T>());
     }
 
     // The message of the std::logic_error `action` throws, or empty when it does not throw one.
@@ -104,332 +103,329 @@ namespace BindTypesTest {
 FW_SCRIPT_CLASS(BindTypesTest::Widget, "Widget");
 
 MODULE(bind_types, {
-    using namespace Framework::Scripting::Bind;
-    using BindTypesTest::Lua;
-    using BindTypesTest::Mode;
-    using BindTypesTest::TypeScript;
-    using BindTypesTest::Widget;
 
     // --- TypeOf and both spellings, one test per row of the type model ---
 
     IT("describes bool as Boolean", {
-        EQUALS(TypeOf<bool>().kind, TypeKind::Boolean);
-        EQUALS(TypeOf<const bool &>().kind, TypeKind::Boolean);
-        EQUALS(TypeScript<bool>(), "boolean");
-        EQUALS(Lua<bool>(), "boolean");
+        EQUALS(Framework::Scripting::Bind::TypeOf<bool>().kind, Framework::Scripting::Bind::TypeKind::Boolean);
+        EQUALS(Framework::Scripting::Bind::TypeOf<const bool &>().kind, Framework::Scripting::Bind::TypeKind::Boolean);
+        EQUALS(BindTypesTest::TypeScript<bool>(), "boolean");
+        EQUALS(BindTypesTest::Lua<bool>(), "boolean");
     });
 
     IT("describes float and double as Number", {
-        EQUALS(TypeOf<float>().kind, TypeKind::Number);
-        EQUALS(TypeOf<double>().kind, TypeKind::Number);
-        EQUALS(TypeOf<const double &>().kind, TypeKind::Number);
-        EQUALS(TypeScript<float>(), "number");
-        EQUALS(Lua<float>(), "number");
-        EQUALS(TypeScript<double>(), "number");
-        EQUALS(Lua<double>(), "number");
+        EQUALS(Framework::Scripting::Bind::TypeOf<float>().kind, Framework::Scripting::Bind::TypeKind::Number);
+        EQUALS(Framework::Scripting::Bind::TypeOf<double>().kind, Framework::Scripting::Bind::TypeKind::Number);
+        EQUALS(Framework::Scripting::Bind::TypeOf<const double &>().kind, Framework::Scripting::Bind::TypeKind::Number);
+        EQUALS(BindTypesTest::TypeScript<float>(), "number");
+        EQUALS(BindTypesTest::Lua<float>(), "number");
+        EQUALS(BindTypesTest::TypeScript<double>(), "number");
+        EQUALS(BindTypesTest::Lua<double>(), "number");
     });
 
     IT("describes integral and enum types as Integer", {
-        EQUALS(TypeOf<int>().kind, TypeKind::Integer);
-        EQUALS(TypeOf<uint8_t>().kind, TypeKind::Integer);
-        EQUALS(TypeOf<int64_t>().kind, TypeKind::Integer);
-        EQUALS(TypeOf<uint64_t>().kind, TypeKind::Integer);
-        EQUALS(TypeOf<const size_t &>().kind, TypeKind::Integer);
-        EQUALS(TypeOf<Mode>().kind, TypeKind::Integer);
-        EQUALS(TypeScript<int>(), "number");
-        EQUALS(Lua<int>(), "integer");
-        EQUALS(TypeScript<uint64_t>(), "number");
-        EQUALS(Lua<uint64_t>(), "integer");
-        EQUALS(TypeScript<Mode>(), "number");
-        EQUALS(Lua<Mode>(), "integer");
+        EQUALS(Framework::Scripting::Bind::TypeOf<int>().kind, Framework::Scripting::Bind::TypeKind::Integer);
+        EQUALS(Framework::Scripting::Bind::TypeOf<uint8_t>().kind, Framework::Scripting::Bind::TypeKind::Integer);
+        EQUALS(Framework::Scripting::Bind::TypeOf<int64_t>().kind, Framework::Scripting::Bind::TypeKind::Integer);
+        EQUALS(Framework::Scripting::Bind::TypeOf<uint64_t>().kind, Framework::Scripting::Bind::TypeKind::Integer);
+        EQUALS(Framework::Scripting::Bind::TypeOf<const size_t &>().kind, Framework::Scripting::Bind::TypeKind::Integer);
+        EQUALS(Framework::Scripting::Bind::TypeOf<BindTypesTest::Mode>().kind, Framework::Scripting::Bind::TypeKind::Integer);
+        EQUALS(BindTypesTest::TypeScript<int>(), "number");
+        EQUALS(BindTypesTest::Lua<int>(), "integer");
+        EQUALS(BindTypesTest::TypeScript<uint64_t>(), "number");
+        EQUALS(BindTypesTest::Lua<uint64_t>(), "integer");
+        EQUALS(BindTypesTest::TypeScript<BindTypesTest::Mode>(), "number");
+        EQUALS(BindTypesTest::Lua<BindTypesTest::Mode>(), "integer");
     });
 
     IT("describes std::string, std::string_view and const char * as String", {
-        EQUALS(TypeOf<std::string>().kind, TypeKind::String);
-        EQUALS(TypeOf<const std::string &>().kind, TypeKind::String);
-        EQUALS(TypeOf<std::string_view>().kind, TypeKind::String);
-        EQUALS(TypeOf<const char *>().kind, TypeKind::String);
-        EQUALS(TypeScript<std::string>(), "string");
-        EQUALS(Lua<std::string>(), "string");
-        EQUALS(TypeScript<std::string_view>(), "string");
-        EQUALS(Lua<std::string_view>(), "string");
-        EQUALS(TypeScript<const char *>(), "string");
-        EQUALS(Lua<const char *>(), "string");
+        EQUALS(Framework::Scripting::Bind::TypeOf<std::string>().kind, Framework::Scripting::Bind::TypeKind::String);
+        EQUALS(Framework::Scripting::Bind::TypeOf<const std::string &>().kind, Framework::Scripting::Bind::TypeKind::String);
+        EQUALS(Framework::Scripting::Bind::TypeOf<std::string_view>().kind, Framework::Scripting::Bind::TypeKind::String);
+        EQUALS(Framework::Scripting::Bind::TypeOf<const char *>().kind, Framework::Scripting::Bind::TypeKind::String);
+        EQUALS(BindTypesTest::TypeScript<std::string>(), "string");
+        EQUALS(BindTypesTest::Lua<std::string>(), "string");
+        EQUALS(BindTypesTest::TypeScript<std::string_view>(), "string");
+        EQUALS(BindTypesTest::Lua<std::string_view>(), "string");
+        EQUALS(BindTypesTest::TypeScript<const char *>(), "string");
+        EQUALS(BindTypesTest::Lua<const char *>(), "string");
     });
 
     IT("describes std::optional<T> as Optional(T)", {
-        const TypeRef type = TypeOf<std::optional<int>>();
-        EQUALS(type.kind, TypeKind::Optional);
+        const Framework::Scripting::Bind::TypeRef type = Framework::Scripting::Bind::TypeOf<std::optional<int>>();
+        EQUALS(type.kind, Framework::Scripting::Bind::TypeKind::Optional);
         EQUALS(type.args.size(), 1u);
-        EQUALS(type.args[0].kind, TypeKind::Integer);
-        EQUALS(TypeOf<const std::optional<int> &>().kind, TypeKind::Optional);
-        EQUALS(TypeScript<std::optional<int>>(), "number | undefined");
-        EQUALS(Lua<std::optional<int>>(), "integer?");
-        EQUALS(TypeScript<std::optional<std::string>>(), "string | undefined");
-        EQUALS(Lua<std::optional<std::string>>(), "string?");
+        EQUALS(type.args[0].kind, Framework::Scripting::Bind::TypeKind::Integer);
+        EQUALS(Framework::Scripting::Bind::TypeOf<const std::optional<int> &>().kind, Framework::Scripting::Bind::TypeKind::Optional);
+        EQUALS(BindTypesTest::TypeScript<std::optional<int>>(), "number | undefined");
+        EQUALS(BindTypesTest::Lua<std::optional<int>>(), "integer?");
+        EQUALS(BindTypesTest::TypeScript<std::optional<std::string>>(), "string | undefined");
+        EQUALS(BindTypesTest::Lua<std::optional<std::string>>(), "string?");
     });
 
     IT("describes std::vector<T> as Array(T)", {
-        const TypeRef type = TypeOf<std::vector<std::string>>();
-        EQUALS(type.kind, TypeKind::Array);
+        const Framework::Scripting::Bind::TypeRef type = Framework::Scripting::Bind::TypeOf<std::vector<std::string>>();
+        EQUALS(type.kind, Framework::Scripting::Bind::TypeKind::Array);
         EQUALS(type.args.size(), 1u);
-        EQUALS(type.args[0].kind, TypeKind::String);
-        EQUALS(TypeOf<const std::vector<float> &>().kind, TypeKind::Array);
-        EQUALS(TypeScript<std::vector<std::string>>(), "string[]");
-        EQUALS(Lua<std::vector<std::string>>(), "string[]");
-        EQUALS(TypeScript<std::vector<std::vector<float>>>(), "number[][]");
-        EQUALS(Lua<std::vector<std::vector<float>>>(), "number[][]");
-        EQUALS(TypeScript<std::optional<std::vector<Widget>>>(), "Widget[] | undefined");
-        EQUALS(Lua<std::optional<std::vector<Widget>>>(), "Widget[]?");
+        EQUALS(type.args[0].kind, Framework::Scripting::Bind::TypeKind::String);
+        EQUALS(Framework::Scripting::Bind::TypeOf<const std::vector<float> &>().kind, Framework::Scripting::Bind::TypeKind::Array);
+        EQUALS(BindTypesTest::TypeScript<std::vector<std::string>>(), "string[]");
+        EQUALS(BindTypesTest::Lua<std::vector<std::string>>(), "string[]");
+        EQUALS(BindTypesTest::TypeScript<std::vector<std::vector<float>>>(), "number[][]");
+        EQUALS(BindTypesTest::Lua<std::vector<std::vector<float>>>(), "number[][]");
+        EQUALS(BindTypesTest::TypeScript<std::optional<std::vector<BindTypesTest::Widget>>>(), "Widget[] | undefined");
+        EQUALS(BindTypesTest::Lua<std::optional<std::vector<BindTypesTest::Widget>>>(), "Widget[]?");
     });
 
     IT("keeps an optional element apart from the array brackets", {
-        EQUALS(TypeScript<std::vector<std::optional<int>>>(), "(number | undefined)[]");
-        EQUALS(Lua<std::vector<std::optional<int>>>(), "(integer?)[]");
+        EQUALS(BindTypesTest::TypeScript<std::vector<std::optional<int>>>(), "(number | undefined)[]");
+        EQUALS(BindTypesTest::Lua<std::vector<std::optional<int>>>(), "(integer?)[]");
     });
 
     IT("describes a bound class by its script name, through references and pointers", {
-        EQUALS(TypeOf<Widget>().kind, TypeKind::Class);
-        EQUALS(TypeOf<Widget>().name, "Widget");
-        EQUALS(TypeOf<Widget &>().name, "Widget");
-        EQUALS(TypeOf<const Widget &>().name, "Widget");
-        EQUALS(TypeOf<Widget *>().name, "Widget");
-        EQUALS(TypeOf<const Widget *>().kind, TypeKind::Class);
-        EQUALS(TypeScript<const Widget &>(), "Widget");
-        EQUALS(Lua<const Widget &>(), "Widget");
-        EQUALS(TypeScript<Widget *>(), "Widget");
-        EQUALS(Lua<Widget *>(), "Widget");
+        EQUALS(Framework::Scripting::Bind::TypeOf<BindTypesTest::Widget>().kind, Framework::Scripting::Bind::TypeKind::Class);
+        EQUALS(Framework::Scripting::Bind::TypeOf<BindTypesTest::Widget>().name, "Widget");
+        EQUALS(Framework::Scripting::Bind::TypeOf<BindTypesTest::Widget &>().name, "Widget");
+        EQUALS(Framework::Scripting::Bind::TypeOf<const BindTypesTest::Widget &>().name, "Widget");
+        EQUALS(Framework::Scripting::Bind::TypeOf<BindTypesTest::Widget *>().name, "Widget");
+        EQUALS(Framework::Scripting::Bind::TypeOf<const BindTypesTest::Widget *>().kind, Framework::Scripting::Bind::TypeKind::Class);
+        EQUALS(BindTypesTest::TypeScript<const BindTypesTest::Widget &>(), "Widget");
+        EQUALS(BindTypesTest::Lua<const BindTypesTest::Widget &>(), "Widget");
+        EQUALS(BindTypesTest::TypeScript<BindTypesTest::Widget *>(), "Widget");
+        EQUALS(BindTypesTest::Lua<BindTypesTest::Widget *>(), "Widget");
     });
 
     IT("describes glm vectors and quaternions as the value classes", {
-        EQUALS(TypeOf<glm::vec2>().kind, TypeKind::Class);
-        EQUALS(TypeOf<glm::vec2>().name, "Vector2");
-        EQUALS(TypeOf<glm::vec3>().name, "Vector3");
-        EQUALS(TypeOf<const glm::vec3 &>().name, "Vector3");
-        EQUALS(TypeOf<glm::vec4>().name, "Vector4");
-        EQUALS(TypeOf<glm::quat>().name, "Quaternion");
-        EQUALS(TypeScript<glm::vec2>(), "Vector2");
-        EQUALS(Lua<glm::vec2>(), "Vector2");
-        EQUALS(TypeScript<glm::vec3>(), "Vector3");
-        EQUALS(Lua<glm::vec3>(), "Vector3");
-        EQUALS(TypeScript<glm::vec4>(), "Vector4");
-        EQUALS(Lua<glm::vec4>(), "Vector4");
-        EQUALS(TypeScript<glm::quat>(), "Quaternion");
-        EQUALS(Lua<glm::quat>(), "Quaternion");
+        EQUALS(Framework::Scripting::Bind::TypeOf<glm::vec2>().kind, Framework::Scripting::Bind::TypeKind::Class);
+        EQUALS(Framework::Scripting::Bind::TypeOf<glm::vec2>().name, "Vector2");
+        EQUALS(Framework::Scripting::Bind::TypeOf<glm::vec3>().name, "Vector3");
+        EQUALS(Framework::Scripting::Bind::TypeOf<const glm::vec3 &>().name, "Vector3");
+        EQUALS(Framework::Scripting::Bind::TypeOf<glm::vec4>().name, "Vector4");
+        EQUALS(Framework::Scripting::Bind::TypeOf<glm::quat>().name, "Quaternion");
+        EQUALS(BindTypesTest::TypeScript<glm::vec2>(), "Vector2");
+        EQUALS(BindTypesTest::Lua<glm::vec2>(), "Vector2");
+        EQUALS(BindTypesTest::TypeScript<glm::vec3>(), "Vector3");
+        EQUALS(BindTypesTest::Lua<glm::vec3>(), "Vector3");
+        EQUALS(BindTypesTest::TypeScript<glm::vec4>(), "Vector4");
+        EQUALS(BindTypesTest::Lua<glm::vec4>(), "Vector4");
+        EQUALS(BindTypesTest::TypeScript<glm::quat>(), "Quaternion");
+        EQUALS(BindTypesTest::Lua<glm::quat>(), "Quaternion");
     });
 
     IT("describes a method returning a reference to its own class as This", {
-        const FunctionDesc grow = DescribeFunction<decltype(&Widget::grow)>("grow", Doc("Grows.").Param("amount", "Size to add."), false, Side::Shared);
-        EQUALS(grow.returns.kind, TypeKind::This);
-        EQUALS(ToTypeScript(grow.returns), "this");
-        EQUALS(ToLuaAnnotation(grow.returns), "self");
+        const Framework::Scripting::Bind::FunctionDesc grow = Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::grow)>("grow", Framework::Scripting::Bind::Doc("Grows.").Param("amount", "Size to add."), false, Framework::Scripting::Bind::Side::Shared);
+        EQUALS(grow.returns.kind, Framework::Scripting::Bind::TypeKind::This);
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(grow.returns), "this");
+        EQUALS(Framework::Scripting::Bind::ToLuaAnnotation(grow.returns), "self");
 
-        const FunctionDesc reset = DescribeFunction<decltype(&Widget::reset)>("reset", Doc("Resets."), false, Side::Shared);
-        EQUALS(reset.returns.kind, TypeKind::This);
+        const Framework::Scripting::Bind::FunctionDesc reset = Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::reset)>("reset", Framework::Scripting::Bind::Doc("Resets."), false, Framework::Scripting::Bind::Side::Shared);
+        EQUALS(reset.returns.kind, Framework::Scripting::Bind::TypeKind::This);
 
-        EQUALS(Type::This().kind, TypeKind::This);
-        EQUALS(ToTypeScript(Type::This()), "this");
-        EQUALS(ToLuaAnnotation(Type::This()), "self");
+        EQUALS(Framework::Scripting::Bind::Type::This().kind, Framework::Scripting::Bind::TypeKind::This);
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(Framework::Scripting::Bind::Type::This()), "this");
+        EQUALS(Framework::Scripting::Bind::ToLuaAnnotation(Framework::Scripting::Bind::Type::This()), "self");
     });
 
     IT("describes void as Void", {
-        EQUALS(TypeOf<void>().kind, TypeKind::Void);
-        EQUALS(TypeRef {}.kind, TypeKind::Void);
-        EQUALS(TypeScript<void>(), "void");
-        EQUALS(Lua<void>(), "nil");
+        EQUALS(Framework::Scripting::Bind::TypeOf<void>().kind, Framework::Scripting::Bind::TypeKind::Void);
+        EQUALS(Framework::Scripting::Bind::TypeRef {}.kind, Framework::Scripting::Bind::TypeKind::Void);
+        EQUALS(BindTypesTest::TypeScript<void>(), "void");
+        EQUALS(BindTypesTest::Lua<void>(), "nil");
     });
 
     IT("spells Any, a class and a custom type as given", {
-        EQUALS(Type::Any().kind, TypeKind::Any);
-        EQUALS(ToTypeScript(Type::Any()), "any");
-        EQUALS(ToLuaAnnotation(Type::Any()), "any");
+        EQUALS(Framework::Scripting::Bind::Type::Any().kind, Framework::Scripting::Bind::TypeKind::Any);
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(Framework::Scripting::Bind::Type::Any()), "any");
+        EQUALS(Framework::Scripting::Bind::ToLuaAnnotation(Framework::Scripting::Bind::Type::Any()), "any");
 
-        EQUALS(Type::Class("Player").kind, TypeKind::Class);
-        EQUALS(ToTypeScript(Type::Class("Player")), "Player");
-        EQUALS(ToLuaAnnotation(Type::Class("Player")), "Player");
+        EQUALS(Framework::Scripting::Bind::Type::Class("Player").kind, Framework::Scripting::Bind::TypeKind::Class);
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(Framework::Scripting::Bind::Type::Class("Player")), "Player");
+        EQUALS(Framework::Scripting::Bind::ToLuaAnnotation(Framework::Scripting::Bind::Type::Class("Player")), "Player");
 
-        const TypeRef custom = Type::Custom("{ x: number; y: number }", "{ x: number, y: number }");
-        EQUALS(custom.kind, TypeKind::Custom);
-        EQUALS(ToTypeScript(custom), "{ x: number; y: number }");
-        EQUALS(ToLuaAnnotation(custom), "{ x: number, y: number }");
+        const Framework::Scripting::Bind::TypeRef custom = Framework::Scripting::Bind::Type::Custom("{ x: number; y: number }", "{ x: number, y: number }");
+        EQUALS(custom.kind, Framework::Scripting::Bind::TypeKind::Custom);
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(custom), "{ x: number; y: number }");
+        EQUALS(Framework::Scripting::Bind::ToLuaAnnotation(custom), "{ x: number, y: number }");
     });
 
     // --- DescribeFunction ---
 
     IT("takes parameter types from the signature and names from the Doc, in order", {
-        const Doc doc         = Doc("Scales the widget.").Param("factor", "Multiplier.").Param("steps", "Times to apply it.").Returns("The scaled size.");
-        const FunctionDesc fn = DescribeFunction<decltype(&Widget::scaled)>("scaled", doc, false, Side::Server);
+        const Framework::Scripting::Bind::Doc doc         = Framework::Scripting::Bind::Doc("Scales the widget.").Param("factor", "Multiplier.").Param("steps", "Times to apply it.").Returns("The scaled size.");
+        const Framework::Scripting::Bind::FunctionDesc fn = Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::scaled)>("scaled", doc, false, Framework::Scripting::Bind::Side::Server);
 
         EQUALS(fn.name, "scaled");
         EQUALS(fn.description, "Scales the widget.");
         EQUALS(fn.returnsDescription, "The scaled size.");
-        EQUALS(fn.returns.kind, TypeKind::Number);
+        EQUALS(fn.returns.kind, Framework::Scripting::Bind::TypeKind::Number);
         EQUALS(fn.isStatic, false);
-        EQUALS(fn.side, Side::Server);
+        EQUALS(fn.side, Framework::Scripting::Bind::Side::Server);
 
         EQUALS(fn.params.size(), 2u);
         EQUALS(fn.params[0].name, "factor");
         EQUALS(fn.params[0].description, "Multiplier.");
-        EQUALS(fn.params[0].type.kind, TypeKind::Number);
+        EQUALS(fn.params[0].type.kind, Framework::Scripting::Bind::TypeKind::Number);
         EQUALS(fn.params[0].optional, false);
         EQUALS(fn.params[1].name, "steps");
         EQUALS(fn.params[1].description, "Times to apply it.");
     });
 
     IT("flags a std::optional parameter optional and unwraps its type", {
-        const Doc doc         = Doc("Scales the widget.").Param("factor", "Multiplier.").Param("steps", "Times to apply it.");
-        const FunctionDesc fn = DescribeFunction<decltype(&Widget::scaled)>("scaled", doc, false, Side::Shared);
+        const Framework::Scripting::Bind::Doc doc         = Framework::Scripting::Bind::Doc("Scales the widget.").Param("factor", "Multiplier.").Param("steps", "Times to apply it.");
+        const Framework::Scripting::Bind::FunctionDesc fn = Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::scaled)>("scaled", doc, false, Framework::Scripting::Bind::Side::Shared);
 
         EQUALS(fn.params.size(), 2u);
         EQUALS(fn.params[1].optional, true);
-        EQUALS(fn.params[1].type.kind, TypeKind::Integer);
-        EQUALS(ToTypeScript(fn.params[1].type), "number");
-        EQUALS(ToLuaAnnotation(fn.params[1].type), "integer");
+        EQUALS(fn.params[1].type.kind, Framework::Scripting::Bind::TypeKind::Integer);
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(fn.params[1].type), "number");
+        EQUALS(Framework::Scripting::Bind::ToLuaAnnotation(fn.params[1].type), "integer");
     });
 
     IT("excludes the receiver of a member function, const and noexcept included", {
-        EQUALS(DescribeFunction<decltype(&Widget::clone)>("clone", Doc("Copies."), false, Side::Shared).params.size(), 0u);
-        EQUALS(DescribeFunction<decltype(&Widget::toString)>("toString", Doc("Formats."), false, Side::Shared).params.size(), 0u);
-        EQUALS(DescribeFunction<decltype(&Widget::clear)>("clear", Doc("Clears."), false, Side::Shared).returns.kind, TypeKind::Void);
-        EQUALS(ToTypeScript(DescribeFunction<decltype(&Widget::clone)>("clone", Doc("Copies."), false, Side::Shared).returns), "Widget");
-        EQUALS(ToTypeScript(DescribeFunction<decltype(&Widget::toString)>("toString", Doc("Formats."), false, Side::Shared).returns), "string");
+        EQUALS(Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::clone)>("clone", Framework::Scripting::Bind::Doc("Copies."), false, Framework::Scripting::Bind::Side::Shared).params.size(), 0u);
+        EQUALS(Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::toString)>("toString", Framework::Scripting::Bind::Doc("Formats."), false, Framework::Scripting::Bind::Side::Shared).params.size(), 0u);
+        EQUALS(Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::clear)>("clear", Framework::Scripting::Bind::Doc("Clears."), false, Framework::Scripting::Bind::Side::Shared).returns.kind, Framework::Scripting::Bind::TypeKind::Void);
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::clone)>("clone", Framework::Scripting::Bind::Doc("Copies."), false, Framework::Scripting::Bind::Side::Shared).returns), "Widget");
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::toString)>("toString", Framework::Scripting::Bind::Doc("Formats."), false, Framework::Scripting::Bind::Side::Shared).returns), "string");
     });
 
     IT("returns This only for a non-const reference to the method's own class", {
-        EQUALS(DescribeFunction<decltype(&Widget::view)>("view", Doc("Views."), false, Side::Shared).returns.kind, TypeKind::Class);
-        EQUALS(DescribeFunction<decltype(&Widget::clone)>("clone", Doc("Copies."), false, Side::Shared).returns.kind, TypeKind::Class);
+        EQUALS(Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::view)>("view", Framework::Scripting::Bind::Doc("Views."), false, Framework::Scripting::Bind::Side::Shared).returns.kind, Framework::Scripting::Bind::TypeKind::Class);
+        EQUALS(Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::clone)>("clone", Framework::Scripting::Bind::Doc("Copies."), false, Framework::Scripting::Bind::Side::Shared).returns.kind, Framework::Scripting::Bind::TypeKind::Class);
 
-        const FunctionDesc same = DescribeFunction<decltype(&BindTypesTest::Same)>("same", Doc("Returns it.").Param("widget", "Any widget."), true, Side::Shared);
-        EQUALS(same.returns.kind, TypeKind::Class);
+        const Framework::Scripting::Bind::FunctionDesc same = Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Same)>("same", Framework::Scripting::Bind::Doc("Returns it.").Param("widget", "Any widget."), true, Framework::Scripting::Bind::Side::Shared);
+        EQUALS(same.returns.kind, Framework::Scripting::Bind::TypeKind::Class);
         EQUALS(same.returns.name, "Widget");
     });
 
     IT("takes every parameter of a free function", {
-        const Doc doc         = Doc("Measures.").Param("a", "First point.").Param("b", "Second point.");
-        const FunctionDesc fn = DescribeFunction<decltype(&BindTypesTest::Distance)>("distance", doc, true, Side::Client);
+        const Framework::Scripting::Bind::Doc doc         = Framework::Scripting::Bind::Doc("Measures.").Param("a", "First point.").Param("b", "Second point.");
+        const Framework::Scripting::Bind::FunctionDesc fn = Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Distance)>("distance", doc, true, Framework::Scripting::Bind::Side::Client);
 
         EQUALS(fn.isStatic, true);
-        EQUALS(fn.side, Side::Client);
+        EQUALS(fn.side, Framework::Scripting::Bind::Side::Client);
         EQUALS(fn.params.size(), 2u);
         EQUALS(fn.params[0].type.name, "Vector3");
         EQUALS(fn.params[1].name, "b");
-        EQUALS(fn.returns.kind, TypeKind::Number);
+        EQUALS(fn.returns.kind, Framework::Scripting::Bind::TypeKind::Number);
 
-        EQUALS(DescribeFunction<decltype(BindTypesTest::Distance)>("distance", doc, true, Side::Shared).params.size(), 2u);
-        EQUALS(DescribeFunction<decltype(&Widget::make)>("make", Doc("Makes.").Param("size", "Initial size."), true, Side::Shared).returns.name, "Widget");
+        EQUALS(Framework::Scripting::Bind::DescribeFunction<decltype(BindTypesTest::Distance)>("distance", doc, true, Framework::Scripting::Bind::Side::Shared).params.size(), 2u);
+        EQUALS(Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::make)>("make", Framework::Scripting::Bind::Doc("Makes.").Param("size", "Initial size."), true, Framework::Scripting::Bind::Side::Shared).returns.name, "Widget");
     });
 
     IT("takes every parameter of a lambda", {
-        const auto lambda     = [](const Widget &, int count, const std::string &) { return count > 0; };
-        const Doc doc         = Doc("Checks.").Param("widget", "Widget.").Param("count", "Count.").Param("label", "Label.");
-        const FunctionDesc fn = DescribeFunction<decltype(lambda)>("check", doc, true, Side::Shared);
+        const auto lambda = [](const BindTypesTest::Widget &, int count, const std::string &) {
+            return count > 0;
+        };
+        const Framework::Scripting::Bind::Doc doc         = Framework::Scripting::Bind::Doc("Checks.").Param("widget", "Widget.").Param("count", "Count.").Param("label", "Label.");
+        const Framework::Scripting::Bind::FunctionDesc fn = Framework::Scripting::Bind::DescribeFunction<decltype(lambda)>("check", doc, true, Framework::Scripting::Bind::Side::Shared);
 
         EQUALS(fn.params.size(), 3u);
         EQUALS(fn.params[0].type.name, "Widget");
-        EQUALS(fn.params[1].type.kind, TypeKind::Integer);
-        EQUALS(fn.params[2].type.kind, TypeKind::String);
-        EQUALS(fn.returns.kind, TypeKind::Boolean);
+        EQUALS(fn.params[1].type.kind, Framework::Scripting::Bind::TypeKind::Integer);
+        EQUALS(fn.params[2].type.kind, Framework::Scripting::Bind::TypeKind::String);
+        EQUALS(fn.returns.kind, Framework::Scripting::Bind::TypeKind::Boolean);
 
-        EQUALS(DescribeFunction<decltype(+lambda)>("check", doc, true, Side::Shared).params.size(), 3u);
+        EQUALS(Framework::Scripting::Bind::DescribeFunction<decltype(+lambda)>("check", doc, true, Framework::Scripting::Bind::Side::Shared).params.size(), 3u);
     });
 
     IT("throws a logic_error naming the function when the Doc names another number of parameters", {
         const std::string tooFew = BindTypesTest::LogicErrorOf([] {
-            DescribeFunction<decltype(&Widget::scaled)>("scaled", Doc("Scales.").Param("factor", "Multiplier."), false, Side::Shared);
+            Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::scaled)>("scaled", Framework::Scripting::Bind::Doc("Scales.").Param("factor", "Multiplier."), false, Framework::Scripting::Bind::Side::Shared);
         });
         EQUALS(tooFew.find("'scaled'") != std::string::npos, true);
 
         const std::string tooMany = BindTypesTest::LogicErrorOf([] {
-            DescribeFunction<decltype(&Widget::clone)>("clone", Doc("Copies.").Param("extra", "Not a parameter."), false, Side::Shared);
+            Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::clone)>("clone", Framework::Scripting::Bind::Doc("Copies.").Param("extra", "Not a parameter."), false, Framework::Scripting::Bind::Side::Shared);
         });
         EQUALS(tooMany.find("'clone'") != std::string::npos, true);
 
         const std::string constructor = BindTypesTest::LogicErrorOf([] {
-            DescribeConstructor<float, float>(Doc("Creates.").Param("x", "X."));
+            Framework::Scripting::Bind::DescribeConstructor<float, float>(Framework::Scripting::Bind::Doc("Creates.").Param("x", "X."));
         });
         EQUALS(constructor.find("'constructor'") != std::string::npos, true);
     });
 
     IT("lets ParamType override the type of the last parameter", {
-        const auto lambda     = [](int, const Widget &) {};
-        const Doc doc         = Doc("Moves.").Param("id", "Identifier.").Param("target", "Destination.").ParamType(Type::Custom("{ x: number }", "{ x: number }"));
-        const FunctionDesc fn = DescribeFunction<decltype(lambda)>("move", doc, true, Side::Shared);
+        const auto lambda                                 = [](int, const BindTypesTest::Widget &) {};
+        const Framework::Scripting::Bind::Doc doc         = Framework::Scripting::Bind::Doc("Moves.").Param("id", "Identifier.").Param("target", "Destination.").ParamType(Framework::Scripting::Bind::Type::Custom("{ x: number }", "{ x: number }"));
+        const Framework::Scripting::Bind::FunctionDesc fn = Framework::Scripting::Bind::DescribeFunction<decltype(lambda)>("move", doc, true, Framework::Scripting::Bind::Side::Shared);
 
         EQUALS(fn.params.size(), 2u);
-        EQUALS(fn.params[0].type.kind, TypeKind::Integer);
-        EQUALS(fn.params[1].type.kind, TypeKind::Custom);
-        EQUALS(ToTypeScript(fn.params[1].type), "{ x: number }");
-        EQUALS(ToLuaAnnotation(fn.params[1].type), "{ x: number }");
+        EQUALS(fn.params[0].type.kind, Framework::Scripting::Bind::TypeKind::Integer);
+        EQUALS(fn.params[1].type.kind, Framework::Scripting::Bind::TypeKind::Custom);
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(fn.params[1].type), "{ x: number }");
+        EQUALS(Framework::Scripting::Bind::ToLuaAnnotation(fn.params[1].type), "{ x: number }");
         EQUALS(fn.params[1].name, "target");
     });
 
     IT("refuses ParamType before any parameter", {
         const std::string message = BindTypesTest::LogicErrorOf([] {
-            Doc("Moves.").ParamType(Type::Any());
+            Framework::Scripting::Bind::Doc("Moves.").ParamType(Framework::Scripting::Bind::Type::Any());
         });
         EQUALS(message.empty(), false);
     });
 
     IT("lets OptionalParam document a parameter optional whatever its C++ type", {
-        const Doc doc         = Doc("Grows.").OptionalParam("amount", "Size to add; one when omitted.");
-        const FunctionDesc fn = DescribeFunction<decltype(&Widget::grow)>("grow", doc, false, Side::Shared);
+        const Framework::Scripting::Bind::Doc doc         = Framework::Scripting::Bind::Doc("Grows.").OptionalParam("amount", "Size to add; one when omitted.");
+        const Framework::Scripting::Bind::FunctionDesc fn = Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::grow)>("grow", doc, false, Framework::Scripting::Bind::Side::Shared);
 
         EQUALS(fn.params.size(), 1u);
         EQUALS(fn.params[0].optional, true);
-        EQUALS(fn.params[0].type.kind, TypeKind::Number);
+        EQUALS(fn.params[0].type.kind, Framework::Scripting::Bind::TypeKind::Number);
         EQUALS(fn.params[0].name, "amount");
         EQUALS(fn.params[0].description, "Size to add; one when omitted.");
     });
 
     IT("lets ReturnType override the derived return type", {
-        const Doc doc         = Doc("Formats.").Returns("Plain object.").ReturnType(Type::Custom("{ size: number }", "{ size: number }"));
-        const FunctionDesc fn = DescribeFunction<decltype(&Widget::toString)>("toJSON", doc, false, Side::Shared);
+        const Framework::Scripting::Bind::Doc doc         = Framework::Scripting::Bind::Doc("Formats.").Returns("Plain object.").ReturnType(Framework::Scripting::Bind::Type::Custom("{ size: number }", "{ size: number }"));
+        const Framework::Scripting::Bind::FunctionDesc fn = Framework::Scripting::Bind::DescribeFunction<decltype(&BindTypesTest::Widget::toString)>("toJSON", doc, false, Framework::Scripting::Bind::Side::Shared);
 
-        EQUALS(fn.returns.kind, TypeKind::Custom);
-        EQUALS(ToTypeScript(fn.returns), "{ size: number }");
+        EQUALS(fn.returns.kind, Framework::Scripting::Bind::TypeKind::Custom);
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(fn.returns), "{ size: number }");
         EQUALS(fn.returnsDescription, "Plain object.");
     });
 
     IT("describes a constructor from its argument types", {
-        const Doc doc         = Doc("Creates a vector.").Param("x", "Initial X.").Param("y", "Initial Y.").Param("z", "Initial Z.");
-        const FunctionDesc fn = DescribeConstructor<float, float, float>(doc);
+        const Framework::Scripting::Bind::Doc doc         = Framework::Scripting::Bind::Doc("Creates a vector.").Param("x", "Initial X.").Param("y", "Initial Y.").Param("z", "Initial Z.");
+        const Framework::Scripting::Bind::FunctionDesc fn = Framework::Scripting::Bind::DescribeConstructor<float, float, float>(doc);
 
         EQUALS(fn.name, "constructor");
         EQUALS(fn.description, "Creates a vector.");
         EQUALS(fn.params.size(), 3u);
         EQUALS(fn.params[2].name, "z");
-        EQUALS(ToTypeScript(fn.params[2].type), "number");
-        EQUALS(ToTypeScript(fn.returns), "void");
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(fn.params[2].type), "number");
+        EQUALS(Framework::Scripting::Bind::ToTypeScript(fn.returns), "void");
         EQUALS(fn.isStatic, false);
-        EQUALS(fn.side, Side::Shared);
+        EQUALS(fn.side, Framework::Scripting::Bind::Side::Shared);
 
-        EQUALS(DescribeConstructor<>(Doc("Creates.")).params.size(), 0u);
+        EQUALS(Framework::Scripting::Bind::DescribeConstructor<>(Framework::Scripting::Bind::Doc("Creates.")).params.size(), 0u);
     });
 
     // --- Side ---
 
     IT("materialises a Shared member everywhere and a sided member on its own side only", {
-        EQUALS(Materialises(Side::Shared, Side::Shared), true);
-        EQUALS(Materialises(Side::Shared, Side::Server), true);
-        EQUALS(Materialises(Side::Shared, Side::Client), true);
-        EQUALS(Materialises(Side::Server, Side::Shared), false);
-        EQUALS(Materialises(Side::Server, Side::Server), true);
-        EQUALS(Materialises(Side::Server, Side::Client), false);
-        EQUALS(Materialises(Side::Client, Side::Shared), false);
-        EQUALS(Materialises(Side::Client, Side::Server), false);
-        EQUALS(Materialises(Side::Client, Side::Client), true);
+        EQUALS(Framework::Scripting::Bind::Materialises(Framework::Scripting::Bind::Side::Shared, Framework::Scripting::Bind::Side::Shared), true);
+        EQUALS(Framework::Scripting::Bind::Materialises(Framework::Scripting::Bind::Side::Shared, Framework::Scripting::Bind::Side::Server), true);
+        EQUALS(Framework::Scripting::Bind::Materialises(Framework::Scripting::Bind::Side::Shared, Framework::Scripting::Bind::Side::Client), true);
+        EQUALS(Framework::Scripting::Bind::Materialises(Framework::Scripting::Bind::Side::Server, Framework::Scripting::Bind::Side::Shared), false);
+        EQUALS(Framework::Scripting::Bind::Materialises(Framework::Scripting::Bind::Side::Server, Framework::Scripting::Bind::Side::Server), true);
+        EQUALS(Framework::Scripting::Bind::Materialises(Framework::Scripting::Bind::Side::Server, Framework::Scripting::Bind::Side::Client), false);
+        EQUALS(Framework::Scripting::Bind::Materialises(Framework::Scripting::Bind::Side::Client, Framework::Scripting::Bind::Side::Shared), false);
+        EQUALS(Framework::Scripting::Bind::Materialises(Framework::Scripting::Bind::Side::Client, Framework::Scripting::Bind::Side::Server), false);
+        EQUALS(Framework::Scripting::Bind::Materialises(Framework::Scripting::Bind::Side::Client, Framework::Scripting::Bind::Side::Client), true);
     });
 
     // --- ApiCatalog ---
 
     IT("finds a recorded description by name", {
-        ClassDesc widget;
+        Framework::Scripting::Bind::ClassDesc widget;
         widget.name = "Widget";
-        ClassDesc chat;
+        Framework::Scripting::Bind::ClassDesc chat;
         chat.name        = "Chat";
         chat.isNamespace = true;
 
-        ApiCatalog catalog;
+        Framework::Scripting::Bind::ApiCatalog catalog;
         catalog.Record(&widget);
         catalog.Record(&chat);
 
@@ -443,88 +439,88 @@ MODULE(bind_types, {
     // The server and the client each have a global Chat, with nothing in common. Which runtimes have a definition
     // is what it declares, not what its members, its constructor or its bases are of.
     IT("finds the description of a name that a runtime of one side has", {
-        const auto function = [](const char *name, Side side) {
-            FunctionDesc desc;
+        const auto function = [](const char *name, Framework::Scripting::Bind::Side side) {
+            Framework::Scripting::Bind::FunctionDesc desc;
             desc.name = name;
             desc.side = side;
             return desc;
         };
-        ClassDesc serverChat;
+        Framework::Scripting::Bind::ClassDesc serverChat;
         serverChat.name        = "Chat";
         serverChat.isNamespace = true;
-        serverChat.side        = Side::Server;
-        serverChat.functions.push_back(function("sendToAll", Side::Server));
-        ClassDesc clientChat;
+        serverChat.side        = Framework::Scripting::Bind::Side::Server;
+        serverChat.functions.push_back(function("sendToAll", Framework::Scripting::Bind::Side::Server));
+        Framework::Scripting::Bind::ClassDesc clientChat;
         clientChat.name        = "Chat";
         clientChat.isNamespace = true;
-        clientChat.side        = Side::Client;
-        clientChat.functions.push_back(function("send", Side::Client));
+        clientChat.side        = Framework::Scripting::Bind::Side::Client;
+        clientChat.functions.push_back(function("send", Framework::Scripting::Bind::Side::Client));
         // Shared, though every member of its own is the client's: it has a constructor and a base everywhere.
-        ClassDesc derived;
+        Framework::Scripting::Bind::ClassDesc derived;
         derived.name = "Derived";
         derived.bases.push_back("Entity");
-        derived.constructor = function("constructor", Side::Shared);
-        derived.functions.push_back(function("focus", Side::Client));
-        derived.properties.push_back({"count", TypeOf<double>(), "", true, true, Side::Client});
+        derived.constructor = function("constructor", Framework::Scripting::Bind::Side::Shared);
+        derived.functions.push_back(function("focus", Framework::Scripting::Bind::Side::Client));
+        derived.properties.push_back({"count", Framework::Scripting::Bind::TypeOf<double>(), "", true, true, Framework::Scripting::Bind::Side::Client});
         // Of the client, though its members are declared for every side.
-        ClassDesc clientOnly;
+        Framework::Scripting::Bind::ClassDesc clientOnly;
         clientOnly.name = "Key";
-        clientOnly.side = Side::Client;
-        clientOnly.functions.push_back(function("bind", Side::Shared));
-        ClassDesc empty;
+        clientOnly.side = Framework::Scripting::Bind::Side::Client;
+        clientOnly.functions.push_back(function("bind", Framework::Scripting::Bind::Side::Shared));
+        Framework::Scripting::Bind::ClassDesc empty;
         empty.name = "Marker";
 
-        EQUALS(serverChat.side == Side::Server && ClassDesc().side == Side::Shared, true);
-        ApiCatalog catalog;
-        for (const ClassDesc *desc : {&serverChat, &clientChat, &derived, &clientOnly, &empty}) {
+        EQUALS(serverChat.side == Framework::Scripting::Bind::Side::Server && Framework::Scripting::Bind::ClassDesc().side == Framework::Scripting::Bind::Side::Shared, true);
+        Framework::Scripting::Bind::ApiCatalog catalog;
+        for (const Framework::Scripting::Bind::ClassDesc *desc : {&serverChat, &clientChat, &derived, &clientOnly, &empty}) {
             catalog.Record(desc);
         }
 
         EQUALS(catalog.Find("Chat") == &serverChat, true);
-        EQUALS(catalog.Find("Chat", Side::Server) == &serverChat, true);
-        EQUALS(catalog.Find("Chat", Side::Client) == &clientChat, true);
-        EQUALS(catalog.Find("Derived", Side::Server) == &derived, true);
-        EQUALS(catalog.Find("Derived", Side::Client) == &derived, true);
-        EQUALS(catalog.Find("Marker", Side::Server) == &empty, true);
-        EQUALS(catalog.Find("Key", Side::Client) == &clientOnly, true);
-        EQUALS(catalog.Find("Key", Side::Server) == nullptr, true);
-        EQUALS(catalog.Find("Missing", Side::Client) == nullptr, true);
-        EQUALS(ExistsIn(serverChat, Side::Client), false);
-        EQUALS(ExistsIn(serverChat, Side::Server), true);
-        EQUALS(ExistsIn(clientChat, Side::Client), true);
-        EQUALS(ExistsIn(derived, Side::Server), true);
+        EQUALS(catalog.Find("Chat", Framework::Scripting::Bind::Side::Server) == &serverChat, true);
+        EQUALS(catalog.Find("Chat", Framework::Scripting::Bind::Side::Client) == &clientChat, true);
+        EQUALS(catalog.Find("Derived", Framework::Scripting::Bind::Side::Server) == &derived, true);
+        EQUALS(catalog.Find("Derived", Framework::Scripting::Bind::Side::Client) == &derived, true);
+        EQUALS(catalog.Find("Marker", Framework::Scripting::Bind::Side::Server) == &empty, true);
+        EQUALS(catalog.Find("Key", Framework::Scripting::Bind::Side::Client) == &clientOnly, true);
+        EQUALS(catalog.Find("Key", Framework::Scripting::Bind::Side::Server) == nullptr, true);
+        EQUALS(catalog.Find("Missing", Framework::Scripting::Bind::Side::Client) == nullptr, true);
+        EQUALS(Framework::Scripting::Bind::ExistsIn(serverChat, Framework::Scripting::Bind::Side::Client), false);
+        EQUALS(Framework::Scripting::Bind::ExistsIn(serverChat, Framework::Scripting::Bind::Side::Server), true);
+        EQUALS(Framework::Scripting::Bind::ExistsIn(clientChat, Framework::Scripting::Bind::Side::Client), true);
+        EQUALS(Framework::Scripting::Bind::ExistsIn(derived, Framework::Scripting::Bind::Side::Server), true);
         // What a runtime asks is its own side, but a Shared question has an answer: only what is everywhere.
-        EQUALS(ExistsIn(empty, Side::Shared), true);
-        EQUALS(ExistsIn(clientChat, Side::Shared), false);
+        EQUALS(Framework::Scripting::Bind::ExistsIn(empty, Framework::Scripting::Bind::Side::Shared), true);
+        EQUALS(Framework::Scripting::Bind::ExistsIn(clientChat, Framework::Scripting::Bind::Side::Shared), false);
 
         // The order of recording decides nothing between the two, for Chat as for Voice.
-        ApiCatalog reversed;
+        Framework::Scripting::Bind::ApiCatalog reversed;
         reversed.Record(&clientChat);
         reversed.Record(&serverChat);
-        EQUALS(reversed.Find("Chat", Side::Server) == &serverChat, true);
-        EQUALS(reversed.Find("Chat", Side::Client) == &clientChat, true);
-        ClassDesc serverVoice;
+        EQUALS(reversed.Find("Chat", Framework::Scripting::Bind::Side::Server) == &serverChat, true);
+        EQUALS(reversed.Find("Chat", Framework::Scripting::Bind::Side::Client) == &clientChat, true);
+        Framework::Scripting::Bind::ClassDesc serverVoice;
         serverVoice.name = "Voice";
-        serverVoice.side = Side::Server;
-        ClassDesc clientVoice;
+        serverVoice.side = Framework::Scripting::Bind::Side::Server;
+        Framework::Scripting::Bind::ClassDesc clientVoice;
         clientVoice.name = "Voice";
-        clientVoice.side = Side::Client;
+        clientVoice.side = Framework::Scripting::Bind::Side::Client;
         for (const bool serverFirst : {true, false}) {
-            ApiCatalog voices;
+            Framework::Scripting::Bind::ApiCatalog voices;
             voices.Record(serverFirst ? &serverVoice : &clientVoice);
             voices.Record(serverFirst ? &clientVoice : &serverVoice);
-            EQUALS(voices.Find("Voice", Side::Server) == &serverVoice, true);
-            EQUALS(voices.Find("Voice", Side::Client) == &clientVoice, true);
+            EQUALS(voices.Find("Voice", Framework::Scripting::Bind::Side::Server) == &serverVoice, true);
+            EQUALS(voices.Find("Voice", Framework::Scripting::Bind::Side::Client) == &clientVoice, true);
         }
     });
 
     IT("keeps descriptions in recording order and ignores one already recorded", {
-        ClassDesc first;
+        Framework::Scripting::Bind::ClassDesc first;
         first.name = "First";
-        ClassDesc second;
+        Framework::Scripting::Bind::ClassDesc second;
         second.name = "Second";
 
-        ApiCatalog catalog;
+        Framework::Scripting::Bind::ApiCatalog catalog;
         EQUALS(catalog.Entries().empty(), true);
         catalog.Record(&first);
         catalog.Record(&second);
@@ -536,16 +532,14 @@ MODULE(bind_types, {
     });
 
     IT("reads the name of a description filled in after it was recorded", {
-        ClassDesc late;
+        Framework::Scripting::Bind::ClassDesc late;
 
-        ApiCatalog catalog;
+        Framework::Scripting::Bind::ApiCatalog catalog;
         catalog.Record(&late);
         late.name = "Late";
 
         EQUALS(catalog.Find("Late") == &late, true);
     });
 
-    IT("shares one process-wide catalog", {
-        EQUALS(&ApiCatalog::Get() == &ApiCatalog::Get(), true);
-    });
+    IT("shares one process-wide catalog", { EQUALS(&Framework::Scripting::Bind::ApiCatalog::Get() == &Framework::Scripting::Bind::ApiCatalog::Get(), true); });
 });

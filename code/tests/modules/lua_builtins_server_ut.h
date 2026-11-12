@@ -27,14 +27,6 @@
 // What only the server gives its scripts, declared once for JavaScript and Lua: the admission gate with a gate
 // resource written in Lua, held against connection_gate_ut.h, and Voice from both languages.
 namespace LuaBuiltinsServerTest {
-    using namespace Framework::Scripting;
-    using Framework::Integrations::Server::AdmissionDecision;
-    using Framework::Integrations::Server::ConnectionGate;
-    using Framework::Integrations::Server::Scripting::Builtins::PendingConnection;
-    using Framework::Integrations::Server::Scripting::Builtins::Voice;
-    using Framework::Voice::VoiceServer;
-    using Framework::Voice::VoiceTier;
-
     // What the gate resource of connection_gate_ut.h does, in Lua: the nickname says what the handler is to do.
     inline constexpr const char *kLuaGate = R"(
         Events.on("playerConnecting", function(connection)
@@ -86,7 +78,7 @@ namespace LuaBuiltinsServerTest {
     // decisions are what the instance acts on, and those are what is asserted.
     struct Admission final {
         LuaResourcesTest::Server server;
-        ConnectionGate gate;
+        Framework::Integrations::Server::ConnectionGate gate;
         bool published = false;
 
         ~Admission() {
@@ -129,8 +121,8 @@ namespace LuaBuiltinsServerTest {
         }
 
         // Ticks the module the way the server does until the gate settles something, or gives up.
-        std::vector<AdmissionDecision> Settle(int maxMs = 1000) {
-            std::vector<AdmissionDecision> out;
+        std::vector<Framework::Integrations::Server::AdmissionDecision> Settle(int maxMs = 1000) {
+            std::vector<Framework::Integrations::Server::AdmissionDecision> out;
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(maxMs);
             while (out.empty() && std::chrono::steady_clock::now() < deadline) {
                 server.module.Update();
@@ -165,12 +157,12 @@ namespace LuaBuiltinsServerTest {
     };
 
     // The names of the methods and of the properties a class declares, in the order it declares them.
-    inline std::string ClassMembers(const Bind::ClassDesc &described) {
+    inline std::string ClassMembers(const Framework::Scripting::Bind::ClassDesc &described) {
         std::string names;
-        for (const Bind::FunctionDesc &function : described.functions) {
+        for (const Framework::Scripting::Bind::FunctionDesc &function : described.functions) {
             names += (names.empty() ? "" : ",") + function.name + "()";
         }
-        for (const Bind::PropertyDesc &property : described.properties) {
+        for (const Framework::Scripting::Bind::PropertyDesc &property : described.properties) {
             names += (names.empty() ? "" : ",") + property.name;
         }
         return names;
@@ -180,15 +172,15 @@ namespace LuaBuiltinsServerTest {
     // that relays to nobody. `p` and `q` are the two players and `e` an entity nobody owns, in both languages.
     struct Booth final {
         LuaBuiltinsPlayerTest::Stage stage;
-        VoiceServer voice;
+        Framework::Voice::VoiceServer voice;
         uint64_t p;
         uint64_t q;
 
         explicit Booth(bool withServer = true): p(static_cast<uint64_t>(stage.players[0]->ownerGUID)), q(static_cast<uint64_t>(stage.players[1]->ownerGUID)) {
             stage.js.js.Enter([](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-                Voice::Register(isolate, context->Global());
+                Framework::Integrations::Server::Scripting::Builtins::Voice::Register(isolate, context->Global());
             });
-            Voice::RegisterLua(stage.lua.Runtime());
+            Framework::Integrations::Server::Scripting::Builtins::Voice::RegisterLua(stage.lua.Runtime());
             stage.lua.Run("q = Player.new(" + stage.b + ")");
             stage.js.Eval("globalThis.q = new Player(" + stage.b + "); 0");
             if (withServer) {
@@ -211,14 +203,11 @@ namespace LuaBuiltinsServerTest {
 } // namespace LuaBuiltinsServerTest
 
 MODULE(lua_builtins_server, {
-    using namespace LuaBuiltinsServerTest;
-    using LuaBuiltinsCoreTest::Members;
-
     // ==================== The admission gate ====================
 
     IT("holds a connection for a gate written in Lua, and admits it when the handler returns", {
-        Admission admission;
-        admission.server.files.Resource("gate", {{"main.lua", kLuaGate}});
+        LuaBuiltinsServerTest::Admission admission;
+        admission.server.files.Resource("gate", {{"main.lua", LuaBuiltinsServerTest::kLuaGate}});
         EQUALS(admission.Start(), true);
 
         EQUALS(admission.Begin(2, "admit"), true);
@@ -235,7 +224,7 @@ MODULE(lua_builtins_server, {
     });
 
     IT("admits at once when no script of either language listens", {
-        Admission admission;
+        LuaBuiltinsServerTest::Admission admission;
         admission.server.files.Resource("idle", {{"main.lua", "Events.on('somethingElse', function() end)"}});
         EQUALS(admission.Start(), true);
 
@@ -244,10 +233,10 @@ MODULE(lua_builtins_server, {
     });
 
     IT("hands a Lua handler the connection as a handle with the properties of JavaScript", {
-        EQUALS(ClassMembers(PendingConnection::Definition().Describe()), "reject(),update(),isPending(),nickname,steamId,epicId,discordId,discordName,hardwareId,ticket,ip");
+        EQUALS(LuaBuiltinsServerTest::ClassMembers(Framework::Integrations::Server::Scripting::Builtins::PendingConnection::Definition().Describe()), "reject(),update(),isPending(),nickname,steamId,epicId,discordId,discordName,hardwareId,ticket,ip");
 
-        Admission admission;
-        admission.server.files.Resource("gate", {{"main.lua", kLuaGate}});
+        LuaBuiltinsServerTest::Admission admission;
+        admission.server.files.Resource("gate", {{"main.lua", LuaBuiltinsServerTest::kLuaGate}});
         EQUALS(admission.Start(), true);
         EQUALS(admission.Begin(11, "probe", "192.168.1.20"), true);
 
@@ -255,14 +244,14 @@ MODULE(lua_builtins_server, {
         EQUALS(admission.Lua("table.concat({probe.nickname, probe.steamId, probe.epicId, probe.discordId, probe.discordName, probe.hardwareId, probe.ticket, probe.ip}, '|')"), "probe|76561198000000000|epic|discord|discord-name|hardware|one-time-ticket|192.168.1.20");
         EQUALS(admission.Lua("type(probe.reject) .. ' ' .. type(probe.update) .. ' ' .. type(probe.isPending)"), "function function function");
         // Read-only, as the properties of the JavaScript object are.
-        EQUALS(LuaResourcesTest::Contains(admission.Lua("(function() probe.nickname = 'other' end)()"), "<error>"), true);
+        EQUALS(LuaRuntimeTest::Contains(admission.Lua("(function() probe.nickname = 'other' end)()"), "<error>"), true);
         EQUALS(admission.Lua("probe.nickname"), "probe");
         // JavaScript has no PendingConnection global, and neither has Lua.
         EQUALS(admission.Lua("type(PendingConnection)"), "nil");
     });
 
     IT("leaves the connection of a JavaScript handler the plain object it was", {
-        Admission admission;
+        LuaBuiltinsServerTest::Admission admission;
         admission.server.files.Resource("js-gate", {{"main.js", "Events.on('playerConnecting', (connection) => { globalThis.probe = connection; });"}});
         EQUALS(admission.Start(), true);
         EQUALS(admission.Begin(11, "probe"), true);
@@ -273,10 +262,10 @@ MODULE(lua_builtins_server, {
         // Its own keys are the members the definition declares, the properties and then the functions: one added
         // there cannot be missing here.
         std::string declared;
-        for (const Bind::PropertyDesc &property : PendingConnection::Definition().Describe().properties) {
+        for (const Framework::Scripting::Bind::PropertyDesc &property : Framework::Integrations::Server::Scripting::Builtins::PendingConnection::Definition().Describe().properties) {
             declared += (declared.empty() ? "" : ",") + property.name;
         }
-        for (const Bind::FunctionDesc &function : PendingConnection::Definition().Describe().functions) {
+        for (const Framework::Scripting::Bind::FunctionDesc &function : Framework::Integrations::Server::Scripting::Builtins::PendingConnection::Definition().Describe().functions) {
             declared += "," + function.name;
         }
         EQUALS(admission.Js("Object.keys(probe).join()"), declared);
@@ -295,7 +284,7 @@ MODULE(lua_builtins_server, {
     });
 
     IT("lets a JavaScript handler call the functions of a connection without a receiver", {
-        Admission admission;
+        LuaBuiltinsServerTest::Admission admission;
         admission.server.files.Resource("js-gate", {{"main.js", "Events.on('playerConnecting', (connection) => { globalThis.probe = connection; });"}});
         EQUALS(admission.Start(), true);
         EQUALS(admission.Begin(11, "probe"), true);
@@ -308,18 +297,18 @@ MODULE(lua_builtins_server, {
     });
 
     IT("refuses with the reason a Lua handler gives, the generic one without, and cuts an overlong one", {
-        Admission admission;
-        admission.server.files.Resource("gate", {{"main.lua", kLuaGate}});
+        LuaBuiltinsServerTest::Admission admission;
+        admission.server.files.Resource("gate", {{"main.lua", LuaBuiltinsServerTest::kLuaGate}});
         EQUALS(admission.Start(), true);
 
         EQUALS(admission.Decide(3, "refuse"), "refused: Not on the whitelist");
         EQUALS(admission.Decide(4, "refuse-default"), "refused: The server refused the connection.");
-        EQUALS(admission.Decide(5, "refuse-long"), "refused: " + std::string(ConnectionGate::kMaxReasonLength, 'x'));
+        EQUALS(admission.Decide(5, "refuse-long"), "refused: " + std::string(Framework::Integrations::Server::ConnectionGate::kMaxReasonLength, 'x'));
     });
 
     IT("fails closed when a Lua handler raises, at once or after a sleep", {
-        Admission admission;
-        admission.server.files.Resource("gate", {{"main.lua", kLuaGate}});
+        LuaBuiltinsServerTest::Admission admission;
+        admission.server.files.Resource("gate", {{"main.lua", LuaBuiltinsServerTest::kLuaGate}});
         EQUALS(admission.Start(), true);
 
         // The player is not shown the script's error.
@@ -331,14 +320,14 @@ MODULE(lua_builtins_server, {
     });
 
     IT("waits for a Lua handler that sleeps before it admits or refuses", {
-        Admission admission;
-        admission.server.files.Resource("gate", {{"main.lua", kLuaGate}});
+        LuaBuiltinsServerTest::Admission admission;
+        admission.server.files.Resource("gate", {{"main.lua", LuaBuiltinsServerTest::kLuaGate}});
         EQUALS(admission.Start(), true);
 
         const auto begun = std::chrono::steady_clock::now();
         EQUALS(admission.Begin(7, "async-admit"), true);
         admission.server.module.Update();
-        std::vector<AdmissionDecision> early;
+        std::vector<Framework::Integrations::Server::AdmissionDecision> early;
         admission.gate.Collect(early);
         EQUALS(early.empty(), true);
         EQUALS(admission.gate.IsPending(7), true);
@@ -352,8 +341,8 @@ MODULE(lua_builtins_server, {
     });
 
     IT("refuses a connection whose Lua handler has not returned once the timeout passes", {
-        Admission admission;
-        admission.server.files.Resource("gate", {{"main.lua", kLuaGate}});
+        LuaBuiltinsServerTest::Admission admission;
+        admission.server.files.Resource("gate", {{"main.lua", LuaBuiltinsServerTest::kLuaGate}});
         EQUALS(admission.Start(), true);
 
         const auto begun = std::chrono::steady_clock::now();
@@ -369,8 +358,8 @@ MODULE(lua_builtins_server, {
 
     IT("restarts the timeout each time a Lua handler updates the player", {
         Framework::Networking::NetworkServer network;
-        Admission admission;
-        admission.server.files.Resource("gate", {{"main.lua", kLuaGate}});
+        LuaBuiltinsServerTest::Admission admission;
+        admission.server.files.Resource("gate", {{"main.lua", LuaBuiltinsServerTest::kLuaGate}});
         EQUALS(admission.Start(200, &network), true);
 
         // 240 ms of handler against a timeout of 200: only the update in the middle keeps it alive.
@@ -379,8 +368,8 @@ MODULE(lua_builtins_server, {
     });
 
     IT("reports pending while undecided and not after, and a decided connection's calls do nothing", {
-        Admission admission;
-        admission.server.files.Resource("gate", {{"main.lua", kLuaGate}});
+        LuaBuiltinsServerTest::Admission admission;
+        admission.server.files.Resource("gate", {{"main.lua", LuaBuiltinsServerTest::kLuaGate}});
         EQUALS(admission.Start(), true);
 
         EQUALS(admission.Begin(11, "probe"), true);
@@ -400,8 +389,8 @@ MODULE(lua_builtins_server, {
     });
 
     IT("refuses a wrong argument in the words of JavaScript", {
-        Admission admission;
-        admission.server.files.Resource("gate", {{"main.lua", kLuaGate}});
+        LuaBuiltinsServerTest::Admission admission;
+        admission.server.files.Resource("gate", {{"main.lua", LuaBuiltinsServerTest::kLuaGate}});
         admission.server.files.Resource("js-gate", {{"main.js", "Events.on('playerConnecting', (connection) => { globalThis.probe = connection; });"}});
         EQUALS(admission.Start(), true);
         EQUALS(admission.Begin(11, "probe"), true);
@@ -437,11 +426,11 @@ MODULE(lua_builtins_server, {
     });
 
     IT("asks a JavaScript gate and a Lua gate of one server, and lets either refuse", {
-        Admission admission;
-        admission.server.files.Resource("gate", {{"main.lua", kLuaGate}});
-        admission.server.files.Resource("js-gate", {{"main.js", kJsGate}});
+        LuaBuiltinsServerTest::Admission admission;
+        admission.server.files.Resource("gate", {{"main.lua", LuaBuiltinsServerTest::kLuaGate}});
+        admission.server.files.Resource("js-gate", {{"main.js", LuaBuiltinsServerTest::kJsGate}});
         EQUALS(admission.Start(), true);
-        EQUALS(admission.server.module.GetResourceManager()->GetEvents().GetListenerCount(ConnectionGate::kEventName), 2u);
+        EQUALS(admission.server.module.GetResourceManager()->GetEvents().GetListenerCount(Framework::Integrations::Server::ConnectionGate::kEventName), 2u);
 
         // Both are asked, and both let it in.
         EQUALS(admission.Decide(20, "admit"), "admitted");
@@ -462,7 +451,7 @@ MODULE(lua_builtins_server, {
     });
 
     IT("carries the connection between the languages as itself", {
-        Admission admission;
+        LuaBuiltinsServerTest::Admission admission;
         // Each language hands the connection it was given on to the other, which answers it.
         admission.server.files.Resource("gate", {{"main.lua", R"(
             Events.on("playerConnecting", function(connection)
@@ -496,7 +485,7 @@ MODULE(lua_builtins_server, {
     });
 
     IT("raises for a method of a connection called with a dot in Lua, and leaves the connection waiting", {
-        Admission admission;
+        LuaBuiltinsServerTest::Admission admission;
         admission.server.files.Resource("gate", {{"main.lua", "Events.on('playerConnecting', function(connection) probe = connection sleep(60000) end)"}});
         EQUALS(admission.Start(2000), true);
         EQUALS(admission.Begin(11, "probe"), true);
@@ -514,7 +503,7 @@ MODULE(lua_builtins_server, {
     });
 
     IT("carries a connection to another runtime while it waits and once it is decided", {
-        Admission admission;
+        LuaBuiltinsServerTest::Admission admission;
         // Three runtimes: a JavaScript gate and a Lua gate that keep the connection, and a JavaScript resource
         // that only logs. `hand` sends the kept connection to the two other runtimes.
         admission.server.files.Resource("js-gate", {{"main.js", R"(
@@ -584,14 +573,14 @@ MODULE(lua_builtins_server, {
     // ==================== Voice ====================
 
     IT("gives a Lua state the Voice of JavaScript, under the same names", {
-        EQUALS(Members(Voice::Definition()),
+        EQUALS(LuaBuiltinsCoreTest::Members(Framework::Integrations::Server::Scripting::Builtins::Voice::Definition()),
             "setRange(),getRange(),setPlayerRange(),getPlayerRange(),setTierRange(),getTierRange(),setPlayerTier(),getPlayerTier(),setPlayerMuted(),isPlayerMuted(),setPlayerDeaf(),isPlayerDeaf(),setLocalMute(),isLocallyMuted(),isPlayerVoiceEnabled(),"
             "isPlayerTalking()");
 
-        Booth booth;
+        LuaBuiltinsServerTest::Booth booth;
         EQUALS(booth.stage.lua.ready, true);
         std::string missing;
-        for (const Bind::FunctionDesc &function : Voice::Definition().Describe().functions) {
+        for (const Framework::Scripting::Bind::FunctionDesc &function : Framework::Integrations::Server::Scripting::Builtins::Voice::Definition().Describe().functions) {
             if (booth.Lua("type(Voice." + function.name + ")") != "function" || booth.Js("typeof Voice." + function.name) != "function") {
                 missing += function.name + " ";
             }
@@ -609,7 +598,7 @@ MODULE(lua_builtins_server, {
     });
 
     IT("sets how far voice carries from Lua as from JavaScript", {
-        Booth booth;
+        LuaBuiltinsServerTest::Booth booth;
         const auto &router = booth.voice.GetRouter();
 
         EQUALS(booth.Lua("Voice.getRange()"), booth.Js("Voice.getRange()") + ".0");
@@ -622,7 +611,7 @@ MODULE(lua_builtins_server, {
         EQUALS(booth.Lua("Voice.getRange()"), "12.5");
 
         booth.Lua("Voice.setTierRange(0, 2)");
-        EQUALS(booth.voice.GetTierRange(VoiceTier::Whisper), 2.0f);
+        EQUALS(booth.voice.GetTierRange(Framework::Voice::VoiceTier::Whisper), 2.0f);
         EQUALS(booth.Lua("Voice.getTierRange(0)"), "2.0");
         EQUALS(booth.Js("Voice.getTierRange(0)"), "2");
         booth.Js("Voice.setTierRange(2, 60)");
@@ -640,7 +629,7 @@ MODULE(lua_builtins_server, {
 
         EQUALS(booth.Lua("Voice.getPlayerTier(p)"), "1");
         booth.Lua("Voice.setPlayerTier(p, 2)");
-        EQUALS(router.GetPlayerTier(booth.p) == VoiceTier::Shout, true);
+        EQUALS(router.GetPlayerTier(booth.p) == Framework::Voice::VoiceTier::Shout, true);
         EQUALS(booth.Lua("math.type(Voice.getPlayerTier(p))"), "integer");
         EQUALS(booth.Js("Voice.getPlayerTier(p)"), "2");
         booth.Js("Voice.setPlayerTier(q, 0)");
@@ -648,7 +637,7 @@ MODULE(lua_builtins_server, {
     });
 
     IT("mutes and deafens from Lua as from JavaScript", {
-        Booth booth;
+        LuaBuiltinsServerTest::Booth booth;
         const auto &router = booth.voice.GetRouter();
 
         EQUALS(booth.Lua("tostring(Voice.isPlayerMuted(p)) .. tostring(Voice.isPlayerDeaf(p)) .. tostring(Voice.isLocallyMuted(p, q))"), "falsefalsefalse");
@@ -711,7 +700,7 @@ MODULE(lua_builtins_server, {
     });
 
     IT("refuses a wrong argument of Voice in the words of JavaScript", {
-        Booth booth;
+        LuaBuiltinsServerTest::Booth booth;
         struct Case final {
             const char *call;
             const char *error; // as JavaScript names it; Lua raises what follows the name
@@ -760,7 +749,7 @@ MODULE(lua_builtins_server, {
     });
 
     IT("answers with the defaults, and sets nothing, on a server without voice", {
-        Booth booth(false);
+        LuaBuiltinsServerTest::Booth booth(false);
         const std::string range = std::to_string(static_cast<int>(Framework::Voice::kDefaultProximityRange));
 
         EQUALS(booth.Lua("math.tointeger(Voice.getRange())"), range);

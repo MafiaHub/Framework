@@ -115,11 +115,9 @@ namespace Framework::Scripting::Builtins {
     }
 
     const Bind::Class<Color> &Color::Definition() {
-        using Bind::Doc;
-        using Bind::LuaMetaEvent;
         static const auto definition =
             Bind::Class<Color>("Color", "Mutable RGBA color, with components stored from 0 to 1.")
-                .Constructor<float, float, float, std::optional<float>>(Doc("Creates a color from normalized RGBA components.")
+                .Constructor<float, float, float, std::optional<float>>(Framework::Scripting::Bind::Doc("Creates a color from normalized RGBA components.")
                         .Param("r", "Initial red component from 0 to 1.")
                         .Param("g", "Initial green component from 0 to 1.")
                         .Param("b", "Initial blue component from 0 to 1.")
@@ -127,40 +125,40 @@ namespace Framework::Scripting::Builtins {
                 // Lua has the declared constructor.
                 .V8Constructor(&ConstructLenient)
                 // Instance methods
-                .Method("lerp", &Color::lerp, Doc("Linearly interpolates every component toward a target in place.").Param("target", "Destination color.").Param("t", "Interpolation factor; 0 keeps this color and 1 reaches target.").Returns("This mutated color for chaining."))
+                .Method("lerp", &Color::lerp, Framework::Scripting::Bind::Doc("Linearly interpolates every component toward a target in place.").Param("target", "Destination color.").Param("t", "Interpolation factor; 0 keeps this color and 1 reaches target.").Returns("This mutated color for chaining."))
                 .Method("set", &Color::set,
-                    Doc("Replaces this color's normalized components in place.")
+                    Framework::Scripting::Bind::Doc("Replaces this color's normalized components in place.")
                         .Param("r", "Replacement red component from 0 to 1.")
                         .Param("g", "Replacement green component from 0 to 1.")
                         .Param("b", "Replacement blue component from 0 to 1.")
                         .Param("a", "Optional replacement alpha; defaults to 1 when omitted.")
                         .Returns("This mutated color for chaining."))
-                .Method("clone", &Color::clone, Doc("Creates an independent copy of this color.").Returns("New color with the same components."))
-                .Method("toHex", &Color::toHex, Doc("Converts normalized components to a hexadecimal CSS-style string.").Param("includeAlpha", "Whether to append the alpha byte; defaults to false.").Returns("Lowercase #rrggbb or #rrggbbaa string."))
-                .Method("toString", &Color::toString, Doc("Formats this color for logging and debugging.").Returns("Text in Color(r, g, b, a) form."))
+                .Method("clone", &Color::clone, Framework::Scripting::Bind::Doc("Creates an independent copy of this color.").Returns("New color with the same components."))
+                .Method("toHex", &Color::toHex, Framework::Scripting::Bind::Doc("Converts normalized components to a hexadecimal CSS-style string.").Param("includeAlpha", "Whether to append the alpha byte; defaults to false.").Returns("Lowercase #rrggbb or #rrggbbaa string."))
+                .Method("toString", &Color::toString, Framework::Scripting::Bind::Doc("Formats this color for logging and debugging.").Returns("Text in Color(r, g, b, a) form."))
                 .Property("r", &Color::getR, &Color::setR, "Mutable normalized red component.")
                 .Property("g", &Color::getG, &Color::setG, "Mutable normalized green component.")
                 .Property("b", &Color::getB, &Color::setB, "Mutable normalized blue component.")
                 .Property("a", &Color::getA, &Color::setA, "Mutable normalized alpha component.")
                 // Static factory methods
                 .Static("fromHex", &Color::fromHex,
-                    Doc("Parses a hexadecimal color string.").Param("hex", "Hexadecimal color in #RRGGBB or #RRGGBBAA form; the leading # is optional. Three- and four-digit shorthands are not supported.").Returns("Parsed color, or opaque white when the input is invalid."))
+                    Framework::Scripting::Bind::Doc("Parses a hexadecimal color string.").Param("hex", "Hexadecimal color in #RRGGBB or #RRGGBBAA form; the leading # is optional. Three- and four-digit shorthands are not supported.").Returns("Parsed color, or opaque white when the input is invalid."))
                 .Static("fromRGB", &Color::fromRGB,
-                    Doc("Creates a normalized color from byte components.")
+                    Framework::Scripting::Bind::Doc("Creates a normalized color from byte components.")
                         .Param("r", "Red byte from 0 to 255.")
                         .Param("g", "Green byte from 0 to 255.")
                         .Param("b", "Blue byte from 0 to 255.")
                         .Param("a", "Optional alpha byte from 0 to 255; defaults to 255.")
                         .Returns("New normalized color."))
-                .Static("white", &Color::white, Doc("Creates opaque white.").Returns("New Color(1, 1, 1, 1)."))
-                .Static("black", &Color::black, Doc("Creates opaque black.").Returns("New Color(0, 0, 0, 1)."))
-                .Static("red", &Color::red, Doc("Creates opaque red.").Returns("New Color(1, 0, 0, 1)."))
-                .Static("green", &Color::green, Doc("Creates opaque green.").Returns("New Color(0, 1, 0, 1)."))
-                .Static("blue", &Color::blue, Doc("Creates opaque blue.").Returns("New Color(0, 0, 1, 1)."))
-                .Static("yellow", &Color::yellow, Doc("Creates opaque yellow.").Returns("New Color(1, 1, 0, 1)."))
-                .Static("cyan", &Color::cyan, Doc("Creates opaque cyan.").Returns("New Color(0, 1, 1, 1)."))
-                .Static("magenta", &Color::magenta, Doc("Creates opaque magenta.").Returns("New Color(1, 0, 1, 1)."))
-                .Static("transparent", &Color::transparent, Doc("Creates fully transparent black.").Returns("New Color(0, 0, 0, 0)."))
+                .Static("white", &Color::white, Framework::Scripting::Bind::Doc("Creates opaque white.").Returns("New Color(1, 1, 1, 1)."))
+                .Static("black", &Color::black, Framework::Scripting::Bind::Doc("Creates opaque black.").Returns("New Color(0, 0, 0, 1)."))
+                .Static("red", &Color::red, Framework::Scripting::Bind::Doc("Creates opaque red.").Returns("New Color(1, 0, 0, 1)."))
+                .Static("green", &Color::green, Framework::Scripting::Bind::Doc("Creates opaque green.").Returns("New Color(0, 1, 0, 1)."))
+                .Static("blue", &Color::blue, Framework::Scripting::Bind::Doc("Creates opaque blue.").Returns("New Color(0, 0, 1, 1)."))
+                .Static("yellow", &Color::yellow, Framework::Scripting::Bind::Doc("Creates opaque yellow.").Returns("New Color(1, 1, 0, 1)."))
+                .Static("cyan", &Color::cyan, Framework::Scripting::Bind::Doc("Creates opaque cyan.").Returns("New Color(0, 1, 1, 1)."))
+                .Static("magenta", &Color::magenta, Framework::Scripting::Bind::Doc("Creates opaque magenta.").Returns("New Color(1, 0, 1, 1)."))
+                .Static("transparent", &Color::transparent, Framework::Scripting::Bind::Doc("Creates fully transparent black.").Returns("New Color(0, 0, 0, 0)."))
                 // What JSON.stringify asks a JavaScript object for. Lua writes the same object from JsonProperties.
                 .V8Hook([](v8pp::class_<Color> &cls, v8::Isolate *) {
                     cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ r: number; g: number; b: number; a: number }", {}, "Converts this color to a plain object for JSON.stringify.", "Object containing the current normalized components."));
@@ -169,7 +167,7 @@ namespace Framework::Scripting::Builtins {
                 // Crosses between runtimes as its glm value.
                 .Transfer(&Color::vec)
                 // Lua operator. Two colors are equal when their components are.
-                .LuaMeta(LuaMetaEvent::Eq, [](const Color &left, const Color &right) {
+                .LuaMeta(Framework::Scripting::Bind::LuaMetaEvent::Eq, [](const Color &left, const Color &right) {
                     return left.vec() == right.vec();
                 });
         return definition;

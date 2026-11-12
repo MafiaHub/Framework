@@ -64,14 +64,11 @@ class ScriptingCatalogGolden {
     // server brings up outside it, then returns the catalog they recorded, normalised. Null when the
     // engine does not start.
     static nlohmann::json BuildServerCatalog() {
-        using namespace Framework::Scripting;
-        namespace ServerBuiltins = Framework::Integrations::Server::Scripting::Builtins;
-
-        NodeEngine engine({});
-        if (engine.Init() != ScriptingError::SCRIPTING_NONE) {
+        Framework::Scripting::NodeEngine engine({});
+        if (engine.Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
             return nullptr;
         }
-        ResourceManager manager(&engine, {});
+        Framework::Scripting::ResourceManager manager(&engine, {});
 
         nlohmann::json catalog;
         {
@@ -83,32 +80,32 @@ class ScriptingCatalogGolden {
             v8::Context::Scope contextScope(context);
             v8::Local<v8::Object> global = context->Global();
 
-            SetScriptingCatalog(isolate, kCatalogName);
-            SetScriptingEnvironment(isolate, /*isClient*/ false);
-            v8pp::metadata::registry &registry = GetScriptingCatalog(isolate);
+            Framework::Scripting::SetScriptingCatalog(isolate, kCatalogName);
+            Framework::Scripting::SetScriptingEnvironment(isolate, /*isClient*/ false);
+            v8pp::metadata::registry &registry = Framework::Scripting::GetScriptingCatalog(isolate);
 
-            RegisterEventMetadata(registry);
+            Framework::Scripting::RegisterEventMetadata(registry);
             Framework::Integrations::Server::Scripting::RegisterServerEventMetadata(registry);
-            RegisterTimerMetadata(registry, /*isClient*/ false);
+            Framework::Scripting::RegisterTimerMetadata(registry, /*isClient*/ false);
 
-            Builtins::RegisterValueTypes(isolate, global);
+            Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
             manager.GetEvents().Register(isolate, context, global, &manager);
-            Builtins::Messages::Register(isolate, context, global, &manager);
-            Builtins::Imports::Register(isolate, context, global, &manager);
-            Builtins::Exports::Register(isolate, context, global, &manager);
-            Builtins::Console::Register(isolate, context, &manager);
-            Builtins::ExecutionEnvironment::Register(isolate, context, global, /*isClient*/ false);
-            Builtins::Chat::Register(isolate, global);
-            ServerBuiltins::Voice::Register(isolate, global);
-            ServerBuiltins::PendingConnection::Register(isolate);
+            Framework::Scripting::Builtins::Messages::Register(isolate, context, global, &manager);
+            Framework::Scripting::Builtins::Imports::Register(isolate, context, global, &manager);
+            Framework::Scripting::Builtins::Exports::Register(isolate, context, global, &manager);
+            Framework::Scripting::Builtins::Console::Register(isolate, context, &manager);
+            Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, /*isClient*/ false);
+            Framework::Scripting::Builtins::Chat::Register(isolate, global);
+            Framework::Integrations::Server::Scripting::Builtins::Voice::Register(isolate, global);
+            Framework::Integrations::Server::Scripting::Builtins::PendingConnection::Register(isolate);
 
             // The handle classes are not part of RegisterFrameworkBindings: the server builds them on
             // first use, or a game registers them. TextLabel goes through Register because that is
             // where its static create and TextLabelOptions are recorded.
-            Builtins::Entity::GetClass(isolate);
-            Builtins::Player::GetClass(isolate);
-            Builtins::StateBag::GetClass(isolate);
-            Builtins::TextLabel::Register(isolate, global);
+            Framework::Scripting::Builtins::Entity::GetClass(isolate);
+            Framework::Scripting::Builtins::Player::GetClass(isolate);
+            Framework::Scripting::Builtins::StateBag::GetClass(isolate);
+            Framework::Scripting::Builtins::TextLabel::Register(isolate, global);
 
             catalog = nlohmann::json::parse(v8pp::metadata::to_json(registry), nullptr, /*allow_exceptions*/ false);
         }

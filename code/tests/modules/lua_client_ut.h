@@ -43,10 +43,6 @@
 // Lua on a client: the V8 engine, the Lua host and the resource manager put together as ClientScriptingModule puts
 // them, which builds on Windows only. The scripts are what a server sent, so the limits are asserted here.
 namespace LuaClientTest {
-    using namespace Framework::Scripting;
-    using Framework::Utils::Vfs;
-    using LuaRuntimeTest::Contains;
-
     using Sources = std::vector<std::pair<std::string, std::string>>;
 
     // The directory of a resource on disk, as a server has it. Removed with the object.
@@ -79,21 +75,21 @@ namespace LuaClientTest {
     // Packages a resource of `directory` as a server does and mounts it where a client reads its resources.
     // Empty when it is mounted, the error otherwise. Unmount it with `<name>.zip`.
     inline std::string MountPackaged(const Directory &directory, const std::string &name) {
-        Vfs::Get().Init(nullptr);
-        PackageManifest manifest;
+        Framework::Utils::Vfs::Get().Init(nullptr);
+        Framework::Scripting::PackageManifest manifest;
         if (!manifest.Parse((directory.root / name / "package.json").string())) {
             return "manifest";
         }
-        PackagedResource packaged;
+        Framework::Scripting::PackagedResource packaged;
         std::string zip, error;
-        if (!ResourcePackager::Package(name, (directory.root / name).string(), manifest, nullptr, packaged, error)) {
+        if (!Framework::Scripting::ResourcePackager::Package(name, (directory.root / name).string(), manifest, nullptr, packaged, error)) {
             return error;
         }
         if (!Framework::Utils::Package::Open(packaged.blob, nullptr, zip, error)) {
             return error;
         }
-        Vfs::Get().Unmount(name + ".zip");
-        return Vfs::Get().MountMemory(std::move(zip), name + ".zip", Vfs::ResourcePath(name), error) ? std::string() : error;
+        Framework::Utils::Vfs::Get().Unmount(name + ".zip");
+        return Framework::Utils::Vfs::Get().MountMemory(std::move(zip), name + ".zip", Framework::Utils::Vfs::ResourcePath(name), error) ? std::string() : error;
     }
 
     // Writes one resource, packages it and mounts it.
@@ -126,14 +122,14 @@ namespace LuaClientTest {
     // its order, with the shared bindings of JavaScript only.
     struct Client final {
         std::string resourcesPath;
-        V8Engine v8;
-        LuaClientHost lua;
-        std::unique_ptr<ResourceManager> manager;
+        Framework::Scripting::V8Engine v8;
+        Framework::Scripting::LuaClientHost lua;
+        std::unique_ptr<Framework::Scripting::ResourceManager> manager;
         // "<resource>: <first line>" for each error the manager told its listeners of.
         std::vector<std::string> errors;
 
-        explicit Client(std::string path = Vfs::kResourceMountRoot, LuaEngineOptions options = LuaEngineOptions::Client()): resourcesPath(std::move(path)), lua(options) {
-            Vfs::Get().Init(nullptr);
+        explicit Client(std::string path = Framework::Utils::Vfs::kResourceMountRoot, Framework::Scripting::LuaEngineOptions options = Framework::Scripting::LuaEngineOptions::Client()): resourcesPath(std::move(path)), lua(options) {
+            Framework::Utils::Vfs::Get().Init(nullptr);
         }
 
         ~Client() {
@@ -142,10 +138,10 @@ namespace LuaClientTest {
 
         bool Init() {
             v8.SetModuleRootPath(resourcesPath);
-            if (v8.Init() != ScriptingError::SCRIPTING_NONE) {
+            if (v8.Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
                 return false;
             }
-            ResourceManagerConfig config;
+            Framework::Scripting::ResourceManagerConfig config;
             config.resourcesPath         = resourcesPath;
             config.isClient              = true;
             config.cascadeStopDependents = true;
@@ -153,20 +149,20 @@ namespace LuaClientTest {
                 manager->SetConfig(config);
             }
             else {
-                manager = std::make_unique<ResourceManager>(&v8, config);
+                manager = std::make_unique<Framework::Scripting::ResourceManager>(&v8, config);
                 manager->AddOnResourceError([this](const std::string &name, const std::string &error) {
                     errors.push_back(name + ": " + LuaRuntimeTest::FirstLine(error));
                 });
             }
-            if (lua.Init(*manager, "1.2.3") != ScriptingError::SCRIPTING_NONE) {
+            if (lua.Init(*manager, "1.2.3") != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
                 return false;
             }
 
-            EngineScope scope(&v8);
-            SetScriptingEnvironment(scope.Isolate(), /*isClient*/ true);
-            Builtins::RegisterValueTypes(scope.Isolate(), scope.Context()->Global());
+            Framework::Scripting::EngineScope scope(&v8);
+            Framework::Scripting::SetScriptingEnvironment(scope.Isolate(), /*isClient*/ true);
+            Framework::Scripting::Builtins::RegisterValueTypes(scope.Isolate(), scope.Context()->Global());
             manager->GetEvents().Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), manager.get(), /*isClient*/ true);
-            Builtins::Console::Register(scope.Isolate(), scope.Context(), manager.get());
+            Framework::Scripting::Builtins::Console::Register(scope.Isolate(), scope.Context(), manager.get());
             return true;
         }
 
@@ -211,7 +207,7 @@ namespace LuaClientTest {
 
         // The value of `expression` in the Lua state of the resource, as tostring() spells it.
         std::string Eval(const std::string &resource, const std::string &expression) const {
-            LuaRuntime *runtime = lua.GetEngine().GetRuntime(resource);
+            Framework::Scripting::LuaRuntime *runtime = lua.GetEngine().GetRuntime(resource);
             return runtime != nullptr ? LuaRuntimeTest::Eval(*runtime, expression) : "<no runtime>";
         }
 
@@ -223,40 +219,32 @@ namespace LuaClientTest {
 } // namespace LuaClientTest
 
 MODULE(lua_client, {
-    using namespace Framework::Scripting;
-    using Framework::Utils::Vfs;
-    using LuaClientTest::Client;
-    using LuaClientTest::Contains;
-    using LuaClientTest::Directory;
-    using LuaClientTest::Mount;
-    using LuaClientTest::MountPackaged;
-
     // ==================== Engine ====================
 
     IT("runs client states as the client side, under 128 MB and a deadline of five seconds", {
-        const LuaEngineOptions options = LuaEngineOptions::Client();
-        EQUALS(options.side == Bind::Side::Client, true);
+        const Framework::Scripting::LuaEngineOptions options = Framework::Scripting::LuaEngineOptions::Client();
+        EQUALS(options.side == Framework::Scripting::Bind::Side::Client, true);
         EQUALS(options.memoryLimitBytes, size_t {128} * 1024 * 1024);
         EQUALS(options.entryDeadline.count(), 5000);
 
-        EQUALS(Mount("limits", R"("clientScripts":["client.lua"])", {{"client.lua", "loaded = true"}}), "");
-        Client client;
+        EQUALS(LuaClientTest::Mount("limits", R"("clientScripts":["client.lua"])", {{"client.lua", "loaded = true"}}), "");
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
         EQUALS(client.Start("limits"), "");
-        const LuaRuntimeOptions &state = client.lua.GetEngine().GetRuntime("limits")->Options();
-        EQUALS(state.side == Bind::Side::Client, true);
+        const Framework::Scripting::LuaRuntimeOptions &state = client.lua.GetEngine().GetRuntime("limits")->Options();
+        EQUALS(state.side == Framework::Scripting::Bind::Side::Client, true);
         EQUALS(state.memoryLimitBytes, options.memoryLimitBytes);
         EQUALS(state.entryDeadline.count(), 5000);
-        Vfs::Get().Unmount("limits.zip");
+        Framework::Utils::Vfs::Get().Unmount("limits.zip");
     });
 
     // ==================== Resources ====================
 
     IT("starts a Lua client resource from a directory, with its shared scripts and without its server ones", {
-        const Directory directory;
+        const LuaClientTest::Directory directory;
         directory.Resource("plain", R"("clientScripts":["client.lua"],"sharedScripts":["shared.lua"],"serverScripts":["server.lua"])",
             {{"shared.lua", "order = 'shared'"}, {"client.lua", "order = order .. ',client,' .. require('lib.util').name"}, {"server.lua", "order = 'server'"}, {"lib/util.lua", "return { name = 'util' }"}});
-        Client client(directory.root.string());
+        LuaClientTest::Client client(directory.root.string());
         EQUALS(client.Init(), true);
         EQUALS(client.Start("plain"), "");
         EQUALS(client.HasRuntime("plain"), true);
@@ -264,14 +252,14 @@ MODULE(lua_client, {
     });
 
     IT("starts a Lua client resource from a mounted package, and requires its modules through the VFS", {
-        const Directory directory;
+        const LuaClientTest::Directory directory;
         directory.Resource("packed", R"("clientScripts":["src/client.lua"],"sharedScripts":["shared.lua"],"serverScripts":["server.lua"],"files":["lib/**"])",
             {{"shared.lua", "order = 'shared'"}, {"src/client.lua", "order = order .. ',client,' .. require('lib.util').name .. ',' .. require('lib.deep').name\nwhere = select(2, pcall(error, 'x', 1))\nfailed = select(2, pcall(function() error('here') end))"},
                 {"server.lua", "order = 'server'"}, {"lib/util.lua", "return { name = 'util' }"}, {"lib/deep/init.lua", "return { name = 'deep' }"}});
-        EQUALS(MountPackaged(directory, "packed"), "");
-        EQUALS(Vfs::Get().Contains("/resources/packed/server.lua"), false);
+        EQUALS(LuaClientTest::MountPackaged(directory, "packed"), "");
+        EQUALS(Framework::Utils::Vfs::Get().Contains("/resources/packed/server.lua"), false);
 
-        Client client;
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
         EQUALS(client.Start("packed"), "");
         EQUALS(client.Eval("packed", "order"), "shared,client,util,deep");
@@ -279,8 +267,8 @@ MODULE(lua_client, {
         EQUALS(client.Eval("packed", "failed"), "packed/src/client.lua:3: here");
 
         // The server script was never shipped, so nothing of the resource can ask for it.
-        EQUALS(Contains(client.Eval("packed", "select(2, pcall(require, 'server'))"), "module 'server' not found in resource 'packed'"), true);
-        Vfs::Get().Unmount("packed.zip");
+        EQUALS(LuaRuntimeTest::Contains(client.Eval("packed", "select(2, pcall(require, 'server'))"), "module 'server' not found in resource 'packed'"), true);
+        Framework::Utils::Vfs::Get().Unmount("packed.zip");
     });
 
     IT("fails the start of a client resource whose Lua script is not in its package", {
@@ -289,12 +277,12 @@ MODULE(lua_client, {
         std::string blob, zip, error;
         EQUALS(writer.Build(nullptr, blob), true);
         EQUALS(Framework::Utils::Package::Open(blob, nullptr, zip, error), true);
-        Client client;
-        EQUALS(Vfs::Get().MountMemory(std::move(zip), "hollow.zip", Vfs::ResourcePath("hollow"), error), true);
+        LuaClientTest::Client client;
+        EQUALS(Framework::Utils::Vfs::Get().MountMemory(std::move(zip), "hollow.zip", Framework::Utils::Vfs::ResourcePath("hollow"), error), true);
         EQUALS(client.Init(), true);
         EQUALS(client.Start("hollow").empty(), false);
         EQUALS(client.HasRuntime("hollow"), false);
-        Vfs::Get().Unmount("hollow.zip");
+        Framework::Utils::Vfs::Get().Unmount("hollow.zip");
     });
 
     // ==================== Bindings ====================
@@ -303,7 +291,7 @@ MODULE(lua_client, {
         const LuaClientTest::World world;
         const std::string &id = world.id;
 
-        EQUALS(Mount("builtins", R"("clientScripts":["client.lua"])", {{"client.lua", R"(
+        EQUALS(LuaClientTest::Mount("builtins", R"("clientScripts":["client.lua"])", {{"client.lua", R"(
             heard, fired = 'nothing', 0
             Events.on('ping', function(vector, text) heard = text .. ':' .. vector.length end)
             Events.emit('ping', Vector3.new(3, 4, 0), 'pong')
@@ -312,7 +300,7 @@ MODULE(lua_client, {
             player = Player.new()" + id + R"()
         )"}}),
             "");
-        Client client;
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
         LuaRuntimeTest::LogCapture log;
         EQUALS(client.Start("builtins"), "");
@@ -333,15 +321,15 @@ MODULE(lua_client, {
         EQUALS(client.Eval("builtins", "type(Events.emitServer) .. type(Events.emitAllClients) .. type(Events.onClient)"), "functionnilnil");
         EQUALS(client.Eval("builtins", "type(player.kick) .. type(player.emit) .. type(player.getIP) .. type(player.id)"), "nilnilnilnumber");
 
-        Vfs::Get().Unmount("builtins.zip");
+        Framework::Utils::Vfs::Get().Unmount("builtins.zip");
     });
 
     IT("exchanges an event between the JavaScript and the Lua script of one client resource", {
-        EQUALS(Mount("mixed", R"("clientScripts":["first.js","second.lua"])",
+        EQUALS(LuaClientTest::Mount("mixed", R"("clientScripts":["first.js","second.lua"])",
                    {{"first.js", "globalThis.fromLua = 'nothing'; Events.on('toJs', (payload) => { fromLua = payload.from + payload.list.length + (payload.at instanceof Vector3); Events.emit('toLua', { from: 'js', at: new Vector3(1, 2, 3) }); });"},
                        {"second.lua", "fromJs = 'nothing'\nEvents.on('toLua', function(payload) fromJs = payload.from .. payload.at.z end)\nEvents.emit('toJs', { from = 'lua', list = { 1, 2 }, at = Vector3.new(0, 0, 0) })"}}),
             "");
-        Client client;
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
         EQUALS(client.Start("mixed"), "");
         EQUALS(client.JavaScript("fromLua === 'lua2true'"), true);
@@ -352,14 +340,14 @@ MODULE(lua_client, {
         EQUALS(client.HasRuntime("mixed"), false);
         EQUALS(client.v8.Execute("fromLua = 'stopped'; Events.emit('toJs', { from: 'js', list: [] });"), true);
         EQUALS(client.JavaScript("fromLua === 'stopped'"), true);
-        Vfs::Get().Unmount("mixed.zip");
+        Framework::Utils::Vfs::Get().Unmount("mixed.zip");
     });
 
     // ==================== Sandbox ====================
 
     IT("gives a client state no way to the machine", {
-        EQUALS(Mount("caged", R"("clientScripts":["client.lua"])", {{"client.lua", "loaded = true"}}), "");
-        Client client;
+        EQUALS(LuaClientTest::Mount("caged", R"("clientScripts":["client.lua"])", {{"client.lua", "loaded = true"}}), "");
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
         EQUALS(client.Start("caged"), "");
         const std::string gone = "(function() local names = {} for _, name in ipairs({'io', 'debug', 'package', 'dofile', 'loadfile', 'loadstring', 'module'}) do names[#names + 1] = type(_G[name]) end return table.concat(names, ',') end)()";
@@ -367,15 +355,15 @@ MODULE(lua_client, {
         EQUALS(client.Eval("caged", "type(os.execute) .. type(os.remove) .. type(os.rename) .. type(os.getenv) .. type(os.exit) .. type(os.tmpname) .. type(string.dump)"), "nilnilnilnilnilnilnil");
         EQUALS(client.Eval("caged", "type(os.time) .. type(os.clock)"), "functionfunction");
         EQUALS(client.Eval("caged", "select(2, pcall(setmetatable, {}, { __gc = function() end })) ~= nil"), "true");
-        Vfs::Get().Unmount("caged.zip");
+        Framework::Utils::Vfs::Get().Unmount("caged.zip");
     });
 
     IT("loads no bytecode in a client state, from a string or from a file of the package", {
         const std::string bytecode = LuaRuntimeTest::Bytecode("escaped = true");
         EQUALS(bytecode.empty(), false);
-        EQUALS(Mount("binary", R"("clientScripts":["client.lua"],"files":["blob.lua"])", {{"client.lua", "loaded = true"}, {"blob.lua", bytecode}}), "");
-        EQUALS(Mount("binary-entry", R"("clientScripts":["client.lua"])", {{"client.lua", bytecode}}), "");
-        Client client;
+        EQUALS(LuaClientTest::Mount("binary", R"("clientScripts":["client.lua"],"files":["blob.lua"])", {{"client.lua", "loaded = true"}, {"blob.lua", bytecode}}), "");
+        EQUALS(LuaClientTest::Mount("binary-entry", R"("clientScripts":["client.lua"])", {{"client.lua", bytecode}}), "");
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
         EQUALS(client.Start("binary"), "");
 
@@ -387,49 +375,49 @@ MODULE(lua_client, {
 
         EQUALS(client.Start("binary-entry").empty(), false);
         EQUALS(client.HasRuntime("binary-entry"), false);
-        Vfs::Get().Unmount("binary.zip");
-        Vfs::Get().Unmount("binary-entry.zip");
+        Framework::Utils::Vfs::Get().Unmount("binary.zip");
+        Framework::Utils::Vfs::Get().Unmount("binary-entry.zip");
     });
 
     IT("requires nothing from outside the resource on a client", {
-        EQUALS(Mount("neighbour", R"("clientScripts":["client.lua"],"files":["secret.lua"])", {{"client.lua", "loaded = true"}, {"secret.lua", "return 'the secret'"}}), "");
-        EQUALS(Mount("nosy", R"("clientScripts":["client.lua"],"files":["own.lua"])", {{"client.lua", "loaded = true"}, {"own.lua", "return 'own'"}}), "");
-        EQUALS(Vfs::Get().Contains("/resources/neighbour/secret.lua"), true);
-        Client client;
+        EQUALS(LuaClientTest::Mount("neighbour", R"("clientScripts":["client.lua"],"files":["secret.lua"])", {{"client.lua", "loaded = true"}, {"secret.lua", "return 'the secret'"}}), "");
+        EQUALS(LuaClientTest::Mount("nosy", R"("clientScripts":["client.lua"],"files":["own.lua"])", {{"client.lua", "loaded = true"}, {"own.lua", "return 'own'"}}), "");
+        EQUALS(Framework::Utils::Vfs::Get().Contains("/resources/neighbour/secret.lua"), true);
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
         EQUALS(client.Start("nosy"), "");
         EQUALS(client.Eval("nosy", "require('own')"), "own");
         for (const char *name : {"neighbour.secret", "..neighbour.secret", "../neighbour/secret", "/resources/neighbour/secret", "own/../../neighbour/secret", ".neighbour.secret", "neighbour/secret"}) {
             EQUALS(client.Eval("nosy", "pcall(require, '" + std::string(name) + "')"), "false");
         }
-        EQUALS(Contains(client.Eval("nosy", "select(2, pcall(require, 'neighbour.secret'))"), "module 'neighbour.secret' not found in resource 'nosy'"), true);
-        Vfs::Get().Unmount("neighbour.zip");
-        Vfs::Get().Unmount("nosy.zip");
+        EQUALS(LuaRuntimeTest::Contains(client.Eval("nosy", "select(2, pcall(require, 'neighbour.secret'))"), "module 'neighbour.secret' not found in resource 'nosy'"), true);
+        Framework::Utils::Vfs::Get().Unmount("neighbour.zip");
+        Framework::Utils::Vfs::Get().Unmount("nosy.zip");
     });
 
     // The loops here end by themselves after twenty seconds, so that a deadline that does not hold fails its test
     // instead of hanging the suite.
     IT("fails the start of a client resource whose script runs past the deadline", {
-        EQUALS(Mount("endless", R"("clientScripts":["client.lua"])", {{"client.lua", "local stop = os.clock() + 20\nwhile os.clock() < stop do end\nsurvived = true"}}), "");
-        Client client;
+        EQUALS(LuaClientTest::Mount("endless", R"("clientScripts":["client.lua"])", {{"client.lua", "local stop = os.clock() + 20\nwhile os.clock() < stop do end\nsurvived = true"}}), "");
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
         const auto start        = std::chrono::steady_clock::now();
         const std::string error = client.Start("endless");
         const auto elapsed      = LuaRuntimeTest::ElapsedMs(start);
-        EQUALS(Contains(error, "script ran too long"), true);
+        EQUALS(LuaRuntimeTest::Contains(error, "script ran too long"), true);
         EQUALS(elapsed >= 5000 && elapsed < 10000, true);
         EQUALS(client.HasRuntime("endless"), false);
-        EQUALS(client.manager->GetResourceState("endless") == ResourceState::Running, false);
-        Vfs::Get().Unmount("endless.zip");
+        EQUALS(client.manager->GetResourceState("endless") == Framework::Scripting::ResourceState::Running, false);
+        Framework::Utils::Vfs::Get().Unmount("endless.zip");
     });
 
     IT("cuts a client timer that runs past the deadline short, and its resource does what its errorBehavior says", {
         const std::string spin = "local stop = os.clock() + 20 while os.clock() < stop do end";
-        EQUALS(Mount("slow-timer", R"("clientScripts":["client.lua"])", {{"client.lua", "setTimeout(function() " + spin + " end, 1)"}}), "");
-        EQUALS(Mount("slow-kept", R"("clientScripts":["client.lua"],"errorBehavior":"continue")", {{"client.lua", "ticks = 0\nsetInterval(function() ticks = ticks + 1 end, 1)\nsetTimeout(function() " + spin + " end, 1)"}}), "");
-        LuaEngineOptions options = LuaEngineOptions::Client();
+        EQUALS(LuaClientTest::Mount("slow-timer", R"("clientScripts":["client.lua"])", {{"client.lua", "setTimeout(function() " + spin + " end, 1)"}}), "");
+        EQUALS(LuaClientTest::Mount("slow-kept", R"("clientScripts":["client.lua"],"errorBehavior":"continue")", {{"client.lua", "ticks = 0\nsetInterval(function() ticks = ticks + 1 end, 1)\nsetTimeout(function() " + spin + " end, 1)"}}), "");
+        Framework::Scripting::LuaEngineOptions options = Framework::Scripting::LuaEngineOptions::Client();
         options.entryDeadline    = std::chrono::milliseconds(100);
-        Client client(Vfs::kResourceMountRoot, options);
+        LuaClientTest::Client client(Framework::Utils::Vfs::kResourceMountRoot, options);
         EQUALS(client.Init(), true);
         EQUALS(client.Start("slow-timer"), "");
         EQUALS(client.Start("slow-kept"), "");
@@ -441,7 +429,7 @@ MODULE(lua_client, {
         EQUALS(client.errors.size(), 2u);
         EQUALS(std::count(client.errors.begin(), client.errors.end(), "slow-timer: slow-timer/client.lua:1: script ran too long"), 1);
         EQUALS(std::count(client.errors.begin(), client.errors.end(), "slow-kept: slow-kept/client.lua:3: script ran too long"), 1);
-        EQUALS(client.manager->GetResourceState("slow-timer") == ResourceState::Error, true);
+        EQUALS(client.manager->GetResourceState("slow-timer") == Framework::Scripting::ResourceState::Error, true);
         EQUALS(client.HasRuntime("slow-timer"), false);
 
         // The one that said to go on does, with the timers it had.
@@ -449,19 +437,19 @@ MODULE(lua_client, {
         const std::string before = client.Eval("slow-kept", "ticks");
         client.Wait(5);
         EQUALS(client.Eval("slow-kept", "ticks") != before, true);
-        Vfs::Get().Unmount("slow-timer.zip");
-        Vfs::Get().Unmount("slow-kept.zip");
+        Framework::Utils::Vfs::Get().Unmount("slow-timer.zip");
+        Framework::Utils::Vfs::Get().Unmount("slow-kept.zip");
     });
 
     IT("cuts a client event handler that runs past the deadline short, and tells the emitter", {
         const std::string spin = "local stop = os.clock() + 20 while os.clock() < stop do end";
-        EQUALS(Mount("slow-handler", R"("clientScripts":["client.js","client.lua"])",
+        EQUALS(LuaClientTest::Mount("slow-handler", R"("clientScripts":["client.js","client.lua"])",
                    {{"client.js", "globalThis.spinError = 'none'; globalThis.spin = () => Events.emit('spin').catch((error) => { spinError = error.message + '|' + (error.errors || []).map((inner) => inner.message).join(); });"},
                        {"client.lua", "after = 0\nEvents.on('spin', function() " + spin + " after = after + 1 end)"}}),
             "");
-        LuaEngineOptions options = LuaEngineOptions::Client();
+        Framework::Scripting::LuaEngineOptions options = Framework::Scripting::LuaEngineOptions::Client();
         options.entryDeadline    = std::chrono::milliseconds(100);
-        Client client(Vfs::kResourceMountRoot, options);
+        LuaClientTest::Client client(Framework::Utils::Vfs::kResourceMountRoot, options);
         EQUALS(client.Init(), true);
         EQUALS(client.Start("slow-handler"), "");
 
@@ -473,43 +461,43 @@ MODULE(lua_client, {
         // The failure is the emitter's to handle, and the state is whole for the next entry.
         EQUALS(client.Eval("slow-handler", "after"), "0");
         EQUALS(client.errors.size(), 0u);
-        Vfs::Get().Unmount("slow-handler.zip");
+        Framework::Utils::Vfs::Get().Unmount("slow-handler.zip");
     });
 
     IT("bounds the memory of a client state", {
         // A megabyte at a time, and far more of them than the cap leaves room for.
         const std::string hoard = "hoard = {}\nfor i = 1, 4096 do hoard[i] = string.rep('x', 1048576) .. i end";
-        EQUALS(Mount("greedy", R"("clientScripts":["client.lua"])", {{"client.lua", hoard}}), "");
-        EQUALS(Mount("greedy-caught", R"("clientScripts":["client.lua"])", {{"client.lua", "caught = select(2, pcall(load([[" + hoard + "]])))\nheld = #hoard\nhoard = nil"}}), "");
-        Client client;
+        EQUALS(LuaClientTest::Mount("greedy", R"("clientScripts":["client.lua"])", {{"client.lua", hoard}}), "");
+        EQUALS(LuaClientTest::Mount("greedy-caught", R"("clientScripts":["client.lua"])", {{"client.lua", "caught = select(2, pcall(load([[" + hoard + "]])))\nheld = #hoard\nhoard = nil"}}), "");
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
-        EQUALS(Contains(client.Start("greedy"), "not enough memory"), true);
+        EQUALS(LuaRuntimeTest::Contains(client.Start("greedy"), "not enough memory"), true);
         EQUALS(client.HasRuntime("greedy"), false);
 
         // A script that catches the refusal goes on, having got no further than the cap.
         EQUALS(client.Start("greedy-caught"), "");
-        EQUALS(Contains(client.Eval("greedy-caught", "caught"), "not enough memory"), true);
+        EQUALS(LuaRuntimeTest::Contains(client.Eval("greedy-caught", "caught"), "not enough memory"), true);
         EQUALS(client.Eval("greedy-caught", "held < 128"), "true");
         EQUALS(client.lua.GetEngine().GetRuntime("greedy-caught")->MemoryInUse() <= size_t {128} * 1024 * 1024, true);
-        Vfs::Get().Unmount("greedy.zip");
-        Vfs::Get().Unmount("greedy-caught.zip");
+        Framework::Utils::Vfs::Get().Unmount("greedy.zip");
+        Framework::Utils::Vfs::Get().Unmount("greedy-caught.zip");
     });
 
     // ==================== Reconnection ====================
 
     IT("drops every Lua state on a reset, and starts clean after it", {
         const auto mount = [](int version) {
-            return Mount("session", R"("clientScripts":["client.js","client.lua"])",
+            return LuaClientTest::Mount("session", R"("clientScripts":["client.js","client.lua"])",
                 {{"client.js", "globalThis.pings = 0; Events.on('ping', () => ++pings);"},
                     {"client.lua", "loads = (loads or 0) + 1\nversion = " + std::to_string(version) + "\nticks, heard = 0, 0\nsetInterval(function() ticks = ticks + 1 end, 1)\nEvents.on('ping', function() heard = heard + 1 end)\nsetTimeout(function() error('late') end, 50)"}});
         };
         EQUALS(mount(1), "");
-        Client client;
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
         EQUALS(client.Start("session"), "");
         client.Wait(5);
         EQUALS(client.Eval("session", "ticks") != "0", true);
-        LuaEngine &engine = client.lua.GetEngine();
+        Framework::Scripting::LuaEngine &engine = client.lua.GetEngine();
         EQUALS(engine.IsInitialized(), true);
 
         client.Reset();
@@ -520,7 +508,7 @@ MODULE(lua_client, {
         client.Wait(60);
         EQUALS(client.errors.size(), 0u);
         // Before the next Init a Lua resource has nothing to run in.
-        EQUALS(Contains(client.Start("session"), "Lua scripting is not available"), true);
+        EQUALS(LuaRuntimeTest::Contains(client.Start("session"), "Lua scripting is not available"), true);
 
         EQUALS(mount(2), "");
         EQUALS(client.Init(), true);
@@ -535,28 +523,28 @@ MODULE(lua_client, {
         client.Shutdown();
         EQUALS(engine.IsInitialized(), false);
         EQUALS(engine.GetRuntime("session") == nullptr, true);
-        Vfs::Get().Unmount("session.zip");
+        Framework::Utils::Vfs::Get().Unmount("session.zip");
     });
 
     IT("closes the states a reset from inside a script left open at the next update, before the next session", {
-        EQUALS(Mount("leaver", R"("clientScripts":["client.lua"])", {{"client.lua", "x = 1"}}), "");
-        Client client;
+        EQUALS(LuaClientTest::Mount("leaver", R"("clientScripts":["client.lua"])", {{"client.lua", "x = 1"}}), "");
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
         EQUALS(client.Start("leaver"), "");
-        LuaEngine &engine = client.lua.GetEngine();
+        Framework::Scripting::LuaEngine &engine = client.lua.GetEngine();
         int disposed      = 0;
-        engine.AddRuntimeDisposingListener([&disposed](LuaRuntime &) {
+        engine.AddRuntimeDisposingListener([&disposed](Framework::Scripting::LuaRuntime &) {
             ++disposed;
         });
 
         // The script disconnects the client, called past the engine as a handler a builtin kept is: nothing is
         // on the way out to close its state.
-        LuaRuntime *runtime = engine.GetRuntime("leaver");
+        Framework::Scripting::LuaRuntime *runtime = engine.GetRuntime("leaver");
         lua_pushlightuserdata(runtime->State(), &client);
         lua_pushcclosure(
             runtime->State(),
             [](lua_State *L) {
-                auto *self = static_cast<Client *>(lua_touserdata(L, lua_upvalueindex(1)));
+                auto *self = static_cast<LuaClientTest::Client *>(lua_touserdata(L, lua_upvalueindex(1)));
                 self->manager->Reset();
                 self->lua.Shutdown();
                 return 0;
@@ -576,21 +564,21 @@ MODULE(lua_client, {
         EQUALS(client.Start("leaver"), "");
         EQUALS(client.Eval("leaver", "x"), "1");
         EQUALS(client.errors.size(), 0u);
-        Vfs::Get().Unmount("leaver.zip");
+        Framework::Utils::Vfs::Get().Unmount("leaver.zip");
     });
 
     IT("lets a Lua setup add another while it runs", {
-        EQUALS(Mount("nested", R"("clientScripts":["client.lua"])", {{"client.lua", "x = 1"}}), "");
-        Client client;
+        EQUALS(LuaClientTest::Mount("nested", R"("clientScripts":["client.lua"])", {{"client.lua", "x = 1"}}), "");
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
 
         std::string seen;
         int added          = 0;
-        LuaClientHost *lua = &client.lua;
-        lua->AddRuntimeSetup([lua, &seen, &added, label = std::string("a label long enough to live on the heap, and not in the string")](LuaRuntime &) {
+        Framework::Scripting::LuaClientHost *lua = &client.lua;
+        lua->AddRuntimeSetup([lua, &seen, &added, label = std::string("a label long enough to live on the heap, and not in the string")](Framework::Scripting::LuaRuntime &) {
             if (added == 0) {
                 for (int i = 0; i < 64; ++i) {
-                    lua->AddRuntimeSetup([&added](LuaRuntime &) {
+                    lua->AddRuntimeSetup([&added](Framework::Scripting::LuaRuntime &) {
                         ++added;
                     });
                 }
@@ -600,33 +588,32 @@ MODULE(lua_client, {
         EQUALS(client.Start("nested"), "");
         EQUALS(seen, "a label long enough to live on the heap, and not in the string");
         EQUALS(added, 64);
-        Vfs::Get().Unmount("nested.zip");
+        Framework::Utils::Vfs::Get().Unmount("nested.zip");
     });
 
     IT("lets go of what the builtins kept for a Lua state that a stop or a reset took", {
-        using Builtins::StateBag;
         const LuaClientTest::World world;
         const std::string script = "Entity.new(" + world.id + ").state:onChange(nil, function() end)";
-        EQUALS(Mount("watcher", R"("clientScripts":["client.lua"])", {{"client.lua", script}}), "");
-        EQUALS(Mount("watcher-too", R"("clientScripts":["client.lua"])", {{"client.lua", script}}), "");
-        Client client;
+        EQUALS(LuaClientTest::Mount("watcher", R"("clientScripts":["client.lua"])", {{"client.lua", script}}), "");
+        EQUALS(LuaClientTest::Mount("watcher-too", R"("clientScripts":["client.lua"])", {{"client.lua", script}}), "");
+        LuaClientTest::Client client;
         EQUALS(client.Init(), true);
         EQUALS(client.Start("watcher"), "");
         EQUALS(client.Start("watcher-too"), "");
-        EQUALS(StateBag::SubscriptionCount(), 2u);
+        EQUALS(Framework::Scripting::Builtins::StateBag::SubscriptionCount(), 2u);
         // Kept by the address of the state, which the next state may get.
         const void *stopped = client.lua.GetEngine().GetRuntime("watcher");
         const void *reset   = client.lua.GetEngine().GetRuntime("watcher-too");
-        EQUALS(Bind::Detail::CallResourceManager(stopped) == client.manager.get(), true);
-        EQUALS(Bind::Detail::CallResourceManager(reset) == client.manager.get(), true);
+        EQUALS(Framework::Scripting::Bind::Detail::CallResourceManager(stopped) == client.manager.get(), true);
+        EQUALS(Framework::Scripting::Bind::Detail::CallResourceManager(reset) == client.manager.get(), true);
 
         EQUALS(static_cast<bool>(client.manager->StopResource("watcher")), true);
-        EQUALS(StateBag::SubscriptionCount(), 1u);
-        EQUALS(Bind::Detail::CallResourceManager(stopped) == nullptr, true);
+        EQUALS(Framework::Scripting::Builtins::StateBag::SubscriptionCount(), 1u);
+        EQUALS(Framework::Scripting::Bind::Detail::CallResourceManager(stopped) == nullptr, true);
         client.Reset();
-        EQUALS(StateBag::SubscriptionCount(), 0u);
-        EQUALS(Bind::Detail::CallResourceManager(reset) == nullptr, true);
-        Vfs::Get().Unmount("watcher.zip");
-        Vfs::Get().Unmount("watcher-too.zip");
+        EQUALS(Framework::Scripting::Builtins::StateBag::SubscriptionCount(), 0u);
+        EQUALS(Framework::Scripting::Bind::Detail::CallResourceManager(reset) == nullptr, true);
+        Framework::Utils::Vfs::Get().Unmount("watcher.zip");
+        Framework::Utils::Vfs::Get().Unmount("watcher-too.zip");
     });
 });

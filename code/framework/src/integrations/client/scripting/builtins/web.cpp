@@ -44,9 +44,6 @@
 #include <utility>
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
-    namespace Bind = Framework::Scripting::Bind;
-    using Framework::Scripting::TransferredValue;
-    using Framework::Scripting::Builtins::ToInt32;
 
     namespace {
         // Keep in sync with the payload builder, the catalog metadata, and the docs.
@@ -137,8 +134,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         // A string argument as text. A Lua string holds any bytes; one that is not UTF-8 is no text and is
         // refused as a value of another type is, so a view is handed nothing a JavaScript string cannot hold.
-        bool ReadText(const Bind::Call &call, size_t index, std::string &out) {
-            const Bind::Value value = call.Arg(index);
+        bool ReadText(const Framework::Scripting::Bind::Call &call, size_t index, std::string &out) {
+            const Framework::Scripting::Bind::Value value = call.Arg(index);
             if (!value.IsString()) {
                 return false;
             }
@@ -147,11 +144,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         // The id of a view as the builtin always read one: the number wrapped to 32 bits.
-        int ViewId(const Bind::Value &value) {
-            return ToInt32(value.AsNumber());
+        int ViewId(const Framework::Scripting::Bind::Value &value) {
+            return Framework::Scripting::Builtins::ToInt32(value.AsNumber());
         }
 
-        bool ReadViewId(Bind::Call &call, const char *methodName, int &outId) {
+        bool ReadViewId(Framework::Scripting::Bind::Call &call, const char *methodName, int &outId) {
             if (call.ArgCount() < 1 || !call.Arg(0).IsNumber()) {
                 call.ThrowError(std::string(methodName) + ": first argument must be a view id");
                 return false;
@@ -161,24 +158,24 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         // A member of the options of createView. One of another type than its own counts as left out.
-        int IntOption(const Bind::Value &options, const char *key, int defaultValue) {
-            const Bind::Value value = options.Member(key);
-            return value.IsNumber() ? ToInt32(value.AsNumber()) : defaultValue;
+        int IntOption(const Framework::Scripting::Bind::Value &options, const char *key, int defaultValue) {
+            const Framework::Scripting::Bind::Value value = options.Member(key);
+            return value.IsNumber() ? Framework::Scripting::Builtins::ToInt32(value.AsNumber()) : defaultValue;
         }
 
-        bool BoolOption(const Bind::Value &options, const char *key, bool defaultValue) {
-            const Bind::Value value = options.Member(key);
+        bool BoolOption(const Framework::Scripting::Bind::Value &options, const char *key, bool defaultValue) {
+            const Framework::Scripting::Bind::Value value = options.Member(key);
             return value.IsBoolean() ? value.AsBoolean() : defaultValue;
         }
 
         // A flag that is optional: only a boolean counts, as it always did.
-        bool OptionalFlag(const Bind::Value &value, bool defaultValue) {
+        bool OptionalFlag(const Framework::Scripting::Bind::Value &value, bool defaultValue) {
             return value.IsBoolean() ? value.AsBoolean() : defaultValue;
         }
 
-        TransferredValue Text(std::string text) {
-            TransferredValue value;
-            value.kind = TransferredValue::Kind::String;
+        Framework::Scripting::TransferredValue Text(std::string text) {
+            Framework::Scripting::TransferredValue value;
+            value.kind = Framework::Scripting::TransferredValue::Kind::String;
             value.text = std::move(text);
             return value;
         }
@@ -187,25 +184,25 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         constexpr int kMaxPayloadDepth = 128;
 
         // A JSON document as the copy a handler's runtime builds its value from. False when it nests too deeply.
-        bool FromJson(const nlohmann::ordered_json &json, int depth, TransferredValue &value) {
+        bool FromJson(const nlohmann::ordered_json &json, int depth, Framework::Scripting::TransferredValue &value) {
             if (depth > kMaxPayloadDepth) {
                 return false;
             }
             switch (json.type()) {
-            case nlohmann::ordered_json::value_t::null: value.kind = TransferredValue::Kind::Null; break;
+            case nlohmann::ordered_json::value_t::null: value.kind = Framework::Scripting::TransferredValue::Kind::Null; break;
             case nlohmann::ordered_json::value_t::boolean:
-                value.kind    = TransferredValue::Kind::Boolean;
+                value.kind    = Framework::Scripting::TransferredValue::Kind::Boolean;
                 value.boolean = json.get<bool>();
                 break;
             case nlohmann::ordered_json::value_t::number_integer:
             case nlohmann::ordered_json::value_t::number_unsigned:
             case nlohmann::ordered_json::value_t::number_float:
-                value.kind   = TransferredValue::Kind::Number;
+                value.kind   = Framework::Scripting::TransferredValue::Kind::Number;
                 value.number = json.get<double>();
                 break;
             case nlohmann::ordered_json::value_t::string: value = Text(json.get<std::string>()); break;
             case nlohmann::ordered_json::value_t::array:
-                value.kind = TransferredValue::Kind::Array;
+                value.kind = Framework::Scripting::TransferredValue::Kind::Array;
                 value.items.reserve(json.size());
                 for (const auto &element : json) {
                     if (!FromJson(element, depth + 1, value.items.emplace_back())) {
@@ -214,10 +211,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 }
                 break;
             case nlohmann::ordered_json::value_t::object:
-                value.kind = TransferredValue::Kind::Object;
+                value.kind = Framework::Scripting::TransferredValue::Kind::Object;
                 value.properties.reserve(json.size());
                 for (const auto &[key, member] : json.items()) {
-                    if (!FromJson(member, depth + 1, value.properties.emplace_back(key, TransferredValue {}).second)) {
+                    if (!FromJson(member, depth + 1, value.properties.emplace_back(key, Framework::Scripting::TransferredValue {}).second)) {
                         return false;
                     }
                 }
@@ -230,12 +227,12 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // The payload of a page event as a handler outside the isolate is given it, under the rules the
         // JavaScript handlers have: nothing for an empty payload, the value for JSON, the text itself for
         // anything else.
-        TransferredValue PagePayload(const std::string &payload) {
+        Framework::Scripting::TransferredValue PagePayload(const std::string &payload) {
             if (payload.empty()) {
                 return {};
             }
             const auto parsed = nlohmann::ordered_json::parse(payload, nullptr, false);
-            TransferredValue value;
+            Framework::Scripting::TransferredValue value;
             if (parsed.is_discarded() || !FromJson(parsed, 0, value)) {
                 return Text(payload);
             }
@@ -357,85 +354,80 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     std::shared_ptr<Web::ManagerLink> Web::_managerLink;
     std::shared_ptr<std::vector<std::string>> Web::_failedOwners = std::make_shared<std::vector<std::string>>();
 
-    const Bind::Namespace &Web::Definition() {
-        using Bind::Doc;
-        using Bind::Side;
-        using Bind::TypeOf;
-        using Bind::Type::Custom;
-
+    const Framework::Scripting::Bind::Namespace &Web::Definition() {
         static const auto definition = [] {
-            const auto number  = TypeOf<double>();
-            const auto boolean = TypeOf<bool>();
-            const auto text    = TypeOf<std::string>();
-            const auto handler = Custom("WebEventHandler", "fun(payload: any)");
-            const auto options = Custom("{ width?: number; height?: number; x?: number; y?: number; zIndex?: number; visible?: boolean; focus?: boolean }", "{ width?: number, height?: number, x?: number, y?: number, zIndex?: number, visible?: boolean, focus?: boolean }");
+            const auto number  = Framework::Scripting::Bind::TypeOf<double>();
+            const auto boolean = Framework::Scripting::Bind::TypeOf<bool>();
+            const auto text    = Framework::Scripting::Bind::TypeOf<std::string>();
+            const auto handler = Framework::Scripting::Bind::Type::Custom("WebEventHandler", "fun(payload: any)");
+            const auto options = Framework::Scripting::Bind::Type::Custom("{ width?: number; height?: number; x?: number; y?: number; zIndex?: number; visible?: boolean; focus?: boolean }", "{ width?: number, height?: number, x?: number, y?: number, zIndex?: number, visible?: boolean, focus?: boolean }");
             const char *viewId = "Owned view identifier.";
-            return Bind::Namespace("Web", "Client-only, resource-owned CEF web-view API exposed as the global Web.", Side::Client)
+            return Framework::Scripting::Bind::Namespace("Web", "Client-only, resource-owned CEF web-view API exposed as the global Web.", Framework::Scripting::Bind::Side::Client)
                 .Function("createView", &CreateView,
-                    Doc("Creates an origin-locked web view owned by the calling resource.")
+                    Framework::Scripting::Bind::Doc("Creates an origin-locked web view owned by the calling resource.")
                         .Param("url", text, "Resource-relative URL or allowed absolute URL loaded into the view.")
                         .OptionalParam("options", options, "Optional initial pixel geometry, stacking, visibility, and focus settings.")
                         .ReturnType(number)
                         .Returns("Numeric view ID used by the remaining Web methods."),
-                    Side::Client)
-                .Function("destroyView", &DestroyView, Doc("Destroys an owned view and removes all of its script event handlers.").Param("viewId", number, viewId).ReturnType(boolean).Returns("True when a view was destroyed."), Side::Client)
-                .Function("showView", &ShowView, Doc("Makes an owned view visible.").Param("viewId", number, viewId).ReturnType(boolean).Returns("True when the view exists and was updated."), Side::Client)
-                .Function("hideView", &HideView, Doc("Hides an owned view.").Param("viewId", number, viewId).ReturnType(boolean).Returns("True when the view exists and was updated."), Side::Client)
+                    Framework::Scripting::Bind::Side::Client)
+                .Function("destroyView", &DestroyView, Framework::Scripting::Bind::Doc("Destroys an owned view and removes all of its script event handlers.").Param("viewId", number, viewId).ReturnType(boolean).Returns("True when a view was destroyed."), Framework::Scripting::Bind::Side::Client)
+                .Function("showView", &ShowView, Framework::Scripting::Bind::Doc("Makes an owned view visible.").Param("viewId", number, viewId).ReturnType(boolean).Returns("True when the view exists and was updated."), Framework::Scripting::Bind::Side::Client)
+                .Function("hideView", &HideView, Framework::Scripting::Bind::Doc("Hides an owned view.").Param("viewId", number, viewId).ReturnType(boolean).Returns("True when the view exists and was updated."), Framework::Scripting::Bind::Side::Client)
                 .Function("focusView", &FocusView,
-                    Doc("Changes input focus for an owned view.")
+                    Framework::Scripting::Bind::Doc("Changes input focus for an owned view.")
                         .Param("viewId", number, viewId)
                         .OptionalParam("focused", boolean, "Whether the view captures keyboard and mouse input; defaults to true.")
                         .ReturnType(boolean)
                         .Returns("True when the view exists and focus was updated."),
-                    Side::Client)
-                .Function("isViewVisible", &IsViewVisible, Doc("Checks whether an owned view is currently visible.").Param("viewId", number, viewId).ReturnType(boolean).Returns("False for missing or unowned views."), Side::Client)
+                    Framework::Scripting::Bind::Side::Client)
+                .Function("isViewVisible", &IsViewVisible, Framework::Scripting::Bind::Doc("Checks whether an owned view is currently visible.").Param("viewId", number, viewId).ReturnType(boolean).Returns("False for missing or unowned views."), Framework::Scripting::Bind::Side::Client)
                 .Function("setViewOffscreen", &SetViewOffscreen,
-                    Doc("Keeps a hidden view painting so something else can sample it, such as a render target drawing the page onto world geometry. A view that is merely hidden stops painting and the sampled picture freezes.")
+                    Framework::Scripting::Bind::Doc("Keeps a hidden view painting so something else can sample it, such as a render target drawing the page onto world geometry. A view that is merely hidden stops painting and the sampled picture freezes.")
                         .Param("viewId", number, viewId)
                         .OptionalParam("offscreen", boolean, "Whether the page keeps painting without being drawn on screen; defaults to true.")
                         .ReturnType(boolean)
                         .Returns("True when the view exists and was updated."),
-                    Side::Client)
-                .Function("isViewOffscreen", &IsViewOffscreen, Doc("Checks whether an owned view keeps painting while hidden.").Param("viewId", number, viewId).ReturnType(boolean).Returns("False for missing or unowned views."), Side::Client)
+                    Framework::Scripting::Bind::Side::Client)
+                .Function("isViewOffscreen", &IsViewOffscreen, Framework::Scripting::Bind::Doc("Checks whether an owned view keeps painting while hidden.").Param("viewId", number, viewId).ReturnType(boolean).Returns("False for missing or unowned views."), Framework::Scripting::Bind::Side::Client)
                 .Function("loadURL", &LoadURL,
-                    Doc("Navigates a view and replaces its allowed origin with the new URL's origin.").Param("viewId", number, viewId).Param("url", text, "New resource-relative or allowed absolute URL.").ReturnType(boolean).Returns("True when navigation was requested."),
-                    Side::Client)
+                    Framework::Scripting::Bind::Doc("Navigates a view and replaces its allowed origin with the new URL's origin.").Param("viewId", number, viewId).Param("url", text, "New resource-relative or allowed absolute URL.").ReturnType(boolean).Returns("True when navigation was requested."),
+                    Framework::Scripting::Bind::Side::Client)
                 .Function("resizeView", &ResizeView,
-                    Doc("Resizes an owned view's viewport.")
+                    Framework::Scripting::Bind::Doc("Resizes an owned view's viewport.")
                         .Param("viewId", number, viewId)
                         .Param("width", number, "New viewport width in pixels.")
                         .Param("height", number, "New viewport height in pixels.")
                         .ReturnType(boolean)
                         .Returns("True when the view exists and was resized."),
-                    Side::Client)
+                    Framework::Scripting::Bind::Side::Client)
                 .Function("setViewPosition", &SetViewPosition,
-                    Doc("Moves an owned view on screen.")
+                    Framework::Scripting::Bind::Doc("Moves an owned view on screen.")
                         .Param("viewId", number, viewId)
                         .Param("x", number, "New horizontal screen position in pixels.")
                         .Param("y", number, "New vertical screen position in pixels.")
                         .ReturnType(boolean)
                         .Returns("True when the view exists and was moved."),
-                    Side::Client)
+                    Framework::Scripting::Bind::Side::Client)
                 .Function("on", &On,
-                    Doc("Registers a handler for an event emitted by an owned same-origin page.").Param("viewId", number, viewId).Param("eventName", text, "Page-to-script event name.").Param("handler", handler, "Resource-owned callback invoked by the view's callEvent bridge."),
-                    Side::Client)
+                    Framework::Scripting::Bind::Doc("Registers a handler for an event emitted by an owned same-origin page.").Param("viewId", number, viewId).Param("eventName", text, "Page-to-script event name.").Param("handler", handler, "Resource-owned callback invoked by the view's callEvent bridge."),
+                    Framework::Scripting::Bind::Side::Client)
                 .Function("off", &Off,
-                    Doc("Removes page-event handlers from an owned view.")
+                    Framework::Scripting::Bind::Doc("Removes page-event handlers from an owned view.")
                         .Param("viewId", number, viewId)
                         .Param("eventName", text, "Page-to-script event name.")
                         .OptionalParam("handler", handler, "Optional exact callback; omitting it removes every matching handler owned by the resource.")
                         .ReturnType(boolean)
                         .Returns("True when at least one handler was removed."),
-                    Side::Client)
+                    Framework::Scripting::Bind::Side::Client)
                 .Function("emit", &Emit,
-                    Doc("Dispatches a CustomEvent into an owned view.")
+                    Framework::Scripting::Bind::Doc("Dispatches a CustomEvent into an owned view.")
                         .Param("viewId", number, viewId)
                         .Param("eventName", text, "CustomEvent name dispatched in the page.")
-                        .OptionalParam("payload", Custom("unknown", "any"), "Optional JSON-serializable event detail.")
+                        .OptionalParam("payload", Framework::Scripting::Bind::Type::Custom("unknown", "any"), "Optional JSON-serializable event detail.")
                         .ReturnType(boolean)
                         .Returns("True when the dispatch script was queued."),
-                    Side::Client)
-                .Function("getScreenSize", &GetScreenSize, Doc("Returns the current client viewport size.").ReturnType(Custom("{ width: number; height: number }", "{ width: integer, height: integer }")).Returns("Width and height in physical pixels."), Side::Client);
+                    Framework::Scripting::Bind::Side::Client)
+                .Function("getScreenSize", &GetScreenSize, Framework::Scripting::Bind::Doc("Returns the current client viewport size.").ReturnType(Framework::Scripting::Bind::Type::Custom("{ width: number; height: number }", "{ width: integer, height: integer }")).Returns("Width and height in physical pixels."), Framework::Scripting::Bind::Side::Client);
         }();
         return definition;
     }
@@ -457,8 +449,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         _managerLink->manager = resourceManager;
 
         // So the calls of this isolate name their resource and its manager.
-        Bind::SetCallResourceManager(isolate, resourceManager);
-        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Bind::Side::Client);
+        Framework::Scripting::Bind::SetCallResourceManager(isolate, resourceManager);
+        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Client);
 
         RegisterViewEventMetadata(isolate);
     }
@@ -522,12 +514,12 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         return gui->GetView(viewId);
     }
 
-    Framework::Scripting::ResourceManager *Web::ManagerOf(const Bind::Call &call) {
+    Framework::Scripting::ResourceManager *Web::ManagerOf(const Framework::Scripting::Bind::Call &call) {
         auto *manager = call.GetResourceManager();
         return manager != nullptr && manager == _resourceManager ? manager : nullptr;
     }
 
-    Framework::GUI::View *Web::GetCallerView(const Bind::Call &call, int viewId) {
+    Framework::GUI::View *Web::GetCallerView(const Framework::Scripting::Bind::Call &call, int viewId) {
         if (!ManagerOf(call)) {
             return nullptr;
         }
@@ -543,7 +535,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         return gui ? gui->GetView(viewId) : nullptr;
     }
 
-    void Web::CreateView(Bind::Call &call) {
+    void Web::CreateView(Framework::Scripting::Bind::Call &call) {
         std::string url;
         if (call.ArgCount() < 1 || !ReadText(call, 0, url)) {
             call.ThrowError("Web.createView requires a url string");
@@ -568,7 +560,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
 
         // Read off an object or a table; anything else has no member and leaves the defaults.
-        const Bind::Value options = call.Arg(1);
+        const Framework::Scripting::Bind::Value options = call.Arg(1);
         const int width           = IntOption(options, "width", 0);
         const int height          = IntOption(options, "height", 0);
         const int x               = IntOption(options, "x", 0);
@@ -608,7 +600,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(id);
     }
 
-    void Web::DestroyView(Bind::Call &call) {
+    void Web::DestroyView(Framework::Scripting::Bind::Call &call) {
         int id = -1;
         if (!ReadViewId(call, "Web.destroyView", id)) {
             return;
@@ -617,7 +609,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(GetCallerView(call, id) != nullptr && DestroyViewInternal(id));
     }
 
-    void Web::ShowView(Bind::Call &call) {
+    void Web::ShowView(Framework::Scripting::Bind::Call &call) {
         int id = -1;
         if (!ReadViewId(call, "Web.showView", id)) {
             return;
@@ -632,7 +624,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(true);
     }
 
-    void Web::HideView(Bind::Call &call) {
+    void Web::HideView(Framework::Scripting::Bind::Call &call) {
         int id = -1;
         if (!ReadViewId(call, "Web.hideView", id)) {
             return;
@@ -649,7 +641,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(true);
     }
 
-    void Web::FocusView(Bind::Call &call) {
+    void Web::FocusView(Framework::Scripting::Bind::Call &call) {
         int id = -1;
         if (!ReadViewId(call, "Web.focusView", id)) {
             return;
@@ -666,7 +658,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(true);
     }
 
-    void Web::IsViewVisible(Bind::Call &call) {
+    void Web::IsViewVisible(Framework::Scripting::Bind::Call &call) {
         int id = -1;
         if (!ReadViewId(call, "Web.isViewVisible", id)) {
             return;
@@ -676,7 +668,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(view != nullptr && view->ShouldDisplay());
     }
 
-    void Web::SetViewOffscreen(Bind::Call &call) {
+    void Web::SetViewOffscreen(Framework::Scripting::Bind::Call &call) {
         int id = -1;
         if (!ReadViewId(call, "Web.setViewOffscreen", id)) {
             return;
@@ -693,7 +685,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(true);
     }
 
-    void Web::IsViewOffscreen(Bind::Call &call) {
+    void Web::IsViewOffscreen(Framework::Scripting::Bind::Call &call) {
         int id = -1;
         if (!ReadViewId(call, "Web.isViewOffscreen", id)) {
             return;
@@ -703,7 +695,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(view != nullptr && view->IsOffscreen());
     }
 
-    void Web::LoadURL(Bind::Call &call) {
+    void Web::LoadURL(Framework::Scripting::Bind::Call &call) {
         std::string url;
         if (call.ArgCount() < 2 || !call.Arg(0).IsNumber() || !ReadText(call, 1, url)) {
             call.ThrowError("Web.loadURL requires 2 arguments: viewId, url");
@@ -719,14 +711,14 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(true);
     }
 
-    void Web::ResizeView(Bind::Call &call) {
+    void Web::ResizeView(Framework::Scripting::Bind::Call &call) {
         if (call.ArgCount() < 3 || !call.Arg(0).IsNumber() || !call.Arg(1).IsNumber() || !call.Arg(2).IsNumber()) {
             call.ThrowError("Web.resizeView requires 3 arguments: viewId, width, height");
             return;
         }
 
-        const int width  = ToInt32(call.Arg(1).AsNumber());
-        const int height = ToInt32(call.Arg(2).AsNumber());
+        const int width  = Framework::Scripting::Builtins::ToInt32(call.Arg(1).AsNumber());
+        const int height = Framework::Scripting::Builtins::ToInt32(call.Arg(2).AsNumber());
 
         auto *view = GetCallerView(call, ViewId(call.Arg(0)));
         if (!view || width <= 0 || height <= 0) {
@@ -739,14 +731,14 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(true);
     }
 
-    void Web::SetViewPosition(Bind::Call &call) {
+    void Web::SetViewPosition(Framework::Scripting::Bind::Call &call) {
         if (call.ArgCount() < 3 || !call.Arg(0).IsNumber() || !call.Arg(1).IsNumber() || !call.Arg(2).IsNumber()) {
             call.ThrowError("Web.setViewPosition requires 3 arguments: viewId, x, y");
             return;
         }
 
-        const int x = ToInt32(call.Arg(1).AsNumber());
-        const int y = ToInt32(call.Arg(2).AsNumber());
+        const int x = Framework::Scripting::Builtins::ToInt32(call.Arg(1).AsNumber());
+        const int y = Framework::Scripting::Builtins::ToInt32(call.Arg(2).AsNumber());
 
         auto *view = GetCallerView(call, ViewId(call.Arg(0)));
         if (!view) {
@@ -757,7 +749,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(true);
     }
 
-    void Web::On(Bind::Call &call) {
+    void Web::On(Framework::Scripting::Bind::Call &call) {
         std::string eventName;
         if (call.ArgCount() < 3 || !call.Arg(0).IsNumber() || !ReadText(call, 1, eventName) || !call.Arg(2).IsFunction()) {
             call.ThrowError("Web.on requires 3 arguments: viewId, eventName, handler");
@@ -789,7 +781,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             return;
         }
 
-        std::shared_ptr<Bind::ScriptCallable> callback = call.Arg(2).ToCallable();
+        std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callback = call.Arg(2).ToCallable();
         if (callback == nullptr) {
             call.ThrowError("Web.on requires 3 arguments: viewId, eventName, handler");
             return;
@@ -814,7 +806,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
     }
 
-    void Web::Off(Bind::Call &call) {
+    void Web::Off(Framework::Scripting::Bind::Call &call) {
         std::string eventName;
         if (call.ArgCount() < 2 || !call.Arg(0).IsNumber() || !ReadText(call, 1, eventName)) {
             call.ThrowError("Web.off requires at least 2 arguments: viewId, eventName");
@@ -825,7 +817,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         // The same function gives the same callable, so the handler is found again by it. Anything that is
         // not a function is no filter.
-        const std::shared_ptr<Bind::ScriptCallable> handler = call.Arg(2).ToCallable();
+        const std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> handler = call.Arg(2).ToCallable();
 
         if (!GetCallerView(call, id)) {
             call.Return(false);
@@ -869,7 +861,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(removed);
     }
 
-    void Web::Emit(Bind::Call &call) {
+    void Web::Emit(Framework::Scripting::Bind::Call &call) {
         std::string eventName;
         if (call.ArgCount() < 2 || !call.Arg(0).IsNumber() || !ReadText(call, 1, eventName)) {
             call.ThrowError("Web.emit requires at least 2 arguments: viewId, eventName");
@@ -886,7 +878,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // null of JavaScript is a detail of null. Neither is a function, which JSON has no form for in
         // either language, nor what JSON.stringify leaves out.
         std::string detail;
-        const Bind::Value payload = call.Arg(2);
+        const Framework::Scripting::Bind::Value payload = call.Arg(2);
         if ((!payload.IsNil() || payload.IsNull()) && !payload.IsFunction()) {
             bool omitted = false;
             auto json    = payload.ToJson(omitted);
@@ -909,7 +901,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         call.Return(true);
     }
 
-    void Web::GetScreenSize(Bind::Call &call) {
+    void Web::GetScreenSize(Framework::Scripting::Bind::Call &call) {
         int width = 0, height = 0;
         if (auto *gui = CoreModules::GetWebManager()) {
             const auto viewport = gui->GetViewportConfiguration();
@@ -917,7 +909,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             height              = viewport.height;
         }
 
-        Bind::Value result = call.NewObject();
+        Framework::Scripting::Bind::Value result = call.NewObject();
         result.Set("width", call.Integer(width));
         result.Set("height", call.Integer(height));
         call.Return(result);
@@ -1032,7 +1024,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         v8::Isolate *engineIsolate = engine && engine->IsInitialized() ? engine->GetIsolate() : nullptr;
         std::optional<Framework::Scripting::EngineScope> scope;
         v8::Local<v8::Value> arg;
-        std::optional<std::vector<TransferredValue>> copied;
+        std::optional<std::vector<Framework::Scripting::TransferredValue>> copied;
 
         for (const Handler &handler : handlers) {
             // A handler that ran before it may have shut the scripting down: nobody is left to call.
@@ -1046,7 +1038,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
 
             if (engineIsolate != nullptr && handler.callback->GetLanguage() == Framework::Scripting::Language::JavaScript) {
-                const auto &callable = static_cast<const Bind::V8Callable &>(*handler.callback);
+                const auto &callable = static_cast<const Framework::Scripting::Bind::V8Callable &>(*handler.callback);
                 if (callable.Isolate() == engineIsolate) {
                     if (!scope) {
                         scope.emplace(engine);
@@ -1084,8 +1076,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
             // Reported when it raised and when what it waited on failed later; one cut short because its
             // runtime stopped has nothing to report.
-            handler.callback->Invoke(*copied, Bind::ReturnMode::Outcome, [link, failed, resourceName = handler.resourceName, viewId, eventName](Bind::CallOutcome &&outcome) {
-                if (outcome.threw && outcome.error != Bind::kRuntimeStopped) {
+            handler.callback->Invoke(*copied, Framework::Scripting::Bind::ReturnMode::Outcome, [link, failed, resourceName = handler.resourceName, viewId, eventName](Framework::Scripting::Bind::CallOutcome &&outcome) {
+                if (outcome.threw && outcome.error != Framework::Scripting::Bind::kRuntimeStopped) {
                     failed->push_back(resourceName);
                     ReportFailure(link->manager, resourceName, viewId, eventName, outcome.error);
                 }

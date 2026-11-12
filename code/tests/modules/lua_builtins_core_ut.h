@@ -32,11 +32,6 @@
 // Console and ExecutionEnvironment, declared once for JavaScript and Lua: what a Lua script gets of them, held
 // against what a JavaScript one gets.
 namespace LuaBuiltinsCoreTest {
-    using namespace Framework::Scripting;
-    using Builtins::Console;
-    using Builtins::ExecutionEnvironment;
-    using LuaRuntimeTest::LogCapture;
-
     // The resource the scripts of both languages run as.
     constexpr const char *kResource   = "core";
     constexpr const char *kModVersion = "1.2.3-rc.1";
@@ -50,7 +45,7 @@ namespace LuaBuiltinsCoreTest {
     }
 
     // What the resource wrote to the log, each line as "<level> <text>", joined with newlines.
-    inline std::string Written(LogCapture &log, const std::string &resource = kResource) {
+    inline std::string Written(LuaRuntimeTest::LogCapture &log, const std::string &resource = kResource) {
         std::vector<std::string> lines;
         const std::string tag = " [" + resource + "] ";
         for (const std::string &line : log.LeveledLines()) {
@@ -64,20 +59,20 @@ namespace LuaBuiltinsCoreTest {
     // A Lua engine whose runtimes get the value types, the console and ExecutionEnvironment the way the server
     // module gives them, with one runtime of the resource.
     struct LuaSide final {
-        LuaEngine engine;
+        Framework::Scripting::LuaEngine engine;
 
         // `memoryLimitBytes` is the cap of the state, or 0 for the one the engine gives by default.
-        explicit LuaSide(Bind::Side side = Bind::Side::Server, const std::string &modVersion = kModVersion, size_t memoryLimitBytes = 0): engine(Options(side, memoryLimitBytes)) {
-            engine.SetRuntimeSetupCallback([side, modVersion](LuaRuntime &runtime) {
-                Builtins::RegisterValueTypesLua(runtime.State(), side);
-                Console::RegisterLua(runtime);
-                ExecutionEnvironment::RegisterLua(runtime, modVersion);
+        explicit LuaSide(Framework::Scripting::Bind::Side side = Framework::Scripting::Bind::Side::Server, const std::string &modVersion = kModVersion, size_t memoryLimitBytes = 0): engine(Options(side, memoryLimitBytes)) {
+            engine.SetRuntimeSetupCallback([side, modVersion](Framework::Scripting::LuaRuntime &runtime) {
+                Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), side);
+                Framework::Scripting::Builtins::Console::RegisterLua(runtime);
+                Framework::Scripting::Builtins::ExecutionEnvironment::RegisterLua(runtime, modVersion);
             });
-            ready = engine.Init() == ScriptingError::SCRIPTING_NONE && engine.CreateResourceRuntime(kResource);
+            ready = engine.Init() == Framework::Scripting::ScriptingError::SCRIPTING_NONE && engine.CreateResourceRuntime(kResource);
         }
 
-        static LuaEngineOptions Options(Bind::Side side, size_t memoryLimitBytes = 0) {
-            LuaEngineOptions options;
+        static Framework::Scripting::LuaEngineOptions Options(Framework::Scripting::Bind::Side side, size_t memoryLimitBytes = 0) {
+            Framework::Scripting::LuaEngineOptions options;
             options.side = side;
             if (memoryLimitBytes != 0) {
                 options.memoryLimitBytes = memoryLimitBytes;
@@ -85,7 +80,7 @@ namespace LuaBuiltinsCoreTest {
             return options;
         }
 
-        LuaRuntime &Runtime() {
+        Framework::Scripting::LuaRuntime &Runtime() {
             return *engine.GetRuntime(kResource);
         }
 
@@ -111,8 +106,8 @@ namespace LuaBuiltinsCoreTest {
 
     // A JavaScript runtime of an engine of its own, taken down in the order the caches kept by isolate need.
     struct JsRuntime final {
-        NodeEngine engine;
-        std::unique_ptr<NodeRuntime> runtime;
+        Framework::Scripting::NodeEngine engine;
+        std::unique_ptr<Framework::Scripting::NodeRuntime> runtime;
 
         JsRuntime() {
             engine.Init();
@@ -122,8 +117,8 @@ namespace LuaBuiltinsCoreTest {
 
         ~JsRuntime() {
             // The caches and the catalog are keyed by isolate address, which a later isolate may reuse.
-            Builtins::UnregisterAll(Isolate());
-            ClearScriptingCatalog(Isolate());
+            Framework::Scripting::Builtins::UnregisterAll(Isolate());
+            Framework::Scripting::ClearScriptingCatalog(Isolate());
             runtime.reset();
             engine.Shutdown();
         }
@@ -154,16 +149,16 @@ namespace LuaBuiltinsCoreTest {
     // Register, under a manager that says which resource is running.
     struct JsSide final {
         JsRuntime js;
-        ResourceManager manager;
+        Framework::Scripting::ResourceManager manager;
 
         explicit JsSide(bool isClient = false, const std::string &modVersion = kModVersion): manager(&js.engine) {
             static int count = 0;
-            SetScriptingCatalog(js.Isolate(), "lua_builtins_core/" + std::to_string(++count));
-            SetScriptingEnvironment(js.Isolate(), isClient);
+            Framework::Scripting::SetScriptingCatalog(js.Isolate(), "lua_builtins_core/" + std::to_string(++count));
+            Framework::Scripting::SetScriptingEnvironment(js.Isolate(), isClient);
             js.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-                Builtins::RegisterValueTypes(isolate, context->Global());
-                Console::Register(isolate, context, &manager);
-                ExecutionEnvironment::Register(isolate, context, context->Global(), isClient, modVersion);
+                Framework::Scripting::Builtins::RegisterValueTypes(isolate, context->Global());
+                Framework::Scripting::Builtins::Console::Register(isolate, context, &manager);
+                Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, context->Global(), isClient, modVersion);
             });
             manager.SetCurrentResourceContext(kResource);
         }
@@ -174,12 +169,12 @@ namespace LuaBuiltinsCoreTest {
     };
 
     // The names of the functions and of the properties a definition declares, in the order it declares them.
-    inline std::string Members(const Bind::Namespace &definition) {
+    inline std::string Members(const Framework::Scripting::Bind::Namespace &definition) {
         std::string names;
-        for (const Bind::FunctionDesc &function : definition.Describe().functions) {
+        for (const Framework::Scripting::Bind::FunctionDesc &function : definition.Describe().functions) {
             names += (names.empty() ? "" : ",") + function.name + "()";
         }
-        for (const Bind::PropertyDesc &property : definition.Describe().properties) {
+        for (const Framework::Scripting::Bind::PropertyDesc &property : definition.Describe().properties) {
             names += (names.empty() ? "" : ",") + property.name;
         }
         return names;
@@ -187,19 +182,16 @@ namespace LuaBuiltinsCoreTest {
 } // namespace LuaBuiltinsCoreTest
 
 MODULE(lua_builtins_core, {
-    using namespace LuaBuiltinsCoreTest;
-    using LuaResourcesTest::Server;
-
     // ==================== console ====================
 
     IT("gives a Lua state the console of JavaScript, under the same names", {
-        EQUALS(Members(Console::Definition()), "log(),info(),warn(),error(),debug()");
+        EQUALS(LuaBuiltinsCoreTest::Members(Framework::Scripting::Builtins::Console::Definition()), "log(),info(),warn(),error(),debug()");
 
-        LuaSide lua;
+        LuaBuiltinsCoreTest::LuaSide lua;
         EQUALS(lua.ready, true);
-        JsSide js;
+        LuaBuiltinsCoreTest::JsSide js;
         std::string types;
-        for (const Bind::FunctionDesc &function : Console::Definition().Describe().functions) {
+        for (const Framework::Scripting::Bind::FunctionDesc &function : Framework::Scripting::Builtins::Console::Definition().Describe().functions) {
             types += lua.Eval("type(console." + function.name + ")") + "/" + js.Eval("typeof console." + function.name) + " ";
         }
         EQUALS(types, "function/function function/function function/function function/function function/function ");
@@ -220,16 +212,16 @@ MODULE(lua_builtins_core, {
         const std::string script   = "console.log('to log'); console.info('to info'); console.warn('to warn'); console.error('to error'); console.debug('to debug')";
         const std::string expected = "info to log\ninfo to info\nwarning to warn\nerror to error\ndebug to debug";
 
-        LogCapture log(spdlog::level::debug);
-        LuaSide lua;
+        LuaRuntimeTest::LogCapture log(spdlog::level::debug);
+        LuaBuiltinsCoreTest::LuaSide lua;
         EQUALS(lua.Run(script), "");
-        EQUALS(Written(log), expected);
+        EQUALS(LuaBuiltinsCoreTest::Written(log), expected);
 
         // JavaScript logs the same lines for the same calls.
-        LogCapture again(spdlog::level::debug);
-        JsSide js;
+        LuaRuntimeTest::LogCapture again(spdlog::level::debug);
+        LuaBuiltinsCoreTest::JsSide js;
         EQUALS(js.Eval(script + "; 0"), "0");
-        EQUALS(Written(again), expected);
+        EQUALS(LuaBuiltinsCoreTest::Written(again), expected);
     });
 
     IT("formats what it is given as the console of JavaScript does", {
@@ -260,9 +252,9 @@ MODULE(lua_builtins_core, {
             {"", "", ""},
         };
 
-        LogCapture log(spdlog::level::debug);
-        LuaSide lua;
-        JsSide js;
+        LuaRuntimeTest::LogCapture log(spdlog::level::debug);
+        LuaBuiltinsCoreTest::LuaSide lua;
+        LuaBuiltinsCoreTest::JsSide js;
         std::string mismatches;
         std::string expected;
         for (const Case &entry : cases) {
@@ -273,7 +265,7 @@ MODULE(lua_builtins_core, {
             expected += std::string(expected.empty() ? "" : "\n") + "info " + entry.expected;
         }
         EQUALS(mismatches, "");
-        EQUALS(Written(log), expected);
+        EQUALS(LuaBuiltinsCoreTest::Written(log), expected);
 
         // Each language spells what it has for nothing, and what the other has no word for.
         EQUALS(lua.Printed("console.log('a', nil, 'b', nil)"), "a nil b nil");
@@ -287,36 +279,36 @@ MODULE(lua_builtins_core, {
         // first value, which is an empty table to it.
         EQUALS(lua.Printed("console:log('x')"), "[] x");
 
-        LogCapture rest(spdlog::level::debug);
+        LuaRuntimeTest::LogCapture rest(spdlog::level::debug);
         js.Eval("console.log(null, undefined, [], {}, { callback: () => {} }, 10n, Symbol('s')); 0");
-        EQUALS(Written(rest), "info null undefined [Array(0)] {} {} 10 <unknown>");
+        EQUALS(LuaBuiltinsCoreTest::Written(rest), "info null undefined [Array(0)] {} {} 10 <unknown>");
     });
 
     IT("writes where print writes, within its bounds", {
-        LuaSide lua;
+        LuaBuiltinsCoreTest::LuaSide lua;
         EQUALS(lua.Printed("print('printed') console.log('logged') console.info('told') console.warn('warned') console.error('failed') console.debug('traced')"), "printed\nlogged\ntold\nwarned\nfailed\ntraced");
 
         // A line is cut where a printed one is, and gets no line of its own into the log.
         const std::string cut = lua.Printed("console.log(('x'):rep(3000), ('y'):rep(3000))");
-        EQUALS(cut.size(), LuaRuntime::kMaxLineBytes + LuaRuntimeTest::kTruncated.size());
+        EQUALS(cut.size(), Framework::Scripting::LuaRuntime::kMaxLineBytes + LuaRuntimeTest::kTruncated.size());
         EQUALS(cut.starts_with(std::string(3000, 'x') + " " + std::string(1095, 'y') + std::string(LuaRuntimeTest::kTruncated)), true);
         EQUALS(lua.Printed("console.warn('first\\nsecond \\27[31mred\\ttab')"), "first second  [31mred\ttab");
 
         // Without a handler both go to the log, and share what a resource may write in a second.
-        LogCapture log(spdlog::level::debug);
+        LuaRuntimeTest::LogCapture log(spdlog::level::debug);
         EQUALS(lua.Run("print('printed') console.log('logged') for i = 1, 150 do print('more') end for i = 1, 150 do console.error('less') end"), "");
         const std::vector<std::string> lines = log.LeveledLines();
         EQUALS(LuaRuntimeTest::CountStartingWith(lines, "info [core] printed"), 1u);
         EQUALS(LuaRuntimeTest::CountStartingWith(lines, "info [core] logged"), 1u);
         EQUALS(LuaRuntimeTest::CountStartingWith(lines, "info [core] more"), 150u);
-        EQUALS(LuaRuntimeTest::CountStartingWith(lines, "error [core] less"), static_cast<size_t>(LuaRuntime::kMaxLinesPerSecond) - 152u);
+        EQUALS(LuaRuntimeTest::CountStartingWith(lines, "error [core] less"), static_cast<size_t>(Framework::Scripting::LuaRuntime::kMaxLinesPerSecond) - 152u);
         EQUALS(LuaRuntimeTest::CountStartingWith(lines, "warning [core] output suppressed"), 1u);
     });
 
     IT("formats no more of its arguments than a line takes", {
         // A state of two megabytes, and lines whose arguments come to far more than that when they are all spelled:
         // two thousand times a string of 64 KB, and as many times a table whose JSON is 20 KB.
-        LuaSide lua(Bind::Side::Server, kModVersion, 2u << 20);
+        LuaBuiltinsCoreTest::LuaSide lua(Framework::Scripting::Bind::Side::Server, LuaBuiltinsCoreTest::kModVersion, 2u << 20);
         EQUALS(lua.ready, true);
         EQUALS(lua.Run("big = ('x'):rep(65536)\nstrings = setmetatable({}, { __index = function() return big end })\nheavy = {}\nfor i = 1, 200 do heavy['key' .. i] = ('x'):rep(100) end\ntables = setmetatable({}, { __index = function() return heavy end })"), "");
 
@@ -337,7 +329,7 @@ MODULE(lua_builtins_core, {
         LESSER(manyTables, oneTable + 50);
 
         // Each is the line a print of the same values is cut to.
-        const std::string cut = std::string(LuaRuntime::kMaxLineBytes, 'x') + std::string(LuaRuntimeTest::kTruncated);
+        const std::string cut = std::string(Framework::Scripting::LuaRuntime::kMaxLineBytes, 'x') + std::string(LuaRuntimeTest::kTruncated);
         EQUALS(printed.lines->size(), 4u);
         EQUALS((*printed.lines)[0], cut);
         EQUALS((*printed.lines)[1], cut);
@@ -345,20 +337,22 @@ MODULE(lua_builtins_core, {
         EQUALS((*printed.lines)[3], (*printed.lines)[2]);
 
         // A line that is full to the byte is whole, and one more value makes it a cut one.
-        EQUALS(lua.Run("console.log(('y'):rep(" + std::to_string(LuaRuntime::kMaxLineBytes) + "))\nconsole.log(('y'):rep(" + std::to_string(LuaRuntime::kMaxLineBytes) + "), '')\nconsole.log(('y'):rep(" + std::to_string(LuaRuntime::kMaxLineBytes - 1) + "), 'z', 'z')"), "");
-        EQUALS((*printed.lines)[4], std::string(LuaRuntime::kMaxLineBytes, 'y'));
-        EQUALS((*printed.lines)[5], std::string(LuaRuntime::kMaxLineBytes, 'y') + std::string(LuaRuntimeTest::kTruncated));
-        EQUALS((*printed.lines)[6], std::string(LuaRuntime::kMaxLineBytes - 1, 'y') + " " + std::string(LuaRuntimeTest::kTruncated));
+        EQUALS(lua.Run("console.log(('y'):rep(" + std::to_string(Framework::Scripting::LuaRuntime::kMaxLineBytes) + "))\nconsole.log(('y'):rep(" + std::to_string(Framework::Scripting::LuaRuntime::kMaxLineBytes) + "), '')\nconsole.log(('y'):rep("
+                       + std::to_string(Framework::Scripting::LuaRuntime::kMaxLineBytes - 1) + "), 'z', 'z')"),
+            "");
+        EQUALS((*printed.lines)[4], std::string(Framework::Scripting::LuaRuntime::kMaxLineBytes, 'y'));
+        EQUALS((*printed.lines)[5], std::string(Framework::Scripting::LuaRuntime::kMaxLineBytes, 'y') + std::string(LuaRuntimeTest::kTruncated));
+        EQUALS((*printed.lines)[6], std::string(Framework::Scripting::LuaRuntime::kMaxLineBytes - 1, 'y') + " " + std::string(LuaRuntimeTest::kTruncated));
 
         // JavaScript has no bound, and gets every value.
-        LogCapture log(spdlog::level::debug);
-        JsSide js;
+        LuaRuntimeTest::LogCapture log(spdlog::level::debug);
+        LuaBuiltinsCoreTest::JsSide js;
         js.Eval("console.log('j'.repeat(3000), 'k'.repeat(3000), 'end'); 0");
-        EQUALS(Written(log), "info " + std::string(3000, 'j') + " " + std::string(3000, 'k') + " end");
+        EQUALS(LuaBuiltinsCoreTest::Written(log), "info " + std::string(3000, 'j') + " " + std::string(3000, 'k') + " end");
     });
 
     IT("keeps one function to format a value of JavaScript with, in a context", {
-        JsRuntime js;
+        LuaBuiltinsCoreTest::JsRuntime js;
         std::string number;
         std::string text;
         bool made = false;
@@ -366,10 +360,10 @@ MODULE(lua_builtins_core, {
         js.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
             // Where Console::FormatValue keeps it: on the global object, under a name no script can read.
             const v8::Local<v8::Private> key = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.console.format"));
-            number                           = Console::FormatValue(isolate, v8::Number::New(isolate, 42).As<v8::Value>());
+            number                           = Framework::Scripting::Builtins::Console::FormatValue(isolate, v8::Number::New(isolate, 42).As<v8::Value>());
             v8::Local<v8::Value> first;
             made = context->Global()->GetPrivate(context, key).ToLocal(&first) && first->IsFunction();
-            text = Console::FormatValue(isolate, v8::String::NewFromUtf8Literal(isolate, "text").As<v8::Value>());
+            text = Framework::Scripting::Builtins::Console::FormatValue(isolate, v8::String::NewFromUtf8Literal(isolate, "text").As<v8::Value>());
             v8::Local<v8::Value> second;
             kept = made && context->Global()->GetPrivate(context, key).ToLocal(&second) && second->StrictEquals(first);
         });
@@ -381,16 +375,16 @@ MODULE(lua_builtins_core, {
     });
 
     IT("names the resource its manager tells, and none without one", {
-        LogCapture log(spdlog::level::debug);
-        JsRuntime js;
-        const auto registerConsole = [&js](ResourceManager *manager) {
+        LuaRuntimeTest::LogCapture log(spdlog::level::debug);
+        LuaBuiltinsCoreTest::JsRuntime js;
+        const auto registerConsole = [&js](Framework::Scripting::ResourceManager *manager) {
             js.Enter([manager](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-                Console::Register(isolate, context, manager);
+                Framework::Scripting::Builtins::Console::Register(isolate, context, manager);
             });
         };
 
         {
-            ResourceManager manager(&js.engine);
+            Framework::Scripting::ResourceManager manager(&js.engine);
             registerConsole(&manager);
             js.Eval("console.log('before any resource'); 0");
             manager.SetCurrentResourceContext("first");
@@ -413,58 +407,58 @@ MODULE(lua_builtins_core, {
     // ==================== ExecutionEnvironment ====================
 
     IT("gives a Lua state the ExecutionEnvironment of JavaScript", {
-        EQUALS(Members(ExecutionEnvironment::Definition()), "isClient,isServer,frameworkVersion,modVersion");
+        EQUALS(LuaBuiltinsCoreTest::Members(Framework::Scripting::Builtins::ExecutionEnvironment::Definition()), "isClient,isServer,frameworkVersion,modVersion");
 
         const std::string version = Framework::Utils::Version::rel;
         {
-            LuaSide lua;
-            JsSide js;
+            LuaBuiltinsCoreTest::LuaSide lua;
+            LuaBuiltinsCoreTest::JsSide js;
             EQUALS(lua.Eval("ExecutionEnvironment.isClient"), "false");
             EQUALS(lua.Eval("ExecutionEnvironment.isServer"), "true");
             EQUALS(lua.Eval("ExecutionEnvironment.frameworkVersion"), version);
-            EQUALS(lua.Eval("ExecutionEnvironment.modVersion"), kModVersion);
+            EQUALS(lua.Eval("ExecutionEnvironment.modVersion"), LuaBuiltinsCoreTest::kModVersion);
             EQUALS(lua.Eval("type(ExecutionEnvironment.isClient) .. ' ' .. type(ExecutionEnvironment.isServer) .. ' ' .. type(ExecutionEnvironment.frameworkVersion) .. ' ' .. type(ExecutionEnvironment.modVersion)"), "boolean boolean string string");
-            EQUALS(js.Eval("[ExecutionEnvironment.isClient, ExecutionEnvironment.isServer, ExecutionEnvironment.frameworkVersion, ExecutionEnvironment.modVersion].join(' ')"), "false true " + version + " " + kModVersion);
+            EQUALS(js.Eval("[ExecutionEnvironment.isClient, ExecutionEnvironment.isServer, ExecutionEnvironment.frameworkVersion, ExecutionEnvironment.modVersion].join(' ')"), "false true " + version + " " + LuaBuiltinsCoreTest::kModVersion);
             EQUALS(js.Eval("[typeof ExecutionEnvironment.isClient, typeof ExecutionEnvironment.isServer, typeof ExecutionEnvironment.frameworkVersion, typeof ExecutionEnvironment.modVersion].join(' ')"), "boolean boolean string string");
         }
 
         // A client runtime is told it is one, in either language.
-        LuaSide lua(Bind::Side::Client);
-        JsSide js(/*isClient*/ true);
+        LuaBuiltinsCoreTest::LuaSide lua(Framework::Scripting::Bind::Side::Client);
+        LuaBuiltinsCoreTest::JsSide js(/*isClient*/ true);
         EQUALS(lua.Eval("tostring(ExecutionEnvironment.isClient) .. ' ' .. tostring(ExecutionEnvironment.isServer)"), "true false");
         EQUALS(js.Eval("ExecutionEnvironment.isClient + ' ' + ExecutionEnvironment.isServer"), "true false");
     });
 
     IT("leaves the mod version empty for a mod that has none", {
-        LuaSide lua(Bind::Side::Server, "");
-        JsSide js(/*isClient*/ false, "");
+        LuaBuiltinsCoreTest::LuaSide lua(Framework::Scripting::Bind::Side::Server, "");
+        LuaBuiltinsCoreTest::JsSide js(/*isClient*/ false, "");
         EQUALS(lua.Eval("ExecutionEnvironment.modVersion == ''"), "true");
         EQUALS(js.Eval("ExecutionEnvironment.modVersion === ''"), "true");
 
         // What RegisterLua gives a state when it is told none.
-        LuaRuntime runtime(LuaRuntimeTest::Options());
-        ExecutionEnvironment::RegisterLua(runtime);
+        Framework::Scripting::LuaRuntime runtime(LuaRuntimeTest::Options());
+        Framework::Scripting::Builtins::ExecutionEnvironment::RegisterLua(runtime);
         EQUALS(LuaRuntimeTest::Eval(runtime, "ExecutionEnvironment.modVersion == '' and ExecutionEnvironment.isServer"), "true");
     });
 
     IT("lets no script change ExecutionEnvironment", {
-        LuaSide lua;
+        LuaBuiltinsCoreTest::LuaSide lua;
         EQUALS(lua.Eval("(function() ExecutionEnvironment.modVersion = 'x' end)()"), "<error> eval:1: attempt to set 'modVersion' on ExecutionEnvironment");
         EQUALS(lua.Eval("(function() ExecutionEnvironment.isClient = true end)()"), "<error> eval:1: attempt to set 'isClient' on ExecutionEnvironment");
         EQUALS(lua.Eval("(function() ExecutionEnvironment.extra = 1 end)()"), "<error> eval:1: attempt to set 'extra' on ExecutionEnvironment");
-        EQUALS(lua.Eval("ExecutionEnvironment.modVersion"), kModVersion);
+        EQUALS(lua.Eval("ExecutionEnvironment.modVersion"), LuaBuiltinsCoreTest::kModVersion);
         EQUALS(lua.Eval("type(ExecutionEnvironment.IsClient)"), "nil");
 
-        JsSide js;
+        LuaBuiltinsCoreTest::JsSide js;
         EQUALS(js.Eval("!Reflect.set(ExecutionEnvironment, 'modVersion', 'x') && !Reflect.deleteProperty(ExecutionEnvironment, 'modVersion') && !Reflect.set(ExecutionEnvironment, 'isClient', true)"), "true");
-        EQUALS(js.Eval("ExecutionEnvironment.modVersion"), kModVersion);
+        EQUALS(js.Eval("ExecutionEnvironment.modVersion"), LuaBuiltinsCoreTest::kModVersion);
     });
 
     // ==================== The server module ====================
 
     IT("has both in the Lua state of a resource the server module starts", {
-        LogCapture log(spdlog::level::debug);
-        Server server;
+        LuaRuntimeTest::LogCapture log(spdlog::level::debug);
+        LuaResourcesTest::Server server;
         server.module.SetModVersion("4.5.6");
         server.files.Resource("lua-side", {{"main.lua", "console.log('started', ExecutionEnvironment.isServer, ExecutionEnvironment.isClient, ExecutionEnvironment.modVersion)\nconsole.warn('careful')"}});
         server.files.Resource("js-side", {{"main.js", "console.log('started', ExecutionEnvironment.isServer, ExecutionEnvironment.isClient, ExecutionEnvironment.modVersion);\nconsole.warn('careful');"}});

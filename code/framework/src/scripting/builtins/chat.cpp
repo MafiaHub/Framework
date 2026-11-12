@@ -110,20 +110,17 @@ namespace Framework::Scripting::Builtins {
     } // namespace
 
     const Bind::Namespace &Chat::Definition() {
-        using Bind::Doc;
-        using Bind::Side;
-        using Bind::TypeOf;
         static const auto definition = [] {
             const auto options      = Bind::Type::Custom("{ author?: string; color?: number | Color }", "{ author: string?, color: (integer|Color)? }");
             const char *optionsHelp = "Optional author label and color: a Color or a packed 0xRRGGBBAA integer.";
-            return Bind::Namespace("Chat", "Server-side delivery of structured chat messages to connected clients.", Side::Server)
-                .Function("sendToAll", &SendToAll, Doc("Broadcasts a structured chat message to all clients.").Param("text", TypeOf<std::string>(), "Message body broadcast to every connected client.").OptionalParam("options", options, optionsHelp), Side::Server)
+            return Bind::Namespace("Chat", "Server-side delivery of structured chat messages to connected clients.", Framework::Scripting::Bind::Side::Server)
+                .Function("sendToAll", &SendToAll, Framework::Scripting::Bind::Doc("Broadcasts a structured chat message to all clients.").Param("text", Framework::Scripting::Bind::TypeOf<std::string>(), "Message body broadcast to every connected client.").OptionalParam("options", options, optionsHelp), Framework::Scripting::Bind::Side::Server)
                 .Function("sendToPlayer", &SendToPlayer,
-                    Doc("Sends a structured chat message to one player's owning connection.")
-                        .Param("player", TypeOf<Entity>(), "Player-owned entity identifying the destination connection.")
-                        .Param("text", TypeOf<std::string>(), "Message body sent to the player.")
+                    Framework::Scripting::Bind::Doc("Sends a structured chat message to one player's owning connection.")
+                        .Param("player", Framework::Scripting::Bind::TypeOf<Entity>(), "Player-owned entity identifying the destination connection.")
+                        .Param("text", Framework::Scripting::Bind::TypeOf<std::string>(), "Message body sent to the player.")
                         .OptionalParam("options", options, optionsHelp),
-                    Side::Server);
+                    Framework::Scripting::Bind::Side::Server);
         }();
         return definition;
     }
