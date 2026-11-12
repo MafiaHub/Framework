@@ -101,8 +101,8 @@ namespace NetworkWorkTest {
 // Rides another entity, which a viewer has to be shown with it.
 class ChurnRider final: public Framework::Networking::Replication::NetworkEntity {
   public:
-    Framework::Networking::Replication::NetworkEntity *mount = nullptr;
-    Framework::Networking::Replication::NetworkEntity *GetInterestDependency() override {
+    uint64_t mount = 0;
+    uint64_t GetInterestDependency() override {
         return mount;
     }
 };
@@ -328,7 +328,7 @@ MODULE(network_work, {
         // Something already shown that comes to ride a creation brings it, however far it is.
         auto *mount       = manager->CreateEntity(type);
         mount->position.x = 3000;
-        rider->mount      = mount;
+        rider->mount      = mount->GetNetworkID();
         manager->RebuildInterest();
         EQUALS(sees(mount), true);
         EQUALS(sees(mover), true);
@@ -349,7 +349,7 @@ MODULE(network_work, {
         EQUALS(sees(npc), true);
         EQUALS(sees(mover), false);
 
-        rider->mount = nullptr;
+        rider->mount = 0;
         manager->DestroyEntity(npc);
         manager->DestroyEntity(mount);
         manager->DestroyEntity(rider);

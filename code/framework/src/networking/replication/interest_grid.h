@@ -224,6 +224,8 @@ namespace Framework::Networking::Replication {
             uint32_t cell                 = kNoCell;
             uint32_t indexInCell          = 0;
             uint32_t syncStamp            = 0;
+            uint64_t id                   = 0; // network id, as of the last sync
+            uint64_t dependencyId         = 0; // GetInterestDependency, as of the last sync
             uint32_t dependency           = kNoSlot;
             uint32_t dependencyGeneration = 0; // the dependency slot's generation when resolved
             MafiaNet::PeerGuid owner      = MafiaNet::UNASSIGNED_PEER_GUID;
@@ -277,6 +279,8 @@ namespace Framework::Networking::Replication {
 
         std::vector<Entry> _entries;
         std::vector<uint32_t> _freeSlots;
+        // Filed entities by network id: how a dependency, named by id, finds its slot.
+        std::unordered_map<uint64_t, uint32_t> _slotById;
         uint32_t _syncStamp = 0;
         std::vector<uint32_t> _dropped;
         std::vector<uint32_t> _dependencyChanges;

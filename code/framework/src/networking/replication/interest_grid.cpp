@@ -210,8 +210,16 @@ namespace Framework::Networking::Replication {
             entity->_interestSlot = slot;
         }
 
-        Entry &entry        = _entries[slot];
-        entry.syncStamp     = _syncStamp;
+        Entry &entry    = _entries[slot];
+        entry.syncStamp = _syncStamp;
+        if (const uint64_t id = entity->GetNetworkID(); entry.id != id) {
+            if (const auto filed = _slotById.find(entry.id); filed != _slotById.end() && filed->second == slot) {
+                _slotById.erase(filed);
+            }
+            entry.id      = id;
+            _slotById[id] = slot;
+        }
+        entry.dependencyId  = entity->GetInterestDependency();
         const bool own      = !_entityRangeTypes.empty() && _entityRangeTypes.contains(entity->GetTypeId());
         const uint32_t cell = CellOf(entity->position);
         if (entry.cell != cell || entry.ownRange != own) {
@@ -262,11 +270,14 @@ namespace Framework::Networking::Replication {
             if (entry.entity == nullptr) {
                 continue;
             }
-            const uint32_t before           = DependencyOf(slot);
-            const NetworkEntity *dependency = entry.entity->GetInterestDependency();
-            entry.dependency                = dependency ? dependency->_interestSlot : kNoSlot;
-            entry.dependencyGeneration      = entry.dependency != kNoSlot ? _entries[entry.dependency].generation : 0;
-            const uint32_t after            = DependencyOf(slot);
+            const uint32_t before = DependencyOf(slot);
+            entry.dependency      = kNoSlot;
+            if (entry.dependencyId != 0) {
+                const auto filed = _slotById.find(entry.dependencyId);
+                entry.dependency = filed != _slotById.end() ? filed->second : kNoSlot;
+            }
+            entry.dependencyGeneration = entry.dependency != kNoSlot ? _entries[entry.dependency].generation : 0;
+            const uint32_t after       = DependencyOf(slot);
             if (after != kNoSlot && after != before) {
                 _dependencyChanges.push_back(slot);
             }
@@ -288,6 +299,9 @@ namespace Framework::Networking::Replication {
         Entry &entry = _entries[slot];
         OwnerRemove(slot, entry.owner);
         EraseValue(_alwaysVisible, slot);
+        if (const auto filed = _slotById.find(entry.id); filed != _slotById.end() && filed->second == slot) {
+            _slotById.erase(filed);
+        }
         const uint32_t generation = entry.generation + 1;
         entry                     = {};
         entry.generation          = generation;

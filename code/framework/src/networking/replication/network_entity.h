@@ -306,10 +306,11 @@ namespace Framework::Networking::Replication {
         }
 
         // --- Game extension points ---
-        // Server interest: an entity this one makes no sense without (a seated ped needs its car).
-        // Survivors of a per-type budget pull it in with them, uncounted. Followed one level.
-        virtual NetworkEntity *GetInterestDependency() {
-            return nullptr;
+        // Server interest: the network id of an entity this one makes no sense without (a seated ped
+        // needs its car), 0 for none. Survivors of a per-type budget pull it in with them, uncounted.
+        // Followed one level; an id that does not resolve counts as none.
+        virtual uint64_t GetInterestDependency() {
+            return 0;
         }
 
         virtual void OnSerializeConstruction(FieldSerializer &fields) {
@@ -427,11 +428,6 @@ namespace Framework::Networking::Replication {
         void ResetTransformOrdering() {
             _lastTransformTime = 0;
         }
-
-        // Resolve another entity in the same replicated world by NetworkID; the owning manager is
-        // otherwise private. The seam for overrides that need a sibling, chiefly
-        // GetInterestDependency.
-        NetworkEntity *ResolveSibling(MafiaNet::NetworkID networkId) const;
 
         void WriteAllocationID(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::BitStream *allocationIdBitstream) const final;
         void SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) final;
