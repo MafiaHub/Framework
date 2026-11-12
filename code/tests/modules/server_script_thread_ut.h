@@ -547,6 +547,71 @@ MODULE(server_script_thread, {
         server.Stop();
     });
 
+    IT("lets a synchronous event's handler call a function a second thread handed it", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_packet_callback", R"(
+            Events.on('withCallback', (text, list, callback) => { callback(); return true; });
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        server.TickFor(300ms);
+        Server::functionCalls = 0;
+        server.extra          = Server::Extra::Function;
+        std::atomic<bool> proceeded {false};
+        std::thread packets([&] {
+            server.GetScriptingModule()->GetEngine()->BindOffThreadRuntime("packet");
+            // The function lives in that thread's own isolate, which it lets go of while it waits for the answer.
+            proceeded = server.EmitSyncAsProjectsDo("withCallback");
+        });
+        packets.join();
+        EQUALS(proceeded.load(), true);
+        EQUALS(Server::functionCalls.load(), 1);
+        server.Stop();
+    });
+
+    IT("raises events that carry a function from two threads at once", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_two_emitters", R"(
+            Events.on('withCallback', (text, list, callback) => { callback(); });
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        server.TickFor(300ms);
+        Server::functionCalls = 0;
+        server.extra          = Server::Extra::Function;
+        const int each        = 500;
+        std::atomic<bool> go {false};
+        std::thread packets([&] {
+            server.GetScriptingModule()->GetEngine()->BindOffThreadRuntime("packet");
+            while (!go) {
+                std::this_thread::yield();
+            }
+            for (int i = 0; i < each; ++i) {
+                server.EmitAsProjectsDo("withCallback");
+            }
+        });
+        go = true;
+        for (int i = 0; i < each; ++i) {
+            server.EmitAsProjectsDo("withCallback");
+            // The script thread calls the functions back while both threads go on handing it new ones.
+            if (i % 10 == 9) {
+                server.Update();
+            }
+        }
+        packets.join();
+        EQUALS(server.TickUntil([&] {
+            return Server::functionCalls.load() >= 2 * each;
+        }),
+            true);
+        server.TickFor(100ms);
+        EQUALS(Server::functionCalls.load(), 2 * each);
+        server.Stop();
+    });
+
     IT("still lets another thread start and stop resources, once the running script is out of the way", {
         Server server;
         // Uses a binding as it loads: a runtime started from the tick thread has to have its own.
