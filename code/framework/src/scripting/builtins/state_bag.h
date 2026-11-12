@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../class_cache.h"
+
 #include <networking/replication/replication_manager.h>
 #include <networking/replication/state_bag.h>
 
@@ -16,6 +18,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 
@@ -76,7 +79,11 @@ namespace Framework::Scripting::Builtins {
         static Held ResolveFrom(const v8::FunctionCallbackInfo<v8::Value> &info);
 
         uint64_t _id = 0;
-        inline static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<StateBag>>> _classes;
+        inline static ClassCache<StateBag> _classes;
+        // Every isolate's subscriptions in one table, which scripts change on their thread while a
+        // change raised on another looks its listener up: under this mutex, never held while a
+        // listener runs or the replication manager is called.
+        inline static std::mutex _subscriptionsMutex;
         inline static std::unordered_map<v8::Isolate *, std::unordered_map<uint32_t, Subscription>> _subscriptions;
         inline static uint32_t _nextSubscriptionId = 0;
     };

@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../class_cache.h"
+
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <memory>
@@ -132,7 +134,7 @@ namespace Framework::Scripting::Builtins {
 
       private:
         glm::vec4 _color;
-        static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Color>>> _classes;
+        static ClassCache<Color> _classes;
     };
 
 } // namespace Framework::Scripting::Builtins

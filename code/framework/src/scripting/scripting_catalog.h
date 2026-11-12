@@ -40,6 +40,25 @@ namespace Framework::Scripting {
         }
     } // namespace detail
 
+    // A catalog is shared by every isolate that registers into it, and registering is not only done
+    // when a runtime is set up: a handle class is built the first time an isolate wraps one, on
+    // whichever thread that isolate is being used by. So one registration runs at a time, a runtime's
+    // setup or a class being built, under this lock. It nests (a class builds its base), and what runs
+    // under it declares bindings and runs no script.
+    class CatalogWriteLock final {
+      public:
+        CatalogWriteLock(): _lock(Mutex()) {}
+        CatalogWriteLock(const CatalogWriteLock &)            = delete;
+        CatalogWriteLock &operator=(const CatalogWriteLock &) = delete;
+
+      private:
+        static std::recursive_mutex &Mutex() {
+            static std::recursive_mutex mutex;
+            return mutex;
+        }
+        std::lock_guard<std::recursive_mutex> _lock;
+    };
+
     inline void SetScriptingCatalog(v8::Isolate *isolate, std::string_view name) {
         if (!isolate) {
             throw std::invalid_argument("SetScriptingCatalog requires an isolate");

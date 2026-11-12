@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../class_cache.h"
+
 #include <v8pp/class.hpp>
 #include <v8pp/property.hpp>
 
@@ -131,7 +133,7 @@ namespace Framework::Scripting::Builtins {
 
       private:
         glm::quat _quat;
-        static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Quaternion>>> _classes;
+        static ClassCache<Quaternion> _classes;
     };
 
 } // namespace Framework::Scripting::Builtins

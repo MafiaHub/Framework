@@ -25,6 +25,7 @@
 #include <chrono>
 #include <map>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -351,6 +352,9 @@ namespace Framework::Scripting {
 
         // One runtime per running resource, and the isolate each one owns.
         std::map<std::string, std::unique_ptr<ResourceRuntime>, std::less<>> _resourceRuntimes;
+        // Changed where resources start and stop, and asked by every thread that opens a scope on the engine
+        // (GetIsolate, GetContext): under this mutex, held for the table only.
+        mutable std::shared_mutex _runtimeByIsolateMutex;
         std::unordered_map<v8::Isolate *, ResourceRuntime *> _runtimeByIsolate;
 
         // Runtimes stopped while script was running; destroyed at the next tick.

@@ -9,6 +9,10 @@
 #pragma once
 
 #include "integrations/server/instance.h"
+#include "scripting/builtins/entity.h"
+#include "scripting/builtins/player.h"
+#include "scripting/builtins/state_bag.h"
+#include "scripting/builtins/vector3.h"
 #include "scripting/engine_scope.h"
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
@@ -693,6 +697,54 @@ MODULE(server_script_thread, {
             true);
         EQUALS(server.registeredElsewhere.load(), 0);
         GREATER(server.ticks, 10);
+        server.Stop();
+    });
+
+    IT("wraps entities from the tick and packet runtimes at once while a resource restarts", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_wrap", "globalThis.loaded = true;");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        server.TickFor(100ms);
+        auto *engine = server.GetScriptingModule()->GetEngine();
+        // Each thread in a runtime of its own, as the tick and the packet thread are, building what an event's
+        // arguments are built from. The classes they wrap with are kept per isolate in tables all isolates share,
+        // and a resource restarting meanwhile takes its isolate's out of them and puts a new one's in.
+        constexpr int kEach = 1000;
+        std::atomic<int> wrapped {0};
+        std::atomic<bool> go {false};
+        const auto wrap = [&](const char *runtime) {
+            if (runtime != nullptr) {
+                engine->BindOffThreadRuntime(runtime);
+            }
+            while (!go) {
+                std::this_thread::yield();
+            }
+            for (int i = 0; i < kEach; ++i) {
+                Framework::Scripting::EngineScope scope(engine);
+                v8::Isolate *isolate = scope.Isolate();
+                const uint64_t id    = 100000 + static_cast<uint64_t>(i);
+                Framework::Scripting::Builtins::Entity::GetClass(isolate);
+                Framework::Scripting::Builtins::Player::GetClass(isolate);
+                const bool whole = !v8pp::class_<Framework::Scripting::Builtins::Entity>::create_object(isolate, id).IsEmpty() && !v8pp::class_<Framework::Scripting::Builtins::Player>::create_object(isolate, id).IsEmpty()
+                                && !Framework::Scripting::Builtins::Vector3::NewInstance(isolate, glm::vec3(1.0f)).IsEmpty() && !Framework::Scripting::Builtins::StateBag::NewInstance(isolate, id).IsEmpty();
+                wrapped += whole ? 1 : 0;
+            }
+        };
+        std::thread packets(wrap, "packet");
+        std::thread ticks(wrap, nullptr);
+        go = true;
+        int restarts = 0;
+        for (int i = 0; i < 3; ++i) {
+            restarts += static_cast<bool>(server.GetScriptingModule()->GetResourceManager()->RestartResource("demo")) ? 1 : 0;
+            server.TickFor(50ms);
+        }
+        packets.join();
+        ticks.join();
+        EQUALS(restarts, 3);
+        EQUALS(wrapped.load(), 2 * kEach);
         server.Stop();
     });
 

@@ -156,13 +156,13 @@ namespace Framework::Scripting::Builtins {
     }
 
     void StateBag::Dispatch(v8::Isolate *isolate, uint32_t id, const Networking::Replication::StateChange &change) {
-        const auto perIsolate = _subscriptions.find(isolate);
-        if (perIsolate == _subscriptions.end()) {
-            return;
-        }
-        const auto entry = perIsolate->second.find(id);
-        if (entry == perIsolate->second.end()) {
-            return;
+        {
+            // Gone since the change was raised: not worth entering the runtime for.
+            const std::lock_guard guard(_subscriptionsMutex);
+            const auto perIsolate = _subscriptions.find(isolate);
+            if (perIsolate == _subscriptions.end() || perIsolate->second.find(id) == perIsolate->second.end()) {
+                return;
+            }
         }
 
         auto *module = CoreModules::GetScriptingModule();
@@ -185,6 +185,22 @@ namespace Framework::Scripting::Builtins {
         }
         v8::Context::Scope contextScope(context);
 
+        // Taken out of the table now that the isolate is this thread's, and called without the table:
+        // the listener may subscribe or unsubscribe.
+        v8::Local<v8::Function> listener;
+        {
+            const std::lock_guard guard(_subscriptionsMutex);
+            const auto perIsolate = _subscriptions.find(isolate);
+            if (perIsolate == _subscriptions.end()) {
+                return;
+            }
+            const auto entry = perIsolate->second.find(id);
+            if (entry == perIsolate->second.end()) {
+                return;
+            }
+            listener = entry->second.callback.Get(isolate);
+        }
+
         // Charged to the listener's resource, not the writer's, from rebuilding its arguments on. Off the main thread
         // the monitor is absent.
         auto *monitor        = ResourceMonitor::Current();
@@ -205,7 +221,7 @@ namespace Framework::Scripting::Builtins {
 
             // A throwing listener is its own bug and must not take down the write that raised it.
             v8::TryCatch tryCatch(isolate);
-            (void)entry->second.callback.Get(isolate)->Call(context, v8::Undefined(isolate), 3, args);
+            (void)listener->Call(context, v8::Undefined(isolate), 3, args);
             tryCatch.Reset();
         }
         if (monitor) {
@@ -214,48 +230,58 @@ namespace Framework::Scripting::Builtins {
     }
 
     void StateBag::Unsubscribe(v8::Isolate *isolate, uint32_t id) {
-        const auto perIsolate = _subscriptions.find(isolate);
-        if (perIsolate == _subscriptions.end()) {
-            return;
-        }
-        const auto it = perIsolate->second.find(id);
-        if (it == perIsolate->second.end()) {
-            return;
+        Subscription dropped;
+        {
+            const std::lock_guard guard(_subscriptionsMutex);
+            const auto perIsolate = _subscriptions.find(isolate);
+            if (perIsolate == _subscriptions.end()) {
+                return;
+            }
+            const auto it = perIsolate->second.find(id);
+            if (it == perIsolate->second.end()) {
+                return;
+            }
+            dropped = std::move(it->second);
+            perIsolate->second.erase(it);
         }
 
         if (auto *replication = CoreModules::GetReplication()) {
-            replication->RemoveStateChangeHandler(it->second.handle);
+            replication->RemoveStateChangeHandler(dropped.handle);
         }
-        perIsolate->second.erase(it);
     }
 
     void StateBag::CleanupResource(v8::Isolate *isolate, const std::string &resourceName) {
-        const auto perIsolate = _subscriptions.find(isolate);
-        if (perIsolate == _subscriptions.end()) {
-            return;
+        std::vector<Subscription> dropped;
+        {
+            const std::lock_guard guard(_subscriptionsMutex);
+            const auto perIsolate = _subscriptions.find(isolate);
+            if (perIsolate == _subscriptions.end()) {
+                return;
+            }
+            for (auto it = perIsolate->second.begin(); it != perIsolate->second.end();) {
+                if (it->second.resourceName != resourceName) {
+                    ++it;
+                    continue;
+                }
+                dropped.push_back(std::move(it->second));
+                it = perIsolate->second.erase(it);
+            }
         }
 
-        auto *replication = CoreModules::GetReplication();
-        for (auto it = perIsolate->second.begin(); it != perIsolate->second.end();) {
-            if (it->second.resourceName != resourceName) {
-                ++it;
-                continue;
+        if (auto *replication = CoreModules::GetReplication()) {
+            for (const Subscription &subscription : dropped) {
+                replication->RemoveStateChangeHandler(subscription.handle);
             }
-            if (replication != nullptr) {
-                replication->RemoveStateChangeHandler(it->second.handle);
-            }
-            it = perIsolate->second.erase(it);
         }
     }
 
     v8pp::class_<StateBag> &StateBag::GetClass(v8::Isolate *isolate) {
-        auto it = _classes.find(isolate);
-        if (it != _classes.end()) {
-            return *it->second;
+        if (auto *found = _classes.Find(isolate)) {
+            return *found;
         }
+        const CatalogWriteLock building;
 
-        auto &cls = _classes[isolate];
-        cls =
+        auto cls =
             std::make_unique<v8pp::class_<StateBag>>(isolate, GetScriptingCatalog(isolate), "StateBag", "Arbitrary key/value state attached to one replicated entity, reached as `entity.state`. Keys set on the server replicate to every client that can currently see the entity.");
         cls->auto_wrap_objects(true);
 
@@ -398,7 +424,10 @@ namespace Framework::Scripting::Builtins {
                 if (subscription.handle == Networking::Replication::kInvalidStateChangeHandle) {
                     return;
                 }
-                _subscriptions[isolate].emplace(id, std::move(subscription));
+                {
+                    const std::lock_guard guard(_subscriptionsMutex);
+                    _subscriptions[isolate].emplace(id, std::move(subscription));
+                }
 
                 // Matching what Events.on hands back.
                 v8::Local<v8::Function> unsubscribe = v8::Function::New(
@@ -421,7 +450,7 @@ namespace Framework::Scripting::Builtins {
 
         // Writes are the server's — the same split Entity draws around setVirtualWorld.
         if (IsClientScripting(isolate)) {
-            return *cls;
+            return _classes.Add(isolate, std::move(cls));
         }
 
         cls->prototype_function(
@@ -487,7 +516,7 @@ namespace Framework::Scripting::Builtins {
             },
             v8pp::metadata::docs("boolean", {v8pp::metadata::param("key", "string", false, "Key to drop.")}, "Removes one key from this entity's state, telling every client that held it.", "True when the key was set and has been removed."));
 
-        return *cls;
+        return _classes.Add(isolate, std::move(cls));
     }
 
     v8::Local<v8::Object> StateBag::NewInstance(v8::Isolate *isolate, uint64_t networkId) {
@@ -495,15 +524,20 @@ namespace Framework::Scripting::Builtins {
     }
 
     void StateBag::UnregisterIsolate(v8::Isolate *isolate) {
-        const auto perIsolate = _subscriptions.find(isolate);
-        if (perIsolate != _subscriptions.end()) {
-            if (auto *replication = CoreModules::GetReplication()) {
-                for (const auto &[id, subscription] : perIsolate->second) {
-                    replication->RemoveStateChangeHandler(subscription.handle);
-                }
+        std::unordered_map<uint32_t, Subscription> dropped;
+        {
+            const std::lock_guard guard(_subscriptionsMutex);
+            const auto perIsolate = _subscriptions.find(isolate);
+            if (perIsolate != _subscriptions.end()) {
+                dropped = std::move(perIsolate->second);
+                _subscriptions.erase(perIsolate);
             }
-            _subscriptions.erase(perIsolate);
         }
-        _classes.erase(isolate);
+        if (auto *replication = CoreModules::GetReplication()) {
+            for (const auto &[id, subscription] : dropped) {
+                replication->RemoveStateChangeHandler(subscription.handle);
+            }
+        }
+        _classes.Unregister(isolate);
     }
 } // namespace Framework::Scripting::Builtins

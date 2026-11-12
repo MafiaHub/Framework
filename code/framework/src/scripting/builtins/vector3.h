@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../class_cache.h"
+
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
@@ -128,7 +130,7 @@ namespace Framework::Scripting::Builtins {
 
       private:
         glm::vec3 _vec;
-        static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Vector3>>> _classes;
+        static ClassCache<Vector3> _classes;
     };
 
 } // namespace Framework::Scripting::Builtins

@@ -678,6 +678,7 @@ namespace Framework::Scripting {
         for (NodeRuntime *runtime : _ready) {
             ResourceRuntime *entry = nullptr;
             if (runtime != _runtime.get()) {
+                const std::shared_lock guard(_runtimeByIsolateMutex);
                 const auto it = _runtimeByIsolate.find(runtime->GetIsolate());
                 if (it == _runtimeByIsolate.end() || it->second->exited || it->second->retired) {
                     continue;
@@ -829,6 +830,8 @@ namespace Framework::Scripting {
         _offThreadRuntimes.push_back({std::string(name), std::move(runtime), reference});
         // GetIsolate() names this runtime while it is entered, so the bindings land in it.
         if (_runtimeSetupCallback) {
+            // Bindings are declared in catalogs every runtime shares.
+            const CatalogWriteLock registering;
             _runtimeSetupCallback(this);
         }
         return true;
@@ -852,8 +855,11 @@ namespace Framework::Scripting {
         v8::Isolate *current = v8::Isolate::TryGetCurrent();
         // A resource's runtime the caller is inside comes first, on any thread: one started from the tick thread
         // is set up there.
-        if (current != nullptr && _runtimeByIsolate.contains(current)) {
-            return current;
+        if (current != nullptr) {
+            const std::shared_lock guard(_runtimeByIsolateMutex);
+            if (_runtimeByIsolate.contains(current)) {
+                return current;
+            }
         }
         if (NodeRuntime *offThread = OffThreadRuntimeFor(current)) {
             return offThread->GetIsolate();
@@ -867,9 +873,15 @@ namespace Framework::Scripting {
         }
         v8::Isolate *current = v8::Isolate::TryGetCurrent();
         if (current != nullptr) {
-            const auto it = _runtimeByIsolate.find(current);
-            if (it != _runtimeByIsolate.end()) {
-                return it->second->runtime->GetContext();
+            // The caller is inside that runtime, so it is not freed under it once the table is let go.
+            ResourceRuntime *entered = nullptr;
+            {
+                const std::shared_lock guard(_runtimeByIsolateMutex);
+                const auto it = _runtimeByIsolate.find(current);
+                entered       = it != _runtimeByIsolate.end() ? it->second : nullptr;
+            }
+            if (entered != nullptr) {
+                return entered->runtime->GetContext();
             }
         }
         if (NodeRuntime *offThread = OffThreadRuntimeFor(current)) {
@@ -922,7 +934,10 @@ namespace Framework::Scripting {
             node::Stop(env);
         });
 
-        _runtimeByIsolate[isolate]      = runtime;
+        {
+            const std::unique_lock guard(_runtimeByIsolateMutex);
+            _runtimeByIsolate[isolate] = runtime;
+        }
         _resourceRuntimes[resourceName] = std::move(entry);
         ++_runtimesGeneration;
         _monitor.Track(isolate, resourceName);
@@ -935,6 +950,8 @@ namespace Framework::Scripting {
 
         // GetIsolate() names this runtime while it is entered, so the bindings land in it.
         if (_runtimeSetupCallback) {
+            // Bindings are declared in catalogs every runtime shares.
+            const CatalogWriteLock registering;
             _runtimeSetupCallback(this);
         }
         return true;
@@ -980,7 +997,10 @@ namespace Framework::Scripting {
         }
         Builtins::UnregisterAll(isolate);
         ClearScriptingCatalog(isolate);
-        _runtimeByIsolate.erase(isolate);
+        {
+            const std::unique_lock guard(_runtimeByIsolateMutex);
+            _runtimeByIsolate.erase(isolate);
+        }
         _monitor.Untrack(isolate);
 
         // Frees the environment: its timers, handles and worker threads stop with it.
@@ -1021,6 +1041,7 @@ namespace Framework::Scripting {
     }
 
     std::string NodeEngine::GetResourceForIsolate(v8::Isolate *isolate) const {
+        const std::shared_lock guard(_runtimeByIsolateMutex);
         const auto it = _runtimeByIsolate.find(isolate);
         return it != _runtimeByIsolate.end() ? it->second->resourceName : std::string();
     }
