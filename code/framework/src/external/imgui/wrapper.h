@@ -92,6 +92,7 @@ namespace Framework::External::ImGUI {
         std::unordered_map<std::string, FontFamily> _families;
         std::unordered_map<std::string, ImFont *> _runtimeFaces; // by file size and hash; null = failed
         size_t _runtimeFontBytes = 0;
+        size_t _runtimeFaceCount = 0; // loaded faces; failures are cached but not counted
 
         void LoadPendingFamilies();
         ImFont *LoadRuntimeFace(const std::string &family, const char *face, const std::string &bytes);

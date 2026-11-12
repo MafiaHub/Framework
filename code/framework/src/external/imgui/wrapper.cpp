@@ -411,18 +411,19 @@ namespace Framework::External::ImGUI {
     void Wrapper::QueueFontFamily(const std::string &family, FontFamilySource faces) {
         std::scoped_lock lock(_familyMtx);
         // Registering again before the next frame replaces the queued faces, and the queue holds no
-        // more than the runtime budget, so a script that registers in a loop cannot grow it.
-        std::erase_if(_pendingFamilies, [&](const PendingFamily &entry) {
-            return entry.family == family;
-        });
+        // more than the runtime budget, so a script that registers in a loop cannot grow it. A
+        // replacement past the budget leaves the queued faces as they were.
         size_t queued = 0;
         for (const PendingFamily &entry : _pendingFamilies) {
-            queued += FaceBytes(entry.faces);
+            queued += entry.family == family ? 0 : FaceBytes(entry.faces);
         }
         if (FaceBytes(faces) > kMaxRuntimeFontBytes - queued) {
             Logging::GetLogger("ImGui")->warn("Font '{}' not loaded: more than {} MiB of fonts are waiting for the next frame", family, kMaxRuntimeFontBytes >> 20);
             return;
         }
+        std::erase_if(_pendingFamilies, [&](const PendingFamily &entry) {
+            return entry.family == family;
+        });
         _pendingFamilies.push_back({family, std::move(faces)});
     }
 
@@ -478,7 +479,7 @@ namespace Framework::External::ImGUI {
         if (const auto it = _runtimeFaces.find(key); it != _runtimeFaces.end()) {
             return it->second;
         }
-        if (_runtimeFaces.size() >= kMaxRuntimeFaces || bytes.size() > kMaxRuntimeFontBytes - _runtimeFontBytes) {
+        if (_runtimeFaceCount >= kMaxRuntimeFaces || bytes.size() > kMaxRuntimeFontBytes - _runtimeFontBytes) {
             Logging::GetLogger("ImGui")->warn("Font '{}' {} face not loaded: runtime fonts are capped at {} faces and {} MiB until the game restarts", family, face, kMaxRuntimeFaces, kMaxRuntimeFontBytes >> 20);
             return nullptr;
         }
@@ -506,8 +507,10 @@ namespace Framework::External::ImGUI {
         else {
             MergeFontFallback(*io.Fonts, font, fallback);
             _runtimeFontBytes += bytes.size();
+            ++_runtimeFaceCount;
         }
-        // A failure too, so registering the same broken file again does not parse it again.
+        // A failure too, so registering the same broken file again does not parse it again. It does
+        // not count against the face cap, which only loaded faces fill.
         _runtimeFaces[key] = font;
         return font;
     }
