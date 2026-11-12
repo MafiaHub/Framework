@@ -547,6 +547,9 @@ namespace Framework::Scripting {
             std::scoped_lock lock(_scheduledRestartsMutex);
             _scheduledRestarts.clear();
         }
+        // Of resources that are gone: the next connection may bring one of the same name. The count goes on.
+        _handlerFailures.clear();
+        _startGenerations.clear();
         _watchSnapshots.clear();
         _lastFileWatchPoll = {};
     }
@@ -615,6 +618,9 @@ namespace Framework::Scripting {
         if (!resource->TransitionTo(ResourceState::Loading)) {
             return ResourceOperationResult("Invalid state transition for resource: " + std::string(name));
         }
+
+        // From here on this is another instance of the resource: what was reported of the one before is not its.
+        _startGenerations[std::string(name)] = ++_lastStartGeneration;
 
         // A plain stop/start (including client refresh notifications) must run
         // the scripts again, not reuse exports from the previous execution.
@@ -1580,7 +1586,8 @@ namespace Framework::Scripting {
     }
 
     void ResourceManager::ReportHandlerFailure(const std::string &resourceName, std::string message) {
-        _handlerFailures.push_back({resourceName, std::move(message)});
+        const auto started = _startGenerations.find(resourceName);
+        _handlerFailures.push_back({resourceName, std::move(message), started != _startGenerations.end() ? started->second : 0});
     }
 
     void ResourceManager::ProcessHandlerFailures() {
@@ -1593,6 +1600,12 @@ namespace Framework::Scripting {
             // Only a resource that still runs: one that stopped or was retired since has been dealt with,
             // and retiring it again would stop it twice. One that failed before and was left running, as
             // errorBehavior continue says, is in the Error state and runs on.
+            const auto started = _startGenerations.find(failure.resourceName);
+            if (started != _startGenerations.end() && started->second != failure.generation) {
+                LogScriptError(this, failure.resourceName, failure.message + " (the resource was started again since)");
+                continue;
+            }
+
             const Resource *resource = GetResource(failure.resourceName);
             const bool running       = resource != nullptr && (resource->GetState() == ResourceState::Running || (resource->GetState() == ResourceState::Error && resource->GetManifest().GetMafiaHubConfig().errorBehavior == "continue"));
             if (running) {

@@ -17,6 +17,7 @@
 
 #include <function2/function2.hpp>
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -395,8 +396,8 @@ namespace Framework::Scripting {
          * Report a script handler of a resource that failed: one a builtin kept and invoked, which threw, or
          * whose promise or coroutine failed later. Nothing is done about it here, where a script of the
          * resource may be executing or the resource may be stopping: the report is queued for
-         * ProcessHandlerFailures. Reports of a resource are dropped when it stops. Call it on the scripting
-         * thread.
+         * ProcessHandlerFailures. Reports of a resource are dropped when it stops, and one made while it
+         * is stopped is dropped when it starts again. Call it on the scripting thread.
          * @param resourceName Name of the resource that owns the handler
          * @param message What failed and how, as the error of the resource will read
          */
@@ -405,8 +406,8 @@ namespace Framework::Scripting {
         /**
          * Act on the handler failures reported since the last call, as on an error of the resource nobody
          * caught (HandleResourceRuntimeError), for each resource that is running by now: in the Running state, or
-         * left running after an earlier error, as errorBehavior continue says. A report for any other resource
-         * is logged and dropped. Call from the scripting update tick, with no script
+         * left running after an earlier error, as errorBehavior continue says, and not started again since the
+         * report. A report for any other resource is logged and dropped. Call from the scripting update tick, with no script
          * executing.
          */
         void ProcessHandlerFailures();
@@ -535,8 +536,15 @@ namespace Framework::Scripting {
         struct HandlerFailure {
             std::string resourceName;
             std::string message;
+            // The start of the resource the report is of: _startGenerations when it was made.
+            uint64_t generation = 0;
         };
         std::vector<HandlerFailure> _handlerFailures;
+
+        // The number of the last start of each resource, out of one count for the manager, so that a report is
+        // never taken for one of a later instance of the name. A resource that never started has none.
+        std::unordered_map<std::string, uint64_t> _startGenerations;
+        uint64_t _lastStartGeneration = 0;
 
         // Scheduled restarts
         struct ScheduledRestart {

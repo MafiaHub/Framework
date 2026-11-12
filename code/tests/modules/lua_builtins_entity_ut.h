@@ -854,6 +854,53 @@ MODULE(lua_builtins_entity, {
         EQUALS(realm.errors.size(), 1u);
     });
 
+    IT("drops a reported failure when the resource was started again since", {
+        Realm realm;
+        realm.Resource("halted", "main.lua", "x = 1", "stop");
+        EQUALS(realm.Start(), true);
+        auto *manager = realm.module.GetResourceManager();
+
+        // Reported and restarted within one update: the report is of the instance that is gone.
+        manager->ReportHandlerFailure("halted", "handler failed");
+        EQUALS(static_cast<bool>(manager->RestartResource("halted")), true);
+        manager->ProcessHandlerFailures();
+        EQUALS(realm.errors.empty(), true);
+        EQUALS(manager->IsResourceRunning("halted"), true);
+
+        // Reported while it was stopped, as by a handler that fails on the way out, and started before the
+        // manager's turn.
+        EQUALS(static_cast<bool>(manager->StopResource("halted")), true);
+        manager->ReportHandlerFailure("halted", "handler failed late");
+        EQUALS(static_cast<bool>(manager->StartResource("halted")), true);
+        manager->ProcessHandlerFailures();
+        EQUALS(realm.errors.empty(), true);
+        EQUALS(manager->IsResourceRunning("halted"), true);
+
+        // A report of the instance that runs is still acted on.
+        manager->ReportHandlerFailure("halted", "handler failed now");
+        manager->ProcessHandlerFailures();
+        EQUALS(realm.ErrorOf("halted"), "handler failed now");
+        EQUALS(manager->IsResourceRunning("halted"), false);
+    });
+
+    IT("forgets the reported failures when the manager is reset", {
+        Realm realm;
+        realm.Resource("halted", "main.lua", "x = 1", "stop");
+        EQUALS(realm.Start(), true);
+        auto *manager = realm.module.GetResourceManager();
+
+        // Queued for a resource that is not running, so that no stop drops it, then the client reconnects.
+        EQUALS(static_cast<bool>(manager->StopResource("halted")), true);
+        manager->ReportHandlerFailure("halted", "handler failed before the reset");
+        manager->ReportHandlerFailure("nobody", "handler failed before the reset");
+        manager->Reset();
+        manager->DiscoverResources();
+        EQUALS(static_cast<bool>(manager->StartResource("halted")), true);
+        manager->ProcessHandlerFailures();
+        EQUALS(realm.errors.empty(), true);
+        EQUALS(manager->IsResourceRunning("halted"), true);
+    });
+
     IT("drops the subscriptions of a resource its manager stops, also from inside its own handler", {
         Realm realm;
         realm.Resource("lua-watcher", "main.lua", "calls = 0 local e = Entity.new(ENTITY) e.state:onChange(nil, function() calls = calls + 1 end) e.state:onChange('job', function() end)");
