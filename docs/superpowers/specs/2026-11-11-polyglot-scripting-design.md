@@ -222,6 +222,11 @@ JavaScript `undefined` and `null` are both `Nil`. `Array` is a JavaScript array 
   `Register` was given (`Bind::SetCallResourceManager`), which is forgotten when the isolate is
   unregistered or the manager is destroyed, and otherwise the scripting module's.
 
+`Call::OwnerOf(function)` names the resource a function belongs to, for a builtin that keeps it beyond the
+call and drops it when that resource stops. In JavaScript it is `ResourceManager::ResolveResourceContext`
+with the function: the resource of the runtime, and in the one isolate of the client the resource whose
+script made the function, before the one that is calling. In Lua it is the resource of the runtime.
+
 `ScriptCallable` is a script function kept beyond a call: an event handler, a key bind, an export.
 
 ```cpp
