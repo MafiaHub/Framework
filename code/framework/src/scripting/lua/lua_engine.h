@@ -39,8 +39,10 @@ namespace Framework::Scripting {
     // middle of telling a `done`) is not destroyed under its own feet. DestroyResourceRuntime takes it away at
     // once, so that GetRuntime no longer gives it, no file runs in it, none of its timers fires and nothing that
     // waits in it is resumed, and the next Tick that finds it idle destroys it. The name is free in between, for
-    // a restart to create the next one. Any other runtime is destroyed on the spot, also when the call comes
-    // from the script of another resource.
+    // a restart to create the next one. So is a runtime destroyed while JavaScript is on the stack
+    // (ScriptActivity), which may be in the middle of a call into it: the next Tick from the top destroys it.
+    // Any other runtime is destroyed on the spot, also when the call comes from the Lua script of another
+    // resource.
     class LuaEngine final: public ScriptEngine {
       public:
         // Installs the bindings in a runtime. A Lua error it raises, or a std::exception it throws, fails the

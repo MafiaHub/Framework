@@ -91,7 +91,10 @@ a worker thread; what changes is that the worker now dies with its resource.
   resource stopping itself, one it is waiting on, or one stopped by another
   resource's event handler) is destroyed at the next tick instead, once no
   script is running at all: native code further up the stack may still hold
-  handles into it.
+  handles into it. A Lua script on the stack counts as much as JavaScript does,
+  since it reaches JavaScript runtimes through the binding layer; and a Lua
+  runtime stopped while JavaScript is on the stack waits for the next tick of
+  the Lua engine the same way (`ScriptActivity`, `scripting/script_engine.h`).
 - `process.exit()` stops the resource that calls it, not the server. Node's
   default exit handler would end the process; each resource's environment gets
   one that stops its JavaScript at once. From the next tick the runtime is cut

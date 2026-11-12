@@ -295,8 +295,9 @@ namespace Framework::Scripting {
 
         // Destroyed from inside its own call, or with its scheduler at work, it has to outlive that: it is freed
         // at the next tick, from the top, and until then none of its timers fires and nothing that waits in it is
-        // resumed.
-        if (runtime->IsExecuting()) {
+        // resumed. So it is while JavaScript is on the stack, which may be in the middle of a call into this
+        // runtime (ScriptActivity).
+        if (runtime->IsExecuting() || ScriptActivity::OfAnother(Language::Lua)) {
             runtime->Scheduler().Stop();
             _retiredRuntimes.push_back(std::move(runtime));
             return;
@@ -362,6 +363,7 @@ namespace Framework::Scripting {
 
     void LuaEngine::FlushRetiredRuntimes() {
         // A shutdown that found a runtime executing leaves them all until none is.
+        const bool shutdown = _shuttingDown;
         if (_shuttingDown) {
             const bool executing = std::any_of(_retiredRuntimes.begin(), _retiredRuntimes.end(), [](const auto &runtime) {
                 return runtime->IsExecuting();
@@ -375,8 +377,10 @@ namespace Framework::Scripting {
         // Taken out first: a teardown runs listeners, which may destroy, and so retire, further runtimes.
         std::vector<std::unique_ptr<LuaRuntime>> retired;
         retired.swap(_retiredRuntimes);
+        // A shutdown closes what is not executing whoever calls it; a tick from under JavaScript closes nothing.
+        const bool held = !shutdown && ScriptActivity::OfAnother(Language::Lua);
         for (auto &runtime : retired) {
-            if (runtime->IsExecuting()) {
+            if (held || runtime->IsExecuting()) {
                 _retiredRuntimes.push_back(std::move(runtime));
             }
             else {

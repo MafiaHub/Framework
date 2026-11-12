@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -29,6 +30,69 @@ namespace Framework::Scripting {
         Info,
         Warning,
         Error
+    };
+
+    /**
+     * Whether script of another language is on the stack of this thread.
+     *
+     * A runtime that is destroyed while script runs must outlive that script. Each engine sees to that for its own
+     * runtimes: it puts the destruction of one that is executing off to its next tick. But script of one language
+     * holds things of a runtime of the other across a call, through the binding layer: a Lua emitter holds the
+     * JavaScript handlers it picked, the caller of an export the function it called. So an engine also puts a
+     * destruction off while script of another language is running, which is what it asks here.
+     *
+     * An engine that enters its runtimes in one place says so there (Running), as the Lua engine does. V8 is
+     * entered from many places, by the engines, the builtins and the projects, so the JavaScript engines answer
+     * through a probe instead: an isolate is entered on this thread. Neither engine needs to know the other.
+     */
+    class ScriptActivity final {
+      public:
+        // For as long as it lives, script of `language` is running on this thread.
+        class Running final {
+          public:
+            explicit Running(Language language): _depth(Depth(language)) {
+                ++_depth;
+            }
+            ~Running() {
+                --_depth;
+            }
+            Running(const Running &)            = delete;
+            Running &operator=(const Running &) = delete;
+
+          private:
+            int &_depth;
+        };
+
+        using Probe = bool (*)();
+
+        // Whether script of a language other than `language` is on the stack of this thread.
+        static bool OfAnother(Language language) {
+            if (language != Language::Lua && Depth(Language::Lua) > 0) {
+                return true;
+            }
+            if (language == Language::JavaScript) {
+                return false;
+            }
+            const Probe probe = IsolateProbe().load(std::memory_order_relaxed);
+            return Depth(Language::JavaScript) > 0 || (probe != nullptr && probe());
+        }
+
+        // Set by the JavaScript engines as they initialise: says whether an isolate is entered on this thread,
+        // which stands for JavaScript being on the stack.
+        static void SetIsolateProbe(Probe probe) {
+            IsolateProbe().store(probe, std::memory_order_relaxed);
+        }
+
+      private:
+        static int &Depth(Language language) {
+            thread_local int depths[2] = {0, 0};
+            return depths[language == Language::Lua ? 1 : 0];
+        }
+
+        static std::atomic<Probe> &IsolateProbe() {
+            static std::atomic<Probe> probe {nullptr};
+            return probe;
+        }
     };
 
     /**

@@ -116,6 +116,12 @@ namespace Framework::Scripting {
     ScriptingError NodeEngine::Init() {
         _lastError.clear();
 
+        // How the engines of other languages learn that JavaScript, or native code that entered an isolate, is on
+        // the stack (ScriptActivity).
+        ScriptActivity::SetIsolateProbe([]() {
+            return v8::Isolate::TryGetCurrent() != nullptr;
+        });
+
         if (_initialized) {
             return ScriptingError::SCRIPTING_NONE;
         }
@@ -830,7 +836,9 @@ namespace Framework::Scripting {
     }
 
     bool NodeEngine::CanTeardownNow(const ResourceRuntime &runtime) const {
-        return v8::Isolate::TryGetCurrent() == nullptr && !runtime.runtime->GetIsolate()->IsInUse();
+        // Not while an isolate is entered, nor while a Lua script runs: either may hold handles of the isolate,
+        // the Lua script through the binding layer.
+        return v8::Isolate::TryGetCurrent() == nullptr && !ScriptActivity::OfAnother(Language::JavaScript) && !runtime.runtime->GetIsolate()->IsInUse();
     }
 
     void NodeEngine::FlushRetiredRuntimes() {

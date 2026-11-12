@@ -35,6 +35,12 @@ namespace Framework::Scripting {
     ScriptingError V8Engine::Init() {
         _lastError.clear();
 
+        // How the engines of other languages learn that JavaScript, or native code that entered an isolate, is on
+        // the stack (ScriptActivity).
+        ScriptActivity::SetIsolateProbe([]() {
+            return v8::Isolate::TryGetCurrent() != nullptr;
+        });
+
         if (_initialized) {
             return ScriptingError::SCRIPTING_NONE;
         }

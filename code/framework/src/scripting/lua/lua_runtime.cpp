@@ -11,6 +11,7 @@
 #include "lua_scheduler.h"
 
 #include "../output_level.h"
+#include "../script_engine.h"
 
 #include "logging/logger.h"
 
@@ -287,7 +288,12 @@ namespace Framework::Scripting {
         if (_entryDepth++ == 0 && HasDeadline()) {
             _deadline = std::chrono::steady_clock::now() + _options.entryDeadline;
         }
-        const int status = lua_pcall(_state, nargs, nresults, function);
+        int status = LUA_OK;
+        {
+            // Script is on the stack: the JavaScript engine frees no runtime under it (ScriptActivity).
+            const ScriptActivity::Running running(Language::Lua);
+            status = lua_pcall(_state, nargs, nresults, function);
+        }
         if (--_entryDepth == 0) {
             _expired = false;
         }
