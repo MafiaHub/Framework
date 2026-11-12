@@ -509,21 +509,6 @@ namespace Framework::Scripting::Builtins {
             return maxSize <= 0.0f || minSize <= maxSize || Fail(isolate, "minSize must not exceed maxSize");
         }
 
-        // A near edge at or past the far one would leave nothing to draw. Only a call that changes either
-        // is checked: the setters allow it, and an unrelated update, or the label's own getOptions()
-        // applied back, must not fail on what they left.
-        bool CheckDistances(v8::Isolate *isolate, const Options &options, const Networking::Replication::Entities::TextLabelEntity *label, float unitsPerMetre) {
-            if (!options.minDrawDistance && !options.drawDistance) {
-                return true;
-            }
-            const float minDraw = options.minDrawDistance.value_or(label ? label->minDrawDistance : 0.0f);
-            const float draw    = options.drawDistance.value_or(label ? label->drawDistance : TextLabel::kDefaultMetres * unitsPerMetre);
-            if (label && minDraw == label->minDrawDistance && draw == label->drawDistance) {
-                return true;
-            }
-            return minDraw < draw || Fail(isolate, "minDrawDistance must be less than drawDistance");
-        }
-
         // `handle` is null while the label is still to be created, so it cannot be its own target.
         bool CheckTarget(v8::Isolate *isolate, const Options &options, const TextLabel *handle) {
             if (!options.attachTo || *options.attachTo == 0) {
@@ -1175,7 +1160,7 @@ namespace Framework::Scripting::Builtins {
         type.add_property("maxWidth", optional("number"), "Wraps at spaces past this width, in fontSize pixels. 0 (default) never wraps.");
         type.add_property("drawDistance", optional("number"), "World units; the label neither draws nor streams past it. Default 30 metres' worth.");
         type.add_property("fadeDistance", optional("number"), "World units where fading starts; 0 starts at 75% of drawDistance.");
-        type.add_property("minDrawDistance", optional("number"), "World units; the label does not draw this close, so a second label can take over up close (a name near, \"Unknown\" far). It is still sent, so the swap has no gap. Must be less than drawDistance. Default 0.");
+        type.add_property("minDrawDistance", optional("number"), "World units; the label does not draw this close, so a second label can take over up close (a name near, \"Unknown\" far). It is still sent, so the swap has no gap. At or past drawDistance it never draws. Default 0.");
         type.add_property("minFadeDistance", optional("number"),
             "World units where it is fully faded in from minDrawDistance (from the camera when that is 0); at or below minDrawDistance (default) it appears at once. To cross-fade with a label that fades out, set minDrawDistance to its fadeDistance and this to its drawDistance.");
         type.add_property("occlusion", optional("boolean"), "Hidden behind world geometry. Default true.");
@@ -1220,7 +1205,7 @@ namespace Framework::Scripting::Builtins {
         // Options are checked before anything exists, so a bad one leaves nothing half-made.
         Options options;
         const bool withOptions = info.Length() >= 5 && info[4]->IsObject() && !info[4]->IsArray();
-        if (withOptions && (!ParseOptions(isolate, info[4].As<v8::Object>(), _unitsPerMetre, options) || !CheckSizes(isolate, options, nullptr) || !CheckDistances(isolate, options, nullptr, _unitsPerMetre))) {
+        if (withOptions && (!ParseOptions(isolate, info[4].As<v8::Object>(), _unitsPerMetre, options) || !CheckSizes(isolate, options, nullptr))) {
             return;
         }
 
@@ -1290,7 +1275,7 @@ namespace Framework::Scripting::Builtins {
         }
         // Parsing ran the options' getters, which can destroy the label; look it up only now.
         auto *label = self->ResolveLabel();
-        if (label && CheckTarget(isolate, options, self) && CheckSizes(isolate, options, label) && CheckDistances(isolate, options, label, _unitsPerMetre) && CheckViewers(isolate, *CoreModules::GetReplication(), options)) {
+        if (label && CheckTarget(isolate, options, self) && CheckSizes(isolate, options, label) &&CheckViewers(isolate, *CoreModules::GetReplication(), options)) {
             ApplyOptions(*self, *label, options);
         }
     }
