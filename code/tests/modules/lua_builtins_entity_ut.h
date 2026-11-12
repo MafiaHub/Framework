@@ -29,6 +29,7 @@
 #include "scripting/scripting_catalog.h"
 #include "scripting/value_transfer.h"
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -173,8 +174,10 @@ namespace LuaBuiltinsEntityTest {
         NetworkEntity *entity;
         std::string id;
         LuaResourcesTest::Files files;
-        // "<resource>: <first line>" for each error the manager was handed.
+        // What the manager told its listeners: "<resource>: <first line>" for each error, "<resource>" for each
+        // stop.
         std::vector<std::string> errors;
+        std::vector<std::string> stopped;
         LuaResourcesTest::ServerScriptingModule module;
 
         Realm(): entity(world.Manager()->CreateEntity(world.targetType)), id(std::to_string(entity->GetNetworkID())) {}
@@ -200,6 +203,9 @@ namespace LuaBuiltinsEntityTest {
             }
             module.GetResourceManager()->AddOnResourceError([this](const std::string &name, const std::string &error) {
                 errors.push_back(name + ": " + LuaRuntimeTest::FirstLine(error));
+            });
+            module.GetResourceManager()->AddOnResourceStopped([this](const std::string &name) {
+                stopped.push_back(name);
             });
             // The module's own bindings give a Lua script no stop(): it is added once the runtimes exist, for
             // the handlers to call.
@@ -683,7 +689,7 @@ MODULE(lua_builtins_entity, {
 
     // ==================== StateBag: failing handlers ====================
 
-    IT("hands the failure of a handler to the manager of its resource, at once or later", {
+    IT("reports the failure of a handler to the manager of its resource, which acts on it at its next upkeep", {
         Realm realm;
         realm.Resource("js-sync", "main.js", "globalThis.calls = 0; new Entity(ENTITY).state.onChange('job', () => { calls++; throw new Error('sync boom'); });");
         realm.Resource("js-async", "main.js", "globalThis.calls = 0; new Entity(ENTITY).state.onChange('job', async () => { calls++; await new Promise((resolve) => setTimeout(resolve, 5)); throw new Error('async boom'); });");
@@ -695,21 +701,23 @@ MODULE(lua_builtins_entity, {
         EQUALS(realm.Start(), true);
         EQUALS(StateBag::SubscriptionCount(), 5u);
 
+        // Nothing is done about a failure inside the write that woke the handler.
         EQUALS(realm.Js("writer", "write('smith')"), "true");
-        // Those that failed in the call were told by the time the write returned.
+        EQUALS(realm.errors.empty(), true);
+
+        // Those that failed in the call, and those that failed after a wait, are errors of their resources once
+        // the manager has had its turn.
+        EQUALS(realm.UpdateUntilErrors(4), true);
         EQUALS(realm.ErrorOf("js-sync").starts_with("State change listener for 'job' failed: "), true);
         EQUALS(LuaRuntimeTest::Contains(realm.ErrorOf("js-sync"), "sync boom"), true);
         EQUALS(realm.ErrorOf("lua-sync").starts_with("State change listener for 'job' failed: "), true);
         EQUALS(LuaRuntimeTest::Contains(realm.ErrorOf("lua-sync"), "lua boom"), true);
-        EQUALS(realm.errors.size(), 2u);
-
-        // Those that failed after a wait are told when it ends.
-        EQUALS(realm.UpdateUntilErrors(4), true);
         EQUALS(realm.ErrorOf("js-async").starts_with("State change listener for 'job' failed: "), true);
         EQUALS(LuaRuntimeTest::Contains(realm.ErrorOf("js-async"), "async boom"), true);
         EQUALS(realm.ErrorOf("lua-async").starts_with("State change listener for 'job' failed: "), true);
         EQUALS(LuaRuntimeTest::Contains(realm.ErrorOf("lua-async"), "lua late boom"), true);
         EQUALS(realm.ErrorOf("quiet") + realm.ErrorOf("writer"), "<none><none>");
+        EQUALS(realm.errors.size(), 4u);
 
         // As errorBehavior continue says, each goes on listening.
         realm.errors.clear();
@@ -717,36 +725,132 @@ MODULE(lua_builtins_entity, {
         EQUALS(realm.UpdateUntilErrors(4), true);
         EQUALS(realm.Js("js-sync", "calls") + realm.Js("js-async", "calls") + realm.Lua("lua-sync", "calls") + realm.Lua("lua-async", "calls") + realm.Lua("quiet", "calls"), "22222");
         EQUALS(StateBag::SubscriptionCount(), 5u);
+        EQUALS(realm.stopped.empty(), true);
     });
 
-    IT("stops a resource whose handler fails, as errorBehavior stop says, in the write that woke it", {
+    IT("stops a resource whose handler fails, as errorBehavior stop says, after the write that woke it", {
         Realm realm;
         realm.Resource("js-fragile", "main.js", "new Entity(ENTITY).state.onChange('job', () => { throw new Error('boom'); });", "stop");
         realm.Resource("lua-fragile", "main.lua", "Entity.new(ENTITY).state:onChange('job', function() error('boom') end)", "stop");
-        // A resource whose own write wakes its own failing handler is stopped under its own feet.
-        realm.Resource("js-self", "main.js", "const e = new Entity(ENTITY); e.state.onChange('mine', () => { throw new Error('own boom'); }); globalThis.write = () => String(e.state.set('mine', 1));", "stop");
-        realm.Resource("lua-self", "main.lua", "local e = Entity.new(ENTITY) e.state:onChange('theirs', function() error('own boom') end) function write() return tostring(e.state:set('theirs', 1)) end", "stop");
+        realm.Resource("js-late", "main.js", "new Entity(ENTITY).state.onChange('job', async () => { await new Promise((resolve) => setTimeout(resolve, 5)); throw new Error('late boom'); });", "stop");
+        realm.Resource("lua-late", "main.lua", "Entity.new(ENTITY).state:onChange('job', function() sleep(5) error('late boom') end)", "stop");
+        // A resource whose own write wakes its own failing handler goes on to the end of its script.
+        realm.Resource("js-self", "main.js", "const e = new Entity(ENTITY); e.state.onChange('mine', () => { throw new Error('own boom'); }); globalThis.write = () => String(e.state.set('mine', 1)) + ' ' + String(e.state.set('mine', 2));", "stop");
+        realm.Resource("lua-self", "main.lua", "local e = Entity.new(ENTITY) e.state:onChange('theirs', function() error('own boom') end) function write() return tostring(e.state:set('theirs', 1)) .. ' ' .. tostring(e.state:set('theirs', 2)) end", "stop");
         realm.Resource("sturdy", "main.lua", "calls = 0 Entity.new(ENTITY).state:onChange(nil, function() calls = calls + 1 end)");
         EQUALS(realm.Start(), true);
-        EQUALS(StateBag::SubscriptionCount(), 5u);
+        EQUALS(StateBag::SubscriptionCount(), 7u);
+        auto *manager = realm.module.GetResourceManager();
 
         realm.Write("job", 1);
-        EQUALS(realm.errors.size(), 2u);
-        EQUALS(realm.module.GetResourceManager()->IsResourceRunning("js-fragile"), false);
-        EQUALS(realm.module.GetResourceManager()->IsResourceRunning("lua-fragile"), false);
-        EQUALS(StateBag::SubscriptionCount(), 3u);
+        EQUALS(realm.Js("js-self", "write()"), "true true");
+        EQUALS(realm.Lua("lua-self", "write()"), "true true");
+        // Nothing changed state inside a write.
+        EQUALS(realm.errors.empty() && realm.stopped.empty(), true);
+        EQUALS(StateBag::SubscriptionCount(), 7u);
 
-        EQUALS(realm.Js("js-self", "write()"), "true");
-        EQUALS(realm.Lua("lua-self", "write()"), "true");
-        EQUALS(realm.errors.size(), 4u);
-        EQUALS(realm.module.GetResourceManager()->IsResourceRunning("js-self"), false);
-        EQUALS(realm.module.GetResourceManager()->IsResourceRunning("lua-self"), false);
+        // Several failures of one resource retire it once.
+        EQUALS(realm.UpdateUntilErrors(6), true);
+        for (const char *name : {"js-fragile", "lua-fragile", "js-late", "lua-late", "js-self", "lua-self"}) {
+            EQUALS(manager->IsResourceRunning(name), false);
+            EQUALS(std::count(realm.stopped.begin(), realm.stopped.end(), name), 1);
+            EQUALS(std::count_if(realm.errors.begin(), realm.errors.end(),
+                       [name](const std::string &error) {
+                           return error.starts_with(std::string(name) + ": ");
+                       }),
+                1);
+        }
         EQUALS(StateBag::SubscriptionCount(), 1u);
 
-        realm.module.Update();
         realm.Write("job", 2);
-        EQUALS(realm.errors.size(), 4u);
-        EQUALS(realm.Lua("sturdy", "calls"), "4");
+        realm.module.Update();
+        EQUALS(realm.errors.size(), 6u);
+        EQUALS(realm.Lua("sturdy", "calls"), "6");
+    });
+
+    IT("restarts a resource whose handler fails later, as errorBehavior restart says", {
+        Realm realm;
+        realm.Resource("js-phoenix", "main.js", "new Entity(ENTITY).state.onChange('job', async () => { await new Promise((resolve) => setTimeout(resolve, 5)); throw new Error('late boom'); });", "restart");
+        realm.Resource("lua-phoenix", "main.lua", "Entity.new(ENTITY).state:onChange('job', function() sleep(5) error('late boom') end)", "restart");
+        EQUALS(realm.Start(), true);
+        auto *manager = realm.module.GetResourceManager();
+
+        realm.Write("job", 1);
+        EQUALS(realm.errors.empty(), true);
+        EQUALS(realm.UpdateUntilErrors(2), true);
+        EQUALS(realm.stopped.size(), 2u);
+
+        // Each comes back, with the handler it registers as it starts.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(8);
+        while (!(manager->IsResourceRunning("js-phoenix") && manager->IsResourceRunning("lua-phoenix")) && std::chrono::steady_clock::now() < deadline) {
+            realm.module.Update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        EQUALS(manager->IsResourceRunning("js-phoenix") && manager->IsResourceRunning("lua-phoenix"), true);
+        EQUALS(StateBag::SubscriptionCount(), 2u);
+        EQUALS(realm.errors.size(), 2u);
+    });
+
+    IT("lets a resource stop when a handler of it fails while it stops, whatever errorBehavior says", {
+        Realm realm;
+        // Its resourceStop handler writes, which wakes its own failing handler in the middle of the stop.
+        realm.Resource("leaver", "main.js", "const e = new Entity(ENTITY); globalThis.heard = 0; e.state.onChange('bye', () => { heard++; throw new Error('boom on the way out'); }); Events.on('resourceStop', (name) => { if (name === 'leaver') e.state.set('bye', 1); });",
+            "restart");
+        realm.Resource("witness", "main.lua", "byes = 0 Entity.new(ENTITY).state:onChange('bye', function() byes = byes + 1 end)");
+        EQUALS(realm.Start(), true);
+        auto *manager = realm.module.GetResourceManager();
+
+        EQUALS(static_cast<bool>(manager->StopResource("leaver")), true);
+        // The handler did run, and failed, during the stop.
+        EQUALS(realm.Lua("witness", "byes"), "1");
+        EQUALS(manager->GetResourceState("leaver") == ResourceState::Stopped, true);
+        EQUALS(std::count(realm.stopped.begin(), realm.stopped.end(), "leaver"), 1);
+
+        // No upkeep takes the failure for a reason to restart what the operator stopped.
+        for (int i = 0; i < 40; ++i) {
+            realm.module.Update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
+        while (std::chrono::steady_clock::now() < deadline) {
+            realm.module.Update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        EQUALS(manager->GetResourceState("leaver") == ResourceState::Stopped, true);
+        EQUALS(std::count(realm.stopped.begin(), realm.stopped.end(), "leaver"), 1);
+        EQUALS(realm.errors.empty(), true);
+        EQUALS(StateBag::SubscriptionCount(), 1u);
+    });
+
+    IT("acts on a reported failure only for a resource that is running by then", {
+        Realm realm;
+        realm.Resource("steady", "main.lua", "x = 1", "stop");
+        realm.Resource("halted", "main.lua", "x = 1", "restart");
+        EQUALS(realm.Start(), true);
+        auto *manager = realm.module.GetResourceManager();
+
+        // Reported, then stopped before the manager's turn: dropped with the stop.
+        manager->ReportHandlerFailure("halted", "handler failed");
+        EQUALS(static_cast<bool>(manager->StopResource("halted")), true);
+        // Reported for a resource that is stopped, and for one the manager does not know: dropped at its turn.
+        manager->ReportHandlerFailure("halted", "handler failed again");
+        manager->ReportHandlerFailure("nobody", "handler failed");
+        manager->ProcessHandlerFailures();
+        EQUALS(realm.errors.empty(), true);
+        EQUALS(manager->GetResourceState("halted") == ResourceState::Stopped, true);
+        EQUALS(realm.stopped.size(), 1u);
+
+        // Two reports for a running resource: the first retires it, the second finds it no longer running.
+        manager->ReportHandlerFailure("steady", "first");
+        manager->ReportHandlerFailure("steady", "second");
+        EQUALS(manager->IsResourceRunning("steady"), true);
+        manager->ProcessHandlerFailures();
+        EQUALS(realm.errors.size(), 1u);
+        EQUALS(realm.ErrorOf("steady"), "first");
+        EQUALS(manager->IsResourceRunning("steady"), false);
+        EQUALS(std::count(realm.stopped.begin(), realm.stopped.end(), "steady"), 1);
+        manager->ProcessHandlerFailures();
+        EQUALS(realm.errors.size(), 1u);
     });
 
     IT("drops the subscriptions of a resource its manager stops, also from inside its own handler", {

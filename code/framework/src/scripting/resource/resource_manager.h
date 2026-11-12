@@ -383,6 +383,26 @@ namespace Framework::Scripting {
         void HandleResourceRuntimeError(const std::string &resourceName, const std::string &error);
 
         /**
+         * Report a script handler of a resource that failed: one a builtin kept and invoked, which threw, or
+         * whose promise or coroutine failed later. Nothing is done about it here, where a script of the
+         * resource may be executing or the resource may be stopping: the report is queued for
+         * ProcessHandlerFailures. Reports of a resource are dropped when it stops. Call it on the scripting
+         * thread.
+         * @param resourceName Name of the resource that owns the handler
+         * @param message What failed and how, as the error of the resource will read
+         */
+        void ReportHandlerFailure(const std::string &resourceName, std::string message);
+
+        /**
+         * Act on the handler failures reported since the last call, as on an error of the resource nobody
+         * caught (HandleResourceRuntimeError), for each resource that is running by now: in the Running state, or
+         * left running after an earlier error, as errorBehavior continue says. A report for any other resource
+         * is logged and dropped. Call from the scripting update tick, with no script
+         * executing.
+         */
+        void ProcessHandlerFailures();
+
+        /**
          * Schedule an auto-restart for a resource.
          * @param resourceName Name of the resource to restart
          * @return True if restart was scheduled
@@ -501,6 +521,13 @@ namespace Framework::Scripting {
         // Current resource context
         std::string _currentResourceContext;
         mutable std::mutex _contextMutex;
+
+        // Handler failures reported and not acted on yet, in the order they came.
+        struct HandlerFailure {
+            std::string resourceName;
+            std::string message;
+        };
+        std::vector<HandlerFailure> _handlerFailures;
 
         // Scheduled restarts
         struct ScheduledRestart {

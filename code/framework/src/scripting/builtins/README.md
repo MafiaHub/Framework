@@ -124,8 +124,11 @@ what it needs, and nothing else diverges:
   (`ForgetManager`), when its isolate goes (`UnregisterIsolate`) and when its
   Lua runtime goes (`DropDeadSubscriptions`, from the Lua engine's disposing
   listener). A handler that throws, or whose promise or coroutine fails
-  later, does not fail the write that woke it: it is handed to
-  `ResourceManager::HandleResourceRuntimeError` as an error of its resource.
+  later, does not fail the write that woke it: it is reported with
+  `ResourceManager::ReportHandlerFailure`, which queues it, and becomes an
+  error of its resource at the manager's next upkeep if the resource is
+  still running. Never `HandleResourceRuntimeError` from the handler's
+  `done`: a script may be executing, or the resource stopping.
   Every builtin that keeps a script function follows these three rules.
 
 - **Service APIs** — need the context and the `ResourceManager`:

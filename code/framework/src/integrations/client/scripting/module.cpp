@@ -222,6 +222,8 @@ namespace Framework::Integrations::Client::Scripting {
 
     void ClientScriptingModule::Update() {
         if (_resourceManager) {
+            // What the handlers the builtins keep failed with since the last update: here, outside any script.
+            _resourceManager->ProcessHandlerFailures();
             _resourceManager->ProcessScheduledRestarts();
         }
 

@@ -246,6 +246,8 @@ namespace Framework::Integrations::Server::Scripting {
 
         if (_resourceManager) {
             FW_PROFILE_SCOPE_N("Scripting::ResourceUpkeep");
+            // What the handlers the builtins keep failed with since the last update: here, outside any script.
+            _resourceManager->ProcessHandlerFailures();
             // Process scheduled restarts
             _resourceManager->ProcessScheduledRestarts();
             // Dev-mode: poll resource files and hot-reload on change

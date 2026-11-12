@@ -1062,6 +1062,15 @@ namespace Framework::Scripting {
         // Whatever language the resource is written in, and whether or not the JavaScript engine is up.
         Builtins::StateBag::CleanupResource(this, std::string(resourceName));
 
+        // What its handlers failed with is no longer acted on: the resource is going anyway.
+        std::erase_if(_handlerFailures, [resourceName](const HandlerFailure &failure) {
+            if (failure.resourceName != resourceName) {
+                return false;
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] {} (the resource is stopping)", failure.resourceName, failure.message);
+            return true;
+        });
+
         // Reject and drop message requests tied to this resource. Rejecting the awaiting
         // Promises needs an active isolate/context, so scope one here.
         if (_jsEngine && _jsEngine->IsInitialized()) {
@@ -1496,6 +1505,31 @@ namespace Framework::Scripting {
             ScheduleAutoRestart(resourceName);
         }
         // "continue" behavior: do nothing, let the resource keep running
+    }
+
+    void ResourceManager::ReportHandlerFailure(const std::string &resourceName, std::string message) {
+        _handlerFailures.push_back({resourceName, std::move(message)});
+    }
+
+    void ResourceManager::ProcessHandlerFailures() {
+        // Taken first: handling one may stop a resource, which drops the reports still queued for it, and
+        // may run script that reports more, for the next call.
+        std::vector<HandlerFailure> failures;
+        failures.swap(_handlerFailures);
+
+        for (const HandlerFailure &failure : failures) {
+            // Only a resource that still runs: one that stopped or was retired since has been dealt with,
+            // and retiring it again would stop it twice. One that failed before and was left running, as
+            // errorBehavior continue says, is in the Error state and runs on.
+            const Resource *resource = GetResource(failure.resourceName);
+            const bool running       = resource != nullptr && (resource->GetState() == ResourceState::Running || (resource->GetState() == ResourceState::Error && resource->GetManifest().GetMafiaHubConfig().errorBehavior == "continue"));
+            if (running) {
+                HandleResourceRuntimeError(failure.resourceName, failure.message);
+            }
+            else {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] {} (the resource is not running)", failure.resourceName, failure.message);
+            }
+        }
     }
 
     bool ResourceManager::ScheduleAutoRestart(const std::string &resourceName) {

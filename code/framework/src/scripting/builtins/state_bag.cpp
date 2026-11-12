@@ -206,9 +206,10 @@ namespace Framework::Scripting::Builtins {
         // What reports a handler that failed, which the write that woke it does not hear of.
         void ReportFailure(ResourceManager *manager, const std::string &resourceName, const std::string &key, const std::string &error) {
             const std::string message = fmt::format("State change listener for '{}' failed: {}", key, error);
-            // As an error of the resource nobody caught: its manager applies what the manifest asks for.
-            if (manager != nullptr && manager->HasResource(resourceName)) {
-                manager->HandleResourceRuntimeError(resourceName, message);
+            // Queued, not handled here, where the script that wrote may be executing and the resource may
+            // be stopping: its manager applies what the manifest asks for at its next upkeep.
+            if (manager != nullptr) {
+                manager->ReportHandlerFailure(resourceName, message);
                 return;
             }
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] {}", resourceName, message);
@@ -284,8 +285,8 @@ namespace Framework::Scripting::Builtins {
         const double charged = monitor ? monitor->ChargedMs(isolate, ResourceMonitor::Clock::now()) : 0.0;
 
         // A failing listener is its own bug and must not take down the write that raised it. It is
-        // reported as an error of its resource instead, when it threw and when what it waited on failed
-        // later. A listener cut short because its runtime stopped has nothing to report.
+        // reported to the manager of its resource instead, when it threw and when what it waited on failed
+        // later, and becomes an error of the resource at the manager's next upkeep. A listener cut short because its runtime stopped has nothing to report.
         callback->Invoke(args, Bind::ReturnMode::Outcome, [manager = entry->second.manager, resourceName = entry->second.resourceName, key = change.key](Bind::CallOutcome &&outcome) {
             if (outcome.threw && outcome.error != Bind::kRuntimeStopped) {
                 ReportFailure(manager->manager, resourceName, key, outcome.error);
