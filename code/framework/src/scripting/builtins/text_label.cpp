@@ -1376,10 +1376,14 @@ namespace Framework::Scripting::Builtins {
         }
         // Parsing ran the options' getters, which can destroy the label; look it up only now. The
         // checks ask the world for other entities, so each holds the label no longer than it needs.
+        const bool lives = static_cast<bool>(self->ResolveLabel());
+        if (!lives || !CheckTarget(isolate, options, self)) {
+            return;
+        }
         uint64_t followed = 0;
         {
             const auto label = self->ResolveLabel();
-            if (!label || !CheckTarget(isolate, options, self) || !CheckSizes(isolate, options, label.label)) {
+            if (!label || !CheckSizes(isolate, options, label.label)) {
                 return;
             }
             followed = label->attachNetworkId;

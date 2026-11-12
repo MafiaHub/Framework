@@ -1088,6 +1088,11 @@ MODULE(js_features, {
                                       "return [o.minDrawDistance, o.minFadeDistance, o.font, copy.minDrawDistance, copy.font, l.minDrawDistance, l.minFadeDistance, JSON.stringify(l.font)].join(); })()")
                       .c_str(),
             "5,7,Inter,5,Inter,3,4,\"\"");
+        // update() takes the label together with what it follows, before and after the options name it.
+        STREQUALS(RunJSErrorName(engine, "const t2 = TextLabel.create(0, 0, 0, 't'); const l2 = TextLabel.create(0, 0, 0, 'x'); l2.update({ attachTo: t2, offset: [0, 0, 2] }); if (l2.getOptions().attachTo !== t2.id) throw new RangeError('not attached'); "
+                                         "l2.update({ text: 'moved', hideForTarget: true }); if (l2.getOptions().attachTo !== t2.id || l2.getOptions().text !== 'moved') throw new RangeError('lost its target')")
+                      .c_str(),
+            "");
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();
