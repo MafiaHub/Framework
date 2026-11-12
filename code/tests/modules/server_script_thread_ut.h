@@ -230,6 +230,38 @@ MODULE(server_script_thread, {
         server.Stop();
     });
 
+    IT("keeps ticking while a script computes after a native call that called back into script", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_nested", true, R"(
+            const fs = require('node:fs');
+            let rounds = 0;
+            let heard = 0;
+            Events.on('ping', () => { heard++; });
+            setInterval(() => {
+                // Native code that calls back into script, and returns. Only while it is on the stack is this no
+                // safe point; the loop after it is the script's own again.
+                Events.emit('ping');
+                const end = Date.now() + 600;
+                while (Date.now() < end) {}
+                if (++rounds === 3) { fs.writeFileSync('$ROOT/busy', String(heard)); }
+            }, 650);
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        EQUALS(server.TickUntil([&] {
+            return std::filesystem::exists(server.Marker("busy"));
+        }),
+            true);
+        fprintf(stderr, "server_script_thread: after a nested call, longest gap between ticks %.1f ms over %d ticks\n", server.longestGapMs, server.ticks);
+        LESSER(server.longestGapMs, 300.0);
+        std::string heard;
+        std::ifstream(server.Marker("busy")) >> heard;
+        EQUALS(heard == "3", true);
+        server.Stop();
+    });
+
     IT("waits for that script with scripts inside the tick, as before", {
         Server server;
         const bool up = server.Start("fw_script_thread_busy_inline", false, kBusyScript);

@@ -22,7 +22,8 @@ namespace Framework::Scripting {
      *   V8 then calls back between two instructions of the script, and the host parks the script thread there for
      *   the length of the tick. A safe point is only taken where nothing but script is on the script thread's
      *   stack: not while a native function further up is in the middle of its work (see NoSafePoint and the nested
-     *   call tracking in RegisterIsolate).
+     *   call tracking in RegisterIsolate). The tick asks again for as long as it waits, so it gets in as soon as
+     *   that native function has returned.
      *
      * - A thread that is not the script thread wants to run script itself, the way server code always has: an
      *   EngineScope and an event emitted inside it. RuntimeEntry makes that safe: the script thread is first put
@@ -84,7 +85,10 @@ namespace Framework::Scripting {
 
     /**
      * Makes an isolate take part: it can be asked for a safe point, and calls made into it from native code that
-     * script called are noticed, so no safe point is taken under them. From the thread that runs the isolate,
+     * script called are noticed, so no safe point is taken under them. V8 does not say when such a call returns,
+     * so it is told from the stack: once the script is no deeper than where it made the call, the call is over.
+     * A script that went on into deeper calls of its own after it returned is taken for still being inside it,
+     * until it comes back up. From the thread that runs the isolate,
      * before it runs script and after it last did.
      */
     void RegisterIsolate(v8::Isolate *isolate);

@@ -8,6 +8,7 @@
 
 #include "script_gate.h"
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -29,6 +30,10 @@ namespace Framework::Scripting {
             // Native code that script called has called back into script, and that call has not returned as far as
             // can be told: the native code is on the stack, so this is no safe point. The script thread's alone.
             bool nestedCall = false;
+            // How many frames of script were on the stack when that native code called back: the shallowest such
+            // call since the flag was set. While the call is in progress the stack is deeper than this, so a stack
+            // no deeper than this means every such call has returned.
+            int nestedDepth = 0;
         };
 
         std::mutex gIsolatesMutex;
@@ -58,10 +63,32 @@ namespace Framework::Scripting {
             return lastState;
         }
 
-        // Whether script of this isolate is running further up this thread's stack. The caller is inside the isolate.
-        bool ScriptOnStack(v8::Isolate *isolate) {
+        // Deeper stacks than this are not told apart: a call back from deeper than this holds safe points off until
+        // the outermost call returns.
+        constexpr int kMaxTrackedDepth = 32;
+
+        // How many frames of this isolate's script are on this thread's stack, counted up to `limit`. The caller is
+        // inside the isolate.
+        int ScriptDepth(v8::Isolate *isolate, int limit) {
             v8::HandleScope scope(isolate);
-            return v8::StackTrace::CurrentStackTrace(isolate, 1)->GetFrameCount() > 0;
+            return v8::StackTrace::CurrentStackTrace(isolate, limit, v8::StackTrace::kOverview)->GetFrameCount();
+        }
+
+        bool ScriptOnStack(v8::Isolate *isolate) {
+            return ScriptDepth(isolate, 1) > 0;
+        }
+
+        // Whether native code that called back into script may still be on the stack. Finds out, where it can, that
+        // it has returned: the stack is then back to where the script called it from, or shallower.
+        bool UnderNestedCall(IsolateState &state) {
+            if (!state.nestedCall) {
+                return false;
+            }
+            if (state.nestedDepth < kMaxTrackedDepth && ScriptDepth(state.isolate, state.nestedDepth + 1) <= state.nestedDepth) {
+                state.nestedCall = false;
+                return false;
+            }
+            return true;
         }
 
         void Request(IsolateState &state) {
@@ -71,8 +98,9 @@ namespace Framework::Scripting {
                         auto *self = static_cast<IsolateState *>(data);
                         self->requested.store(false, std::memory_order_release);
                         ScriptGate *gate = gGate.load(std::memory_order_acquire);
-                        // Held off: the tick goes on waiting, and is asked for again when what holds it off ends.
-                        if (gate != nullptr && gate->OnScriptThread() && tHeldOff == 0 && !self->nestedCall && gate->SafePointWanted()) {
+                        // Held off: the tick goes on waiting and asks again (it does while it waits), by when what
+                        // holds this off may have ended.
+                        if (gate != nullptr && gate->OnScriptThread() && tHeldOff == 0 && gate->SafePointWanted() && !UnderNestedCall(*self)) {
                             gate->OnSafePoint();
                         }
                     },
@@ -112,11 +140,21 @@ namespace Framework::Scripting {
                 return;
             }
             IsolateState *state = Find(isolate);
-            if (state == nullptr || state->nestedCall) {
+            if (state == nullptr) {
                 return;
             }
-            if (ScriptOnStack(isolate)) {
-                state->nestedCall = true;
+            if (state->nestedCall) {
+                // Another one, while an earlier one may still be in progress: what counts is the shallowest. Only
+                // as many frames are counted as it takes to tell.
+                if (state->nestedDepth > 1) {
+                    state->nestedDepth = std::min(state->nestedDepth, ScriptDepth(isolate, state->nestedDepth));
+                }
+                return;
+            }
+            const int depth = ScriptDepth(isolate, kMaxTrackedDepth);
+            if (depth > 0) {
+                state->nestedCall  = true;
+                state->nestedDepth = depth;
             }
             else {
                 Rearm(*state);
