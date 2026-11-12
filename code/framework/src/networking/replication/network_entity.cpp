@@ -484,6 +484,40 @@ namespace Framework::Networking::Replication {
         return QueryRemoteConstruction_ServerConstruction(sourceConnection, IsServerPeer());
     }
 
+    MafiaNet::RM3ConstructionState NetworkEntity::QueryConstruction(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) {
+        if (!IsServerPeer()) {
+            return VirtualWorldReplica3::QueryConstruction(destinationConnection, replicaManager3);
+        }
+        // Not the pass's view (_pass): that is taken when the pass serializes, after it has
+        // constructed, and a new entity has none yet.
+        MafiaNet::VirtualWorldId world = 0;
+        {
+            const Detail::EntityGuard guard(*this, false);
+            world = GetVirtualWorld();
+        }
+        const MafiaNet::RM3ConstructionState within = QueryConstructionWithinWorld(destinationConnection, replicaManager3);
+        if (within == MafiaNet::RM3CS_SEND_CONSTRUCTION && !MafiaNet::VirtualWorldsCanSee(world, destinationConnection->GetVirtualWorld())) {
+            return MafiaNet::RM3CS_NO_ACTION;
+        }
+        return within;
+    }
+
+    MafiaNet::RM3DestructionState NetworkEntity::QueryDestruction(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) {
+        if (!IsServerPeer()) {
+            return VirtualWorldReplica3::QueryDestruction(destinationConnection, replicaManager3);
+        }
+        MafiaNet::VirtualWorldId world = 0;
+        {
+            const Detail::EntityGuard guard(*this, false);
+            world = GetVirtualWorld();
+        }
+        const bool authoritative = QueryConstructionWithinWorld(destinationConnection, replicaManager3) == MafiaNet::RM3CS_SEND_CONSTRUCTION;
+        if (authoritative && !MafiaNet::VirtualWorldsCanSee(world, destinationConnection->GetVirtualWorld())) {
+            return MafiaNet::RM3DS_SEND_DESTRUCTION;
+        }
+        return QueryDestructionWithinWorld(destinationConnection, replicaManager3);
+    }
+
     MafiaNet::RM3QuerySerializationResult NetworkEntity::QuerySerialization(MafiaNet::Connection_RM3 *destinationConnection) {
         if (!IsServerPeer()) {
             return VirtualWorldReplica3::QuerySerialization(destinationConnection);

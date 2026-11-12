@@ -454,6 +454,11 @@ namespace Framework::Networking::Replication {
 
         bool QueryRemoteConstruction(MafiaNet::Connection_RM3 *sourceConnection) final;
         MafiaNet::RM3QuerySerializationResult QuerySerialization(MafiaNet::Connection_RM3 *destinationConnection) final;
+        // The base's dimension rule for constructing and destroying, with the entity's virtual world read
+        // under its lock: the pass asks these before it has taken its view of the entity, and a handler
+        // may be moving the entity to another world meanwhile.
+        MafiaNet::RM3ConstructionState QueryConstruction(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) final;
+        MafiaNet::RM3DestructionState QueryDestruction(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) final;
 
         // Serialize writes the same bytes for every connection (per-connection choices are made in
         // QuerySerializationWithinWorld and ReplicationConnection::SendSerialize), so ReplicaManager3
