@@ -1,0 +1,725 @@
+{
+  "functions": [],
+  "schemaVersion": 2,
+  "symbols": [
+    {
+      "bases": [],
+      "description": "",
+      "functions": [],
+      "kind": "dataType",
+      "name": "EventMap",
+      "properties": [
+        {
+          "description": "Dispatched when the local player starts speaking, as isTalking turns true.",
+          "name": "voiceStart",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when the local player stops speaking, as isTalking turns false.",
+          "name": "voiceStop",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[]",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "Client-only, resource-owned physical key bindings exposed as the global Key.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Binds a resource-owned handler that fires while the game has foreground input and no UI is capturing it. Each wheelup/wheeldown notch fires down, then up.",
+          "examples": [],
+          "name": "bind",
+          "parameters": [
+            {
+              "description": "Case-insensitive supported keyboard or mouse key name.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Trigger state, or the handler itself to use the default down state.",
+              "name": "stateOrHandler",
+              "type": {
+                "cppName": "",
+                "name": "\"down\" | \"up\" | \"both\" | KeyHandler",
+                "optional": false
+              }
+            },
+            {
+              "description": "Handler required when an explicit trigger state is provided.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "KeyHandler",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True after the binding is installed; invalid keys or states throw.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Returns the current layout's label for a physical key, even while UI owns input. Query again when refreshing prompts. Throws for unknown keys or non-string arguments.",
+          "examples": [],
+          "name": "getLabel",
+          "parameters": [
+            {
+              "description": "Case-insensitive physical key name, using the same names as bind.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Uppercase printable text, or an English name such as Enter or Mouse 1. Falls back to the uppercase canonical key name when translation is unavailable.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Queries live physical key state using the same foreground and UI-input gate as binding dispatch.",
+          "examples": [],
+          "name": "isDown",
+          "parameters": [
+            {
+              "description": "Case-insensitive supported key name.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "False when the key is up, the game is backgrounded, UI owns input, or the key name is invalid. Always false for the wheel, which is never held.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Removes matching bindings owned by the calling resource; omitting filters removes every binding for the key.",
+          "examples": [],
+          "name": "unbind",
+          "parameters": [
+            {
+              "description": "Case-insensitive supported key name.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional trigger-state filter.",
+              "name": "state",
+              "type": {
+                "cppName": "",
+                "name": "\"down\" | \"up\" | \"both\"",
+                "optional": true
+              }
+            },
+            {
+              "description": "Optional exact handler filter.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "KeyHandler",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when at least one binding was removed.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Key",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "Local player's proximity voice chat settings: on/off, playback volume, hearing range and the push-to-talk binding.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Reads the voice-activation threshold.",
+          "examples": [],
+          "name": "getActivationThreshold",
+          "parameters": [],
+          "returns": {
+            "description": "Level from 0 to 1.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the local hearing-range limit.",
+          "examples": [],
+          "name": "getHearingRange",
+          "parameters": [],
+          "returns": {
+            "description": "Radius in world units, or 0 when the server's range applies unreduced.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the chosen microphone.",
+          "examples": [],
+          "name": "getInputDevice",
+          "parameters": [],
+          "returns": {
+            "description": "Its name, or an empty string for the system default.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Lists the microphones voice can record from.",
+          "examples": [],
+          "name": "getInputDevices",
+          "parameters": [],
+          "returns": {
+            "description": "Device names as the player would recognise them; empty when the game chooses the device itself.",
+            "type": {
+              "cppName": "",
+              "name": "string[]",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads how loud the microphone is while this player is sending voice. The microphone stays open for the whole session, so what it hears the rest of the time is not given to scripts.",
+          "examples": [],
+          "name": "getInputLevel",
+          "parameters": [],
+          "returns": {
+            "description": "Smoothed level from 0 to 1 while isTalking is true; 0 otherwise.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the push-to-talk binding.",
+          "examples": [],
+          "name": "getPushToTalkKey",
+          "parameters": [],
+          "returns": {
+            "description": "Canonical key name, e.g. \"v\".",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the push-to-talk release delay.",
+          "examples": [],
+          "name": "getPushToTalkReleaseDelay",
+          "parameters": [],
+          "returns": {
+            "description": "Delay in milliseconds; 0 when transmission stops the moment the key is released.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the server's proximity range for talkers with no override of their own.",
+          "examples": [],
+          "name": "getRange",
+          "parameters": [],
+          "returns": {
+            "description": "Radius in world units.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the voice tier this player is on.",
+          "examples": [],
+          "name": "getTier",
+          "parameters": [],
+          "returns": {
+            "description": "0 whisper, 1 normal, 2 shout.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads what opens the microphone.",
+          "examples": [],
+          "name": "getTransmitMode",
+          "parameters": [],
+          "returns": {
+            "description": "The current transmit mode.",
+            "type": {
+              "cppName": "",
+              "name": "'pushToTalk' | 'voiceActivity'",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the voice playback volume.",
+          "examples": [],
+          "name": "getVolume",
+          "parameters": [],
+          "returns": {
+            "description": "Current gain, where 1 is unattenuated.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether a capture device opened for this session.",
+          "examples": [],
+          "name": "hasMicrophone",
+          "parameters": [],
+          "returns": {
+            "description": "False when the player has no working microphone, i.e. they are listen-only.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether voice chat is enabled for this player.",
+          "examples": [],
+          "name": "isEnabled",
+          "parameters": [],
+          "returns": {
+            "description": "True unless the player turned voice chat off.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether noise suppression is on.",
+          "examples": [],
+          "name": "isNoiseSuppressionEnabled",
+          "parameters": [],
+          "returns": {
+            "description": "True while background noise is being filtered.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether the local player is speaking right now. The same state raises the voiceStart and voiceStop events.",
+          "examples": [],
+          "name": "isTalking",
+          "parameters": [],
+          "returns": {
+            "description": "True while push-to-talk is open -- held, or still inside the release delay -- and the microphone is producing audio.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sets the voice-activation sensitivity: lower sends quieter speech, higher ignores more background noise. Clamped to 0..1.",
+          "examples": [],
+          "name": "setActivationThreshold",
+          "parameters": [
+            {
+              "description": "Microphone level, 0 to 1 on the scale getInputLevel reports, above which voice activation sends.",
+              "name": "level",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Turns voice chat on or off. Off closes the microphone and playback devices and tells the server to stop relaying voice to this client.",
+          "examples": [],
+          "name": "setEnabled",
+          "parameters": [
+            {
+              "description": "Whether voice chat runs at all for this player.",
+              "name": "enabled",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Narrows how far this player hears others. Can only reduce the server's range, since a talker beyond it is never relayed.",
+          "examples": [],
+          "name": "setHearingRange",
+          "parameters": [
+            {
+              "description": "Audibility radius in world units; 0 removes the local limit.",
+              "name": "range",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Chooses the microphone. A running microphone is reopened on the new device; a device that is no longer connected falls back to the default.",
+          "examples": [],
+          "name": "setInputDevice",
+          "parameters": [
+            {
+              "description": "A name from getInputDevices, or an empty string for the system default.",
+              "name": "name",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Turns noise suppression on or off. It runs before the level is measured, so it also keeps steady noise from tripping voice activation.",
+          "examples": [],
+          "name": "setNoiseSuppression",
+          "parameters": [
+            {
+              "description": "Whether to filter background noise out of the microphone.",
+              "name": "enabled",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Rebinds push-to-talk. Unknown key names and the wheel, which is never held, throw.",
+          "examples": [],
+          "name": "setPushToTalkKey",
+          "parameters": [
+            {
+              "description": "Case-insensitive key name, using the same names as Key.bind.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sets how long transmission continues after push-to-talk is released, so letting go slightly early does not clip the end of a word. Muting, turning voice off and starting to type into a text field still stop it at once.",
+          "examples": [],
+          "name": "setPushToTalkReleaseDelay",
+          "parameters": [
+            {
+              "description": "How long to keep transmitting after the key goes up. Clamped to 0..2000.",
+              "name": "milliseconds",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Switches how far this player's voice carries. A request: the server paces it, decides the radius, and may move the player itself.",
+          "examples": [],
+          "name": "setTier",
+          "parameters": [
+            {
+              "description": "Voice tier: 0 whisper, 1 normal, 2 shout.",
+              "name": "tier",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Chooses what opens the microphone. Switching closes whatever the previous mode had open. Unknown modes throw.",
+          "examples": [],
+          "name": "setTransmitMode",
+          "parameters": [
+            {
+              "description": "pushToTalk sends while the key is held; voiceActivity sends whenever the microphone is louder than the activation threshold.",
+              "name": "mode",
+              "type": {
+                "cppName": "",
+                "name": "'pushToTalk' | 'voiceActivity'",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sets the playback volume of incoming voice. A game that plays voice through its own audio engine applies the same gain there.",
+          "examples": [],
+          "name": "setVolume",
+          "parameters": [
+            {
+              "description": "Playback gain, where 1 is unattenuated. Clamped to 0..4.",
+              "name": "volume",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Voice",
+      "properties": []
+    }
+  ],
+  "variables": []
+}

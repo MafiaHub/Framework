@@ -83,13 +83,23 @@ endif()
 # the client runtime in its own process.
 add_executable(FrameworkClientScriptingTests client_scripting_ut.cpp)
 target_include_directories(FrameworkClientScriptingTests PRIVATE . ../framework/src)
-if(WIN32)
-    # Key.bind dispatch, without linking the rest of FrameworkClient.
-    target_sources(FrameworkClientScriptingTests PRIVATE
-        ../framework/src/integrations/client/scripting/builtins/keybinds.cpp
-        ../framework/src/utils/key_names.cpp)
+# The Key and Voice builtins of a client and what they stand on, without linking the rest of
+# FrameworkClient: key names, and a voice client that is never attached to a peer and so opens no device.
+target_sources(FrameworkClientScriptingTests PRIVATE
+    ../framework/src/integrations/client/scripting/builtins/keybinds.cpp
+    ../framework/src/integrations/client/scripting/builtins/voice.cpp
+    ../framework/src/utils/key_names.cpp
+    ../framework/src/voice/client/mixer.cpp
+    ../framework/src/voice/client/audio_device.cpp
+    ../framework/src/voice/client/noise_suppressor.cpp
+    ../framework/src/voice/client/voice_client.cpp
+    ../framework/src/networking/network_client.cpp)
+# The vendors build miniaudio for the client, which is Windows; the voice client needs it wherever it links.
+if(NOT TARGET miniaudio)
+    add_subdirectory(../../vendors/miniaudio "${CMAKE_BINARY_DIR}/vendors/miniaudio" EXCLUDE_FROM_ALL)
 endif()
-target_link_libraries(FrameworkClientScriptingTests Framework FrameworkServer libnode)
+target_link_libraries(FrameworkClientScriptingTests Framework FrameworkServer libnode miniaudio)
+target_compile_definitions(FrameworkClientScriptingTests PRIVATE FW_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 
 # The SDK smoke test: install this build into a prefix, then configure and build a consumer project
 # against that prefix alone (code/tests/sdk-consumer), the way a mod does through
