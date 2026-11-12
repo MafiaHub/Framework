@@ -30,6 +30,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace LuaTransferTest {
@@ -65,6 +66,45 @@ namespace LuaTransferTest {
         explicit VipTicket(uint64_t id): Ticket(id) {}
     };
 
+    // A handle that carries text, so it says itself what it crosses as: the length of its name, then the name.
+    class Badge final {
+      public:
+        explicit Badge(std::string name): _name(std::move(name)) {}
+
+        const std::string &GetName() const {
+            return _name;
+        }
+
+        void Write(std::vector<uint8_t> &bytes) const {
+            const uint32_t length = static_cast<uint32_t>(_name.size());
+            bytes.resize(sizeof(length) + _name.size());
+            std::memcpy(bytes.data(), &length, sizeof(length));
+            if (!_name.empty()) {
+                std::memcpy(bytes.data() + sizeof(length), _name.data(), _name.size());
+            }
+        }
+
+        // Refuses bytes that are cut short, and the badge that was revoked.
+        static Badge Read(const std::vector<uint8_t> &bytes) {
+            uint32_t length = 0;
+            if (bytes.size() < sizeof(length)) {
+                throw std::runtime_error("a badge is cut short");
+            }
+            std::memcpy(&length, bytes.data(), sizeof(length));
+            if (bytes.size() - sizeof(length) < length) {
+                throw std::runtime_error("a badge is cut short");
+            }
+            std::string name(reinterpret_cast<const char *>(bytes.data()) + sizeof(length), length);
+            if (name == "revoked") {
+                throw std::runtime_error("this badge was revoked");
+            }
+            return Badge(std::move(name));
+        }
+
+      private:
+        std::string _name;
+    };
+
     // A bound class nobody taught the transfer or JSON.
     struct Plain final {
         int value = 0;
@@ -76,6 +116,7 @@ namespace LuaTransferTest {
 
 FW_SCRIPT_CLASS(LuaTransferTest::Ticket, "TransferTicket");
 FW_SCRIPT_CLASS(LuaTransferTest::VipTicket, "TransferVipTicket");
+FW_SCRIPT_CLASS(LuaTransferTest::Badge, "TransferBadge");
 FW_SCRIPT_CLASS(LuaTransferTest::Plain, "TransferPlain");
 FW_SCRIPT_CLASS(LuaTransferTest::Faulty, "TransferFaulty");
 
@@ -90,6 +131,12 @@ namespace LuaTransferTest {
         using Bind::Doc;
         TicketDefinition();
         static const auto definition = Bind::Class<VipTicket>("TransferVipTicket", "A ticket with privileges.").Inherit<Ticket>().Constructor<uint64_t>(Doc("Finds a ticket.").Param("id", "Its id."));
+        return definition;
+    }
+
+    inline const Bind::Class<Badge> &BadgeDefinition() {
+        using Bind::Doc;
+        static const auto definition = Bind::Class<Badge>("TransferBadge", "A badge with a name.").Constructor<std::string>(Doc("Makes a badge.").Param("name", "Its name.")).Property("name", &Badge::GetName, "Its name.").Transfer(&Badge::Write, &Badge::Read);
         return definition;
     }
 
@@ -957,6 +1004,88 @@ MODULE(lua_transfer, {
             again.Transfer(&Ticket::GetId);
         }),
             "Bind: 'TransferTicket' declares twice how it crosses between runtimes");
+    });
+
+    IT("carries a class that says itself what it crosses as, in both languages", {
+        Worlds worlds;
+        // Registered for this test alone, in the runtimes of the worlds; the class goes before they do.
+        BadgeDefinition().RegisterTransfer();
+        std::unique_ptr<v8pp::class_<Badge>> badge;
+        worlds.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            badge = BadgeDefinition().MaterialiseV8(isolate, Framework::Scripting::GetScriptingCatalog(isolate), Side::Server);
+            context->Global()->Set(context, v8pp::to_v8(isolate, "TransferBadge"), badge->js_function_template()->GetFunction(context).ToLocalChecked()).Check();
+        });
+        for (LuaRuntime *runtime : {&worlds.lua, &worlds.other}) {
+            BadgeDefinition().RegisterLuaGlobal(runtime->State(), Side::Server);
+        }
+
+        // What crosses is what the class wrote, under its name, whichever language copied it.
+        const Copied fromLua = Worlds::CopyLua(worlds.lua, "TransferBadge('caf\u{e9}')");
+        const Copied fromJs  = worlds.CopyJs("new TransferBadge('caf\u00e9')");
+        EQUALS(static_cast<bool>(fromLua) && static_cast<bool>(fromJs), true);
+        EQUALS(fromLua.GetValue().kind == Kind::HostObject && fromJs.GetValue().kind == Kind::HostObject, true);
+        EQUALS(fromLua.GetValue().text + " " + fromJs.GetValue().text, "TransferBadge TransferBadge");
+        EQUALS(fromLua.GetValue().bytes.size(), sizeof(uint32_t) + 5);
+        EQUALS(fromLua.GetValue().bytes == fromJs.GetValue().bytes, true);
+
+        // JavaScript to Lua, Lua to JavaScript, JavaScript to JavaScript and Lua to Lua, inside other values.
+        EQUALS(worlds.JsToLua("{ badge: new TransferBadge('from js') }"), "");
+        EQUALS(worlds.Other("type(received.badge) .. ' ' .. received.badge.name"), "userdata from js");
+        EQUALS(worlds.LuaToJs("{ badge = TransferBadge('from lua') }"), "");
+        EQUALS(worlds.Js("(received.badge instanceof TransferBadge) + ' ' + received.badge.name"), "true from lua");
+        const Copied again = worlds.CopyJs("[new TransferBadge('js to js'), new TransferBadge('')]");
+        EQUALS(worlds.StoreJs(again.GetValue()), "");
+        EQUALS(worlds.Js("received.map((b) => (b instanceof TransferBadge) + ':' + b.name).join()"), "true:js to js,true:");
+        EQUALS(worlds.LuaToLua("{ TransferBadge('lua to lua') }"), "");
+        EQUALS(worlds.Other("received[1].name"), "lua to lua");
+
+        // What `read` throws fails the copy with its message, where the value arrives, in both directions.
+        EQUALS(worlds.JsToLua("{ badge: new TransferBadge('revoked') }"), "Cannot copy value.badge: this badge was revoked");
+        EQUALS(lua_gettop(worlds.other.State()), 0);
+        EQUALS(worlds.LuaToJs("{ badge = TransferBadge('revoked') }"), "rebuild threw: Error: this badge was revoked");
+        const Copied revoked = worlds.CopyJs("new TransferBadge('revoked')");
+        EQUALS(worlds.StoreJs(revoked.GetValue()), "rebuild threw: Error: this badge was revoked");
+
+        // Bytes that are cut short are refused by the class, in both languages: nothing is built from them.
+        TransferredValue cut = fromLua.GetValue();
+        cut.bytes.pop_back();
+        EQUALS(Worlds::StoreLua(worlds.other, cut), "Cannot copy value: a badge is cut short");
+        EQUALS(worlds.StoreJs(cut), "rebuild threw: Error: a badge is cut short");
+        cut.bytes.clear();
+        EQUALS(Worlds::StoreLua(worlds.other, cut), "Cannot copy value: a badge is cut short");
+        EQUALS(worlds.StoreJs(cut), "rebuild threw: Error: a badge is cut short");
+        EQUALS(lua_gettop(worlds.other.State()), 0);
+
+        // A class declares how it crosses once, whichever way it does.
+        const auto message = [](auto action) -> std::string {
+            try {
+                action();
+            }
+            catch (const std::logic_error &error) {
+                return error.what();
+            }
+            return {};
+        };
+        EQUALS(message([] {
+            Bind::Class<Badge> twice = BadgeDefinition();
+            twice.Transfer(&Badge::Write, &Badge::Read);
+        }),
+            "Bind: 'TransferBadge' declares twice how it crosses between runtimes");
+        EQUALS(message([] {
+            Bind::Class<Ticket> twice = TicketDefinition();
+            twice.Transfer([](const Ticket &, std::vector<uint8_t> &) {},
+                [](const std::vector<uint8_t> &) {
+                    return Ticket(1);
+                });
+        }),
+            "Bind: 'TransferTicket' declares twice how it crosses between runtimes");
+
+        // Unregistered, it crosses no more.
+        BadgeDefinition().UnregisterTransfer();
+        EQUALS(worlds.Refusal("TransferBadge('gone')"), "Cannot copy value: a TransferBadge cannot be copied");
+        EQUALS(Worlds::StoreLua(worlds.other, fromLua.GetValue()), "Cannot copy value: host type 'TransferBadge' is not available in Lua");
+        EQUALS(worlds.StoreJs(fromJs.GetValue()), "rebuild threw: Error: Unknown host type TransferBadge");
+        badge.reset();
     });
 
     // --- Refusals ---
