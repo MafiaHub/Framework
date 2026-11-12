@@ -208,6 +208,11 @@ what it needs, and nothing else diverges:
     (`Messages::ReplyFunction`) that queues a copy of the answer; a Lua
     requester waits on a `Bind::Deferred`. `ProcessPendingResponses()`
     delivers both kinds of reply, with or without an isolate at hand.
+    A handler is kept with the manager it was registered under, which is
+    who a failure nobody waits for is reported to, and is dropped when that
+    manager goes (`ForgetManager`). A request made from Lua that nobody
+    waits for any more, because its runtime went or its call could not wait,
+    is dropped by `DropAbandonedRequests`.
   - The server's `Voice` and `PendingConnection`
     (`integrations/server/scripting/builtins/`) are declared this way too.
     `Voice` throws a `RangeError` for a tier that is none

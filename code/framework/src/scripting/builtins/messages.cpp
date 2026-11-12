@@ -31,6 +31,8 @@ namespace Framework::Scripting::Builtins {
     std::vector<Messages::PendingResponse> Messages::_responseQueue;
     std::mutex Messages::_responseQueueMutex;
     uint64_t Messages::_nextRequestId = 1;
+    std::map<const ResourceManager *, std::shared_ptr<Messages::ManagerLink>> Messages::_managers;
+    bool Messages::_luaRequestsUnchecked = false;
 
     namespace {
         constexpr const char *kNoResource = "Target resource not found";
@@ -104,7 +106,8 @@ namespace Framework::Scripting::Builtins {
                 return;
             }
 
-            if (call.GetResourceManager() == nullptr) {
+            ResourceManager *manager = call.GetResourceManager();
+            if (manager == nullptr) {
                 call.ThrowError("Messages.handle: resource manager not available");
                 return;
             }
@@ -127,6 +130,7 @@ namespace Framework::Scripting::Builtins {
             // The handler it replaces is let go of once the table is unlocked.
             {
                 std::scoped_lock lock(_handlersMutex);
+                entry.manager = LinkOf(manager);
                 std::swap(_handlers[resourceName][messageType], entry);
             }
         }
@@ -185,10 +189,11 @@ namespace Framework::Scripting::Builtins {
                 std::scoped_lock lock(_pendingRequestsMutex);
                 requestId = _nextRequestId++;
                 _pendingRequests.try_emplace(requestId, requestId, waiter, sourceResource, targetResource);
+                _luaRequestsUnchecked = true;
             }
 
-            if (const auto error = Dispatch(manager, handler, targetResource, messageType, requestId, sourceResource, std::move(payload).GetValue())) {
-                HandlerFailed(manager, targetResource, messageType, requestId, *error);
+            if (const auto error = Dispatch(handler, targetResource, messageType, requestId, sourceResource, std::move(payload).GetValue())) {
+                HandlerFailed(handler.manager, targetResource, messageType, requestId, *error);
             }
         }
 
@@ -234,7 +239,7 @@ namespace Framework::Scripting::Builtins {
                     _pendingRequests.try_emplace(requestId, requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource, targetResource, isolate, context);
                 }
 
-                if (const auto error = Dispatch(manager, handler, targetResource, messageType, requestId, sourceResource, std::move(copy))) {
+                if (const auto error = Dispatch(handler, targetResource, messageType, requestId, sourceResource, std::move(copy))) {
                     // Rejected here, in the call that made the Promise, as for a JavaScript handler that throws.
                     if (const RequestNode request = TakeUnanswered(requestId); !request.empty()) {
                         const bool stopped = *error == Bind::kRuntimeStopped;
@@ -245,7 +250,7 @@ namespace Framework::Scripting::Builtins {
                         resolver->Reject(context, stopped ? text.As<v8::Value>() : v8::Exception::Error(text)).Check();
                     }
                     else {
-                        ReportUnawaited(manager, targetResource, messageType, *error);
+                        ReportUnawaited(handler.manager, targetResource, messageType, *error);
                     }
                 }
                 return;
@@ -360,8 +365,8 @@ namespace Framework::Scripting::Builtins {
                 return; // Silently ignore
             }
 
-            if (const auto error = Dispatch(manager, handler, targetResource, messageType, 0, call.ResourceName(), std::move(payload).GetValue())) {
-                ReportUnawaited(manager, targetResource, messageType, *error);
+            if (const auto error = Dispatch(handler, targetResource, messageType, 0, call.ResourceName(), std::move(payload).GetValue())) {
+                ReportUnawaited(handler.manager, targetResource, messageType, *error);
             }
         }
 
@@ -390,8 +395,8 @@ namespace Framework::Scripting::Builtins {
                     }
                     copy = std::move(copied).GetValue();
                 }
-                if (const auto error = Dispatch(manager, handler, targetResource, messageType, 0, manager != nullptr ? manager->ResolveResourceContext(isolate) : std::string(), std::move(copy))) {
-                    ReportUnawaited(manager, targetResource, messageType, *error);
+                if (const auto error = Dispatch(handler, targetResource, messageType, 0, manager != nullptr ? manager->ResolveResourceContext(isolate) : std::string(), std::move(copy))) {
+                    ReportUnawaited(handler.manager, targetResource, messageType, *error);
                 }
                 return;
             }
@@ -464,6 +469,16 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Messages::ProcessPendingResponses() {
+        // A request made from Lua since the last time may have had nowhere to wait: its call has raised by now.
+        bool unchecked = false;
+        {
+            std::scoped_lock lock(_pendingRequestsMutex);
+            unchecked = std::exchange(_luaRequestsUnchecked, false);
+        }
+        if (unchecked) {
+            DropAbandonedRequests();
+        }
+
         std::vector<PendingResponse> responses;
         {
             std::scoped_lock lock(_responseQueueMutex);
@@ -593,6 +608,7 @@ namespace Framework::Scripting::Builtins {
             handler.isolate = entry.isolate;
             handler.function.Reset(entry.isolate, entry.function);
             handler.callable = entry.callable;
+            handler.manager  = entry.manager;
             return Lookup::Found;
         }
 
@@ -604,10 +620,11 @@ namespace Framework::Scripting::Builtins {
             return Lookup::NoHandler;
         }
         handler.callable = entry.callable;
+        handler.manager  = entry.manager;
         return Lookup::Found;
     }
 
-    std::optional<std::string> Messages::Dispatch(ResourceManager *manager, const Handler &handler, const std::string &targetResource, const std::string &messageType, uint64_t requestId, const std::string &sourceResource, TransferredValue payload) {
+    std::optional<std::string> Messages::Dispatch(const Handler &handler, const std::string &targetResource, const std::string &messageType, uint64_t requestId, const std::string &sourceResource, TransferredValue payload) {
         std::vector<TransferredValue> args(2);
         args[0]          = std::move(payload);
         args[1].kind     = TransferredValue::Kind::Function;
@@ -626,7 +643,7 @@ namespace Framework::Scripting::Builtins {
         auto *monitor        = isolate != nullptr ? ResourceMonitor::Current() : nullptr;
         const double charged = monitor ? monitor->ChargedMs(isolate, ResourceMonitor::Clock::now()) : 0.0;
 
-        handler.callable->Invoke(args, Bind::ReturnMode::Outcome, [told, manager, targetResource, messageType, requestId](Bind::CallOutcome &&outcome) {
+        handler.callable->Invoke(args, Bind::ReturnMode::Outcome, [told, manager = handler.manager, targetResource, messageType, requestId](Bind::CallOutcome &&outcome) {
             if (!outcome.threw) {
                 return;
             }
@@ -673,7 +690,7 @@ namespace Framework::Scripting::Builtins {
         return _pendingRequests.extract(it);
     }
 
-    void Messages::HandlerFailed(ResourceManager *manager, const std::string &targetResource, const std::string &messageType, uint64_t requestId, const std::string &error) {
+    void Messages::HandlerFailed(const std::shared_ptr<ManagerLink> &manager, const std::string &targetResource, const std::string &messageType, uint64_t requestId, const std::string &error) {
         RequestNode request = requestId != 0 ? TakeUnanswered(requestId) : RequestNode();
         if (request.empty()) {
             ReportUnawaited(manager, targetResource, messageType, error);
@@ -689,13 +706,13 @@ namespace Framework::Scripting::Builtins {
         Reject(request.mapped(), error, true);
     }
 
-    void Messages::ReportUnawaited(ResourceManager *manager, const std::string &targetResource, const std::string &messageType, const std::string &error) {
+    void Messages::ReportUnawaited(const std::shared_ptr<ManagerLink> &manager, const std::string &targetResource, const std::string &messageType, const std::string &error) {
         if (error == Bind::kRuntimeStopped) {
             return;
         }
         // Queued, not handled here, where a script may be executing: the manager acts on it at its next upkeep.
-        if (manager != nullptr) {
-            manager->ReportHandlerFailure(targetResource, "Message handler '" + messageType + "' error: " + error);
+        if (manager != nullptr && manager->manager != nullptr) {
+            manager->manager->ReportHandlerFailure(targetResource, "Message handler '" + messageType + "' error: " + error);
             return;
         }
         LogHandlerError(targetResource, messageType, error);
@@ -755,6 +772,59 @@ namespace Framework::Scripting::Builtins {
         if (monitor) {
             monitor->ReportOwnTime(isolate, "continuations of a reply from", request.targetResource, charged, ResourceMonitor::Clock::now());
         }
+    }
+
+    void Messages::ForgetManager(const ResourceManager *manager) {
+        // Let go of once the table is unlocked.
+        std::vector<Handler> dropped;
+        std::scoped_lock lock(_handlersMutex);
+        const auto link = _managers.find(manager);
+        if (link == _managers.end()) {
+            return;
+        }
+        for (auto resourceIt = _handlers.begin(); resourceIt != _handlers.end();) {
+            for (auto handlerIt = resourceIt->second.begin(); handlerIt != resourceIt->second.end();) {
+                if (handlerIt->second.manager == link->second) {
+                    dropped.push_back(std::move(handlerIt->second));
+                    handlerIt = resourceIt->second.erase(handlerIt);
+                }
+                else {
+                    ++handlerIt;
+                }
+            }
+            resourceIt = resourceIt->second.empty() ? _handlers.erase(resourceIt) : std::next(resourceIt);
+        }
+        // A handler that is still running reports to nobody.
+        link->second->manager = nullptr;
+        _managers.erase(link);
+    }
+
+    std::shared_ptr<Messages::ManagerLink> Messages::LinkOf(ResourceManager *manager) {
+        std::shared_ptr<ManagerLink> &link = _managers[manager];
+        if (link == nullptr) {
+            link          = std::make_shared<ManagerLink>();
+            link->manager = manager;
+        }
+        return link;
+    }
+
+    void Messages::DropAbandonedRequests() {
+        // Let go of once the table is unlocked.
+        std::vector<RequestNode> abandoned;
+        std::scoped_lock lock(_pendingRequestsMutex);
+        for (auto it = _pendingRequests.begin(); it != _pendingRequests.end();) {
+            if (it->second.isolate == nullptr && !it->second.waiter.Awaited()) {
+                abandoned.push_back(_pendingRequests.extract(it++));
+            }
+            else {
+                ++it;
+            }
+        }
+    }
+
+    size_t Messages::GetPendingRequestCount() {
+        std::scoped_lock lock(_pendingRequestsMutex);
+        return _pendingRequests.size();
     }
 
     void Messages::Shutdown() {

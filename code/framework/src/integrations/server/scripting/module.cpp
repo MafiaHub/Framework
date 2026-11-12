@@ -74,6 +74,8 @@ namespace Framework::Integrations::Server::Scripting {
         // runtime watched are let go of with it.
         _luaEngine->AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
             Framework::Scripting::Builtins::StateBag::DropDeadSubscriptions();
+            // So are the message requests its scripts were waiting on.
+            Framework::Scripting::Builtins::Messages::DropAbandonedRequests();
             // The address of the runtime may be the next one's.
             Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);
         });

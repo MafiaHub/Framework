@@ -9,8 +9,10 @@
 #pragma once
 
 #include "lua_events_ut.h"
+#include "lua_transfer_ut.h"
 
 #include "scripting/builtins/messages.h"
+#include "scripting/lua/lua_transfer.h"
 
 #include <string>
 #include <vector>
@@ -669,6 +671,165 @@ MODULE(lua_messages, {
         EQUALS(stops.Js("js-asker", "outcome[1]"), "rejected|string|No handler for message type");
         EQUALS(rig.manager.IsResourceRunning("lua-asker"), true);
         EQUALS(rig.manager.IsResourceRunning("js-asker"), true);
+    });
+
+    IT("keeps no request of a Lua runtime that went, or of a call that could not wait", {
+        Bus bus;
+        bus.server.files.Resource("provider", {{"main.lua", "calls = 0 Messages.handle('never', function() calls = calls + 1 end) Messages.handle('ping', function(payload, reply) calls = calls + 1 reply(1) end)"}});
+        bus.server.files.Resource("asker", {{"main.lua", LuaMessagesTest::kLuaAsker}});
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.StartAll({"provider", "asker"}), true);
+        EQUALS(Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
+
+        // On the main thread a request cannot wait. Its handler was called all the same; whether it answered or
+        // not, nothing is kept for the request once the server has updated.
+        EQUALS(Contains(bus.Lua("asker", "select(2, pcall(Messages.request, 'provider', 'never'))"), "cannot wait here"), true);
+        EQUALS(Contains(bus.Lua("asker", "select(2, pcall(Messages.request, 'provider', 'ping'))"), "cannot wait here"), true);
+        EQUALS(bus.Lua("provider", "calls"), "2");
+        bus.server.module.Update();
+        EQUALS(Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
+
+        // A request that waits is kept, until its runtime goes: here without its resource being stopped.
+        EQUALS(bus.Run("asker", "try('provider', 'never')"), "");
+        bus.server.module.Update();
+        EQUALS(Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(1));
+        bus.server.module.GetLuaEngine()->DestroyResourceRuntime("asker");
+        EQUALS(Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
+        EQUALS(bus.Manager().IsResourceRunning("provider"), true);
+    });
+
+    IT("rejects the promise of a reply its runtime cannot be given", {
+        Bus bus;
+        bus.server.files.Resource("provider", {{"main.lua", ""}});
+        bus.server.files.Resource("asker", {{"main.js", LuaMessagesTest::kJsAsker}});
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.StartAll({"provider", "asker"}), true);
+
+        // A handle the provider's Lua runtime has and the requester's JavaScript one does not.
+        LuaTransferTest::TicketDefinition().RegisterLuaGlobal(bus.server.module.GetLuaEngine()->GetRuntime("provider")->State(), Bind::Side::Server);
+        // It leaves Lua as a host type JavaScript was never told of, or is told of no more.
+        ValueTransfer::UnregisterHostType("TransferTicket");
+        LuaTransfer::RegisterHostType(
+            "TransferTicket",
+            [](lua_State *, int, std::vector<uint8_t> &bytes) {
+                bytes = {7};
+                return true;
+            },
+            [](lua_State *, const std::vector<uint8_t> &) {
+                return false;
+            });
+        EQUALS(bus.Lua("provider", "Messages.handle('ticket', function(payload, reply) reply(TransferTicket.new(7)) answered = true end)"), "nil");
+
+        EQUALS(bus.Js("asker", "tryIt('provider', 'ticket')"), "asked");
+        EQUALS(bus.Until([&] {
+            return bus.Js("asker", "outcome[1]") != "pending";
+        }),
+            true);
+        LuaTransfer::UnregisterHostType("TransferTicket");
+        EQUALS(bus.Lua("provider", "answered"), "true");
+        EQUALS(bus.Js("asker", "outcome[1]"), "rejected|Error|Unknown host type TransferTicket");
+        EQUALS(Builtins::Messages::GetPendingRequestCount(), static_cast<size_t>(0));
+    });
+
+    IT("needs a resource manager to handle and to request, in a runtime that was given none", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        {
+            EngineScope scope(&engine);
+            Builtins::Messages::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), nullptr);
+        }
+        const auto why = [&engine](const std::string &call) {
+            return RunJSString(engine, ("(() => { try { " + call + "; return 'ok'; } catch (e) { return e.constructor.name + ': ' + e.message; } })()").c_str());
+        };
+
+        EQUALS(why("Messages.handle('x', () => {})"), "Error: Messages.handle: resource manager not available");
+        EQUALS(why("Messages.request('nobody', 'x')"), "Error: Messages.request: resource manager not available");
+        // A notification needs none.
+        EQUALS(why("Messages.send('nobody', 'x')"), "ok");
+        // The shape of the call is checked first.
+        EQUALS(why("Messages.handle('x')"), "TypeError: Messages.handle requires 2 arguments: messageType, handler");
+
+        engine.Shutdown();
+    });
+
+    IT("reports a failure nobody waits for to the manager of the handler, also once the sender's is gone", {
+        // Two servers' worth of scripting in one process, Lua alone: each a manager over an engine of its own.
+        struct Host final {
+            LuaResourcesTest::Files files;
+            LuaEngine lua;
+            std::unique_ptr<ResourceManager> manager;
+            std::vector<std::string> errors;
+            std::chrono::steady_clock::time_point clock = std::chrono::steady_clock::now();
+
+            bool Init() {
+                if (lua.Init() != ScriptingError::SCRIPTING_NONE) {
+                    return false;
+                }
+                Bind::WatchRuntimes(lua);
+                ResourceManagerConfig config;
+                config.resourcesPath = files.root.string();
+                manager              = std::make_unique<ResourceManager>(nullptr, config);
+                manager->SetLuaEngine(&lua);
+                lua.SetRuntimeSetupCallback([this](LuaRuntime &runtime) {
+                    Bind::SetCallResourceManager(&runtime, manager.get());
+                    Builtins::Messages::RegisterLua(runtime);
+                });
+                lua.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
+                    Bind::SetCallResourceManager(&runtime, nullptr);
+                });
+                manager->AddOnResourceError([this](const std::string &name, const std::string &error) {
+                    errors.push_back(name + ": " + LuaRuntimeTest::FirstLine(error));
+                });
+                manager->DiscoverResources();
+                return true;
+            }
+
+            // A frame: time moves on by `ms`, and the manager acts on what its handlers failed with.
+            void Frame(int ms) {
+                clock += std::chrono::milliseconds(ms);
+                lua.Tick(clock);
+                if (manager != nullptr) {
+                    manager->ProcessHandlerFailures();
+                }
+            }
+        };
+
+        Host handlers;
+        handlers.files.Resource("provider", {{"main.lua", "Messages.handle('note', function(payload) sleep(20) failed = payload error('late ' .. payload) end)"}}, R"(,"errorBehavior":"continue")");
+        EQUALS(handlers.Init(), true);
+        EQUALS((bool)handlers.manager->StartResource("provider"), true);
+        {
+            Host senders;
+            senders.files.Resource("sender", {{"main.lua", ""}});
+            EQUALS(senders.Init(), true);
+            EQUALS((bool)senders.manager->StartResource("sender"), true);
+
+            // The handler sleeps, so it fails after the call that woke it has returned: its own manager hears
+            // of it, and the sender's does not.
+            EQUALS(LuaRuntimeTest::Eval(*senders.lua.GetRuntime("sender"), "Messages.send('provider', 'note', 'one')"), "nil");
+            handlers.Frame(30);
+            senders.Frame(30);
+            EQUALS(LuaRuntimeTest::Eval(*handlers.lua.GetRuntime("provider"), "failed"), "one");
+            EQUALS(handlers.errors.size(), static_cast<size_t>(1));
+            EQUALS(LuaMessagesTest::AnyContains(handlers.errors, "provider: Message handler 'note' error: "), true);
+            EQUALS(LuaMessagesTest::AnyContains(handlers.errors, "late one"), true);
+            EQUALS(senders.errors.size(), static_cast<size_t>(0));
+
+            // The sender's manager goes while the handler sleeps.
+            EQUALS(LuaRuntimeTest::Eval(*senders.lua.GetRuntime("sender"), "Messages.send('provider', 'note', 'two')"), "nil");
+            senders.manager.reset();
+        }
+        handlers.Frame(30);
+        EQUALS(LuaRuntimeTest::Eval(*handlers.lua.GetRuntime("provider"), "failed"), "two");
+        EQUALS(handlers.errors.size(), static_cast<size_t>(2));
+        EQUALS(LuaMessagesTest::AnyContains(handlers.errors, "late two"), true);
+
+        // A manager that goes takes its handlers with it, and what still fails then is told to nobody.
+        EQUALS(LuaRuntimeTest::Eval(*handlers.lua.GetRuntime("provider"), "Messages.send('provider', 'note', 'three')"), "nil");
+        handlers.manager.reset();
+        handlers.Frame(30);
+        EQUALS(handlers.errors.size(), static_cast<size_t>(2));
+        Builtins::Messages::Shutdown();
     });
 
     IT("answers and cleans up under a manager that has no JavaScript engine", {

@@ -245,6 +245,7 @@ namespace Framework::Scripting {
         // A runtime a builtin was registered in with this manager may outlive it.
         Bind::ForgetCallResourceManager(this);
         Builtins::StateBag::ForgetManager(this);
+        Builtins::Messages::ForgetManager(this);
         if (_jsEngine) {
             _jsEngine->SetResourceManager(nullptr);
         }
@@ -1134,7 +1135,8 @@ namespace Framework::Scripting {
             Builtins::Messages::CleanupResource(isolate, context, std::string(resourceName));
         }
         else {
-            // Without JavaScript only Lua waits on a request, and that needs no isolate.
+            // No JavaScript engine is up to hand an isolate over, and none is needed: each request is failed in
+            // the runtime of its requester.
             Builtins::Messages::CleanupResource(std::string(resourceName));
         }
         return true;

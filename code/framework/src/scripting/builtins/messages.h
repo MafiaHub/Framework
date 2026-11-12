@@ -87,10 +87,28 @@ namespace Framework::Scripting::Builtins {
         static void ForgetIsolate(v8::Isolate *isolate);
 
         /**
+         * Drop the handlers registered under a manager that is going, and report to nobody what a handler of
+         * its resources still fails with. The manager calls it as it is destroyed.
+         */
+        static void ForgetManager(const ResourceManager *manager);
+
+        /**
+         * Drop the requests made from Lua that nobody waits for any more: those of a runtime that has stopped,
+         * and those of a call that could not wait. Call it when a Lua runtime goes, after its callables were told
+         * (Bind::WatchRuntimes); ProcessPendingResponses does it for the requests made since it last ran.
+         */
+        static void DropAbandonedRequests();
+
+        /**
          * Cleanup all static V8 globals.
          * Must be called before the V8 isolate is disposed.
          */
         static void Shutdown();
+
+        /**
+         * Diagnostics and tests: the requests that still wait for a reply.
+         */
+        static size_t GetPendingRequestCount();
 
       private:
         // The functions of the definition.
@@ -99,13 +117,26 @@ namespace Framework::Scripting::Builtins {
         // What a handler is given as `reply` when it is called through its callable.
         class ReplyFunction;
 
-        // A registered handler. One registered from JavaScript also has the isolate its Global<Function> is bound
-        // to, for a JavaScript requester. Requests/sends must not Get() a handler from a foreign isolate.
+        // The manager handlers were registered under, until it goes: what a failing handler is reported to.
+        struct ManagerLink {
+            ResourceManager *manager = nullptr;
+        };
+
+        // A registered handler, and the manager of the resource that owns it. One registered from JavaScript also
+        // has the isolate its Global<Function> is bound to, for a JavaScript requester. Requests/sends must not
+        // Get() a handler from a foreign isolate.
         struct Handler {
             v8::Isolate *isolate = nullptr;
             v8::Global<v8::Function> function;
             std::shared_ptr<Bind::ScriptCallable> callable;
+            std::shared_ptr<ManagerLink> manager;
         };
+
+        // The link of `manager`, shared by every handler registered under it. Never null.
+        static std::shared_ptr<ManagerLink> LinkOf(ResourceManager *manager);
+
+        // By manager; under _handlersMutex.
+        static std::map<const ResourceManager *, std::shared_ptr<ManagerLink>> _managers;
 
         // Message handler storage: resourceName -> messageType -> handler
         static std::map<std::string, std::map<std::string, Handler>> _handlers;
@@ -171,7 +202,7 @@ namespace Framework::Scripting::Builtins {
         // Calls a handler through its callable with (payload, reply), where reply answers request `requestId`, or
         // nothing for 0, a notification. Gives what the handler failed with before this returned, for the caller
         // to act on where it stands; a handler that fails later is dealt with by HandlerFailed.
-        static std::optional<std::string> Dispatch(ResourceManager *manager, const Handler &handler, const std::string &targetResource, const std::string &messageType, uint64_t requestId, const std::string &sourceResource, TransferredValue payload);
+        static std::optional<std::string> Dispatch(const Handler &handler, const std::string &targetResource, const std::string &messageType, uint64_t requestId, const std::string &sourceResource, TransferredValue payload);
 
         // Queues the answer to a request that has none yet.
         static void QueueReply(uint64_t requestId, TransferredValue response);
@@ -180,11 +211,12 @@ namespace Framework::Scripting::Builtins {
         static RequestNode TakeUnanswered(uint64_t requestId);
 
         // A handler that was called through its callable failed with `error`: fails the request that still waits
-        // for it, and reports a failure nobody waits for.
-        static void HandlerFailed(ResourceManager *manager, const std::string &targetResource, const std::string &messageType, uint64_t requestId, const std::string &error);
+        // for it, and reports a failure nobody waits for to the manager of the handler, `manager`.
+        static void HandlerFailed(const std::shared_ptr<ManagerLink> &manager, const std::string &targetResource, const std::string &messageType, uint64_t requestId, const std::string &error);
 
-        // Reports what a handler failed with when no request waits for it.
-        static void ReportUnawaited(ResourceManager *manager, const std::string &targetResource, const std::string &messageType, const std::string &error);
+        // Reports what a handler failed with when no request waits for it, to the manager of the handler if it is
+        // still there.
+        static void ReportUnawaited(const std::shared_ptr<ManagerLink> &manager, const std::string &targetResource, const std::string &messageType, const std::string &error);
 
         // Fails a request with `message`: a JavaScript Promise is rejected with it, as an Error when `asError`
         // and as the string otherwise, and a Lua wait raises it.
@@ -200,6 +232,10 @@ namespace Framework::Scripting::Builtins {
         static std::mutex _responseQueueMutex;
 
         static uint64_t _nextRequestId;
+
+        // Whether a request was made from Lua since the abandoned ones were last dropped; under
+        // _pendingRequestsMutex.
+        static bool _luaRequestsUnchecked;
     };
 
 } // namespace Framework::Scripting::Builtins
