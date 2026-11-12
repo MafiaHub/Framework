@@ -34,7 +34,7 @@ namespace InterestScaleTests {
 
     using namespace Framework::Networking::Replication;
 
-    struct World {
+    struct ScaleWorld {
         static constexpr MafiaNet::Time kTickMs = 16;
 
         Framework::Networking::NetworkServer peer;
@@ -43,14 +43,14 @@ namespace InterestScaleTests {
         std::vector<NetworkEntity *> entities;
         std::vector<ReplicationConnection *> connections;
 
-        World() {
+        ScaleWorld() {
             MafiaNet::SetTimeSourceOverride(&Now);
             manager->Init(&peer, true);
             manager->ConfigureGrid(100.0f, -100000.0f, 100000.0f);
             manager->SetAutoSerializeInterval(kTickMs);
         }
 
-        ~World() {
+        ~ScaleWorld() {
             for (NetworkEntity *entity : entities) {
                 manager->DestroyEntity(entity);
             }
@@ -114,7 +114,7 @@ MODULE(interest_scale, {
     // in next to it without anything else happening. Whether a player sees its mover tells whether
     // its interest was recomputed.
     constexpr int kPlayers = 60;
-    auto populate          = [](World &world, std::vector<NetworkEntity *> &movers) {
+    auto populate          = [](ScaleWorld &world, std::vector<NetworkEntity *> &movers) {
         for (int i = 0; i < kPlayers; ++i) {
             world.Join(100 + i, i * 1000.0f, 0.0f);
             movers.push_back(world.Spawn(i * 1000.0f, 500.0f));
@@ -131,7 +131,7 @@ MODULE(interest_scale, {
     };
 
     IT("bounds the viewers one slow tick recomputes, then reaches them all", {
-        World world;
+        ScaleWorld world;
         world.manager->SetInterestRebuildInterval(100);
         std::vector<NetworkEntity *> movers;
         populate(world, movers);
@@ -142,7 +142,7 @@ MODULE(interest_scale, {
         // slow tick into a slower next one; the work per tick has to stay what a normal tick does.
         world.SlowTick(250);
         const int afterOne        = world.CountSeeing(movers);
-        const int perTickAtSpeed  = (kPlayers * World::kTickMs + 99) / 100;
+        const int perTickAtSpeed  = (kPlayers * ScaleWorld::kTickMs + 99) / 100;
         GREATER(afterOne, 0);
         LESSEREQ(afterOne, perTickAtSpeed);
 
@@ -153,7 +153,7 @@ MODULE(interest_scale, {
     });
 
     IT("streams a new entity in without recomputing every other viewer", {
-        World world;
+        ScaleWorld world;
         world.manager->SetInterestRebuildInterval(1000000);
         std::vector<NetworkEntity *> movers;
         populate(world, movers);
@@ -168,7 +168,7 @@ MODULE(interest_scale, {
     });
 
     IT("streams a destroyed entity out without recomputing every other viewer", {
-        World world;
+        ScaleWorld world;
         world.manager->SetInterestRebuildInterval(1000000);
         std::vector<NetworkEntity *> movers;
         populate(world, movers);
@@ -184,7 +184,7 @@ MODULE(interest_scale, {
     });
 
     IT("runs a tick in which nothing changed without allocating", {
-        World world;
+        ScaleWorld world;
         world.manager->SetInterestRebuildInterval(100);
         // The count is per thread: keep the work on this one.
         world.manager->SetReplicationWorkerThreads(0);
@@ -207,7 +207,7 @@ MODULE(interest_scale, {
     });
 
     IT("recomputes a viewer's interest without allocating once it has settled", {
-        World world;
+        ScaleWorld world;
         world.manager->SetReplicationWorkerThreads(0);
         for (int i = 0; i < 300; ++i) {
             world.Spawn(static_cast<float>(i % 50), static_cast<float>(i / 50));
@@ -228,11 +228,11 @@ MODULE(interest_scale, {
 
     IT("computes the same interest on worker threads as on the server thread", {
         // Two identical crowds, one recomputed serially and one across workers, every tick.
-        World serial, parallel;
+        ScaleWorld serial, parallel;
         serial.manager->SetReplicationWorkerThreads(0);
         parallel.manager->SetReplicationWorkerThreads(3);
         std::vector<NetworkEntity *> serialThings, parallelThings;
-        for (World *world : {&serial, &parallel}) {
+        for (ScaleWorld *world : {&serial, &parallel}) {
             auto &things = world == &serial ? serialThings : parallelThings;
             for (int i = 0; i < 48; ++i) {
                 world->Join(100 + i, (i % 8) * 60.0f, (i / 8) * 60.0f);
@@ -260,7 +260,7 @@ MODULE(interest_scale, {
     });
 
     IT("works out what each viewer gains and loses along with its interest, ahead of the pass", {
-        World world;
+        ScaleWorld world;
         std::vector<NetworkEntity *> movers;
         populate(world, movers);
         moveIn(movers);
@@ -271,7 +271,7 @@ MODULE(interest_scale, {
     });
 
     IT("works them out on the worker threads too, to the same result", {
-        World world;
+        ScaleWorld world;
         world.manager->SetReplicationWorkerThreads(3);
         std::vector<NetworkEntity *> movers;
         populate(world, movers);
@@ -288,7 +288,7 @@ MODULE(interest_scale, {
     });
 
     IT("decides again in the pass when an entity left after the interest was computed", {
-        World world;
+        ScaleWorld world;
         std::vector<NetworkEntity *> movers;
         populate(world, movers);
         NetworkEntity *doomed = world.Spawn(30 * 1000.0f, 20.0f);
@@ -302,7 +302,7 @@ MODULE(interest_scale, {
         const unsigned held = countHeld();
         moveIn(movers);
 
-        g_nowUS += World::kTickMs * 1000;
+        g_nowUS += ScaleWorld::kTickMs * 1000;
         world.manager->RebuildInterest();
         // Between the two halves of a tick: what was worked out names an entity that is gone.
         world.Despawn(doomed);

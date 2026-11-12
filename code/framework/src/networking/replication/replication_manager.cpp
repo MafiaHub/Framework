@@ -712,6 +712,7 @@ namespace Framework::Networking::Replication {
             // on it at its next query, by which time the caller has placed it.
             _interest.Sync(entity);
             Reevaluate(entity);
+            _world.Adopt(entity);
         }
         if (_onEntityCreated) {
             _onEntityCreated(entity->GetNetworkID());
@@ -723,6 +724,13 @@ namespace Framework::Networking::Replication {
         if (!entity) {
             return;
         }
+        // An entity the world knows goes through it, so that a handle held on it stays valid.
+        if (!_world.Destroy(entity->GetNetworkID())) {
+            TeardownEntity(entity);
+        }
+    }
+
+    void ReplicationManager::TeardownEntity(NetworkEntity *entity) {
         // Erase by value, not by ownerGUID: the owner key may have been reassigned since SetViewer,
         // and on a respawn flow (SetViewer(newAvatar) then DestroyEntity(oldAvatar)) an erase by key
         // would take out the replacement's mapping and silence that connection's streaming.
@@ -743,8 +751,9 @@ namespace Framework::Networking::Replication {
         if (_onEntityDestroyed) {
             _onEntityDestroyed(entity->GetNetworkID());
         }
-        // BroadcastDestruction must precede deletion; ~Replica3 dereferences automatically.
+        // BroadcastDestruction must precede Dereference, and both the deletion.
         entity->BroadcastDestruction();
+        Dereference(entity);
         delete entity;
     }
 
@@ -826,6 +835,7 @@ namespace Framework::Networking::Replication {
     }
 
     void ReplicationManager::ForgetEntity(NetworkEntity *entity) {
+        _world.Forget(entity);
         const uint32_t slot = _interest.SlotOf(entity);
         if (slot == InterestGrid::kNoSlot) {
             return;

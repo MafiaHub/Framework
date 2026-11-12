@@ -12,6 +12,7 @@
 #include "entity_registry.h"
 #include "interest_grid.h"
 #include "network_entity.h"
+#include "world.h"
 
 #include <utils/fork_join_pool.h>
 
@@ -158,8 +159,13 @@ namespace Framework::Networking::Replication {
         // Server: construct and start replicating an entity of the given type, nullptr if unknown.
         // Non-owning: the manager owns it; destroy via DestroyEntity.
         NetworkEntity *CreateEntity(uint32_t typeId);
-        // Broadcast destruction and delete the entity.
+        // Broadcast destruction and delete the entity; once the last handle on it is released, if
+        // the world has given any out (see World::Destroy).
         void DestroyEntity(NetworkEntity *entity);
+        // Server: entities and registered state behind handles that lock them. See world.h.
+        World &GetWorld() {
+            return _world;
+        }
         NetworkEntity *GetEntityByNetworkID(MafiaNet::NetworkID networkId) const;
         void ForEachEntity(const fu2::function<void(NetworkEntity *) const> &fn) const;
 
@@ -388,6 +394,8 @@ namespace Framework::Networking::Replication {
         // can be handed out again. From DestroyEntity, and from ~NetworkEntity for any other way out.
         void ForgetEntity(NetworkEntity *entity);
         void ForgetSlot(uint32_t slot);
+        // What DestroyEntity ends in, with nothing left holding the entity.
+        void TeardownEntity(NetworkEntity *entity);
         // Recomputes the viewers RebuildInterest found due, across the worker pool when it pays.
         void ComputeDueInterest();
         // The worker pool, started on first use, for `work` independent items; null when that is too
@@ -401,6 +409,7 @@ namespace Framework::Networking::Replication {
         };
         SerializeExecutor _serializeExecutor;
         friend class NetworkEntity;
+        friend class World;
 
         bool _isServer                 = false;
         bool _batchTransforms          = false;
@@ -416,6 +425,7 @@ namespace Framework::Networking::Replication {
         bool _clientRPCsRegistered = false;
         bool _serverRPCsRegistered = false;
         InterestGrid _interest;
+        World _world {*this};
         DelegationManager _delegation;
         SerializeRateBands _rateBands;
         std::unordered_map<uint32_t, SerializeRateBands> _rateBandsByType;

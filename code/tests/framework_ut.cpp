@@ -84,6 +84,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/webserver_main_thread_ut.h"
 #include "modules/world_lock_ut.h"
 #include "modules/world_text_ut.h"
+#include "modules/world_ut.h"
 
 #ifdef _WIN32
 #include "modules/d3d12_backend_ut.h"
@@ -142,6 +143,7 @@ int main() {
     UNIT_MODULE(thread_budget);
     UNIT_MODULE(webserver_main_thread);
     UNIT_MODULE(world_lock);
+    UNIT_MODULE(world);
     UNIT_MODULE(client_package);
     UNIT_MODULE(input_state);
     UNIT_MODULE(delegation);
