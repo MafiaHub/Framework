@@ -13,8 +13,11 @@
 #include "scripting/bind/sol.h"
 #include "scripting/lua/lua_runtime.h"
 
+#include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace SolSmokeTest {
     struct Counter final {
@@ -33,6 +36,31 @@ namespace SolSmokeTest {
             value = next;
         }
     };
+
+    // Throws from its constructor and counts what is destroyed.
+    struct Thrower final {
+        static inline int destroyed = 0;
+
+        explicit Thrower(int) {
+            throw std::runtime_error("no object");
+        }
+
+        ~Thrower() {
+            ++destroyed;
+        }
+    };
+
+    inline int PushThrower(lua_State *L) {
+        bool threw = false;
+        try {
+            sol::stack::push<Thrower>(L, 1);
+        }
+        catch (const std::exception &) {
+            threw = true;
+        }
+        lua_pushboolean(L, threw ? 1 : 0);
+        return 1;
+    }
 
     inline bool g_unwound = false;
 
@@ -157,5 +185,90 @@ MODULE(sol_smoke, {
         EQUALS(LuaTest::Eval(L, "callback(function() error('from script', 0) end)"), "<error> from script");
         EQUALS(SolSmokeTest::g_unwound, true);
         EQUALS(LuaTest::Eval(L, "1 + 1"), "2");
+    });
+
+    // --- What sol does differently from what the binding layer pins ---
+    //
+    // Each of these is a default of sol 3.5.0 that no configuration macro changes and that a test of the binding
+    // layer pins the other way. They are why the part of the Lua backend named in each stays hand-written; a sol
+    // that changes one of them fails here first.
+
+    IT("accepts a userdata without a metatable as an object of any class", {
+        LuaTest::State state;
+        lua_State *L = state.L;
+
+        lua_newuserdatauv(L, 4, 0);
+        EQUALS(sol::stack::check<SolSmokeTest::Counter>(L, -1, sol::no_panic), true);
+    });
+
+    IT("gives a pushed object its metatable before it constructs it", {
+        LuaTest::State state;
+        lua_State *L = state.L;
+
+        SolSmokeTest::Thrower::destroyed = 0;
+        lua_pushcfunction(L, SolSmokeTest::PushThrower);
+        EQUALS(lua_pcall(L, 0, 1, 0), LUA_OK);
+        EQUALS(lua_toboolean(L, -1), 1);
+        lua_settop(L, 0);
+        lua_gc(L, LUA_GCCOLLECT);
+        // The finalizer ran on an object no constructor finished.
+        EQUALS(SolSmokeTest::Thrower::destroyed, 1);
+    });
+
+    IT("reads integers without the range of their type and refuses a float with an integral value", {
+        LuaTest::State state;
+        lua_State *L = state.L;
+
+        lua_pushinteger(L, 300);
+        EQUALS(sol::stack::check<uint8_t>(L, -1, sol::no_panic), true);
+        lua_pushnumber(L, 2.0);
+        EQUALS(sol::stack::check<int>(L, -1, sol::no_panic), false);
+    });
+
+    IT("refuses to push an unsigned integer past the largest lua_Integer", {
+        LuaTest::State state;
+        lua_State *L = state.L;
+
+        // The type model has it cross as its two's complement.
+        std::string error;
+        try {
+            sol::stack::push(L, std::numeric_limits<uint64_t>::max());
+        }
+        catch (const sol::error &exception) {
+            error = exception.what();
+        }
+        EQUALS(error, "integer value will be misrepresented in lua");
+    });
+
+    IT("takes any table for a vector", {
+        LuaTest::State state;
+        lua_State *L = state.L;
+
+        EQUALS(luaL_dostring(L, "return { 1, nil, 3, key = 4 }"), LUA_OK);
+        EQUALS(sol::stack::check<std::vector<int>>(L, -1, sol::no_panic), true);
+    });
+
+    IT("words the error of a wrong argument and of a wrong receiver its own way", {
+        LuaTest::State state;
+        lua_State *L = state.L;
+        sol::state_view lua(L);
+        lua.new_usertype<SolSmokeTest::Counter>("Counter", "add", &SolSmokeTest::Counter::Add);
+
+        // The binding layer pins "bad argument #1 to 'Counter:add' (integer expected, got string)" and "bad
+        // receiver for 'Counter:add' (Counter expected, got number)".
+        EQUALS(LuaTest::Eval(L, "Counter.new():add('x')"), "<error> eval:1: stack index 2, expected number, received string: not a numeric type that fits exactly an integer (number maybe has significant decimals) (bad argument into 'int(int)')");
+        EQUALS(LuaTest::Eval(L, "Counter.add(1, 2)"), "<error> eval:1: sol: received nil for 'self' argument (use ':' for accessing member functions, make sure member variables are preceeded by the actual object with '.' syntax)");
+    });
+
+    IT("lets a script extend a class and read the metatable of an object", {
+        LuaTest::State state;
+        lua_State *L = state.L;
+        sol::state_view lua(L);
+        lua.new_usertype<SolSmokeTest::Counter>("Counter", "add", &SolSmokeTest::Counter::Add);
+
+        // The binding layer pins a read-only class table and getmetatable(object) == false.
+        EQUALS(LuaTest::Eval(L, "Counter.extra = 1; return Counter.extra"), "1");
+        EQUALS(LuaTest::Eval(L, "type(getmetatable(Counter.new()))"), "table");
+        EQUALS(LuaTest::Eval(L, "type(getmetatable(Counter.new()).__gc)"), "function");
     });
 });
