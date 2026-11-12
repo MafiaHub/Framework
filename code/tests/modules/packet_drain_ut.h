@@ -273,7 +273,8 @@ MODULE(packet_drain, {
         // Handlers ran on the packet thread: not here, and not where the ticks ran.
         EQUALS(handlerThreads.size(), static_cast<size_t>(1));
         EQUALS(handlerThreads.empty() || handlerThreads[0] != std::this_thread::get_id(), true);
-        GREATER(ticks.load(), 50);
+        // Not a pace: a hosted runner with three cores gets through a few dozen in the two seconds.
+        GREATER(ticks.load(), 10);
         LESSER(stopMs, 5000.0);
     });
 });

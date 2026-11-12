@@ -1244,8 +1244,9 @@ MODULE(server_packet_thread, {
         std::atomic<bool> connectFailed {false};
         const auto started  = Clock::now();
         const auto deadline = started + 60s;
-        std::thread players([&] {
-            while (cycles < kClients * kRounds && Clock::now() < deadline && !connectFailed) {
+        // Spelled with `=`: MSVC reads `std::thread players([&] {` here as the start of a function declaration.
+        auto players           = std::thread([&] {
+            while (cycles.load() != kClients * kRounds && Clock::now() < deadline && !connectFailed.load()) {
                 for (int i = 0; i < kClients; ++i) {
                     Storming &each = *storm[i];
                     if (each.round >= kRounds) {
@@ -1274,7 +1275,7 @@ MODULE(server_packet_thread, {
         });
         server.longestGapMs = 0.0;
         const int ticksAtStart = server.ticks;
-        while (cycles < kClients * kRounds && Clock::now() < deadline && !connectFailed) {
+        while (cycles.load() != kClients * kRounds && Clock::now() < deadline && !connectFailed.load()) {
             server.Update();
         }
         players.join();
