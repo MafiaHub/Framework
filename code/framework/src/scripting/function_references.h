@@ -84,6 +84,9 @@ namespace Framework::Scripting {
          * an exception naming the argument is pending in the caller and the result is empty.
          */
         std::optional<std::vector<TransferredValue>> CopyArguments(v8::Isolate *caller, const std::vector<v8::Local<v8::Value>> &arguments);
+        // The other half, for copies that crossed threads on their own: builds them again in `target`, a runtime
+        // this object knows, inside its current context. Empty, with the exception pending there, on failure.
+        std::optional<std::vector<v8::Local<v8::Value>>> RebuildArguments(v8::Isolate *target, const std::vector<TransferredValue> &arguments);
 
         /**
          * Call a function that lives in `owner` from inside `caller`, whose scopes the caller holds. The arguments are

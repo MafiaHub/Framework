@@ -83,7 +83,7 @@ namespace Framework::Integrations::Shared::Scripting {
 
             // A write can come from off the script thread, so the isolate is entered rather than
             // assumed. Locker nests safely when a script's own write is what got us here.
-            const Framework::Scripting::RuntimeEntry entry;
+            const Framework::Scripting::RuntimeEntry entry(Framework::Scripting::RuntimeEntry::Into::OwnIsolate);
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);

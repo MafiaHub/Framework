@@ -27,13 +27,24 @@ namespace Framework::Scripting {
             // does is forgotten when the lock is next taken. So the script thread clears this each time it starts
             // running the isolate (OnIsolateRunning), and asks again there if the tick is still waiting.
             std::atomic<bool> requested {false};
-            // Native code that script called has called back into script, and that call has not returned as far as
-            // can be told: the native code is on the stack, so this is no safe point. The script thread's alone.
-            bool nestedCall = false;
-            // How many frames of script were on the stack when that native code called back: the shallowest such
-            // call since the flag was set. While the call is in progress the stack is deeper than this, so a stack
-            // no deeper than this means every such call has returned.
-            int nestedDepth = 0;
+            // Calls made back into script by native code that script called, since the outermost call into the
+            // isolate began: while one is in progress that native code is on the stack, so this is no safe point.
+            // V8 reports when such a call starts and never when it returns, so each is remembered by where it was
+            // made from: how deep the script's stack was, and which call in which script was at the top of it. It
+            // has returned once the stack is no deeper than that, or that place on the stack holds something else.
+            // The script thread's alone.
+            struct NestedCall {
+                int depth    = 0;
+                int scriptId = 0;
+                int line     = 0;
+                int column   = 0;
+            };
+            static constexpr int kMaxNestedCalls = 8;
+            NestedCall nested[kMaxNestedCalls];
+            int nestedCount = 0;
+            // More of them than are remembered, or made from deeper than is looked at: no safe point until the
+            // outermost call returns.
+            bool untracked = false;
         };
 
         std::mutex gIsolatesMutex;
@@ -63,32 +74,48 @@ namespace Framework::Scripting {
             return lastState;
         }
 
-        // Deeper stacks than this are not told apart: a call back from deeper than this holds safe points off until
-        // the outermost call returns.
-        constexpr int kMaxTrackedDepth = 32;
+        // Frames of script looked at; a stack this deep or deeper is not told apart.
+        constexpr int kMaxTrackedDepth = 48;
 
-        // How many frames of this isolate's script are on this thread's stack, counted up to `limit`. The caller is
-        // inside the isolate.
-        int ScriptDepth(v8::Isolate *isolate, int limit) {
-            v8::HandleScope scope(isolate);
-            return v8::StackTrace::CurrentStackTrace(isolate, limit, v8::StackTrace::kOverview)->GetFrameCount();
+        v8::Local<v8::StackTrace> ScriptStack(v8::Isolate *isolate, int limit) {
+            return v8::StackTrace::CurrentStackTrace(isolate, limit, static_cast<v8::StackTrace::StackTraceOptions>(v8::StackTrace::kLineNumber | v8::StackTrace::kColumnOffset | v8::StackTrace::kScriptId));
         }
 
+        // Whether script of this isolate is running further up this thread's stack. The caller is inside the isolate.
         bool ScriptOnStack(v8::Isolate *isolate) {
-            return ScriptDepth(isolate, 1) > 0;
+            v8::HandleScope scope(isolate);
+            return v8::StackTrace::CurrentStackTrace(isolate, 1, v8::StackTrace::kOverview)->GetFrameCount() > 0;
         }
 
-        // Whether native code that called back into script may still be on the stack. Finds out, where it can, that
-        // it has returned: the stack is then back to where the script called it from, or shallower.
+        // Whether native code that called back into script may still be on the stack. Forgets the calls it finds
+        // have returned.
         bool UnderNestedCall(IsolateState &state) {
-            if (!state.nestedCall) {
+            if (state.untracked) {
+                return true;
+            }
+            if (state.nestedCount == 0) {
                 return false;
             }
-            if (state.nestedDepth < kMaxTrackedDepth && ScriptDepth(state.isolate, state.nestedDepth + 1) <= state.nestedDepth) {
-                state.nestedCall = false;
-                return false;
+            v8::Isolate *isolate = state.isolate;
+            v8::HandleScope scope(isolate);
+            const v8::Local<v8::StackTrace> stack = ScriptStack(isolate, kMaxTrackedDepth);
+            const int depth                       = stack->GetFrameCount();
+            if (depth >= kMaxTrackedDepth) {
+                return true;
             }
-            return true;
+            for (int i = 0; i < state.nestedCount; ++i) {
+                const IsolateState::NestedCall &call = state.nested[i];
+                // Deeper than where the call was made from: in progress if the frame that made it is still there
+                // and still at that call. Frames come top first.
+                if (depth > call.depth) {
+                    const v8::Local<v8::StackFrame> frame = stack->GetFrame(isolate, static_cast<uint32_t>(depth - call.depth));
+                    if (frame->GetScriptId() == call.scriptId && frame->GetLineNumber() == call.line && frame->GetColumn() == call.column) {
+                        return true;
+                    }
+                }
+            }
+            state.nestedCount = 0;
+            return false;
         }
 
         void Request(IsolateState &state) {
@@ -140,32 +167,38 @@ namespace Framework::Scripting {
                 return;
             }
             IsolateState *state = Find(isolate);
-            if (state == nullptr) {
+            if (state == nullptr || state->untracked) {
                 return;
             }
-            if (state->nestedCall) {
-                // Another one, while an earlier one may still be in progress: what counts is the shallowest. Only
-                // as many frames are counted as it takes to tell.
-                if (state->nestedDepth > 1) {
-                    state->nestedDepth = std::min(state->nestedDepth, ScriptDepth(isolate, state->nestedDepth));
-                }
-                return;
-            }
-            const int depth = ScriptDepth(isolate, kMaxTrackedDepth);
-            if (depth > 0) {
-                state->nestedCall  = true;
-                state->nestedDepth = depth;
-            }
-            else {
+            v8::HandleScope scope(isolate);
+            const v8::Local<v8::StackTrace> stack = ScriptStack(isolate, kMaxTrackedDepth);
+            const int depth                       = stack->GetFrameCount();
+            if (depth == 0) {
                 Rearm(*state);
+                return;
             }
+            if (depth >= kMaxTrackedDepth || state->nestedCount == IsolateState::kMaxNestedCalls) {
+                state->untracked = true;
+                return;
+            }
+            const v8::Local<v8::StackFrame> top = stack->GetFrame(isolate, 0);
+            const IsolateState::NestedCall call {depth, top->GetScriptId(), top->GetLineNumber(), top->GetColumn()};
+            // The same call site again, as a native that calls back once per element does: already remembered.
+            for (int i = 0; i < state->nestedCount; ++i) {
+                const IsolateState::NestedCall &known = state->nested[i];
+                if (known.depth == call.depth && known.scriptId == call.scriptId && known.line == call.line && known.column == call.column) {
+                    return;
+                }
+            }
+            state->nested[state->nestedCount++] = call;
         }
 
         // The outermost call into the isolate returned: nothing native is left under script there.
         void OnCallCompleted(v8::Isolate *isolate) {
             IsolateState *state = Find(isolate);
-            if (state != nullptr && state->nestedCall) {
-                state->nestedCall = false;
+            if (state != nullptr && (state->nestedCount != 0 || state->untracked)) {
+                state->nestedCount = 0;
+                state->untracked   = false;
                 AskAgain(state);
             }
         }
@@ -179,13 +212,25 @@ namespace Framework::Scripting {
         return gGate.load(std::memory_order_acquire);
     }
 
-    RuntimeEntry::RuntimeEntry() {
+    RuntimeEntry::RuntimeEntry(Into into) {
         ScriptGate *gate = gGate.load(std::memory_order_acquire);
         if (gate == nullptr) {
             return;
         }
         if (!gate->OnScriptThread()) {
-            gate->EnterFromOutside();
+            if (into == Into::OwnIsolate) {
+                return;
+            }
+            // The script thread finishes its task before this returns, and may need an isolate this thread has
+            // locked to do it: let go of it for the wait. Locals made in it stay valid.
+            v8::Isolate *held = v8::Isolate::TryGetCurrent();
+            if (held != nullptr && v8::Locker::IsLocked(held)) {
+                const v8::Unlocker unlocked(held);
+                gate->EnterFromOutside();
+            }
+            else {
+                gate->EnterFromOutside();
+            }
             _outside = gate;
             return;
         }

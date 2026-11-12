@@ -737,6 +737,23 @@ namespace Framework::Scripting {
         return _state->FindRuntime(isolate);
     }
 
+    std::optional<std::vector<v8::Local<v8::Value>>> FunctionReferences::RebuildArguments(v8::Isolate *target, const std::vector<TransferredValue> &arguments) {
+        const uint32_t targetId = _state->FindRuntime(target);
+        if (targetId == 0) {
+            State::Throw(target, "The resource is not reachable from here");
+            return std::nullopt;
+        }
+        const auto hooks                     = _state->Hooks(targetId);
+        const v8::Local<v8::Context> context = target->GetCurrentContext();
+        std::vector<v8::Local<v8::Value>> rebuilt(arguments.size());
+        for (size_t i = 0; i < arguments.size(); ++i) {
+            if (!ValueTransfer::Rebuild(target, context, arguments[i], *hooks).ToLocal(&rebuilt[i])) {
+                return std::nullopt;
+            }
+        }
+        return rebuilt;
+    }
+
     std::optional<std::vector<TransferredValue>> FunctionReferences::CopyArguments(v8::Isolate *caller, const std::vector<v8::Local<v8::Value>> &arguments) {
         const uint32_t callerId = _state->FindRuntime(caller);
         if (callerId == 0) {

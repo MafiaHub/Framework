@@ -10,6 +10,8 @@
 
 #include <v8.h>
 
+#include <function2/function2.hpp>
+
 namespace Framework::Scripting {
     /**
      * What the scripting layer needs from a host that runs scripts on a thread of their own, beside the thread
@@ -25,11 +27,17 @@ namespace Framework::Scripting {
      *   call tracking in RegisterIsolate). The tick asks again for as long as it waits, so it gets in as soon as
      *   that native function has returned.
      *
-     * - A thread that is not the script thread wants to run script itself, the way server code always has: an
-     *   EngineScope and an event emitted inside it. RuntimeEntry makes that safe: the script thread is first put
-     *   out of whatever it was running, so two threads are never inside the runtimes at once. That waits for the
-     *   script thread's current task, which is the cost the script thread exists to avoid: code on the tick thread
-     *   that can hand its script work over (the host's post-to-scripts call) should.
+     * - A thread that is not the script thread raises an event, the way server code always has: an EngineScope
+     *   or V8's own scopes on the engine's isolate, values built there, and an emit. None of that runs script on
+     *   the calling thread any more. Off the script thread the engine's isolate is one of that side's own
+     *   (NodeEngine's off-thread runtime), which the script thread never enters, so the two never wait on each
+     *   other's lock; the emit copies its arguments and posts the dispatch to the script thread (Post), or runs it
+     *   there and waits for the answer when the caller needs one (Run).
+     *
+     * - What is left is a thread that has to go into the script side's runtimes itself: starting or stopping a
+     *   resource, calling a resource's function directly. RuntimeEntry makes that safe: the script thread is
+     *   first put out of whatever it was running, so two threads are never inside those runtimes at once. That
+     *   waits for the script thread's current task.
      */
     class ScriptGate {
       public:
@@ -39,6 +47,10 @@ namespace Framework::Scripting {
         // A thread other than the script thread enters the runtimes, and leaves. Calls nest.
         virtual void EnterFromOutside() = 0;
         virtual void LeaveFromOutside() = 0;
+        // Runs a task on the script thread, with the world; Run waits for it, and a caller that has the world
+        // gives it up meanwhile. How anything that ends in script is handed over from another thread.
+        virtual void Post(fu2::unique_function<void()> task) = 0;
+        virtual void Run(fu2::unique_function<void()> task)  = 0;
         // Whether the tick thread is waiting for the script thread to reach a safe point.
         virtual bool SafePointWanted() const = 0;
         // The script thread is at one. Returns when the script may carry on.
@@ -59,7 +71,15 @@ namespace Framework::Scripting {
      */
     class RuntimeEntry final {
       public:
-        RuntimeEntry();
+        enum class Into {
+            // A runtime the script thread runs: another thread has to put the script thread out first.
+            ScriptRuntimes,
+            // The engine's isolate as the calling thread sees it, which off the script thread is that side's own:
+            // nothing to put out.
+            OwnIsolate,
+        };
+
+        explicit RuntimeEntry(Into into = Into::ScriptRuntimes);
         ~RuntimeEntry();
 
         RuntimeEntry(const RuntimeEntry &)            = delete;
@@ -86,9 +106,8 @@ namespace Framework::Scripting {
     /**
      * Makes an isolate take part: it can be asked for a safe point, and calls made into it from native code that
      * script called are noticed, so no safe point is taken under them. V8 does not say when such a call returns,
-     * so it is told from the stack: once the script is no deeper than where it made the call, the call is over.
-     * A script that went on into deeper calls of its own after it returned is taken for still being inside it,
-     * until it comes back up. From the thread that runs the isolate,
+     * so it is told from the stack: the call is over once the script is no deeper than where it made it, or the
+     * place it was made from is no longer on the stack at that call. From the thread that runs the isolate,
      * before it runs script and after it last did.
      */
     void RegisterIsolate(v8::Isolate *isolate);

@@ -164,6 +164,13 @@ namespace Framework::Scripting {
             _runGate = gate;
         }
 
+        // For a host that runs the engine on a thread of its own: the runtime GetIsolate() and GetContext() name on
+        // every other thread. Code there builds values the way it always did (an EngineScope, or V8's own scopes,
+        // on the engine's isolate), in an isolate the engine's thread never enters, so neither side waits for the
+        // other's lock; what it emits is copied across. It has the bindings a resource's runtime has and runs no
+        // script. From the engine's thread, once, after Init().
+        bool CreateOffThreadRuntime();
+
         // Whether the last RunUntil() ended because the gate turned it away.
         bool LostRunGate() const {
             return _gateLost;
@@ -320,6 +327,10 @@ namespace Framework::Scripting {
         // Calls and values between the engine's runtime and every resource's.
         std::unique_ptr<FunctionReferences> _references;
         uint32_t _hostReference = 0;
+        std::unique_ptr<NodeRuntime> _offThreadRuntime;
+        uint32_t _offThreadReference = 0;
+        // Whether the calling thread is one the off-thread runtime is for.
+        bool OffEngineThread() const;
 
         // One runtime per running resource, and the isolate each one owns.
         std::map<std::string, std::unique_ptr<ResourceRuntime>, std::less<>> _resourceRuntimes;

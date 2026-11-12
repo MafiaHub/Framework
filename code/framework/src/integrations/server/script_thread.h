@@ -53,10 +53,10 @@ namespace Framework::Integrations::Server {
 
         // --- Any thread ---
         // Runs `task` on the script thread, with the world.
-        void Post(Task task);
+        void Post(Task task) override;
         // The same, and waits for it. A thread that has the world gives it up while it waits, so the world may have
         // changed when this returns. On the script thread, or with the thread stopped, runs it at once.
-        void Run(Task task);
+        void Run(Task task) override;
 
         // --- The tick side: any thread but the script thread, one at a time ---
         void LockWorld();

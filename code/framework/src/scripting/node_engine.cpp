@@ -158,6 +158,20 @@ namespace Framework::Scripting {
             TeardownResourceRuntime(std::move(runtime));
         }
 
+        // The off-thread runtime goes like a resource's: out of the references, its bindings dropped, then freed.
+        if (_offThreadRuntime) {
+            v8::Isolate *offThread = _offThreadRuntime->GetIsolate();
+            {
+                v8::Locker locker(offThread);
+                v8::Isolate::Scope isolateScope(offThread);
+                v8::HandleScope handleScope(offThread);
+                v8::Context::Scope contextScope(_offThreadRuntime->GetContext());
+                _references->RemoveRuntime(_offThreadReference);
+            }
+            Builtins::UnregisterAll(offThread);
+            _offThreadRuntime.reset();
+        }
+
         v8::Isolate *isolate = _runtime->GetIsolate();
         {
             v8::Locker locker(isolate);
@@ -730,11 +744,50 @@ namespace Framework::Scripting {
         return Execute(code, absPathStr);
     }
 
+    bool NodeEngine::OffEngineThread() const {
+        if (!_offThreadRuntime) {
+            return false;
+        }
+        ScriptGate *gate = ScriptGate::Get();
+        return gate != nullptr && !gate->OnScriptThread();
+    }
+
+    bool NodeEngine::CreateOffThreadRuntime() {
+        if (!_initialized || _offThreadRuntime) {
+            return _offThreadRuntime != nullptr;
+        }
+        std::unique_ptr<NodeRuntime> runtime = CreateRuntime(_lastError);
+        if (!runtime) {
+            return false;
+        }
+        runtime->SetName("tick");
+        v8::Isolate *isolate = runtime->GetIsolate();
+        // It never runs script on the engine's thread, so there is nothing to ask it a safe point for.
+        UnregisterIsolate(isolate);
+
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = runtime->GetContext();
+        v8::Context::Scope contextScope(context);
+
+        _offThreadRuntime   = std::move(runtime);
+        _offThreadReference = _references->AddRuntime(isolate, context, "tick");
+        // GetIsolate() names this runtime while it is entered, so the bindings land in it.
+        if (_runtimeSetupCallback) {
+            _runtimeSetupCallback(this);
+        }
+        return true;
+    }
+
     v8::Isolate *NodeEngine::GetIsolate() const {
         if (!_runtime) {
             return nullptr;
         }
         v8::Isolate *current = v8::Isolate::TryGetCurrent();
+        if (_offThreadRuntime && (current == _offThreadRuntime->GetIsolate() || OffEngineThread())) {
+            return _offThreadRuntime->GetIsolate();
+        }
         if (current != nullptr && _runtimeByIsolate.contains(current)) {
             return current;
         }
@@ -746,6 +799,9 @@ namespace Framework::Scripting {
             return v8::Local<v8::Context>();
         }
         v8::Isolate *current = v8::Isolate::TryGetCurrent();
+        if (_offThreadRuntime && (current == _offThreadRuntime->GetIsolate() || OffEngineThread())) {
+            return _offThreadRuntime->GetContext();
+        }
         if (current != nullptr) {
             const auto it = _runtimeByIsolate.find(current);
             if (it != _runtimeByIsolate.end()) {
