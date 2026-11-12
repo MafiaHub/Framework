@@ -96,6 +96,11 @@ namespace Framework::Networking {
         uint64_t _slowHandlers = 0;
         std::chrono::steady_clock::time_point _nextSlowHandlerWarning {};
         void NoteHandlerTime(RPC::Identifier identifier, std::chrono::steady_clock::duration elapsed);
+        // RPCs dropped for a payload that did not read whole since the last warning, which is written
+        // at most once a second: a peer can send them as fast as it likes. The draining thread's own.
+        uint64_t _shortPayloads = 0;
+        std::chrono::steady_clock::time_point _nextShortPayloadWarning {};
+        void NoteShortPayload(RPC::Identifier identifier, MafiaNet::RakNetGUID guid);
 
         void ClearClientState(MafiaNet::RakNetGUID guid);
 
@@ -120,17 +125,25 @@ namespace Framework::Networking {
 
         // Register a handler for RPC payload type T. It receives the decoded payload, the connection
         // that sent it and the world, through which it reaches entities by handle (see
-        // replication/world.h). Handlers run where packets are drained, on a server its packet
+        // replication/world.h). A payload the client did not send whole (truncated, or not what
+        // T::Serialize writes: see RPC::ReadWhole) is dropped before the handler, counted and logged at
+        // most once a second. Handlers run where packets are drained, on a server its packet
         // thread, one at a time; register them before it starts (an instance's PostInit or
         // PostScriptInit), since the table they go in is read there without a lock.
         template <RPC::Payload T>
         void RegisterRPC(fu2::function<void(const T &payload, Sender sender, Replication::World &world) const> handler) {
-            RegisterRawRPC(T::kIdentifier, [cb = std::move(handler)](MafiaNet::BitStream *bs, Sender sender, Replication::World &world) {
-                cb(RPC::Read<T>(bs), sender, world);
+            RegisterRawRPC(T::kIdentifier, [this, cb = std::move(handler)](MafiaNet::BitStream *bs, Sender sender, Replication::World &world) {
+                T payload {};
+                if (!RPC::ReadWhole(bs, payload)) {
+                    NoteShortPayload(T::kIdentifier, sender.Connection());
+                    return;
+                }
+                cb(payload, sender, world);
             });
         }
 
-        // Raw variant for handlers that decode the bitstream themselves.
+        // Raw variant for handlers that decode the bitstream themselves, and so answer for what a short
+        // or hostile one decodes to: every BitStream read says whether it got its bits.
         void RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, Sender, Replication::World &)> handler);
 
         // Signal an RPC to every connected system except one (typically the originator) — the

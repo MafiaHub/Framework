@@ -18,6 +18,8 @@
 #include "networking/replication/world.h"
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/client_identity.h"
+#include "networking/rpc/client_join.h"
+#include "networking/rpc/rpc_identifier.h"
 #include "networking/rpc/server_resources.h"
 #include "networking/sender.h"
 
@@ -296,6 +298,108 @@ MODULE(network_packets, {
         net.client.BroadcastRPC(message);
         EQUALS(net.rig.PumpUntil([&] { return calls == 5; }), true);
         EQUALS(slowWarnings(), 1);
+    });
+
+    IT("tells a payload that was read whole from one that was cut short", {
+        using namespace Framework::Networking;
+        RPC::ChatMessage sent {};
+        sent.text   = "Lumos";
+        sent.author = "Hermione";
+        MafiaNet::BitStream whole;
+        sent.Serialize(&whole, true);
+        const unsigned int bytes = whole.GetNumberOfBytesUsed();
+
+        RPC::ChatMessage read {};
+        EQUALS(RPC::ReadWhole(&whole, read), true);
+        STREQUALS(read.text.c_str(), "Lumos");
+        STREQUALS(read.author.c_str(), "Hermione");
+
+        // Cut anywhere, it is not whole; no length reads as one by accident.
+        unsigned int accepted = 0;
+        for (unsigned int length = 0; length < bytes; ++length) {
+            MafiaNet::BitStream cut(whole.GetData(), length, false);
+            RPC::ChatMessage partial {};
+            accepted += RPC::ReadWhole(&cut, partial) ? 1 : 0;
+        }
+        EQUALS(accepted, 0u);
+
+        // What follows a payload is not the payload's business, and is left where it is.
+        MafiaNet::BitStream followed;
+        sent.Serialize(&followed, true);
+        const MafiaNet::BitSize_t end = followed.GetNumberOfBitsUsed();
+        followed.Write(static_cast<std::uint32_t>(42));
+        RPC::ChatMessage again {};
+        EQUALS(RPC::ReadWhole(&followed, again), true);
+        EQUALS(followed.GetReadOffset(), end);
+        std::uint32_t tail = 0;
+        EQUALS(followed.Read(tail), true);
+        EQUALS(tail, 42u);
+
+        // A payload with nothing in it is whole in an empty stream.
+        MafiaNet::BitStream empty;
+        RPC::ClientJoin join {};
+        EQUALS(RPC::ReadWhole(&empty, join), true);
+    });
+
+    IT("drops an RPC whose payload was cut short before its handler, and says so once for a burst", {
+        using namespace Framework::Networking;
+        NetworkPacketsTest::Loopback net;
+        EQUALS(net.Connect(), true);
+
+        auto logger = Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING, false);
+        auto logs   = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(8);
+        logs->set_pattern("%v");
+        struct RestoreLogger {
+            std::shared_ptr<spdlog::logger> logger;
+            spdlog::level::level_enum level;
+            ~RestoreLogger() {
+                logger->sinks().pop_back();
+                logger->set_level(level);
+            }
+        } restoreLogger {logger, logger->level()};
+        logger->sinks().push_back(logs);
+        logger->set_level(spdlog::level::warn);
+
+        std::vector<std::string> texts;
+        net.server.RegisterRPC<RPC::ChatMessage>([&](const RPC::ChatMessage &message, Sender, Replication::World &) {
+            texts.push_back(message.text);
+        });
+        int rawCalls = 0;
+        net.server.RegisterRawRPC(FW_RPC_IDENTIFIER("Test::NetworkPackets::Raw"), [&](MafiaNet::BitStream *, Sender, Replication::World &) {
+            ++rawCalls;
+        });
+
+        RPC::ChatMessage message {};
+        message.text = "Lumos";
+        MafiaNet::BitStream whole;
+        message.Serialize(&whole, true);
+        const MafiaNet::RakNetGUID server = net.client.GetPeer()->GetGUIDFromIndex(0);
+        // Three that stop part of the way, then a raw one with nothing in it, then one in order.
+        for (const unsigned int length : {0u, 2u, whole.GetNumberOfBytesUsed() - 1}) {
+            MafiaNet::BitStream cut(whole.GetData(), length, true);
+            net.client.SendRawRPC(RPC::ChatMessage::kIdentifier, cut, server);
+        }
+        MafiaNet::BitStream nothing;
+        net.client.SendRawRPC(FW_RPC_IDENTIFIER("Test::NetworkPackets::Raw"), nothing, server);
+        net.client.BroadcastRPC(message);
+        EQUALS(net.rig.PumpUntil([&] { return !texts.empty(); }), true);
+
+        EQUALS(texts.size(), static_cast<size_t>(1));
+        STREQUALS(texts.empty() ? "" : texts.front().c_str(), "Lumos");
+        // A raw handler decodes for itself, and is handed even an empty stream.
+        EQUALS(rawCalls, 1);
+        int warnings = 0;
+        bool named   = false;
+        char digest[32];
+        snprintf(digest, sizeof(digest), "%016llx", static_cast<unsigned long long>(RPC::ChatMessage::kIdentifier.digest));
+        for (const std::string &line : logs->last_formatted()) {
+            if (line.find("whose payload did not read whole") != std::string::npos) {
+                ++warnings;
+                named = named || line.find(digest) != std::string::npos;
+            }
+        }
+        EQUALS(warnings, 1);
+        EQUALS(named, true);
     });
 
     IT("gives a sender without an avatar the id 0", {

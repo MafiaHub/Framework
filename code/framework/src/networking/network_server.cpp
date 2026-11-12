@@ -71,6 +71,17 @@ namespace Framework::Networking {
         _nextSlowHandlerWarning = now + std::chrono::seconds(1);
     }
 
+    void NetworkServer::NoteShortPayload(RPC::Identifier identifier, MafiaNet::RakNetGUID guid) {
+        ++_shortPayloads;
+        const auto now = std::chrono::steady_clock::now();
+        if (now < _nextShortPayloadWarning) {
+            return;
+        }
+        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Dropped {} RPC(s) whose payload did not read whole, last one RPC {:016x} from {}", _shortPayloads, identifier.digest, guid.g);
+        _shortPayloads           = 0;
+        _nextShortPayloadWarning = now + std::chrono::seconds(1);
+    }
+
     void NetworkServer::Update() {
         if (!_peer) {
             return;

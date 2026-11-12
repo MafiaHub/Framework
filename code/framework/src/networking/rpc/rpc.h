@@ -37,4 +37,41 @@ namespace Framework::Networking::RPC {
         payload.Serialize(bs, false);
         return payload;
     }
+
+    // Decodes a payload and says whether the stream held all of it, for a peer that does not trust the
+    // sender. A BitStream reports a short read to whoever made that read and to nobody else, and
+    // Serialize returns nothing, so a truncated payload decodes to defaults and to whatever was half
+    // read. Serialize is symmetric: the decoded payload is written back, and it was read whole exactly
+    // when that gives the bits the read consumed. Anything else is refused, an encoding no Serialize
+    // would have written included. Bits after the payload are left unread, as Read leaves them.
+    template <typename T>
+    inline bool ReadWhole(MafiaNet::BitStream *bs, T &payload) {
+        const MafiaNet::BitSize_t start = bs->GetReadOffset();
+        payload.Serialize(bs, false);
+        const MafiaNet::BitSize_t end = bs->GetReadOffset();
+        MafiaNet::BitStream written;
+        payload.Serialize(&written, true);
+        const MafiaNet::BitSize_t bits = written.GetNumberOfBitsUsed();
+        if (end < start || end - start != bits || end > bs->GetNumberOfBitsUsed()) {
+            return false;
+        }
+        if (bits == 0) {
+            return true;
+        }
+        MafiaNet::BitStream consumed;
+        bs->SetReadOffset(start);
+        if (!bs->Read(&consumed, bits) || consumed.GetNumberOfBitsUsed() != bits) {
+            return false;
+        }
+        const unsigned char *a          = written.GetData();
+        const unsigned char *b          = consumed.GetData();
+        const MafiaNet::BitSize_t whole = bits / 8;
+        for (MafiaNet::BitSize_t i = 0; i < whole; ++i) {
+            if (a[i] != b[i]) {
+                return false;
+            }
+        }
+        const unsigned int rest = static_cast<unsigned int>(bits % 8);
+        return rest == 0 || ((a[whole] ^ b[whole]) >> (8 - rest)) == 0;
+    }
 } // namespace Framework::Networking::RPC
