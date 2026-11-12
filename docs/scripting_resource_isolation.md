@@ -8,6 +8,10 @@ framework's server scripting to it.
 The client is out of scope. It runs on the standalone V8 engine with one
 shared isolate and keeps doing so.
 
+A resource's `.lua` scripts run in a Lua state of its own, on both sides; what
+a Lua script has and how it differs from JavaScript is in
+[scripting_lua.md](scripting_lua.md).
+
 ## Why
 
 Today every server resource shares one Node environment. Stopping a resource
