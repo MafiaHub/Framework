@@ -151,7 +151,7 @@ namespace Framework::Integrations::Server::Scripting {
             _nodeEngine->InstallUncaughtExceptionHandler(_resourcesPath);
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("JS Server scripting module initialized with Node.js engine");
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Server scripting module initialized with the Node.js and Lua engines");
 
         _initialized = true;
         return Framework::Scripting::ScriptingError::SCRIPTING_NONE;
