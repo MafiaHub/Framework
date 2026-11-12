@@ -253,6 +253,17 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             Framework::Scripting::LogScriptError(nullptr, resourceName, message);
         }
 
+        // Whether a resource still runs script: it runs, or it failed and was left running, as errorBehavior
+        // continue says. The rule of ResourceManager::ProcessHandlerFailures.
+        bool StillRuns(const Framework::Scripting::ResourceManager &manager, const std::string &resourceName) {
+            const Framework::Scripting::Resource *resource = manager.GetResource(resourceName);
+            if (resource == nullptr) {
+                return false;
+            }
+            const auto state = resource->GetState();
+            return state == Framework::Scripting::ResourceState::Running || (state == Framework::Scripting::ResourceState::Error && resource->GetManifest().GetMafiaHubConfig().errorBehavior == "continue");
+        }
+
         std::string EscapeJSString(const std::string &input) {
             std::string out;
             out.reserve(input.size());
@@ -344,6 +355,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     std::mutex Web::_mutex;
     Framework::Scripting::ResourceManager *Web::_resourceManager = nullptr;
     std::shared_ptr<Web::ManagerLink> Web::_managerLink;
+    std::shared_ptr<std::vector<std::string>> Web::_failedOwners = std::make_shared<std::vector<std::string>>();
 
     const Bind::Namespace &Web::Definition() {
         using Bind::Doc;
@@ -439,6 +451,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         if (_managerLink != nullptr) {
             _managerLink->manager = nullptr;
         }
+        ForgetFailedOwners();
         _resourceManager      = resourceManager;
         _managerLink          = std::make_shared<ManagerLink>();
         _managerLink->manager = resourceManager;
@@ -871,15 +884,16 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         // The page gets JSON text and nothing else. A payload left out, undefined or nil is no detail; the
         // null of JavaScript is a detail of null. Neither is a function, which JSON has no form for in
-        // either language, nor what JSON.stringify gives nothing for.
+        // either language, nor what JSON.stringify leaves out.
         std::string detail;
         const Bind::Value payload = call.Arg(2);
         if ((!payload.IsNil() || payload.IsNull()) && !payload.IsFunction()) {
-            auto json = payload.ToJson();
+            bool omitted = false;
+            auto json    = payload.ToJson(omitted);
             if (json) {
                 detail = std::move(json).GetValue();
             }
-            else if (json.GetError() != Bind::kNoJsonForm) {
+            else if (!omitted) {
                 call.ThrowError("Web.emit: payload is not JSON-serializable");
                 return;
             }
@@ -933,7 +947,15 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         _pendingViewEvents.push_back({viewId, data});
     }
 
+    void Web::ForgetFailedOwners() {
+        if (!_failedOwners->empty()) {
+            _failedOwners = std::make_shared<std::vector<std::string>>();
+        }
+    }
+
     void Web::Update() {
+        ForgetFailedOwners();
+
         auto *manager = _resourceManager;
         if (!manager) {
             return;
@@ -1000,7 +1022,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             handlers = eventIt->second;
         }
         // Held: a handler may shut the scripting down.
-        const std::shared_ptr<ManagerLink> link = _managerLink;
+        const std::shared_ptr<ManagerLink> link                = _managerLink;
+        const std::shared_ptr<std::vector<std::string>> failed = _failedOwners;
 
         // The JavaScript handlers of the client's isolate are called in it, one after the other with the one
         // value the payload parses to, as they always were: a handler sees what the one before it wrote in
@@ -1012,8 +1035,13 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         std::optional<std::vector<TransferredValue>> copied;
 
         for (const Handler &handler : handlers) {
-            // Its runtime may have gone with a handler that ran before it.
-            if (!handler.callback->IsAlive()) {
+            // A handler that ran before it may have shut the scripting down: nobody is left to call.
+            if (link == nullptr || link->manager == nullptr) {
+                break;
+            }
+            // Or stopped its resource, in either language, or failed: the resource then waits for the next
+            // update.
+            if (!handler.callback->IsAlive() || !StillRuns(*link->manager, handler.resourceName) || std::find(failed->begin(), failed->end(), handler.resourceName) != failed->end()) {
                 continue;
             }
 
@@ -1043,7 +1071,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                     (void)fn->Call(context, context->Global(), 1, argv);
                     if (tryCatch.HasCaught()) {
                         const std::string error = Framework::Scripting::FormatV8Exception(engineIsolate, tryCatch, "Unknown error in web view event handler");
-                        ReportFailure(link != nullptr ? link->manager : nullptr, handler.resourceName, viewId, eventName, error);
+                        failed->push_back(handler.resourceName);
+                        ReportFailure(link->manager, handler.resourceName, viewId, eventName, error);
                     }
                     continue;
                 }
@@ -1055,9 +1084,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
             // Reported when it raised and when what it waited on failed later; one cut short because its
             // runtime stopped has nothing to report.
-            handler.callback->Invoke(*copied, Bind::ReturnMode::Outcome, [link, resourceName = handler.resourceName, viewId, eventName](Bind::CallOutcome &&outcome) {
+            handler.callback->Invoke(*copied, Bind::ReturnMode::Outcome, [link, failed, resourceName = handler.resourceName, viewId, eventName](Bind::CallOutcome &&outcome) {
                 if (outcome.threw && outcome.error != Bind::kRuntimeStopped) {
-                    ReportFailure(link != nullptr ? link->manager : nullptr, resourceName, viewId, eventName, outcome.error);
+                    failed->push_back(resourceName);
+                    ReportFailure(link->manager, resourceName, viewId, eventName, outcome.error);
                 }
             });
         }
@@ -1129,6 +1159,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         _handlers.clear();
         _viewOwners.clear();
         _pendingViewEvents.clear();
+        ForgetFailedOwners();
         _resourceManager = nullptr;
         // A handler that is still running reports to nobody.
         if (_managerLink != nullptr) {
@@ -1140,6 +1171,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     size_t Web::ViewCount() {
         std::scoped_lock lock(_mutex);
         return _viewOwners.size();
+    }
+
+    size_t Web::PendingEventCount() {
+        std::scoped_lock lock(_mutex);
+        return _pendingViewEvents.size();
     }
 
     size_t Web::HandlerCount() {

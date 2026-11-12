@@ -19,6 +19,9 @@
 
 #include <v8pp/convert.hpp>
 
+#include <lua.h>
+
+#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -69,11 +72,29 @@ namespace ClientWebTest {
         bool ready = false;
 
         // Without `cleanupOnStop` nobody tells Web that a resource stopped, as the module does.
-        explicit Stage(bool cleanupOnStop = true) {
+        explicit Stage(bool cleanupOnStop = true, LuaEngineOptions options = LuaEngineOptions::Client()): client(Vfs::kResourceMountRoot, options) {
+            current = this;
             Framework::CoreModules::SetWebManager(gui.get());
             gui->Start();
             client.lua.AddRuntimeSetup([](LuaRuntime &runtime) {
                 Web::RegisterLua(runtime);
+                // What the host can do to the scripting while a handler runs.
+                lua_pushcfunction(runtime.State(), [](lua_State *L) {
+                    current->client.manager->StopResource(lua_tostring(L, 1));
+                    return 0;
+                });
+                lua_setglobal(runtime.State(), "stopResource");
+                lua_pushcfunction(runtime.State(), [](lua_State *) {
+                    Web::Shutdown();
+                    return 0;
+                });
+                lua_setglobal(runtime.State(), "shutdownWeb");
+                lua_pushcfunction(runtime.State(), [](lua_State *) {
+                    current->client.manager->Reset();
+                    Web::Shutdown();
+                    return 0;
+                });
+                lua_setglobal(runtime.State(), "resetScripting");
             });
             ready = Register();
             if (ready && cleanupOnStop) {
@@ -91,7 +112,21 @@ namespace ClientWebTest {
                 return false;
             }
             EngineScope scope(&client.v8);
-            Web::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), client.manager.get());
+            const auto context = scope.Context();
+            Web::Register(scope.Isolate(), context, context->Global(), client.manager.get());
+            const auto expose = [&](const char *name, v8::FunctionCallback callback) {
+                context->Global()->Set(context, v8pp::to_v8(scope.Isolate(), name), v8::Function::New(context, callback).ToLocalChecked()).Check();
+            };
+            expose("stopResource", [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                current->client.manager->StopResource(v8pp::from_v8<std::string>(info.GetIsolate(), info[0]));
+            });
+            expose("shutdownWeb", [](const v8::FunctionCallbackInfo<v8::Value> &) {
+                Web::Shutdown();
+            });
+            expose("resetScripting", [](const v8::FunctionCallbackInfo<v8::Value> &) {
+                current->client.manager->Reset();
+                Web::Shutdown();
+            });
             return true;
         }
 
@@ -113,6 +148,7 @@ namespace ClientWebTest {
             client.lua.Shutdown();
             client.v8.Shutdown();
             Framework::CoreModules::SetWebManager(nullptr);
+            current = nullptr;
             for (const std::string &name : mounted) {
                 Vfs::Get().Unmount(name + ".zip");
             }
@@ -201,6 +237,9 @@ namespace ClientWebTest {
             data.event = event;
             Raise(id, data);
         }
+
+        // The stage of the running test, for the functions a script calls.
+        static inline Stage *current = nullptr;
 
         // The errors the manager told its listeners of, each followed by a bar.
         std::string Errors() const {
@@ -418,12 +457,12 @@ MODULE(lua_client_web, {
 
         // The flag of focusView and of setViewOffscreen is a boolean or is left out: anything else is true.
         EQUALS(both("Web.focusView(2, false)", "Web.focusView(1, false)"), Pair("true"));
-        EQUALS(stage.View(1)->hasFocus || stage.View(2)->hasFocus, false);
+        EQUALS((stage.View(1)->hasFocus || stage.View(2)->hasFocus), false);
         EQUALS(both("Web.focusView(2, 0)", "Web.focusView(1, 0)"), Pair("true"));
-        EQUALS(stage.View(1)->hasFocus && stage.View(2)->hasFocus, true);
+        EQUALS((stage.View(1)->hasFocus && stage.View(2)->hasFocus), true);
         EQUALS(both("Web.focusView(2, false)", "Web.focusView(1, false)"), Pair("true"));
         EQUALS(both("Web.focusView(2, nil)", "Web.focusView(1, null)"), Pair("true"));
-        EQUALS(stage.View(1)->hasFocus && stage.View(2)->hasFocus, true);
+        EQUALS((stage.View(1)->hasFocus && stage.View(2)->hasFocus), true);
 
         EQUALS(both("Web.isViewOffscreen(2)", "Web.isViewOffscreen(1)"), Pair("false"));
         EQUALS(both("Web.setViewOffscreen(2)", "Web.setViewOffscreen(1)"), Pair("true"));
@@ -576,8 +615,8 @@ MODULE(lua_client_web, {
         EQUALS(stage.View(2)->calls.size(), calls2);
         EQUALS(stage.Shape(1), "1920x1080+0+0 z=0 shown focused auto");
         EQUALS(stage.Shape(2), stage.Shape(1));
-        EQUALS(stage.View(1)->scripts.empty() && stage.View(2)->scripts.empty(), true);
-        EQUALS(stage.View(1)->loaded.empty() && stage.View(2)->loaded.empty(), true);
+        EQUALS((stage.View(1)->scripts.empty() && stage.View(2)->scripts.empty()), true);
+        EQUALS((stage.View(1)->loaded.empty() && stage.View(2)->loaded.empty()), true);
         EQUALS(stage.gui->destroyed.empty(), true);
         EQUALS(Web::HandlerCount(), 2u);
         stage.Page(1, "ev", "1");
@@ -838,16 +877,19 @@ MODULE(lua_client_web, {
         Stage stage;
         EQUALS(stage.ready, true);
         const char *keepGoing = R"(,"errorBehavior":"continue")";
-        EQUALS(stage.Start("js-fails", "client.js", "globalThis.failing = Web.createView('https://x.test/'); Web.on(failing, 'ev', () => { throw new Error('js boom'); }); Web.on(failing, 'ev', rec('js-after'));", keepGoing), "");
-        EQUALS(stage.Start("lua-fails", "client.lua", std::string(ClientWebTest::kLua) + "view = Web.createView('https://x.test/') Web.on(view, 'ev\\nil', function() error('lua boom') end) Web.on(view, 'ev\\nil', rec('lua-after'))", keepGoing), "");
+        EQUALS(stage.Start("js-fails", "client.js", "globalThis.failing = Web.createView('https://x.test/'); Web.on(failing, 'ev', (p) => log.push('js-before:' + p)); Web.on(failing, 'ev', () => { throw new Error('js boom'); }); Web.on(failing, 'ev', (p) => log.push('js-after:' + p));", keepGoing), "");
+        EQUALS(stage.Start("lua-fails", "client.lua", std::string(ClientWebTest::kLua) + "view = Web.createView('https://x.test/') Web.on(view, 'ev\\nil', rec('lua-before')) Web.on(view, 'ev\\nil', function() error('lua boom') end) Web.on(view, 'ev\\nil', rec('lua-after'))", keepGoing), "");
         EQUALS(stage.Start("later", "client.lua", std::string(ClientWebTest::kLua) + "view = Web.createView('https://x.test/') Web.on(view, 'ev', function() sleep(1) error('late boom') end)", keepGoing), "");
         EQUALS(stage.Start("stops", "client.lua", "view = Web.createView('https://x.test/') Web.on(view, 'ev', function() error('fatal boom') end)"), "");
 
         stage.Page(1, "ev", "1");
         stage.Page(2, "ev\nil", "1");
         stage.Page(3, "ev", "1");
-        EQUALS(stage.Js("seen()"), "js-after:1");
-        EQUALS(stage.Lua("seen()", "lua-fails"), "lua-after:1");
+        // The handlers of a resource after the one that failed wait for the next update; those of the others run.
+        stage.Page(1, "ev", "2");
+        stage.Page(2, "ev\nil", "2");
+        EQUALS(stage.Js("seen()"), "js-before:1");
+        EQUALS(stage.Lua("seen()", "lua-fails"), "lua-before:1");
         // Nothing is acted on inside the dispatch: the manager hears of it at its next upkeep.
         EQUALS(stage.Errors(), "");
         stage.Frame();
@@ -860,10 +902,18 @@ MODULE(lua_client_web, {
         stage.Frame();
         EQUALS(Contains(stage.Errors(), "later: Web view 3 event 'ev' handler error: "), true);
         EQUALS(Contains(stage.Errors(), "late boom"), true);
-        // A resource that goes on keeps its views and its handlers.
-        EQUALS(stage.client.manager->IsResourceRunning("js-fails") && stage.client.manager->IsResourceRunning("lua-fails") && stage.client.manager->IsResourceRunning("later"), true);
+        // A resource that goes on, in the state of one that failed, keeps its views and its handlers.
+        for (const char *name : {"js-fails", "lua-fails", "later"}) {
+            EQUALS(stage.client.manager->GetResourceState(name) == ResourceState::Error, true);
+        }
         EQUALS(stage.gui->ViewCount(), 4u);
-        EQUALS(Web::HandlerCount(), 6u);
+        EQUALS(Web::HandlerCount(), 8u);
+        // The next update starts over.
+        stage.Page(1, "ev", "3");
+        stage.Page(2, "ev\nil", "3");
+        EQUALS(stage.Js("seen()"), "js-before:3");
+        EQUALS(stage.Lua("seen()", "lua-fails"), "lua-before:3");
+        stage.Frame();
 
         // By default a failing handler stops its resource, and its views go with it.
         stage.Page(4, "ev", "1");
@@ -872,7 +922,130 @@ MODULE(lua_client_web, {
         EQUALS(Contains(stage.Errors(), "stops: Web view 4 event 'ev' handler error: "), true);
         EQUALS(stage.client.manager->IsResourceRunning("stops"), false);
         EQUALS(stage.View(4) == nullptr, true);
-        EQUALS(Web::HandlerCount(), 5u);
+        EQUALS(Web::HandlerCount(), 7u);
+    });
+
+    IT("charges a resource whose handlers all hang one deadline an update, whatever its page sends", {
+        LuaEngineOptions options = LuaEngineOptions::Client();
+        options.entryDeadline    = std::chrono::milliseconds(150);
+        Stage stage(/*cleanupOnStop*/ true, options);
+        EQUALS(stage.ready, true);
+        const char *keepGoing  = R"(,"errorBehavior":"continue")";
+        const std::string spin = "local function spin() local stop = os.clock() + 20 while os.clock() < stop do end end ";
+        EQUALS(stage.Start("hangs", "client.lua", spin + "view = Web.createView('https://x.test/') for i = 1, 20 do Web.on(view, 'ev', spin) end Web.on(view, 'other', spin)", keepGoing), "");
+        EQUALS(stage.Start("fine", "client.lua", "ran = 0 view = Web.createView('https://x.test/') Web.on(view, 'ev', function() ran = ran + 1 end)"), "");
+        EQUALS(stage.Start("js-fails", "client.js", "globalThis.threw = 0; globalThis.failing = Web.createView('https://x.test/'); for (let i = 0; i < 3; ++i) Web.on(failing, 'ev', () => { ++threw; throw Error('boom'); });", keepGoing), "");
+
+        // The page decides how many events arrive between two updates.
+        const auto start = std::chrono::steady_clock::now();
+        for (int i = 0; i < 5; ++i) {
+            stage.Page(1, "ev", "1");
+            stage.Page(1, "other", "1");
+            stage.Page(2, "ev", "1");
+            stage.Page(3, "ev", "1");
+        }
+        const auto took = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+        EQUALS(took >= 150, true);
+        EQUALS(took < 1500, true);
+        EQUALS(stage.Lua("ran", "fine"), "5");
+        EQUALS(stage.Js("threw", "js-fails"), "1");
+
+        // One report for each resource, and the next update starts over.
+        stage.Frame();
+        EQUALS(stage.client.errors.size(), 2u);
+        stage.Page(3, "ev", "1");
+        stage.Page(3, "ev", "1");
+        stage.Page(2, "ev", "1");
+        EQUALS(stage.Js("threw", "js-fails"), "2");
+        EQUALS(stage.Lua("ran", "fine"), "6");
+        stage.Frame();
+        EQUALS(stage.client.errors.size(), 3u);
+        EQUALS(Web::HandlerCount(), 25u);
+    });
+
+    // ==================== Reentrancy ====================
+
+    IT("calls no later handler of a resource that a handler stopped, in either language", {
+        Stage stage;
+        EQUALS(stage.ready, true);
+        EQUALS(stage.Start("js-quits", "client.js", "globalThis.quitLog = []; globalThis.quitView = Web.createView('https://x.test/'); Web.on(quitView, 'ev', () => { quitLog.push('quit'); stopResource('js-quits'); quitLog.push('on'); }); Web.on(quitView, 'ev', () => quitLog.push('after'));"), "");
+        EQUALS(stage.Start("lua-quits", "client.lua", "view = Web.createView('https://x.test/') Web.on(view, 'ev', function() stopResource('lua-quits') error('still running') end) Web.on(view, 'ev', function() error('after') end)"), "");
+        // A handler of another resource on the view of the one that stops: a JavaScript function is its maker's.
+        EQUALS(stage.Js("(Web.createView('https://x.test/'), 1)"), "1");
+        EQUALS(stage.Start("js-kills", "client.js", "globalThis.victimLog = []; globalThis.victimView = Web.createView('https://x.test/'); Web.on(victimView, 'ev', () => { stopResource('js'); }); Web.on(victimView, 'ev', rec('of-js')); Web.on(victimView, 'ev', () => victimLog.push('mine'));"), "");
+        EQUALS(Web::ViewCount(), 4u);
+
+        stage.Page(1, "ev", "1");
+        // The script that stopped its resource ran on to its end; the handler after it was not called.
+        EQUALS(stage.Js("quitLog.join()", ""), "quit,on");
+        EQUALS(stage.View(1) == nullptr, true);
+        stage.Page(2, "ev", "1");
+        EQUALS(stage.View(2) == nullptr, true);
+        stage.Page(4, "ev", "1");
+        EQUALS(stage.Js("victimLog.join() + '/' + log.length", ""), "mine/0");
+        EQUALS(stage.View(3) == nullptr, true);
+        EQUALS(Web::ViewCount(), 1u);
+        EQUALS(Web::HandlerCount(), 2u);
+        // A resource that is stopping has nothing reported.
+        stage.Frame();
+        EQUALS(stage.Errors(), "");
+        EQUALS((stage.client.manager->IsResourceRunning("js-quits") || stage.client.manager->IsResourceRunning("lua-quits") || stage.client.manager->IsResourceRunning("js")), false);
+    });
+
+    IT("stops dispatching when a handler shuts Web down, and reports what fails afterwards to nobody", {
+        for (const bool lua : {false, true}) {
+            Stage stage;
+            EQUALS(stage.ready, true);
+            if (lua) {
+                EQUALS(stage.Lua("(function() view = Web.createView('https://x.test/') Web.on(view, 'ev', function() log[#log + 1] = 'first' shutdownWeb() error('after the shutdown') end) Web.on(view, 'ev', rec('second')) end)()"), "nil");
+            }
+            else {
+                EQUALS(stage.Js("(globalThis.view = Web.createView('https://x.test/'), Web.on(view, 'ev', () => { log.push('first'); shutdownWeb(); throw new Error('after the shutdown'); }), Web.on(view, 'ev', rec('second')))"), "undefined");
+            }
+            stage.Page(1, "ev", "1");
+            EQUALS((lua ? stage.Lua("seen()") : stage.Js("seen()")), "first");
+            EQUALS(Web::ViewCount() + Web::HandlerCount(), 0u);
+            // The manager the handler was registered under is no longer Web's to report to.
+            stage.Frame();
+            stage.Frame();
+            EQUALS(stage.Errors(), "");
+            EQUALS(stage.client.manager->IsResourceRunning(lua ? "lua" : "js"), true);
+            // The listener the view still has finds nobody.
+            stage.Page(1, "ev", "2");
+            EQUALS((lua ? stage.Lua("seen()") : stage.Js("seen()")), "");
+        }
+    });
+
+    IT("survives a reset of the scripting from inside a handler, and serves both languages afterwards", {
+        for (const bool lua : {false, true}) {
+            Stage stage;
+            EQUALS(stage.ready, true);
+            EQUALS(stage.Js("(globalThis.view = Web.createView('https://x.test/'), 1)"), "1");
+            EQUALS(stage.Lua("(function() view = Web.createView('https://y.test/') end)()"), "nil");
+            EQUALS(stage.Js("(globalThis.reached = [], Web.on(view, 'ev', () => { reached.push('js'); resetScripting(); reached.push('on'); }), Web.on(view, 'ev', () => reached.push('after')))"), "undefined");
+            EQUALS(stage.Lua("(function() Web.on(view, 'ev', function() resetScripting() error('after the reset') end) Web.on(view, 'ev', function() error('second') end) end)()"), "nil");
+            stage.Page(lua ? 2 : 1, "ev", "1");
+            if (!lua) {
+                EQUALS(stage.Js("reached.join()", ""), "js,on");
+            }
+            EQUALS(Web::ViewCount() + Web::HandlerCount(), 0u);
+            EQUALS((stage.client.manager->IsResourceRunning("js") || stage.client.manager->IsResourceRunning("lua")), false);
+
+            // The rest of ClientScriptingModule::Reset, then Init.
+            stage.client.lua.Shutdown();
+            stage.client.v8.ResetContext();
+            EQUALS(stage.Register(), true);
+            EQUALS(stage.client.Start("js"), "");
+            EQUALS(stage.client.Start("lua"), "");
+            EQUALS(stage.Js("(globalThis.view = Web.createView('https://x.test/'), Web.on(view, 'ev', rec('js')), view)"), "3");
+            EQUALS(stage.Lua("(function() view = Web.createView('https://y.test/') Web.on(view, 'ev', rec('lua')) return view end)()"), "4");
+            stage.Page(3, "ev", "1");
+            stage.Page(4, "ev", "1");
+            EQUALS(stage.Js("seen()"), "js:1");
+            EQUALS(stage.Lua("seen()"), "lua:1");
+            stage.Frame();
+            EQUALS(stage.Errors(), "");
+        }
     });
 
     // ==================== Cleanup ====================
@@ -897,7 +1070,7 @@ MODULE(lua_client_web, {
         stage.Raise(1, ViewEvent::Tooltip);
 
         EQUALS(static_cast<bool>(stage.client.manager->StopResource("lua")), true);
-        EQUALS(stage.View(4) == nullptr && stage.View(5) == nullptr, true);
+        EQUALS((stage.View(4) == nullptr && stage.View(5) == nullptr), true);
         EQUALS(Web::ViewCount(), 3u);
         EQUALS(Web::HandlerCount(), 5u);
 
@@ -1092,11 +1265,24 @@ MODULE(lua_client_web, {
         EQUALS(stage.Lua("log[1] .. log[#log]"), "browser:{text=\"6\",viewId=1}browser:{text=\"1029\",viewId=1}");
         EQUALS(stage.Lua("seen() ~= ''"), "true");
 
-        // What a view reported before it was destroyed is dropped with it.
-        stage.Raise(1, ClientWebTest::Filled(ViewEvent::Tooltip));
-        EQUALS(stage.Lua("Web.destroyView(1)"), "true");
+        // What a view reported before it was destroyed is dropped with it, there and then, and what another
+        // view reported stays.
+        EQUALS(stage.Lua("Web.createView('https://y.test/2')"), "2");
         stage.Frame();
         EQUALS(stage.Lua("seen()"), "");
+        EQUALS(Web::PendingEventCount(), 0u);
+        stage.Raise(1, ClientWebTest::Filled(ViewEvent::Tooltip));
+        stage.Raise(2, ClientWebTest::Filled(ViewEvent::Tooltip));
+        stage.Raise(1, ClientWebTest::Filled(ViewEvent::Tooltip));
+        EQUALS(Web::PendingEventCount(), 3u);
+        EQUALS(stage.Lua("Web.destroyView(1)"), "true");
+        EQUALS(Web::PendingEventCount(), 1u);
+        stage.Frame();
+        EQUALS(stage.Lua("seen()"), "browser:{text=\"tip\",viewId=2}");
+        stage.Raise(2, ClientWebTest::Filled(ViewEvent::Tooltip));
+        EQUALS(static_cast<bool>(stage.client.manager->StopResource("lua")), true);
+        EQUALS(Web::PendingEventCount(), 0u);
+        stage.Frame();
         EQUALS(stage.Errors(), "");
     });
 })

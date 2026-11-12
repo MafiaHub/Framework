@@ -171,7 +171,11 @@ waited, is an error of its resource, like a failing timer: it is logged as
 resource then follows its `errorBehavior` (`stop` by default, which destroys its
 views). This changed with Lua support: before, a JavaScript handler that threw
 was only logged and its resource ran on; a resource that relies on that needs
-`"errorBehavior": "continue"`. The other handlers of the event still run.
+`"errorBehavior": "continue"`. The handlers of other resources still run; the
+failing resource's own remaining handlers are skipped until the next scripting
+tick, whatever its pages send meanwhile, so a resource whose handlers all hang
+costs a frame one script deadline. A handler is not called either once its
+resource has stopped, even when an earlier handler of the same event stopped it.
 
 ## Native side
 

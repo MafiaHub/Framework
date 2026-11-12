@@ -77,9 +77,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // Must run before the isolate is disposed, and before the resource manager goes.
         static void Shutdown();
 
-        // Diagnostics and tests: the views scripts own, and the handlers they keep on them.
+        // Diagnostics and tests: the views scripts own, the handlers they keep on them.
         static size_t ViewCount();
         static size_t HandlerCount();
+        // And the browser events queued for the next Update.
+        static size_t PendingEventCount();
 
       private:
         // The manager a failed handler is reported to. Shared with the calls still running when Shutdown
@@ -138,6 +140,13 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static Framework::Scripting::ResourceManager *_resourceManager;
         // Of _resourceManager, from Register until Shutdown.
         static std::shared_ptr<ManagerLink> _managerLink;
+
+        // The resources a page-event handler of which failed since the last Update. Their other handlers wait
+        // for the next one: a resource that runs every handler into its deadline costs a frame one deadline,
+        // however many handlers it has and however many events its page sends. Shared with the calls that end
+        // later, which add to it in vain.
+        static std::shared_ptr<std::vector<std::string>> _failedOwners;
+        static void ForgetFailedOwners();
     };
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins
