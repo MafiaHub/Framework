@@ -379,6 +379,44 @@ MODULE(lua_events, {
         EQUALS(bus.Events().GetClientListenerCount("js-toggle"), (size_t)0);
     });
 
+    IT("unsubscribes for a script that tampered with the prototypes", {
+        Bus bus;
+        bus.server.files.Resource("hostile", {{"main.js", R"(
+            globalThis.attempt = () => {
+                let result = 'none';
+                let calls = 0;
+            globalThis.leaked = [];
+            const hostile = [[Array.prototype, 0], [Array.prototype, 1], [Object.prototype, 0], [Object.prototype, 1], [Object.prototype, 'framework.carrier.holder'], [Object.prototype, 'framework.carrier.value']];
+            for (const [target, key] of hostile) {
+                Object.defineProperty(target, key, { set(value) { leaked.push(String(key)); }, get() { leaked.push(String(key)); return {}; }, configurable: true });
+            }
+            try {
+                const handler = () => { calls += 1; };
+                const off = Events.on('hostile', handler);
+                const offClient = Events.onClient('hostile', handler);
+                const counted = Events.listenerCount('hostile');
+                off();
+                off();
+                offClient();
+                result = [counted, Events.listenerCount('hostile')].join(',');
+            } finally {
+                for (const [target, key] of hostile) { delete target[key]; }
+            }
+                // With the prototypes as they were again: nobody is left to call.
+                Events.emit('hostile');
+                return result + '|' + calls + '|' + leaked.length;
+            };
+        )"}});
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.Start("hostile"), "");
+
+        // The handler the unsubscribe function carries is kept where no accessor of the script is asked: the
+        // function removes it, and the script is handed nothing.
+        EQUALS(bus.Js("hostile", "attempt()"), "1,0|0|0");
+        EQUALS(bus.Events().GetListenerCount("hostile"), (size_t)0);
+        EQUALS(bus.Events().GetClientListenerCount("hostile"), (size_t)0);
+    });
+
     IT("emits to the handlers of one resource with emitTo", {
         Bus bus;
         bus.server.files.Resource("a", {{"main.lua", "Events.on('targeted', function(x) got = x end)"}});

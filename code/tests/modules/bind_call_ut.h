@@ -1108,6 +1108,31 @@ MODULE(bind_call, {
         EQUALS(runtimes.Js("refs.filter((ref) => ref.deref() !== undefined).length"), "0");
     });
 
+    IT("keeps what a function carries out of the reach of a script that tampers with the prototypes", {
+        Runtimes runtimes;
+        // Accessors where an ordinary read or write of an array or an object would look: none of them is asked,
+        // nothing is handed to the script, and the functions work.
+        EQUALS(runtimes.Js(R"((() => {
+            let result = 'none';
+            globalThis.leaked = [];
+            const hostile = [[Array.prototype, 0], [Array.prototype, 1], [Object.prototype, 0], [Object.prototype, 1], [Object.prototype, 'framework.carrier.holder'], [Object.prototype, 'framework.carrier.value']];
+            for (const [target, key] of hostile) {
+                Object.defineProperty(target, key, { set(value) { leaked.push(String(key)); }, get() { leaked.push(String(key)); return {}; }, configurable: true });
+            }
+            try {
+                const o = {};
+                const carry = Probe.carry(o);
+                const plain = Probe.adder(2);
+                result = [carry() === o, carry(true), plain(3)].join('|');
+            } finally {
+                for (const [target, key] of hostile) { delete target[key]; }
+            }
+            return result + '|' + leaked.length;
+        })())"),
+            "true|NilObject|5|0");
+        EQUALS(runtimes.Js("[].length + Object.keys({}).length"), "0");
+    });
+
     IT("gives the V8 handle of a JavaScript value, and takes one back", {
         Runtimes runtimes;
         EQUALS(runtimes.Js("{ const o = {}; Probe.handle(o) === o }"), "true");

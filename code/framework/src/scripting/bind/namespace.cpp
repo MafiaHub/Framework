@@ -198,7 +198,9 @@ namespace Framework::Scripting::Bind {
             }
             if (member.function) {
                 const FunctionDesc &function = desc.functions[member.described];
-                object->Set(context, v8pp::to_v8(isolate, function.name), member.v8(isolate, context).ToLocalChecked()).Check();
+                // Defined, not assigned: an assignment would run a setter a script put on Object.prototype under
+                // the name, and the member would be missing.
+                object->CreateDataProperty(context, v8pp::to_v8(isolate, function.name), member.v8(isolate, context).ToLocalChecked()).Check();
                 symbol.record(v8pp::metadata::function_of<v8::FunctionCallback>(function.name, Detail::V8FunctionOptions(function), false));
             }
             else {

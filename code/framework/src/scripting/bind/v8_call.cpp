@@ -50,6 +50,15 @@ namespace Framework::Scripting::Bind {
         // What a function made with a value runs (Call::NewFunction): its data is that value and its holder.
         void CallCarrying(const v8::FunctionCallbackInfo<v8::Value> &info);
 
+        // The private keys of what such a function carries: no script can name them.
+        v8::Local<v8::Private> CarrierHolderKey(v8::Isolate *isolate) {
+            return v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.carrier.holder"));
+        }
+
+        v8::Local<v8::Private> CarrierValueKey(v8::Isolate *isolate) {
+            return v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.carrier.value"));
+        }
+
         class V8Call final
             : public Call
             , public Detail::ValueBackend {
@@ -193,16 +202,18 @@ namespace Framework::Scripting::Bind {
                 return Keep(made);
             }
 
-            // The data of the function is a pair: what holds the NativeFunction, and the value. V8 keeps the
-            // pair alive with the function and traces into it.
+            // The data of the function is an object no script ever reaches, with no prototype, that keeps what
+            // holds the NativeFunction and the value under private keys: V8 keeps it alive with the function and
+            // traces into it, and neither storing nor reading asks a prototype, an accessor or a proxy, which a
+            // script could have put in the way of an ordinary property.
             Value NewFunction(NativeFunction function, Value data) override {
                 if (!CanRun()) {
                     return At(0);
                 }
-                v8::Local<v8::Array> pair = v8::Array::New(_isolate, 2);
+                v8::Local<v8::Object> carrier = v8::Object::New(_isolate, v8::Null(_isolate), nullptr, nullptr, 0);
                 v8::Local<v8::Function> made;
-                if (!pair->Set(_context, 0, v8pp::detail::external_data::set(_isolate, FunctionHolder(std::make_shared<NativeFunction>(std::move(function))))).FromMaybe(false) || !pair->Set(_context, 1, Local(Slot(data))).FromMaybe(false)
-                    || !v8::Function::New(_context, &CallCarrying, pair).ToLocal(&made)) {
+                if (!carrier->SetPrivate(_context, CarrierHolderKey(_isolate), v8pp::detail::external_data::set(_isolate, FunctionHolder(std::make_shared<NativeFunction>(std::move(function))))).FromMaybe(false)
+                    || !carrier->SetPrivate(_context, CarrierValueKey(_isolate), Local(Slot(data))).FromMaybe(false) || !v8::Function::New(_context, &CallCarrying, carrier).ToLocal(&made)) {
                     return At(0);
                 }
                 return Keep(made);
@@ -718,15 +729,20 @@ namespace Framework::Scripting::Bind {
             call.Finish();
         }
 
-        // What a function made with a value runs: its data is the pair NewFunction made.
+        // What a function made with a value runs: its data is the carrier NewFunction made. What it reads there
+        // is checked before it is taken for what was stored: a data that is not the carrier, or a carrier without
+        // its holder, calls nothing.
         void CallCarrying(const v8::FunctionCallbackInfo<v8::Value> &info) {
             v8::Isolate *isolate = info.GetIsolate();
             v8::HandleScope scope(isolate);
             v8::Local<v8::Context> context = isolate->GetCurrentContext();
-            v8::Local<v8::Array> pair      = info.Data().As<v8::Array>();
+            if (!info.Data()->IsObject()) {
+                return;
+            }
+            v8::Local<v8::Object> carrier = info.Data().As<v8::Object>();
             v8::Local<v8::Value> holder;
             v8::Local<v8::Value> carried;
-            if (!pair->Get(context, 0).ToLocal(&holder) || !pair->Get(context, 1).ToLocal(&carried)) {
+            if (!carrier->GetPrivate(context, CarrierHolderKey(isolate)).ToLocal(&holder) || !holder->IsExternal() || !carrier->GetPrivate(context, CarrierValueKey(isolate)).ToLocal(&carried)) {
                 return;
             }
             const FunctionHolder function = v8pp::detail::external_data::get<FunctionHolder>(holder);
