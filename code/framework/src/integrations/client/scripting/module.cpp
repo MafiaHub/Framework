@@ -66,7 +66,10 @@ namespace Framework::Integrations::Client::Scripting {
         // The builtins only a client has, next to the shared ones of every state.
         _lua->AddRuntimeSetup([](Framework::Scripting::LuaRuntime &runtime) {
             Builtins::Keybinds::RegisterLua(runtime);
+            Builtins::Chat::RegisterLua(runtime);
+            Builtins::Discord::RegisterLua(runtime);
             Builtins::Voice::RegisterLua(runtime);
+            Builtins::Nametags::RegisterLua(runtime);
         });
     }
 

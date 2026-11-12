@@ -32,6 +32,7 @@
 #include "modules/client_callable_ut.h"
 #include "modules/client_catalog_golden_ut.h"
 #include "modules/lua_client_builtins_ut.h"
+#include "modules/lua_client_services_ut.h"
 #include "modules/lua_client_ut.h"
 #ifdef _WIN32
 #include "modules/keybinds_ut.h"
@@ -352,6 +353,7 @@ int main() {
     UNIT_MODULE(lua_client);
     UNIT_MODULE(client_catalog_golden);
     UNIT_MODULE(lua_client_builtins);
+    UNIT_MODULE(lua_client_services);
 #ifdef _WIN32
     UNIT_MODULE(keybinds);
 #endif
