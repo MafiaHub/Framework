@@ -143,8 +143,10 @@ jobs:
 
   # The threading tests under ThreadSanitizer (-DFW_SANITIZE=thread). MafiaNet is built from source
   # with the same instrumentation, so a race across the library boundary shows both sides; the
-  # pinned archive is not instrumented. Any report fails the job. cmake/tsan.supp holds the
-  # suppressions: third-party code only, never Framework or MafiaNet.
+  # pinned archive is not instrumented. Any report fails the job, bar two sets of suppressions:
+  # cmake/tsan.supp, for third-party code only, and MafiaNet's own baseline (ci/tsan.supp in the
+  # checkout built here) of the unlocked reads RakPeer has always made between the user's thread
+  # and its network thread. This repository carries no suppression for MafiaNet code.
   tsan:
     name: ThreadSanitizer
     runs-on: ubuntu-latest
@@ -193,11 +195,14 @@ jobs:
           cmakeVersion: "~3.31.0"
 
       # Release, static: the one configuration the Framework maps every build type onto
-      # (vendors/CMakeLists.txt). -g for file and line in the reports.
+      # (vendors/CMakeLists.txt). Its flags are RelWithDebInfo's, as in MafiaNet's own TSan
+      # preset: the baseline names functions that are inlined, and the reports only show those
+      # frames with debug information.
       - name: Build MafiaNet with ThreadSanitizer
         run: |
           cmake -S .mafianet-src -B "${RUNNER_TEMP}/mafianet-build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-g -DCMAKE_CXX_FLAGS=-g \
+            -DCMAKE_BUILD_TYPE=Release \
+            "-DCMAKE_C_FLAGS_RELEASE=-O2 -g -DNDEBUG" "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g -DNDEBUG" \
             -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
             -DMAFIANET_SANITIZER=thread \
             -DMAFIANET_BUILD_SHARED=OFF -DMAFIANET_BUILD_STATIC=ON \
@@ -234,13 +239,14 @@ jobs:
       - name: Build the tests
         run: cmake --build build --target FrameworkTests
 
+      # TSAN_OPTIONS takes one suppressions file, so the two are joined.
       # halt_on_error=0 so one run lists every report; the runtime still exits non-zero when it
       # made any, and the grep covers a report that a passing exit code would hide.
       - name: Run the threading tests
-        env:
-          TSAN_OPTIONS: halt_on_error=0:second_deadlock_stack=1:suppressions=${{ github.workspace }}/cmake/tsan.supp
         run: |
           set -o pipefail
+          cat cmake/tsan.supp .mafianet-src/ci/tsan.supp > "${RUNNER_TEMP}/tsan.supp"
+          export TSAN_OPTIONS="halt_on_error=0:second_deadlock_stack=1:suppressions=${RUNNER_TEMP}/tsan.supp"
           build/bin/FrameworkTests 2>&1 | tee tsan.log
           if grep -q 'WARNING: ThreadSanitizer' tsan.log; then
             echo "::error::ThreadSanitizer made reports in a run that exited cleanly"
