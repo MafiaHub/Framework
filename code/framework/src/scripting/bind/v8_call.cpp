@@ -104,6 +104,15 @@ namespace Framework::Scripting::Bind {
                 return Detail::CallResourceManager(_isolate);
             }
 
+            std::string OwnerOf(const Value &function) const override {
+                const ResourceManager *manager = GetResourceManager();
+                if (manager == nullptr) {
+                    return {};
+                }
+                const v8::Local<v8::Value> value = Local(Slot(function));
+                return manager->ResolveResourceContext(_isolate, value->IsFunction() ? value.As<v8::Function>() : v8::Local<v8::Function>());
+            }
+
             size_t ArgCount() const override {
                 return _count;
             }

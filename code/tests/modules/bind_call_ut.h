@@ -545,6 +545,12 @@ namespace BindCallTest {
                     },
                     Doc("Names the calling resource.").ReturnType(TypeOf<std::string>()))
                 .Function(
+                    "ownerOf",
+                    [](Call &call) {
+                        call.Return(call.OwnerOf(call.Arg(0)));
+                    },
+                    Doc("Names the resource that owns a function.").Param("value", Type::Any(), "The function.").ReturnType(TypeOf<std::string>()))
+                .Function(
                     "manager",
                     [](Call &call) {
                         const ResourceManager *manager = call.GetResourceManager();
@@ -1475,8 +1481,13 @@ MODULE(bind_call, {
             EQUALS(runtimes.Js("Probe.resource()"), "");
             manager.SetCurrentResourceContext("js-probe");
             EQUALS(runtimes.Js("Probe.resource()"), "js-probe");
+            // The owner of a function is asked of the manager too, with the function; what is no function
+            // has the owner the call has. A Lua state runs one resource.
+            EQUALS(runtimes.Js("Probe.ownerOf(() => 1) + '|' + Probe.ownerOf(5) + '|' + Probe.ownerOf()"), "js-probe|js-probe|js-probe");
             manager.SetCurrentResourceContext("");
+            EQUALS(runtimes.Js("Probe.ownerOf(() => 1)"), "");
             EQUALS(runtimes.Lua("Probe.resource()"), "lua-probe");
+            EQUALS(runtimes.Lua("Probe.ownerOf(print) .. '|' .. Probe.ownerOf(5) .. '|' .. Probe.ownerOf()"), "lua-probe|lua-probe|lua-probe");
 
             Bind::SetCallResourceManager(runtimes.Isolate(), nullptr);
             Bind::SetCallResourceManager(&runtimes.LuaSide(), nullptr);

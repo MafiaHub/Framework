@@ -97,6 +97,11 @@ namespace Framework::Scripting::Bind {
                 return Detail::CallResourceManager(LuaRuntime::From(_L));
             }
 
+            // A state runs the scripts of one resource.
+            std::string OwnerOf(const Value &) const override {
+                return ResourceName();
+            }
+
             size_t ArgCount() const override {
                 return _count;
             }

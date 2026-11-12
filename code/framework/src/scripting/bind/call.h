@@ -77,6 +77,14 @@ namespace Framework::Scripting::Bind {
         // The resource manager of the runtime the script runs in (SetCallResourceManager), or nullptr.
         virtual ResourceManager *GetResourceManager() const = 0;
 
+        // The resource that owns `function`, a value of this call: what a builtin that keeps the function beyond
+        // the call (a handler, a subscriber) drops it with when a resource stops. In JavaScript it is what the
+        // manager of the runtime answers for the function (ResourceManager::ResolveResourceContext): the resource
+        // of the runtime where each has its own, and where they share one isolate the resource whose script made
+        // the function, before the one that is calling. In Lua it is the resource of the runtime. For a value that
+        // is not a function it is ResourceName(). Empty when it cannot be told.
+        virtual std::string OwnerOf(const Value &function) const = 0;
+
         // The receiver of a method is not an argument, in either language.
         virtual size_t ArgCount() const = 0;
 
