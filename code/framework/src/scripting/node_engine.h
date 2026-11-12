@@ -164,12 +164,17 @@ namespace Framework::Scripting {
             _runGate = gate;
         }
 
-        // For a host that runs the engine on a thread of its own: the runtime GetIsolate() and GetContext() name on
-        // every other thread. Code there builds values the way it always did (an EngineScope, or V8's own scopes,
+        // For a host that runs the engine on a thread of its own: a runtime GetIsolate() and GetContext() name on
+        // another thread. Code there builds values the way it always did (an EngineScope, or V8's own scopes,
         // on the engine's isolate), in an isolate the engine's thread never enters, so neither side waits for the
         // other's lock; what it emits is copied across. It has the bindings a resource's runtime has and runs no
-        // script. From the engine's thread, once, after Init().
-        bool CreateOffThreadRuntime();
+        // script. From the engine's thread, once per name, after Init().
+        bool CreateOffThreadRuntime(std::string_view name);
+
+        // Makes the runtime of that name the one the calling thread sees, so that two threads off the engine's never
+        // wait for each other's isolate either. A thread that bound none sees "tick". A name that was not created is
+        // logged and leaves the thread where it was.
+        void BindOffThreadRuntime(std::string_view name);
 
         // Whether the last RunUntil() ended because the gate turned it away.
         bool LostRunGate() const {
@@ -327,10 +332,21 @@ namespace Framework::Scripting {
         // Calls and values between the engine's runtime and every resource's.
         std::unique_ptr<FunctionReferences> _references;
         uint32_t _hostReference = 0;
-        std::unique_ptr<NodeRuntime> _offThreadRuntime;
-        uint32_t _offThreadReference = 0;
-        // Whether the calling thread is one the off-thread runtime is for.
+        struct OffThreadRuntime {
+            std::string name;
+            std::unique_ptr<NodeRuntime> runtime;
+            uint32_t reference = 0;
+        };
+        // In the order they were created; none goes before Shutdown().
+        std::vector<OffThreadRuntime> _offThreadRuntimes;
+        // Tells this engine's off-thread runtimes from any other's, and from its own before a Shutdown(): what a
+        // thread bound is only good for the set it was bound in.
+        uint64_t _offThreadSet = 0;
+        // Whether the calling thread is one the off-thread runtimes are for.
         bool OffEngineThread() const;
+        // The off-thread runtime `current` belongs to, or else the one the calling thread sees; null on the engine's
+        // thread.
+        NodeRuntime *OffThreadRuntimeFor(v8::Isolate *current) const;
 
         // One runtime per running resource, and the isolate each one owns.
         std::map<std::string, std::unique_ptr<ResourceRuntime>, std::less<>> _resourceRuntimes;

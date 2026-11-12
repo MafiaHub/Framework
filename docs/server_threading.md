@@ -186,9 +186,12 @@ resourceManager->GetEvents().EmitReserved(isolate, context, "playerDied", args);
 or the same with an `EngineScope`. What changed is underneath:
 
 - Off the script thread, `engine->GetIsolate()` and `GetContext()` name a
-  runtime of the tick side's own (`NodeEngine::CreateOffThreadRuntime`). It
-  has the bindings a resource's runtime has, runs no script, and the script
-  thread never enters it, so locking it waits for no script.
+  runtime of the calling thread's own (`NodeEngine::CreateOffThreadRuntime`).
+  It has the bindings a resource's runtime has, runs no script, and the
+  script thread never enters it, so locking it waits for no script. The
+  server creates two, `"tick"` and `"packet"`; a thread sees the one it bound
+  with `NodeEngine::BindOffThreadRuntime`, and `"tick"` if it bound none, so
+  two such threads do not wait for each other's isolate either.
 - An emit made there (`EmitReserved`, `EmitReservedTo`, `EmitClient`) copies
   its arguments out of that isolate, the way arguments cross between two
   resources, and posts the dispatch to the script thread. It returns at

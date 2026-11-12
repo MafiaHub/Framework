@@ -377,9 +377,12 @@ namespace Framework::Integrations::Server {
         }
         if (auto *engine = _scriptingModule->GetEngine()) {
             engine->GetMonitor().SetSlowThresholdMs(_opts.slowScriptWarnMs);
-            // What the tick thread builds its script values in, so it never waits for a script to do it.
-            if (!engine->CreateOffThreadRuntime()) {
-                return "Failed to create the tick thread's scripting runtime: " + engine->GetLastError();
+            // What the tick thread and the packet thread each build their script values in, so neither waits for a
+            // script to do it, nor for the other.
+            for (const char *name : {"tick", "packet"}) {
+                if (!engine->CreateOffThreadRuntime(name)) {
+                    return std::string("Failed to create the ") + name + " thread's scripting runtime: " + engine->GetLastError();
+                }
             }
         }
 

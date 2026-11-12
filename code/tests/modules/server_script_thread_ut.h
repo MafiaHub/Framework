@@ -449,6 +449,48 @@ MODULE(server_script_thread, {
         server.Stop();
     });
 
+    IT("raises an event from a second thread while the tick thread is inside its own isolate", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_packet", R"(
+            const fs = require('node:fs');
+            Events.on('packetEvent', (text) => { fs.writeFileSync('$ROOT/packet', text); });
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        server.TickFor(300ms);
+        auto *engine = server.GetScriptingModule()->GetEngine();
+        std::atomic<bool> held {false};
+        std::atomic<double> emitMs {-1.0};
+        std::thread packets([&] {
+            engine->BindOffThreadRuntime("packet");
+            while (!held) {
+                std::this_thread::yield();
+            }
+            const auto before = std::chrono::steady_clock::now();
+            server.EmitAsProjectsDo("packetEvent");
+            emitMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - before).count();
+        });
+        {
+            // Tick code in the middle of building its own values.
+            v8::Locker locker(engine->GetIsolate());
+            held = true;
+            std::this_thread::sleep_for(500ms);
+        }
+        packets.join();
+        fprintf(stderr, "server_script_thread: an emit from a second thread took %.2f ms\n", emitMs.load());
+        // It built its arguments in a runtime of its own, so it did not wait for the tick thread's.
+        LESSER(emitMs.load(), 100.0);
+        EQUALS(server.TickUntil([&] {
+            std::string text;
+            std::ifstream(server.Marker("packet")) >> text;
+            return text == "from-a-project";
+        }),
+            true);
+        server.Stop();
+    });
+
     IT("brings a project's synchronous event back with the handlers' veto", {
         Server server;
         const bool up = server.Start("fw_script_thread_veto", R"(

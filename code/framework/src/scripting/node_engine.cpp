@@ -18,6 +18,7 @@
 #include <utils/profiler.h>
 
 #include <algorithm>
+#include <atomic>
 #include <filesystem>
 #include <thread>
 
@@ -33,6 +34,18 @@
 namespace {
     // Script started this close to the next tick could run into it.
     constexpr auto kRunMargin = std::chrono::milliseconds(1);
+
+    // The off-thread runtime of a thread that bound none.
+    constexpr std::string_view kDefaultOffThreadRuntime = "tick";
+
+    // Which off-thread runtime this thread bound, and in which engine's set: an engine that went away, or shut down,
+    // leaves a set no later one has, so what is left here of it names nothing.
+    struct OffThreadBinding {
+        uint64_t set = 0;
+        size_t index = 0;
+    };
+    thread_local OffThreadBinding tOffThreadBinding;
+    std::atomic<uint64_t> gNextOffThreadSet {1};
 
     // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
     // Handles: backslash, single quote, newline, carriage return, and tab.
@@ -158,19 +171,21 @@ namespace Framework::Scripting {
             TeardownResourceRuntime(std::move(runtime));
         }
 
-        // The off-thread runtime goes like a resource's: out of the references, its bindings dropped, then freed.
-        if (_offThreadRuntime) {
-            v8::Isolate *offThread = _offThreadRuntime->GetIsolate();
+        // An off-thread runtime goes like a resource's: out of the references, its bindings dropped, then freed.
+        for (OffThreadRuntime &entry : _offThreadRuntimes) {
+            v8::Isolate *offThread = entry.runtime->GetIsolate();
             {
                 v8::Locker locker(offThread);
                 v8::Isolate::Scope isolateScope(offThread);
                 v8::HandleScope handleScope(offThread);
-                v8::Context::Scope contextScope(_offThreadRuntime->GetContext());
-                _references->RemoveRuntime(_offThreadReference);
+                v8::Context::Scope contextScope(entry.runtime->GetContext());
+                _references->RemoveRuntime(entry.reference);
             }
             Builtins::UnregisterAll(offThread);
-            _offThreadRuntime.reset();
+            entry.runtime.reset();
         }
+        _offThreadRuntimes.clear();
+        _offThreadSet = 0;
 
         v8::Isolate *isolate = _runtime->GetIsolate();
         {
@@ -745,22 +760,50 @@ namespace Framework::Scripting {
     }
 
     bool NodeEngine::OffEngineThread() const {
-        if (!_offThreadRuntime) {
+        if (_offThreadRuntimes.empty()) {
             return false;
         }
         ScriptGate *gate = ScriptGate::Get();
         return gate != nullptr && !gate->OnScriptThread();
     }
 
-    bool NodeEngine::CreateOffThreadRuntime() {
-        if (!_initialized || _offThreadRuntime) {
-            return _offThreadRuntime != nullptr;
+    NodeRuntime *NodeEngine::OffThreadRuntimeFor(v8::Isolate *current) const {
+        if (current != nullptr) {
+            for (const OffThreadRuntime &entry : _offThreadRuntimes) {
+                if (entry.runtime->GetIsolate() == current) {
+                    return entry.runtime.get();
+                }
+            }
+        }
+        if (!OffEngineThread()) {
+            return nullptr;
+        }
+        const OffThreadBinding &bound = tOffThreadBinding;
+        if (bound.set == _offThreadSet && bound.index < _offThreadRuntimes.size()) {
+            return _offThreadRuntimes[bound.index].runtime.get();
+        }
+        for (const OffThreadRuntime &entry : _offThreadRuntimes) {
+            if (entry.name == kDefaultOffThreadRuntime) {
+                return entry.runtime.get();
+            }
+        }
+        return nullptr;
+    }
+
+    bool NodeEngine::CreateOffThreadRuntime(std::string_view name) {
+        if (!_initialized) {
+            return false;
+        }
+        for (const OffThreadRuntime &entry : _offThreadRuntimes) {
+            if (entry.name == name) {
+                return true;
+            }
         }
         std::unique_ptr<NodeRuntime> runtime = CreateRuntime(_lastError);
         if (!runtime) {
             return false;
         }
-        runtime->SetName("tick");
+        runtime->SetName(std::string(name));
         v8::Isolate *isolate = runtime->GetIsolate();
         // It never runs script on the engine's thread, so there is nothing to ask it a safe point for.
         UnregisterIsolate(isolate);
@@ -771,13 +814,26 @@ namespace Framework::Scripting {
         v8::Local<v8::Context> context = runtime->GetContext();
         v8::Context::Scope contextScope(context);
 
-        _offThreadRuntime   = std::move(runtime);
-        _offThreadReference = _references->AddRuntime(isolate, context, "tick");
+        if (_offThreadRuntimes.empty()) {
+            _offThreadSet = gNextOffThreadSet.fetch_add(1);
+        }
+        const uint32_t reference = _references->AddRuntime(isolate, context, std::string(name));
+        _offThreadRuntimes.push_back({std::string(name), std::move(runtime), reference});
         // GetIsolate() names this runtime while it is entered, so the bindings land in it.
         if (_runtimeSetupCallback) {
             _runtimeSetupCallback(this);
         }
         return true;
+    }
+
+    void NodeEngine::BindOffThreadRuntime(std::string_view name) {
+        for (size_t index = 0; index < _offThreadRuntimes.size(); ++index) {
+            if (_offThreadRuntimes[index].name == name) {
+                tOffThreadBinding = {_offThreadSet, index};
+                return;
+            }
+        }
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("No off-thread scripting runtime is named '{}'; this thread stays on '{}'", name, kDefaultOffThreadRuntime);
     }
 
     v8::Isolate *NodeEngine::GetIsolate() const {
@@ -790,8 +846,8 @@ namespace Framework::Scripting {
         if (current != nullptr && _runtimeByIsolate.contains(current)) {
             return current;
         }
-        if (_offThreadRuntime && (current == _offThreadRuntime->GetIsolate() || OffEngineThread())) {
-            return _offThreadRuntime->GetIsolate();
+        if (NodeRuntime *offThread = OffThreadRuntimeFor(current)) {
+            return offThread->GetIsolate();
         }
         return _runtime->GetIsolate();
     }
@@ -807,8 +863,8 @@ namespace Framework::Scripting {
                 return it->second->runtime->GetContext();
             }
         }
-        if (_offThreadRuntime && (current == _offThreadRuntime->GetIsolate() || OffEngineThread())) {
-            return _offThreadRuntime->GetContext();
+        if (NodeRuntime *offThread = OffThreadRuntimeFor(current)) {
+            return offThread->GetContext();
         }
         return _runtime->GetContext();
     }
