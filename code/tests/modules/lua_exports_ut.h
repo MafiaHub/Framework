@@ -47,7 +47,7 @@ namespace LuaExportsTest {
             later(n) { return new Promise((resolve) => setTimeout(() => resolve(n + 1), 20)); },
             refuse() { return Promise.reject(new Error('js refused')); },
             boom() { throw new Error('js boom'); },
-            receiver() { 'use strict'; return this === undefined ? 'none' : typeof this; },
+            receiver() { 'use strict'; return this === undefined ? 'none' : this === globalThis ? 'global' : typeof this; },
             each(callback) { return callback(1) + callback(2); },
         });
         globalThis.balance = () => total;
@@ -194,9 +194,9 @@ MODULE(lua_exports, {
         EQUALS(bus.Js("provider", "balance()"), "10");
         EQUALS(bus.Lua("consumer", "Imports.get('provider').api:deposit(5)"), "15");
         EQUALS(bus.Lua("consumer", "api:each(function(n) return n * 10 end)"), "30");
-        // The JavaScript function is called on nothing all the same: a method that uses `this` has none.
-        EQUALS(bus.Lua("consumer", "api.receiver()"), "none");
-        EQUALS(bus.Lua("consumer", "api:receiver()"), "none");
+        // The JavaScript function is not called on the object it came in: `this` is the global of its resource.
+        EQUALS(bus.Lua("consumer", "api.receiver()"), "global");
+        EQUALS(bus.Lua("consumer", "api:receiver()"), "global");
 
         // A copy: the owner's object is its own.
         EQUALS(bus.Lua("consumer", "(function() api.version = 9 return Exports.get('provider', 'api').version end)()"), "3");

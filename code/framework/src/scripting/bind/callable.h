@@ -97,9 +97,10 @@ namespace Framework::Scripting::Bind {
         // the client has no such queue: a promise of it is told when the isolate next runs its microtasks, which is
         // the next call into it or the next tick of its engine.
         //
-        // The function is called on nothing: `this` is undefined in JavaScript and Lua gets no receiver, also
-        // for a function that was copied as a property of an object. Only the function references of JavaScript
-        // (function_references.h) call a method on the object it was sent with.
+        // The function is called on no object of the script: in JavaScript `this` is the global object of the
+        // context of the function, as the builtins written by hand called a handler, and Lua gets no receiver. That
+        // is so also for a function that was copied as a property of an object. Only the function references of
+        // JavaScript (function_references.h) call a method on the object it was sent with.
         //
         // `done` may invoke callables, this one included, and destroy runtimes through their engines. An empty
         // `done` is one that nobody waits on: the function runs all the same.

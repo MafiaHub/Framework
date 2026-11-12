@@ -422,11 +422,14 @@ MODULE(script_callable, {
         EQUALS(stage.Js("alpha", "got"), "undefined");
     });
 
-    IT("calls a JavaScript function with no this", {
+    // As the builtins written by hand called a handler: a strict function sees the global object, not undefined.
+    IT("calls a JavaScript function on the global object of its context", {
         Stage stage;
         stage.CreateJs("alpha");
-        stage.Js("alpha", "Stage.keep(function () { 'use strict'; return this === undefined; })");
+        stage.Js("alpha", "Stage.keep(function () { 'use strict'; return this === globalThis; })");
+        stage.Js("alpha", "Stage.keep(function () { return this === globalThis; })");
         EQUALS(Spell(Invoke(Held().callables.at(0))->value), "true");
+        EQUALS(Spell(Invoke(Held().callables.at(1))->value), "true");
     });
 
     IT("exposes the isolate and the function of a JavaScript callable", {

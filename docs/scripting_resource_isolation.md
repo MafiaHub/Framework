@@ -224,9 +224,10 @@ is the very table it arrived in, however the call was written.
 - A script that really wants to hand a function the table it came in, as its
   first argument, must pass a copy of the table or pass it in another
   position: `api.inspect(api)` calls `inspect` with no argument.
-- The function behind it is called on nothing in every case. A JavaScript
-  function called from Lua has `this` undefined, so a JavaScript export whose
-  methods use `this` does not work from Lua. A Lua export written as
+- The function behind it is never called on the object it was exported in. A
+  JavaScript function called from Lua has the global object of its own
+  resource as `this`, not that object, so a JavaScript export whose methods
+  use `this` does not work from Lua. A Lua export written as
   `function bank:deposit(n)` gets no `self` from an importer of either
   language: its first parameter is the importer's first argument. Write
   exported functions over a closure (`function(n) ... end`, an arrow

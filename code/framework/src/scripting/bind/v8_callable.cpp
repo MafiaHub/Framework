@@ -321,7 +321,7 @@ namespace Framework::Scripting::Bind {
                     if (arguments.size() != args.size()) {
                         outcome = Unfinished(isolate, tryCatch, "Argument " + std::to_string(arguments.size()) + ": ", "the value could not be built");
                     }
-                    else if (!_function.Get(isolate)->Call(entered.context, v8::Undefined(isolate), static_cast<int>(arguments.size()), arguments.data()).ToLocal(&value)) {
+                    else if (!_function.Get(isolate)->Call(entered.context, entered.context->Global(), static_cast<int>(arguments.size()), arguments.data()).ToLocal(&value)) {
                         outcome = Unfinished(isolate, tryCatch, {}, "The call failed");
                     }
                     else if (!value->IsPromise()) {

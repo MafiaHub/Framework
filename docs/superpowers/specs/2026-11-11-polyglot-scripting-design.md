@@ -296,8 +296,9 @@ says `Language::Lua`; only one that says `Language::JavaScript` may be taken for
     isolate of a shared engine), and a Lua state no engine owns says so as it closes.
   - The function references between JavaScript runtimes keep their own rule: a retired runtime can be
     called through them until it is freed.
-- `Invoke` calls the function on nothing: `this` is undefined in JavaScript and Lua gets no receiver, also
-  for a function that crossed as a property of an object.
+- `Invoke` calls the function on no object of the script: in JavaScript `this` is the global object of the
+  function's context, as the hand-written builtins called a handler (`fn->Call(context, context->Global(), ...)`),
+  and Lua gets no receiver, also for a function that crossed as a property of an object.
 - `done` is told later for a promise, with one exception: a promise that settles as the call leaves its
   runtime, where the runtime's queues drain, has told `done` by the time `Invoke` returns. That is Node.
   The client's one isolate has no such queue: a promise of it, and what waits on a deferred of it, is
@@ -490,8 +491,8 @@ One value crosses per call result: a Lua function's first return value.
     `reference` and no `callable`, and is rebuilt by their import hook. Where a value has both and the
     caller gave `ValueTransfer::Rebuild` an import hook, the hook wins; a value with a callable alone is
     rebuilt from it whatever the caller gave.
-  - A function called through a callable gets no `this` (§1.4). Calling a method on the object it was
-    sent with stays what the function references of JavaScript do, and only they.
+  - A function called through a callable gets the global object of its context as `this` in JavaScript and
+    no receiver in Lua (§1.4), never the object it was sent with. Calling a method on that object stays what the function references of JavaScript do, and only they.
 - The event, message and export tables store `ScriptCallable`. Dispatch between two JavaScript handlers
   in one isolate keeps passing values by reference, as today. Every other pairing copies.
 - The JSON payload of a network event or a state bag is read and written by a C++ codec in Lua
