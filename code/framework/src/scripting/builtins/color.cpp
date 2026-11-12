@@ -179,10 +179,8 @@ namespace Framework::Scripting::Builtins {
         });
     }
 
-    void Color::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        v8pp::class_<Color> &cls = GetClass(isolate);
-        auto ctx                 = isolate->GetCurrentContext();
-        global->Set(ctx, v8pp::to_v8(isolate, "Color"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
+    void Color::Register(Bind::Registrar &registrar, Bind::Languages languages) {
+        registrar.Global(Definition(), languages);
     }
 
     v8::Local<v8::Object> Color::NewInstance(v8::Isolate *isolate, const glm::vec4 &value) {
@@ -192,10 +190,6 @@ namespace Framework::Scripting::Builtins {
 
     void Color::UnregisterIsolate(v8::Isolate *isolate) {
         _classes.Unregister(isolate);
-    }
-
-    void Color::RegisterLua(lua_State *L, Bind::Side side) {
-        Definition().RegisterLuaGlobal(L, side);
     }
 
 } // namespace Framework::Scripting::Builtins

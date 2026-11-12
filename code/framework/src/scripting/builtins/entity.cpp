@@ -7,7 +7,6 @@
  */
 
 #include "entity.h"
-#include "../lua/lua_runtime.h"
 #include "../scripting_catalog.h"
 #include "state_bag.h"
 
@@ -177,19 +176,12 @@ namespace Framework::Scripting::Builtins {
         });
     }
 
-    void Entity::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        v8pp::class_<Entity> &cls = GetClass(isolate);
-        auto ctx                  = isolate->GetCurrentContext();
-        global->Set(ctx, v8pp::to_v8(isolate, "Entity"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
-    }
-
-    void Entity::RegisterLua(LuaRuntime &runtime) {
-        const Bind::Side side = runtime.Options().side;
+    void Entity::Register(Bind::Registrar &registrar, Bind::Languages languages) {
         // What the properties of an entity read as, whether or not the state has them as globals.
-        Vector3::Definition().MaterialiseLua(runtime.State(), side);
-        Quaternion::Definition().MaterialiseLua(runtime.State(), side);
-        StateBag::RegisterLua(runtime);
-        Definition().RegisterLuaGlobal(runtime.State(), side);
+        registrar.Type(Vector3::Definition(), languages);
+        registrar.Type(Quaternion::Definition(), languages);
+        StateBag::Register(registrar, languages);
+        registrar.Global(Definition(), languages);
     }
 
     Networking::Replication::NetworkEntity *Entity::Resolve() const {

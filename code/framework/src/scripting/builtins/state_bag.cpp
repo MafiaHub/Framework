@@ -10,7 +10,6 @@
 
 #include "../bind/v8_callable.h"
 #include "../engine_helpers.h"
-#include "../lua/lua_runtime.h"
 #include "../resource_monitor.h"
 #include "../script_log.h"
 #include "../scripting_catalog.h"
@@ -573,7 +572,7 @@ namespace Framework::Scripting::Builtins {
         _classes.Unregister(isolate);
     }
 
-    void StateBag::RegisterLua(LuaRuntime &runtime) {
-        Definition().MaterialiseLua(runtime.State(), runtime.Options().side);
+    void StateBag::Register(Bind::Registrar &registrar, Bind::Languages languages) {
+        registrar.Type(Definition(), languages);
     }
 } // namespace Framework::Scripting::Builtins

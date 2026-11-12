@@ -206,6 +206,8 @@ namespace Framework::Integrations::Client::Scripting {
         std::unique_ptr<Framework::Scripting::V8Engine> _engine;
         // The Lua engine of a client, its bindings and its tick (scripting/lua/lua_client_host.h).
         std::unique_ptr<Framework::Scripting::LuaClientHost> _lua;
+        // The client builtins in Lua, as the last RegisterFrameworkBindings recorded them.
+        Framework::Scripting::Bind::LuaBindings _luaBindings;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
         std::string _modVersion;
 

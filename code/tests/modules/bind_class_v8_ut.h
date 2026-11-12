@@ -627,7 +627,10 @@ MODULE(bind_class_v8, {
 
         std::unique_ptr<v8pp::class_<BindClassV8Test::Compass>> compass;
         runtime.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-            Framework::Scripting::Builtins::Vector3::Register(isolate, context->Global());
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), context->Global());
+                Framework::Scripting::Builtins::Vector3::Register(registrar);
+            }
             compass = BindClassV8Test::MaterialiseCompass(isolate, runtime.Catalog());
             context->Global()->Set(context, v8pp::to_v8(isolate, "Compass"), compass->js_function_template()->GetFunction(context).ToLocalChecked()).Check();
         });

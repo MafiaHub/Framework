@@ -7,7 +7,6 @@
  */
 
 #include "text_label.h"
-#include "../lua/lua_runtime.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
 #include "color.h"
@@ -1272,18 +1271,15 @@ namespace Framework::Scripting::Builtins {
         type.add_property("hideForTarget", optional("boolean"), "Not sent to the player it is attached to, as for their own name tag. Default false.");
     }
 
-    void TextLabel::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        v8pp::class_<TextLabel> &cls = GetClass(isolate);
-        RegisterOptionsType(isolate);
-        auto ctx = isolate->GetCurrentContext();
-        global->Set(ctx, v8pp::to_v8(isolate, "TextLabel"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
-    }
-
-    void TextLabel::RegisterLua(LuaRuntime &runtime) {
-        Entity::RegisterLua(runtime);
+    void TextLabel::Register(Bind::Registrar &registrar, Bind::Languages languages) {
+        Entity::Register(registrar, languages & Bind::Languages::Lua);
         // What an option reads a colour from, whether or not the state has it as a global.
-        Color::Definition().MaterialiseLua(runtime.State(), runtime.Options().side);
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
+        registrar.Type(Color::Definition(), languages);
+        if (registrar.HasJavaScript(languages)) {
+            GetClass(registrar.Isolate());
+            RegisterOptionsType(registrar.Isolate());
+        }
+        registrar.Global(Definition(), languages);
     }
 
     void TextLabel::UnregisterIsolate(v8::Isolate *isolate) {

@@ -10,6 +10,7 @@
 
 #include <scripting/bind/callable.h>
 #include <scripting/bind/namespace.h>
+#include <scripting/bind/registrar.h>
 
 #include <v8.h>
 
@@ -23,7 +24,6 @@
 #include <vector>
 
 namespace Framework::Scripting {
-    class LuaRuntime;
     class ResourceManager;
 } // namespace Framework::Scripting
 
@@ -37,11 +37,10 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // Key, declared once for both languages.
         static const Framework::Scripting::Bind::Namespace &Definition();
 
-        // Starts from no binding: the ones of a context that was reset are gone with it.
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager);
-
-        // Publishes Key as a global of a Lua runtime. The bindings are one table for both languages.
-        static void RegisterLua(Framework::Scripting::LuaRuntime &runtime);
+        // Publishes Key as a global in the languages of `languages`, in the runtimes of a client. The bindings are
+        // one table for both languages. JavaScript starts from no binding: the ones of a context that was reset are
+        // gone with it.
+        static void Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages = Framework::Scripting::Bind::Languages::All, Framework::Scripting::ResourceManager *resourceManager = nullptr);
 
         // Poll physical keys, detect edges, dispatch matching handlers into their scripts.
         static void Update();

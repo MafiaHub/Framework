@@ -9,12 +9,9 @@
 #pragma once
 
 #include <scripting/bind/namespace.h>
+#include <scripting/bind/registrar.h>
 
 #include <v8.h>
-
-namespace Framework::Scripting {
-    class LuaRuntime;
-} // namespace Framework::Scripting
 
 namespace Framework::Integrations::Server::Scripting::Builtins {
 
@@ -25,10 +22,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         // Voice, declared once for both languages.
         static const Framework::Scripting::Bind::Namespace &Definition();
 
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
-
-        // Publishes Voice as a global of a Lua runtime.
-        static void RegisterLua(Framework::Scripting::LuaRuntime &runtime);
+        // Publishes Voice as a global in the languages of `languages`, in the runtimes of a server. JavaScript
+        // also gets the voice events in its catalog.
+        static void Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages = Framework::Scripting::Bind::Languages::All);
     };
 
 } // namespace Framework::Integrations::Server::Scripting::Builtins

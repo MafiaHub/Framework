@@ -88,50 +88,76 @@ Rules:
 
 ## Registration
 
-`target` is always the context's global root — there is no namespace object to
-nest under, so every builtin is reachable as a bare global (`Web`, `Key`,
+Every builtin has one entry point, which registers it in both languages:
+
+```cpp
+static void Register(Bind::Registrar &registrar,
+                     Bind::Languages languages = Bind::Languages::All
+                     /*, what it needs: ResourceManager *, modVersion */);
+```
+
+`languages` turns a language off (`Bind::Languages::JavaScript`,
+`Bind::Languages::Lua`). A builtin never names Lua itself: it only includes
+`bind/` headers, and does its work through the registrar
+(`bind/registrar.h`):
+
+- `registrar.Global(Definition(), languages)` publishes a `Bind::Namespace`
+  or a `Bind::Class` as a global; `registrar.Type(Definition(), languages)`
+  makes a class known without a global.
+- JavaScript is registered at once, in the isolate the registrar was built
+  for. Lua is recorded (`registrar.Lua()`), and the scripting module applies
+  the record to every Lua state as it is created, with the side of that
+  runtime: a state is made per resource, long after the builtins register.
+- What a builtin keeps for its isolate (a handler table, the manager the
+  isolate answers with, catalog metadata) goes under
+  `if (registrar.HasJavaScript(languages))`, with `registrar.Isolate()`,
+  `Context()` and `Target()`.
+
+`Target()` is always the context's global root — there is no namespace object
+to nest under, so every builtin is reachable as a bare global (`Web`, `Key`,
 `Exports`, …), under the same name in a Lua state. Names that Node's CommonJS
 module scope would shadow are capitalized for that reason: `Exports`, not
 `exports`.
 
-There are two legitimate `Register` shapes; a builtin uses the one that matches
-what it needs, and nothing else diverges.
+The scripting modules build one registrar per isolate
+(`ServerScriptingModule::RegisterFrameworkBindings`,
+`ClientScriptingModule::RegisterFrameworkBindings`) and keep its Lua record
+for the states they create. `Builtins::RegisterShared` registers what both
+sides have; a client's Lua host registers it in Lua itself
+(`LuaClientHost::Init`).
 
 ### Value and handle types
 
-Classes attached to a target object:
+Classes published as globals:
 
 ```cpp
 static const Bind::Class<T> &Definition();
-static void Register(v8::Isolate *isolate, v8::Local<v8::Object> target);
-static void RegisterLua(lua_State *L, Bind::Side side);   // value types
-static void RegisterLua(LuaRuntime &runtime);             // handle types
+static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
 ```
 
 `GetClass(isolate)` builds the v8pp class from the definition, so `Register`
-and the catalog follow it; `RegisterLua` publishes the same class as a global
-of a Lua state.
+(through `registrar.Global`) and the catalog follow it; in Lua the same
+definition is published as a global of each state.
 
 - **The pure value types** (`Vector2/3/4`, `Quaternion`, `Color`) need nothing
   from the runtime. They are registered together by
-  `Builtins::RegisterValueTypes`, and in Lua by
-  `Builtins::RegisterValueTypesLua`.
+  `Builtins::RegisterValueTypes`.
 - **`RegisterValueTypes` registers only the pure value types** — its name says
   so. It is the counterpart to `UnregisterAll`, which additionally drops the
-  handle types' cached class wrappers on isolate disposal.
-  `RegisterValueTypesLua` has no such counterpart: closing a Lua state drops
-  everything registered in it.
+  handle types' cached class wrappers on isolate disposal. Lua has no such
+  counterpart: closing a Lua state drops everything registered in it.
 - **Handle types** (`Entity`, `Player`, `TextLabel`) register individually
   because they pull in networking/replication and are wired up by the
-  integration layer, not by the value-type helper. A handle's `RegisterLua`
-  takes the `LuaRuntime`, as a service API's does, and the scripting module
-  calls it for every state it sets up.
+  integration layer, not by the value-type helper. A handle's `Register`
+  makes the classes it reads as known first (`registrar.Type`), as `Entity`
+  does for `Vector3`, `Quaternion` and `StateBag`.
 - **`Player` and `TextLabel` inherit `Entity`** in both languages
   (`Inherit<Entity>()`): a Lua `Player` passes where an `Entity` is expected.
   What only the server has of a player (`kick`, `emit`, the nametag setters,
   the identity of the connection) is tagged `Bind::Side::Server`. In
   JavaScript a game publishes the two itself (`Player::Register`,
-  `TextLabel::Register`); a Lua state gets both from its scripting module.
+  `TextLabel::Register`); a Lua state gets both from its scripting module,
+  which registers them with `Bind::Languages::Lua` (`Builtins::RegisterShared`).
 - **`StateBag` is a global in neither language**: it is materialised for
   `entity.state` to give, and not published.
 
@@ -148,44 +174,42 @@ How a type leaves a runtime is part of its definition:
 
 ### Service APIs
 
-These need the context and the `ResourceManager`:
+These are a `Bind::Namespace` and take the `ResourceManager`:
 
 ```cpp
 static const Bind::Namespace &Definition();
-static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context,
-                     v8::Local<v8::Object> target, ResourceManager *manager);
-static void RegisterLua(LuaRuntime &runtime /*, what Register is told */);
+static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All,
+                     ResourceManager *resourceManager = nullptr);
 ```
 
-`Exports`, `Imports` and `Messages` have exactly this shape. A service API
-takes only what it needs of it, so the argument list varies:
+`Exports`, `Imports`, `Messages` and `Console` have exactly this shape. A
+service API takes only what it needs, so the trailing arguments vary:
 
 ```cpp
-// Console: its global is always the context's own
-static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *resourceManager);
 // ExecutionEnvironment: no manager, the values of its runtime constants
-static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, bool isClient, const std::string &modVersion = {});
-// Chat: neither a context nor a manager
-static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All, const std::string &modVersion = {});
+// Chat: no manager
+static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
 ```
 
 `Console` and `ExecutionEnvironment` are the worked examples of a definition,
 and `Chat` the one that reads an option object and a handle argument.
 
 - `Definition()` holds the functions, the constants and their documentation.
-- `Register` materialises the definition into the isolate
-  (`Definition().MaterialiseV8(...)`), which sets the global and records the
-  catalog; `RegisterLua` publishes the same definition as a global of a Lua
-  state (`Definition().RegisterLuaGlobal(...)`), and the scripting module
-  calls it for every state it sets up.
+- `Register` publishes the definition (`registrar.Global(Definition(),
+  languages)`): in the isolate it sets the global and records the catalog,
+  and every Lua state the module sets up gets the same definition as a
+  global. JavaScript-only extras, such as `console.info` being
+  `console.log`, use the object `Global` returns.
 - A function made from a definition carries no `ResourceManager`. It asks
   its call: `Call::ResourceName()`, `Call::GetResourceManager()`. So a
   `Register` that is given a manager tells the binding layer which one the
   isolate answers with (`Bind::SetCallResourceManager`); the layer forgets
-  it when the isolate is unregistered or the manager is destroyed.
+  it when the isolate is unregistered or the manager is destroyed. A Lua
+  runtime is told its manager by the module that sets it up.
 - A value that is only known when a runtime is set up (the side, the mod
-  version) is a `RuntimeConstant` of the definition, and `Register` and
-  `RegisterLua` hand its value to the materialisation.
+  version) is a `RuntimeConstant` of the definition, and `Register` hands
+  `registrar.Global` its value for each side.
 - What a script writes goes through `Call::WriteOutput`: the scripting
   logger in JavaScript, the path of `print()` in Lua. A line built from
   many values stops at `Call::OutputLineLimit()`, as the console does: what
@@ -194,11 +218,10 @@ and `Chat` the one that reads an option object and a handle argument.
 
 `Events` is the one deliberate variation in shape: it is a non-static member of
 `ResourceManager` (which owns the handler tables), so it is called as
-`manager.GetEvents().Register(...)` with the same argument list. Its functions
+`manager.GetEvents().Register(registrar, languages, &manager)`. Its functions
 come from one definition for JavaScript and Lua all the same
-(`Events::Definition()`, `Events::RegisterLua`): a JavaScript call finds its
-`Events` by the isolate `Register` bound, a Lua call through the manager of its
-runtime.
+(`Events::Definition()`): a JavaScript call finds its `Events` by the isolate
+`Register` bound, a Lua call through the manager of its runtime.
 
 ## Script functions a builtin keeps
 

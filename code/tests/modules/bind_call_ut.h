@@ -650,7 +650,10 @@ namespace BindCallTest {
 
             Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
                 v8::Local<v8::Object> global = context->Global();
-                Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
+                {
+                    Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), global);
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                }
                 if (withCounters) {
                     _counter = CounterDefinition().MaterialiseV8(isolate, Catalog(), side);
                     _stepper = StepperDefinition().MaterialiseV8(isolate, Catalog(), side);
@@ -661,7 +664,11 @@ namespace BindCallTest {
             });
 
             lua_State *L = _lua.State();
-            Framework::Scripting::Builtins::RegisterValueTypesLua(L, side);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                registrar.Lua().Apply(L, side);
+            }
             if (withCounters) {
                 CounterDefinition().RegisterLuaGlobal(L, side);
                 StepperDefinition().RegisterLuaGlobal(L, side);

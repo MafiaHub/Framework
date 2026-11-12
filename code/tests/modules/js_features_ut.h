@@ -176,16 +176,14 @@ class EventsTestHelper {
 };
 
 MODULE(js_features, {
-    using namespace Framework::Scripting;
-    using namespace Framework::Scripting::Builtins;
 
     // ========================================
     // BUILTIN TYPES TESTS (single engine to avoid v8pp caching bug)
     // ========================================
 
     IT("All builtin types work correctly", {
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -196,7 +194,10 @@ MODULE(js_features, {
             v8::Context::Scope contextScope(context);
 
             v8::Local<v8::Object> global = context->Global();
-            Builtins::RegisterValueTypes(isolate, global);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), global);
+                Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+            }
         }
 
         // Vector3 tests
@@ -235,8 +236,8 @@ MODULE(js_features, {
     // Value-type parity: Quaternion gained length/lengthSquared (like Vector) and mul (renamed from
     // multiply — the old name is gone); Color gained NewInstance so native C++ can return a Color.
     IT("Quaternion length/mul parity and Color::NewInstance", {
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         v8::Isolate *isolate = engine.GetIsolate();
         {
@@ -246,10 +247,13 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
             v8::Local<v8::Object> global = context->Global();
-            RegisterValueTypes(isolate, global);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), global);
+                Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+            }
 
             // Native C++ hands a Color to JS via NewInstance (the native-SDK direction).
-            v8::Local<v8::Object> col = Color::NewInstance(isolate, glm::vec4(0.25f, 0.5f, 0.75f, 1.0f));
+            v8::Local<v8::Object> col = Framework::Scripting::Builtins::Color::NewInstance(isolate, glm::vec4(0.25f, 0.5f, 0.75f, 1.0f));
             context->Global()->Set(context, v8pp::to_v8(isolate, "__col"), col).Check();
         }
 
@@ -275,8 +279,8 @@ MODULE(js_features, {
     // 3/4-digit shorthands are unsupported (yield white), Quaternion.normalize maps zero to identity,
     // and the ctor is scalar-first (w, x, y, z).
     IT("Color hex and Quaternion normalize/ctor match their docs", {
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
         {
             v8::Isolate *isolate = engine.GetIsolate();
             v8::Locker locker(isolate);
@@ -285,7 +289,10 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
             v8::Local<v8::Object> global = context->Global();
-            RegisterValueTypes(isolate, global);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), global);
+                Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+            }
         }
 
         // The 3-argument constructor works and alpha defaults to 1 (v8pp optional-ctor fix).
@@ -314,14 +321,14 @@ MODULE(js_features, {
     // Color::toRGBA/toARGB. Their end-to-end use needs networking/replication (integration-tested);
     // here we lock the byte ordering directly. Color(1, 0.5, 0, 1) -> R=255 G=128 B=0 A=255.
     IT("Color packs to RGBA and ARGB with the documented byte order", {
-        Color c(1.0f, 0.5f, 0.0f, 1.0f);
+        Framework::Scripting::Builtins::Color c(1.0f, 0.5f, 0.0f, 1.0f);
         // 0xRRGGBBAA
         UEQUALS(c.toRGBA(), (uint32_t)0xFF80'00FFu);
         // 0xAARRGGBB
         UEQUALS(c.toARGB(), (uint32_t)0xFFFF'8000u);
 
         // Fully opaque red, distinct in the two layouts.
-        Color red(1.0f, 0.0f, 0.0f, 1.0f);
+        Framework::Scripting::Builtins::Color red(1.0f, 0.0f, 0.0f, 1.0f);
         UEQUALS(red.toRGBA(), (uint32_t)0xFF00'00FFu);
         UEQUALS(red.toARGB(), (uint32_t)0xFFFF'0000u);
     });
@@ -333,12 +340,12 @@ MODULE(js_features, {
     IT("Events.on registers handler and CleanupResource removes it", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -349,7 +356,10 @@ MODULE(js_features, {
             v8::Context::Scope contextScope(context);
 
             v8::Local<v8::Object> global = context->Global();
-            manager.GetEvents().Register(isolate, context, global, &manager);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Server);
+                manager.GetEvents().Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
             manager.SetCurrentResourceContext("testResource");
         }
 
@@ -376,12 +386,12 @@ MODULE(js_features, {
     IT("Events.listenerCount returns correct count", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -392,7 +402,10 @@ MODULE(js_features, {
             v8::Context::Scope contextScope(context);
 
             v8::Local<v8::Object> global = context->Global();
-            manager.GetEvents().Register(isolate, context, global, &manager);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Server);
+                manager.GetEvents().Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
             manager.SetCurrentResourceContext("testResource");
         }
 
@@ -416,12 +429,12 @@ MODULE(js_features, {
     IT("Events unsubscribe function removes handler", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -432,7 +445,10 @@ MODULE(js_features, {
             v8::Context::Scope contextScope(context);
 
             v8::Local<v8::Object> global = context->Global();
-            manager.GetEvents().Register(isolate, context, global, &manager);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Server);
+                manager.GetEvents().Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
             manager.SetCurrentResourceContext("testResource");
         }
 
@@ -456,12 +472,12 @@ MODULE(js_features, {
     IT("Events.on throws without resource context", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -472,7 +488,10 @@ MODULE(js_features, {
             v8::Context::Scope contextScope(context);
 
             v8::Local<v8::Object> global = context->Global();
-            manager.GetEvents().Register(isolate, context, global, &manager);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Server);
+                manager.GetEvents().Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
             // NOT setting resource context
         }
 
@@ -485,12 +504,12 @@ MODULE(js_features, {
     IT("Events.on throws with invalid arguments", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -501,7 +520,10 @@ MODULE(js_features, {
             v8::Context::Scope contextScope(context);
 
             v8::Local<v8::Object> global = context->Global();
-            manager.GetEvents().Register(isolate, context, global, &manager);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Server);
+                manager.GetEvents().Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
             manager.SetCurrentResourceContext("testResource");
         }
 
@@ -526,12 +548,12 @@ MODULE(js_features, {
     IT("Events arg-shape errors are TypeError and off is no longer silent", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -542,7 +564,10 @@ MODULE(js_features, {
             v8::Context::Scope contextScope(context);
 
             v8::Local<v8::Object> global = context->Global();
-            manager.GetEvents().Register(isolate, context, global, &manager);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Server);
+                manager.GetEvents().Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
             manager.SetCurrentResourceContext("testResource");
         }
 
@@ -590,7 +615,7 @@ MODULE(js_features, {
     // table disjoint from on() and are removed independently. The async emit round-trip stays covered
     // by integration testing (its Promise-aggregation teardown is flaky under this unit harness).
 
-    auto registerEvents = [](NodeEngine &engine, ResourceManager &manager) {
+    auto registerEvents = [](Framework::Scripting::NodeEngine &engine, Framework::Scripting::ResourceManager &manager) {
         v8::Isolate *isolate = engine.GetIsolate();
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
@@ -598,11 +623,14 @@ MODULE(js_features, {
         v8::Local<v8::Context> context = engine.GetContext();
         v8::Context::Scope contextScope(context);
         v8::Local<v8::Object> global = context->Global();
-        manager.GetEvents().Register(isolate, context, global, &manager);
+        {
+            Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Server);
+            manager.GetEvents().Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+        }
         manager.SetCurrentResourceContext("testResource");
     };
 
-    auto cleanupResource = [](NodeEngine &engine, ResourceManager &manager) {
+    auto cleanupResource = [](Framework::Scripting::NodeEngine &engine, Framework::Scripting::ResourceManager &manager) {
         v8::Isolate *isolate = engine.GetIsolate();
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
@@ -615,11 +643,11 @@ MODULE(js_features, {
     // never resolve to an on() handler.
     IT("onClient/onceClient register into a table disjoint from on", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         registerEvents(engine, manager);
 
         RunJS(engine, "Events.onClient('shared', () => {}); 0");
@@ -644,11 +672,11 @@ MODULE(js_features, {
     // onClient's unsubscribe fn and offClient remove from the client table only, leaving on() intact.
     IT("onClient unsubscribe and offClient touch only the client table", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         registerEvents(engine, manager);
 
         RunJS(engine, R"(
@@ -680,11 +708,11 @@ MODULE(js_features, {
     // CleanupResource drops client handlers along with global ones (a resource stop leaks neither).
     IT("CleanupResource clears client handlers", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         registerEvents(engine, manager);
 
         RunJS(engine, R"(
@@ -713,11 +741,11 @@ MODULE(js_features, {
     // Throwing `status` getter: pre-fix, Get("status").ToLocalChecked() aborts on the empty MaybeLocal.
     IT("emit survives a Promise.allSettled whose records throw on access", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         registerEvents(engine, manager);
 
         RunJS(engine, R"(
@@ -745,11 +773,11 @@ MODULE(js_features, {
     // Non-array settled value: pre-fix it reaches info[0].As<v8::Array>() + Array::Length() (UB).
     IT("emit survives a Promise.allSettled that resolves with a non-array", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         registerEvents(engine, manager);
 
         RunJS(engine, R"(
@@ -774,11 +802,11 @@ MODULE(js_features, {
     // runs on a non-Promise handle and aborts. Post-fix the IsPromise() guard soft-resolves.
     IT("emit survives a Promise.allSettled that returns a non-Promise", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         registerEvents(engine, manager);
 
         RunJS(engine, R"(
@@ -802,11 +830,11 @@ MODULE(js_features, {
     // Sanity: the hardening must not swallow genuine, well-formed rejections.
     IT("emit still rejects when a handler rejects (real allSettled)", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         registerEvents(engine, manager);
 
         RunJS(engine, R"(
@@ -844,8 +872,8 @@ MODULE(js_features, {
             pkg << R"({"name":"provider","version":"1.0.0","mafiahub":{"exports":["alpha","beta"]}})";
         }
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         v8::Isolate *isolate = engine.GetIsolate();
         {
@@ -855,12 +883,12 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            Resource provider(providerPath);
+            Framework::Scripting::Resource provider(providerPath);
             provider.SetIsolate(isolate);
             EQUALS(provider.RegisterExport("alpha", v8::Integer::New(isolate, 42)), true);
             EQUALS(provider.RegisterExport("beta", v8pp::to_v8(isolate, std::string("hello"))), true);
 
-            v8::Local<v8::Object> imported = Imports::BuildImportsObject(isolate, context, &provider);
+            v8::Local<v8::Object> imported = Framework::Scripting::Builtins::Imports::BuildImportsObject(isolate, context, &provider);
             context->Global()->Set(context, v8pp::to_v8(isolate, "__imp"), imported).Check();
         }
 
@@ -882,17 +910,20 @@ MODULE(js_features, {
     // leave those handlers behind until full Shutdown — CleanupResource drops them eagerly, like
     // Events. (The cross-isolate guard added alongside can only be exercised with two live isolates,
     // which libnode cannot host in one process, so it is covered by integration testing.)
-    auto registerMessages = [](NodeEngine &engine, ResourceManager &manager) {
+    auto registerMessages = [](Framework::Scripting::NodeEngine &engine, Framework::Scripting::ResourceManager &manager) {
         v8::Isolate *isolate = engine.GetIsolate();
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
         v8::HandleScope handleScope(isolate);
         v8::Local<v8::Context> context = engine.GetContext();
         v8::Context::Scope contextScope(context);
-        Messages::Register(isolate, context, context->Global(), &manager);
+        {
+            Framework::Scripting::Bind::Registrar registrar(isolate, context, context->Global());
+            Framework::Scripting::Builtins::Messages::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+        }
     };
 
-    auto pumpMessages = [](NodeEngine &engine) {
+    auto pumpMessages = [](Framework::Scripting::NodeEngine &engine) {
         for (int i = 0; i < 8; ++i) {
             {
                 v8::Isolate *isolate = engine.GetIsolate();
@@ -901,7 +932,7 @@ MODULE(js_features, {
                 v8::HandleScope handleScope(isolate);
                 v8::Local<v8::Context> context = engine.GetContext();
                 v8::Context::Scope contextScope(context);
-                Messages::ProcessPendingResponses(isolate, context);
+                Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);
             }
             engine.Tick();
         }
@@ -911,11 +942,11 @@ MODULE(js_features, {
     // is rejected because the handler is gone — proving the resource's handlers were released.
     IT("messages.request round-trips, and CleanupResource drops the handler", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         registerMessages(engine, manager);
 
         // Arg-shape failures throw TypeError (convention), before any state checks.
@@ -961,7 +992,7 @@ MODULE(js_features, {
             v8::HandleScope handleScope(isolate);
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
-            Messages::CleanupResource(isolate, context, "provider");
+            Framework::Scripting::Builtins::Messages::CleanupResource(isolate, context, "provider");
         }
         pumpMessages(engine);
         // ...and the in-flight Promise now rejects instead of hanging forever.
@@ -981,7 +1012,7 @@ MODULE(js_features, {
             v8::Isolate *isolate = engine.GetIsolate();
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
-            Messages::Shutdown();
+            Framework::Scripting::Builtins::Messages::Shutdown();
         }
         engine.Shutdown();
         EventsTestHelper::Cleanup();
@@ -991,11 +1022,11 @@ MODULE(js_features, {
     // ProcessPendingResponses. A continuation that requests again must find the request table unlocked.
     IT("messages.request can be chained from a reply's continuation", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         registerMessages(engine, manager);
 
         manager.SetCurrentResourceContext("provider");
@@ -1015,7 +1046,7 @@ MODULE(js_features, {
             v8::Isolate *isolate = engine.GetIsolate();
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
-            Messages::Shutdown();
+            Framework::Scripting::Builtins::Messages::Shutdown();
         }
         engine.Shutdown();
         EventsTestHelper::Cleanup();
@@ -1028,8 +1059,8 @@ MODULE(js_features, {
     // constructor like its handle-type siblings (Entity, TextLabel). Guards the registration sweep.
     IT("RegisterValueTypes and Player::Register publish their constructors", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         v8::Isolate *isolate = engine.GetIsolate();
         {
@@ -1039,8 +1070,11 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
             v8::Local<v8::Object> target = context->Global();
-            Builtins::RegisterValueTypes(isolate, target);
-            Builtins::Player::Register(isolate, target);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), target);
+                Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                Framework::Scripting::Builtins::Player::Register(registrar);
+            }
         }
 
         // Value types published by RegisterValueTypes.
@@ -1057,8 +1091,8 @@ MODULE(js_features, {
     // with no replication at all, and a good set gets as far as the replication check.
     IT("TextLabel.create validates its options before it needs replication", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         v8::Isolate *isolate = engine.GetIsolate();
         {
@@ -1068,8 +1102,11 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
             v8::Local<v8::Object> target = context->Global();
-            Builtins::RegisterValueTypes(isolate, target);
-            Builtins::TextLabel::Register(isolate, target);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), target);
+                Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                Framework::Scripting::Builtins::TextLabel::Register(registrar);
+            }
         }
 
         const char *rejected[] {
@@ -1109,8 +1146,8 @@ MODULE(js_features, {
     IT("TextLabel.update survives a getter that destroys the label, and checks targets and sizes", {
         EventsTestHelper::Setup();
         TextLabelWorld world;
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         v8::Isolate *isolate = engine.GetIsolate();
         {
@@ -1120,8 +1157,11 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
             v8::Local<v8::Object> target = context->Global();
-            Builtins::RegisterValueTypes(isolate, target);
-            Builtins::TextLabel::Register(isolate, target);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), target);
+                Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                Framework::Scripting::Builtins::TextLabel::Register(registrar);
+            }
         }
 
         // The getter destroys the label and makes another, which may be given its memory: an update
@@ -1158,8 +1198,8 @@ MODULE(js_features, {
         const std::string b = std::to_string(players[1]->GetNetworkID());
         const std::string n = std::to_string(npc->GetNetworkID());
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
         v8::Isolate *isolate = engine.GetIsolate();
         {
             v8::Locker locker(isolate);
@@ -1168,8 +1208,11 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
             v8::Local<v8::Object> target = context->Global();
-            Builtins::RegisterValueTypes(isolate, target);
-            Builtins::TextLabel::Register(isolate, target);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), target);
+                Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                Framework::Scripting::Builtins::TextLabel::Register(registrar);
+            }
         }
 
         const std::string read = "const viewers = (l) => { const o = l.getAudience(); return JSON.stringify([o.showTo, o.hideFrom, o.hideForTarget]); };";
@@ -1216,11 +1259,11 @@ MODULE(js_features, {
     // global is ExecutionEnvironment (was Environment) with camelCase isClient/isServer.
     IT("Framework namespace bindings moved to the global root", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -1230,8 +1273,14 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
             // Registered at the global root, as production does.
-            Exports::Register(isolate, context, context->Global(), &manager);
-            ExecutionEnvironment::Register(isolate, context, context->Global(), /*isClient*/ true, "1.2.3-rc.1");
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, context->Global());
+                Framework::Scripting::Builtins::Exports::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, context->Global(), Framework::Scripting::Bind::Side::Client);
+                Framework::Scripting::Builtins::ExecutionEnvironment::Register(registrar, Framework::Scripting::Bind::Languages::All, "1.2.3-rc.1");
+            }
         }
 
         EQUALS(RunJSBool(engine, "typeof Exports === 'object' && Exports !== null"), true);
@@ -1263,11 +1312,11 @@ MODULE(js_features, {
     // An unsubscribe closure from the first Register() must still remove its handler after a second.
     IT("Second Register keeps a prior unsubscribe closure valid", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         // Stash the unsubscribe closure from the first Register().
         registerEvents(engine, manager);
@@ -1292,11 +1341,11 @@ MODULE(js_features, {
     // into the same Events after a second Register(), and the new Events must work too.
     IT("Second Register keeps prior function-template externals valid", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         // Capture the on() function from the first Register(), then re-register over it.
         registerEvents(engine, manager);
@@ -1318,11 +1367,11 @@ MODULE(js_features, {
 
     IT("ResourceManager reset keeps prior callback externals safe", {
         EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         registerEvents(engine, manager);
         RunJS(engine, R"(
@@ -1354,12 +1403,12 @@ MODULE(js_features, {
     IT("console methods are callable without crash", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -1369,7 +1418,10 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            Console::Register(isolate, context, &manager);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, context->Global());
+                Framework::Scripting::Builtins::Console::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
         }
 
         EQUALS(RunJSBool(engine, "typeof console.log === 'function'"), true);
@@ -1386,8 +1438,8 @@ MODULE(js_features, {
     });
 
     IT("Console::FormatValue formats functions as [Function]", {
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -1400,19 +1452,19 @@ MODULE(js_features, {
             // Test arrow function
             v8::Local<v8::String> arrowCode = v8::String::NewFromUtf8(isolate, "() => {}").ToLocalChecked();
             v8::Local<v8::Value> arrowFn = v8::Script::Compile(context, arrowCode).ToLocalChecked()->Run(context).ToLocalChecked();
-            std::string arrowResult = Console::FormatValue(isolate, arrowFn);
+            std::string arrowResult = Framework::Scripting::Builtins::Console::FormatValue(isolate, arrowFn);
             STREQUALS(arrowResult.c_str(), "[Function]");
 
             // Test regular function
             v8::Local<v8::String> funcCode = v8::String::NewFromUtf8(isolate, "(function myFunc() {})").ToLocalChecked();
             v8::Local<v8::Value> func = v8::Script::Compile(context, funcCode).ToLocalChecked()->Run(context).ToLocalChecked();
-            std::string funcResult = Console::FormatValue(isolate, func);
+            std::string funcResult = Framework::Scripting::Builtins::Console::FormatValue(isolate, func);
             STREQUALS(funcResult.c_str(), "[Function]");
 
             // Test native function (Math.max)
             v8::Local<v8::String> nativeCode = v8::String::NewFromUtf8(isolate, "Math.max").ToLocalChecked();
             v8::Local<v8::Value> nativeFn = v8::Script::Compile(context, nativeCode).ToLocalChecked()->Run(context).ToLocalChecked();
-            std::string nativeResult = Console::FormatValue(isolate, nativeFn);
+            std::string nativeResult = Framework::Scripting::Builtins::Console::FormatValue(isolate, nativeFn);
             STREQUALS(nativeResult.c_str(), "[Function]");
         }
 
@@ -1420,8 +1472,8 @@ MODULE(js_features, {
     });
 
     IT("Console::FormatValue formats primitive types correctly", {
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -1433,35 +1485,35 @@ MODULE(js_features, {
 
             // Test string
             v8::Local<v8::Value> strVal = v8::String::NewFromUtf8(isolate, "hello").ToLocalChecked();
-            STREQUALS(Console::FormatValue(isolate, strVal).c_str(), "hello");
+            STREQUALS(Framework::Scripting::Builtins::Console::FormatValue(isolate, strVal).c_str(), "hello");
 
             // Test integer
             v8::Local<v8::Value> intVal = v8::Number::New(isolate, 42);
-            STREQUALS(Console::FormatValue(isolate, intVal).c_str(), "42");
+            STREQUALS(Framework::Scripting::Builtins::Console::FormatValue(isolate, intVal).c_str(), "42");
 
             // Test boolean true
             v8::Local<v8::Value> trueVal = v8::Boolean::New(isolate, true);
-            STREQUALS(Console::FormatValue(isolate, trueVal).c_str(), "true");
+            STREQUALS(Framework::Scripting::Builtins::Console::FormatValue(isolate, trueVal).c_str(), "true");
 
             // Test boolean false
             v8::Local<v8::Value> falseVal = v8::Boolean::New(isolate, false);
-            STREQUALS(Console::FormatValue(isolate, falseVal).c_str(), "false");
+            STREQUALS(Framework::Scripting::Builtins::Console::FormatValue(isolate, falseVal).c_str(), "false");
 
             // Test null
             v8::Local<v8::Value> nullVal = v8::Null(isolate);
-            STREQUALS(Console::FormatValue(isolate, nullVal).c_str(), "null");
+            STREQUALS(Framework::Scripting::Builtins::Console::FormatValue(isolate, nullVal).c_str(), "null");
 
             // Test undefined
             v8::Local<v8::Value> undefVal = v8::Undefined(isolate);
-            STREQUALS(Console::FormatValue(isolate, undefVal).c_str(), "undefined");
+            STREQUALS(Framework::Scripting::Builtins::Console::FormatValue(isolate, undefVal).c_str(), "undefined");
         }
 
         engine.Shutdown();
     });
 
     IT("Console::FormatValue formats arrays correctly", {
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -1474,20 +1526,20 @@ MODULE(js_features, {
             // Test empty array
             v8::Local<v8::String> emptyArrCode = v8::String::NewFromUtf8(isolate, "[]").ToLocalChecked();
             v8::Local<v8::Value> emptyArr = v8::Script::Compile(context, emptyArrCode).ToLocalChecked()->Run(context).ToLocalChecked();
-            STREQUALS(Console::FormatValue(isolate, emptyArr).c_str(), "[Array(0)]");
+            STREQUALS(Framework::Scripting::Builtins::Console::FormatValue(isolate, emptyArr).c_str(), "[Array(0)]");
 
             // Test array with 3 elements
             v8::Local<v8::String> arrCode = v8::String::NewFromUtf8(isolate, "[1, 2, 3]").ToLocalChecked();
             v8::Local<v8::Value> arr = v8::Script::Compile(context, arrCode).ToLocalChecked()->Run(context).ToLocalChecked();
-            STREQUALS(Console::FormatValue(isolate, arr).c_str(), "[Array(3)]");
+            STREQUALS(Framework::Scripting::Builtins::Console::FormatValue(isolate, arr).c_str(), "[Array(3)]");
         }
 
         engine.Shutdown();
     });
 
     IT("Console::FormatValue formats objects as JSON", {
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -1500,7 +1552,7 @@ MODULE(js_features, {
             // Test simple object
             v8::Local<v8::String> objCode = v8::String::NewFromUtf8(isolate, "({x: 1, y: 2})").ToLocalChecked();
             v8::Local<v8::Value> obj = v8::Script::Compile(context, objCode).ToLocalChecked()->Run(context).ToLocalChecked();
-            std::string objResult = Console::FormatValue(isolate, obj);
+            std::string objResult = Framework::Scripting::Builtins::Console::FormatValue(isolate, obj);
             // JSON output should contain x and y
             EQUALS(objResult.contains("\"x\""), true);
             EQUALS(objResult.contains("\"y\""), true);
@@ -1510,8 +1562,8 @@ MODULE(js_features, {
     });
 
     IT("Console::FormatValue handles circular references safely", {
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -1527,7 +1579,7 @@ MODULE(js_features, {
             v8::Local<v8::Value> circularObj = v8::Script::Compile(context, circularCode).ToLocalChecked()->Run(context).ToLocalChecked();
 
             // Should not crash, should return [Object] for circular
-            std::string result = Console::FormatValue(isolate, circularObj);
+            std::string result = Framework::Scripting::Builtins::Console::FormatValue(isolate, circularObj);
             STREQUALS(result.c_str(), "[Object]");
         }
 
@@ -1535,8 +1587,8 @@ MODULE(js_features, {
     });
 
     IT("Console::FormatValue handles objects with function properties", {
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -1551,7 +1603,7 @@ MODULE(js_features, {
             v8::Local<v8::Value> obj = v8::Script::Compile(context, objCode).ToLocalChecked()->Run(context).ToLocalChecked();
 
             // Should not crash - JSON.stringify will omit the function
-            std::string result = Console::FormatValue(isolate, obj);
+            std::string result = Framework::Scripting::Builtins::Console::FormatValue(isolate, obj);
             EQUALS(result.empty(), false);
         }
 

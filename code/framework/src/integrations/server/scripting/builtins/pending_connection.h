@@ -10,16 +10,13 @@
 
 #include <networking/rpc/client_identity.h>
 #include <scripting/bind/class.h>
+#include <scripting/bind/registrar.h>
 
 #include <v8.h>
 
 #include <cstdint>
 #include <string>
 #include <vector>
-
-namespace Framework::Scripting {
-    class LuaRuntime;
-} // namespace Framework::Scripting
 
 namespace Framework::Integrations::Server::Scripting::Builtins {
     class PendingConnection;
@@ -81,11 +78,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         // The type as scripts see it, declared once for both languages.
         static const Framework::Scripting::Bind::Class<PendingConnection> &Definition();
 
-        // Declares the type and the playerConnecting event in the catalog; installs no global.
-        static void Register(v8::Isolate *isolate);
-
-        // Gives a Lua runtime the class, for the handles its handlers receive. No global there either.
-        static void RegisterLua(Framework::Scripting::LuaRuntime &runtime);
+        // Makes the type known in the languages of `languages`, for the handles the handlers receive; installs no
+        // global. JavaScript gets the type and the playerConnecting event in its catalog.
+        static void Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages = Framework::Scripting::Bind::Languages::All);
 
         // Lets a connection cross between runtimes as itself, in both languages. Process-wide and
         // idempotent; the server scripting module's constructor sees to it.

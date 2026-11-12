@@ -9,10 +9,10 @@
 #pragma once
 
 #include "../bind/class.h"
+#include "../bind/registrar.h"
 #include "../class_cache.h"
 
 #include <glm/glm.hpp>
-#include <lua.h>
 #include <string>
 #include <v8pp/class.hpp>
 #include <v8pp/property.hpp>
@@ -105,15 +105,11 @@ namespace Framework::Scripting::Builtins {
         // The class as scripts see it, declared once for both languages.
         static const Bind::Class<Vector2> &Definition();
 
-        // V8 Registration
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+        // Publishes the class as a global in the languages of `languages`.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
         static v8pp::class_<Vector2> &GetClass(v8::Isolate *isolate);
         static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, const glm::vec2 &value);
         static void UnregisterIsolate(v8::Isolate *isolate);
-
-        // Lua Registration: publishes the class as a global of the state, which belongs to a runtime of side `side`.
-        // A failure, such as the state running out of memory, is a Lua error: call it protected, or it is a panic.
-        static void RegisterLua(lua_State *L, Bind::Side side);
 
       private:
         glm::vec2 _vec;

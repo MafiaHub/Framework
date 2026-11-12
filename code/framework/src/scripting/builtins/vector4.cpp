@@ -88,10 +88,8 @@ namespace Framework::Scripting::Builtins {
         });
     }
 
-    void Vector4::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        v8pp::class_<Vector4> &cls = GetClass(isolate);
-        auto ctx                   = isolate->GetCurrentContext();
-        global->Set(ctx, v8pp::to_v8(isolate, "Vector4"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
+    void Vector4::Register(Bind::Registrar &registrar, Bind::Languages languages) {
+        registrar.Global(Definition(), languages);
     }
 
     v8::Local<v8::Object> Vector4::NewInstance(v8::Isolate *isolate, const glm::vec4 &value) {
@@ -101,10 +99,6 @@ namespace Framework::Scripting::Builtins {
 
     void Vector4::UnregisterIsolate(v8::Isolate *isolate) {
         _classes.Unregister(isolate);
-    }
-
-    void Vector4::RegisterLua(lua_State *L, Bind::Side side) {
-        Definition().RegisterLuaGlobal(L, side);
     }
 
 } // namespace Framework::Scripting::Builtins

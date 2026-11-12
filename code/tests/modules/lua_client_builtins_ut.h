@@ -118,8 +118,12 @@ namespace ClientBuiltinsTest {
                 return gateOpen;
             });
             client.lua.AddRuntimeSetup([](Framework::Scripting::LuaRuntime &runtime) {
-                Framework::Integrations::Client::Scripting::Builtins::Keybinds::RegisterLua(runtime);
-                Framework::Integrations::Client::Scripting::Builtins::Voice::RegisterLua(runtime);
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Integrations::Client::Scripting::Builtins::Keybinds::Register(registrar);
+                    Framework::Integrations::Client::Scripting::Builtins::Voice::Register(registrar);
+                    registrar.Lua().Apply(runtime);
+                }
                 lua_pushcfunction(runtime.State(), [](lua_State *) {
                     gateOpen = false;
                     return 0;
@@ -148,8 +152,11 @@ namespace ClientBuiltinsTest {
             {
                 Framework::Scripting::EngineScope scope(&client.v8);
                 const auto context = scope.Context();
-                Framework::Integrations::Client::Scripting::Builtins::Keybinds::Register(scope.Isolate(), context, context->Global(), client.manager.get());
-                Framework::Integrations::Client::Scripting::Builtins::Voice::Register(scope.Isolate(), context, context->Global(), client.manager.get());
+                {
+                    Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), context, context->Global(), Framework::Scripting::Bind::Side::Client);
+                    Framework::Integrations::Client::Scripting::Builtins::Keybinds::Register(registrar, Framework::Scripting::Bind::Languages::All, client.manager.get());
+                    Framework::Integrations::Client::Scripting::Builtins::Voice::Register(registrar, Framework::Scripting::Bind::Languages::All, client.manager.get());
+                }
                 const auto closeGate = v8::Function::New(context, [](const v8::FunctionCallbackInfo<v8::Value> &) {
                     gateOpen = false;
                 }).ToLocalChecked();

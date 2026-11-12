@@ -69,7 +69,11 @@ namespace ClientWebTest {
             Framework::CoreModules::SetWebManager(gui.get());
             gui->Start();
             client.lua.AddRuntimeSetup([](Framework::Scripting::LuaRuntime &runtime) {
-                Framework::Integrations::Client::Scripting::Builtins::Web::RegisterLua(runtime);
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Integrations::Client::Scripting::Builtins::Web::Register(registrar);
+                    registrar.Lua().Apply(runtime);
+                }
                 // What the host can do to the scripting while a handler runs.
                 lua_pushcfunction(runtime.State(), [](lua_State *L) {
                     current->client.manager->StopResource(lua_tostring(L, 1));
@@ -105,7 +109,10 @@ namespace ClientWebTest {
             }
             Framework::Scripting::EngineScope scope(&client.v8);
             const auto context = scope.Context();
-            Framework::Integrations::Client::Scripting::Builtins::Web::Register(scope.Isolate(), context, context->Global(), client.manager.get());
+            {
+                Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), context, context->Global(), Framework::Scripting::Bind::Side::Client);
+                Framework::Integrations::Client::Scripting::Builtins::Web::Register(registrar, Framework::Scripting::Bind::Languages::All, client.manager.get());
+            }
             const auto expose = [&](const char *name, v8::FunctionCallback callback) {
                 context->Global()->Set(context, v8pp::to_v8(scope.Isolate(), name), v8::Function::New(context, callback).ToLocalChecked()).Check();
             };
@@ -319,7 +326,11 @@ MODULE(lua_client_web, {
 
         Framework::Scripting::LuaRuntime server(LuaRuntimeTest::Options());
         EQUALS(server.Options().side == Framework::Scripting::Bind::Side::Server, true);
-        Framework::Integrations::Client::Scripting::Builtins::Web::RegisterLua(server);
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Integrations::Client::Scripting::Builtins::Web::Register(registrar);
+            registrar.Lua().Apply(server);
+        }
         EQUALS(LuaRuntimeTest::Eval(server, "type(Web)"), "nil");
     });
 

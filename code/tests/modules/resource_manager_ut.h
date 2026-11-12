@@ -110,9 +110,15 @@ class TestManagerHelper {
             v8::HandleScope handleScope(isolate);
             v8::Local<v8::Context> context = target->GetContext();
             v8::Context::Scope contextScope(context);
-            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
-            Framework::Scripting::Builtins::Exports::Register(isolate, context, context->Global(), &manager);
-            Framework::Scripting::Builtins::Messages::Register(isolate, context, context->Global(), &manager);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, context->Global(), Framework::Scripting::Bind::Side::Server);
+                manager.GetEvents().Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, context->Global());
+                Framework::Scripting::Builtins::Exports::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+                Framework::Scripting::Builtins::Messages::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
             InstallRecorder(isolate, context);
             if (extra) {
                 extra(isolate, context);
@@ -162,19 +168,18 @@ class TestManagerHelper {
 };
 
 MODULE(resource_manager, {
-    using namespace Framework::Scripting;
 
     // ==================== Basic Initialization ====================
 
     IT("can create and destroy resource manager", {
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager *manager = new ResourceManager(&engine, config);
+        Framework::Scripting::ResourceManager *manager = new Framework::Scripting::ResourceManager(&engine, config);
         NEQUALS(manager, nullptr);
 
         delete manager;
@@ -182,18 +187,18 @@ MODULE(resource_manager, {
     });
 
     IT("GetConfig returns configuration", {
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
         config.isClient = true;
         config.cascadeStopDependents = false;
         config.resourceStartTimeoutMs = 1234;
         config.resourceStopTimeoutMs  = 5678;
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         const auto &retrievedConfig = manager.GetConfig();
         STREQUALS(retrievedConfig.resourcesPath.c_str(), config.resourcesPath.c_str());
@@ -206,16 +211,16 @@ MODULE(resource_manager, {
     });
 
     IT("SetConfig updates configuration", {
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = "/old/path";
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
-        ResourceManagerConfig newConfig;
+        Framework::Scripting::ResourceManagerConfig newConfig;
         newConfig.resourcesPath = "/new/path";
         manager.SetConfig(newConfig);
 
@@ -231,12 +236,12 @@ MODULE(resource_manager, {
             "version": "1.0.0"
         })");
 
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         EQUALS(manager.DiscoverResources(), 1u);
         manager.SetCurrentResourceContext("reset-me");
@@ -249,7 +254,7 @@ MODULE(resource_manager, {
         EQUALS(manager.GetRunningResourceCount(), 0u);
         STREQUALS(manager.GetCurrentResourceContext().c_str(), "");
 
-        ResourceManagerConfig newConfig;
+        Framework::Scripting::ResourceManagerConfig newConfig;
         newConfig.resourcesPath = "/new/session/path";
         manager.SetConfig(newConfig);
         STREQUALS(manager.GetConfig().resourcesPath.c_str(), "/new/session/path");
@@ -270,14 +275,14 @@ MODULE(resource_manager, {
             "version": "2.0.0"
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         size_t discovered = manager.DiscoverResources();
 
         EQUALS(discovered, 2u);
@@ -295,14 +300,14 @@ MODULE(resource_manager, {
             "version": "1.0.0"
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         bool result = manager.DiscoverResource(TestManagerHelper::GetTestResourcePath() + "/single-disc");
         EQUALS(result, true);
@@ -320,14 +325,14 @@ MODULE(resource_manager, {
             testDir.createDirectory();
         }
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         size_t discovered = manager.DiscoverResources();
 
         EQUALS(discovered, 0u);
@@ -349,14 +354,14 @@ MODULE(resource_manager, {
             "version": "1.0.0"
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto names = manager.GetAllResourceNames();
@@ -372,17 +377,17 @@ MODULE(resource_manager, {
             "version": "3.0.0"
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
-        const Resource *resource = manager.GetResource("get-test");
+        const Framework::Scripting::Resource *resource = manager.GetResource("get-test");
         NEQUALS(resource, nullptr);
         STREQUALS(resource->GetName().c_str(), "get-test");
         STREQUALS(resource->GetVersion().c_str(), "3.0.0");
@@ -392,16 +397,16 @@ MODULE(resource_manager, {
     });
 
     IT("GetResource returns nullptr for unknown resource", {
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
-        const Resource *resource = manager.GetResource("nonexistent");
+        const Framework::Scripting::Resource *resource = manager.GetResource("nonexistent");
         EQUALS(resource, nullptr);
 
         engine.Shutdown();
@@ -413,14 +418,14 @@ MODULE(resource_manager, {
             "version": "1.0.0"
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         EQUALS(manager.HasResource("has-test"), true);
@@ -438,18 +443,18 @@ MODULE(resource_manager, {
             "version": "1.0.0"
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
-        ResourceState state = manager.GetResourceState("state-test");
-        EQUALS(state, ResourceState::Unloaded);
+        Framework::Scripting::ResourceState state = manager.GetResourceState("state-test");
+        EQUALS(state, Framework::Scripting::ResourceState::Unloaded);
 
         engine.Shutdown();
         TestManagerHelper::Cleanup();
@@ -461,14 +466,14 @@ MODULE(resource_manager, {
             "version": "1.0.0"
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         EQUALS(manager.IsResourceRunning("running-test"), false);
@@ -492,14 +497,14 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto deps = manager.GetDependencies("dep-child");
@@ -522,14 +527,14 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto dependents = manager.GetDependents("parent-res");
@@ -549,14 +554,14 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto result = manager.StartAll();
@@ -578,14 +583,14 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto result = manager.StartAll();
@@ -610,14 +615,14 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto order      = manager.GetLoadOrder();
@@ -657,14 +662,14 @@ MODULE(resource_manager, {
             "mafiahub": { "priority": -100, "resourceDependencies": ["prio-a"] }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         // prio-d has the lowest priority but still waits for prio-a, its dependency.
@@ -692,14 +697,14 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto result = manager.StartAll();
@@ -727,14 +732,14 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         manager.StartAll();
@@ -755,15 +760,15 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath            = TestManagerHelper::GetTestResourcePath();
         config.warnOnMissingDependency  = true;
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto result = manager.StartAll();
@@ -785,14 +790,14 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto result = manager.StartResource("selfdep");
@@ -821,14 +826,14 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto result = manager.StartResource("cycle-a");
@@ -862,14 +867,14 @@ MODULE(resource_manager, {
             "version": "1.0.0"
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto result = manager.StartResource("healthy");
@@ -897,14 +902,14 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto first = manager.StartResource("cycle-a");
@@ -930,14 +935,14 @@ MODULE(resource_manager, {
             }
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         // The manifest still parses, so the resource is discovered rather than dropped.
@@ -958,14 +963,14 @@ MODULE(resource_manager, {
             "version": "1.0.0"
         })");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         EQUALS(manager.GetRunningResourceCount(), 0u);
@@ -988,14 +993,14 @@ MODULE(resource_manager, {
         outsideFile << "// outside";
         outsideFile.close();
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         auto startResult = manager.StartResource("escape-test");
@@ -1011,7 +1016,6 @@ MODULE(resource_manager, {
 });
 
 MODULE(resource_lifecycle, {
-    using namespace Framework::Scripting;
 
     IT("loads code afresh on every start, ESM and CommonJS alike", {
         TestManagerHelper::Cleanup();
@@ -1053,12 +1057,12 @@ MODULE(resource_lifecycle, {
         };
         writeModules(1);
 
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath          = TestManagerHelper::GetTestResourcePath();
         config.resourceStartTimeoutMs = 2000;
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         TestManagerHelper::RegisterEvents(engine, manager);
         EQUALS(manager.DiscoverResources(), 2u);
         EQUALS((bool)manager.StartResource("esm-restart-other"), true);
@@ -1126,12 +1130,12 @@ MODULE(resource_lifecycle, {
             __record("dependentSawReady", __recorded("dependencyReady") === 1 ? 1 : 0);
         )");
 
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath          = TestManagerHelper::GetTestResourcePath();
         config.resourceStartTimeoutMs = 250;
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         TestManagerHelper::RegisterEvents(engine, manager);
         EQUALS(manager.DiscoverResources(), 2u);
 
@@ -1166,19 +1170,19 @@ MODULE(resource_lifecycle, {
             });
         )");
 
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath         = TestManagerHelper::GetTestResourcePath();
         config.resourceStopTimeoutMs = 250;
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         TestManagerHelper::RegisterEvents(engine, manager);
         EQUALS(manager.DiscoverResources(), 1u);
         EQUALS((bool)manager.StartResource("async-stop"), true);
 
         const auto result = manager.StopResource("async-stop");
         EQUALS((bool)result, true);
-        EQUALS(manager.GetResourceState("async-stop"), ResourceState::Stopped);
+        EQUALS(manager.GetResourceState("async-stop"), Framework::Scripting::ResourceState::Stopped);
         EQUALS(TestManagerHelper::RecordedValue("stopFinished"), 1);
         EQUALS(TestManagerHelper::RecordedValue("stopSawOwnedListener"), 1);
         EQUALS(manager.GetEvents().GetListenerCount("owned-listener"), static_cast<size_t>(0));
@@ -1203,19 +1207,19 @@ MODULE(resource_lifecycle, {
             });
         )");
 
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath          = TestManagerHelper::GetTestResourcePath();
         config.resourceStartTimeoutMs = 250;
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         TestManagerHelper::RegisterEvents(engine, manager);
         EQUALS(manager.DiscoverResources(), 1u);
 
         const auto result = manager.StartResource("reject-start");
         EQUALS((bool)result, false);
         EQUALS(result.GetError().contains("migration failed"), true);
-        EQUALS(manager.GetResourceState("reject-start"), ResourceState::Error);
+        EQUALS(manager.GetResourceState("reject-start"), Framework::Scripting::ResourceState::Error);
         EQUALS(manager.GetEvents().GetListenerCount("leaked-start-listener"), static_cast<size_t>(0));
 
         engine.Shutdown();
@@ -1235,19 +1239,19 @@ MODULE(resource_lifecycle, {
                 name === "timeout-start" ? new Promise(() => {}) : undefined);
         )");
 
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath          = TestManagerHelper::GetTestResourcePath();
         config.resourceStartTimeoutMs = 10;
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         TestManagerHelper::RegisterEvents(engine, manager);
         EQUALS(manager.DiscoverResources(), 1u);
 
         const auto result = manager.StartResource("timeout-start");
         EQUALS((bool)result, false);
         EQUALS(result.GetError().contains("timed out"), true);
-        EQUALS(manager.GetResourceState("timeout-start"), ResourceState::Error);
+        EQUALS(manager.GetResourceState("timeout-start"), Framework::Scripting::ResourceState::Error);
         EQUALS(manager.GetEvents().GetListenerCount("leaked-timeout-listener"), static_cast<size_t>(0));
 
         engine.Shutdown();
@@ -1263,17 +1267,17 @@ MODULE(resource_lifecycle, {
                 "Events.on('resourceStop', (name) => name === '"
                     + name + "' ? (" + stopBody + ") : undefined);");
 
-            NodeEngine engine;
-            bool ok = engine.Init() == ScriptingError::SCRIPTING_NONE;
-            ResourceManagerConfig config;
+            Framework::Scripting::NodeEngine engine;
+            bool ok = engine.Init() == Framework::Scripting::ScriptingError::SCRIPTING_NONE;
+            Framework::Scripting::ResourceManagerConfig config;
             config.resourcesPath         = TestManagerHelper::GetTestResourcePath();
             config.resourceStopTimeoutMs = 10;
-            ResourceManager manager(&engine, config);
+            Framework::Scripting::ResourceManager manager(&engine, config);
             TestManagerHelper::RegisterEvents(engine, manager);
             ok = ok && manager.DiscoverResources() == 1u;
             ok = ok && static_cast<bool>(manager.StartResource(name));
             ok = ok && static_cast<bool>(manager.StopResource(name));
-            ok = ok && manager.GetResourceState(name) == ResourceState::Stopped;
+            ok = ok && manager.GetResourceState(name) == Framework::Scripting::ResourceState::Stopped;
             ok = ok && manager.GetEvents().GetListenerCount("force-cleanup-listener") == 0u;
             engine.Shutdown();
             TestManagerHelper::Cleanup();
@@ -1286,7 +1290,6 @@ MODULE(resource_lifecycle, {
 });
 
 MODULE(resource_manager_callbacks, {
-    using namespace Framework::Scripting;
 
     IT("fires OnResourceStarted callback", {
         TestManagerHelper::CreateTestResource("callback-start", R"({
@@ -1298,14 +1301,14 @@ MODULE(resource_manager_callbacks, {
         })");
         TestManagerHelper::CreateTestScript("callback-start", "main.js", "// empty script");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         std::string startedResource;
         manager.AddOnResourceStarted([&startedResource](const std::string &name) {
@@ -1332,14 +1335,14 @@ MODULE(resource_manager_callbacks, {
         })");
         TestManagerHelper::CreateTestScript("callback-stop", "main.js", "// empty script");
 
-        NodeEngine engine;
+        Framework::Scripting::NodeEngine engine;
 
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         std::string stoppedResource;
         manager.AddOnResourceStopped([&stoppedResource](const std::string &name) {
@@ -1361,11 +1364,11 @@ MODULE(resource_manager_callbacks, {
         TestManagerHelper::CreateTestResource("stop-on-throw", R"({"name":"stop-on-throw","version":"1.0.0","mafiahub":{"server":"main.js"}})");
         TestManagerHelper::CreateTestScript("stop-on-throw", "main.js", "throw new Error('boom');");
 
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         TestManagerHelper::RegisterEvents(engine, manager);
 
         std::vector<std::string> stopped;
@@ -1394,12 +1397,12 @@ MODULE(resource_manager_callbacks, {
             });
         )");
 
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath          = TestManagerHelper::GetTestResourcePath();
         config.resourceStartTimeoutMs = 250;
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         TestManagerHelper::RegisterEvents(engine, manager);
 
         std::vector<std::string> stopped;
@@ -1422,11 +1425,11 @@ MODULE(resource_manager_callbacks, {
         TestManagerHelper::CreateTestResource("stop-on-error", R"({"name":"stop-on-error","version":"1.0.0","mafiahub":{"server":"main.js"}})");
         TestManagerHelper::CreateTestScript("stop-on-error", "main.js", "// empty script");
 
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         TestManagerHelper::RegisterEvents(engine, manager);
 
         std::vector<std::string> stopped;
@@ -1457,11 +1460,11 @@ MODULE(resource_manager_callbacks, {
         TestManagerHelper::CreateTestResource("keep-on-error", R"({"name":"keep-on-error","version":"1.0.0","mafiahub":{"server":"main.js","errorBehavior":"continue"}})");
         TestManagerHelper::CreateTestScript("keep-on-error", "main.js", "// empty script");
 
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         TestManagerHelper::RegisterEvents(engine, manager);
 
         std::vector<std::string> stopped;
@@ -1485,11 +1488,11 @@ MODULE(resource_manager_callbacks, {
         TestManagerHelper::CreateTestResource("stop-then-restart", R"({"name":"stop-then-restart","version":"1.0.0","mafiahub":{"server":"main.js","errorBehavior":"restart"}})");
         TestManagerHelper::CreateTestScript("stop-then-restart", "main.js", "// empty script");
 
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         TestManagerHelper::RegisterEvents(engine, manager);
 
         std::vector<std::string> events;
@@ -1525,14 +1528,14 @@ MODULE(resource_manager_callbacks, {
     // ==================== Current Resource Context ====================
 
     IT("SetCurrentResourceContext and GetCurrentResourceContext work correctly", {
-        NodeEngine engine;
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine;
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
 
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         STREQUALS(manager.GetCurrentResourceContext().c_str(), "");
 

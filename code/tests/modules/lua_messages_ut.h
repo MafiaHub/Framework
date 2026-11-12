@@ -62,7 +62,11 @@ namespace LuaMessagesTest {
                 lua_pushcclosure(L, LuaResourcesTest::Rig::Stop, 1);
                 lua_setglobal(L, "stop");
                 Framework::Scripting::Bind::SetCallResourceManager(&runtime, &rig.manager);
-                Framework::Scripting::Builtins::Messages::RegisterLua(runtime);
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Scripting::Builtins::Messages::Register(registrar);
+                    registrar.Lua().Apply(runtime);
+                }
             });
         }
 
@@ -731,7 +735,10 @@ MODULE(lua_messages, {
         EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
         {
             Framework::Scripting::EngineScope scope(&engine);
-            Framework::Scripting::Builtins::Messages::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), nullptr);
+            {
+                Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), scope.Context(), scope.Context()->Global());
+                Framework::Scripting::Builtins::Messages::Register(registrar);
+            }
         }
         const auto why = [&engine](const std::string &call) {
             return RunJSString(engine, ("(() => { try { " + call + "; return 'ok'; } catch (e) { return e.constructor.name + ': ' + e.message; } })()").c_str());
@@ -767,7 +774,11 @@ MODULE(lua_messages, {
                 manager->SetLuaEngine(&lua);
                 lua.SetRuntimeSetupCallback([this](Framework::Scripting::LuaRuntime &runtime) {
                     Framework::Scripting::Bind::SetCallResourceManager(&runtime, manager.get());
-                    Framework::Scripting::Builtins::Messages::RegisterLua(runtime);
+                    {
+                        Framework::Scripting::Bind::Registrar registrar;
+                        Framework::Scripting::Builtins::Messages::Register(registrar);
+                        registrar.Lua().Apply(runtime);
+                    }
                 });
                 lua.AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
                     Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);
@@ -841,7 +852,11 @@ MODULE(lua_messages, {
         manager.SetLuaEngine(&lua);
         lua.SetRuntimeSetupCallback([&manager](Framework::Scripting::LuaRuntime &runtime) {
             Framework::Scripting::Bind::SetCallResourceManager(&runtime, &manager);
-            Framework::Scripting::Builtins::Messages::RegisterLua(runtime);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Scripting::Builtins::Messages::Register(registrar);
+                registrar.Lua().Apply(runtime);
+            }
         });
         lua.AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
             Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);

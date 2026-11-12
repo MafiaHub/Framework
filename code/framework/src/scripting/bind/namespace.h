@@ -136,7 +136,7 @@ namespace Framework::Scripting::Bind {
         // protected call.
         void MaterialiseLua(lua_State *L, Side runtime, const RuntimeConstants &constants = {}) const;
 
-        // MaterialiseLua, under the name the RegisterLua of a builtin calls for a class too.
+        // MaterialiseLua, under the name a Registrar calls for a class too.
         void RegisterLuaGlobal(lua_State *L, Side runtime, const RuntimeConstants &constants = {}) const {
             MaterialiseLua(L, runtime, constants);
         }

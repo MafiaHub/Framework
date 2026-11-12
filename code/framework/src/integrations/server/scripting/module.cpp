@@ -32,6 +32,7 @@
 #include <scripting/builtins/text_label.h>
 #include <scripting/engine_scope.h>
 #include <scripting/event_metadata.h>
+#include <scripting/lua/lua_builtins.h>
 #include <scripting/lua/lua_runtime.h>
 #include <scripting/scripting_catalog.h>
 #include <scripting/timer_metadata.h>
@@ -172,27 +173,23 @@ namespace Framework::Integrations::Server::Scripting {
         // The engine installs the timers without a binding; declare them for it.
         Framework::Scripting::RegisterTimerMetadata(Framework::Scripting::GetScriptingCatalog(isolate), /*isClient*/ false);
 
-        // Every builtin registers at the global root (new Vector3, not new Core.Vector3).
-        Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
-
-        _resourceManager->GetEvents().Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Messages::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Imports::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Exports::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
-        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, false, _modVersion);
-        Framework::Scripting::Builtins::Chat::Register(isolate, global);
-        Builtins::Voice::Register(isolate, global);
-        Builtins::PendingConnection::Register(isolate);
+        // Each builtin registers in the isolate and records what every Lua state is given. Every builtin registers
+        // at the global root (new Vector3, not new Core.Vector3).
+        Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Server);
+        Framework::Scripting::Builtins::RegisterShared(registrar, Framework::Scripting::Bind::Languages::All, *_resourceManager, _modVersion);
+        Framework::Scripting::Builtins::Chat::Register(registrar);
+        Builtins::Voice::Register(registrar);
+        Builtins::PendingConnection::Register(registrar);
+        _luaBindings = registrar.Lua();
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework JS bindings");
     }
 
     void ServerScriptingModule::RegisterLuaBindings(Framework::Scripting::LuaRuntime &runtime) {
-        Framework::Scripting::Builtins::RegisterSharedLua(runtime, _resourceManager.get(), _modVersion);
-        Framework::Scripting::Builtins::Chat::RegisterLua(runtime);
-        Builtins::Voice::RegisterLua(runtime);
-        Builtins::PendingConnection::RegisterLua(runtime);
+        // As the isolates are told through the console. Forgotten when the runtime goes (WatchLuaRuntimes), and
+        // when the manager does.
+        Framework::Scripting::Bind::SetCallResourceManager(&runtime, _resourceManager.get());
+        _luaBindings.Apply(runtime);
 
         // What a project added, after the builtins it may build on.
         // Each one is called through a copy: a setup may add another, which moves the ones in the list. The one it

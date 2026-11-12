@@ -123,10 +123,8 @@ namespace Framework::Scripting::Builtins {
         });
     }
 
-    void Quaternion::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        v8pp::class_<Quaternion> &cls = GetClass(isolate);
-        auto ctx                      = isolate->GetCurrentContext();
-        global->Set(ctx, v8pp::to_v8(isolate, "Quaternion"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
+    void Quaternion::Register(Bind::Registrar &registrar, Bind::Languages languages) {
+        registrar.Global(Definition(), languages);
     }
 
     v8::Local<v8::Object> Quaternion::NewInstance(v8::Isolate *isolate, const glm::quat &value) {
@@ -136,10 +134,6 @@ namespace Framework::Scripting::Builtins {
 
     void Quaternion::UnregisterIsolate(v8::Isolate *isolate) {
         _classes.Unregister(isolate);
-    }
-
-    void Quaternion::RegisterLua(lua_State *L, Bind::Side side) {
-        Definition().RegisterLuaGlobal(L, side);
     }
 
 } // namespace Framework::Scripting::Builtins

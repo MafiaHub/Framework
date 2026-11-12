@@ -12,7 +12,6 @@
 
 #include <core_modules.h>
 #include <scripting/bind/v8_backend.h>
-#include <scripting/lua/lua_runtime.h>
 #include <scripting/scripting_catalog.h>
 #include <scripting/value_transfer.h>
 
@@ -263,12 +262,13 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             });
     }
 
-    void PendingConnection::RegisterLua(Framework::Scripting::LuaRuntime &runtime) {
-        Definition().MaterialiseLua(runtime.State(), runtime.Options().side);
-    }
+    void PendingConnection::Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages) {
+        registrar.Type(Definition(), languages);
+        if (!registrar.HasJavaScript(languages)) {
+            return;
+        }
 
-    void PendingConnection::Register(v8::Isolate *isolate) {
-        auto &catalog = Framework::Scripting::GetScriptingCatalog(isolate);
+        auto &catalog = Framework::Scripting::GetScriptingCatalog(registrar.Isolate());
 
         catalog.data_type("EventMap")
             .add_property(ConnectionGate::kEventName, "[connection: PendingConnection]",

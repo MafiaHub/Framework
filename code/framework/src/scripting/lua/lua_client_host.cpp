@@ -8,8 +8,10 @@
 
 #include "lua_client_host.h"
 
+#include "lua_builtins.h"
 #include "lua_runtime.h"
 
+#include "../bind/call.h"
 #include "../builtins/builtins.h"
 #include "../resource/resource_manager.h"
 
@@ -28,7 +30,10 @@ namespace Framework::Scripting {
 
         // The manager is asked for when a state is created, which only the manager of that moment does.
         _engine.SetRuntimeSetupCallback([this](LuaRuntime &runtime) {
-            Builtins::RegisterSharedLua(runtime, _engine.GetResourceManager(), _modVersion);
+            // As the isolates are told through the console. Forgotten when the runtime goes (WatchLuaRuntimes), and
+            // when the manager does.
+            Bind::SetCallResourceManager(&runtime, _engine.GetResourceManager());
+            _shared.Apply(runtime);
             // Each one called through a copy: a setup may add another, which moves the ones in the list. The one
             // it adds runs in this state too.
             for (size_t i = 0; i < _setups.size(); ++i) {
@@ -43,7 +48,9 @@ namespace Framework::Scripting {
     }
 
     ScriptingError LuaClientHost::Init(ResourceManager &manager, const std::string &modVersion) {
-        _modVersion = modVersion;
+        Bind::Registrar registrar;
+        Builtins::RegisterShared(registrar, Bind::Languages::Lua, manager, modVersion);
+        _shared = registrar.Lua();
         if (_engine.Init() != ScriptingError::SCRIPTING_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to initialize Lua engine: {}", _engine.GetLastError());
             return ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;

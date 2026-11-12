@@ -11,7 +11,6 @@
 #include "../bind/v8_callable.h"
 #include "../engine_helpers.h"
 #include "../function_references.h"
-#include "../lua/lua_runtime.h"
 #include "../resource/resource_manager.h"
 #include "../resource_monitor.h"
 #include "../script_log.h"
@@ -593,21 +592,20 @@ namespace Framework::Scripting::Builtins {
         return definition;
     }
 
-    void Events::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager, bool isClient) {
-        _resourceManager = resourceManager;
-        {
-            std::scoped_lock lock(BindingsMutex());
-            Bindings()[isolate] = {this, resourceManager};
+    void Events::Register(Bind::Registrar &registrar, Bind::Languages languages, ResourceManager *resourceManager) {
+        if (registrar.HasJavaScript(languages)) {
+            v8::Isolate *isolate = registrar.Isolate();
+            _resourceManager     = resourceManager;
+            {
+                std::scoped_lock lock(BindingsMutex());
+                Bindings()[isolate] = {this, resourceManager};
+            }
+            // The owner of a handler is asked of the manager of the runtime.
+            if (resourceManager != nullptr) {
+                Bind::SetCallResourceManager(isolate, resourceManager);
+            }
         }
-        // The owner of a handler is asked of the manager of the runtime.
-        if (resourceManager != nullptr) {
-            Bind::SetCallResourceManager(isolate, resourceManager);
-        }
-        Definition().MaterialiseV8(isolate, context, target, GetScriptingCatalog(isolate), isClient ? Bind::Side::Client : Bind::Side::Server);
-    }
-
-    void Events::RegisterLua(LuaRuntime &runtime) {
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
+        registrar.Global(Definition(), languages);
     }
 
     std::string Events::DescribeFailures(std::string_view message, const std::vector<std::string> &errors) {

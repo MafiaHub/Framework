@@ -10,6 +10,7 @@
 
 #include "lua_engine.h"
 
+#include "../bind/registrar.h"
 #include "../errors.h"
 
 #include <functional>
@@ -60,7 +61,8 @@ namespace Framework::Scripting {
 
       private:
         LuaEngine _engine;
-        std::string _modVersion;
+        // The shared builtins, as Init registered them in Lua.
+        Bind::LuaBindings _shared;
         std::vector<std::function<void(LuaRuntime &)>> _setups;
     };
 } // namespace Framework::Scripting

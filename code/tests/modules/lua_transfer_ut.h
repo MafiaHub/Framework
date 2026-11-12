@@ -258,7 +258,10 @@ namespace LuaTransferTest {
             Framework::Scripting::SetScriptingCatalog(js->GetIsolate(), "lua_transfer/" + std::to_string(++count));
             Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
                 v8::Local<v8::Object> global = context->Global();
-                Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
+                {
+                    Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), global);
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                }
                 _ticket = TicketDefinition().MaterialiseV8(isolate, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Server);
                 _vip    = VipTicketDefinition().MaterialiseV8(isolate, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Server);
                 _plain  = PlainDefinition().MaterialiseV8(isolate, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Server);
@@ -270,7 +273,11 @@ namespace LuaTransferTest {
 
             for (Framework::Scripting::LuaRuntime *runtime : {&lua, &other}) {
                 lua_State *L = runtime->State();
-                Framework::Scripting::Builtins::RegisterValueTypesLua(L, Framework::Scripting::Bind::Side::Server);
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                    registrar.Lua().Apply(L, Framework::Scripting::Bind::Side::Server);
+                }
                 TicketDefinition().RegisterLuaGlobal(L, Framework::Scripting::Bind::Side::Server);
                 VipTicketDefinition().RegisterLuaGlobal(L, Framework::Scripting::Bind::Side::Server);
                 PlainDefinition().RegisterLuaGlobal(L, Framework::Scripting::Bind::Side::Server);

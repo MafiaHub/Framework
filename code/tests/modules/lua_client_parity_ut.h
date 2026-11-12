@@ -71,13 +71,14 @@ namespace LuaClientParityTest {
                 Framework::Scripting::SetScriptingCatalog(isolate, "parity-client");
                 v8pp::metadata::registry &registry = Framework::Scripting::GetScriptingCatalog(isolate);
 
-                Framework::Integrations::Client::Scripting::Builtins::RegisterSharedBuiltins(isolate, context, global, &manager, "");
-                Framework::Integrations::Client::Scripting::Builtins::RegisterClientBuiltins(isolate, context, global, &manager);
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Client);
+                Framework::Integrations::Client::Scripting::Builtins::RegisterSharedBuiltins(registrar, manager, "");
+                Framework::Integrations::Client::Scripting::Builtins::RegisterClientBuiltins(registrar, Framework::Scripting::Bind::Languages::All, &manager);
 
                 Framework::Scripting::Builtins::Entity::GetClass(isolate);
                 Framework::Scripting::Builtins::Player::GetClass(isolate);
                 Framework::Scripting::Builtins::StateBag::GetClass(isolate);
-                Framework::Scripting::Builtins::TextLabel::Register(isolate, global);
+                Framework::Scripting::Builtins::TextLabel::Register(registrar);
 
                 catalog = nlohmann::json::parse(v8pp::metadata::to_json(registry), nullptr, /*allow_exceptions*/ false);
             }
@@ -94,7 +95,11 @@ namespace LuaClientParityTest {
         bool ready = false;
 
         Stage() {
-            client.lua.AddRuntimeSetup(&Framework::Integrations::Client::Scripting::Builtins::RegisterClientBuiltinsLua);
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Integrations::Client::Scripting::Builtins::RegisterClientBuiltins(registrar);
+            client.lua.AddRuntimeSetup([bindings = registrar.Lua()](Framework::Scripting::LuaRuntime &runtime) {
+                bindings.Apply(runtime);
+            });
             ready = client.Init() && LuaClientTest::Mount("lua", R"("clientScripts":["client.lua"])", {{"client.lua", ""}}).empty() && client.Start("lua").empty();
         }
 

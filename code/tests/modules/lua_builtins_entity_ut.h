@@ -58,8 +58,16 @@ namespace LuaBuiltinsEntityTest {
             });
             engine.SetRuntimeSetupCallback([side, manager](Framework::Scripting::LuaRuntime &runtime) {
                 Framework::Scripting::Bind::SetCallResourceManager(&runtime, manager);
-                Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), side);
-                Framework::Scripting::Builtins::Entity::RegisterLua(runtime);
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                    registrar.Lua().Apply(runtime.State(), side);
+                }
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Scripting::Builtins::Entity::Register(registrar);
+                    registrar.Lua().Apply(runtime);
+                }
             });
             ready = engine.Init() == Framework::Scripting::ScriptingError::SCRIPTING_NONE && engine.CreateResourceRuntime(kLuaResource);
         }
@@ -91,8 +99,11 @@ namespace LuaBuiltinsEntityTest {
             Framework::Scripting::SetScriptingCatalog(js.Isolate(), "lua_builtins_entity/" + std::to_string(++count));
             Framework::Scripting::SetScriptingEnvironment(js.Isolate(), isClient);
             js.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-                Framework::Scripting::Builtins::RegisterValueTypes(isolate, context->Global());
-                Framework::Scripting::Builtins::Entity::Register(isolate, context->Global());
+                {
+                    Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), context->Global());
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                    Framework::Scripting::Builtins::Entity::Register(registrar);
+                }
                 Framework::Scripting::Bind::SetCallResourceManager(isolate, &manager);
             });
             manager.SetCurrentResourceContext(kJsResource);
@@ -189,7 +200,10 @@ namespace LuaBuiltinsEntityTest {
                 Framework::Scripting::EngineScope scope(engine);
                 v8::Isolate *isolate           = scope.Isolate();
                 v8::Local<v8::Context> context = scope.Context();
-                Framework::Scripting::Builtins::Entity::Register(isolate, context->Global());
+                {
+                    Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), context->Global());
+                    Framework::Scripting::Builtins::Entity::Register(registrar);
+                }
                 context->Global()->Set(context, v8pp::to_v8(isolate, "stop"), v8::Function::New(context, JavaScriptStop, v8::External::New(isolate, this)).ToLocalChecked()).Check();
             });
             if (registered != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
@@ -371,7 +385,10 @@ MODULE(lua_builtins_entity, {
         avatar->ownerGUID    = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(72));
         const std::string id = std::to_string(avatar->GetNetworkID());
         stage.js.js.Enter([](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-            Framework::Scripting::Builtins::Player::Register(isolate, context->Global());
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), context->Global());
+                Framework::Scripting::Builtins::Player::Register(registrar);
+            }
         });
 
         EQUALS(stage.js.Eval("globalThis.p = new Player(" + id + "); [p instanceof Entity, p.toString(), String(p.id), p.virtualWorld].join(' ')"), "true Player{ id: " + id + " } " + id + " 0");

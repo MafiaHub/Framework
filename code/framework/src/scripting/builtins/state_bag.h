@@ -10,6 +10,7 @@
 
 #include "../bind/callable.h"
 #include "../bind/class.h"
+#include "../bind/registrar.h"
 #include "../class_cache.h"
 
 #include <networking/replication/replication_manager.h>
@@ -26,7 +27,6 @@
 #include <unordered_map>
 
 namespace Framework::Scripting {
-    class LuaRuntime;
     class ResourceManager;
 } // namespace Framework::Scripting
 
@@ -55,10 +55,9 @@ namespace Framework::Scripting::Builtins {
         // Drops the class of the isolate, the subscriptions its scripts hold and those whose runtime is gone.
         static void UnregisterIsolate(v8::Isolate *isolate);
 
-        // Makes the class exist in the state of a Lua runtime, for `entity.state` to give. Like JavaScript, Lua
-        // gets no global: there is nothing for a script to construct. A failure, such as the state running out
-        // of memory, is a Lua error: call it protected, or it is a panic.
-        static void RegisterLua(LuaRuntime &runtime);
+        // Makes the class known to the runtime, for `entity.state` to give. No language gets a global: there is
+        // nothing for a script to construct.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
 
         // Drops the change subscriptions of a stopping resource of `manager`, mirroring
         // Events::CleanupResource. Without it a stopped resource's handler keeps running, and its

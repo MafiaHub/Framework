@@ -9,12 +9,9 @@
 #pragma once
 
 #include "../bind/namespace.h"
+#include "../bind/registrar.h"
 
 #include <v8.h>
-
-namespace Framework::Scripting {
-    class LuaRuntime;
-} // namespace Framework::Scripting
 
 namespace Framework::Scripting::Builtins {
     // Global Chat, sending the framework ChatMessage RPC, for JavaScript and Lua. Targets players through the
@@ -29,9 +26,7 @@ namespace Framework::Scripting::Builtins {
         // Chat, declared once for both languages.
         static const Bind::Namespace &Definition();
 
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
-
-        // Publishes Chat as a global of a Lua runtime.
-        static void RegisterLua(LuaRuntime &runtime);
+        // Publishes Chat as a global in the languages of `languages`, in the runtimes of a server.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
     };
 } // namespace Framework::Scripting::Builtins

@@ -7,7 +7,6 @@
  */
 
 #include "console.h"
-#include "../lua/lua_runtime.h"
 #include "../scripting_catalog.h"
 
 #include <v8pp/convert.hpp>
@@ -56,22 +55,23 @@ namespace Framework::Scripting::Builtins {
         return definition;
     }
 
-    void Console::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *resourceManager) {
+    void Console::Register(Bind::Registrar &registrar, Bind::Languages languages, ResourceManager *resourceManager) {
+        v8::Isolate *isolate = registrar.Isolate();
         // The functions carry no manager of their own: a call asks the one of its runtime for its resource.
-        if (resourceManager != nullptr) {
+        if (registrar.HasJavaScript(languages) && resourceManager != nullptr) {
             Bind::SetCallResourceManager(isolate, resourceManager);
         }
-        v8::Local<v8::Object> console = Definition().MaterialiseV8(isolate, context, context->Global(), GetScriptingCatalog(isolate), ScriptingSide(isolate));
+        v8::Local<v8::Object> console = registrar.Global(Definition(), languages);
+        if (console.IsEmpty()) {
+            return;
+        }
 
         // To JavaScript info is log itself under a second name, as it always was (console.log === console.info).
+        v8::Local<v8::Context> context = registrar.Context();
         v8::Local<v8::Value> log;
         if (console->Get(context, v8::String::NewFromUtf8Literal(isolate, "log")).ToLocal(&log)) {
             console->Set(context, v8::String::NewFromUtf8Literal(isolate, "info"), log).Check();
         }
-    }
-
-    void Console::RegisterLua(LuaRuntime &runtime) {
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
     }
 
     std::string Console::FormatValue(const Bind::Value &value) {

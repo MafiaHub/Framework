@@ -9,11 +9,11 @@
 #pragma once
 
 #include <scripting/bind/namespace.h>
+#include <scripting/bind/registrar.h>
 
 #include <v8.h>
 
 namespace Framework::Scripting {
-    class LuaRuntime;
     class ResourceManager;
 } // namespace Framework::Scripting
 
@@ -28,10 +28,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // Nametags, declared once for both languages.
         static const Framework::Scripting::Bind::Namespace &Definition();
 
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager);
-
-        // Publishes Nametags as a global of a Lua runtime.
-        static void RegisterLua(Framework::Scripting::LuaRuntime &runtime);
+        // Publishes Nametags as a global in the languages of `languages`, in the runtimes of a client.
+        static void Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages = Framework::Scripting::Bind::Languages::All, Framework::Scripting::ResourceManager *resourceManager = nullptr);
 
         // Drops every label: they are keyed by network id, which means nothing past the session.
         static void Shutdown();

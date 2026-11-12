@@ -53,12 +53,15 @@ namespace ClientCatalogGolden {
                 Framework::Scripting::EngineScope scope(&engine);
                 Framework::Scripting::SetScriptingCatalog(scope.Isolate(), "golden-client");
                 Framework::Scripting::SetScriptingEnvironment(scope.Isolate(), /*isClient*/ true);
-                Framework::Integrations::Client::Scripting::Builtins::Web::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-                Framework::Integrations::Client::Scripting::Builtins::Keybinds::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-                Framework::Integrations::Client::Scripting::Builtins::Chat::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-                Framework::Integrations::Client::Scripting::Builtins::Discord::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-                Framework::Integrations::Client::Scripting::Builtins::Voice::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-                Framework::Integrations::Client::Scripting::Builtins::Nametags::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
+                {
+                    Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), scope.Context(), scope.Context()->Global(), Framework::Scripting::Bind::Side::Client);
+                    Framework::Integrations::Client::Scripting::Builtins::Web::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+                    Framework::Integrations::Client::Scripting::Builtins::Keybinds::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+                    Framework::Integrations::Client::Scripting::Builtins::Chat::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+                    Framework::Integrations::Client::Scripting::Builtins::Discord::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+                    Framework::Integrations::Client::Scripting::Builtins::Voice::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+                    Framework::Integrations::Client::Scripting::Builtins::Nametags::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+                }
                 catalog = nlohmann::json::parse(v8pp::metadata::to_json(Framework::Scripting::GetScriptingCatalog(scope.Isolate())), nullptr, /*allow_exceptions*/ false);
             }
             Framework::Integrations::Client::Scripting::Builtins::Web::Shutdown();

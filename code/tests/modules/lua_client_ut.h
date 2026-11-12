@@ -160,9 +160,18 @@ namespace LuaClientTest {
 
             Framework::Scripting::EngineScope scope(&v8);
             Framework::Scripting::SetScriptingEnvironment(scope.Isolate(), /*isClient*/ true);
-            Framework::Scripting::Builtins::RegisterValueTypes(scope.Isolate(), scope.Context()->Global());
-            manager->GetEvents().Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), manager.get(), /*isClient*/ true);
-            Framework::Scripting::Builtins::Console::Register(scope.Isolate(), scope.Context(), manager.get());
+            {
+                Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), scope.Isolate()->GetCurrentContext(), scope.Context()->Global());
+                Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+            }
+            {
+                Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), scope.Context(), scope.Context()->Global(), Framework::Scripting::Bind::Side::Client);
+                manager->GetEvents().Register(registrar, Framework::Scripting::Bind::Languages::All, manager.get());
+            }
+            {
+                Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), scope.Context(), scope.Context()->Global());
+                Framework::Scripting::Builtins::Console::Register(registrar, Framework::Scripting::Bind::Languages::All, manager.get());
+            }
             return true;
         }
 

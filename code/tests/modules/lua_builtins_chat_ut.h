@@ -29,9 +29,16 @@ namespace LuaBuiltinsChatTest {
     // Gives the runtimes of a stage of the Player tests the Chat of the server module.
     inline void GiveChat(LuaBuiltinsPlayerTest::JsSide &js, LuaBuiltinsPlayerTest::LuaSide &lua) {
         js.js.Enter([](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-            Framework::Scripting::Builtins::Chat::Register(isolate, context->Global());
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), context->Global(), Framework::Scripting::Bind::Side::Server);
+                Framework::Scripting::Builtins::Chat::Register(registrar);
+            }
         });
-        Framework::Scripting::Builtins::Chat::RegisterLua(lua.Runtime());
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Scripting::Builtins::Chat::Register(registrar);
+            registrar.Lua().Apply(lua.Runtime());
+        }
     }
 
     // A server two clients are connected to over loopback, published as the network peer the builtins send

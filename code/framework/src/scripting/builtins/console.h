@@ -9,13 +9,13 @@
 #pragma once
 
 #include "../bind/namespace.h"
+#include "../bind/registrar.h"
 
 #include <v8.h>
 
 #include <string>
 
 namespace Framework::Scripting {
-    class LuaRuntime;
     class ResourceManager;
 } // namespace Framework::Scripting
 
@@ -29,7 +29,7 @@ namespace Framework::Scripting::Builtins {
      * - console.error() -> error level
      * - console.debug() -> debug level
      *
-     * JavaScript writes to the Framework logger. Lua writes where its print() does (LuaRuntime::WriteOutput), so
+     * JavaScript writes to the Framework logger. Lua writes where its print() does, so
      * a line of it is cut at the bound of a printed one, and the arguments past that bound are not formatted.
      *
      * console.info is console.log itself in JavaScript, as it always was. In Lua they are two functions.
@@ -40,18 +40,16 @@ namespace Framework::Scripting::Builtins {
         static const Bind::Namespace &Definition();
 
         /**
-         * Register the console override in a context.
-         * @param isolate V8 isolate
-         * @param context Target context
-         * @param resourceManager Resource manager for getting current resource context. The console asks the
-         *        manager its isolate answers with (Bind::SetCallResourceManager), which this sets. Null sets none:
-         *        the console then names its resource through the manager the isolate was given before, or the
-         *        scripting module's, where a console registered without a manager used to write without a name.
+         * Publish the console as a global in the languages of `languages`.
+         * @param registrar Where the builtins are registered
+         * @param languages The languages to register it in
+         * @param resourceManager Resource manager for getting current resource context. In JavaScript the console
+         *        asks the manager its isolate answers with (Bind::SetCallResourceManager), which this sets. Null
+         *        sets none: the console then names its resource through the manager the isolate was given before,
+         *        or the scripting module's, where a console registered without a manager used to write without a
+         *        name. A Lua runtime is told its manager by the scripting module.
          */
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *resourceManager);
-
-        // Publishes the console as a global of a Lua runtime.
-        static void RegisterLua(LuaRuntime &runtime);
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All, ResourceManager *resourceManager = nullptr);
 
         // Format a single script value as the console writes it, in either language
         static std::string FormatValue(const Bind::Value &value);

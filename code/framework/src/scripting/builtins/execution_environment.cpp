@@ -7,7 +7,6 @@
  */
 
 #include "execution_environment.h"
-#include "../lua/lua_runtime.h"
 #include "../scripting_catalog.h"
 #include <utils/version.h>
 
@@ -28,13 +27,10 @@ namespace Framework::Scripting::Builtins {
         return definition;
     }
 
-    void ExecutionEnvironment::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, bool isClient, const std::string &modVersion) {
-        Definition().MaterialiseV8(isolate, context, target, GetScriptingCatalog(isolate), isClient ? Bind::Side::Client : Bind::Side::Server, ConstantsOf(isClient, modVersion));
-    }
-
-    void ExecutionEnvironment::RegisterLua(LuaRuntime &runtime, const std::string &modVersion) {
-        const Bind::Side side = runtime.Options().side;
-        Definition().RegisterLuaGlobal(runtime.State(), side, ConstantsOf(side == Bind::Side::Client, modVersion));
+    void ExecutionEnvironment::Register(Bind::Registrar &registrar, Bind::Languages languages, const std::string &modVersion) {
+        registrar.Global(Definition(), languages, [modVersion](Bind::Side side) {
+            return ConstantsOf(side == Bind::Side::Client, modVersion);
+        });
     }
 
 } // namespace Framework::Scripting::Builtins

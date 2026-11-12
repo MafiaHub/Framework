@@ -691,8 +691,8 @@ namespace Framework::Scripting::Bind {
             Detail::LuaPublishClass(L, *_record, targetIndex);
         }
 
-        // MaterialiseLua, then the class table as a global of the state under the name of the class: what the
-        // RegisterLua of a builtin does. In a state that already has the class, whatever the side, it only puts it
+        // MaterialiseLua, then the class table as a global of the state under the name of the class: what
+        // Registrar::Global applies to a Lua state. In a state that already has the class, whatever the side, it only puts it
         // back under its name. The global is set raw, as PublishLua sets it. Runs unprotected, as MaterialiseLua: a
         // Lua error here panics unless the caller is in a protected call.
         void RegisterLuaGlobal(lua_State *L, Side runtime) const {

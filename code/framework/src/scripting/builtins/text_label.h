@@ -96,13 +96,11 @@ namespace Framework::Scripting::Builtins {
 
         static v8pp::class_<TextLabel> &GetClass(v8::Isolate *isolate);
 
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+        // Publishes the class as a global in the languages of `languages`. In Lua Entity, which it inherits, is
+        // published with it, and Color, which an option reads a colour from, is made to exist in the state.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
 
         static void UnregisterIsolate(v8::Isolate *isolate);
-
-        // Publishes the class as a global of the state of a Lua runtime, with Entity, which it inherits. A failure,
-        // such as the state running out of memory, is a Lua error: call it protected, or it is a panic.
-        static void RegisterLua(LuaRuntime &runtime);
 
       private:
         // Describes TextLabelOptions in the catalog of the isolate, for the generated declarations.

@@ -65,8 +65,11 @@ namespace Framework::Integrations::Client::Scripting {
         // Lua scripts come from the server as the JavaScript ones do: sandboxed, with the memory and the time of
         // a client state.
         _lua = std::make_unique<Framework::Scripting::LuaClientHost>(Framework::Scripting::LuaEngineOptions::Client());
-        // The builtins only a client has, next to the shared ones of every state.
-        _lua->AddRuntimeSetup(&Builtins::RegisterClientBuiltinsLua);
+        // The builtins only a client has, next to the shared ones of every state, as RegisterFrameworkBindings
+        // recorded them.
+        _lua->AddRuntimeSetup([this](Framework::Scripting::LuaRuntime &runtime) {
+            _luaBindings.Apply(runtime);
+        });
     }
 
     ClientScriptingModule::~ClientScriptingModule() {
@@ -160,8 +163,11 @@ namespace Framework::Integrations::Client::Scripting {
         Framework::Scripting::SetScriptingCatalog(isolate, "framework-client");
         // What a client shares with a server, then the client-only surface: both named in builtins/builtins.h,
         // where the parity gate of the tests reads them.
-        Builtins::RegisterSharedBuiltins(isolate, context, global, _resourceManager.get(), _modVersion);
-        Builtins::RegisterClientBuiltins(isolate, context, global, _resourceManager.get());
+        // Each builtin registers in the isolate and records what every Lua state is given.
+        Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Client);
+        Builtins::RegisterSharedBuiltins(registrar, *_resourceManager, _modVersion);
+        Builtins::RegisterClientBuiltins(registrar, Framework::Scripting::Bind::Languages::All, _resourceManager.get());
+        _luaBindings = registrar.Lua();
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
     }

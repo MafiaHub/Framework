@@ -12,6 +12,7 @@
 
 #include <scripting/bind/callable.h>
 #include <scripting/bind/namespace.h>
+#include <scripting/bind/registrar.h>
 
 #include <v8.h>
 
@@ -23,7 +24,6 @@
 #include <vector>
 
 namespace Framework::Scripting {
-    class LuaRuntime;
     class ResourceManager;
 } // namespace Framework::Scripting
 
@@ -60,10 +60,8 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // Web, declared once for both languages.
         static const Framework::Scripting::Bind::Namespace &Definition();
 
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager);
-
-        // Publishes Web as a global of a Lua runtime.
-        static void RegisterLua(Framework::Scripting::LuaRuntime &runtime);
+        // Publishes Web as a global in the languages of `languages`, in the runtimes of a client.
+        static void Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages = Framework::Scripting::Bind::Languages::All, Framework::Scripting::ResourceManager *resourceManager = nullptr);
 
         // Drains queued browser events into script. Once per scripting tick.
         static void Update();

@@ -28,7 +28,11 @@
 #include <scripting/timer_metadata.h>
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
-    void RegisterSharedBuiltins(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> global, Framework::Scripting::ResourceManager *manager, const std::string &modVersion) {
+    void RegisterSharedBuiltins(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::ResourceManager &manager, const std::string &modVersion) {
+        if (!registrar.HasJavaScript()) {
+            return;
+        }
+        v8::Isolate *isolate = registrar.Isolate();
         Framework::Scripting::SetScriptingEnvironment(isolate, /*isClient*/ true);
 
         // The events the framework raises; a mod's catalog blends them into its own EventMap.
@@ -37,33 +41,26 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // The engine installs the timers without a binding; declare them for it.
         Framework::Scripting::RegisterTimerMetadata(Framework::Scripting::GetScriptingCatalog(isolate), /*isClient*/ true);
 
-        // Every builtin registers at the global root (new Vector3, not new Core.Vector3).
-        Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
+        // Every builtin registers at the global root (new Vector3, not new Core.Vector3). The Lua host registers
+        // the same builtins in Lua (Framework::Scripting::Builtins::RegisterShared).
+        const Framework::Scripting::Bind::Languages languages = Framework::Scripting::Bind::Languages::JavaScript;
+        Framework::Scripting::Builtins::RegisterValueTypes(registrar, languages);
 
-        manager->GetEvents().Register(isolate, context, global, manager, /*isClient*/ true);
-        Framework::Scripting::Builtins::Messages::Register(isolate, context, global, manager);
-        Framework::Scripting::Builtins::Exports::Register(isolate, context, global, manager);
-        Framework::Scripting::Builtins::Imports::Register(isolate, context, global, manager);
-        Framework::Scripting::Builtins::Console::Register(isolate, context, manager);
-        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, true, modVersion);
+        manager.GetEvents().Register(registrar, languages, &manager);
+        Framework::Scripting::Builtins::Messages::Register(registrar, languages, &manager);
+        Framework::Scripting::Builtins::Exports::Register(registrar, languages, &manager);
+        Framework::Scripting::Builtins::Imports::Register(registrar, languages, &manager);
+        Framework::Scripting::Builtins::Console::Register(registrar, languages, &manager);
+        Framework::Scripting::Builtins::ExecutionEnvironment::Register(registrar, languages, modVersion);
     }
 
-    void RegisterClientBuiltins(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> global, Framework::Scripting::ResourceManager *manager) {
-        Web::Register(isolate, context, global, manager);
-        Keybinds::Register(isolate, context, global, manager);
-        Chat::Register(isolate, context, global, manager);
-        Discord::Register(isolate, context, global, manager);
-        Voice::Register(isolate, context, global, manager);
-        Nametags::Register(isolate, context, global, manager);
-    }
-
-    void RegisterClientBuiltinsLua(Framework::Scripting::LuaRuntime &runtime) {
-        Web::RegisterLua(runtime);
-        Keybinds::RegisterLua(runtime);
-        Chat::RegisterLua(runtime);
-        Discord::RegisterLua(runtime);
-        Voice::RegisterLua(runtime);
-        Nametags::RegisterLua(runtime);
+    void RegisterClientBuiltins(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages, Framework::Scripting::ResourceManager *manager) {
+        Web::Register(registrar, languages, manager);
+        Keybinds::Register(registrar, languages, manager);
+        Chat::Register(registrar, languages, manager);
+        Discord::Register(registrar, languages, manager);
+        Voice::Register(registrar, languages, manager);
+        Nametags::Register(registrar, languages, manager);
     }
 
     std::vector<const Framework::Scripting::Bind::ClassDesc *> ClientLuaDefinitions() {

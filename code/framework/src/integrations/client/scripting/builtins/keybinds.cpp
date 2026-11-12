@@ -11,7 +11,6 @@
 
 #include "keybinds.h"
 
-#include <scripting/lua/lua_runtime.h>
 #include <scripting/resource/resource_manager.h>
 #include <scripting/script_log.h>
 #include <scripting/scripting_catalog.h>
@@ -111,21 +110,19 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         return definition;
     }
 
-    void Keybinds::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
-        {
-            std::scoped_lock lock(_mutex);
-            _buckets.clear();
+    void Keybinds::Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages, Framework::Scripting::ResourceManager *resourceManager) {
+        if (registrar.HasJavaScript(languages)) {
+            {
+                std::scoped_lock lock(_mutex);
+                _buckets.clear();
+            }
+            _sourceWasUnavailable = false;
+            _wheelCursor          = GetLastWheelNotch();
+
+            // So the calls of this isolate name their resource and its manager.
+            Framework::Scripting::Bind::SetCallResourceManager(registrar.Isolate(), resourceManager);
         }
-        _sourceWasUnavailable = false;
-        _wheelCursor          = GetLastWheelNotch();
-
-        // So the calls of this isolate name their resource and its manager.
-        Framework::Scripting::Bind::SetCallResourceManager(isolate, resourceManager);
-        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Client);
-    }
-
-    void Keybinds::RegisterLua(Framework::Scripting::LuaRuntime &runtime) {
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
+        registrar.Global(Definition(), languages);
     }
 
     void Keybinds::GetLabel(Framework::Scripting::Bind::Call &call) {

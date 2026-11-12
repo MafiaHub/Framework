@@ -64,9 +64,17 @@ namespace LuaBuiltinsCoreTest {
         // `memoryLimitBytes` is the cap of the state, or 0 for the one the engine gives by default.
         explicit LuaSide(Framework::Scripting::Bind::Side side = Framework::Scripting::Bind::Side::Server, const std::string &modVersion = kModVersion, size_t memoryLimitBytes = 0): engine(Options(side, memoryLimitBytes)) {
             engine.SetRuntimeSetupCallback([side, modVersion](Framework::Scripting::LuaRuntime &runtime) {
-                Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), side);
-                Framework::Scripting::Builtins::Console::RegisterLua(runtime);
-                Framework::Scripting::Builtins::ExecutionEnvironment::RegisterLua(runtime, modVersion);
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                    registrar.Lua().Apply(runtime.State(), side);
+                }
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Scripting::Builtins::Console::Register(registrar);
+                    Framework::Scripting::Builtins::ExecutionEnvironment::Register(registrar, Framework::Scripting::Bind::Languages::All, modVersion);
+                    registrar.Lua().Apply(runtime);
+                }
             });
             ready = engine.Init() == Framework::Scripting::ScriptingError::SCRIPTING_NONE && engine.CreateResourceRuntime(kResource);
         }
@@ -156,9 +164,15 @@ namespace LuaBuiltinsCoreTest {
             Framework::Scripting::SetScriptingCatalog(js.Isolate(), "lua_builtins_core/" + std::to_string(++count));
             Framework::Scripting::SetScriptingEnvironment(js.Isolate(), isClient);
             js.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-                Framework::Scripting::Builtins::RegisterValueTypes(isolate, context->Global());
-                Framework::Scripting::Builtins::Console::Register(isolate, context, &manager);
-                Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, context->Global(), isClient, modVersion);
+                {
+                    Framework::Scripting::Bind::Registrar registrar(isolate, context, context->Global());
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                    Framework::Scripting::Builtins::Console::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+                }
+                {
+                    Framework::Scripting::Bind::Registrar registrar(isolate, context, context->Global(), isClient ? Framework::Scripting::Bind::Side::Client : Framework::Scripting::Bind::Side::Server);
+                    Framework::Scripting::Builtins::ExecutionEnvironment::Register(registrar, Framework::Scripting::Bind::Languages::All, modVersion);
+                }
             });
             manager.SetCurrentResourceContext(kResource);
         }
@@ -379,7 +393,10 @@ MODULE(lua_builtins_core, {
         LuaBuiltinsCoreTest::JsRuntime js;
         const auto registerConsole = [&js](Framework::Scripting::ResourceManager *manager) {
             js.Enter([manager](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-                Framework::Scripting::Builtins::Console::Register(isolate, context, manager);
+                {
+                    Framework::Scripting::Bind::Registrar registrar(isolate, context, context->Global());
+                    Framework::Scripting::Builtins::Console::Register(registrar, Framework::Scripting::Bind::Languages::All, manager);
+                }
             });
         };
 
@@ -435,9 +452,13 @@ MODULE(lua_builtins_core, {
         EQUALS(lua.Eval("ExecutionEnvironment.modVersion == ''"), "true");
         EQUALS(js.Eval("ExecutionEnvironment.modVersion === ''"), "true");
 
-        // What RegisterLua gives a state when it is told none.
+        // What Register gives a state when it is told no mod version.
         Framework::Scripting::LuaRuntime runtime(LuaRuntimeTest::Options());
-        Framework::Scripting::Builtins::ExecutionEnvironment::RegisterLua(runtime);
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Scripting::Builtins::ExecutionEnvironment::Register(registrar);
+            registrar.Lua().Apply(runtime);
+        }
         EQUALS(LuaRuntimeTest::Eval(runtime, "ExecutionEnvironment.modVersion == '' and ExecutionEnvironment.isServer"), "true");
     });
 

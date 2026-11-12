@@ -17,6 +17,7 @@
 #include <function2/function2.hpp>
 
 #include <scripting/bind/descriptors.h>
+#include <scripting/bind/registrar.h>
 #include <scripting/lua/lua_engine.h>
 #include <scripting/module.h>
 #include <scripting/node_engine.h>
@@ -148,13 +149,15 @@ namespace Framework::Integrations::Server::Scripting {
         bool StartAllResources();
 
         /**
-         * Register the Framework SDK bindings in the engine.
+         * Register the Framework SDK bindings in the engine, and record what they are in Lua for
+         * RegisterLuaBindings.
          */
         void RegisterFrameworkBindings();
 
         /**
-         * Register the Framework SDK bindings in a resource's Lua runtime, then run the setups AddLuaRuntimeSetup
-         * was given. The Lua engine runs this inside every runtime it creates, in a protected call.
+         * Register the Framework SDK bindings, as RegisterFrameworkBindings recorded them, in a resource's Lua
+         * runtime, then run the setups AddLuaRuntimeSetup was given. The Lua engine runs this inside every runtime
+         * it creates, in a protected call.
          */
         void RegisterLuaBindings(Framework::Scripting::LuaRuntime &runtime);
 
@@ -184,6 +187,8 @@ namespace Framework::Integrations::Server::Scripting {
         std::unique_ptr<Framework::Scripting::LuaEngine> _luaEngine;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
         std::vector<fu2::function<void(Framework::Scripting::LuaRuntime &) const>> _luaRuntimeSetups;
+        // The Framework's builtins in Lua, as the last RegisterFrameworkBindings recorded them.
+        Framework::Scripting::Bind::LuaBindings _luaBindings;
         std::chrono::steady_clock::time_point _lastLuaTick {};
         uint64_t _waitRounds = 0;
         std::string _modVersion;

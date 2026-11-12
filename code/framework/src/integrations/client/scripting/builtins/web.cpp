@@ -20,7 +20,6 @@
 #include <scripting/engine.h>
 #include <scripting/engine_helpers.h>
 #include <scripting/engine_scope.h>
-#include <scripting/lua/lua_runtime.h>
 #include <scripting/lua/lua_value_walk.h>
 #include <scripting/resource/resource.h>
 #include <scripting/resource/resource_manager.h>
@@ -432,31 +431,30 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         return definition;
     }
 
-    void Web::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
-        {
-            std::scoped_lock lock(_mutex);
-            _handlers.clear();
-            _viewOwners.clear();
-            _pendingViewEvents.clear();
+    void Web::Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages, Framework::Scripting::ResourceManager *resourceManager) {
+        if (registrar.HasJavaScript(languages)) {
+            {
+                std::scoped_lock lock(_mutex);
+                _handlers.clear();
+                _viewOwners.clear();
+                _pendingViewEvents.clear();
+            }
+            // What a handler of the manager before this one still reports is no longer anybody's.
+            if (_managerLink != nullptr) {
+                _managerLink->manager = nullptr;
+            }
+            ForgetFailedOwners();
+            _resourceManager      = resourceManager;
+            _managerLink          = std::make_shared<ManagerLink>();
+            _managerLink->manager = resourceManager;
+
+            // So the calls of this isolate name their resource and its manager.
+            Framework::Scripting::Bind::SetCallResourceManager(registrar.Isolate(), resourceManager);
         }
-        // What a handler of the manager before this one still reports is no longer anybody's.
-        if (_managerLink != nullptr) {
-            _managerLink->manager = nullptr;
+        registrar.Global(Definition(), languages);
+        if (registrar.HasJavaScript(languages)) {
+            RegisterViewEventMetadata(registrar.Isolate());
         }
-        ForgetFailedOwners();
-        _resourceManager      = resourceManager;
-        _managerLink          = std::make_shared<ManagerLink>();
-        _managerLink->manager = resourceManager;
-
-        // So the calls of this isolate name their resource and its manager.
-        Framework::Scripting::Bind::SetCallResourceManager(isolate, resourceManager);
-        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Client);
-
-        RegisterViewEventMetadata(isolate);
-    }
-
-    void Web::RegisterLua(Framework::Scripting::LuaRuntime &runtime) {
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
     }
 
     void Web::RegisterViewEventMetadata(v8::Isolate *isolate) {

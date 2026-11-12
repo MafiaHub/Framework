@@ -8,7 +8,6 @@
 
 #include "chat.h"
 
-#include "../lua/lua_runtime.h"
 #include "../scripting_catalog.h"
 #include "color.h"
 #include "entity.h"
@@ -125,16 +124,7 @@ namespace Framework::Scripting::Builtins {
         return definition;
     }
 
-    void Chat::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        if (!isolate || global.IsEmpty()) {
-            return;
-        }
-        // Whoever registers this Chat gets its functions, as before the definition gave them a side: the
-        // client has a Chat of its own and does not come here.
-        Definition().MaterialiseV8(isolate, isolate->GetCurrentContext(), global, GetScriptingCatalog(isolate), Bind::Side::Server);
-    }
-
-    void Chat::RegisterLua(LuaRuntime &runtime) {
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
+    void Chat::Register(Bind::Registrar &registrar, Bind::Languages languages) {
+        registrar.Global(Definition(), languages);
     }
 } // namespace Framework::Scripting::Builtins

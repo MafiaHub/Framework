@@ -9,11 +9,11 @@
 #pragma once
 
 #include "../bind/class.h"
+#include "../bind/registrar.h"
 #include "../class_cache.h"
 
 #include <cstdint>
 #include <glm/glm.hpp>
-#include <lua.h>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -127,17 +127,13 @@ namespace Framework::Scripting::Builtins {
         // The class as scripts see it, declared once for both languages.
         static const Bind::Class<Color> &Definition();
 
-        // V8 Registration
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+        // Publishes the class as a global in the languages of `languages`.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
         static v8pp::class_<Color> &GetClass(v8::Isolate *isolate);
         // Wrap a native color as a JS Color, so C++ (e.g. the native SDK) can return
         // one to script. Mirrors Vector3/Quaternion::NewInstance.
         static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, const glm::vec4 &value);
         static void UnregisterIsolate(v8::Isolate *isolate);
-
-        // Lua Registration: publishes the class as a global of the state, which belongs to a runtime of side `side`.
-        // A failure, such as the state running out of memory, is a Lua error: call it protected, or it is a panic.
-        static void RegisterLua(lua_State *L, Bind::Side side);
 
       private:
         glm::vec4 _color;

@@ -9,13 +9,10 @@
 #pragma once
 
 #include "../bind/namespace.h"
+#include "../bind/registrar.h"
 
 #include <string>
 #include <v8.h>
-
-namespace Framework::Scripting {
-    class LuaRuntime;
-} // namespace Framework::Scripting
 
 namespace Framework::Scripting::Builtins {
 
@@ -35,21 +32,13 @@ namespace Framework::Scripting::Builtins {
         static const Bind::Namespace &Definition();
 
         /**
-         * Register the ExecutionEnvironment object on the target object.
-         * @param isolate V8 isolate
-         * @param context Target context
-         * @param target Object to attach ExecutionEnvironment to (e.g., the global root)
-         * @param isClient true if this is the client side, false for server
+         * Publish the ExecutionEnvironment object as a global in the languages of `languages`. The side of each
+         * runtime says which one it is.
+         * @param registrar Where the builtins are registered
+         * @param languages The languages to register it in
          * @param modVersion Local application's mod version; empty if unspecified
          */
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, bool isClient, const std::string &modVersion = {});
-
-        /**
-         * Publish the ExecutionEnvironment object as a global of a Lua runtime, whose side says which one it is.
-         * @param runtime Lua runtime
-         * @param modVersion Local application's mod version; empty if unspecified
-         */
-        static void RegisterLua(LuaRuntime &runtime, const std::string &modVersion = {});
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All, const std::string &modVersion = {});
     };
 
 } // namespace Framework::Scripting::Builtins

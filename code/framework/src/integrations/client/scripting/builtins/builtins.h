@@ -9,14 +9,12 @@
 #pragma once
 
 #include <scripting/bind/descriptors.h>
-
-#include <v8.h>
+#include <scripting/bind/registrar.h>
 
 #include <string>
 #include <vector>
 
 namespace Framework::Scripting {
-    class LuaRuntime;
     class ResourceManager;
 } // namespace Framework::Scripting
 
@@ -26,18 +24,17 @@ namespace Framework::Scripting {
 // has before them is named here too. It is apart from the module,
 // which builds on Windows only, so that the tests hold exactly this list to the parity gate.
 namespace Framework::Integrations::Client::Scripting::Builtins {
-    // Registers in the isolate what a client shares with a server, in the client's flavour: the environment, the
-    // metadata of the events and the timers, the value types, Events, Messages, Exports, Imports, Console and
-    // the execution environment. Call with `context` entered, once the catalog of the isolate is set
-    // (SetScriptingCatalog) and before RegisterClientBuiltins. It is here, and not in the module, so that a
-    // shared builtin added to a client is one the parity gate sees.
-    void RegisterSharedBuiltins(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> global, Framework::Scripting::ResourceManager *manager, const std::string &modVersion);
+    // Registers in the isolate of `registrar` what a client shares with a server, in the client's flavour: the
+    // environment, the metadata of the events and the timers, the value types, Events, Messages, Exports, Imports,
+    // Console and the execution environment. JavaScript only: a Lua state gets them from its host
+    // (Framework::Scripting::LuaClientHost). Call with the context of the registrar entered, once the catalog of the
+    // isolate is set (SetScriptingCatalog) and before RegisterClientBuiltins. It is here, and not in the module, so
+    // that a shared builtin added to a client is one the parity gate sees.
+    void RegisterSharedBuiltins(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::ResourceManager &manager, const std::string &modVersion);
 
-    // Registers the client builtins in the isolate, after the shared ones. Call with `context` entered.
-    void RegisterClientBuiltins(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> global, Framework::Scripting::ResourceManager *manager);
-
-    // Publishes the client builtins in a Lua state, after the shared ones: the runtime setup of the Lua host.
-    void RegisterClientBuiltinsLua(Framework::Scripting::LuaRuntime &runtime);
+    // Registers the client builtins in the languages of `languages`, after the shared ones. Lua is what the
+    // registrar records for every Lua state of the client, applied after the shared builtins.
+    void RegisterClientBuiltins(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages = Framework::Scripting::Bind::Languages::All, Framework::Scripting::ResourceManager *manager = nullptr);
 
     // The definitions of everything a Lua state of a client has: the shared ones, then those of the client
     // builtins in the order they are registered. What the Lua definition file of a client is written from.

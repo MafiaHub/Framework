@@ -178,9 +178,16 @@ namespace LuaBuiltinsServerTest {
 
         explicit Booth(bool withServer = true): p(static_cast<uint64_t>(stage.players[0]->ownerGUID)), q(static_cast<uint64_t>(stage.players[1]->ownerGUID)) {
             stage.js.js.Enter([](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-                Framework::Integrations::Server::Scripting::Builtins::Voice::Register(isolate, context->Global());
+                {
+                    Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), context->Global(), Framework::Scripting::Bind::Side::Server);
+                    Framework::Integrations::Server::Scripting::Builtins::Voice::Register(registrar);
+                }
             });
-            Framework::Integrations::Server::Scripting::Builtins::Voice::RegisterLua(stage.lua.Runtime());
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Integrations::Server::Scripting::Builtins::Voice::Register(registrar);
+                registrar.Lua().Apply(stage.lua.Runtime());
+            }
             stage.lua.Run("q = Player.new(" + stage.b + ")");
             stage.js.Eval("globalThis.q = new Player(" + stage.b + "); 0");
             if (withServer) {

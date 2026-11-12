@@ -11,7 +11,6 @@
 #include <core_modules.h>
 #include <scripting/builtins/entity.h>
 #include <scripting/builtins/script_args.h>
-#include <scripting/lua/lua_runtime.h>
 #include <scripting/scripting_catalog.h>
 #include <voice/server/voice_server.h>
 
@@ -282,20 +281,17 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         return definition;
     }
 
-    void Voice::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        if (!isolate || global.IsEmpty()) {
+    void Voice::Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages) {
+        registrar.Global(Definition(), languages);
+        if (!registrar.HasJavaScript(languages)) {
             return;
         }
-        Definition().MaterialiseV8(isolate, isolate->GetCurrentContext(), global, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Server);
 
+        v8::Isolate *isolate = registrar.Isolate();
         auto &events = Framework::Scripting::GetScriptingCatalog(isolate).data_type("EventMap");
         events.add_property("playerVoiceStart", "[player: Player]", "Dispatched when a player starts speaking, as isPlayerTalking turns true.");
         events.add_property("playerVoiceStop", "[player: Player]", "Dispatched shortly after a player's last voice frame, as isPlayerTalking turns false. A player who disconnects while talking gets no stop, so clear them on disconnect too.");
         events.add_property("playerVoiceTierChange", "[player: Player, tier: number]", "Dispatched when a player switches voice tier themselves: 0 whisper, 1 normal, 2 shout. setPlayerTier does not raise it.");
-    }
-
-    void Voice::RegisterLua(Framework::Scripting::LuaRuntime &runtime) {
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
     }
 
 } // namespace Framework::Integrations::Server::Scripting::Builtins

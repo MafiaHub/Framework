@@ -415,13 +415,13 @@ for a wrong `this`, as the hand-written builtins did.
   manager's next upkeep, at the top of the same `Update()`.
 - The client scripting module owns a Lua engine too, through `LuaClientHost` (`scripting/lua/lua_client_host.h`),
   which is shared code so that it builds and is tested on every host: 128 MB a state, 5 000 ms an entry, the
-  bindings both sides have (`Builtins::RegisterSharedLua`) with the members of the client side, and the transfer
+  bindings both sides have (`Builtins::RegisterShared`, in Lua) with the members of the client side, and the transfer
   types, which nothing else registers on a client. It ticks the engine once in every `Update()` and hands what
   it queued as errors to the manager. `Reset()` and `Shutdown()` destroy every state after the resources were
   stopped; between a `Reset()` and the next `Init()` a `.lua` script fails its start with `Lua scripting is not
   available`. The builtins only a client has are added to every state through
-  `LuaClientHost::AddRuntimeSetup`, which the module calls with their `RegisterLua` (`Web`, `Key`, `Chat`,
-  `Discord`, `Voice`, `Nametags`).
+  `LuaClientHost::AddRuntimeSetup`, which the module calls with what their `Register` recorded for Lua (`Web`,
+  `Key`, `Chat`, `Discord`, `Voice`, `Nametags`).
 
 ## 3. Resources
 

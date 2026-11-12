@@ -7,7 +7,6 @@
  */
 
 #include "player.h"
-#include "../lua/lua_runtime.h"
 #include "../scripting_catalog.h"
 
 #include <core_modules.h>
@@ -212,15 +211,9 @@ namespace Framework::Scripting::Builtins {
         return peer ? peer->GetPeerIdentity(MafiaNet::ToGuid(entity->ownerGUID)) : nullptr;
     }
 
-    void Player::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        v8pp::class_<Player> &cls = GetClass(isolate);
-        auto ctx                  = isolate->GetCurrentContext();
-        global->Set(ctx, v8pp::to_v8(isolate, "Player"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
-    }
-
-    void Player::RegisterLua(LuaRuntime &runtime) {
-        Entity::RegisterLua(runtime);
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
+    void Player::Register(Bind::Registrar &registrar, Bind::Languages languages) {
+        Entity::Register(registrar, languages & Bind::Languages::Lua);
+        registrar.Global(Definition(), languages);
     }
 
     void Player::UnregisterIsolate(v8::Isolate *isolate) {

@@ -147,8 +147,12 @@ namespace LuaEventsTest {
                 lua_pushcclosure(L, LuaResourcesTest::Rig::Stop, 1);
                 lua_setglobal(L, "stop");
                 Framework::Scripting::Bind::SetCallResourceManager(&runtime, &rig.manager);
-                Framework::Scripting::Builtins::Events::RegisterLua(runtime);
-                Framework::Scripting::Builtins::Exports::RegisterLua(runtime);
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    rig.manager.GetEvents().Register(registrar);
+                    Framework::Scripting::Builtins::Exports::Register(registrar);
+                    registrar.Lua().Apply(runtime);
+                }
             });
             // Each runtime that is destroyed says so in the log, next to what the scripts wrote.
             rig.lua.AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
@@ -1261,7 +1265,11 @@ MODULE(lua_events, {
         manager.SetLuaEngine(&lua);
         lua.SetRuntimeSetupCallback([&manager](Framework::Scripting::LuaRuntime &runtime) {
             Framework::Scripting::Bind::SetCallResourceManager(&runtime, &manager);
-            Framework::Scripting::Builtins::Events::RegisterLua(runtime);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                manager.GetEvents().Register(registrar);
+                registrar.Lua().Apply(runtime);
+            }
             lua_pushcfunction(runtime.State(), LuaResourcesTest::LuaLog);
             lua_setglobal(runtime.State(), "log");
         });

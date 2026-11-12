@@ -15,7 +15,6 @@
 #include "core_modules.h"
 
 #include <external/discord/wrapper.h>
-#include <scripting/lua/lua_runtime.h>
 #include <scripting/scripting_catalog.h>
 
 #include <discord.h>
@@ -604,18 +603,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         return definition;
     }
 
-    void Discord::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
-        if (!isolate || context.IsEmpty() || target.IsEmpty()) {
-            return;
+    void Discord::Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages, Framework::Scripting::ResourceManager *resourceManager) {
+        if (registrar.HasJavaScript(languages) && resourceManager != nullptr) {
+            Framework::Scripting::Bind::SetCallResourceManager(registrar.Isolate(), resourceManager);
         }
-        if (resourceManager != nullptr) {
-            Framework::Scripting::Bind::SetCallResourceManager(isolate, resourceManager);
-        }
-        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Client);
-    }
-
-    void Discord::RegisterLua(Framework::Scripting::LuaRuntime &runtime) {
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
+        registrar.Global(Definition(), languages);
     }
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins

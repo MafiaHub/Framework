@@ -33,17 +33,16 @@ Its definition is a `Bind::Class<T>` (`bind/class.h`). This is `Vector3`
 
 ```cpp
 const Bind::Class<Vector3> &Vector3::Definition() {
-    using Bind::Doc;
     // AddVectorOperators gives the class its Lua operators.
     static const auto definition = AddVectorOperators(Bind::Class<Vector3>("Vector3", "Mutable three-dimensional vector for positions, directions, and Euler angles.")
-            .Constructor<float, float, float>(Doc("Creates a vector from three numeric components.").Param("x", "Initial X component.").Param("y", "Initial Y component.").Param("z", "Initial Z component."))
-            .Method("add", &Vector3::add, Doc("Adds another vector to this vector in place.").Param("other", "Vector to add component-wise.").Returns("This mutated vector for chaining."))
+            .Constructor<float, float, float>(Framework::Scripting::Bind::Doc("Creates a vector from three numeric components.").Param("x", "Initial X component.").Param("y", "Initial Y component.").Param("z", "Initial Z component."))
+            .Method("add", &Vector3::add, Framework::Scripting::Bind::Doc("Adds another vector to this vector in place.").Param("other", "Vector to add component-wise.").Returns("This mutated vector for chaining."))
             // ...
-            .Method("toString", &Vector3::toString, Doc("Formats this vector for logging and debugging.").Returns("Text in Vector3(x, y, z) form."))
+            .Method("toString", &Vector3::toString, Framework::Scripting::Bind::Doc("Formats this vector for logging and debugging.").Returns("Text in Vector3(x, y, z) form."))
             .Property("x", &Vector3::getX, &Vector3::setX, "Mutable X component.")
             // ...
             .Property("length", &Vector3::getLength, "Read-only Euclidean magnitude of this vector.")
-            .Static("zero", &Vector3::zero, Doc("Creates a zero vector.").Returns("New Vector3(0, 0, 0)."))
+            .Static("zero", &Vector3::zero, Framework::Scripting::Bind::Doc("Creates a zero vector.").Returns("New Vector3(0, 0, 0)."))
             // ...
             // What JSON.stringify asks a JavaScript object for. Lua writes the same object from JsonProperties.
             .V8Hook([](v8pp::class_<Vector3> &cls, v8::Isolate *) {
@@ -61,8 +60,8 @@ v8pp::class_<Vector3> &Vector3::GetClass(v8::Isolate *isolate) {
     });
 }
 
-void Vector3::RegisterLua(lua_State *L, Bind::Side side) {
-    Definition().RegisterLuaGlobal(L, side);
+void Vector3::Register(Bind::Registrar &registrar, Bind::Languages languages) {
+    registrar.Global(Definition(), languages);
 }
 ```
 
@@ -144,33 +143,23 @@ void SendToAll(Bind::Call &call) {
 }
 
 const Bind::Namespace &Chat::Definition() {
-    using Bind::Doc;
-    using Bind::Side;
-    using Bind::TypeOf;
     static const auto definition = [] {
         const auto options      = Bind::Type::Custom("{ author?: string; color?: number | Color }", "{ author: string?, color: (integer|Color)? }");
         const char *optionsHelp = "Optional author label and color: a Color or a packed 0xRRGGBBAA integer.";
-        return Bind::Namespace("Chat", "Server-side delivery of structured chat messages to connected clients.", Side::Server)
-            .Function("sendToAll", &SendToAll, Doc("Broadcasts a structured chat message to all clients.").Param("text", TypeOf<std::string>(), "Message body broadcast to every connected client.").OptionalParam("options", options, optionsHelp), Side::Server)
+        return Bind::Namespace("Chat", "Server-side delivery of structured chat messages to connected clients.", Framework::Scripting::Bind::Side::Server)
+            .Function("sendToAll", &SendToAll, Framework::Scripting::Bind::Doc("Broadcasts a structured chat message to all clients.").Param("text", Framework::Scripting::Bind::TypeOf<std::string>(), "Message body broadcast to every connected client.").OptionalParam("options", options, optionsHelp), Framework::Scripting::Bind::Side::Server)
             .Function("sendToPlayer", &SendToPlayer,
-                Doc("Sends a structured chat message to one player's owning connection.")
-                    .Param("player", TypeOf<Entity>(), "Player-owned entity identifying the destination connection.")
-                    .Param("text", TypeOf<std::string>(), "Message body sent to the player.")
+                Framework::Scripting::Bind::Doc("Sends a structured chat message to one player's owning connection.")
+                    .Param("player", Framework::Scripting::Bind::TypeOf<Entity>(), "Player-owned entity identifying the destination connection.")
+                    .Param("text", Framework::Scripting::Bind::TypeOf<std::string>(), "Message body sent to the player.")
                     .OptionalParam("options", options, optionsHelp),
-                Side::Server);
+                Framework::Scripting::Bind::Side::Server);
     }();
     return definition;
 }
 
-void Chat::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-    if (!isolate || global.IsEmpty()) {
-        return;
-    }
-    Definition().MaterialiseV8(isolate, isolate->GetCurrentContext(), global, GetScriptingCatalog(isolate), Bind::Side::Server);
-}
-
-void Chat::RegisterLua(LuaRuntime &runtime) {
-    Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
+void Chat::Register(Bind::Registrar &registrar, Bind::Languages languages) {
+    registrar.Global(Definition(), languages);
 }
 ```
 
@@ -189,7 +178,33 @@ void Chat::RegisterLua(LuaRuntime &runtime) {
 runs unprotected, for a class as for a namespace: call it from the setup
 callback of the Lua engine, which protects it.
 
-## Typed members and context functions
+## Registration
+
+A builtin has one `Register`, for both languages:
+
+```cpp
+static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All /*, ResourceManager *, ... */);
+```
+
+`Bind::Registrar` (`bind/registrar.h`) is what it registers through, so a
+builtin includes no Lua header:
+
+| Call | What it does |
+|---|---|
+| `Global(namespaceOrClass, languages[, constants])` | Publishes the definition as a global. For a namespace it returns the JavaScript object, empty when none was made. `constants` is a `Namespace::RuntimeConstants`, or a function of the `Bind::Side` that gives them. |
+| `Type(class, languages)` | Makes a class known without a global, for a value that reads as it (`StateBag`, `PendingConnection`). Only Lua has anything to do. |
+| `HasJavaScript(languages)`, `Isolate()`, `Context()`, `Target()` | For what a builtin keeps for its isolate: handler tables, `Bind::SetCallResourceManager`, catalog metadata. |
+| `Lua()` | The `Bind::LuaBindings` recorded: `Apply(runtime)` publishes them in a Lua state. |
+
+`Bind::Languages` is `JavaScript`, `Lua` or `All`, combined with `|` and `&`.
+A registrar built for an isolate
+(`Registrar(isolate, context, target, side)`) registers JavaScript at once;
+one built without (`Registrar()`) registers Lua only. Lua is always
+recorded, because a Lua state is made per resource, after the builtins
+register: the scripting modules keep the record of the registrar of their
+isolate and apply it to each state as it is created, with the side of that
+runtime, before the setups of a project.
+
 
 A member is implemented one of two ways.
 
@@ -269,7 +284,7 @@ layer raises `bad receiver for 'Class:method' (...)`.
 A JavaScript call asks the resource manager of its isolate for its resource.
 A builtin whose `Register` is given a `ResourceManager *` says which one that
 is with `Bind::SetCallResourceManager(isolate, manager)`, as `console.cpp`
-does; a Lua runtime is told by `Builtins::RegisterSharedLua`.
+does; a Lua runtime is told by the scripting module that sets it up.
 
 ### `Bind::Value`
 
@@ -749,9 +764,12 @@ against both:
 ```cpp
 inline void GiveChat(LuaBuiltinsPlayerTest::JsSide &js, LuaBuiltinsPlayerTest::LuaSide &lua) {
     js.js.Enter([](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-        Chat::Register(isolate, context->Global());
+        Bind::Registrar registrar(isolate, context, context->Global(), Bind::Side::Server);
+        Chat::Register(registrar, Bind::Languages::JavaScript);
     });
-    Chat::RegisterLua(lua.Runtime());
+    Bind::Registrar registrar;
+    Chat::Register(registrar, Bind::Languages::Lua);
+    registrar.Lua().Apply(lua.Runtime());
 }
 
 IT("gives a Lua state the Chat of JavaScript, under the same names", {
@@ -823,13 +841,26 @@ behaviour. Nothing a project binds by hand appears in Lua.
 To expose an API to Lua, a project:
 
 1. **Declares it through `Bind`**, as above: `FW_SCRIPT_CLASS` and a
-   `Definition()`. Its `Register` and `GetClass(isolate)` keep their signatures
-   and materialise from the definition, so JavaScript and the catalog do not
-   change. A handle derived from `Player` or `Entity` declares
-   `.Inherit<Player>()`.
-2. **Gives it a `RegisterLua(LuaRuntime &runtime)`** that calls
-   `Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side)`.
-3. **Registers it in every Lua state**, through the hook of its side:
+   `Definition()`. `GetClass(isolate)` materialises from the definition, so
+   JavaScript and the catalog do not change. A handle derived from `Player`
+   or `Entity` declares `.Inherit<Player>()`.
+2. **Gives it one `Register(Bind::Registrar &registrar, Bind::Languages
+   languages = Bind::Languages::All)`**, as the builtins have (see
+   [Registration](#registration)): `registrar.Global(Definition(), languages)`.
+3. **Registers it in every Lua state**, through the hook of its side, with
+   what a Lua-only registrar records:
+
+   ```cpp
+   Bind::Registrar registrar;
+   MyApi::Register(registrar, Bind::Languages::Lua);
+   module.AddLuaRuntimeSetup([bindings = registrar.Lua()](LuaRuntime &runtime) {
+       bindings.Apply(runtime);
+   });
+   ```
+
+   and in JavaScript with a registrar built for its isolate
+   (`Bind::Registrar(isolate, context, context->Global(), side)`) and
+   `Bind::Languages::JavaScript`. The hooks:
    - **Server:** `ServerScriptingModule::AddLuaRuntimeSetup(fu2::function<void(LuaRuntime &) const> setup)`
      (`integrations/server/scripting/module.h`). `setup` runs in every Lua
      state the server creates from then on, after the Framework's own builtins
@@ -838,12 +869,12 @@ To expose an API to Lua, a project:
    - **Client:** `ClientScriptingModule::AddLuaRuntimeSetup(...)`, of the same
      signature (`integrations/client/scripting/module.h`). It forwards to
      `LuaClientHost::AddRuntimeSetup` (`scripting/lua/lua_client_host.h`), the
-     hook the client scripting module adds its own builtins through
-     (`Builtins::RegisterClientBuiltinsLua`): `setup` runs after the shared
+     hook the client scripting module applies its own builtins through
+     (`Builtins::RegisterClientBuiltins`): `setup` runs after the shared
      and the client builtins. Call it before a resource starts.
 
    A setup runs inside the setup callback of the Lua engine, which protects
-   it, and that is where `RegisterLuaGlobal` belongs.
+   it, and that is where `LuaBindings::Apply` belongs.
 4. **Declares how its handles cross**, with `.Transfer(&T::GetId)` and
    `Definition().RegisterTransfer()`, after `Builtins::RegisterTransferTypes()`
    and each derived class after its base. `RegisterHandleTransfer<T>` alone

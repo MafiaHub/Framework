@@ -13,6 +13,7 @@
 
 #include "../bind/callable.h"
 #include "../bind/namespace.h"
+#include "../bind/registrar.h"
 #include "../value_transfer.h"
 
 #include <function2/function2.hpp>
@@ -28,7 +29,6 @@
 #include <vector>
 
 namespace Framework::Scripting {
-    class LuaRuntime;
     class ResourceManager;
 } // namespace Framework::Scripting
 
@@ -118,18 +118,16 @@ namespace Framework::Scripting::Builtins {
         // The Events global of both languages.
         static const Bind::Namespace &Definition();
 
-        // Publishes Events in a Lua runtime. Its functions work on the Events of the resource manager the calls
-        // of the runtime answer with (Bind::SetCallResourceManager).
-        static void RegisterLua(LuaRuntime &runtime);
-
         /**
-         * Register the Events object on the target. isClient exposes emitServer (client -> onClient);
-         * otherwise exposes emitAllClients (server -> every client's on()).
+         * Publish Events as a global in the languages of `languages`. A client runtime gets emitServer
+         * (client -> onClient); a server one emitAllClients (server -> every client's on()).
          *
          * An isolate has one Events: the functions of the definition find theirs by the isolate they run in, so
-         * the last Register of an isolate wins, also for the Events objects earlier calls made there.
+         * the last Register of an isolate wins, also for the Events objects earlier calls made there. In Lua the
+         * functions work on the Events of the resource manager the calls of the runtime answer with
+         * (Bind::SetCallResourceManager).
          */
-        void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager, bool isClient = false);
+        void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All, ResourceManager *resourceManager = nullptr);
 
         /**
          * Emit an event from native code to all global handlers.

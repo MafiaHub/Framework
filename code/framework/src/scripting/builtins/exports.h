@@ -9,6 +9,7 @@
 #pragma once
 
 #include "../bind/namespace.h"
+#include "../bind/registrar.h"
 #include "../transferred_value.h"
 
 #include <utils/result.h>
@@ -22,7 +23,6 @@
 #include <vector>
 
 namespace Framework::Scripting {
-    class LuaRuntime;
     class Resource;
     class ResourceManager;
 } // namespace Framework::Scripting
@@ -47,9 +47,9 @@ namespace Framework::Scripting::Builtins {
         static const Bind::Namespace &Definition();
 
         // Exposed as `Exports`, not `exports`: Node's CommonJS module scope would shadow the latter.
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager);
-
-        static void RegisterLua(LuaRuntime &runtime);
+        // Publishes Exports as a global in the languages of `languages`. In JavaScript the calls of the isolate answer
+        // with `resourceManager` (Bind::SetCallResourceManager) when it is not null.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All, ResourceManager *resourceManager = nullptr);
 
         using Copies = std::vector<std::pair<std::string, TransferredValue>>;
 

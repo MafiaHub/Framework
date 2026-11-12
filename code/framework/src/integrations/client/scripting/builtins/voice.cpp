@@ -13,7 +13,6 @@
 #include "core_modules.h"
 
 #include <input/input.h>
-#include <scripting/lua/lua_runtime.h>
 #include <scripting/scripting_catalog.h>
 #include <utils/key_names.h>
 #include <voice/client/voice_client.h>
@@ -319,22 +318,18 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         return definition;
     }
 
-    void Voice::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
-        if (!isolate || context.IsEmpty() || target.IsEmpty()) {
+    void Voice::Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages, Framework::Scripting::ResourceManager *resourceManager) {
+        if (registrar.HasJavaScript(languages) && resourceManager != nullptr) {
+            Framework::Scripting::Bind::SetCallResourceManager(registrar.Isolate(), resourceManager);
+        }
+        registrar.Global(Definition(), languages);
+        if (!registrar.HasJavaScript(languages)) {
             return;
         }
-        if (resourceManager != nullptr) {
-            Framework::Scripting::Bind::SetCallResourceManager(isolate, resourceManager);
-        }
-        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Client);
 
-        auto &events = Framework::Scripting::GetScriptingCatalog(isolate).data_type("EventMap");
+        auto &events = Framework::Scripting::GetScriptingCatalog(registrar.Isolate()).data_type("EventMap");
         events.add_property("voiceStart", "[]", "Dispatched when the local player starts speaking, as isTalking turns true.");
         events.add_property("voiceStop", "[]", "Dispatched when the local player stops speaking, as isTalking turns false.");
-    }
-
-    void Voice::RegisterLua(Framework::Scripting::LuaRuntime &runtime) {
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
     }
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins

@@ -9,6 +9,7 @@
 #pragma once
 
 #include "../bind/namespace.h"
+#include "../bind/registrar.h"
 
 #include <v8pp/convert.hpp>
 
@@ -17,7 +18,6 @@
 #include <string>
 
 namespace Framework::Scripting {
-    class LuaRuntime;
     class ResourceManager;
     class Resource;
 } // namespace Framework::Scripting
@@ -30,9 +30,9 @@ namespace Framework::Scripting::Builtins {
       public:
         static const Bind::Namespace &Definition();
 
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager);
-
-        static void RegisterLua(LuaRuntime &runtime);
+        // Publishes Imports as a global in the languages of `languages`. In JavaScript the calls of the isolate answer
+        // with `resourceManager` (Bind::SetCallResourceManager) when it is not null.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All, ResourceManager *resourceManager = nullptr);
 
         /**
          * Build an object mapping every export name a resource registered from JavaScript to its

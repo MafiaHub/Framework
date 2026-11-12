@@ -135,12 +135,19 @@ namespace ValueTypesParityTest {
                 // A catalog of its own: Anchor is no builtin, and the default catalog is shared by every test.
                 Framework::Scripting::SetScriptingCatalog(isolate, kCatalogName);
                 v8::Local<v8::Object> global = context->Global();
-                Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
+                {
+                    Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), global);
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                }
                 _anchor = AnchorDefinition().MaterialiseV8(isolate, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Server);
                 global->Set(context, v8pp::to_v8(isolate, "Anchor"), _anchor->js_function_template()->GetFunction(context).ToLocalChecked()).Check();
             });
 
-            Framework::Scripting::Builtins::RegisterValueTypesLua(_lua.L, Framework::Scripting::Bind::Side::Server);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                registrar.Lua().Apply(_lua.L, Framework::Scripting::Bind::Side::Server);
+            }
             AnchorDefinition().RegisterLuaGlobal(_lua.L, Framework::Scripting::Bind::Side::Server);
         }
 
@@ -541,7 +548,11 @@ MODULE(value_types_parity, {
     IT("converts glm values on the Lua stack through the value types", {
         LuaTest::State state;
         lua_State *L = state.L;
-        Framework::Scripting::Builtins::RegisterValueTypesLua(L, Framework::Scripting::Bind::Side::Server);
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+            registrar.Lua().Apply(L, Framework::Scripting::Bind::Side::Server);
+        }
 
         Framework::Scripting::Bind::LuaConvert<glm::vec2>::Push(L, glm::vec2(1.0f, 2.0f));
         Framework::Scripting::Bind::LuaConvert<glm::vec3>::Push(L, glm::vec3(1.0f, 2.0f, 3.0f));
@@ -588,7 +599,11 @@ MODULE(value_types_parity, {
     IT("adds operators to the vectors in Lua, each giving a new value", {
         LuaTest::State state;
         lua_State *L = state.L;
-        Framework::Scripting::Builtins::RegisterValueTypesLua(L, Framework::Scripting::Bind::Side::Server);
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+            registrar.Lua().Apply(L, Framework::Scripting::Bind::Side::Server);
+        }
 
         EQUALS(LuaTest::Eval(L, "tostring(Vector2.new(1, 2) + Vector2.new(3, 5))"), "Vector2(4, 7)");
         EQUALS(LuaTest::Eval(L, "tostring(Vector2.new(1, 2) - Vector2.new(3, 5))"), "Vector2(-2, -3)");
@@ -641,7 +656,11 @@ MODULE(value_types_parity, {
     IT("adds composition to Quaternion and equality to Quaternion and Color in Lua", {
         LuaTest::State state;
         lua_State *L = state.L;
-        Framework::Scripting::Builtins::RegisterValueTypesLua(L, Framework::Scripting::Bind::Side::Server);
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+            registrar.Lua().Apply(L, Framework::Scripting::Bind::Side::Server);
+        }
 
         EQUALS(LuaTest::EvalNumber(L, "(Quaternion.new(0, 1, 0, 0) * Quaternion.new(0, 0, 1, 0)).z"), 1.0);
         EQUALS(LuaTest::EvalNumber(L, "(Quaternion.new(0, 0, 1, 0) * Quaternion.new(0, 1, 0, 0)).z"), -1.0);
@@ -662,14 +681,22 @@ MODULE(value_types_parity, {
     IT("registers the value types in Lua as read-only globals with typed members", {
         LuaTest::State state;
         lua_State *L = state.L;
-        Framework::Scripting::Builtins::RegisterValueTypesLua(L, Framework::Scripting::Bind::Side::Server);
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+            registrar.Lua().Apply(L, Framework::Scripting::Bind::Side::Server);
+        }
         EQUALS(lua_gettop(L), 0);
 
         EQUALS(LuaTest::Eval(L, "type(Vector2) .. type(Vector3) .. type(Vector4) .. type(Quaternion) .. type(Color)"), "tabletabletabletabletable");
         EQUALS(LuaTest::Eval(L, "type(Vector3.new(1, 2, 3))"), "userdata");
 
         // Registering again changes nothing.
-        Framework::Scripting::Builtins::RegisterValueTypesLua(L, Framework::Scripting::Bind::Side::Server);
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+            registrar.Lua().Apply(L, Framework::Scripting::Bind::Side::Server);
+        }
         EQUALS(lua_gettop(L), 0);
         EQUALS(LuaTest::Eval(L, "tostring(Vector3.one())"), "Vector3(1, 1, 1)");
 
@@ -684,12 +711,20 @@ MODULE(value_types_parity, {
     IT("needs Vector3 in the state for what a Quaternion gives as one", {
         LuaTest::State state;
         lua_State *L = state.L;
-        Framework::Scripting::Builtins::Quaternion::RegisterLua(L, Framework::Scripting::Bind::Side::Server);
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Scripting::Builtins::Quaternion::Register(registrar);
+            registrar.Lua().Apply(L, Framework::Scripting::Bind::Side::Server);
+        }
 
         EQUALS(LuaTest::Eval(L, "Quaternion.identity():mul(Quaternion.identity()):toString()"), "Quaternion(1, 0, 0, 0)");
         EQUALS(LuaTest::Eval(L, "Quaternion.identity():toEuler()"), "<error> eval:1: Vector3 is not available in this Lua state");
 
-        Framework::Scripting::Builtins::Vector3::RegisterLua(L, Framework::Scripting::Bind::Side::Server);
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Scripting::Builtins::Vector3::Register(registrar);
+            registrar.Lua().Apply(L, Framework::Scripting::Bind::Side::Server);
+        }
         EQUALS(LuaTest::Eval(L, "tostring(Quaternion.identity():rotateVector(Vector3.new(1, 2, 3)))"), "Vector3(1, 2, 3)");
     });
 

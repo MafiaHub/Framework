@@ -225,8 +225,11 @@ MODULE(client_scripting, {
             {
                 Framework::Scripting::EngineScope scope(&engine);
                 Framework::Scripting::SetScriptingEnvironment(scope.Isolate(), true);
-                Framework::Scripting::Builtins::RegisterValueTypes(scope.Isolate(), scope.Context()->Global());
-                Framework::Scripting::Builtins::Entity::Register(scope.Isolate(), scope.Context()->Global());
+                {
+                    Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), scope.Isolate()->GetCurrentContext(), scope.Context()->Global());
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                    Framework::Scripting::Builtins::Entity::Register(registrar);
+                }
                 Framework::Scripting::Bind::SetCallResourceManager(scope.Isolate(), &manager);
             }
             EQUALS(manager.DiscoverResources(), 2u);

@@ -58,11 +58,21 @@ namespace LuaBuiltinsPlayerTest {
             });
             engine.SetRuntimeSetupCallback([side, manager](Framework::Scripting::LuaRuntime &runtime) {
                 Framework::Scripting::Bind::SetCallResourceManager(&runtime, manager);
-                Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), side);
-                Framework::Scripting::Builtins::Entity::RegisterLua(runtime);
-                Framework::Scripting::Builtins::Player::RegisterLua(runtime);
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                    registrar.Lua().Apply(runtime.State(), side);
+                }
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Scripting::Builtins::Entity::Register(registrar);
+                    Framework::Scripting::Builtins::Player::Register(registrar);
+                    registrar.Lua().Apply(runtime);
+                }
                 if (side == Framework::Scripting::Bind::Side::Server) {
-                    Framework::Scripting::Builtins::TextLabel::RegisterLua(runtime);
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Scripting::Builtins::TextLabel::Register(registrar);
+                    registrar.Lua().Apply(runtime);
                 }
             });
             ready = engine.Init() == Framework::Scripting::ScriptingError::SCRIPTING_NONE && engine.CreateResourceRuntime(kLuaResource);
@@ -101,11 +111,17 @@ namespace LuaBuiltinsPlayerTest {
             Framework::Scripting::SetScriptingCatalog(js.Isolate(), "lua_builtins_player/" + std::to_string(++count));
             Framework::Scripting::SetScriptingEnvironment(js.Isolate(), isClient);
             js.Enter([&](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-                Framework::Scripting::Builtins::RegisterValueTypes(isolate, context->Global());
-                Framework::Scripting::Builtins::Entity::Register(isolate, context->Global());
-                Framework::Scripting::Builtins::Player::Register(isolate, context->Global());
+                {
+                    Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), context->Global());
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                    Framework::Scripting::Builtins::Entity::Register(registrar);
+                    Framework::Scripting::Builtins::Player::Register(registrar);
+                }
                 if (!isClient) {
-                    Framework::Scripting::Builtins::TextLabel::Register(isolate, context->Global());
+                    {
+                        Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), context->Global());
+                        Framework::Scripting::Builtins::TextLabel::Register(registrar);
+                    }
                 }
                 Framework::Scripting::Bind::SetCallResourceManager(isolate, &manager);
             });
@@ -229,14 +245,25 @@ namespace LuaBuiltinsPlayerTest {
 
         Owners() {
             TestManagerHelper::RegisterEvents(rig.node, rig.manager, [this](v8::Isolate *isolate, v8::Local<v8::Context> context) {
-                Framework::Scripting::Builtins::RegisterValueTypes(isolate, context->Global());
-                Framework::Scripting::Builtins::TextLabel::Register(isolate, context->Global());
+                {
+                    Framework::Scripting::Bind::Registrar registrar(isolate, isolate->GetCurrentContext(), context->Global());
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                    Framework::Scripting::Builtins::TextLabel::Register(registrar);
+                }
                 Framework::Scripting::Bind::SetCallResourceManager(isolate, &rig.manager);
             });
             rig.lua.SetRuntimeSetupCallback([this](Framework::Scripting::LuaRuntime &runtime) {
                 Framework::Scripting::Bind::SetCallResourceManager(&runtime, &rig.manager);
-                Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), Framework::Scripting::Bind::Side::Server);
-                Framework::Scripting::Builtins::TextLabel::RegisterLua(runtime);
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                    registrar.Lua().Apply(runtime.State(), Framework::Scripting::Bind::Side::Server);
+                }
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Scripting::Builtins::TextLabel::Register(registrar);
+                    registrar.Lua().Apply(runtime);
+                }
             });
             rig.lua.AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
                 Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);

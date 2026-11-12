@@ -57,9 +57,13 @@ namespace ClientServicesTest {
                 Framework::CoreModules::SetClientInstance(instance.get());
             }
             client.lua.AddRuntimeSetup([](Framework::Scripting::LuaRuntime &runtime) {
-                Framework::Integrations::Client::Scripting::Builtins::Chat::RegisterLua(runtime);
-                Framework::Integrations::Client::Scripting::Builtins::Discord::RegisterLua(runtime);
-                Framework::Integrations::Client::Scripting::Builtins::Nametags::RegisterLua(runtime);
+                {
+                    Framework::Scripting::Bind::Registrar registrar;
+                    Framework::Integrations::Client::Scripting::Builtins::Chat::Register(registrar);
+                    Framework::Integrations::Client::Scripting::Builtins::Discord::Register(registrar);
+                    Framework::Integrations::Client::Scripting::Builtins::Nametags::Register(registrar);
+                    registrar.Lua().Apply(runtime);
+                }
             });
             if (!client.Init()) {
                 return;
@@ -67,9 +71,12 @@ namespace ClientServicesTest {
             {
                 Framework::Scripting::EngineScope scope(&client.v8);
                 const auto context = scope.Context();
-                Framework::Integrations::Client::Scripting::Builtins::Chat::Register(scope.Isolate(), context, context->Global(), client.manager.get());
-                Framework::Integrations::Client::Scripting::Builtins::Discord::Register(scope.Isolate(), context, context->Global(), client.manager.get());
-                Framework::Integrations::Client::Scripting::Builtins::Nametags::Register(scope.Isolate(), context, context->Global(), client.manager.get());
+                {
+                    Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), context, context->Global(), Framework::Scripting::Bind::Side::Client);
+                    Framework::Integrations::Client::Scripting::Builtins::Chat::Register(registrar, Framework::Scripting::Bind::Languages::All, client.manager.get());
+                    Framework::Integrations::Client::Scripting::Builtins::Discord::Register(registrar, Framework::Scripting::Bind::Languages::All, client.manager.get());
+                    Framework::Integrations::Client::Scripting::Builtins::Nametags::Register(registrar, Framework::Scripting::Bind::Languages::All, client.manager.get());
+                }
             }
             ready = LuaClientTest::Mount("js", R"("clientScripts":["client.js"])", {{"client.js", ""}}).empty() && client.Start("js").empty() && LuaClientTest::Mount("lua", R"("clientScripts":["client.lua"])", {{"client.lua", ""}}).empty() && client.Start("lua").empty();
         }
@@ -168,7 +175,11 @@ MODULE(lua_client_services, {
         // A state of the server, with its Chat registered as ServerScriptingModule registers it.
         Framework::Scripting::LuaRuntime server(LuaRuntimeTest::Options());
         EQUALS(server.Options().side == Framework::Scripting::Bind::Side::Server, true);
-        Framework::Scripting::Builtins::Chat::RegisterLua(server);
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Scripting::Builtins::Chat::Register(registrar);
+            registrar.Lua().Apply(server);
+        }
         EQUALS(LuaRuntimeTest::Eval(server, "type(Chat.send) .. ',' .. type(Chat.sendToAll) .. ',' .. type(Chat.sendToPlayer)"), "nil,function,function");
         // And the client state still has its own.
         EQUALS(stage.Lua("type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "function,nil");
@@ -179,22 +190,42 @@ MODULE(lua_client_services, {
         options.side                                    = Framework::Scripting::Bind::Side::Client;
         {
             Framework::Scripting::LuaRuntime client(options);
-            Framework::Scripting::Builtins::Chat::RegisterLua(client);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Scripting::Builtins::Chat::Register(registrar);
+                registrar.Lua().Apply(client);
+            }
             EQUALS(LuaRuntimeTest::Eval(client, "type(Chat)"), "nil");
-            Framework::Integrations::Client::Scripting::Builtins::Chat::RegisterLua(client);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Integrations::Client::Scripting::Builtins::Chat::Register(registrar);
+                registrar.Lua().Apply(client);
+            }
             EQUALS(LuaRuntimeTest::Eval(client, "type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "function,nil");
         }
         {
             Framework::Scripting::LuaRuntime client(options);
-            Framework::Integrations::Client::Scripting::Builtins::Chat::RegisterLua(client);
-            Framework::Scripting::Builtins::Chat::RegisterLua(client);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Integrations::Client::Scripting::Builtins::Chat::Register(registrar);
+                Framework::Scripting::Builtins::Chat::Register(registrar);
+                registrar.Lua().Apply(client);
+            }
             EQUALS(LuaRuntimeTest::Eval(client, "type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "function,nil");
         }
-        Framework::Integrations::Client::Scripting::Builtins::Chat::RegisterLua(server);
+        {
+            Framework::Scripting::Bind::Registrar registrar;
+            Framework::Integrations::Client::Scripting::Builtins::Chat::Register(registrar);
+            registrar.Lua().Apply(server);
+        }
         EQUALS(LuaRuntimeTest::Eval(server, "type(Chat.send) .. ',' .. type(Chat.sendToAll)"), "nil,function");
         {
             Framework::Scripting::LuaRuntime fresh(LuaRuntimeTest::Options());
-            Framework::Integrations::Client::Scripting::Builtins::Chat::RegisterLua(fresh);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Integrations::Client::Scripting::Builtins::Chat::Register(registrar);
+                registrar.Lua().Apply(fresh);
+            }
             EQUALS(LuaRuntimeTest::Eval(fresh, "type(Chat)"), "nil");
         }
 
@@ -236,28 +267,52 @@ MODULE(lua_client_services, {
         options.side                                    = Framework::Scripting::Bind::Side::Client;
         {
             Framework::Scripting::LuaRuntime client(options);
-            Framework::Integrations::Server::Scripting::Builtins::Voice::RegisterLua(client);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Integrations::Server::Scripting::Builtins::Voice::Register(registrar);
+                registrar.Lua().Apply(client);
+            }
             EQUALS(LuaRuntimeTest::Eval(client, "type(Voice)"), "nil");
-            Framework::Integrations::Client::Scripting::Builtins::Voice::RegisterLua(client);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Integrations::Client::Scripting::Builtins::Voice::Register(registrar);
+                registrar.Lua().Apply(client);
+            }
             EQUALS(LuaRuntimeTest::Eval(client, members), "function,nil");
         }
         {
             Framework::Scripting::LuaRuntime client(options);
-            Framework::Integrations::Client::Scripting::Builtins::Voice::RegisterLua(client);
-            Framework::Integrations::Server::Scripting::Builtins::Voice::RegisterLua(client);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Integrations::Client::Scripting::Builtins::Voice::Register(registrar);
+                Framework::Integrations::Server::Scripting::Builtins::Voice::Register(registrar);
+                registrar.Lua().Apply(client);
+            }
             EQUALS(LuaRuntimeTest::Eval(client, members), "function,nil");
         }
         {
             Framework::Scripting::LuaRuntime server(LuaRuntimeTest::Options());
-            Framework::Integrations::Client::Scripting::Builtins::Voice::RegisterLua(server);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Integrations::Client::Scripting::Builtins::Voice::Register(registrar);
+                registrar.Lua().Apply(server);
+            }
             EQUALS(LuaRuntimeTest::Eval(server, "type(Voice)"), "nil");
-            Framework::Integrations::Server::Scripting::Builtins::Voice::RegisterLua(server);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Integrations::Server::Scripting::Builtins::Voice::Register(registrar);
+                registrar.Lua().Apply(server);
+            }
             EQUALS(LuaRuntimeTest::Eval(server, members), "nil,function");
         }
         {
             Framework::Scripting::LuaRuntime server(LuaRuntimeTest::Options());
-            Framework::Integrations::Server::Scripting::Builtins::Voice::RegisterLua(server);
-            Framework::Integrations::Client::Scripting::Builtins::Voice::RegisterLua(server);
+            {
+                Framework::Scripting::Bind::Registrar registrar;
+                Framework::Integrations::Server::Scripting::Builtins::Voice::Register(registrar);
+                Framework::Integrations::Client::Scripting::Builtins::Voice::Register(registrar);
+                registrar.Lua().Apply(server);
+            }
             EQUALS(LuaRuntimeTest::Eval(server, members), "nil,function");
         }
 
@@ -276,7 +331,10 @@ MODULE(lua_client_services, {
         {
             Framework::Scripting::EngineScope scope(&stage.client.v8);
             const auto context = scope.Context();
-            Framework::Integrations::Client::Scripting::Builtins::Voice::Register(scope.Isolate(), context, context->Global(), stage.client.manager.get());
+            {
+                Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), context, context->Global(), Framework::Scripting::Bind::Side::Client);
+                Framework::Integrations::Client::Scripting::Builtins::Voice::Register(registrar, Framework::Scripting::Bind::Languages::All, stage.client.manager.get());
+            }
             EQUALS(Framework::Integrations::Server::Scripting::Builtins::Voice::Definition().MaterialiseV8(scope.Isolate(), context, context->Global(), Framework::Scripting::GetScriptingCatalog(scope.Isolate()), Framework::Scripting::Bind::Side::Client).IsEmpty(), true);
         }
         EQUALS(stage.Js("typeof Voice.setTier + ',' + typeof Voice.setRange"), "function,undefined");

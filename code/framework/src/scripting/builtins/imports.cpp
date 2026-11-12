@@ -11,7 +11,6 @@
 
 #include "../engine_helpers.h"
 #include "../function_references.h"
-#include "../lua/lua_runtime.h"
 #include "../resource/resource.h"
 #include "../resource/resource_manager.h"
 #include "../script_log.h"
@@ -150,16 +149,12 @@ namespace Framework::Scripting::Builtins {
         return definition;
     }
 
-    void Imports::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager) {
+    void Imports::Register(Bind::Registrar &registrar, Bind::Languages languages, ResourceManager *resourceManager) {
         // The functions carry no manager of their own: a call asks the one of its runtime.
-        if (resourceManager != nullptr) {
-            Bind::SetCallResourceManager(isolate, resourceManager);
+        if (registrar.HasJavaScript(languages) && resourceManager != nullptr) {
+            Bind::SetCallResourceManager(registrar.Isolate(), resourceManager);
         }
-        Definition().MaterialiseV8(isolate, context, target, GetScriptingCatalog(isolate), ScriptingSide(isolate));
-    }
-
-    void Imports::RegisterLua(LuaRuntime &runtime) {
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
+        registrar.Global(Definition(), languages);
     }
 
     v8::Local<v8::Object> Imports::BuildImportsObject(v8::Isolate *isolate, v8::Local<v8::Context> context, const Resource *resource) {

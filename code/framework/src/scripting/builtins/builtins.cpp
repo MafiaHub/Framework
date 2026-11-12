@@ -22,8 +22,7 @@
 #include "../bind/call.h"
 #include "../bind/callable.h"
 #include "../bind/v8_callable.h"
-#include "../lua/lua_engine.h"
-#include "../lua/lua_runtime.h"
+#include "../resource/resource_manager.h"
 #include "../value_transfer.h"
 
 #include <exception>
@@ -52,23 +51,22 @@ namespace Framework::Scripting::Builtins {
         StateBag::Definition().RegisterTransfer();
     }
 
-    void RegisterSharedLua(LuaRuntime &runtime, ResourceManager *manager, const std::string &modVersion) {
-        // As the isolates are told through the console. Forgotten when the runtime goes (WatchLuaRuntimes), and
-        // when the manager does.
-        Bind::SetCallResourceManager(&runtime, manager);
+    void RegisterShared(Bind::Registrar &registrar, Bind::Languages languages, ResourceManager &manager, const std::string &modVersion) {
+        // Every builtin is a global (new Vector3 / Vector3.new, not Core.Vector3).
+        RegisterValueTypes(registrar, languages);
 
-        // As in JavaScript, every builtin is a global (Vector3.new, not Core.Vector3.new).
-        RegisterValueTypesLua(runtime.State(), runtime.Options().side);
+        manager.GetEvents().Register(registrar, languages, &manager);
+        Messages::Register(registrar, languages, &manager);
+        Imports::Register(registrar, languages, &manager);
+        Exports::Register(registrar, languages, &manager);
+        Console::Register(registrar, languages, &manager);
+        ExecutionEnvironment::Register(registrar, languages, modVersion);
 
-        Events::RegisterLua(runtime);
-        Messages::RegisterLua(runtime);
-        Imports::RegisterLua(runtime);
-        Exports::RegisterLua(runtime);
-        Console::RegisterLua(runtime);
-        ExecutionEnvironment::RegisterLua(runtime, modVersion);
-        Entity::RegisterLua(runtime);
-        Player::RegisterLua(runtime);
-        TextLabel::RegisterLua(runtime);
+        // A game publishes these itself in JavaScript.
+        const Bind::Languages lua = languages & Bind::Languages::Lua;
+        Entity::Register(registrar, lua);
+        Player::Register(registrar, lua);
+        TextLabel::Register(registrar, lua);
     }
 
     std::vector<const Bind::ClassDesc *> SharedDefinitions(std::initializer_list<const Bind::ClassDesc *> more) {
@@ -91,20 +89,6 @@ namespace Framework::Scripting::Builtins {
         };
         definitions.insert(definitions.end(), more.begin(), more.end());
         return definitions;
-    }
-
-    void WatchLuaRuntimes(LuaEngine &engine) {
-        Bind::WatchRuntimes(engine);
-
-        // After the above, which is what tells a handler that its runtime goes: the state changes a Lua runtime
-        // watched are let go of with it.
-        engine.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
-            StateBag::DropDeadSubscriptions();
-            // So are the message requests its scripts were waiting on.
-            Messages::DropAbandonedRequests();
-            // The address of the runtime may be the next one's.
-            Bind::SetCallResourceManager(&runtime, nullptr);
-        });
     }
 
     void UnregisterAll(v8::Isolate *isolate) {

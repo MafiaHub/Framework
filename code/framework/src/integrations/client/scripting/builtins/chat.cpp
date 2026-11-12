@@ -15,7 +15,6 @@
 
 #include "core_modules.h"
 
-#include <scripting/lua/lua_runtime.h>
 #include <scripting/scripting_catalog.h>
 
 #include <string>
@@ -87,22 +86,18 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         return definition;
     }
 
-    void Chat::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
-        if (!isolate || context.IsEmpty() || target.IsEmpty()) {
+    void Chat::Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages, Framework::Scripting::ResourceManager *resourceManager) {
+        if (registrar.HasJavaScript(languages) && resourceManager != nullptr) {
+            Framework::Scripting::Bind::SetCallResourceManager(registrar.Isolate(), resourceManager);
+        }
+        registrar.Global(Definition(), languages);
+        if (!registrar.HasJavaScript(languages)) {
             return;
         }
-        if (resourceManager != nullptr) {
-            Framework::Scripting::Bind::SetCallResourceManager(isolate, resourceManager);
-        }
-        Definition().MaterialiseV8(isolate, context, target, Framework::Scripting::GetScriptingCatalog(isolate), Framework::Scripting::Bind::Side::Client);
 
-        auto &events = Framework::Scripting::GetScriptingCatalog(isolate).data_type("EventMap");
+        auto &events = Framework::Scripting::GetScriptingCatalog(registrar.Isolate()).data_type("EventMap");
         events.add_property("chatMessage", "[message: { author: string; text: string; color: number }]", "Dispatched for every chat line the server sends. An empty author is a notice line; color is packed 0xRRGGBBAA, 0 for the chat box's default.");
         events.add_property("chatSend", "[text: string]", "Dispatched synchronously for a line the player typed into the chat box, before it is sent. A handler returning false, not a Promise of it, blocks it; Chat.send does not raise this.");
-    }
-
-    void Chat::RegisterLua(Framework::Scripting::LuaRuntime &runtime) {
-        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
     }
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins
