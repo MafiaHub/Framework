@@ -652,7 +652,29 @@ None of this is true of a context function. What still differs for one is
 said above: `null` (`IsNull`), raw table access, the empty table, a wrong
 receiver, and every error being a raised string in Lua.
 
-<!-- BENCH TABLE -->
+## What a call costs
+
+`FrameworkBindingBench` (`code/tests/bench/binding_bench.cpp`) times a bound
+call from a script of each language, in real resources of a server scripting
+module. An emission is timed until its one handler has run.
+
+| Operation | JavaScript | Lua |
+|---|---|---|
+| `Vector3` constructed | 552 ns | 95 ns |
+| `vector.add(other)` | 3370 ns | 109 ns |
+| `vector.x` read | 1253 ns | 62 ns |
+| `Events.emit`, handler in the same resource | 56 µs | 4.6 µs |
+
+| `Events.emit` to another resource | Handler in JavaScript | Handler in Lua |
+|---|---|---|
+| Emitted from JavaScript | 60 µs | 6.8 µs |
+| Emitted from Lua | 163 µs | 4.4 µs |
+
+These numbers are indicative only: they come from one run of an unoptimised
+build (no `CMAKE_BUILD_TYPE`) on Apple Silicon macOS, where the Framework's own
+C++ is not optimised while V8 and Lua are, so they say more about the order of
+magnitude than about either language. Run the benchmark in RelWithDebInfo or
+Release before drawing a conclusion.
 
 ## The catalog and the definition files
 

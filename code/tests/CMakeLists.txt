@@ -56,6 +56,13 @@ target_include_directories(FrameworkValueTransferBench PRIVATE ../framework/src)
 target_link_libraries(FrameworkValueTransferBench Framework FrameworkServer libnode)
 target_compile_definitions(FrameworkValueTransferBench PRIVATE NODE_WANT_INTERNALS=1)
 
+# Not a test: what a bound call and an event cost a script in JavaScript and in Lua (see the file).
+# Build it in RelWithDebInfo or Release.
+add_executable(FrameworkBindingBench bench/binding_bench.cpp)
+target_include_directories(FrameworkBindingBench PRIVATE ../framework/src)
+target_link_libraries(FrameworkBindingBench Framework FrameworkServer libnode)
+target_compile_definitions(FrameworkBindingBench PRIVATE NODE_WANT_INTERNALS=1)
+
 # Not a test: what a log call costs its caller while the outputs keep up, fall behind and stall (see the
 # file). Build it in RelWithDebInfo or Release.
 add_executable(FrameworkLoggingBench bench/logging_bench.cpp)
