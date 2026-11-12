@@ -72,7 +72,9 @@ static const Bind::Class<Vector3> &Definition() {
 ```
 
 A definition is built once per process and materialised into each runtime. Service objects (`Events`,
-`Chat`) use `Bind::Namespace` with the same member kinds minus the constructor.
+`Chat`) use `Bind::Namespace` with the same member kinds minus the constructor. A constant of a namespace
+whose value is only known when a runtime is set up (`ExecutionEnvironment.isClient`, `.modVersion`) is
+declared with `RuntimeConstant<T>`, and each materialisation is given its value.
 
 A member's implementation is one of:
 
@@ -165,6 +167,7 @@ class Call {
     virtual void ThrowTypeError(std::string message) = 0;  // raised when the function returns
     virtual void ThrowError(std::string message) = 0;
     virtual bool HasThrown() const = 0;
+    virtual void WriteOutput(OutputLevel level, std::string_view line) = 0;  // the output of the runtime
     virtual Deferred Defer() = 0;                      // the call's result becomes asynchronous
 };
 
@@ -204,6 +207,13 @@ JavaScript `undefined` and `null` are both `Nil`. `Array` is a JavaScript array 
   message of what was thrown meanwhile, by `JSON.stringify`, by a script's `toJSON` or by a rebuild, and
   that exception is not left pending. A value JavaScript has no JSON for (a function, a symbol) is an
   error, not the text `undefined`.
+
+- `WriteOutput` is where a console writes. In JavaScript it is the scripting logger at the level given,
+  `[resource] line`, or the line alone when the resource cannot be told. In Lua it is the path of `print`
+  (§2).
+- A JavaScript call asks the resource manager of its isolate for its resource: the one a builtin's
+  `Register` was given (`Bind::SetCallResourceManager`), which is forgotten when the isolate is
+  unregistered or the manager is destroyed, and otherwise the scripting module's.
 
 `ScriptCallable` is a script function kept beyond a call: an event handler, a key bind, an export.
 
@@ -285,7 +295,10 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
   - **Libraries:** base, coroutine, table, string, utf8, math, and `os` cut down to `time`, `clock`,
     `date`, `difftime`. Removed from base: `dofile`, `loadfile`; `load` only accepts text and only
     strings; `string.dump` is removed; `collectgarbage` only answers `"count"`. `print` writes to the
-    scripting logger under the resource's name. `pcall`, `xpcall`, `setmetatable` and
+    scripting logger under the resource's name, and `console` writes where `print` does
+    (`LuaRuntime::WriteOutput`): a line is cut at the same bound, its control characters are blanked, it
+    counts in the same share of the log per second, and it is logged at the level of its function. A
+    print handler gets the lines of both, without the level. `pcall`, `xpcall`, `setmetatable` and
     `coroutine.create`/`wrap`/`resume`/`close` are the runtime's own, on both sides: they behave as
     Lua's, except that `setmetatable` refuses a metatable carrying `__gc` and that none of them lets
     a script run past the deadline of an entry.
@@ -339,8 +352,8 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
     waits between two ticks. Given the time of the last tick it passes over what that tick left due for
     the next one.
 - The Lua engine holds no V8. A server running only Lua resources executes no JavaScript for them.
-- The server scripting module owns the Lua engine: 512 MB a state, no deadline, and the value types for
-  bindings so far. It ticks it once in every `Update()`. While it waits for its next tick the wait is
+- The server scripting module owns the Lua engine: 512 MB a state, no deadline, and the value types,
+  `console` and `ExecutionEnvironment` for bindings so far. It ticks it once in every `Update()`. While it waits for its next tick the wait is
   Node's, and Lua is ticked only for a timer or a sleep that comes due after its last tick, 4 ms after
   that tick at the earliest, so Node keeps its share of the wait. A wait for no time (`sleep(0)`,
   `setTimeout(fn, 0)`) is due at the tick that armed it, not after it: it goes on at the next `Update()`,
