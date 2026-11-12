@@ -159,11 +159,16 @@ namespace Framework::Networking {
         // The RPC4 slot key for an identifier under the current salt, valid for the peer's lifetime.
         const char *ResolveIdentifier(RPC::Identifier identifier);
 
+      protected:
         // Register a handler for RPC payload type T (see networking/rpc/rpc.h). The handler receives
         // the already-decoded payload and the raw packet, and may capture (e.g. the owning instance).
         // A decode wrapper around RegisterRawRPC below, which owns the slot mechanics. Matches the
-        // Signal() send below. A server registers on NetworkServer, whose handlers are given the
-        // sender and the world instead of the packet.
+        // Signal() send below.
+        //
+        // The client's form: NetworkClient makes this and RegisterRawRPC public. A server registers on
+        // NetworkServer, whose handlers are given the sender and the world, and behind which sit the
+        // short-payload check, the shutdown check and the timing. Protected here so that a server
+        // mod holding a NetworkPeer * cannot register a handler that skips all three.
         template <RPC::Payload T>
         void RegisterRPC(fu2::function<void(const T &payload, MafiaNet::Packet *packet) const> handler) {
             RegisterRawRPC(T::kIdentifier, [cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
@@ -171,6 +176,7 @@ namespace Framework::Networking {
             });
         }
 
+      public:
         // Send an RPC payload to every connected system, optionally excluding one (in broadcast mode
         // RakNet treats the guid as the system to SKIP — e.g. don't echo a client's own update back).
         // `channel` is the ordering channel: Events, the construction channel, unless the message
@@ -190,10 +196,11 @@ namespace Framework::Networking {
             _rpc.Signal(ResolveIdentifier(T::kIdentifier), &bs, priority, reliability, ToOrderingChannel(channel), guid, false, false);
         }
 
+      protected:
         // Raw variant of RegisterRPC for handlers that decode the bitstream themselves (e.g. a
         // polymorphic tail). Prefer the typed RegisterRPC<T> for fixed-shape payloads. The callable
         // is stored for the peer's lifetime and reached through RPC4's per-slot context, so no
-        // file-static handler pointers are needed.
+        // file-static handler pointers are needed. Public on NetworkClient; see RegisterRPC.
         void RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)> handler) {
             auto slot     = std::make_unique<RPCSlot>(std::move(handler));
             void *context = slot.get();
@@ -201,6 +208,7 @@ namespace Framework::Networking {
             _rpc.RegisterSlot(ResolveIdentifier(identifier), &NetworkPeer::DispatchRPC, context, 0);
         }
 
+      public:
         // Send a pre-encoded bitstream under a raw identifier (pairs with RegisterRawRPC).
         void SendRawRPC(RPC::Identifier identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
             _rpc.Signal(ResolveIdentifier(identifier), &bs, priority, reliability, ToOrderingChannel(Channel::Events), guid, false, false);

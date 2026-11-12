@@ -67,6 +67,18 @@ namespace NetworkPacketsTest {
         }
     };
 
+    // The handler form that is given the packet is a client's. On a server it would run on the packet thread past
+    // the short-payload check, the shutdown check and the timing, so neither a NetworkServer nor the NetworkPeer a
+    // mod gets from CoreModules offers it.
+    template <typename Peer>
+    concept TakesPacketHandlers = requires(Peer &peer, fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)> raw, fu2::function<void(const Framework::Networking::RPC::ChatMessage &, MafiaNet::Packet *) const> typed) {
+        peer.RegisterRawRPC(Framework::Networking::RPC::Identifier {}, std::move(raw));
+        peer.template RegisterRPC<Framework::Networking::RPC::ChatMessage>(std::move(typed));
+    };
+    static_assert(TakesPacketHandlers<Framework::Networking::NetworkClient>);
+    static_assert(!TakesPacketHandlers<Framework::Networking::NetworkPeer>);
+    static_assert(!TakesPacketHandlers<Framework::Networking::NetworkServer>);
+
     // A loopback server with one connected client, as the admission tests stand them up.
     struct Loopback final {
         ConnectionAdmissionRig rig;

@@ -29,11 +29,10 @@ namespace Framework::Networking::RPC {
     //   static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Mod::Name"); // unique on both peers
     //   void Serialize(MafiaNet::BitStream *bs, bool write); // symmetric read/write
     //
-    // Register a handler with NetworkPeer::RegisterRPC<T> and send with NetworkPeer::BroadcastRPC /
-    // SendRPC (and NetworkServer::BroadcastRPCExcept). A handler is a function of shape
-    // void(MafiaNet::BitStream *, MafiaNet::Packet *); decode its payload with Read<T>. To target a
-    // specific entity, give the payload a MafiaNet::NetworkID field and resolve it through the
-    // ReplicationManager in the handler.
+    // Send with NetworkPeer::BroadcastRPC / SendRPC. Receive with RegisterRPC<T> on the concrete peer:
+    // NetworkClient's handler is given the decoded payload and the packet, NetworkServer's the payload,
+    // the Sender and the World. To target a specific entity, give the payload a network id field; a
+    // server handler takes it from the world by handle, a client through ClientEntities.
     template <typename T>
     inline T Read(MafiaNet::BitStream *bs) {
         T payload {};
