@@ -325,6 +325,11 @@ namespace Framework::Networking::Replication {
         // taken, so it may be asked from inside a handle's scope, and by the time it is read the
         // entity may be gone. For telling a caller its id is wrong, not for deciding to use it.
         bool Exists(uint64_t id) const;
+        // The registered type id of the entity an id names (EntityTypeId<T>(), NetworkEntity::GetTypeId),
+        // 0 when it names none. Like Exists it reads the table of ids and takes no entity lock: for
+        // code that must choose by type with a handle held or without taking one, such as a
+        // WrapScriptEntity override picking the wrapper class.
+        uint32_t TypeIdOf(uint64_t id) const;
 
         // One object per type, registered before the server handles packets (an instance's PostInit
         // or PostScriptInit) and kept for the world's life: the list is read by every thread without a

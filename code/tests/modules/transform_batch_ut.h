@@ -14,8 +14,26 @@
 #include "networking/replication/transform_batch.h"
 
 #include <chrono>
+#include <functional>
 #include <future>
 #include <vector>
+
+namespace TransformBatchTest {
+    // An entity whose hook, run with the entity locked, puts off what it cannot do there.
+    struct Deferring final: Framework::Networking::Replication::NetworkEntity {
+        static constexpr const char *kTypeName = "Test::TransformBatch::Deferring";
+        static inline std::function<void()> later;
+        static inline int deserialized = 0;
+        void OnDeserialized(bool) override {
+            ++deserialized;
+            Framework::Networking::Replication::World::WhenNoneHeld([] {
+                if (later) {
+                    later();
+                }
+            });
+        }
+    };
+} // namespace TransformBatchTest
 
 MODULE(transform_batch, {
     struct Packet {
@@ -281,6 +299,78 @@ MODULE(transform_batch, {
         delivery.wait();
         EQUALS(applied, true);
         EQUALS(entity.position.x, 4.0f);
+    });
+
+    IT("runs what OnDeserialized put off at the thread's next settle, with nothing held", {
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            Framework::Networking::Replication::ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+                TransformBatchTest::Deferring::later = nullptr;
+            }
+        } cleanup {manager};
+        using TransformBatchTest::Deferring;
+        Framework::Networking::Replication::EntityRegistry::Get().Register<Deferring>(Deferring::kTypeName);
+        auto &world = manager->GetWorld();
+        const MafiaNet::RakNetGUID owner(1001);
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
+        uint64_t moved = 0, other = 0;
+        std::uint8_t epoch = 0;
+        {
+            const auto created = world.Create<Deferring>();
+            created->ownerGUID = MafiaNet::ToPeerGuid(owner);
+            moved              = created.Id();
+            epoch              = created->stateEpoch;
+        }
+        {
+            other = world.Create<Deferring>().Id();
+        }
+
+        int ran           = 0;
+        size_t heldThen   = 99;
+        bool reachedOther = false;
+        Deferring::later  = [&] {
+            ++ran;
+            heldThen = Framework::Networking::Replication::World::HeldByThisThread();
+            // What the hook could not do while its own entity was locked: reach another one.
+            reachedOther = static_cast<bool>(world.Write<Deferring>(other));
+        };
+
+        Harness h;
+        h.pose.Reset();
+        h.pose.Write(epoch);
+        Framework::Networking::Replication::NetworkEntity source;
+        source.position.x = 6.0f;
+        Framework::Networking::Replication::FieldSerializer fields(&h.pose, true);
+        source.SerializeTransform(fields);
+        h.Queue(moved, 100);
+        h.Flush();
+        MafiaNet::Packet packet {};
+        packet.data   = h.packets[0].data.data();
+        packet.length = static_cast<unsigned int>(h.packets[0].data.size());
+        packet.guid   = owner;
+        TestWorld::OnReceive(manager, &packet);
+
+        // The hook ran; what it put off has not, since letting go of the Framework's own hold on the entity
+        // runs nothing (it is let go under the sender's connection lock). It waits for the settle that ends a
+        // drain or a tick's pass, or for the next handle this thread lets go of.
+        const int ranAfterReceive = ran;
+        Framework::Networking::Replication::World::Settle();
+        float x = 0.0f;
+        {
+            const auto entity = world.Read<Deferring>(moved);
+            x                 = entity ? entity->position.x : -1.0f;
+        }
+        EQUALS(x, 6.0f);
+        EQUALS(Deferring::deserialized, 1);
+        EQUALS(ranAfterReceive, 0);
+        EQUALS(ran, 1);
+        EQUALS(heldThen, static_cast<size_t>(0));
+        EQUALS(reachedOther, true);
+        Deferring::deserialized = 0;
     });
 
     IT("resets the reused pose stream between entities and packets", {

@@ -719,6 +719,27 @@ MODULE(world, {
         EQUALS(world.Exists(b), false);
     });
 
+    IT("says what type an id names without taking the entity", {
+        Fixture fixture;
+        World &world     = fixture.world;
+        const uint64_t a = fixture.Make<Walker>();
+        const uint64_t b = fixture.Make<Prop>();
+        using Framework::Networking::Replication::EntityTypeId;
+
+        EQUALS(world.TypeIdOf(a), EntityTypeId<Walker>());
+        EQUALS(world.TypeIdOf(b), EntityTypeId<Prop>());
+        EQUALS(world.TypeIdOf(b + 1000), 0u);
+        uint32_t whileHeld = 0;
+        {
+            // With that very entity held for writing, and another: no lock of theirs is asked for.
+            auto [walker, prop] = world.Write<Walker, Prop>(a, b);
+            whileHeld           = world.TypeIdOf(a);
+        }
+        EQUALS(whileHeld, EntityTypeId<Walker>());
+        EQUALS(world.Destroy(a), true);
+        EQUALS(world.TypeIdOf(a), 0u);
+    });
+
     IT("gives an entity's id through either kind of handle, and 0 through an empty one", {
         Fixture fixture;
         World &world     = fixture.world;
