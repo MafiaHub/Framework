@@ -38,11 +38,13 @@
       "platform": "windows"
     },
     {
+      "$comment": "FreeType, not stb_truetype, parses every font: servers send them, and stb_truetype does not bounds-check a file. FreeType comes from cmake/vcpkg-ports, without codecs.",
       "name": "imgui",
       "default-features": false,
       "features": [
         "dx9-binding",
         "dx11-binding",
+        "freetype",
         "win32-binding"
       ],
       "platform": "windows"

@@ -1,0 +1,50 @@
+{
+  "$comment": "Upstream freetype without its default codecs. Servers send fonts, so no decoder beyond sfnt is reachable, and a static zlib would collide with the one libnode exports.",
+  "name": "freetype",
+  "version": "2.14.3",
+  "description": "A library to render fonts.",
+  "homepage": "https://www.freetype.org/",
+  "license": "FTL OR GPL-2.0-or-later",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ],
+  "features": {
+    "brotli": {
+      "description": "Support decompression of WOFF2 streams",
+      "dependencies": [
+        "brotli"
+      ]
+    },
+    "bzip2": {
+      "description": "Support bzip2 compressed fonts.",
+      "dependencies": [
+        "bzip2"
+      ]
+    },
+    "error-strings": {
+      "description": "Enable support for meaningful error descriptions."
+    },
+    "png": {
+      "description": "Support PNG compressed OpenType embedded bitmaps.",
+      "dependencies": [
+        "libpng"
+      ]
+    },
+    "subpixel-rendering": {
+      "description": "Enables subpixel rendering."
+    },
+    "zlib": {
+      "description": "Use zlib instead of internal library for DEFLATE",
+      "dependencies": [
+        "zlib"
+      ]
+    }
+  }
+}
