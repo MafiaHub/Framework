@@ -197,7 +197,11 @@ or the same with an `EngineScope`. What changed is underneath:
   logged and the event is not raised.
 - `EmitReservedSync` runs the dispatch on the script thread and waits for
   the handlers' veto. That waits for whatever script is running there to
-  finish its task, so keep it for events whose answer the tick needs.
+  finish its task, so keep it for events whose answer the tick needs. The
+  caller lets go of its isolate for the wait, so a handler may call a
+  function that was among the arguments. An event that could not be raised
+  (an argument that cannot be copied) answers `false`: nothing that might
+  have refused it saw it.
 
 For anything else that ends in script, hand it over:
 

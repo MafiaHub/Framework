@@ -759,13 +759,17 @@ namespace Framework::Scripting::Builtins {
             return true;
         }
         // Out of the caller's isolate, into a form that belongs to no isolate. An argument that cannot cross (a
-        // promise, a cycle) is the caller's mistake: said once, and the event is not raised.
-        v8::TryCatch tryCatch(isolate);
-        std::optional<std::vector<TransferredValue>> copied = references->CopyArguments(isolate, args);
-        if (!copied) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Event '{}' was not raised: {}", eventName, FormatV8Exception(isolate, tryCatch, "its arguments cannot be copied to the script thread"));
-            tryCatch.Reset();
-            return true;
+        // promise, a cycle) is the caller's mistake: said once, and the event is not raised. A synchronous caller
+        // is then told no: the handlers that might have refused never saw it.
+        std::optional<std::vector<TransferredValue>> copied;
+        {
+            v8::TryCatch tryCatch(isolate);
+            copied = references->CopyArguments(isolate, args);
+            if (!copied) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Event '{}' was not raised: {}", eventName, FormatV8Exception(isolate, tryCatch, "its arguments cannot be copied to the script thread"));
+                tryCatch.Reset();
+                return !sync;
+            }
         }
 
         // On the script thread, from its own isolate: what every emit there always did.
@@ -779,6 +783,9 @@ namespace Framework::Scripting::Builtins {
             const auto rebuilt = references->RebuildArguments(host, arguments);
             if (!rebuilt) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Event '{}' was not raised: {}", eventName, FormatV8Exception(host, failed, "its arguments could not be rebuilt"));
+                if (result != nullptr) {
+                    *result = false;
+                }
                 return;
             }
             if (sync) {
@@ -795,11 +802,21 @@ namespace Framework::Scripting::Builtins {
 
         ScriptGate *gate = ScriptGate::Get();
         if (sync) {
-            // The caller keeps its isolate: the script thread never enters that one.
-            bool proceed = true;
-            gate->Run([&emit, &proceed] {
-                emit(&proceed);
-            });
+            bool proceed   = true;
+            const auto run = [&] {
+                gate->Run([&emit, &proceed] {
+                    emit(&proceed);
+                });
+            };
+            // A handler may call a function that was among the arguments, which runs in the caller's isolate, on
+            // the script thread: the caller lets go of it for the wait. Locals made in it stay valid.
+            if (v8::Locker::IsLocked(isolate)) {
+                const v8::Unlocker unlocked(isolate);
+                run();
+            }
+            else {
+                run();
+            }
             return proceed;
         }
         gate->Post([emit = std::move(emit)]() mutable {

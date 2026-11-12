@@ -78,6 +78,10 @@ namespace ServerScriptThreadTest {
         // touchWorld(): a native as a project would bind one, standing in for anything that reads the world.
         void ModuleRegister(Framework::Scripting::Engine *engine) override {
             v8::Isolate *isolate = engine->GetIsolate();
+            // The runtime being set up is the one the caller is inside.
+            if (v8::Isolate *current = v8::Isolate::TryGetCurrent(); current != nullptr && current != isolate) {
+                ++registeredElsewhere;
+            }
             v8::HandleScope handleScope(isolate);
             v8::Local<v8::Context> context = isolate->GetCurrentContext();
             if (context.IsEmpty()) {
@@ -191,6 +195,11 @@ namespace ServerScriptThreadTest {
 
         // Raises an event the way projects do from an RPC handler on the tick thread: V8's own scopes on the
         // engine's isolate, values built there, and an emit. No EngineScope, no hand-over.
+        std::atomic<int> registeredElsewhere {0};
+        enum class Extra { None, Promise, Function };
+        Extra extra = Extra::None;
+        static inline std::atomic<int> functionCalls {0};
+
         template <typename Emit>
         auto WithProjectScopes(Emit emit) {
             auto *engine         = GetScriptingModule()->GetEngine();
@@ -201,6 +210,16 @@ namespace ServerScriptThreadTest {
             v8::Local<v8::Context> context = engine->GetContext();
             v8::Context::Scope contextScope(context);
             std::vector<v8::Local<v8::Value>> args {v8pp::to_v8(isolate, std::string("from-a-project")), v8::Array::New(isolate, 0)};
+            if (extra == Extra::Promise) {
+                // Cannot be copied to another isolate.
+                args.push_back(v8::Promise::Resolver::New(context).ToLocalChecked()->GetPromise());
+            }
+            else if (extra == Extra::Function) {
+                // Crosses as a reference: whoever calls it runs it back in this thread's isolate.
+                args.push_back(v8::Function::New(context, [](const v8::FunctionCallbackInfo<v8::Value> &) {
+                    functionCalls++;
+                }).ToLocalChecked());
+            }
             return emit(isolate, context, GetScriptingModule()->GetResourceManager()->GetEvents(), args);
         }
 
@@ -451,9 +470,48 @@ MODULE(server_script_thread, {
         server.Stop();
     });
 
+    IT("does not let a synchronous event through when it could not be raised", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_unraised", R"(
+            Events.on('mayNot', () => false);
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        server.TickFor(300ms);
+        // The handler that would have said no never saw it: that is not a yes.
+        server.extra = Server::Extra::Promise;
+        EQUALS(server.EmitSyncAsProjectsDo("mayNot"), false);
+        EQUALS(server.EmitSyncAsProjectsDo("nobodyListens"), false);
+        server.Stop();
+    });
+
+    IT("lets a synchronous event's handler call a function the tick thread handed it", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_callback", R"(
+            Events.on('withCallback', (text, list, callback) => { callback(); return true; });
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        server.TickFor(300ms);
+        Server::functionCalls = 0;
+        server.extra          = Server::Extra::Function;
+        // The function lives in the isolate this thread is inside while it waits for the answer.
+        EQUALS(server.EmitSyncAsProjectsDo("withCallback"), true);
+        EQUALS(Server::functionCalls.load(), 1);
+        server.Stop();
+    });
+
     IT("still lets another thread start and stop resources, once the running script is out of the way", {
         Server server;
-        const bool up = server.Start("fw_script_thread_enter", kBusyScript);
+        // Uses a binding as it loads: a runtime started from the tick thread has to have its own.
+        const bool up = server.Start("fw_script_thread_enter", std::string(kBusyScript) + R"(
+            touchWorld();
+            fs.appendFileSync('$ROOT/loads', 'x');
+        )");
         EQUALS(up, true);
         if (!up) {
             break;
@@ -461,7 +519,13 @@ MODULE(server_script_thread, {
         server.TickFor(900ms);
         // Goes into the script side's runtimes, so it has to wait for the script; it must work and not deadlock.
         EQUALS(static_cast<bool>(server.GetScriptingModule()->GetResourceManager()->RestartResource("demo")), true);
-        server.TickFor(100ms);
+        EQUALS(server.TickUntil([&] {
+            std::string loads;
+            std::ifstream(server.Marker("loads")) >> loads;
+            return loads == "xx";
+        }),
+            true);
+        EQUALS(server.registeredElsewhere.load(), 0);
         GREATER(server.ticks, 10);
         server.Stop();
     });

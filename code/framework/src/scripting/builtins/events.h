@@ -214,8 +214,9 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Promise> EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource = "", HandlerScope scope = HandlerScope::Global);
         // An emit from a thread that is not the script thread (a server's tick thread raising an event from an RPC
         // handler). Handlers never run there: the arguments are copied out of the caller's isolate and the emit
-        // itself runs on the script thread. `sync` waits for it and returns whether no handler vetoed; without it
-        // the call returns at once (true) and nothing of the handlers comes back.
+        // itself runs on the script thread. `sync` waits for it and returns whether no handler vetoed, and false when the
+        // event could not be raised at all; without it the call returns at once (true) and nothing of the handlers
+        // comes back.
         bool EmitFromOtherThread(v8::Isolate *isolate, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource, HandlerScope scope, bool sync);
 
         // Calls every handler and settles `resolver` once they all have: rejected with an AggregateError of the failures

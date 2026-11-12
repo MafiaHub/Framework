@@ -785,11 +785,13 @@ namespace Framework::Scripting {
             return nullptr;
         }
         v8::Isolate *current = v8::Isolate::TryGetCurrent();
-        if (_offThreadRuntime && (current == _offThreadRuntime->GetIsolate() || OffEngineThread())) {
-            return _offThreadRuntime->GetIsolate();
-        }
+        // A resource's runtime the caller is inside comes first, on any thread: one started from the tick thread
+        // is set up there.
         if (current != nullptr && _runtimeByIsolate.contains(current)) {
             return current;
+        }
+        if (_offThreadRuntime && (current == _offThreadRuntime->GetIsolate() || OffEngineThread())) {
+            return _offThreadRuntime->GetIsolate();
         }
         return _runtime->GetIsolate();
     }
@@ -799,14 +801,14 @@ namespace Framework::Scripting {
             return v8::Local<v8::Context>();
         }
         v8::Isolate *current = v8::Isolate::TryGetCurrent();
-        if (_offThreadRuntime && (current == _offThreadRuntime->GetIsolate() || OffEngineThread())) {
-            return _offThreadRuntime->GetContext();
-        }
         if (current != nullptr) {
             const auto it = _runtimeByIsolate.find(current);
             if (it != _runtimeByIsolate.end()) {
                 return it->second->runtime->GetContext();
             }
+        }
+        if (_offThreadRuntime && (current == _offThreadRuntime->GetIsolate() || OffEngineThread())) {
+            return _offThreadRuntime->GetContext();
         }
         return _runtime->GetContext();
     }
