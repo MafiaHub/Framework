@@ -5,3 +5,5 @@
 /scripts/build_windows_container.sh text eol=lf
 /scripts/run_windows_server.sh text eol=lf
 /scripts/run_windows_client.sh text eol=lf
+# Generated Lua definition files are compared byte for byte with what the generator writes (LF).
+types/lua/*.d.lua text eol=lf
