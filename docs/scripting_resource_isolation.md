@@ -177,10 +177,18 @@ Exports cross languages the same way. What a Lua script registers with
 functions that call home, and every importer of either language gets a
 rebuild of that copy: a table changed after it was registered is not seen,
 so share state through exported functions. A Lua importer gets a copy of a
-JavaScript export, made when it asks. A function that crossed to or from Lua
-is called on nothing: a JavaScript method called from Lua has no `this`, and
-`api:method()` passes nothing more than `api.method()`. Only an export that
-goes from JavaScript to JavaScript keeps the owner's object as `this`. A call
+JavaScript export, made when it asks. In Lua, a function that arrived as a
+member of a table can be called with `.` or with `:` on that table:
+`api:deposit(5)` and `api.deposit(5)` are the same call, because the function
+drops a first argument that is the table it arrived in. Copied out of that
+table, put in another one, or called with any other first argument, it passes
+every argument on; a function that arrived on its own always does. The
+function behind it is called on nothing in every case: a JavaScript function
+called from Lua has `this` undefined, so a JavaScript export whose methods
+use `this` does not work from Lua. Write such methods over a closure instead.
+Only an export that goes from JavaScript to JavaScript keeps the owner's
+object as `this`. A resource that imports its own Lua export gets its own
+functions, which are called as the script wrote the call. A call
 returns the value itself when the function finished at once; otherwise a
 JavaScript caller gets a Promise and a Lua caller waits, and a rejection or
 an error raised late is thrown to it. A name is registered once per start of
