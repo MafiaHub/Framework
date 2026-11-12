@@ -290,9 +290,9 @@ namespace Framework::Integrations::Server {
             replication->SetInterestUsesEntityRange(Framework::Networking::Replication::Entities::TextLabelEntity::kTypeName, true);
             // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
             // still resolvable) just before destroying and broadcasting the destruction of the avatar.
-            replication->SetOnClientDisconnect([this](MafiaNet::PeerGuid guid) {
+            replication->SetOnClientDisconnect([this, replication](MafiaNet::PeerGuid guid) {
                 if (_readyPlayerGuids.contains(static_cast<uint64_t>(guid))) {
-                    OnPlayerDisconnect(guid);
+                    OnPlayerDisconnect(guid, replication->GetWorld());
                 }
             });
         }
@@ -734,15 +734,15 @@ namespace Framework::Integrations::Server {
                 return;
             }
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Client spawn ready for player guid {}", guid.g);
-            OnPlayerReady(MafiaNet::ToPeerGuid(guid));
+            OnPlayerReady(MafiaNet::ToPeerGuid(guid), net->GetReplicationManager()->GetWorld());
             net->GetReadyEvent()->SetEvent(eventId, true);
         });
 
         // Client is done downloading and its resources run: build the avatar. Gated on the build check
         // so an unverified peer cannot conjure one; admission needs no check, because a refused or
         // still-waiting peer has no connection to send this over.
-        net->RegisterRPC<Framework::Networking::RPC::ClientJoin>([this, net](const Framework::Networking::RPC::ClientJoin &, MafiaNet::Packet *packet) {
-            const auto guid = packet->guid;
+        net->RegisterRPC<Framework::Networking::RPC::ClientJoin>([this, net](const Framework::Networking::RPC::ClientJoin &, Framework::Networking::Sender sender, Framework::Networking::Replication::World &world) {
+            const auto guid = sender.Connection();
             if (!net->IsAuthenticated(guid)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring join from unauthenticated peer {}", guid.g);
                 return;
@@ -750,7 +750,7 @@ namespace Framework::Integrations::Server {
 
             auto *replication   = net->GetReplicationManager();
             const auto peerGuid = MafiaNet::ToPeerGuid(guid);
-            if (replication && (replication->GetConnectionByGUID(guid) || replication->GetViewer(peerGuid))) {
+            if (replication && (replication->GetConnectionByGUID(guid) || sender.Avatar() != 0)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring duplicate join from {}", guid.g);
                 return;
             }
@@ -786,7 +786,7 @@ namespace Framework::Integrations::Server {
             data.epicId      = identity.epicId;
             data.discordId   = identity.discordId;
             data.discordName = identity.discordName;
-            OnPlayerConnect(data);
+            OnPlayerConnect(data, world);
 
             // Gate opens: this connection now starts receiving the replicated world.
             net->PushReplicationConnection(guid);
@@ -799,58 +799,52 @@ namespace Framework::Integrations::Server {
 
         // Incoming chat from clients. Sender resolution + command parsing happen here; the mod
         // observes via the OnChatMessage / OnChatCommand overrides.
-        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, MafiaNet::Packet *packet) {
+        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, Framework::Networking::Sender sender, Framework::Networking::Replication::World &world) {
             if (payload.text.empty()) {
                 return;
             }
-            // Resolve the sender from its connection's viewer entity.
-            auto *engine = GetNetworkingEngine();
-            auto *server = engine ? engine->GetNetworkServer() : nullptr;
-            auto *repl   = server ? server->GetReplicationManager() : nullptr;
-            auto *sender = repl ? repl->GetViewer(MafiaNet::ToPeerGuid(packet->guid)) : nullptr;
-            if (!sender) {
+            // The sender is its connection's viewer entity.
+            const uint64_t senderId = sender.Avatar();
+            if (senderId == 0) {
                 return;
             }
-            HandleIncomingChat(sender->GetNetworkID(), payload.text);
+            HandleIncomingChat(senderId, payload.text, world);
         });
 
         // Client -> server scripting events (the client's Game.emitServer). Resolve the sender from
         // its viewer entity, then hand off to OnClientEvent, which routes into the dedicated
         // client-event table (Events.onClient) — never the global bus a client could otherwise
         // collide with.
-        net->RegisterRPC<Framework::Integrations::Shared::RPC::EmitScriptEvent>([this](const Framework::Integrations::Shared::RPC::EmitScriptEvent &payload, MafiaNet::Packet *packet) {
+        net->RegisterRPC<Framework::Integrations::Shared::RPC::EmitScriptEvent>([this](const Framework::Integrations::Shared::RPC::EmitScriptEvent &payload, Framework::Networking::Sender sender, Framework::Networking::Replication::World &) {
             const std::string name = payload.GetEventName();
             if (name.empty()) {
                 return;
             }
-            auto *engine = GetNetworkingEngine();
-            auto *server = engine ? engine->GetNetworkServer() : nullptr;
-            auto *repl   = server ? server->GetReplicationManager() : nullptr;
-            auto *sender = repl ? repl->GetViewer(MafiaNet::ToPeerGuid(packet->guid)) : nullptr;
-            if (!sender) {
+            const uint64_t senderId = sender.Avatar();
+            if (senderId == 0) {
                 return;
             }
             // Handlers run where scripts run: a slow one holds up other scripts, not the packets behind this one.
-            PostToScripts([this, senderId = static_cast<uint64_t>(sender->GetNetworkID()), name, eventPayload = payload.GetPayload()] {
+            PostToScripts([this, senderId, name, eventPayload = payload.GetPayload()] {
                 OnClientEvent(senderId, name, eventPayload);
             });
         });
 
         // A client announcing whether its player left voice chat on. The GUID is the packet's,
         // never a field, so a peer can only ever speak for itself.
-        net->RegisterRPC<Framework::Networking::RPC::VoicePreference>([this, net](const Framework::Networking::RPC::VoicePreference &payload, MafiaNet::Packet *packet) {
-            if (!net->IsAuthenticated(packet->guid)) {
+        net->RegisterRPC<Framework::Networking::RPC::VoicePreference>([this, net](const Framework::Networking::RPC::VoicePreference &payload, Framework::Networking::Sender sender, Framework::Networking::Replication::World &) {
+            if (!net->IsAuthenticated(sender.Connection())) {
                 return;
             }
-            _voiceServer.OnPlayerPreference(static_cast<uint64_t>(MafiaNet::ToPeerGuid(packet->guid)), payload.enabled);
+            _voiceServer.OnPlayerPreference(static_cast<uint64_t>(sender.Guid()), payload.enabled);
         });
 
         // A player switching how far their voice carries. Same rule: the packet's GUID only.
-        net->RegisterRPC<Framework::Networking::RPC::VoiceTierRequest>([this, net](const Framework::Networking::RPC::VoiceTierRequest &payload, MafiaNet::Packet *packet) {
-            if (!net->IsAuthenticated(packet->guid)) {
+        net->RegisterRPC<Framework::Networking::RPC::VoiceTierRequest>([this, net](const Framework::Networking::RPC::VoiceTierRequest &payload, Framework::Networking::Sender sender, Framework::Networking::Replication::World &) {
+            if (!net->IsAuthenticated(sender.Connection())) {
                 return;
             }
-            _voiceServer.OnTierRequest(static_cast<uint64_t>(MafiaNet::ToPeerGuid(packet->guid)), payload.tier);
+            _voiceServer.OnTierRequest(static_cast<uint64_t>(sender.Guid()), payload.tier);
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
@@ -930,12 +924,12 @@ namespace Framework::Integrations::Server {
         }
     }
 
-    void Instance::HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) {
+    void Instance::HandleIncomingChat(uint64_t senderNetworkId, const std::string &text, Framework::Networking::Replication::World &world) {
         if (text.empty()) {
             return;
         }
         if (text[0] != '/') {
-            OnChatMessage(senderNetworkId, text);
+            OnChatMessage(senderNetworkId, text, world);
             return;
         }
         // Same tokenizer as console commands, so a line parses identically on both surfaces.
@@ -945,7 +939,7 @@ namespace Framework::Integrations::Server {
         }
         const std::string command = std::move(tokens.front());
         tokens.erase(tokens.begin());
-        OnChatCommand(senderNetworkId, text, command, tokens);
+        OnChatCommand(senderNetworkId, text, command, tokens, world);
     }
 
     void Instance::OnClientEvent(uint64_t senderNetworkId, const std::string &eventName, const std::string &payloadJson) {
@@ -1655,8 +1649,8 @@ namespace Framework::Integrations::Server {
         // A peer whose viewer is already gone is skipped rather than reported against a
         // network id that no longer names anyone.
         const auto networkIdOf = [replication](uint64_t guid) -> std::optional<uint64_t> {
-            auto *viewer = replication ? replication->GetViewer(static_cast<MafiaNet::PeerGuid>(guid)) : nullptr;
-            return viewer ? std::optional<uint64_t>(static_cast<uint64_t>(viewer->GetNetworkID())) : std::nullopt;
+            const uint64_t viewer = replication ? replication->GetViewerId(static_cast<MafiaNet::PeerGuid>(guid)) : 0;
+            return viewer != 0 ? std::optional<uint64_t>(viewer) : std::nullopt;
         };
 
         for (const Voice::TalkingChange &change : _voiceTalkingChanges) {

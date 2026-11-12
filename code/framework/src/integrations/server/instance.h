@@ -388,21 +388,23 @@ namespace Framework::Integrations::Server {
             (void)engine;
         }
 
-        virtual void OnPlayerConnect(const PlayerConnectionData &data) {
-            (void)data;
+        // The five below are called where the packet that caused them is handled, with no entity
+        // held: an override reaches entities through `world`, by handle (networking/replication/world.h).
+        virtual void OnPlayerConnect(const PlayerConnectionData &data, Framework::Networking::Replication::World &world) {
+            (void)data, (void)world;
         }
-        virtual void OnPlayerReady(MafiaNet::PeerGuid guid) {
-            (void)guid;
+        virtual void OnPlayerReady(MafiaNet::PeerGuid guid, Framework::Networking::Replication::World &world) {
+            (void)guid, (void)world;
         }
-        virtual void OnPlayerDisconnect(MafiaNet::PeerGuid guid) {
-            (void)guid;
+        virtual void OnPlayerDisconnect(MafiaNet::PeerGuid guid, Framework::Networking::Replication::World &world) {
+            (void)guid, (void)world;
         }
         // Plain lines -> OnChatMessage; '/' lines -> OnChatCommand (command + whitespace-split args).
-        virtual void OnChatMessage(uint64_t senderNetworkId, const std::string &text) {
-            (void)senderNetworkId, (void)text;
+        virtual void OnChatMessage(uint64_t senderNetworkId, const std::string &text, Framework::Networking::Replication::World &world) {
+            (void)senderNetworkId, (void)text, (void)world;
         }
-        virtual void OnChatCommand(uint64_t senderNetworkId, const std::string &text, const std::string &command, const std::vector<std::string> &args) {
-            (void)senderNetworkId, (void)text, (void)command, (void)args;
+        virtual void OnChatCommand(uint64_t senderNetworkId, const std::string &text, const std::string &command, const std::vector<std::string> &args, Framework::Networking::Replication::World &world) {
+            (void)senderNetworkId, (void)text, (void)command, (void)args, (void)world;
         }
         // A player started or stopped talking; also emitted as the "playerVoiceStart" /
         // "playerVoiceStop" events. Derived from relayed frames, so it tracks speech rather than
@@ -436,7 +438,7 @@ namespace Framework::Integrations::Server {
         void OnSignal(sig_signal_t);
 
         // Parse a received chat line and dispatch it to OnChatMessage / OnChatCommand.
-        void HandleIncomingChat(uint64_t senderNetworkId, const std::string &text);
+        void HandleIncomingChat(uint64_t senderNetworkId, const std::string &text, Framework::Networking::Replication::World &world);
 
         InstanceOptions &GetOptions() {
             return _opts;
