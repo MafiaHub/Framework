@@ -78,6 +78,10 @@ namespace Framework::Integrations::Server::Scripting {
             Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);
         });
 
+        // A connection asking to join crosses as itself too. Ahead of the rest, so that it is asked last: the newest
+        // registration is tried first, and values and entities cross far more often than a connection does.
+        Builtins::PendingConnection::RegisterTransfer();
+
         // Before any project registers its own handle types (PostInit runs ahead of Init): the newest is tried first,
         // so the framework's bases must come first.
         Framework::Scripting::Builtins::RegisterTransferTypes();
@@ -209,6 +213,8 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Builtins::Player::RegisterLua(runtime);
         Framework::Scripting::Builtins::TextLabel::RegisterLua(runtime);
         Framework::Scripting::Builtins::Chat::RegisterLua(runtime);
+        Builtins::Voice::RegisterLua(runtime);
+        Builtins::PendingConnection::RegisterLua(runtime);
     }
 
     bool ServerScriptingModule::PreShutdown() {

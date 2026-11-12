@@ -83,7 +83,8 @@ namespace Framework::Integrations::Server {
         // In the table before any handler runs: one that calls reject() synchronously has to find it.
         Pending &pending = _pending[guid.g];
         pending.guid     = guid;
-        pending.nickname = identity.name;
+        pending.identity = identity;
+        pending.address  = address;
         pending.deadline = std::chrono::steady_clock::now() + _timeout;
 
         // Before the emit: a handler that answers synchronously logs its answer inside it.
@@ -103,6 +104,16 @@ namespace Framework::Integrations::Server {
     bool ConnectionGate::IsPending(uint64_t guid) const {
         const auto it = _pending.find(guid);
         return it != _pending.end() && !it->second.refusal.has_value();
+    }
+
+    bool ConnectionGate::Describe(uint64_t guid, Networking::RPC::ClientIdentity &identity, std::string &address) const {
+        const auto it = _pending.find(guid);
+        if (it == _pending.end()) {
+            return false;
+        }
+        identity = it->second.identity;
+        address  = it->second.address;
+        return true;
     }
 
     void ConnectionGate::Refuse(uint64_t guid, std::string reason) {
@@ -146,7 +157,7 @@ namespace Framework::Integrations::Server {
             it->second.verdict.Reset();
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} left while waiting on {}", it->second.nickname, guid, kEventName);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} left while waiting on {}", it->second.identity.name, guid, kEventName);
         _pending.erase(it);
     }
 
@@ -173,19 +184,19 @@ namespace Framework::Integrations::Server {
             AdmissionDecision decision {pending.guid, false, {}};
             if (pending.refusal.has_value()) {
                 decision.reason = *pending.refusal;
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} refused: {}", pending.nickname, it->first, decision.reason);
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} refused: {}", pending.identity.name, it->first, decision.reason);
             }
             else if (state == v8::Promise::PromiseState::kFulfilled) {
                 decision.admitted = true;
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} admitted", pending.nickname, it->first);
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} admitted", pending.identity.name, it->first);
             }
             else if (state == v8::Promise::PromiseState::kRejected) {
                 decision.reason = kHandlerFailedReason;
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Player {} guid {} refused: a {} handler failed:\n{}", pending.nickname, it->first, kEventName, DescribeRejection(isolate, context, verdict->Result()));
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Player {} guid {} refused: a {} handler failed:\n{}", pending.identity.name, it->first, kEventName, DescribeRejection(isolate, context, verdict->Result()));
             }
             else if (now >= pending.deadline) {
                 decision.reason = kTimedOutReason;
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Player {} guid {} refused: {} handlers did not settle within {} ms", pending.nickname, it->first, kEventName, _timeout.count());
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Player {} guid {} refused: {} handlers did not settle within {} ms", pending.identity.name, it->first, kEventName, _timeout.count());
             }
             else {
                 ++it;

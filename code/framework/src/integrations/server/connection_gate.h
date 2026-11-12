@@ -70,6 +70,10 @@ namespace Framework::Integrations::Server {
 
         bool IsPending(uint64_t guid) const;
 
+        // Who the gate holds under `guid`, and where from: what a PendingConnection that arrives in another
+        // runtime is built again with. False for a connection the gate no longer holds.
+        bool Describe(uint64_t guid, Networking::RPC::ClientIdentity &identity, std::string &address) const;
+
         // PendingConnection.reject(). No-op once the connection is decided or gone.
         void Refuse(uint64_t guid, std::string reason);
 
@@ -90,7 +94,8 @@ namespace Framework::Integrations::Server {
       private:
         struct Pending {
             MafiaNet::RakNetGUID guid;
-            std::string nickname; // for the log lines only
+            Networking::RPC::ClientIdentity identity;
+            std::string address;
             v8::Global<v8::Promise> verdict;
             std::chrono::steady_clock::time_point deadline;
             std::optional<std::string> refusal;

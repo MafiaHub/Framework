@@ -8,33 +8,27 @@
 
 #pragma once
 
+#include <scripting/bind/namespace.h>
+
 #include <v8.h>
+
+namespace Framework::Scripting {
+    class LuaRuntime;
+} // namespace Framework::Scripting
 
 namespace Framework::Integrations::Server::Scripting::Builtins {
 
-    // Server-side proximity voice rules, exposed as the global Voice. Players are addressed
-    // through the base Entity handle, like the Chat builtin, so this stays game-agnostic.
+    // Server-side proximity voice rules, exposed as the global Voice to JavaScript and Lua. Players are
+    // addressed through the base Entity handle, like the Chat builtin, so this stays game-agnostic.
     class Voice final {
       public:
+        // Voice, declared once for both languages.
+        static const Framework::Scripting::Bind::Namespace &Definition();
+
         static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
 
-      private:
-        static void JS_SetRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_GetRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetPlayerRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_GetPlayerRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetTierRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_GetTierRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetPlayerTier(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_GetPlayerTier(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetPlayerMuted(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_IsPlayerMuted(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetPlayerDeaf(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_IsPlayerDeaf(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetLocalMute(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_IsLocallyMuted(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_IsPlayerVoiceEnabled(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_IsPlayerTalking(const v8::FunctionCallbackInfo<v8::Value> &info);
+        // Publishes Voice as a global of a Lua runtime.
+        static void RegisterLua(Framework::Scripting::LuaRuntime &runtime);
     };
 
 } // namespace Framework::Integrations::Server::Scripting::Builtins
