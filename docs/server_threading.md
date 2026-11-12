@@ -591,6 +591,13 @@ longer resolve. A script's listener (`entity.state.onChange`, the
 `entityStateChange` event) is not one of these: it always runs on the script
 thread, later, whoever wrote the bag.
 
+A change written off the script thread is delivered to a script's listener
+after the write has returned. Writes to one key from different threads (a
+packet handler and the tick, say) may therefore reach the listener in
+another order than they were made in. When the order matters, the listener
+reads the bag's current value (`entity.state.get(key)`) rather than trusting
+the value it was called with.
+
 **A handler that throws loses its packet, not the server.** An exception
 out of an RPC handler, or out of `OnPlayerConnect`, `OnPlayerReady` or
 `OnPlayerDisconnect`, is logged with the RPC's digest (or the override's
