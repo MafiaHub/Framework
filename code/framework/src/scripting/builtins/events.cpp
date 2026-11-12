@@ -22,6 +22,7 @@
 #include <networking/network_peer.h>
 #include <utils/profiler.h>
 
+#include <algorithm>
 #include <unordered_map>
 
 namespace Framework::Scripting::Builtins {
@@ -231,23 +232,26 @@ namespace Framework::Scripting::Builtins {
                 return;
             }
 
-            EventHandler entry                                   = MakeHandler(call, resourceName, false);
-            const std::shared_ptr<Bind::ScriptCallable> callable = entry.callable;
+            EventHandler entry = MakeHandler(call, resourceName, false);
             {
                 std::scoped_lock lock(binding.events->_handlersMutex);
                 binding.events->HandlerTable(scope)[eventName].push_back(std::move(entry));
             }
 
-            // The unsubscribe function removes what `off` would, given the same handler. It does not keep the handler:
-            // a handler that holds its own unsubscribe function would otherwise hold itself, through a native
-            // function no collector sees into, and never be let go of once it is removed.
-            call.Return(call.NewFunction([self = binding.events->_self, scope, eventName, resourceName, handler = std::weak_ptr<Bind::ScriptCallable>(callable)](Bind::Call &) {
-                Events *events                                       = *self;
-                const std::shared_ptr<Bind::ScriptCallable> callable = handler.lock();
-                if (events != nullptr && callable != nullptr) {
-                    Remove(*events, scope, eventName, resourceName, *callable);
-                }
-            }));
+            // The unsubscribe function removes what `off` would, given the same handler, whenever it is called: also
+            // a registration made after an earlier removal. It carries the handler as a script value, which the
+            // collector of the language sees, and asks for its callable when it is called. Holding the callable
+            // would root the handler: one that holds its own unsubscribe function would then hold itself, and never
+            // be let go of once it is removed.
+            call.Return(call.NewFunction(
+                [self = binding.events->_self, scope, eventName, resourceName](Bind::Call &unsubscribe) {
+                    Events *events                                       = *self;
+                    const std::shared_ptr<Bind::ScriptCallable> callable = unsubscribe.Data().ToCallable();
+                    if (events != nullptr && callable != nullptr) {
+                        Remove(*events, scope, eventName, resourceName, *callable);
+                    }
+                },
+                call.Arg(1)));
         }
 
         static void Once(Bind::Call &call, HandlerScope scope) {
@@ -1012,15 +1016,19 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Events::TrackDispatch(const std::vector<CollectedHandler> &handlers) {
+        // What the emissions that ended since held is let go of first, once for each isolate this one touches.
+        std::vector<v8::Isolate *> pruned;
         for (const CollectedHandler &handler : handlers) {
             if (handler.isolate == nullptr) {
                 continue;
             }
             auto &live = _dispatching[handler.isolate];
-            // The emissions that ended since.
-            std::erase_if(live, [](const std::weak_ptr<v8::Global<v8::Function>> &function) {
-                return function.expired();
-            });
+            if (std::find(pruned.begin(), pruned.end(), handler.isolate) == pruned.end()) {
+                pruned.push_back(handler.isolate);
+                std::erase_if(live, [](const std::weak_ptr<v8::Global<v8::Function>> &function) {
+                    return function.expired();
+                });
+            }
             live.push_back(handler.callback);
         }
     }

@@ -15,6 +15,7 @@
 #include "scripting/bind/lua_callable.h"
 #include "scripting/bind/v8_callable.h"
 #include "scripting/builtins/events.h"
+#include "scripting/builtins/exports.h"
 #include "scripting/engine_scope.h"
 
 #include <v8pp/convert.hpp>
@@ -149,10 +150,27 @@ namespace LuaEventsTest {
                 lua_setglobal(L, "stop");
                 Bind::SetCallResourceManager(&runtime, &rig.manager);
                 Builtins::Events::RegisterLua(runtime);
+                Builtins::Exports::RegisterLua(runtime);
             });
+            // Each runtime that is destroyed says so in the log, next to what the scripts wrote.
             rig.lua.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
+                LuaResourcesTest::Log().push_back("lua runtime of " + runtime.Options().resourceName + " destroyed");
                 Bind::SetCallResourceManager(&runtime, nullptr);
             });
+            rig.node.AddRuntimeDisposingListener([](v8::Isolate *) {
+                LuaResourcesTest::Log().emplace_back("javascript runtime destroyed");
+            });
+        }
+
+        // What the scripts logged, without the runtimes that were destroyed.
+        static std::string Said() {
+            std::string text;
+            for (const std::string &entry : LuaResourcesTest::Log()) {
+                if (!entry.ends_with(" destroyed")) {
+                    text += (text.empty() ? "" : ",") + entry;
+                }
+            }
+            return text;
         }
 
         // The value of `expression` in the JavaScript runtime of the resource, as a string.
@@ -311,6 +329,54 @@ MODULE(lua_events, {
         EQUALS(bus.Lua("listener", "Events.emit('f')"), "nil");
         EQUALS(bus.Lua("listener", "hits"), "100");
         EQUALS(bus.Events().GetListenerCount("f"), (size_t)1);
+    });
+
+    IT("removes with the function on returned a handler that was registered again since", {
+        Bus bus;
+        bus.server.files.Resource("toggle", {{"main.lua", R"(
+            function toggle()
+                local function handler() end
+                local off = Events.on('lua-toggle', handler)
+                off()
+                Events.on('lua-toggle', handler)
+                local between = Events.listenerCount('lua-toggle')
+                off()
+                -- Every registration of the function goes, and a function that is not registered removes nothing.
+                Events.on('lua-toggle', handler)
+                Events.on('lua-toggle', handler)
+                local doubled = Events.listenerCount('lua-toggle')
+                off()
+                off()
+                return between .. ',' .. doubled .. ',' .. Events.listenerCount('lua-toggle')
+            end
+        )"},
+                                                {"main.js", R"(
+            globalThis.toggle = () => {
+                const handler = () => {};
+                const off = Events.on('js-toggle', handler);
+                off();
+                Events.on('js-toggle', handler);
+                const between = Events.listenerCount('js-toggle');
+                off();
+                Events.on('js-toggle', handler);
+                Events.on('js-toggle', handler);
+                const doubled = Events.listenerCount('js-toggle');
+                off();
+                off();
+                // The client table has its own: the function on returned removes nothing from it.
+                const offClient = Events.onClient('js-toggle', handler);
+                off();
+                const client = Events.listenerCount('js-toggle');
+                offClient();
+                return [between, doubled, Events.listenerCount('js-toggle'), client].join(',');
+            };
+        )"}});
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.Start("toggle"), "");
+
+        EQUALS(bus.Lua("toggle", "toggle()"), "1,2,0");
+        EQUALS(bus.Js("toggle", "toggle()"), "1,2,0,0");
+        EQUALS(bus.Events().GetClientListenerCount("js-toggle"), (size_t)0);
     });
 
     IT("emits to the handlers of one resource with emitTo", {
@@ -783,7 +849,7 @@ MODULE(lua_events, {
         // A Lua handler that stops its own resource runs on to its end; the emit that waited on it is told that
         // the resource went, and the handler after it, of a runtime that is gone, is not called.
         EQUALS(rig.Eval("driver", "try('halt-lua')"), "ok");
-        EQUALS(LuaResourcesTest::LogText(), "lua first,lua after");
+        EQUALS(stops.Said(), "lua first,lua after");
         EQUALS(rig.manager.IsResourceRunning("lua-self"), false);
         EQUALS(rig.manager.GetEvents().GetListenerCount("halt-lua"), (size_t)0);
         rig.Advance(1);
@@ -792,7 +858,7 @@ MODULE(lua_events, {
         // The same from a JavaScript handler, called by a Lua emitter.
         LuaResourcesTest::Log().clear();
         EQUALS(rig.Eval("driver", "try('halt-js')"), "ok");
-        EQUALS(LuaResourcesTest::LogText(), "js first,js after");
+        EQUALS(stops.Said(), "js first,js after");
         EQUALS(rig.manager.IsResourceRunning("js-self"), false);
         EQUALS(rig.manager.GetEvents().GetListenerCount("halt-js"), (size_t)0);
 
@@ -800,7 +866,7 @@ MODULE(lua_events, {
         // and nothing fails. From a Lua emitter, then from a JavaScript one.
         LuaResourcesTest::Log().clear();
         EQUALS(rig.Eval("driver", "try('kill')"), "ok");
-        EQUALS(LuaResourcesTest::LogText(), "killer");
+        EQUALS(stops.Said(), "killer");
         EQUALS(rig.manager.IsResourceRunning("victim"), false);
 
         EQUALS(rig.Start("victim"), "");
@@ -812,9 +878,103 @@ MODULE(lua_events, {
         EQUALS(stops.Js("driver", "settled"), "resolved");
         // Between JavaScript runtimes it is as it always was: the isolate of the stopped resource lives on while
         // JavaScript is running, and its handler, picked already, is still called. Its Lua handler is not.
-        EQUALS(LuaResourcesTest::LogText(), "js killer,js victim");
+        EQUALS(stops.Said(), "js killer,js victim");
         EQUALS(rig.manager.IsResourceRunning("victim"), false);
         rig.Advance(1);
+    });
+
+    IT("calls none of the JavaScript handlers picked after one that cleared the bus", {
+        Bus bus;
+        bus.server.files.Resource("a", {{"main.js", "globalThis.seen = ''; Events.on('wipe', () => { seen += '1'; clearAll(); }); Events.on('wipe', () => { seen += '2'; });"}});
+        bus.server.files.Resource("b", {{"main.js", "globalThis.seen = ''; Events.on('wipe', () => { seen += 'b'; });"}, {"main.lua", "Events.on('wipe', function() seen = 'lua' end)"}});
+        bus.server.files.Resource("emitter", {{"main.js", "globalThis.settled = 'pending'; globalThis.fire = () => { Events.emit('wipe').then(() => { settled = 'resolved'; }, () => { settled = 'rejected'; }); return 0; };"}});
+        EQUALS(bus.Init(), true);
+        // A host function that clears every handler, as a project's session reset does, reachable from a script.
+        bus.server.module.GetEngine()->SetRuntimeSetupCallback([&bus](Engine *engine) {
+            bus.server.module.RegisterFrameworkBindings();
+            engine->InitFrameworkSDK();
+            EngineScope scope(engine);
+            v8::Isolate *isolate           = scope.Isolate();
+            v8::Local<v8::Context> context = scope.Context();
+            const auto clear               = [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                static_cast<Builtins::Events *>(info.Data().As<v8::External>()->Value())->ClearAll();
+            };
+            context->Global()->Set(context, v8::String::NewFromUtf8Literal(isolate, "clearAll"), v8::Function::New(context, clear, v8::External::New(isolate, &bus.Events())).ToLocalChecked()).Check();
+        });
+        EQUALS(bus.StartAll({"emitter", "a", "b"}), true);
+
+        EQUALS(bus.Js("emitter", "fire()"), "0");
+        EQUALS(bus.Until([&] {
+            return bus.Js("emitter", "settled") != "pending";
+        }),
+            true);
+        // The handlers that had been picked lost their functions with the tables: none of them is called, in the
+        // isolate of the one that cleared or in another, and the emission settles. The Lua handler, which has
+        // no such function, is called through its callable as picked.
+        EQUALS(bus.Js("emitter", "settled"), "resolved");
+        EQUALS(bus.Js("a", "seen"), "1");
+        EQUALS(bus.Js("b", "seen"), "");
+        EQUALS(bus.Lua("b", "seen"), "lua");
+        EQUALS(bus.Events().GetListenerCount("wipe"), (size_t)0);
+    });
+
+    IT("keeps a runtime that is stopped under a script of the other language until the next tick", {
+        LuaEventsTest::StopRig stops;
+        auto &rig = stops.rig;
+        EQUALS(rig.ready, true);
+        rig.files.Resource("js-provider", {{"main.js", "Exports.register('quit', () => { stop('js-provider'); return 'bye'; }); Exports.register('add', (a, b) => a + b);"}}, R"(,"exports":["quit","add"])");
+        rig.files.Resource("js-victim", {{"main.js", "Exports.register('add', (a, b) => a + b);"}}, R"(,"exports":["add"])");
+        rig.files.Resource("lua-provider", {{"main.lua", "Exports.register('quit', function() stop('lua-provider') return 'bye' end)"}}, R"(,"exports":["quit"])");
+        rig.files.Resource("lua-victim", {{"main.lua", "Exports.register('add', function(a, b) return a + b end)"}}, R"(,"exports":["add"])");
+        rig.files.Resource("lua-caller", {{"main.lua", R"(
+            function try(f, ...) local ok, result = pcall(f, ...) return tostring(ok) .. ':' .. tostring(result) end
+            function quit() local f = Exports.get('js-provider', 'quit') local said = try(f) log('lua went on') return said end
+            function kill() local add = Exports.get('js-victim', 'add') local before = add(1, 2) stop('js-victim') local said = before .. '|' .. try(add, 1, 2) log('lua went on') return said end
+        )"}});
+        rig.files.Resource("js-caller", {{"main.js", R"(
+            const attempt = (f, ...args) => { try { return 'true:' + f(...args); } catch (e) { return 'false:' + e.message; } };
+            globalThis.quit = () => { const f = Exports.get('lua-provider', 'quit'); const said = attempt(f); log('js went on'); return said; };
+            globalThis.kill = () => { const add = Exports.get('lua-victim', 'add'); const before = add(1, 2); stop('lua-victim'); const said = before + '|' + attempt(add, 1, 2); log('js went on'); return said; };
+        )"}});
+        for (const char *resource : {"js-provider", "js-victim", "lua-provider", "lua-victim", "lua-caller", "js-caller"}) {
+            EQUALS(rig.Start(resource), "");
+        }
+
+        std::string said;
+
+        // A JavaScript export that stops its own resource, called from Lua: the caller gets its answer, and the
+        // runtime goes at the next tick of its engine.
+        LuaResourcesTest::Log().clear();
+        said = rig.Eval("lua-caller", "quit()");
+        EQUALS(said, "true:bye");
+        EQUALS(LuaResourcesTest::LogText(), "lua went on");
+        rig.node.Tick();
+        EQUALS(LuaResourcesTest::LogText(), "lua went on,javascript runtime destroyed");
+
+        // A Lua script that stops a JavaScript resource whose function it holds: no isolate is entered, and the
+        // runtime still outlives the script. The function answers that its resource stopped.
+        LuaResourcesTest::Log().clear();
+        said = rig.Eval("lua-caller", "kill()");
+        EQUALS(said, "3|false:runtime stopped");
+        EQUALS(LuaResourcesTest::LogText(), "lua went on");
+        rig.node.Tick();
+        EQUALS(LuaResourcesTest::LogText(), "lua went on,javascript runtime destroyed");
+
+        // The mirror: a Lua export that stops its own resource, called from JavaScript.
+        LuaResourcesTest::Log().clear();
+        said = stops.Js("js-caller", "quit()");
+        EQUALS(said, "true:bye");
+        EQUALS(LuaResourcesTest::LogText(), "js went on");
+        rig.Advance(1);
+        EQUALS(LuaResourcesTest::LogText(), "js went on,lua runtime of lua-provider destroyed");
+
+        // And JavaScript that stops a Lua resource whose function it holds.
+        LuaResourcesTest::Log().clear();
+        said = stops.Js("js-caller", "kill()");
+        EQUALS(said, "3|false:runtime stopped");
+        EQUALS(LuaResourcesTest::LogText(), "js went on");
+        rig.Advance(1);
+        EQUALS(LuaResourcesTest::LogText(), "js went on,lua runtime of lua-victim destroyed");
     });
 
     IT("drops an emission whose emitter stops while a handler is still at it", {

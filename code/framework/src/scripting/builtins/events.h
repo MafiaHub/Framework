@@ -110,8 +110,8 @@ namespace Framework::Scripting::Builtins {
         // that failed threw, in the order the handlers were called. Empty when none failed. It must not throw.
         using EmissionDone = fu2::unique_function<void(std::vector<std::string> &&errors)>;
 
-        // An emission made with copied arguments that still waits on its handlers, for CancelPendingEmission. Empty
-        // for one that had settled when it was made.
+        // An emission made with copied arguments, for CancelPendingEmission. Null for one that found no handler to
+        // call. One whose handlers have all settled has a token too, and cancelling it does nothing.
         struct CopiedEmission;
         using EmissionToken = std::shared_ptr<CopiedEmission>;
 
