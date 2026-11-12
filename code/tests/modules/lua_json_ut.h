@@ -634,6 +634,17 @@ MODULE(lua_json, {
         EQUALS(worlds.Js("Codec.json({ toJSON() { throw 'a string'; } })"), "<failed> a string");
         EQUALS(worlds.Js("Codec.json(10n)"), "<failed> Do not know how to serialize a BigInt");
 
+        // What JSON.stringify gives no text for at all is told apart from what failed, whatever the failure says.
+        for (const char *left : {"() => 1", "Symbol('x')", "{ toJSON() { return undefined; } }", "{ toJSON() { return () => 1; } }"}) {
+            EQUALS(worlds.Js(std::string("Codec.jsonOmitted(") + left + ")"), "failed, omitted");
+        }
+        for (const char *failed : {"10n", "{ toJSON() { throw ''; } }", "{ toJSON() { throw new Error('a value of this kind has no JSON form'); } }", "(() => { const loop = {}; loop.back = loop; return loop; })()"}) {
+            EQUALS(worlds.Js(std::string("Codec.jsonOmitted(") + failed + ")"), "failed");
+        }
+        EQUALS(worlds.Js("Codec.jsonOmitted(undefined) + ' / ' + Codec.jsonOmitted({ a: 1 })"), "written / written");
+        // Lua leaves nothing out.
+        EQUALS(worlds.Lua("Codec.jsonOmitted(print) .. ' / ' .. Codec.jsonOmitted({ f = print }) .. ' / ' .. Codec.jsonOmitted(nil)"), "failed / failed / written");
+
         // A function that cannot go on throws it under its own name, the same way in both languages.
         EQUALS(worlds.Lua("(function() local loop = { inner = {} } loop.inner.back = loop return select(2, pcall(Codec.jsonOrThrow, loop)) end)()"), "Codec.jsonOrThrow: Cannot encode value.inner.back: it refers back to itself");
         EQUALS(worlds.Js("(() => { try { Codec.jsonOrThrow({ toJSON() { throw new RangeError('mine'); } }); return 'no throw'; } catch (error) { return error.name + ': ' + error.message; } })()"), "Error: Codec.jsonOrThrow: mine");

@@ -498,7 +498,7 @@ namespace Framework::Scripting::Bind {
                 return copied;
             }
 
-            Utils::Result<std::string, std::string> JsonOf(size_t slot) override {
+            Utils::Result<std::string, std::string> JsonOf(size_t slot, bool *omitted) override {
                 using Result                     = Utils::Result<std::string, std::string>;
                 const v8::Local<v8::Value> value = Local(slot);
                 if (value->IsNullOrUndefined()) {
@@ -520,6 +520,9 @@ namespace Framework::Scripting::Bind {
                 // whose toJSON gives one of them. A string would be in quotes.
                 std::string text = ToUtf8(_isolate, json);
                 if (text == "undefined") {
+                    if (omitted != nullptr) {
+                        *omitted = true;
+                    }
                     return Result::Err(kNoJsonForm);
                 }
                 return Result::Ok(std::move(text));
@@ -558,6 +561,7 @@ namespace Framework::Scripting::Bind {
             };
 
             static constexpr const char *kTerminating = "the runtime is being terminated";
+            static constexpr const char *kNoJsonForm  = "a value of this kind has no JSON form";
 
             Value At(size_t slot) const {
                 return Detail::ValueAccess::Make(*this, slot);

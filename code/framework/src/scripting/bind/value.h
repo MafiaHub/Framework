@@ -41,11 +41,6 @@ namespace Framework::Scripting::Bind {
         Other   // what the other language has nothing for: a symbol, a bigint, a coroutine, a userdata of no class
     };
 
-    // The error of Value::ToJson for a JavaScript value JSON.stringify gives no text for, undefined instead: a
-    // function, a symbol, an object whose toJSON gives one of them. It tells such a value, which an API may always
-    // have taken for none, from one that failed to be written.
-    inline constexpr const char *kNoJsonForm = "a value of this kind has no JSON form";
-
     namespace Detail {
         // What a Value forwards to: the values of one call, by slot. Slot 0 is nil. Implemented once per language,
         // by the Call of that language (lua_call.cpp, v8_call.cpp).
@@ -88,7 +83,8 @@ namespace Framework::Scripting::Bind {
             virtual Value ElementAt(size_t slot, size_t zeroBased)                       = 0;
             virtual void AppendTo(size_t slot, const Value &value)                       = 0;
             virtual Utils::Result<TransferredValue, std::string> TransferOf(size_t slot) = 0;
-            virtual Utils::Result<std::string, std::string> JsonOf(size_t slot)          = 0;
+            // `omitted`, when given, is set where the failure is that JSON writes no text for the value at all.
+            virtual Utils::Result<std::string, std::string> JsonOf(size_t slot, bool *omitted) = 0;
             // The callable of the function at `slot`, or nullptr for what is not a function.
             virtual std::shared_ptr<ScriptCallable> CallableOf(size_t slot) = 0;
 
@@ -315,7 +311,17 @@ namespace Framework::Scripting::Bind {
         // it cannot send goes on, and one that does not throws the error under its own name.
         Utils::Result<std::string, std::string> ToJson() const {
             const Target target = Find();
-            return target.backend != nullptr ? target.backend->JsonOf(target.slot) : Utils::Result<std::string, std::string>::Ok("null");
+            return target.backend != nullptr ? target.backend->JsonOf(target.slot, nullptr) : Utils::Result<std::string, std::string>::Ok("null");
+        }
+
+        // ToJson, for an API that takes a value JSON leaves out for no value at all. `omitted` tells that kind of
+        // failure from the others: it is true where JSON.stringify gives undefined instead of text, for a
+        // JavaScript function, a symbol, or an object whose toJSON gives one of them, and false for a value that
+        // failed to be written and for every failure in Lua, which leaves nothing out.
+        Utils::Result<std::string, std::string> ToJson(bool &omitted) const {
+            omitted             = false;
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->JsonOf(target.slot, &omitted) : Utils::Result<std::string, std::string>::Ok("null");
         }
 
       private:

@@ -203,6 +203,14 @@ namespace LuaTransferTest {
                                                           },
                                                           Doc("Writes a value as JSON.").Param("value", Type::Any(), "Value to write.").ReturnType(TypeOf<std::string>()))
                                                       .Function(
+                                                          "jsonOmitted",
+                                                          [](Call &call) {
+                                                              bool omitted    = true;
+                                                              const auto json = call.Arg(0).ToJson(omitted);
+                                                              call.Return(std::string(json ? "written" : "failed") + (omitted ? ", omitted" : ""));
+                                                          },
+                                                          Doc("Tells whether JSON leaves a value out.").Param("value", Type::Any(), "Value to write.").ReturnType(TypeOf<std::string>()))
+                                                      .Function(
                                                           "jsonOrThrow",
                                                           [](Call &call) {
                                                               const auto json = call.Arg(0).ToJson();

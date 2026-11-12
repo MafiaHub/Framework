@@ -457,7 +457,7 @@ namespace Framework::Scripting::Bind {
                 return index != 0 ? LuaTransfer::Copy(_L, index) : Utils::Result<TransferredValue, std::string>::Ok();
             }
 
-            Utils::Result<std::string, std::string> JsonOf(size_t slot) override {
+            Utils::Result<std::string, std::string> JsonOf(size_t slot, bool *) override {
                 const int index = Index(slot);
                 return index != 0 ? LuaJson::Encode(_L, index) : Utils::Result<std::string, std::string>::Ok("null");
             }
