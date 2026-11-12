@@ -43,6 +43,9 @@ namespace Framework::Scripting::Bind {
     // kRuntimeStopped, and its deferred results. Call it while the state is open; a second call does nothing.
     void LuaRuntimeDisposing(LuaRuntime &runtime);
 
+    // Diagnostics and tests: the functions of `runtime` the host holds a callable of.
+    size_t LuaCallableCount(LuaRuntime &runtime);
+
     namespace Detail {
         // The deferred result of a Lua call.
         class LuaDeferred: public DeferredState {

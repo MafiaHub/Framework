@@ -564,6 +564,11 @@ namespace Framework::Scripting::Bind {
         }
     }
 
+    size_t LuaCallableCount(LuaRuntime &runtime) {
+        const std::shared_ptr<Link> link = FindLink(runtime.State());
+        return link != nullptr ? link->callables.size() : 0;
+    }
+
     void WatchRuntimes(LuaEngine &engine) {
         engine.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
             LuaRuntimeDisposing(runtime);

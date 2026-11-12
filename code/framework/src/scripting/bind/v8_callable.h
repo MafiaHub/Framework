@@ -60,6 +60,9 @@ namespace Framework::Scripting::Bind {
     // for the isolate any more. Call it while the isolate is alive; a second call does nothing.
     void V8RuntimeDisposing(v8::Isolate *isolate);
 
+    // Diagnostics and tests: the functions of `isolate` the host holds a callable of.
+    size_t V8CallableCount(v8::Isolate *isolate);
+
     // Diagnostics and tests: the functions of `isolate` that stand for a callable of another runtime.
     size_t V8StandInCount(v8::Isolate *isolate);
 

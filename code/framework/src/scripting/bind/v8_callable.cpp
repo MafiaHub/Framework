@@ -617,6 +617,11 @@ namespace Framework::Scripting::Bind {
         runtime->isolate = nullptr;
     }
 
+    size_t V8CallableCount(v8::Isolate *isolate) {
+        const std::shared_ptr<Runtime> runtime = FindRuntime(isolate);
+        return runtime != nullptr ? runtime->callables.size() : 0;
+    }
+
     size_t V8StandInCount(v8::Isolate *isolate) {
         const std::shared_ptr<Runtime> runtime = FindRuntime(isolate);
         return runtime != nullptr ? runtime->standIns.size() : 0;
