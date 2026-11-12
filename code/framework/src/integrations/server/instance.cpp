@@ -230,6 +230,7 @@ namespace Framework::Integrations::Server {
 
         // The host's cores, shared out before anything starts a thread of its own. This thread is the
         // tick thread: it owns the scheduler, so completions and tick-thread routes run in Update().
+        // Packets are handled on a thread of their own, started last (see the end of Init).
         const Utils::ThreadBudget threads = Utils::ThreadBudget::For(std::thread::hardware_concurrency(), _opts.replicationThreads, _opts.backgroundThreads);
         _tickWorkers                      = std::make_unique<Utils::ForkJoinPool>(threads.replicationWorkers);
         _scheduler                        = std::make_unique<Utils::TaskScheduler>(threads.backgroundWorkers);
@@ -367,7 +368,7 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Password:\t{}", _opts.bindPassword.empty() ? "none" : "required");
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)
-            ->info("Threads:\t{} cores: tick, network, {} replication, {} background, {} script platform, {} web", std::thread::hardware_concurrency(), threads.replicationWorkers, threads.backgroundWorkers, threads.scriptPlatformThreads, webWorkers);
+            ->info("Threads:\t{} cores: tick, network, packet, {} replication, {} background, {} script platform, {} web", std::thread::hardware_concurrency(), threads.replicationWorkers, threads.backgroundWorkers, threads.scriptPlatformThreads, webWorkers);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
@@ -551,6 +552,7 @@ namespace Framework::Integrations::Server {
         read("max-downloading", opts.maxDownloading);
         read("package-secret", opts.packageSecret);
         read("slow-script-ms", opts.slowScriptWarnMs);
+        read("slow-packet-handler-ms", opts.slowPacketHandlerWarnMs);
         read("replication-threads", opts.replicationThreads);
         read("background-threads", opts.backgroundThreads);
     }
@@ -663,6 +665,7 @@ namespace Framework::Integrations::Server {
         frameworkKeys["max-downloading"] = _opts.maxDownloading;
         frameworkKeys["package-secret"]  = _opts.packageSecret;
         frameworkKeys["slow-script-ms"]  = _opts.slowScriptWarnMs;
+        frameworkKeys["slow-packet-handler-ms"] = _opts.slowPacketHandlerWarnMs;
         frameworkKeys["replication-threads"] = _opts.replicationThreads;
         frameworkKeys["background-threads"]  = _opts.backgroundThreads;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
@@ -692,6 +695,7 @@ namespace Framework::Integrations::Server {
     void Instance::InitNetworkingMessages() {
         const auto net = _networkingEngine->GetNetworkServer();
         net->SetIdentifierSalt(_opts.rpcIdentifierSalt);
+        net->SetSlowHandlerWarnMs(_opts.slowPacketHandlerWarnMs);
         // Build gate: a mismatched token fails the challenge inside NetworkServer; the peer never
         // reaches the asset phase.
         if (_opts.verifyBuildToken) {
@@ -1861,13 +1865,13 @@ namespace Framework::Integrations::Server {
             lap(tick.scriptsMs);
 
             // What background work finished and what other threads asked of this one: run before the
-            // packet pump, so what it sends leaves with this tick.
+            // replication pass, so what it changes leaves with this tick.
             if (_scheduler) {
                 FW_PROFILE_SCOPE_N("Server::TickThreadTasks");
                 _scheduler->Drain();
             }
 
-            // Before the packet pump: voice frames are routed inline there, and must see the worlds
+            // Voice frames are routed as they arrive, on MafiaNet's thread, and must see the worlds
             // scripts and PostUpdate set last tick, not the ones from before them.
             auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr;
             if (replication) {
@@ -1875,8 +1879,8 @@ namespace Framework::Integrations::Server {
                 _voiceServer.SyncAvatars(*replication);
             }
 
-            // Before the interest rebuild in the packet pump, so attached labels stream from where
-            // their targets are now.
+            // Before the interest rebuild below, so attached labels stream from where their targets
+            // are now.
             if (replication) {
                 FW_PROFILE_SCOPE_N("Server::TextLabels");
                 Framework::Scripting::Builtins::TextLabel::FollowTargets(*replication);
@@ -1887,14 +1891,16 @@ namespace Framework::Integrations::Server {
                 FW_PROFILE_SCOPE_N("Server::Networking");
                 _networkingEngine->Update();
             }
-            // The packet pump runs the replication pass; report it apart from the packets themselves.
-            double pumpMs = 0.0;
-            lap(pumpMs);
+            // No packet is handled here: that is the packet thread's. What the tick does for the
+            // network is interest and the pass, reported apart from the little that is left
+            // (delegation, the state-bag flush).
+            double networkingMs = 0.0;
+            lap(networkingMs);
             if (replication) {
                 tick.replicationInterestMs = replication->LastInterestMs();
                 tick.replicationPassMs     = replication->LastPassMs();
             }
-            tick.packetsMs = std::max(0.0, pumpMs - tick.replicationInterestMs - tick.replicationPassMs);
+            tick.networkMs = std::max(0.0, networkingMs - tick.replicationInterestMs - tick.replicationPassMs);
 
             if (replication) {
                 FW_PROFILE_SCOPE_N("Server::Voice");
@@ -1903,7 +1909,7 @@ namespace Framework::Integrations::Server {
 
             // Voice events, the runtimes, admission and console commands all end in script: they run on the
             // script thread's own round.
-            lap(tick.packetsMs);
+            lap(tick.networkMs);
 
             if (_masterlist->IsInitialized()) {
                 FW_PROFILE_SCOPE_N("Server::MasterlistPing");

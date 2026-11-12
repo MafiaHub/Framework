@@ -94,6 +94,10 @@ namespace Framework::Integrations::Server {
         // script logs a warning naming the resource (server.json "slow-script-ms"; 0 turns the warnings off).
         int32_t slowScriptWarnMs = 50;
 
+        // An RPC handler that holds the packet thread at least this long logs a warning, at most once a second
+        // (server.json "slow-packet-handler-ms"; 0 turns the warnings off). It delays the packets behind it.
+        int32_t slowPacketHandlerWarnMs = 10;
+
         // Threads beside the tick thread (server.json "replication-threads" and "background-threads", or
         // the flags of the same names). Negative, the default, sizes them to the host's cores (see
         // Utils::ThreadBudget); 0 keeps that work on the tick thread.
@@ -475,8 +479,8 @@ namespace Framework::Integrations::Server {
             return _webServer.get();
         }
 
-        // Scripts run on a thread of their own. Code on the tick thread (PostUpdate, RPC and packet
-        // handlers, the On* overrides the tick calls) raises events as it always did, and they are
+        // Scripts run on a thread of their own. Code on the tick thread (PostUpdate) and on the packet
+        // thread (RPC handlers, the On* overrides above) raises events as it always did, and they are
         // carried to that thread; for anything else that ends in script, this runs `task` there, with
         // the world: it may open an EngineScope, call into resources and touch the world like tick
         // code. Before Init() and after Shutdown() it runs at once.

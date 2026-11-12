@@ -11,8 +11,8 @@
 #include <cstdint>
 
 namespace Framework::Utils {
-    // How a server shares the host's cores between its thread pools. The tick thread and MafiaNet's network thread
-    // are always there; the rest scale with the machine unless the operator pins them.
+    // How a server shares the host's cores between its thread pools. The tick thread, MafiaNet's network thread and
+    // the packet thread are always there; the rest scale with the machine unless the operator pins them.
     struct ThreadBudget {
         // Past this the serialize pass is bound by its serial part, not by the workers.
         static constexpr uint32_t kMaxAutoReplicationWorkers = 12;

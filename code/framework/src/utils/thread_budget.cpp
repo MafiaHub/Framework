@@ -13,8 +13,9 @@
 namespace Framework::Utils {
     ThreadBudget ThreadBudget::For(uint32_t cores, int32_t requestedReplication, int32_t requestedBackground) {
         ThreadBudget budget;
-        // Two cores are spoken for: the tick thread and the network thread.
-        budget.replicationWorkers    = std::min(cores > 2 ? cores - 2 : 0, kMaxAutoReplicationWorkers);
+        // Three cores are spoken for: the tick thread, the network thread and the packet thread, which
+        // handles what arrives while the workers run the pass.
+        budget.replicationWorkers    = std::min(cores > 3 ? cores - 3 : 0, kMaxAutoReplicationWorkers);
         budget.backgroundWorkers     = std::clamp<uint32_t>(cores / 4, 1, 4);
         budget.scriptPlatformThreads = std::clamp<uint32_t>(cores / 2, 4, 8);
         if (requestedReplication >= 0) {

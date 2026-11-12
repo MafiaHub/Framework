@@ -23,9 +23,13 @@
 
 #include <mafianet/bit_stream.h>
 
+#include <algorithm>
+#include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace NetworkPacketsTest {
@@ -227,6 +231,71 @@ MODULE(network_packets, {
         auto avatar = world.Read<NetworkPacketsTest::Avatar>(avatarId);
         EQUALS(static_cast<bool>(avatar), true);
         EQUALS(avatar->messages, 1);
+    });
+
+    IT("warns of a handler that holds up the packets behind it, once for a burst, naming its RPC", {
+        using namespace Framework::Networking;
+        NetworkPacketsTest::Loopback net;
+        EQUALS(net.Connect(), true);
+
+        auto logger = Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING, false);
+        auto logs   = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(8);
+        logs->set_pattern("%v");
+        struct RestoreLogger {
+            std::shared_ptr<spdlog::logger> logger;
+            spdlog::level::level_enum level;
+            ~RestoreLogger() {
+                logger->sinks().pop_back();
+                logger->set_level(level);
+            }
+        } restoreLogger {logger, logger->level()};
+        logger->sinks().push_back(logs);
+        logger->set_level(spdlog::level::warn);
+
+        int calls = 0;
+        int sleepMs = 30;
+        net.server.RegisterRPC<RPC::ChatMessage>([&](const RPC::ChatMessage &, Sender, Replication::World &) {
+            ++calls;
+            std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
+        });
+        const auto slowWarnings = [&] {
+            int count = 0;
+            for (const std::string &line : logs->last_formatted()) {
+                count += line.find("Packet handler for RPC") != std::string::npos ? 1 : 0;
+            }
+            return count;
+        };
+        RPC::ChatMessage message {};
+        message.text = "Lumos";
+
+        // Under the threshold: nothing to say.
+        net.server.SetSlowHandlerWarnMs(10);
+        sleepMs = 0;
+        net.client.BroadcastRPC(message);
+        EQUALS(net.rig.PumpUntil([&] { return calls == 1; }), true);
+        EQUALS(slowWarnings(), 0);
+
+        // Three slow ones in a row are one line, which carries the digest of the RPC's identifier.
+        sleepMs = 30;
+        for (int i = 0; i < 3; ++i) {
+            net.client.BroadcastRPC(message);
+        }
+        EQUALS(net.rig.PumpUntil([&] { return calls == 4; }), true);
+        EQUALS(slowWarnings(), 1);
+        char digest[32];
+        snprintf(digest, sizeof(digest), "%016llx", static_cast<unsigned long long>(RPC::ChatMessage::kIdentifier.digest));
+        const std::vector<std::string> lines = logs->last_formatted();
+        const bool named                     = std::any_of(lines.begin(), lines.end(), [&](const std::string &line) {
+            return line.find(std::string("Packet handler for RPC ") + digest) != std::string::npos;
+        });
+        EQUALS(named, true);
+
+        // Switched off, a slow handler is nobody's business.
+        net.server.SetSlowHandlerWarnMs(0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+        net.client.BroadcastRPC(message);
+        EQUALS(net.rig.PumpUntil([&] { return calls == 5; }), true);
+        EQUALS(slowWarnings(), 1);
     });
 
     IT("gives a sender without an avatar the id 0", {

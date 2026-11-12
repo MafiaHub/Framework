@@ -14,7 +14,7 @@ MODULE(thread_budget, {
     using Framework::Utils::ThreadBudget;
 
     IT("keeps everything on the tick thread of a machine with no core to spare", {
-        for (const uint32_t cores : {0u, 1u, 2u}) {
+        for (const uint32_t cores : {0u, 1u, 2u, 3u}) {
             const ThreadBudget budget = ThreadBudget::For(cores);
             EQUALS(budget.replicationWorkers, 0u);
             // Blocking work still must not run on the tick thread.
@@ -22,10 +22,10 @@ MODULE(thread_budget, {
         }
     });
 
-    IT("gives replication every core but the tick and network threads", {
-        EQUALS(ThreadBudget::For(4).replicationWorkers, 2u);
-        EQUALS(ThreadBudget::For(8).replicationWorkers, 6u);
-        EQUALS(ThreadBudget::For(12).replicationWorkers, 10u);
+    IT("gives replication every core but the tick, network and packet threads", {
+        EQUALS(ThreadBudget::For(4).replicationWorkers, 1u);
+        EQUALS(ThreadBudget::For(8).replicationWorkers, 5u);
+        EQUALS(ThreadBudget::For(12).replicationWorkers, 9u);
     });
 
     IT("stops adding replication workers where they stop paying", {

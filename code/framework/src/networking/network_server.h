@@ -120,7 +120,9 @@ namespace Framework::Networking {
 
         // Register a handler for RPC payload type T. It receives the decoded payload, the connection
         // that sent it and the world, through which it reaches entities by handle (see
-        // replication/world.h).
+        // replication/world.h). Handlers run where packets are drained, on a server its packet
+        // thread, one at a time; register them before it starts (an instance's PostInit or
+        // PostScriptInit), since the table they go in is read there without a lock.
         template <RPC::Payload T>
         void RegisterRPC(fu2::function<void(const T &payload, Sender sender, Replication::World &world) const> handler) {
             RegisterRawRPC(T::kIdentifier, [cb = std::move(handler)](MafiaNet::BitStream *bs, Sender sender, Replication::World &world) {
