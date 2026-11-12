@@ -400,6 +400,11 @@ namespace Framework::Integrations::Server {
         virtual void PostScriptInit() {}
         virtual void PostUpdate() {}
         virtual void PreShutdown() {}
+        // Called for every scripting runtime as it is set up: each resource's, when it starts, and
+        // the tick and packet threads' own. It declares bindings, and builds the mod's handle classes
+        // (T::GetClass(isolate)) so that wrapping an entity later is a lookup. It runs under the lock
+        // that keeps binding declarations apart (Scripting::CatalogWriteLock): it must not ask the
+        // world for a handle, and should run no script.
         virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
             (void)engine;
         }

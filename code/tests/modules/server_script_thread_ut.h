@@ -15,6 +15,7 @@
 #include "scripting/builtins/vector3.h"
 #include "scripting/engine_scope.h"
 #include "scripting/node_engine.h"
+#include "scripting/scripting_catalog.h"
 #include "scripting/resource/resource_manager.h"
 #include "utils/path.h"
 
@@ -26,6 +27,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <random>
 #include <string>
 #include <cstdio>
@@ -697,6 +699,33 @@ MODULE(server_script_thread, {
             true);
         EQUALS(server.registeredElsewhere.load(), 0);
         GREATER(server.ticks, 10);
+        server.Stop();
+    });
+
+    IT("wraps an entity in the packet runtime without waiting for whoever declares bindings", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_eager", "");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        auto *engine = server.GetScriptingModule()->GetEngine();
+        // Held here as a resource's setup holds it while it starts. A first wrap that had to build its class would
+        // wait for it; the classes the Framework wraps with were built when the runtime was made.
+        std::future<bool> wrapped;
+        bool inTime = false;
+        {
+            const Framework::Scripting::CatalogWriteLock declaring;
+            wrapped = std::async(std::launch::async, [&] {
+                engine->BindOffThreadRuntime("packet");
+                Framework::Scripting::EngineScope scope(engine);
+                return !server.WrapScriptPlayer(scope.Isolate(), 4242).IsEmpty() && !server.WrapScriptEntity(scope.Isolate(), 4242).IsEmpty()
+                    && !Framework::Scripting::Builtins::StateBag::NewInstance(scope.Isolate(), 4242).IsEmpty();
+            });
+            inTime = wrapped.wait_for(std::chrono::seconds(3)) == std::future_status::ready;
+        }
+        EQUALS(inTime, true);
+        EQUALS(wrapped.get(), true);
         server.Stop();
     });
 
