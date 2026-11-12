@@ -206,7 +206,9 @@ MODULE(packet_drain, {
         std::vector<Seen> before, after;
         bool caughtUp = false;
         if (in) {
-            // Two seconds of every client writing its avatar and sending a step, each update.
+            // Two seconds of every client writing its avatar and sending a step, each update. The server's guid is
+            // asked for once here: RakPeer answers GetGUIDFromIndex from a table its own thread writes.
+            const MafiaNet::RakNetGUID serverGuid = server->GetPeer()->GetMyGUID();
             before = read();
             pumpUntil(
                 [&] {
@@ -216,7 +218,7 @@ MODULE(packet_drain, {
                         own->position.x += 0.5f;
                         Step step;
                         step.sequence = ++player->sent;
-                        player->net.SendRPC(step, player->net.GetPeer()->GetGUIDFromIndex(0));
+                        player->net.SendRPC(step, serverGuid);
                     }
                     return false;
                 },
