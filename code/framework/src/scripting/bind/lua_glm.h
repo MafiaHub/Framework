@@ -18,60 +18,39 @@
 // which is also what a script receives. A table with the components is not a vector, where JavaScript takes any
 // object that has them (v8pp_glm.h).
 //
-// sol2 is taught the four types through its customization points, which it finds in the namespace of glm, and
-// LuaConvert reads and pushes them through sol::stack like any type sol knows.
-//
-// The functions are only declared here, so that this file needs no header of the wrapper classes, which themselves
-// include the binding layer. They are defined in lua_glm.cpp. Pushing raises a Lua error in a state the wrapper
-// class is not registered in.
-namespace Framework::Scripting::Bind::Detail {
-    bool LuaIsGlm(sol::types<glm::vec2>, lua_State *L, int index);
-    bool LuaIsGlm(sol::types<glm::vec3>, lua_State *L, int index);
-    bool LuaIsGlm(sol::types<glm::vec4>, lua_State *L, int index);
-    bool LuaIsGlm(sol::types<glm::quat>, lua_State *L, int index);
-} // namespace Framework::Scripting::Bind::Detail
-
-namespace glm {
-    template <typename T, typename Handler>
-        requires requires(lua_State *L) { Framework::Scripting::Bind::Detail::LuaIsGlm(sol::types<T>(), L, 0); }
-    bool sol_lua_check(sol::types<T> type, lua_State *L, int index, Handler &&handler, sol::stack::record &tracking) {
-        tracking.use(1);
-        if (Framework::Scripting::Bind::Detail::LuaIsGlm(type, L, index)) {
-            return true;
-        }
-        handler(L, index, sol::type::userdata, sol::type_of(L, index), "");
-        return false;
-    }
-
-    vec2 sol_lua_get(sol::types<vec2>, lua_State *L, int index, sol::stack::record &tracking);
-    vec3 sol_lua_get(sol::types<vec3>, lua_State *L, int index, sol::stack::record &tracking);
-    vec4 sol_lua_get(sol::types<vec4>, lua_State *L, int index, sol::stack::record &tracking);
-    quat sol_lua_get(sol::types<quat>, lua_State *L, int index, sol::stack::record &tracking);
-
-    int sol_lua_push(lua_State *L, const vec2 &value);
-    int sol_lua_push(lua_State *L, const vec3 &value);
-    int sol_lua_push(lua_State *L, const vec4 &value);
-    int sol_lua_push(lua_State *L, const quat &value);
-} // namespace glm
-
+// The converters are only declared here, so that this file needs no header of the wrapper classes, which
+// themselves include the binding layer. They are defined in lua_glm.cpp. Push raises a Lua error in a state the
+// wrapper class is not registered in.
 namespace Framework::Scripting::Bind {
     template <>
-    struct LuaConvert<glm::vec2> final: Detail::SolConvert<glm::vec2> {
+    struct LuaConvert<glm::vec2> final {
+        static bool Is(lua_State *L, int index);
+        static glm::vec2 Get(lua_State *L, int index);
+        static void Push(lua_State *L, const glm::vec2 &value);
         static const char *Expected();
     };
 
     template <>
-    struct LuaConvert<glm::vec3> final: Detail::SolConvert<glm::vec3> {
+    struct LuaConvert<glm::vec3> final {
+        static bool Is(lua_State *L, int index);
+        static glm::vec3 Get(lua_State *L, int index);
+        static void Push(lua_State *L, const glm::vec3 &value);
         static const char *Expected();
     };
 
     template <>
-    struct LuaConvert<glm::vec4> final: Detail::SolConvert<glm::vec4> {
+    struct LuaConvert<glm::vec4> final {
+        static bool Is(lua_State *L, int index);
+        static glm::vec4 Get(lua_State *L, int index);
+        static void Push(lua_State *L, const glm::vec4 &value);
         static const char *Expected();
     };
 
     template <>
-    struct LuaConvert<glm::quat> final: Detail::SolConvert<glm::quat> {
+    struct LuaConvert<glm::quat> final {
+        static bool Is(lua_State *L, int index);
+        static glm::quat Get(lua_State *L, int index);
+        static void Push(lua_State *L, const glm::quat &value);
         static const char *Expected();
     };
 } // namespace Framework::Scripting::Bind

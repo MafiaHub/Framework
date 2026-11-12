@@ -37,7 +37,6 @@ find_package(cxxopts CONFIG REQUIRED)
 find_package(function2 CONFIG REQUIRED)
 find_package(sentry CONFIG REQUIRED)
 find_package(unofficial-lua CONFIG REQUIRED)
-find_package(sol2 CONFIG REQUIRED)
 
 # The crashpad backend launches this helper out-of-process, so it has to sit next to the binaries.
 # The vendored drop staged it from a POST_BUILD; the port puts it under tools/.

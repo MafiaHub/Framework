@@ -53,6 +53,11 @@ from JavaScript today is reachable from Lua under the same name.
 | Async | A function documented as returning a Promise suspends the calling Lua coroutine and returns the settled value, or raises | No `await` keyword to teach; every Lua entry point runs in a coroutine. |
 | Catalog | The v8pp registry stays the JavaScript export, filled from the neutral description; a neutral catalog is added for Lua definitions | Zero change for the existing TypeScript tooling. |
 
+sol2 was evaluated for the Lua backend and rejected. `sol::usertype` keeps its storage in a global
+of the state that a sandboxed script can reach, and several of its defaults contradict behaviour the
+tests pin: a userdata without a metatable passes for any class, integers are not range-checked, any
+table is taken for a vector, and its error wording is not the `"<Api>.<method>: ..."` form.
+
 ## 1. The binding layer (`code/framework/src/scripting/bind/`)
 
 ### 1.1 Declaring an API

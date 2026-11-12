@@ -393,8 +393,6 @@ endif()
 # Lua built as C++ (the port's cpp feature). The plain signature links publicly, so <lua.h> reaches
 # everything that links Framework.
 target_link_libraries(Framework unofficial::lua::lua-cpp)
-# sol2 is header-only and sits under the Lua half of the binding layer (scripting/bind/sol.h).
-target_link_libraries(Framework sol2::sol2)
 
 # The prebuilt MafiaHubServices (IMPORTED archive, created in src/services) references Framework
 # symbols (Utils::Time) but can't declare that dependency there since Framework isn't defined yet.
