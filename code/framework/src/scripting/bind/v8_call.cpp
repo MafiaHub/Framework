@@ -784,6 +784,16 @@ namespace Framework::Scripting::Bind {
         return Detail::V8NativeFunction(isolate, context, std::make_shared<NativeFunction>(std::move(function))).ToLocalChecked();
     }
 
+    void RecordV8DataType(v8pp::metadata::registry &catalog, const ClassDesc &desc) {
+        auto &type = catalog.data_type(desc.name, desc.description);
+        for (const PropertyDesc &property : desc.properties) {
+            type.add_property(property.name, ToTypeScript(property.type), property.description, property.readonly);
+        }
+        for (const FunctionDesc &function : desc.functions) {
+            type.record(v8pp::metadata::function_of<v8::FunctionCallback>(function.name, Detail::V8FunctionOptions(function)));
+        }
+    }
+
     namespace Detail {
         // v8pp owns the holder of a function: it frees it when the function is collected, and v8pp::cleanup frees
         // what an isolate still holds when it goes.

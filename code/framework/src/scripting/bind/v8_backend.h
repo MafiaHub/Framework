@@ -79,6 +79,11 @@ namespace Framework::Scripting::Bind {
     // JavaScript one.
     Value V8ValueIn(Call &call, v8::Local<v8::Value> value);
 
+    // Records `desc` in `catalog` as a data type: the shape of an object a script is handed and cannot construct,
+    // for a class JavaScript has as plain objects and not as a v8pp class. Its properties and methods are recorded
+    // as those of a materialised class are.
+    void RecordV8DataType(v8pp::metadata::registry &catalog, const ClassDesc &desc);
+
     // What V8 needs of a bound class: Class<T> fills a V8Class, and materialising it builds the v8pp class a
     // hand-written binding would, with the same records in the catalog.
     namespace Detail {
