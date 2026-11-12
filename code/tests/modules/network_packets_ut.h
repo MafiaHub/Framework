@@ -8,16 +8,56 @@
 
 #pragma once
 
+#include "connection_admission_ut.h"
+#include "networking/network_client.h"
 #include "networking/network_peer.h"
 #include "networking/network_server.h"
+#include "networking/replication/entity_registry.h"
+#include "networking/replication/network_entity.h"
+#include "networking/replication/replication_manager.h"
+#include "networking/replication/world.h"
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/client_identity.h"
 #include "networking/rpc/server_resources.h"
+#include "networking/sender.h"
 
 #include <mafianet/bit_stream.h>
 
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <vector>
+
+namespace NetworkPacketsTest {
+    struct Avatar final: Framework::Networking::Replication::NetworkEntity {
+        static constexpr const char *kTypeName = "Test::NetworkPackets::Avatar";
+        int messages                           = 0;
+    };
+
+    // A loopback server with one connected client, as the admission tests stand them up.
+    struct Loopback final {
+        ConnectionAdmissionRig rig;
+        Framework::Networking::NetworkServer &server;
+        Framework::Networking::NetworkClient &client;
+
+        Loopback(): rig(), server((rig.StartServer(false), *rig.server)), client(*rig.client) {
+            Framework::Networking::Replication::EntityRegistry::Get().Register<Avatar>(Avatar::kTypeName);
+        }
+        ~Loopback() {
+            server.GetReplicationManager()->Clear();
+        }
+
+        bool Connect() {
+            return rig.port != 0 && rig.Connect("") && rig.PumpUntil([this] {
+                return rig.seen.clientConnected && server.GetPlayerCount() == 1u;
+            });
+        }
+
+        MafiaNet::PeerGuid ClientGuid() const {
+            return MafiaNet::ToPeerGuid(client.GetPeer()->GetMyGUID());
+        }
+    };
+} // namespace NetworkPacketsTest
 
 // Networking wire-format tests: the ID_TIMESTAMP packet-id offset (a wrong skip width once read the
 // id mid-timestamp and faked an ID_CONNECTION_LOST), plus serialize/deserialize round-trips of the
@@ -141,6 +181,129 @@ MODULE(network_packets, {
         server.Update();
         EQUALS(logs->last_raw().size(), static_cast<size_t>(2));
         EQUALS(logs->last_formatted()[1].find("Received unknown packet " + std::to_string(ID_RAKVOICE_RELAY_DATA)), static_cast<size_t>(0));
+    });
+
+    IT("hands a server handler the sender and the world", {
+        using namespace Framework::Networking;
+        NetworkPacketsTest::Loopback net;
+        EQUALS(net.Connect(), true);
+
+        Replication::World &world = net.server.GetReplicationManager()->GetWorld();
+        uint64_t avatarId         = 0;
+        {
+            auto avatar = world.Create<NetworkPacketsTest::Avatar>();
+            avatarId    = avatar->GetNetworkID();
+            net.server.GetReplicationManager()->SetViewer(net.ClientGuid(), &*avatar);
+        }
+
+        int calls = 0;
+        MafiaNet::PeerGuid seenGuid = MafiaNet::UNASSIGNED_PEER_GUID;
+        uint64_t seenAvatar = 0;
+        std::string seenText;
+        net.server.RegisterRPC<RPC::ChatMessage>([&](const RPC::ChatMessage &message, Sender sender, Replication::World &handlerWorld) {
+            ++calls;
+            seenGuid   = sender.Guid();
+            seenAvatar = sender.Avatar();
+            seenText   = message.text;
+            if (auto avatar = handlerWorld.Write<NetworkPacketsTest::Avatar>(sender.Avatar())) {
+                ++avatar->messages;
+            }
+        });
+
+        RPC::ChatMessage message {};
+        message.text = "Lumos";
+        net.client.BroadcastRPC(message);
+        EQUALS(net.rig.PumpUntil([&] { return calls > 0; }), true);
+
+        EQUALS(calls, 1);
+        EQUALS(seenGuid == net.ClientGuid(), true);
+        EQUALS(seenAvatar, avatarId);
+        STREQUALS(seenText.c_str(), "Lumos");
+        EQUALS(&world == &net.server.GetReplicationManager()->GetWorld(), true);
+        auto avatar = world.Read<NetworkPacketsTest::Avatar>(avatarId);
+        EQUALS(static_cast<bool>(avatar), true);
+        EQUALS(avatar->messages, 1);
+    });
+
+    IT("gives a sender without an avatar the id 0", {
+        using namespace Framework::Networking;
+        NetworkPacketsTest::Loopback net;
+        EQUALS(net.Connect(), true);
+
+        int calls = 0;
+        uint64_t seenAvatar = 1;
+        net.server.RegisterRawRPC(RPC::ChatMessage::kIdentifier, [&](MafiaNet::BitStream *, Sender sender, Replication::World &) {
+            ++calls;
+            seenAvatar = sender.Avatar();
+        });
+
+        RPC::ChatMessage message {};
+        net.client.BroadcastRPC(message);
+        EQUALS(net.rig.PumpUntil([&] { return calls > 0; }), true);
+        EQUALS(seenAvatar, uint64_t {0});
+    });
+
+    IT("replies to the sender only", {
+        using namespace Framework::Networking;
+        NetworkPacketsTest::Loopback net;
+        EQUALS(net.Connect(), true);
+
+        auto bystander = std::make_unique<NetworkClient>("127.0.0.1");
+        bystander->SetBuildToken(NetworkPeer::kBuildVerificationDisabledToken);
+        EQUALS(static_cast<bool>(bystander->Connect("127.0.0.1", net.rig.port, "", "")), true);
+        EQUALS(net.rig.PumpUntil([&] {
+            bystander->Update();
+            return net.server.GetPlayerCount() == 2u;
+        }),
+            true);
+
+        std::vector<std::string> senderGot;
+        int bystanderGot = 0;
+        net.client.RegisterRPC<RPC::ChatMessage>([&](const RPC::ChatMessage &reply, MafiaNet::Packet *) {
+            senderGot.push_back(reply.text);
+        });
+        bystander->RegisterRPC<RPC::ChatMessage>([&](const RPC::ChatMessage &, MafiaNet::Packet *) {
+            ++bystanderGot;
+        });
+        net.server.RegisterRPC<RPC::ChatMessage>([](const RPC::ChatMessage &message, Sender sender, Replication::World &) {
+            RPC::ChatMessage reply {};
+            reply.text = "re: " + message.text;
+            sender.Reply(reply);
+        });
+
+        RPC::ChatMessage message {};
+        message.text = "Nox";
+        net.client.BroadcastRPC(message);
+        EQUALS(net.rig.PumpUntil([&] {
+            bystander->Update();
+            return !senderGot.empty();
+        }),
+            true);
+        // Long enough for a reply sent to everyone to have reached the other client too.
+        net.rig.PumpUntil([&] {
+            bystander->Update();
+            return false;
+        }, 300);
+        EQUALS(senderGot.size(), static_cast<size_t>(1));
+        STREQUALS(senderGot[0].c_str(), "re: Nox");
+        EQUALS(bystanderGot, 0);
+        bystander.reset();
+    });
+
+    IT("drops the sender with the reason given", {
+        using namespace Framework::Networking;
+        NetworkPacketsTest::Loopback net;
+        EQUALS(net.Connect(), true);
+
+        net.server.RegisterRPC<RPC::ChatMessage>([](const RPC::ChatMessage &, Sender sender, Replication::World &) {
+            sender.Drop("Chat is closed.");
+        });
+
+        RPC::ChatMessage message {};
+        net.client.BroadcastRPC(message);
+        EQUALS(net.rig.PumpUntil([&] { return net.rig.seen.clientDisconnected && net.server.GetPlayerCount() == 0u; }), true);
+        EQUALS(net.rig.seen.reason == DisconnectionReason::KICKED_CUSTOM, true);
+        STREQUALS(net.rig.seen.customReason.c_str(), "Chat is closed.");
     });
 
     IT("round-trips a ChatMessage payload", {

@@ -15,6 +15,7 @@
 #include "network_peer.h"
 #include "rpc/client_identity.h"
 #include "rpc/rpc.h"
+#include "sender.h"
 
 #include <utils/error.h>
 #include <utils/result.h>
@@ -26,6 +27,10 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+
+namespace Framework::Networking::Replication {
+    class World;
+} // namespace Framework::Networking::Replication
 
 namespace Framework::Networking {
     using ClientGuidCallback      = fu2::function<void(MafiaNet::RakNetGUID) const>;
@@ -75,6 +80,28 @@ namespace Framework::Networking {
         void Shutdown() override;
 
         bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;
+
+        // Register a handler for RPC payload type T. It receives the decoded payload, the connection
+        // that sent it and the world, through which it reaches entities by handle (see
+        // replication/world.h).
+        template <RPC::Payload T>
+        void RegisterRPC(fu2::function<void(const T &payload, Sender sender, Replication::World &world) const> handler) {
+            RegisterRawRPC(T::kIdentifier, [cb = std::move(handler)](MafiaNet::BitStream *bs, Sender sender, Replication::World &world) {
+                cb(RPC::Read<T>(bs), sender, world);
+            });
+        }
+
+        // Raw variant for handlers that decode the bitstream themselves.
+        void RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, Sender, Replication::World &)> handler);
+
+        template <RPC::Payload T>
+        [[deprecated("use the (payload, Sender, World &) form")]] void RegisterRPC(fu2::function<void(const T &payload, MafiaNet::Packet *packet) const> handler) {
+            NetworkPeer::RegisterRPC<T>(std::move(handler));
+        }
+
+        [[deprecated("use the (payload, Sender, World &) form")]] void RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)> handler) {
+            NetworkPeer::RegisterRawRPC(identifier, std::move(handler));
+        }
 
         // Signal an RPC to every connected system except one (typically the originator) — the
         // server-authoritative relay primitive, since RPC4::Signal has no exclusion parameter. The

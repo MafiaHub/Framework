@@ -9,7 +9,9 @@
 #include "network_server.h"
 
 #include "channels.h"
+#include "replication/network_entity.h"
 #include "replication/replication_manager.h"
+#include "replication/world.h"
 
 #include <logging/logger.h>
 #include <mafianet/bit_stream.h>
@@ -18,7 +20,9 @@
 #include <mafianet/message_identifiers.h>
 
 #include <algorithm>
+#include <string>
 #include <string_view>
+#include <utility>
 
 namespace Framework::Networking {
     namespace {
@@ -26,6 +30,22 @@ namespace Framework::Networking {
         // ms. Larger than the client's because the server broadcasts to every connection.
         constexpr unsigned int kShutdownBlockDurationMs = 1000;
     } // namespace
+
+    uint64_t Sender::Avatar() const {
+        Replication::NetworkEntity *avatar = _server->GetReplicationManager()->GetViewer(_guid);
+        return avatar ? avatar->GetNetworkID() : 0;
+    }
+
+    void Sender::Drop(std::string_view reason) const {
+        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Dropping {}: {}", MafiaNet::to_string(MafiaNet::ToGuid(_guid)), reason);
+        _server->KickPlayer(MafiaNet::ToGuid(_guid), reason.empty() ? DisconnectionReason::KICKED : DisconnectionReason::KICKED_CUSTOM, std::string(reason));
+    }
+
+    void NetworkServer::RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, Sender, Replication::World &)> handler) {
+        NetworkPeer::RegisterRawRPC(identifier, [this, cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) mutable {
+            cb(bs, Sender(*this, MafiaNet::ToPeerGuid(packet->guid)), _replicationManager->GetWorld());
+        });
+    }
 
     Utils::Result<void, Error> NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password, const AdmissionSettings &admission) {
         if (port <= 0 || port > 65535) {

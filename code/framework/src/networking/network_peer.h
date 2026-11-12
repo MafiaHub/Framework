@@ -138,7 +138,8 @@ namespace Framework::Networking {
         // Register a handler for RPC payload type T (see networking/rpc/rpc.h). The handler receives
         // the already-decoded payload and the raw packet, and may capture (e.g. the owning instance).
         // A decode wrapper around RegisterRawRPC below, which owns the slot mechanics. Matches the
-        // Signal() send below.
+        // Signal() send below. A server registers on NetworkServer, whose handlers are given the
+        // sender and the world instead of the packet.
         template <RPC::Payload T>
         void RegisterRPC(fu2::function<void(const T &payload, MafiaNet::Packet *packet) const> handler) {
             RegisterRawRPC(T::kIdentifier, [cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
