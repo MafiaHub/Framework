@@ -10,6 +10,7 @@
 
 #include "network_peer.h"
 
+#include <logging/logger.h>
 #include <utils/profiler.h>
 
 #include <utility>
@@ -38,6 +39,12 @@ namespace Framework::Networking {
 
     void PacketThread::Stop() {
         if (!_thread.joinable()) {
+            return;
+        }
+        if (OnPacketThread()) {
+            // A thread cannot wait for itself: joining here would end the process in std::thread.
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("PacketThread::Stop was called from a packet handler; the thread stops after this handler, and has to be joined from another thread");
+            _stop.store(true, std::memory_order_release);
             return;
         }
         _stop.store(true, std::memory_order_release);

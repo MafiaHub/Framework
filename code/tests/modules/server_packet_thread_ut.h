@@ -197,6 +197,13 @@ namespace ServerPacketThreadTest {
             net->RegisterRPC<Hold>([this](const Hold &hold, Sender sender, World &world) {
                 auto avatar = world.Write<Avatar>(sender.Avatar());
                 heldAvatar  = static_cast<bool>(avatar);
+                // What a handler must not do, and a mod's "quit" command might: shut the server down from here.
+                if (hold.value == 3) {
+                    avatar.Reset();
+                    Shutdown();
+                    ++holds;
+                    return;
+                }
                 // Asking the script thread for something and waiting: only once the handle is let go.
                 if (hold.value == 2) {
                     const uint64_t id = avatar.Id();
@@ -1180,6 +1187,34 @@ MODULE(server_packet_thread, {
         }),
             true);
         EQUALS(bystander.disconnected, false);
+        server.Stop();
+    });
+
+    IT("asks the server to stop, rather than joining itself, when a handler shuts it down", {
+        Server server;
+        const bool up = server.Start("fw_packet_thread_self_stop");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        Client client;
+        const bool in = Join(server, client);
+        EQUALS(in, true);
+        if (!in) {
+            break;
+        }
+        client.Send<Hold>(3);
+        client.Send<Ping>(9);
+        // The handler returned, and the one behind it ran: nothing was torn down under them.
+        EQUALS(Pump(server, {&client}, [&] {
+            return server.holds.load() == 1 && !client.pongs.empty();
+        }),
+            true);
+        // Run() has been told to stop, so it returns at once to whoever shuts the server down properly.
+        const auto before = Clock::now();
+        server.Run();
+        const double runMs = std::chrono::duration<double, std::milli>(Clock::now() - before).count();
+        LESSER(runMs, 1000.0);
         server.Stop();
     });
 

@@ -356,6 +356,12 @@ namespace Framework::Integrations::Server {
             return Error(scriptingError);
         }
 
+        // This thread ticks: the runtime it builds script values in is the tick's, by name rather
+        // than by being what a thread that bound nothing gets.
+        if (auto *engine = _scriptingModule->GetEngine()) {
+            engine->BindOffThreadRuntime("tick");
+        }
+
         // Last: a handler may raise an event, which needs the runtimes made just above, and every
         // handler the mod registered in PostInit and PostScriptInit is in place.
         _packetThread.Start(*_networkingEngine->GetNetworkServer(), [this] {
@@ -1792,6 +1798,13 @@ namespace Framework::Integrations::Server {
 
     void Instance::Shutdown() {
         if (_shuttingDown) {
+            return;
+        }
+        if (_packetThread.OnPacketThread()) {
+            // Shutting down joins the packet thread, which this is. Run() is asked to stop instead,
+            // and whoever called it shuts the server down from there, as after a signal.
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Instance::Shutdown was called from a packet handler, which cannot stop the thread it runs on; the server is asked to stop instead. Shut down from the thread that runs it");
+            _stopRequested = true;
             return;
         }
 

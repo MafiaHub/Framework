@@ -778,7 +778,7 @@ namespace Framework::Scripting::Builtins {
             std::sort(ids.begin(), ids.end());
             auto array = v8::Array::New(isolate, static_cast<int>(ids.size()));
             for (size_t i = 0; i < ids.size(); ++i) {
-                array->Set(isolate->GetCurrentContext(), static_cast<uint32_t>(i), v8pp::to_v8(isolate, static_cast<double>(ids[i]))).Check();
+                array->CreateDataProperty(isolate->GetCurrentContext(), static_cast<uint32_t>(i), v8pp::to_v8(isolate, static_cast<double>(ids[i]))).Check();
             }
             return array;
         }
@@ -802,9 +802,11 @@ namespace Framework::Scripting::Builtins {
             if (viewers && viewers->only) {
                 showTo = PlayerIdArray(isolate, replication, *viewers->only);
             }
-            out->Set(context, Str(isolate, "showTo"), showTo).Check();
-            out->Set(context, Str(isolate, "hideFrom"), viewers ? PlayerIdArray(isolate, replication, viewers->except) : v8::Array::New(isolate)).Check();
-            out->Set(context, Str(isolate, "hideForTarget"), v8pp::to_v8(isolate, label.hideForTarget)).Check();
+            // Defined, not assigned: the label is held here, and an assignment would run a setter a script
+            // put on Object.prototype, which may call back into a binding and ask the world again.
+            out->CreateDataProperty(context, Str(isolate, "showTo"), showTo).Check();
+            out->CreateDataProperty(context, Str(isolate, "hideFrom"), viewers ? PlayerIdArray(isolate, replication, viewers->except) : v8::Array::New(isolate)).Check();
+            out->CreateDataProperty(context, Str(isolate, "hideForTarget"), v8pp::to_v8(isolate, label.hideForTarget)).Check();
             return out;
         }
 
@@ -814,7 +816,8 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Object> OptionsObject(v8::Isolate *isolate, const Networking::Replication::Entities::TextLabelEntity &label, uint32_t virtualWorld) {
             auto context   = isolate->GetCurrentContext();
             const auto put = [&](v8::Local<v8::Object> object, std::string_view key, v8::Local<v8::Value> value) {
-                object->Set(context, Str(isolate, key), value).Check();
+                // Defined, not assigned, for the reason AudienceObject gives.
+                object->CreateDataProperty(context, Str(isolate, key), value).Check();
             };
             const auto set = [&](v8::Local<v8::Object> object, std::string_view key, auto value) {
                 put(object, key, v8pp::to_v8(isolate, value));
