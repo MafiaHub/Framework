@@ -129,7 +129,8 @@ namespace Framework::Networking::Replication {
 
     // A write handle on an entity or a registered state: holds its lock for as long as it lives.
     // Empty when what was asked for does not resolve. Keep it in the scope that took it; what is kept
-    // across calls is the id.
+    // across calls is the id. It belongs to the thread that took it: the lock is that thread's, and so
+    // is the count of what it holds, so a handle is never moved to, or let go on, another thread.
     template <typename T>
     class Ref final {
       public:
@@ -315,7 +316,9 @@ namespace Framework::Networking::Replication {
         }
         // The id stops resolving before this returns, here and through the manager; false if it did
         // not resolve. The entity itself goes once no handle holds it and the thread that finds so
-        // holds no handle at all: now, or when the last of those is released.
+        // holds no handle at all: now, or when the last of those is released. So the teardown (the
+        // entity's destructor, SetOnEntityDestroyed, the destruction sent to clients) runs on
+        // whichever thread lets go of the last handle, which need not be the one that called Destroy.
         bool Destroy(uint64_t id);
 
         // Whether the id names an entity now, answered from the table of ids alone: no entity's lock is
@@ -337,8 +340,14 @@ namespace Framework::Networking::Replication {
         // Logs and aborts if the calling thread holds one: for what takes locks that come before an
         // entity's, and so cannot be done from inside a handle's scope.
         static void RequireNoneHeld(const char *what);
+        // The same for what takes ReplicaManager3's world, and so must also not be called from an
+        // entity's creation callback, which runs with the new entity locked for its creator.
+        static void RequireWorldFree(const char *what);
         // Runs fn once the calling thread holds nothing: at once if it holds nothing now, otherwise
-        // when it releases its last handle, or at its next Settle if what it holds is a guard.
+        // when it releases its last handle, or at its next Settle if what it holds is a guard. The
+        // tick thread and the packet thread settle after each pass and each drain, and a delegation
+        // pass after it has let go of ReplicaManager3's world. A replication worker never does: from
+        // a callback the pass makes on its workers (QuerySerialization, a send), fn never runs.
         static void WhenNoneHeld(fu2::unique_function<void()> fn);
         // Runs what the calling thread put off while it held something, teardowns included. For the
         // loops that call into entities under a guard, between two of those calls.
@@ -452,6 +461,16 @@ namespace Framework::Networking::Replication {
         };
         Doom MarkDoomed(uint64_t id, std::shared_ptr<Detail::WorldEntitySlot> &unheld);
         void TeardownUnheld(std::shared_ptr<Detail::WorldEntitySlot> slot);
+
+        // Around a creation callback: the new entity's lock is held for the creator but not yet
+        // counted among its handles, so RequireWorldFree is told another way.
+        class Creating final {
+          public:
+            Creating();
+            ~Creating();
+            Creating(const Creating &)            = delete;
+            Creating &operator=(const Creating &) = delete;
+        };
 
         // While one lives, the calling thread runs nothing it put off and tears nothing down when it
         // lets go of a handle: for a walk made under a lock that what is put off must not run

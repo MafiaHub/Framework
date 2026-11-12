@@ -20,6 +20,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -336,30 +337,44 @@ MODULE(world, {
         World &world                = fixture.world;
         ReplicationManager *manager = fixture.manager;
         std::atomic<bool> inCallback {false};
-        std::atomic<bool> released {false};
-        std::atomic<bool> reachedEarly {false};
+        std::atomic<bool> ticking {false};
+        std::atomic<bool> ticked {false};
+        // The tick got through while the creator still had the entity: in its callback, or after it.
+        bool tickedInCallback = true;
+        bool tickedWhileHeld  = true;
+        // Until the tick thread says it is going for the entity, and then long enough for it to have got
+        // there, were nothing keeping it out.
+        const auto letTheTickTry = [&] {
+            while (!ticking) {
+                std::this_thread::yield();
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        };
         manager->SetOnEntityCreated([&](uint64_t) {
             inCallback = true;
-            // Long enough for the tick to get to the entity, which is referenced by now.
-            std::this_thread::sleep_for(std::chrono::milliseconds(40));
+            letTheTickTry();
+            tickedInCallback = ticked;
         });
         // What the tick does first: bring the interest index up to date with every entity.
         std::thread tick([&] {
             while (!inCallback) {
                 std::this_thread::yield();
             }
+            ticking = true;
             manager->RebuildInterest();
-            reachedEarly = !released;
+            ticked = true;
         });
         {
             const Ref<Walker> created = world.Create<Walker>();
-            std::this_thread::sleep_for(std::chrono::milliseconds(40));
-            created->steps = 1;
-            released       = true;
+            letTheTickTry();
+            created->steps  = 1;
+            tickedWhileHeld = ticked;
         }
         tick.join();
         manager->SetOnEntityCreated({});
-        EQUALS(reachedEarly.load(), false);
+        EQUALS(tickedInCallback, false);
+        EQUALS(tickedWhileHeld, false);
+        EQUALS(ticked.load(), true);
     });
 
     IT("gives an empty handle to a thread that waited for an entity destroyed meanwhile", {
@@ -367,24 +382,64 @@ MODULE(world, {
         World &world          = fixture.world;
         const uint64_t walker = fixture.Make<Walker>();
         std::atomic<bool> asking {false};
-        bool resolved = true;
+        std::atomic<bool> answered {false};
+        bool resolved              = true;
+        bool answeredWhileHeld     = true;
+        bool destroyed             = false;
         std::thread waiter;
         {
             const Ref<Walker> handle = world.Write<Walker>(walker);
             waiter                   = std::thread([&] {
                 asking   = true;
                 resolved = static_cast<bool>(world.Write<Walker>(walker));
+                answered = true;
             });
             while (!asking) {
                 std::this_thread::yield();
             }
-            // Long enough for the waiter to be waiting on the entity's lock.
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            EQUALS(world.Destroy(walker), true);
+            // Long enough for the waiter to be waiting on the entity's lock; it has not been answered, so
+            // it did not get past the holder.
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            answeredWhileHeld = answered;
+            destroyed         = world.Destroy(walker);
         }
+        // Joined before anything is checked: a check that fails leaves the test, and the thread must be done.
         waiter.join();
+        EQUALS(answeredWhileHeld, false);
+        EQUALS(destroyed, true);
         EQUALS(resolved, false);
         EQUALS(static_cast<bool>(world.Read<Walker>(walker)), false);
+    });
+
+    IT("destroys an entity whose creation callback throws, and hands the exception on", {
+        Fixture fixture;
+        World &world = fixture.world;
+        int tornDown = 0;
+        uint64_t made = 0;
+        fixture.manager->SetOnEntityCreated([&](uint64_t id) {
+            made = id;
+            throw std::runtime_error("nobody wants this one");
+        });
+        fixture.manager->SetOnEntityDestroyed([&](uint64_t) {
+            ++tornDown;
+        });
+        bool threw = false;
+        try {
+            const Ref<Walker> created = world.Create<Walker>();
+        }
+        catch (const std::runtime_error &) {
+            threw = true;
+        }
+        fixture.manager->SetOnEntityCreated({});
+        fixture.manager->SetOnEntityDestroyed({});
+        EQUALS(threw, true);
+        NEQUALS(made, uint64_t {0});
+        EQUALS(world.Exists(made), false);
+        EQUALS(tornDown, 1);
+        EQUALS(World::HeldByThisThread(), size_t {0});
+        // Nothing is left locked or half made: the next one is created and reached as usual.
+        const uint64_t next = fixture.Make<Walker>();
+        EQUALS(static_cast<bool>(world.Write<Walker>(next)), true);
     });
 
     IT("visits every entity of a type one lock at a time", {

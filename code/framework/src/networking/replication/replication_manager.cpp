@@ -673,7 +673,7 @@ namespace Framework::Networking::Replication {
         if (!_isServer || _owner == nullptr) {
             return peers;
         }
-        World::RequireNoneHeld("an entity's audience was asked for");
+        World::RequireWorldFree("an entity's audience was asked for");
         const WorldGuard world(*this);
         NetworkEntity *entity = GetEntityByNetworkID(networkId);
         if (entity == nullptr) {
@@ -831,7 +831,20 @@ namespace Framework::Networking::Replication {
         // Before the id resolves and before the lock counts as one this thread holds: the callback
         // may ask the world for other entities, and finds nothing under this id.
         if (_onEntityCreated) {
-            _onEntityCreated(entity->GetNetworkID());
+            const World::Creating creating;
+            try {
+                _onEntityCreated(entity->GetNetworkID());
+            }
+            catch (...) {
+                // The entity is referenced and locked, and nobody will ever be handed it: it is given
+                // its place like any other so that it can be destroyed like any other, and goes when
+                // the hold made here is let go.
+                const uint64_t id = entity->GetNetworkID();
+                _world.Publish(std::move(slot), hold);
+                _world.Destroy(id);
+                hold = Detail::WorldHold();
+                throw;
+            }
         }
         _world.Publish(std::move(slot), hold);
         return entity;
@@ -1159,7 +1172,7 @@ namespace Framework::Networking::Replication {
     }
 
     void ReplicationManager::StartReplication(const MafiaNet::SystemAddress &address, MafiaNet::RakNetGUID guid) {
-        World::RequireNoneHeld("replication to a connection was started");
+        World::RequireWorldFree("replication to a connection was started");
         const WorldGuard world(*this);
         if (GetConnectionByGUID(guid) != nullptr) {
             return; // already started (a client could send ClientIdentity twice)

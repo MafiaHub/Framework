@@ -35,6 +35,8 @@ namespace Framework::Networking::Replication {
         thread_local bool t_draining = false;
         // World::HoldOff scopes alive on this thread.
         thread_local uint32_t t_heldOff = 0;
+        // World::Creating scopes alive on this thread.
+        thread_local uint32_t t_creating = 0;
 
         void Unhold(const Detail::WorldLockable *lock) {
             const auto it = std::find(t_locks.begin(), t_locks.end(), lock);
@@ -55,6 +57,25 @@ namespace Framework::Networking::Replication {
         logger->critical("World: {} while this thread holds {} handle(s); take everything a scope needs in one call", what, t_locks.size());
         logger->flush();
         std::abort();
+    }
+
+    void World::RequireWorldFree(const char *what) {
+        RequireNoneHeld(what);
+        if (t_creating == 0) {
+            return;
+        }
+        const auto logger = Logging::GetLogger(FRAMEWORK_INNER_NETWORKING);
+        logger->critical("World: {} from inside an entity's creation callback, which runs with the new entity locked", what);
+        logger->flush();
+        std::abort();
+    }
+
+    World::Creating::Creating() {
+        ++t_creating;
+    }
+
+    World::Creating::~Creating() {
+        --t_creating;
     }
 
     namespace Detail {
@@ -272,7 +293,7 @@ namespace Framework::Networking::Replication {
     }
 
     NetworkEntity *World::CreateEntity(uint32_t typeId, Detail::WorldHold &hold) {
-        RequireNoneHeld("an entity was created");
+        RequireWorldFree("an entity was created");
         if (!_manager.IsServer()) {
             return nullptr;
         }

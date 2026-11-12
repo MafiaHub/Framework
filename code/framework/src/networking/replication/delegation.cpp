@@ -405,7 +405,7 @@ namespace Framework::Networking::Replication {
             _passPending = true;
             return;
         }
-        World::RequireNoneHeld("a delegation pass was run");
+        World::RequireWorldFree("a delegation pass was run");
         const Walking walking;
         RunPass();
         // What the pass put off while it had ReplicaManager3's world: functions queued with
