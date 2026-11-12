@@ -257,6 +257,13 @@ namespace LuaEngineTest {
             return Framework::Utils::Vfs::ResourcePath(name);
         }
     };
+
+    // Whether the host lets a test create symbolic links: a Windows runner needs a privilege for it.
+#ifdef _WIN32
+    inline constexpr bool kCanLink = false;
+#else
+    inline constexpr bool kCanLink = true;
+#endif
 } // namespace LuaEngineTest
 
 MODULE(lua_engine, {
@@ -556,8 +563,10 @@ MODULE(lua_engine, {
         EQUALS(scripted.Eval("a", "require('sub.y')"), "y");
     });
 
-#ifndef _WIN32
     IT("does not follow a link out of the resource", {
+        if (!LuaEngineTest::kCanLink) {
+            SKIP();
+        }
         LuaEngineTest::Scripted scripted;
         EQUALS(scripted.Create("a"), true);
         const std::string outside = scripted.files.Write("b", "secret.lua", "return 'secret'");
@@ -567,7 +576,6 @@ MODULE(lua_engine, {
         EQUALS(scripted.Eval("a", "require('out')"), "<error> eval:1: module 'out' not found in resource 'a'");
         EQUALS(scripted.Eval("a", "require('alias')"), "inside");
     });
-#endif
 
     IT("says which module was not found, and in which resource", {
         LuaEngineTest::Scripted scripted;

@@ -44,6 +44,15 @@ namespace LuaParityTest {
         };
         return exemptions;
     }
+
+    // Sets an environment variable of the process.
+    inline void SetEnvironment(const char *variable, const std::string &value) {
+#ifdef _WIN32
+        _putenv_s(variable, value.c_str());
+#else
+        setenv(variable, value.c_str(), 1);
+#endif
+    }
 } // namespace LuaParityTest
 
 MODULE(lua_parity, {
@@ -251,11 +260,7 @@ function Tools.log(level, ...) end
         const std::filesystem::path path = std::filesystem::temp_directory_path() / ("framework_lua_definitions_ut_" + std::to_string(std::random_device {}()) + ".d.lua");
         const char *const variable       = "FW_TEST_LUA_DEFINITIONS_PATH";
         const auto set                   = [variable](const std::string &value) {
-#ifdef _WIN32
-            _putenv_s(variable, value.c_str());
-#else
-            setenv(variable, value.c_str(), 1);
-#endif
+            LuaParityTest::SetEnvironment(variable, value);
         };
 
         set("");
