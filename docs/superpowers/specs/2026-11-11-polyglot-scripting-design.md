@@ -406,7 +406,8 @@ for a wrong `this`, as the hand-written builtins did.
   types, which nothing else registers on a client. It ticks the engine once in every `Update()` and hands what
   it queued as errors to the manager. `Reset()` and `Shutdown()` destroy every state after the resources were
   stopped; between a `Reset()` and the next `Init()` a `.lua` script fails its start with `Lua scripting is not
-  available`.
+  available`. The builtins only a client has are added to every state through
+  `LuaClientHost::AddRuntimeSetup`, which the module calls with their `RegisterLua` (`Key`, `Voice`).
 
 ## 3. Resources
 

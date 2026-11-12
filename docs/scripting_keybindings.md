@@ -61,6 +61,22 @@ Key.bind("space", "down", onJump);
 Key.unbind("space", "down", onJump);
 ```
 
+A Lua client script has the same `Key`, with the same names and arguments:
+
+```lua
+Key.bind("b", "both", function(key, state)
+    setAiming(state == "down")
+end)
+
+local function onJump() jump() end
+Key.bind("space", "down", onJump)
+-- ...
+Key.unbind("space", "down", onJump)
+```
+
+Binds of both languages share one table: a key bound by a JavaScript script and
+by a Lua script calls both handlers, in the order they were bound.
+
 ## Key names
 
 Names are **case-insensitive**. The recognised set:
@@ -141,6 +157,13 @@ everywhere: binds fire only when the player could otherwise be driving/walking.
 Binds are **resource-owned**. When a resource stops (or is hot-reloaded), all of
 its binds are removed automatically — you do not need to `unbind` them in a
 `resourceStop` handler. Re-registering in the new `resourceStart` is enough.
+
+A handler that throws (JavaScript) or raises (Lua), or whose promise rejects or
+coroutine fails later, is an error of its resource, like a failing timer: it is
+logged as `Runtime error: Key '<key>' (<state>) handler error: ...` and the
+resource then
+follows its `errorBehavior` (`stop` by default). The other handlers of the key
+still run.
 
 ## Notes and limits
 

@@ -63,6 +63,11 @@ namespace Framework::Integrations::Client::Scripting {
         // Lua scripts come from the server as the JavaScript ones do: sandboxed, with the memory and the time of
         // a client state.
         _lua = std::make_unique<Framework::Scripting::LuaClientHost>(Framework::Scripting::LuaEngineOptions::Client());
+        // The builtins only a client has, next to the shared ones of every state.
+        _lua->AddRuntimeSetup([](Framework::Scripting::LuaRuntime &runtime) {
+            Builtins::Keybinds::RegisterLua(runtime);
+            Builtins::Voice::RegisterLua(runtime);
+        });
     }
 
     ClientScriptingModule::~ClientScriptingModule() {
@@ -114,9 +119,9 @@ namespace Framework::Integrations::Client::Scripting {
         }
 
         // Web views and key binds created by a resource die with it (single callback slot).
-        _resourceManager->AddOnResourceStopped([](const std::string &resourceName) {
+        _resourceManager->AddOnResourceStopped([manager = _resourceManager.get()](const std::string &resourceName) {
             Builtins::Web::CleanupResource(resourceName);
-            Builtins::Keybinds::CleanupResource(resourceName);
+            Builtins::Keybinds::CleanupResource(manager, resourceName);
         });
 
         RegisterFrameworkBindings();
@@ -257,7 +262,7 @@ namespace Framework::Integrations::Client::Scripting {
                 Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);
             }
 
-            // Both self-scope the isolate.
+            // Key binds enter the runtime of each handler; Web self-scopes the isolate.
             Builtins::Keybinds::Update();
             Builtins::Web::Update();
         }
