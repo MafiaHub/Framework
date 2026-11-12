@@ -73,6 +73,10 @@ namespace Framework::Scripting::Bind {
             // The object in the value at `slot` seen as the class of `definition`, or nullptr.
             virtual void *BoundOf(size_t slot, const LuaClass *definition) const         = 0;
             virtual Value GetKey(size_t slot, std::string_view key)                      = 0;
+            // What a script reads as value.key: GetKey for an Object or an Array, the property of a bound object.
+            virtual Value MemberOf(size_t slot, std::string_view key) = 0;
+            // Whether the value is the null of JavaScript.
+            virtual bool IsNullAt(size_t slot) const                                     = 0;
             virtual void SetKey(size_t slot, std::string_view key, const Value &value)   = 0;
             virtual std::vector<std::string> KeysOf(size_t slot)                         = 0;
             virtual size_t LengthOf(size_t slot) const                                   = 0;
@@ -126,6 +130,14 @@ namespace Framework::Scripting::Bind {
 
         bool IsNil() const {
             return Scalar() == ValueKind::Nil;
+        }
+        // Whether the value is JavaScript's null and not its undefined, for an API that gives null a meaning a
+        // value left out does not have (`attachTo: null` detaches). Both are Nil, and IsNil is true of both. Never
+        // true in Lua, which has the one nil: a table cannot hold it, so where such an API takes null in an
+        // object, a Lua script passes false, which the function accepts for it there.
+        bool IsNull() const {
+            const Target target = Find();
+            return target.backend != nullptr && target.backend->IsNullAt(target.slot);
         }
         bool IsBoolean() const {
             return Scalar() == ValueKind::Boolean;
@@ -209,6 +221,18 @@ namespace Framework::Scripting::Bind {
         Value Get(std::string_view key) const {
             const Target target = Find();
             return target.backend != nullptr ? target.backend->GetKey(target.slot, key) : Value();
+        }
+
+        // What a script reads as `value.key`, for a function that takes "anything with an id": a plain object or a
+        // handle of any bound class. On an Object or an Array it is Get. On a bound object it is the property of
+        // that name: in JavaScript whatever the object answers for it, as a script reading it gets, and what an
+        // accessor throws is thrown by the call once the function has returned; in Lua what the getter of a
+        // property the class declares for this runtime gives, a method not being one, and a getter that fails
+        // makes the call raise its error when the function returns (HasThrown tells). Nil for anything else, a
+        // function included.
+        Value Member(std::string_view key) const {
+            const Target target = Find();
+            return target.backend != nullptr ? target.backend->MemberOf(target.slot, key) : Value();
         }
 
         // Nil removes the key in Lua and stores undefined in JavaScript. A key that is the decimal text of an

@@ -146,6 +146,11 @@ namespace Framework::Scripting::Bind {
         // or else those of the first of its bases that names some. nullptr when none does.
         const std::vector<const LuaFunction *> *LuaJsonProperties(const LuaClass &definition);
 
+        // The getter of the property `name` of the bound object at `index`, as the state materialised its class: a
+        // property of the class or of a base, of the side of the runtime. nullptr for a method, for a name the
+        // class does not have and for what is not a bound object.
+        const LuaFunction *LuaFindGetter(lua_State *L, int index, std::string_view name);
+
         // Pushes what the property behind `getter` reads on the object at `index`, as indexing the object does.
         // Raises a Lua error, carrying what() when the getter threw.
         void LuaPushProperty(lua_State *L, int index, const LuaFunction &getter);

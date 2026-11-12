@@ -338,6 +338,28 @@ namespace Framework::Scripting::Bind {
                 return Keep(value);
             }
 
+            Value MemberOf(size_t slot, std::string_view key) override {
+                const v8::Local<v8::Value> object = Local(slot);
+                if (HasKeys(object)) {
+                    return GetKey(slot, key);
+                }
+                v8::Local<v8::String> name;
+                if (!IsBound(object) || !CanRun() || !NewString(key).ToLocal(&name)) {
+                    return At(0);
+                }
+                v8::TryCatch tryCatch(_isolate);
+                v8::Local<v8::Value> value;
+                if (!object.As<v8::Object>()->Get(_context, name).ToLocal(&value)) {
+                    Caught(tryCatch);
+                    return At(0);
+                }
+                return Keep(value);
+            }
+
+            bool IsNullAt(size_t slot) const override {
+                return Local(slot)->IsNull();
+            }
+
             void SetKey(size_t slot, std::string_view key, const Value &value) override {
                 const v8::Local<v8::Value> object = Local(slot);
                 v8::Local<v8::String> name;

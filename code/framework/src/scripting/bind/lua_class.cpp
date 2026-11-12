@@ -542,6 +542,24 @@ namespace Framework::Scripting::Bind::Detail {
         return nullptr;
     }
 
+    // The members of a class are upvalue 1 of the __index of its instances: a getter is a light userdata there.
+    const LuaFunction *LuaFindGetter(lua_State *L, int index, std::string_view name) {
+        if (LuaClassAt(L, index) == nullptr) {
+            return nullptr;
+        }
+        luaL_checkstack(L, 4, "cannot read a property");
+        const int top             = lua_gettop(L);
+        const LuaFunction *getter = nullptr;
+        if (lua_getmetatable(L, index) != 0 && lua_getfield(L, -1, "__index") == LUA_TFUNCTION && lua_getupvalue(L, -1, 1) != nullptr && lua_istable(L, -1)) {
+            lua_pushlstring(L, name.data(), name.size());
+            if (lua_rawget(L, -2) == LUA_TLIGHTUSERDATA) {
+                getter = static_cast<const LuaFunction *>(lua_touserdata(L, -1));
+            }
+        }
+        lua_settop(L, top);
+        return getter;
+    }
+
     // Called as a function of its own, so that the getter finds its receiver where every thunk expects it.
     void LuaPushProperty(lua_State *L, int index, const LuaFunction &getter) {
         index = lua_absindex(L, index);

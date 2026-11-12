@@ -306,6 +306,34 @@ namespace Framework::Scripting::Bind {
                 return Top();
             }
 
+            // The getter of a bound object runs protected: what it raises is the call's to raise, on its return.
+            Value MemberOf(size_t slot, std::string_view key) override {
+                if (Is(slot, LUA_TTABLE)) {
+                    return GetKey(slot, key);
+                }
+                const int index                   = Index(slot);
+                const Detail::LuaFunction *getter = index != 0 ? Detail::LuaFindGetter(_L, index, key) : nullptr;
+                if (getter == nullptr) {
+                    return At(0);
+                }
+                Reserve(3);
+                lua_pushcfunction(_L, ReadMember);
+                lua_pushvalue(_L, index);
+                lua_pushlightuserdata(_L, const_cast<Detail::LuaFunction *>(getter));
+                if (lua_pcall(_L, 2, 1, 0) != LUA_OK) {
+                    size_t length     = 0;
+                    const char *error = lua_tolstring(_L, -1, &length);
+                    ThrowError(error != nullptr ? std::string(error, length) : std::string("the property could not be read"));
+                    lua_pop(_L, 1);
+                    return At(0);
+                }
+                return Top();
+            }
+
+            bool IsNullAt(size_t) const override {
+                return false;
+            }
+
             void SetKey(size_t slot, std::string_view key, const Value &value) override {
                 if (!IsWritable(slot)) {
                     return;
@@ -428,6 +456,12 @@ namespace Framework::Scripting::Bind {
           private:
             Value At(int index) const {
                 return Detail::ValueAccess::Make(*this, static_cast<size_t>(index));
+            }
+
+            // The object is at index 1 and the getter of one of its properties at index 2.
+            static int ReadMember(lua_State *L) {
+                Detail::LuaPushProperty(L, 1, *static_cast<const Detail::LuaFunction *>(lua_touserdata(L, 2)));
+                return 1;
             }
 
             Value Top() const {

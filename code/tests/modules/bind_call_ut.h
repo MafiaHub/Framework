@@ -245,6 +245,19 @@ namespace BindCallTest {
                     },
                     Doc("Names the kind of a value.").Param("value", Type::Any(), "Value to inspect.").ReturnType(TypeOf<std::string>()).Returns("Name of its kind."))
                 .Function(
+                    "member",
+                    [](Call &call) {
+                        call.Return(call.Arg(0).Member(call.Arg(1).AsString()));
+                        ++reachedEnd;
+                    },
+                    Doc("Reads a member as a script does.").Param("value", Type::Any(), "Value to read.").Param("key", TypeOf<std::string>(), "Member to read.").ReturnType(Type::Any()))
+                .Function(
+                    "isNull",
+                    [](Call &call) {
+                        call.Return(call.Arg(0).IsNull());
+                    },
+                    Doc("Tells null from a value left out.").Param("value", Type::Any(), "Value to inspect.").ReturnType(TypeOf<bool>()))
+                .Function(
                     "flags",
                     [](Call &call) {
                         call.Return(Flags(call.Arg(0)));
@@ -1120,6 +1133,43 @@ MODULE(bind_call, {
 
         // What a script put on a function is not a key of it either.
         EQUALS(runtimes.Js("{ const f = function () {}; f.tag = 5; Probe.kind(Probe.get(f, 'tag')) + Probe.keys(f).length }"), "Nil0");
+    });
+
+    IT("reads a member of a bound object as a script does, and of a table as its key", {
+        Runtimes runtimes;
+        std::string mismatches;
+        // A property of the class, of whatever class it is.
+        mismatches += runtimes.Both("Probe.member(new Vector3(1, 2, 3), 'y')", "math.tointeger(Probe.member(Vector3.new(1, 2, 3), 'y'))", "2");
+        mismatches += runtimes.Both("Probe.member(new Color(0.5, 0, 0, 1), 'r')", "Probe.member(Color.new(0.5, 0, 0, 1), 'r')", "0.5");
+        mismatches += runtimes.Both("Probe.kind(Probe.member(new Vector3(1, 2, 3), 'w'))", "Probe.kind(Probe.member(Vector3.new(1, 2, 3), 'w'))", "Nil");
+        // A plain object or table is read as Get reads it.
+        mismatches += runtimes.Both("Probe.member({ id: 7 }, 'id')", "Probe.member({ id = 7 }, 'id')", "7");
+        mismatches += runtimes.Both("Probe.member([4, 5], '1')", "Probe.member({ 4, 5 }, '1')", "5");
+        mismatches += runtimes.Both("Probe.kind(Probe.member({}, 'id'))", "Nil");
+        // Nothing else has members: a scalar, a function.
+        mismatches += runtimes.Both("Probe.kind(Probe.member('text', 'length')) + Probe.kind(Probe.member(5, 'id')) + Probe.kind(Probe.member(Probe.kind, 'name'))", "Probe.kind(Probe.member('text', 'length')) .. Probe.kind(Probe.member(5, 'id')) .. Probe.kind(Probe.member(Probe.kind, 'name'))", "NilNilNil");
+        EQUALS(mismatches, "");
+
+        // A method is what JavaScript reads under its name, and no property in Lua.
+        EQUALS(runtimes.Js("Probe.kind(Probe.member(new Vector3(1, 2, 3), 'add'))"), "Function");
+        EQUALS(runtimes.Lua("Probe.kind(Probe.member(Vector3.new(1, 2, 3), 'add'))"), "Nil");
+        // JavaScript reads what a script put on the object too.
+        EQUALS(runtimes.Js("{ const v = new Vector3(1, 2, 3); v.id = 9; Probe.member(v, 'id') }"), "9");
+        // A Lua table is read raw, as Get reads it.
+        EQUALS(runtimes.Lua("Probe.kind(Probe.member(setmetatable({}, { __index = function() error('ran') end }), 'a'))"), "Nil");
+
+        // What reading throws is thrown once the function has returned.
+        reachedEnd = 0;
+        EQUALS(runtimes.Js("{ const v = new Vector3(1, 2, 3); Object.defineProperty(v, 'id', { get() { throw new RangeError('accessor ran'); } }); Probe.member(v, 'id') }"), "<threw> RangeError: accessor ran");
+        EQUALS(reachedEnd, 1);
+    });
+
+    IT("tells the null of JavaScript from a value left out, and finds none in Lua", {
+        Runtimes runtimes;
+        EQUALS(runtimes.Js("[Probe.isNull(null), Probe.isNull(undefined), Probe.isNull(), Probe.isNull(false), Probe.isNull(0), Probe.isNull({}), Probe.isNull(Probe.get({ a: null }, 'a')), Probe.isNull(Probe.get({}, 'a'))].join()"),
+            "true,false,false,false,false,false,true,false");
+        EQUALS(runtimes.Js("Probe.kind(null) + Probe.kind(undefined)"), "NilNil");
+        EQUALS(runtimes.Lua("tostring(Probe.isNull(nil)) .. tostring(Probe.isNull()) .. tostring(Probe.isNull(false)) .. tostring(Probe.isNull({}))"), "falsefalsefalsefalse");
     });
 
     IT("reads a Lua table raw, and a JavaScript object as a script does", {
