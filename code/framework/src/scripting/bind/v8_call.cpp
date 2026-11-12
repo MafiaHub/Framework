@@ -102,6 +102,7 @@ namespace Framework::Scripting::Bind {
                     }
                     break;
                 case Thrown::TypeError: _isolate->ThrowException(v8::Exception::TypeError(Message())); break;
+                case Thrown::RangeError: _isolate->ThrowException(v8::Exception::RangeError(Message())); break;
                 case Thrown::Error: _isolate->ThrowException(v8::Exception::Error(Message())); break;
                 case Thrown::Caught: _isolate->ThrowException(_caught); break;
                 case Thrown::Terminated: break;
@@ -271,6 +272,10 @@ namespace Framework::Scripting::Bind {
 
             void ThrowTypeError(std::string message) override {
                 Throw(Thrown::TypeError, std::move(message));
+            }
+
+            void ThrowRangeError(std::string message) override {
+                Throw(Thrown::RangeError, std::move(message));
             }
 
             void ThrowError(std::string message) override {
@@ -546,6 +551,7 @@ namespace Framework::Scripting::Bind {
             enum class Thrown : uint8_t {
                 None,
                 TypeError,
+                RangeError,
                 Error,
                 Caught,    // a script threw inside the function: _caught
                 Terminated // the isolate is being terminated, and throws that itself

@@ -190,8 +190,11 @@ namespace Framework::Scripting::Bind {
         void Return(std::nullptr_t) = delete;
 
         virtual void ThrowTypeError(std::string message) = 0;
-        virtual void ThrowError(std::string message)     = 0;
-        virtual bool HasThrown() const                   = 0;
+        // For a number outside what the function takes, where the API always threw a RangeError: a RangeError
+        // in JavaScript, and in Lua the raised string every error is.
+        virtual void ThrowRangeError(std::string message) = 0;
+        virtual void ThrowError(std::string message)      = 0;
+        virtual bool HasThrown() const                    = 0;
 
         // Writes `line` to the output of the runtime the script runs in, which is where its console writes. In
         // JavaScript that is the scripting logger, at `level`: "[resource] line", or the line alone when the

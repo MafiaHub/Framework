@@ -207,6 +207,10 @@ namespace Framework::Scripting::Bind {
                 ThrowError(std::move(message));
             }
 
+            void ThrowRangeError(std::string message) override {
+                ThrowError(std::move(message));
+            }
+
             void ThrowError(std::string message) override {
                 if (!_thrown) {
                     _thrown = std::move(message);
