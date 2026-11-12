@@ -48,7 +48,26 @@ namespace Framework::Scripting::Builtins {
         static void SetUnitsPerMetre(float unitsPerMetre);
         static float GetUnitsPerMetre();
 
-        LabelEntity *ResolveLabel() const;
+        // The label behind this handle, held for the scope that keeps it; with another entity when
+        // one is named, both taken in one call. False when the handle is stale or not a label.
+        struct HeldLabel {
+            Held entity;
+            Held target;
+            LabelEntity *label = nullptr;
+
+            explicit operator bool() const {
+                return label != nullptr;
+            }
+            LabelEntity *operator->() const {
+                return label;
+            }
+            LabelEntity &operator*() const {
+                return *label;
+            }
+        };
+        HeldLabel ResolveLabel(uint64_t with = 0) const;
+        // With the entity the label follows, if it follows one.
+        HeldLabel ResolveLabelAndTarget() const;
 
         std::string GetText() const;
         void SetText(const std::string &text);

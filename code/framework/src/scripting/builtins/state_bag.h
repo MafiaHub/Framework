@@ -53,7 +53,9 @@ namespace Framework::Scripting::Builtins {
         static v8::Local<v8::Value> FromStateValue(v8::Isolate *isolate, v8::Local<v8::Context> context, const Networking::Replication::StateValue &value);
 
       private:
-        Networking::Replication::StateBag *Resolve() const;
+        // The entity whose bag this is, held for the scope that keeps it; empty when it is gone.
+        using Held = Networking::Replication::Ref<Networking::Replication::NetworkEntity>;
+        Held Resolve() const;
 
         // One live `onChange` registration: the script's function, the resource it belongs to so a
         // stop can drop it, and the replication-side handle to cancel.
@@ -71,7 +73,7 @@ namespace Framework::Scripting::Builtins {
         // The live bag behind a call's receiver, or nullptr when the handle is stale or not a
         // StateBag at all. Both cases are a silent no-op, so callers need not tell them apart —
         // argument checks still run first, because a bad argument throws even on a dead receiver.
-        static Networking::Replication::StateBag *ResolveFrom(const v8::FunctionCallbackInfo<v8::Value> &info);
+        static Held ResolveFrom(const v8::FunctionCallbackInfo<v8::Value> &info);
 
         uint64_t _id = 0;
         inline static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<StateBag>>> _classes;

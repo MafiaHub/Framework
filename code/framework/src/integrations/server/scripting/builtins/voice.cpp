@@ -37,13 +37,13 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
                 return false;
             }
 
-            auto *handle = entity->GetHandle();
-            if (!handle || handle->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
+            MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
+            if (!entity->ResolveOwner(owner) || owner == MafiaNet::UNASSIGNED_PEER_GUID) {
                 isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string(fn) + ": player has no owning connection")));
                 return false;
             }
 
-            out = static_cast<uint64_t>(handle->ownerGUID);
+            out = static_cast<uint64_t>(owner);
             return true;
         }
 

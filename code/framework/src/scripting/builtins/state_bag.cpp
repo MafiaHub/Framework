@@ -83,15 +83,14 @@ namespace Framework::Scripting::Builtins {
         }
     } // namespace
 
-    Networking::Replication::StateBag *StateBag::ResolveFrom(const v8::FunctionCallbackInfo<v8::Value> &info) {
+    StateBag::Held StateBag::ResolveFrom(const v8::FunctionCallbackInfo<v8::Value> &info) {
         auto *self = v8pp::class_<StateBag>::unwrap_object(info.GetIsolate(), info.This());
-        return self != nullptr ? self->Resolve() : nullptr;
+        return self != nullptr ? self->Resolve() : Held();
     }
 
-    Networking::Replication::StateBag *StateBag::Resolve() const {
+    StateBag::Held StateBag::Resolve() const {
         auto *replication = CoreModules::GetReplication();
-        auto *entity      = replication != nullptr ? replication->GetEntityByNetworkID(_id) : nullptr;
-        return entity != nullptr ? &entity->state : nullptr;
+        return replication != nullptr ? replication->GetWorld().Write<Networking::Replication::NetworkEntity>(_id) : Held();
     }
 
     bool StateBag::ToStateValue(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> input, Networking::Replication::StateValue &out) {
@@ -268,11 +267,11 @@ namespace Framework::Scripting::Builtins {
                 if (!ReadKey(info, "get", key)) {
                     return;
                 }
-                auto *bag = ResolveFrom(info);
-                if (bag == nullptr) {
+                const Held held = ResolveFrom(info);
+                if (!held) {
                     return;
                 }
-                const auto *value = bag->Get(key);
+                const auto *value = held->state.Get(key);
                 if (value == nullptr) {
                     return;
                 }
@@ -287,8 +286,8 @@ namespace Framework::Scripting::Builtins {
                 if (!ReadKey(info, "has", key)) {
                     return;
                 }
-                auto *bag = ResolveFrom(info);
-                info.GetReturnValue().Set(bag != nullptr && bag->Has(key));
+                const Held held = ResolveFrom(info);
+                info.GetReturnValue().Set(held && held->state.Has(key));
             },
             v8pp::metadata::docs("boolean", {v8pp::metadata::param("key", "string", false, "Key to test.")}, "Checks whether this entity's state holds a key.", "True when the key is set."));
 
@@ -297,12 +296,15 @@ namespace Framework::Scripting::Builtins {
             [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 v8::Isolate *isolate           = info.GetIsolate();
                 v8::Local<v8::Context> context = isolate->GetCurrentContext();
-                auto *bag                      = ResolveFrom(info);
-                if (bag == nullptr) {
-                    info.GetReturnValue().Set(v8::Array::New(isolate, 0));
-                    return;
+                std::vector<std::string> keys;
+                {
+                    const Held held = ResolveFrom(info);
+                    if (!held) {
+                        info.GetReturnValue().Set(v8::Array::New(isolate, 0));
+                        return;
+                    }
+                    keys = held->state.Keys();
                 }
-                const std::vector<std::string> keys = bag->Keys();
                 v8::Local<v8::Array> out            = v8::Array::New(isolate, static_cast<int>(keys.size()));
                 for (size_t i = 0; i < keys.size(); ++i) {
                     out->Set(context, static_cast<uint32_t>(i), v8pp::to_v8(isolate, keys[i])).Check();
@@ -317,7 +319,8 @@ namespace Framework::Scripting::Builtins {
                 v8::Isolate *isolate           = info.GetIsolate();
                 v8::Local<v8::Context> context = isolate->GetCurrentContext();
                 v8::Local<v8::Object> out      = v8::Object::New(isolate);
-                if (auto *bag = ResolveFrom(info)) {
+                if (const Held held = ResolveFrom(info)) {
+                    const auto *bag = &held->state;
                     for (const std::string &key : bag->Keys()) {
                         if (const auto *value = bag->Get(key)) {
                             // CreateDataProperty, not Set: "__proto__" is a storable key, and Set would
@@ -445,12 +448,16 @@ namespace Framework::Scripting::Builtins {
                     return;
                 }
 
-                auto *bag = ResolveFrom(info);
-                if (bag == nullptr) {
-                    return; // Stale receiver; silent, per the builtin conventions.
+                // Let go of before anything else: the change reaches its listeners, which read the
+                // entity, as the handle is released.
+                auto result = Networking::Replication::StateBag::WriteResult::Unchanged;
+                {
+                    const Held held = ResolveFrom(info);
+                    if (!held) {
+                        return; // Stale receiver; silent, per the builtin conventions.
+                    }
+                    result = held->state.Set(key, value, scope);
                 }
-
-                const auto result = bag->Set(key, value, scope);
                 if (result != Networking::Replication::StateBag::WriteResult::Applied && result != Networking::Replication::StateBag::WriteResult::Unchanged) {
                     isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, fmt::format("StateBag.set: {}", Networking::Replication::StateBag::WriteResultToString(result)))));
                     return;
@@ -472,8 +479,11 @@ namespace Framework::Scripting::Builtins {
                 if (!ReadKey(info, "remove", key)) {
                     return;
                 }
-                auto *bag = ResolveFrom(info);
-                info.GetReturnValue().Set(bag != nullptr && bag->Remove(key));
+                bool removed = false;
+                if (const Held held = ResolveFrom(info)) {
+                    removed = held->state.Remove(key);
+                }
+                info.GetReturnValue().Set(removed);
             },
             v8pp::metadata::docs("boolean", {v8pp::metadata::param("key", "string", false, "Key to drop.")}, "Removes one key from this entity's state, telling every client that held it.", "True when the key was set and has been removed."));
 

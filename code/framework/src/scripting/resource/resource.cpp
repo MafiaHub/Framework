@@ -333,7 +333,7 @@ namespace Framework::Scripting {
     }
 
     void Resource::DestroyOwnedEntities() {
-        // Swap out first: DestroyEntity re-enters UntrackEntity via the destroy hook.
+        // Swap out first: destroying re-enters UntrackEntity via the destroy hook.
         std::unordered_set<uint64_t> owned;
         {
             std::scoped_lock lock(_ownedEntitiesMutex);
@@ -345,9 +345,7 @@ namespace Framework::Scripting {
             return;
         }
         for (uint64_t networkId : owned) {
-            if (auto *entity = replication->GetEntityByNetworkID(networkId)) {
-                replication->DestroyEntity(entity);
-            }
+            replication->GetWorld().Destroy(networkId);
         }
     }
 

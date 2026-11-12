@@ -20,23 +20,23 @@
 
 namespace Framework::Scripting::Builtins {
     void Player::Kick(const std::string &reason) {
-        auto *entity = Resolve();
-        if (!entity) {
+        MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
+        if (!ResolveOwner(owner)) {
             return;
         }
         auto *peer = CoreModules::GetNetworkPeer();
         if (!peer) {
             return;
         }
-        peer->KickPlayer(MafiaNet::ToGuid(entity->ownerGUID), reason.empty() ? Networking::DisconnectionReason::KICKED : Networking::DisconnectionReason::KICKED_CUSTOM, reason);
+        peer->KickPlayer(MafiaNet::ToGuid(owner), reason.empty() ? Networking::DisconnectionReason::KICKED : Networking::DisconnectionReason::KICKED_CUSTOM, reason);
     }
 
     void Player::Emit(const std::string &eventName, const std::string &payloadJson) {
         if (eventName.empty()) {
             return;
         }
-        auto *entity = Resolve();
-        if (!entity) {
+        MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
+        if (!ResolveOwner(owner)) {
             return;
         }
         auto *peer = CoreModules::GetNetworkPeer();
@@ -45,7 +45,7 @@ namespace Framework::Scripting::Builtins {
         }
         Framework::Integrations::Shared::RPC::EmitScriptEvent ev;
         ev.FromParameters(eventName, payloadJson);
-        peer->SendRPC(ev, MafiaNet::ToGuid(entity->ownerGUID));
+        peer->SendRPC(ev, MafiaNet::ToGuid(owner));
     }
 
     std::string Player::GetSteamId() const {
@@ -74,42 +74,44 @@ namespace Framework::Scripting::Builtins {
     }
 
     int Player::GetPing() const {
-        const auto *entity = Resolve();
-        if (!entity) {
+        MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
+        if (!ResolveOwner(owner)) {
             return -1;
         }
         auto *peer = CoreModules::GetNetworkPeer();
-        return peer ? peer->GetPing(MafiaNet::ToGuid(entity->ownerGUID)) : -1;
+        return peer ? peer->GetPing(MafiaNet::ToGuid(owner)) : -1;
     }
 
     std::string Player::GetAddress() const {
-        const auto *entity = Resolve();
-        if (!entity) {
+        MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
+        if (!ResolveOwner(owner)) {
             return "";
         }
         auto *peer = CoreModules::GetNetworkPeer();
-        return peer ? peer->GetAddress(MafiaNet::ToGuid(entity->ownerGUID)) : "";
+        return peer ? peer->GetAddress(MafiaNet::ToGuid(owner)) : "";
     }
 
-    Networking::Replication::NametagState *Player::ResolveNametag() const {
-        auto *entity = Resolve();
-        return entity ? entity->GetNametag() : nullptr;
+    Player::HeldNametag Player::ResolveNametag() const {
+        HeldNametag held;
+        held.entity = Resolve();
+        held.state  = held.entity ? held.entity->GetNametag() : nullptr;
+        return held;
     }
 
-    Networking::Replication::NametagState *Player::WritableNametag() const {
+    Player::HeldNametag Player::WritableNametag() const {
         // Server-only, like Kick: the state is a ServerField, so a client write would never leave it.
-        return CoreModules::GetClientInstance() ? nullptr : ResolveNametag();
+        return CoreModules::GetClientInstance() ? HeldNametag() : ResolveNametag();
     }
 
     void Player::SetNametagComponent(Networking::Replication::NametagComponent component, bool enabled) {
-        if (auto *state = WritableNametag()) {
+        if (const auto state = WritableNametag()) {
             state->Set(component, enabled);
         }
     }
 
     bool Player::HasNametagComponent(Networking::Replication::NametagComponent component) const {
-        const auto *state = ResolveNametag();
-        return state != nullptr && state->Has(component);
+        const auto state = ResolveNametag();
+        return state && state->Has(component);
     }
 
     void Player::SetNametagVisible(bool visible) {
@@ -129,25 +131,25 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Player::SetNametagText(const std::string &text) {
-        if (auto *state = WritableNametag()) {
+        if (const auto state = WritableNametag()) {
             state->text = text;
             Utils::StringUtils::TruncateUtf8(state->text, Networking::Replication::NametagState::kMaxTextBytes);
         }
     }
 
     std::string Player::GetNametagText() const {
-        const auto *state = ResolveNametag();
+        const auto state = ResolveNametag();
         return state ? state->text : "";
     }
 
     void Player::SetNametagColor(uint32_t color) {
-        if (auto *state = WritableNametag()) {
+        if (const auto state = WritableNametag()) {
             state->color = color;
         }
     }
 
     uint32_t Player::GetNametagColor() const {
-        const auto *state = ResolveNametag();
+        const auto state = ResolveNametag();
         return state ? state->color : 0xFFFFFFFF;
     }
 
@@ -202,12 +204,12 @@ namespace Framework::Scripting::Builtins {
     }
 
     const Networking::RPC::ClientIdentity *Player::ResolveIdentity() const {
-        const auto *entity = Resolve();
-        if (!entity) {
+        MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
+        if (!ResolveOwner(owner)) {
             return nullptr;
         }
         auto *peer = CoreModules::GetNetworkPeer();
-        return peer ? peer->GetPeerIdentity(MafiaNet::ToGuid(entity->ownerGUID)) : nullptr;
+        return peer ? peer->GetPeerIdentity(MafiaNet::ToGuid(owner)) : nullptr;
     }
 
     void Player::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {

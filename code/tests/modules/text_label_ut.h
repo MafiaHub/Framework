@@ -273,7 +273,7 @@ MODULE(text_label, {
         world.Manager()->DestroyEntity(target);
         TextLabel::FollowTargets(*world.Manager());
         EQUALS((world.Manager()->GetEntityByNetworkID(labelId) == nullptr), true);
-        EQUALS((handle.ResolveLabel() == nullptr), true);
+        EQUALS(static_cast<bool>(handle.ResolveLabel()), false);
     });
 
     IT("an attached label streams only to players near its target", {
@@ -471,13 +471,13 @@ MODULE(text_label, {
         EQUALS(sees(0), true);
         EQUALS(sees(1), true);
 
-        handle.SetVisibleTo(players[1]);
+        handle.SetVisibleTo(players[1]->ownerGUID);
         EQUALS(sees(0), false);
         EQUALS(sees(1), true);
-        handle.SetVisibleTo(players[0]);
+        handle.SetVisibleTo(players[0]->ownerGUID);
         EQUALS(sees(0), true);
         EQUALS(sees(1), false);
-        handle.SetVisibleTo(nullptr);
+        handle.SetVisibleTo(MafiaNet::UNASSIGNED_PEER_GUID);
         EQUALS(sees(0), true);
         EQUALS(sees(1), true);
     });

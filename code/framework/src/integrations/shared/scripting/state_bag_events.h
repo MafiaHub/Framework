@@ -65,7 +65,7 @@ namespace Framework::Integrations::Shared::Scripting {
         // An empty filter: this is the global bus. A script that wants one entity or one key
         // subscribes through entity.state.onChange rather than being woken here.
         return replication->AddStateChangeHandler({}, [wrap = std::move(wrap)](const Framework::Networking::Replication::StateChange &change) {
-            if (change.entity == nullptr) {
+            if (change.networkId == 0) {
                 return;
             }
 
@@ -93,7 +93,7 @@ namespace Framework::Integrations::Shared::Scripting {
             }
             v8::Context::Scope contextScope(context);
 
-            std::vector<v8::Local<v8::Value>> args = StateChangeArgs(isolate, context, change, wrap(isolate, change.entity->GetNetworkID()));
+            std::vector<v8::Local<v8::Value>> args = StateChangeArgs(isolate, context, change, wrap(isolate, change.networkId));
             resources->GetEvents().EmitReserved(isolate, context, "entityStateChange", args);
         });
     }
