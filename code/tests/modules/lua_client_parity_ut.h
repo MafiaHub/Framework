@@ -37,10 +37,10 @@
 // The acceptance gate of Lua scripting on a client (lua_parity_ut.h has the server's): everything the JavaScript
 // catalog of a client documents is there in a Lua state set up as ClientScriptingModule sets it up, and so is
 // everything the Lua definition file of a client declares. The module itself builds on Windows only; what it
-// registers of its own, in both languages, and what it writes its definition file from are the three functions of
-// integrations/client/scripting/builtins/builtins.h, which are what is used here. Nametags needs the headers of
-// ImGui (FW_TEST_CLIENT_NAMETAGS): a binary built without them holds every other builtin to the gate, and the
-// committed definition file less its Nametags section.
+// registers in its isolate, what it adds to every Lua state and what it writes its definition file from are the
+// functions of integrations/client/scripting/builtins/builtins.h, which are what is used here. Nametags needs the
+// headers of ImGui (FW_TEST_CLIENT_NAMETAGS): a binary built without them holds every other builtin to the gate,
+// and the committed definition file less its Nametags section.
 namespace LuaClientParityTest {
     using namespace Framework::Scripting;
     using Framework::Utils::Vfs;
@@ -54,19 +54,23 @@ namespace LuaClientParityTest {
 #endif
     }
 
-    // In the order of ClientScriptingModule::Shutdown, for what the client builtins keep.
-    inline void ShutdownBuiltins() {
+    // What the client builtins keep is let go of in the order of ClientScriptingModule::Shutdown: what names the
+    // manager before the manager goes, what holds V8 globals after the Lua host and before the engine.
+    inline void ShutdownManagerBuiltins() {
         ClientBuiltins::Web::Shutdown();
         ClientBuiltins::Keybinds::Shutdown();
+    }
+
+    inline void ShutdownIsolateBuiltins() {
         ClientBuiltins::Discord::Shutdown();
 #ifdef FW_TEST_CLIENT_NAMETAGS
         ClientBuiltins::Nametags::Shutdown();
 #endif
     }
 
-    // What a client records for JavaScript: what ClientScriptingModule::RegisterFrameworkBindings registers, in
-    // its order, and the handle classes a game publishes on top of it. Normalised; null when the engine does not
-    // start.
+    // What a client records for JavaScript: what ClientScriptingModule::RegisterFrameworkBindings registers,
+    // through the two functions it registers it with, and the handle classes a game publishes on top of it.
+    // Normalised; null when the engine does not start.
     inline nlohmann::json BuildCatalog() {
         V8Engine engine;
         if (engine.Init() != ScriptingError::SCRIPTING_NONE) {
@@ -83,18 +87,9 @@ namespace LuaClientParityTest {
                 const v8::Local<v8::Context> context = scope.Context();
                 const v8::Local<v8::Object> global   = context->Global();
                 SetScriptingCatalog(isolate, "parity-client");
-                SetScriptingEnvironment(isolate, /*isClient*/ true);
                 v8pp::metadata::registry &registry = GetScriptingCatalog(isolate);
 
-                RegisterEventMetadata(registry);
-                RegisterTimerMetadata(registry, /*isClient*/ true);
-                Builtins::RegisterValueTypes(isolate, global);
-                manager.GetEvents().Register(isolate, context, global, &manager, /*isClient*/ true);
-                Builtins::Messages::Register(isolate, context, global, &manager);
-                Builtins::Exports::Register(isolate, context, global, &manager);
-                Builtins::Imports::Register(isolate, context, global, &manager);
-                Builtins::Console::Register(isolate, context, &manager);
-                Builtins::ExecutionEnvironment::Register(isolate, context, global, /*isClient*/ true);
+                ClientBuiltins::RegisterSharedBuiltins(isolate, context, global, &manager, "");
                 ClientBuiltins::RegisterClientBuiltins(isolate, context, global, &manager);
 
                 Builtins::Entity::GetClass(isolate);
@@ -104,8 +99,9 @@ namespace LuaClientParityTest {
 
                 catalog = nlohmann::json::parse(v8pp::metadata::to_json(registry), nullptr, /*allow_exceptions*/ false);
             }
-            ShutdownBuiltins();
+            ShutdownManagerBuiltins();
         }
+        ShutdownIsolateBuiltins();
         engine.Shutdown();
         return ScriptingCatalogGolden::Normalise(std::move(catalog));
     }
@@ -124,9 +120,10 @@ namespace LuaClientParityTest {
             if (client.manager) {
                 client.manager->StopAll();
             }
-            ShutdownBuiltins();
+            ShutdownManagerBuiltins();
             client.manager.reset();
             client.lua.Shutdown();
+            ShutdownIsolateBuiltins();
             client.v8.Shutdown();
             Vfs::Get().Unmount("lua.zip");
         }

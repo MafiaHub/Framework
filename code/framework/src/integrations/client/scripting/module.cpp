@@ -37,6 +37,11 @@
 #include <cctype>
 #include <filesystem>
 
+// Of the test binary that builds without the headers of ImGui (builtins/builtins.h). A client always has Nametags.
+#ifdef FW_CLIENT_SCRIPTING_WITHOUT_NAMETAGS
+#error "FW_CLIENT_SCRIPTING_WITHOUT_NAMETAGS is for the client scripting tests only: a product build must not define it"
+#endif
+
 namespace Framework::Integrations::Client::Scripting {
     namespace {
         bool IsResourceAvailableLocally(const std::string &resourcePath) {
@@ -158,25 +163,9 @@ namespace Framework::Integrations::Client::Scripting {
         v8::Local<v8::Object> global = context->Global();
 
         Framework::Scripting::SetScriptingCatalog(isolate, "framework-client");
-        Framework::Scripting::SetScriptingEnvironment(isolate, /*isClient*/ true);
-
-        // The events the framework raises; a mod's catalog blends them into its own EventMap.
-        Framework::Scripting::RegisterEventMetadata(Framework::Scripting::GetScriptingCatalog(isolate));
-
-        // The engine installs the timers without a binding; declare them for it.
-        Framework::Scripting::RegisterTimerMetadata(Framework::Scripting::GetScriptingCatalog(isolate), /*isClient*/ true);
-
-        // Every builtin registers at the global root (new Vector3, not new Core.Vector3).
-        Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
-
-        _resourceManager->GetEvents().Register(isolate, context, global, _resourceManager.get(), /*isClient*/ true);
-        Framework::Scripting::Builtins::Messages::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Exports::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Imports::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
-        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, true, _modVersion);
-
-        // Client-only surface.
+        // What a client shares with a server, then the client-only surface: both named in builtins/builtins.h,
+        // where the parity gate of the tests reads them.
+        Builtins::RegisterSharedBuiltins(isolate, context, global, _resourceManager.get(), _modVersion);
         Builtins::RegisterClientBuiltins(isolate, context, global, _resourceManager.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
