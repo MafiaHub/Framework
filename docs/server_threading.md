@@ -314,8 +314,11 @@ past the end (a length taken off the wire and believed) is not noticed, so a
 payload that reads such a length checks it itself.
 
 Handlers are registered before the packet thread starts, in `PostInit` or
-`PostScriptInit`. The table they go in is read on the packet thread without
-a lock, so a handler cannot be registered later.
+`PostScriptInit`, on the `NetworkServer`
+(`GetNetworkingEngine()->GetNetworkServer()`). The table they go in is read
+on the packet thread without a lock, so registering later logs a critical
+line and aborts. The client's handler form, which is given the packet, does
+not exist on a server: it is `NetworkClient`'s.
 
 Sends (`SendRPC`, `BroadcastRPC`, `SignalExcept`, `Sender::Reply`) are
 callable from any thread, with or without a handle held.
@@ -396,7 +399,8 @@ are safe from any thread, inside a handle's scope or not.
 
 Mod state that is not an entity and that a packet handler touches (a
 destruction registry, a seat table) is registered with the world, one object
-per type, before the server starts:
+per type, before the server handles packets (`PostInit` or `PostScriptInit`;
+registering after the packet thread has started aborts):
 
 ```cpp
 void MyServer::PostInit() {
@@ -409,9 +413,19 @@ It is then reached like an entity, without an id, alone or in the same call
 as entities:
 
 ```cpp
-auto registry = world.Write<DestructionRegistry>();
+// Alone:
+if (auto registry = world.Write<DestructionRegistry>()) {
+    registry->Forget(msg.propId);
+}
+```
+
+```cpp
+// Or with the entities the same scope needs, in one call:
 auto [player, registry] = world.Write<Human, DestructionRegistry>(sender.Avatar());
 ```
+
+Not one after the other in the same scope: the second call would be made
+with the first handle held.
 
 The world owns the object and keeps it for its own life. A type that was
 not registered gives an empty handle. State that only the tick thread and
@@ -544,7 +558,10 @@ functions, `OnDeserialized`, `GetInterestDependency`, `GetDelegationPolicy`,
 `CanReleaseSimulation`, `OnSimulatorChanged`. An override works on its own
 entity freely and must not ask the world for a handle. What it has to do on
 another entity, it hands to `World::WhenNoneHeld`, which runs it on the
-same thread once the Framework has let go:
+same thread at that thread's next settle: the end of the packet drain
+or of the tick's pass it is part of, or the next handle the thread lets go
+of. Not at the moment the Framework lets go of the entity, which is still
+under a connection's lock:
 
 ```cpp
 void Human::OnDeserialized(bool) {
@@ -560,14 +577,34 @@ void Human::OnDeserialized(bool) {
 }
 ```
 
-Capture ids, not `this`: the entity may be gone when the task runs.
+Capture ids, not `this`: the entity may be gone when the task runs. A hook
+the pass calls on a replication worker (`QuerySerialization`, a send) has no
+settle to wait for: what it hands to `WhenNoneHeld` never runs.
 
 **Callbacks are told by id, with nothing held.** A state-change handler
 (`AddStateChangeHandler`) is called once the writer has let go of the
 entity, on the writer's thread, with `StateChange::networkId`. A
 simulator-changed handler (`AddSimulatorChangedHandler`) is called once the
-delegation pass is over, with the entity's network id. Both ask the world
-for the entity, and the id may no longer resolve.
+delegation pass is over and has let go of ReplicaManager3's world, with the
+entity's network id. Both ask the world for the entity, and the id may no
+longer resolve. A script's listener (`entity.state.onChange`, the
+`entityStateChange` event) is not one of these: it always runs on the script
+thread, later, whoever wrote the bag.
+
+**A handler that throws loses its packet, not the server.** An exception
+out of an RPC handler, or out of `OnPlayerConnect`, `OnPlayerReady` or
+`OnPlayerDisconnect`, is logged with the RPC's digest (or the override's
+name) and the sender, and the packet thread goes on with the next packet.
+Handles are let go by the unwinding. The sender is not dropped; a handler
+that wants that calls `sender.Drop`.
+
+**Client script events are rate-limited** on the packet thread, before they
+reach scripts: 50 a second with bursts of 200 for each connection
+(`InstanceOptions::clientEventRate`, `clientEventBurst`). An event over
+that is dropped and counted (`Instance::ClientEventsDropped()`). A client
+that keeps at it past the flood limit (`clientEventFloodRate` 75,
+`clientEventFloodBurst` 300) is dropped with "Reliable network event
+overflow.". A rate of 0 turns a limit off.
 
 **A handler does not capture a mod object by pointer and use it bare.**
 What it touches is an entity, registered state, or something that guards

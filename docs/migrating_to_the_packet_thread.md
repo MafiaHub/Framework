@@ -26,7 +26,9 @@ using Framework::Networking::Replication::World;
 Three things break at compile time and one does not.
 
 - A server `RegisterRPC` handler taking `MafiaNet::Packet *` no longer
-  compiles.
+  compiles: that form is `NetworkClient`'s alone, and neither
+  `NetworkServer` nor the `NetworkPeer *` from
+  `CoreModules::GetNetworkPeer()` has it.
 - `GetEntityByNetworkID`, `GetEntity<T>`, `ForEachEntity`, `ForEach<T>`,
   `GetViewer`, `GetViewerAs<T>`, `ForEachViewer`, `CreateEntity` and
   `DestroyEntity` are gone from `ReplicationManager`'s public interface.
@@ -40,8 +42,9 @@ Three things break at compile time and one does not.
 
 Two failures show up only when the code runs, as a critical log line
 followed by an abort: asking the world for a handle while holding one, and
-`EmitReservedSync` or `RunOnScriptThread` with a handle held. Each names
-what was attempted. Run
+`EmitReservedSync` or `RunOnScriptThread` with a handle held. So does
+registering an RPC handler or a state after the packet thread has started.
+Each names what was attempted. Run
 every handler once after porting it.
 
 ## 1. A server RPC handler
@@ -365,11 +368,56 @@ In `OnPlayerDisconnect` the avatar still resolves:
 `replication->GetViewerId(guid)` gives its id, and the Framework destroys
 it after the override returns.
 
-`OnPlayerVoiceStateChanged`, `OnConsoleCommand`, `OnClientEvent`,
-`WrapScriptPlayer` and `WrapScriptEntity` keep their signatures and are not
-called on the packet thread. `PostUpdate` stays on the tick thread; the
-entities it touches are reached through
+`OnPlayerDisconnect` is called only for a player that reached ready
+(`OnPlayerReady` was called for it). A connection that drops between
+`OnPlayerConnect` and ready gets no call; the Framework still destroys its
+avatar. The directory above would keep that player's entry for ever, so
+either keep what belongs to a player on the avatar entity, which goes with
+it, or drop the entries whose entity is gone, from the tick:
+
+```cpp
+void MyServer::PostUpdate() {
+    auto &world = Framework::CoreModules::GetReplication()->GetWorld();
+    if (auto players = world.Write<PlayerDirectory>()) {
+        // World::Exists takes no entity lock, so it is allowed with the directory held.
+        players->EraseIf([&](uint64_t avatarId) {
+            return !world.Exists(avatarId);
+        });
+    }
+}
+```
+
+An override that throws is logged and the connection carries on: see "The
+rules" in `docs/server_threading.md`.
+
+`OnPlayerVoiceStateChanged`, `OnConsoleCommand` and `OnClientEvent` keep
+their signatures and run on the script thread. `PostUpdate` stays on the
+tick thread; the entities it touches are reached through
 `Framework::CoreModules::GetReplication()->GetWorld()`.
+
+`WrapScriptPlayer` and `WrapScriptEntity` keep their signatures and are
+called on every thread that raises an event about an entity: the tick
+thread, the packet thread (from a handler, with a handle held or not) and
+the script thread, each in its own isolate. An override asks the world for
+no handle and guards any cache of its own. To choose a wrapper class by
+the entity's type it asks `world.TypeIdOf(id)`, which like `Exists` reads
+the table of ids and takes no entity lock:
+
+```cpp
+v8::Local<v8::Value> MyServer::WrapScriptEntity(v8::Isolate *isolate, uint64_t networkId) {
+    const uint32_t type = Framework::CoreModules::GetReplication()->GetWorld().TypeIdOf(networkId);
+    if (type == Framework::Networking::Replication::EntityTypeId<Vehicle>()) {
+        return v8pp::class_<ScriptVehicle>::create_object(isolate, networkId);
+    }
+    return Instance::WrapScriptEntity(isolate, networkId);
+}
+```
+
+`ModuleRegister` is called for every runtime as it is set up, the tick and
+packet threads' own included. Build the mod's handle classes there
+(`ScriptVehicle::GetClass(isolate)`), so that wrapping one later is a
+lookup. It runs under the lock that keeps binding declarations apart: it
+asks the world for no handle and should run no script.
 
 ## 5. `GetInterestDependency` returns an id
 
@@ -421,8 +469,10 @@ void Human::OnDeserialized(bool) {
 }
 ```
 
-The task runs on the same thread once the Framework has let go of the
-entity. Capture ids, not `this`.
+The task runs on the same thread at that thread's next settle: the end of the packet drain
+or of the tick's pass it is part of, or the next handle the thread lets go
+of. Not at the moment the Framework lets go of the entity, which is still
+under a connection's lock. Capture ids, not `this`.
 
 ## 6. Simulator-changed handlers and state changes carry ids
 
@@ -467,7 +517,9 @@ replication->AddStateChangeHandler(filter, [replication](const StateChange &chan
 ```
 
 On the server the handler is called once the writer has let go of the
-entity, on the writer's thread, which may be the packet thread.
+entity, on the writer's thread, which may be the packet thread. A script's
+`entity.state.onChange` listener and the `entityStateChange` event always
+run on the script thread, later.
 
 The rest of the delegation and replication API names entities by id or by
 handle, never by pointer:
@@ -483,10 +535,21 @@ handle, never by pointer:
 | `MarkStateBagDirty(entity)` | `MarkStateBagDirty(id)` |
 | `ForEachStreamingPeer(entity, fn)` | `for (PeerGuid peer : StreamingPeers(id))` |
 
-The forms that take an id, `Pin`, `SetDeclined`, `UpdateNow` and
-`StreamingPeers` must be called with no handle held; they abort
-otherwise. The forms that take a `Ref`, and `entity->SetOwner(guid)` and
-`entity->ForceState()`, are for inside the handle's scope.
+Which of these may be called with a handle held:
+
+- Not `ForceState(id)`, `SetOwner(id, guid)`, `SetVirtualWorld(id, world)`,
+  `SetViewer(guid, id)`, `Pin`, `SetDeclined`, `UpdateNow` or
+  `StreamingPeers`: they take a handle themselves, or ReplicaManager3's
+  world, and abort.
+- `MarkStateBagDirty(id)`, `Unpin(id)`, `IsPinned(id)`, `PinnedTo(id)`,
+  `IsDeclined(id, guid)`, `GetViewerId(guid)`, `World::Exists(id)` and
+  `World::TypeIdOf(id)` only touch a table under its own mutex: fine
+  anywhere.
+- The forms that take a `Ref`, and `entity->SetOwner(guid)` and
+  `entity->ForceState()`, are for inside the handle's scope.
+
+`StreamingPeers(id)` returns the list rather than calling back, so what is
+done with each peer runs under nothing.
 
 ## 7. Creating and destroying entities
 
@@ -661,10 +724,56 @@ that ends in script with `Instance::PostToScripts(task)`. Both run later;
 neither is a way around the handles, which the task takes again when it
 runs.
 
+**An owner's destruction of its entity.** When a client destroys an entity
+it owns, the mod's `PreDestruction` runs with the entity held by nobody
+else. If a handler or a script holds the entity at that moment, the
+destruction waits for it as before, and `PreDestruction` now waits too: it
+runs at the teardown, with no connection named (`nullptr`).
+
+**An entity belongs to the resource that created it, and to no other.** An
+entity is attributed to a resource only when the creating thread is running
+that resource's script. One a mod creates in `PostUpdate` or in a packet
+handler belongs to no resource, whatever script was running at that moment.
+
 **Two entities change one pass apart.** A handler that writes a player and
 a vehicle holds both, but the pass serializes entities one at a time. A
 client may see the vehicle's new seat in one update and the player's new
 vehicle id in the next. Client code that needs both tolerates the gap.
+
+## Behaviour changes
+
+What changed without changing a signature, in one list:
+
+- `NetworkServer::Update` no longer receives. Packets are handled by a
+  `PacketThread`, or by whoever calls `DrainPackets`.
+- A server state-change handler runs after the writer's handle is let go,
+  on the writer's thread, and is given an id. A script's state-bag listener
+  runs on the script thread.
+- A simulator-changed handler runs after the delegation pass, with nothing
+  held, and is given an id.
+- What `SetOwner`, `SetStreamTarget` and the viewer filters do to interest
+  lands on the next tick, not at the call.
+- `GetPeerIdentity` and `Player::ResolveIdentity` return an optional copy.
+- A typed RPC whose `Serialize` probes for optional trailing fields is
+  dropped when they are absent: reading past the end is what "cut short"
+  means.
+- A handler or a packet-thread override that throws is logged, and the
+  server carries on.
+- A client's script events are rate-limited, and a client that floods is
+  dropped.
+- `ForEachStreamingPeer(id, fn)` is `StreamingPeers(id)`, which returns the
+  peers.
+- Registering an RPC handler or a world state after the packet thread has
+  started aborts.
+- A script wrapper of an entity is made without asking the world, for any
+  id; only `new Entity(id)` written in a script refuses an unknown one, and
+  a mod's handle class needs `Entity::ConstructFromScript<T>` to do the
+  same.
+- An entity created off the script thread belongs to no resource.
+- The automatic replication worker count is one lower, and is zero on a
+  host with three cores or fewer.
+- `Instance::Shutdown` called from a packet handler does not shut down: it
+  logs, and asks `Run()` to stop.
 
 ## A porting order that works
 
