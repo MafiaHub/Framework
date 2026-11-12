@@ -12,3 +12,8 @@
 # No entry today. Tracy races with itself before main() (its worker threads start from one static
 # initializer, its allocator's span cache is constructed by a later one); configure with
 # -DFW_PROFILING=OFF, as the job does, rather than suppress it.
+
+# spdlog: a logger's sink list is not synchronised, and network_packets_ut.h adds a ring-buffer
+# sink to a live logger to read what it logs while spdlog's periodic flusher walks that list.
+# Test-only: the server sets its sinks up before any thread logs.
+race:spdlog::sinks::base_sink
