@@ -204,6 +204,7 @@ namespace Framework::Integrations::Server::Scripting {
         // In JavaScript a game publishes these two itself. A Lua state is set up here and nowhere else.
         Framework::Scripting::Builtins::Player::RegisterLua(runtime);
         Framework::Scripting::Builtins::TextLabel::RegisterLua(runtime);
+        Framework::Scripting::Builtins::Chat::RegisterLua(runtime);
     }
 
     bool ServerScriptingModule::PreShutdown() {
