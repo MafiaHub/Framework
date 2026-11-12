@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "networking/network_server.h"
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
@@ -20,6 +21,7 @@
 #include <mafianet/types.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -38,6 +40,7 @@ MODULE(voice_positions, {
     using Framework::Networking::Replication::NetworkEntity;
     using Framework::Networking::Replication::ReplicationManager;
     using Framework::Voice::VoiceServer;
+    using ServerEntity = TestWorld::Owned;
 
     // Unstarted peers, as in replication_authority_ut: the role is ReplicationManager::Init's flag.
     NetworkServer serverPeer;
@@ -106,28 +109,27 @@ MODULE(voice_positions, {
     };
 
     IT("places a speaker at their avatar on the server, not at an entity they only own", {
-        NetworkEntity aliceAvatar;
-        NetworkEntity bobAvatar;
-        NetworkEntity delegatedNpc;
-        serverManager->Reference(&aliceAvatar);
-        serverManager->Reference(&bobAvatar);
-        serverManager->Reference(&delegatedNpc);
+        ServerEntity aliceAvatar(serverManager);
+        ServerEntity bobAvatar(serverManager);
+        ServerEntity delegatedNpc(serverManager);
 
-        aliceAvatar.ownerGUID = alice;
-        aliceAvatar.position  = aliceAt;
-        serverManager->SetViewer(alice, &aliceAvatar);
-        bobAvatar.ownerGUID = bob;
-        bobAvatar.position  = bobAt;
-        serverManager->SetViewer(bob, &bobAvatar);
-        delegatedNpc.ownerGUID = alice;
-        delegatedNpc.position  = farAway;
+        aliceAvatar->ownerGUID = alice;
+        aliceAvatar->position  = aliceAt;
+        serverManager->SetViewer(alice, aliceAvatar.id);
+        bobAvatar->ownerGUID = bob;
+        bobAvatar->position  = bobAt;
+        serverManager->SetViewer(bob, bobAvatar.id);
+        delegatedNpc->ownerGUID = alice;
+        delegatedNpc->position  = farAway;
 
         // Exactly what Server::VoicePositions does each tick.
         VoiceServer voice;
         voice.SyncAvatars(*serverManager);
 
         std::vector<uint64_t> recipients;
-        voice.GetRouter().ComputeRecipients(static_cast<uint64_t>(alice), recipients);
+        voice.WithRouter([&](Framework::Voice::VoiceRouter &router) {
+            router.ComputeRecipients(static_cast<uint64_t>(alice), recipients);
+        });
         const bool bobHearsAlice = std::ranges::contains(recipients, static_cast<uint64_t>(bob));
         EQUALS(bobHearsAlice, true);
 
@@ -143,22 +145,22 @@ MODULE(voice_positions, {
 
     IT("keeps a speaker from a listener whose avatar is in another virtual world", {
         // A dungeon and the overland map share coordinates, so the two stand side by side.
-        NetworkEntity aliceAvatar;
-        NetworkEntity bobAvatar;
-        serverManager->Reference(&aliceAvatar);
-        serverManager->Reference(&bobAvatar);
-        aliceAvatar.ownerGUID = alice;
-        aliceAvatar.position  = aliceAt;
-        serverManager->SetViewer(alice, &aliceAvatar);
-        bobAvatar.ownerGUID = bob;
-        bobAvatar.position  = bobAt;
-        bobAvatar.SetVirtualWorld(42);
-        serverManager->SetViewer(bob, &bobAvatar);
+        ServerEntity aliceAvatar(serverManager);
+        ServerEntity bobAvatar(serverManager);
+        aliceAvatar->ownerGUID = alice;
+        aliceAvatar->position  = aliceAt;
+        serverManager->SetViewer(alice, aliceAvatar.id);
+        bobAvatar->ownerGUID = bob;
+        bobAvatar->position  = bobAt;
+        bobAvatar->SetVirtualWorld(42);
+        serverManager->SetViewer(bob, bobAvatar.id);
 
         VoiceServer voice;
         const auto hears = [&voice](MafiaNet::PeerGuid talker, MafiaNet::PeerGuid listener) {
             std::vector<uint64_t> recipients;
-            voice.GetRouter().ComputeRecipients(static_cast<uint64_t>(talker), recipients);
+            voice.WithRouter([&](Framework::Voice::VoiceRouter &router) {
+                router.ComputeRecipients(static_cast<uint64_t>(talker), recipients);
+            });
             return std::ranges::contains(recipients, static_cast<uint64_t>(listener));
         };
 
@@ -167,7 +169,7 @@ MODULE(voice_positions, {
         const bool aliceHearsBob = hears(bob, alice);
 
         // Walking out of the dungeon puts them back in earshot on the next tick.
-        bobAvatar.SetVirtualWorld(aliceAvatar.GetVirtualWorld());
+        bobAvatar->SetVirtualWorld(aliceAvatar->GetVirtualWorld());
         voice.SyncAvatars(*serverManager);
         const bool bobHearsAliceAgain = hears(alice, bob);
 
@@ -182,21 +184,21 @@ MODULE(voice_positions, {
     IT("stops routing a player whose avatar is gone, in both directions", {
         // A mod moving a player to another map can tear the avatar down before making the next
         // one. In between they stand nowhere, so they must not be heard where they last stood.
-        NetworkEntity aliceAvatar;
-        NetworkEntity bobAvatar;
-        serverManager->Reference(&aliceAvatar);
-        serverManager->Reference(&bobAvatar);
-        aliceAvatar.ownerGUID = alice;
-        aliceAvatar.position  = aliceAt;
-        serverManager->SetViewer(alice, &aliceAvatar);
-        bobAvatar.ownerGUID = bob;
-        bobAvatar.position  = bobAt;
-        serverManager->SetViewer(bob, &bobAvatar);
+        ServerEntity aliceAvatar(serverManager);
+        ServerEntity bobAvatar(serverManager);
+        aliceAvatar->ownerGUID = alice;
+        aliceAvatar->position  = aliceAt;
+        serverManager->SetViewer(alice, aliceAvatar.id);
+        bobAvatar->ownerGUID = bob;
+        bobAvatar->position  = bobAt;
+        serverManager->SetViewer(bob, bobAvatar.id);
 
         VoiceServer voice;
         const auto hears = [&voice](MafiaNet::PeerGuid talker, MafiaNet::PeerGuid listener) {
             std::vector<uint64_t> recipients;
-            voice.GetRouter().ComputeRecipients(static_cast<uint64_t>(talker), recipients);
+            voice.WithRouter([&](Framework::Voice::VoiceRouter &router) {
+                router.ComputeRecipients(static_cast<uint64_t>(talker), recipients);
+            });
             return std::ranges::contains(recipients, static_cast<uint64_t>(listener));
         };
 
@@ -215,10 +217,9 @@ MODULE(voice_positions, {
     });
 
     IT("gives the server no position for a player who owns entities but has no avatar", {
-        NetworkEntity ownedProp;
-        serverManager->Reference(&ownedProp);
-        ownedProp.ownerGUID = alice;
-        ownedProp.position  = farAway;
+        ServerEntity ownedProp(serverManager);
+        ownedProp->ownerGUID = alice;
+        ownedProp->position  = farAway;
 
         const int aliceReports = countFor(avatars(serverManager), alice);
         EQUALS(aliceReports, 0);
@@ -252,28 +253,26 @@ MODULE(voice_positions, {
     IT("moves a client's speaker to a replacement avatar made after construction", {
         // A respawn: the first body was built on the client as the avatar, the server then made
         // another one the viewer. Only the state channel can carry that.
-        NetworkEntity serverOld;
-        NetworkEntity serverNew;
-        serverManager->Reference(&serverOld);
-        serverManager->Reference(&serverNew);
-        serverOld.ownerGUID = alice;
-        serverOld.position  = farAway;
-        serverNew.ownerGUID = alice;
-        serverNew.position  = aliceAt;
-        serverManager->SetViewer(alice, &serverOld);
+        ServerEntity serverOld(serverManager);
+        ServerEntity serverNew(serverManager);
+        serverOld->ownerGUID = alice;
+        serverOld->position  = farAway;
+        serverNew->ownerGUID = alice;
+        serverNew->position  = aliceAt;
+        serverManager->SetViewer(alice, serverOld.id);
 
         NetworkEntity clientOld;
         NetworkEntity clientNew;
         clientManager->Reference(&clientOld);
         clientManager->Reference(&clientNew);
-        construct(serverOld, clientOld);
-        construct(serverNew, clientNew);
-        deliverState(serverOld, clientOld, true);
-        deliverState(serverNew, clientNew, true);
+        construct(*serverOld, clientOld);
+        construct(*serverNew, clientNew);
+        deliverState(*serverOld, clientOld, true);
+        deliverState(*serverNew, clientNew, true);
 
-        serverManager->SetViewer(alice, &serverNew);
-        deliverState(serverOld, clientOld, false);
-        deliverState(serverNew, clientNew, false);
+        serverManager->SetViewer(alice, serverNew.id);
+        deliverState(*serverOld, clientOld, false);
+        deliverState(*serverNew, clientNew, false);
 
         const std::vector<Reported> reported = avatars(clientManager);
         const int aliceReports               = countFor(reported, alice);
@@ -324,20 +323,18 @@ MODULE(voice_positions, {
         });
     };
     const auto placeBoth = [&](NetworkEntity &aliceAvatar, NetworkEntity &bobAvatar) {
-        serverManager->Reference(&aliceAvatar);
-        serverManager->Reference(&bobAvatar);
         aliceAvatar.ownerGUID = alice;
         aliceAvatar.position  = aliceAt;
-        serverManager->SetViewer(alice, &aliceAvatar);
+        serverManager->SetViewer(alice, aliceAvatar.GetNetworkID());
         bobAvatar.ownerGUID = bob;
         bobAvatar.position  = bobAt;
-        serverManager->SetViewer(bob, &bobAvatar);
+        serverManager->SetViewer(bob, bobAvatar.GetNetworkID());
     };
 
     IT("relays a talker from the tick after their first frame, and reports them talking", {
-        NetworkEntity aliceAvatar;
-        NetworkEntity bobAvatar;
-        placeBoth(aliceAvatar, bobAvatar);
+        ServerEntity aliceAvatar(serverManager);
+        ServerEntity bobAvatar(serverManager);
+        placeBoth(*aliceAvatar, *bobAvatar);
 
         VoiceServer voice;
         voice.SyncAvatars(*serverManager);
@@ -365,9 +362,9 @@ MODULE(voice_positions, {
     });
 
     IT("drops a listener from the relay table the tick their world or avatar changes", {
-        NetworkEntity aliceAvatar;
-        NetworkEntity bobAvatar;
-        placeBoth(aliceAvatar, bobAvatar);
+        ServerEntity aliceAvatar(serverManager);
+        ServerEntity bobAvatar(serverManager);
+        placeBoth(*aliceAvatar, *bobAvatar);
 
         VoiceServer voice;
         voice.SyncAvatars(*serverManager);
@@ -375,12 +372,12 @@ MODULE(voice_positions, {
         voice.Update();
         const bool relayedTogether = relayedTo(voice, alice, bob);
 
-        bobAvatar.SetVirtualWorld(42);
+        bobAvatar->SetVirtualWorld(42);
         voice.SyncAvatars(*serverManager);
         voice.Update();
         const bool relayedAcrossWorlds = relayedTo(voice, alice, bob);
 
-        bobAvatar.SetVirtualWorld(aliceAvatar.GetVirtualWorld());
+        bobAvatar->SetVirtualWorld(aliceAvatar->GetVirtualWorld());
         voice.SyncAvatars(*serverManager);
         voice.Update();
         const bool relayedOnReturn = relayedTo(voice, alice, bob);
@@ -398,16 +395,16 @@ MODULE(voice_positions, {
     });
 
     IT("drops a listener who walks out of range once the refresh interval has passed", {
-        NetworkEntity aliceAvatar;
-        NetworkEntity bobAvatar;
-        placeBoth(aliceAvatar, bobAvatar);
+        ServerEntity aliceAvatar(serverManager);
+        ServerEntity bobAvatar(serverManager);
+        placeBoth(*aliceAvatar, *bobAvatar);
 
         VoiceServer voice;
         voice.SyncAvatars(*serverManager);
         relay(voice, alice, alice);
         voice.Update();
 
-        bobAvatar.position = farAway;
+        bobAvatar->position = farAway;
         voice.SyncAvatars(*serverManager);
         voice.Update();
         const bool relayedWithinInterval = relayedTo(voice, alice, bob);
@@ -422,10 +419,53 @@ MODULE(voice_positions, {
         EQUALS(relayedAfterInterval, false);
     });
 
+    IT("takes preferences and tier requests from another thread while the tick runs", {
+        ServerEntity aliceAvatar(serverManager);
+        ServerEntity bobAvatar(serverManager);
+        placeBoth(*aliceAvatar, *bobAvatar);
+
+        VoiceServer voice;
+        std::atomic<bool> stop {false};
+        // What a thread handling packets does with the two voice RPCs and a connection closing.
+        std::thread packets([&] {
+            for (int i = 0; !stop; ++i) {
+                voice.OnPlayerPreference(static_cast<uint64_t>(bob), (i & 1) == 0);
+                voice.OnTierRequest(static_cast<uint64_t>(alice), static_cast<uint8_t>(i % 2));
+                voice.SetPlayerRange(static_cast<uint64_t>(alice), 10.0f + static_cast<float>(i % 5));
+                voice.OnPlayerDisconnect(static_cast<uint64_t>(MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(900 + i % 3))));
+            }
+        });
+        std::vector<Framework::Voice::TierChange> tiers;
+        for (int tick = 0; tick < 300; ++tick) {
+            voice.SyncAvatars(*serverManager);
+            relay(voice, alice, alice);
+            voice.Update();
+            voice.DrainTierChanges(tiers);
+            (void)voice.IsPlayerTalking(static_cast<uint64_t>(alice));
+            (void)voice.WithRouter([&](Framework::Voice::VoiceRouter &router) {
+                return router.GetPlayerTier(static_cast<uint64_t>(alice));
+            });
+        }
+        stop = true;
+        packets.join();
+
+        // Settled by one thread, the rule reads back what was last asked of it.
+        voice.OnPlayerPreference(static_cast<uint64_t>(bob), false);
+        const bool bobDisabled = voice.WithRouter([&](Framework::Voice::VoiceRouter &router) {
+            return router.IsPlayerVoiceDisabled(static_cast<uint64_t>(bob));
+        });
+        const bool aliceTalking = voice.IsPlayerTalking(static_cast<uint64_t>(alice));
+
+        serverManager->ClearViewer(alice);
+        serverManager->ClearViewer(bob);
+        EQUALS(bobDisabled, true);
+        EQUALS(aliceTalking, true);
+    });
+
     IT("forgets a frame still waiting for the tick when its talker disconnects", {
-        NetworkEntity aliceAvatar;
-        NetworkEntity bobAvatar;
-        placeBoth(aliceAvatar, bobAvatar);
+        ServerEntity aliceAvatar(serverManager);
+        ServerEntity bobAvatar(serverManager);
+        placeBoth(*aliceAvatar, *bobAvatar);
 
         VoiceServer voice;
         voice.SyncAvatars(*serverManager);
@@ -446,9 +486,9 @@ MODULE(voice_positions, {
     });
 
     IT("ignores a frame whose origin is not its sender", {
-        NetworkEntity aliceAvatar;
-        NetworkEntity bobAvatar;
-        placeBoth(aliceAvatar, bobAvatar);
+        ServerEntity aliceAvatar(serverManager);
+        ServerEntity bobAvatar(serverManager);
+        placeBoth(*aliceAvatar, *bobAvatar);
 
         VoiceServer voice;
         voice.SyncAvatars(*serverManager);
