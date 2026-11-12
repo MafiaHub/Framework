@@ -452,10 +452,14 @@ namespace Framework::Networking::Replication {
         std::vector<uint64_t> IdsOfType(uint32_t typeId, bool anyType);
         void AddState(const void *key, void *object, void (*destroy)(void *));
 
-        // From the manager, for an entity it creates. Prepare gives it its lock, taken for the
-        // creator, before the manager lets any other thread find the entity; Publish makes the id
-        // resolve and counts the lock among the creator's, as `hold`.
+        // From the manager, for an entity it creates. Prepare gives it its lock before the manager
+        // lets any other thread find the entity; Publish makes the id resolve and counts the lock,
+        // by then taken for the creator, among the creator's, as `hold`.
         std::shared_ptr<Detail::WorldEntitySlot> Prepare(NetworkEntity *entity);
+        // Takes the new entity's lock for its creator. With ReplicaManager3's world held and the
+        // entity just referenced: the tick cannot have reached it yet, and the order is the world's
+        // then the entity's, as everywhere.
+        void TakeForCreator(Detail::WorldEntitySlot &slot);
         void Publish(std::shared_ptr<Detail::WorldEntitySlot> slot, Detail::WorldHold &hold);
         // A client's entity, which the server constructed there: known by id, with no lock to take
         // around the Framework's own calls on it.

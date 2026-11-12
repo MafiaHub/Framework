@@ -376,12 +376,15 @@ namespace Framework::Networking::Replication {
         auto slot    = std::make_shared<Detail::WorldEntitySlot>();
         slot->entity = entity;
         slot->id     = entity->GetNetworkID();
-        // Locked for its creator before anything can reach the entity: whoever finds it through
-        // ReplicaManager3 from here on waits on this lock.
-        slot->mutex.lock();
+        // The creator's hold is counted from the start; the lock itself is taken by TakeForCreator,
+        // under ReplicaManager3's world, so that it comes after the world like every other entity lock.
         slot->holders      = 1;
         entity->_worldLock = slot.get();
         return slot;
+    }
+
+    void World::TakeForCreator(Detail::WorldEntitySlot &slot) {
+        slot.mutex.lock();
     }
 
     void World::Publish(std::shared_ptr<Detail::WorldEntitySlot> slot, Detail::WorldHold &hold) {

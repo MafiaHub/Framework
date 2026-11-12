@@ -817,12 +817,16 @@ namespace Framework::Networking::Replication {
         // under it. Ids must stay within JavaScript's 2^53 exact-integer range so scripts can hold
         // them as plain numbers. Clients adopt this id via the construction snapshot.
         entity->SetNetworkID(_nextNetworkId.fetch_add(1) + 1);
-        // Its lock first, held for the creator: once referenced, the tick finds the entity through
-        // ReplicaManager3 and must wait until the creator has let go of it.
+        // Its lock exists before it is referenced and is taken for the creator while the world is
+        // still held: the tick, which finds the entity through ReplicaManager3 once the world is
+        // free, then waits until the creator has let go of it. Taken after the world and after
+        // Reference() has let go of the replica set, never before: that is the order the pass and
+        // inbound state take them in.
         std::shared_ptr<Detail::WorldEntitySlot> slot = _world.Prepare(entity);
         {
             const WorldGuard world(*this);
             Reference(entity);
+            _world.TakeForCreator(*slot);
             // Into the index now, so it has its slot; every viewer decides on it at its next query,
             // from what the index takes of it then: by that time the caller has placed it.
             _interest.Sync(entity);
