@@ -53,6 +53,9 @@ namespace Framework::Scripting::Bind {
         std::string description;
         std::vector<std::string> bases;
         bool isNamespace = false;
+        // Which runtimes have the definition at all. A Shared one is everywhere, with the members of each side; one
+        // of a side is nowhere else, whatever the sides of its members.
+        Side side = Side::Shared;
         std::optional<FunctionDesc> constructor;
         std::vector<FunctionDesc> functions;
         std::vector<PropertyDesc> properties;
@@ -165,8 +168,8 @@ namespace Framework::Scripting::Bind {
         return Detail::DescribeSignature(Detail::Signature<void, void, Args...> {}, "constructor", doc, false, Side::Shared);
     }
 
-    // Whether a runtime of side `runtime` has the class or namespace: it has one of its members, or the description
-    // declares none.
+    // Whether a runtime of side `runtime` has the class or namespace: the side the definition declares is Shared or
+    // is that one. The sides of its members, its constructor and its bases say nothing of it.
     bool ExistsIn(const ClassDesc &desc, Side runtime);
 
     // Every description built in this process, in the order it was recorded. Not thread-safe: definitions are built
@@ -188,7 +191,8 @@ namespace Framework::Scripting::Bind {
 
         // The first recorded description named `name` that a runtime of side `runtime` has (ExistsIn), or nullptr.
         // Two builtins may share a global name when no runtime has both, as the Chat of the server and the Chat
-        // of the client do: each is its own definition, materialised on its side only.
+        // of the client do: each is its own definition and declares its side, and registering it in a runtime
+        // of the other side does nothing.
         const ClassDesc *Find(std::string_view name, Side runtime) const;
 
       private:

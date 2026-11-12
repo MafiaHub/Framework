@@ -509,9 +509,10 @@ One value crosses per call result: a Lua function's first return value.
 ## 5. Tooling
 
 - `Bind::ApiCatalog` records every definition. A generator writes LuaLS definition files (`---@meta`)
-  for each side next to the TypeScript contract. Two definitions may share a global name when no runtime
-  has both (the `Chat` of the server and the `Chat` of the client): `Find(name, side)` gives the one a
-  runtime of that side has.
+  for each side next to the TypeScript contract. A definition declares the side it exists on (`Shared` by
+  default, with members of each side), and registering it in a runtime of another side does nothing. Two
+  definitions may so share a global name (the `Chat` of the server and the `Chat` of the client), in any
+  order of registration, and `Find(name, side)` gives the one a runtime of that side has.
 - A parity test walks the JavaScript catalog and requires every global and member to exist in a Lua
   state of the same side, apart from a short explicit list of language-specific members.
 

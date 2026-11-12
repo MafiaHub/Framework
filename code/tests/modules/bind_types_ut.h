@@ -440,7 +440,8 @@ MODULE(bind_types, {
         EQUALS(catalog.Find("") == nullptr, true);
     });
 
-    // The server and the client each have a global Chat, with nothing in common.
+    // The server and the client each have a global Chat, with nothing in common. Which runtimes have a definition
+    // is what it declares, not what its members, its constructor or its bases are of.
     IT("finds the description of a name that a runtime of one side has", {
         const auto function = [](const char *name, Side side) {
             FunctionDesc desc;
@@ -451,39 +452,57 @@ MODULE(bind_types, {
         ClassDesc serverChat;
         serverChat.name        = "Chat";
         serverChat.isNamespace = true;
+        serverChat.side        = Side::Server;
         serverChat.functions.push_back(function("sendToAll", Side::Server));
         ClassDesc clientChat;
         clientChat.name        = "Chat";
         clientChat.isNamespace = true;
+        clientChat.side        = Side::Client;
         clientChat.functions.push_back(function("send", Side::Client));
-        clientChat.properties.push_back({"version", TypeOf<double>(), "", true, true, Side::Client});
-        ClassDesc events;
-        events.name = "Events";
-        events.functions.push_back(function("emitServer", Side::Client));
-        events.functions.push_back(function("on", Side::Shared));
+        // Shared, though every member of its own is the client's: it has a constructor and a base everywhere.
+        ClassDesc derived;
+        derived.name = "Derived";
+        derived.bases.push_back("Entity");
+        derived.constructor = function("constructor", Side::Shared);
+        derived.functions.push_back(function("focus", Side::Client));
+        derived.properties.push_back({"count", TypeOf<double>(), "", true, true, Side::Client});
+        // Of the client, though its members are declared for every side.
         ClassDesc clientOnly;
         clientOnly.name = "Key";
-        clientOnly.properties.push_back({"count", TypeOf<double>(), "", true, true, Side::Client});
+        clientOnly.side = Side::Client;
+        clientOnly.functions.push_back(function("bind", Side::Shared));
         ClassDesc empty;
         empty.name = "Marker";
 
+        EQUALS(serverChat.side == Side::Server && ClassDesc().side == Side::Shared, true);
         ApiCatalog catalog;
-        for (const ClassDesc *desc : {&serverChat, &clientChat, &events, &clientOnly, &empty}) {
+        for (const ClassDesc *desc : {&serverChat, &clientChat, &derived, &clientOnly, &empty}) {
             catalog.Record(desc);
         }
 
         EQUALS(catalog.Find("Chat") == &serverChat, true);
         EQUALS(catalog.Find("Chat", Side::Server) == &serverChat, true);
         EQUALS(catalog.Find("Chat", Side::Client) == &clientChat, true);
-        // A description with a shared member is of every runtime, and so is one without a member.
-        EQUALS(catalog.Find("Events", Side::Server) == &events, true);
-        EQUALS(catalog.Find("Events", Side::Client) == &events, true);
+        EQUALS(catalog.Find("Derived", Side::Server) == &derived, true);
+        EQUALS(catalog.Find("Derived", Side::Client) == &derived, true);
         EQUALS(catalog.Find("Marker", Side::Server) == &empty, true);
         EQUALS(catalog.Find("Key", Side::Client) == &clientOnly, true);
         EQUALS(catalog.Find("Key", Side::Server) == nullptr, true);
         EQUALS(catalog.Find("Missing", Side::Client) == nullptr, true);
         EQUALS(ExistsIn(serverChat, Side::Client), false);
+        EQUALS(ExistsIn(serverChat, Side::Server), true);
         EQUALS(ExistsIn(clientChat, Side::Client), true);
+        EQUALS(ExistsIn(derived, Side::Server), true);
+        // What a runtime asks is its own side, but a Shared question has an answer: only what is everywhere.
+        EQUALS(ExistsIn(empty, Side::Shared), true);
+        EQUALS(ExistsIn(clientChat, Side::Shared), false);
+
+        // The order of recording decides nothing between the two.
+        ApiCatalog reversed;
+        reversed.Record(&clientChat);
+        reversed.Record(&serverChat);
+        EQUALS(reversed.Find("Chat", Side::Server) == &serverChat, true);
+        EQUALS(reversed.Find("Chat", Side::Client) == &clientChat, true);
     });
 
     IT("keeps descriptions in recording order and ignores one already recorded", {

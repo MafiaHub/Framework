@@ -202,13 +202,7 @@ namespace Framework::Scripting::Bind {
     }
 
     bool ExistsIn(const ClassDesc &desc, Side runtime) {
-        if (desc.functions.empty() && desc.properties.empty()) {
-            return true;
-        }
-        const auto here = [runtime](const auto &member) {
-            return Materialises(member.side, runtime);
-        };
-        return std::any_of(desc.functions.begin(), desc.functions.end(), here) || std::any_of(desc.properties.begin(), desc.properties.end(), here);
+        return Materialises(desc.side, runtime);
     }
 
     ApiCatalog &ApiCatalog::Get() {

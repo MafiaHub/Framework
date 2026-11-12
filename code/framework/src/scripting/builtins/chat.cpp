@@ -116,7 +116,7 @@ namespace Framework::Scripting::Builtins {
         static const auto definition = [] {
             const auto options      = Bind::Type::Custom("{ author?: string; color?: number | Color }", "{ author: string?, color: (integer|Color)? }");
             const char *optionsHelp = "Optional author label and color: a Color or a packed 0xRRGGBBAA integer.";
-            return Bind::Namespace("Chat", "Server-side delivery of structured chat messages to connected clients.")
+            return Bind::Namespace("Chat", "Server-side delivery of structured chat messages to connected clients.", Side::Server)
                 .Function("sendToAll", &SendToAll, Doc("Broadcasts a structured chat message to all clients.").Param("text", TypeOf<std::string>(), "Message body broadcast to every connected client.").OptionalParam("options", options, optionsHelp), Side::Server)
                 .Function("sendToPlayer", &SendToPlayer,
                     Doc("Sends a structured chat message to one player's owning connection.")

@@ -79,7 +79,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         static const auto definition = [] {
             const auto boolean = TypeOf<bool>();
-            return Bind::Namespace("Chat", "Client chat transport and native chat-box controls.")
+            return Bind::Namespace("Chat", "Client chat transport and native chat-box controls.", Side::Client)
                 .Function("send", &Send, Doc("Sends a chat line to the server, bypassing the chatSend event; incoming lines arrive through the reserved chatMessage event.").Param("text", TypeOf<std::string>(), "Player-authored chat text sent to the server."), Side::Client)
                 .Function("setUIVisible", &SetUIVisible,
                     Doc("Changes visibility of the native chat overlay without opening its input field. Hidden, the overlay also stops opening on its key. The choice holds for the rest of the session and resets to visible on disconnect, so a resource that replaces the chat calls this once at startup.")

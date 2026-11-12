@@ -391,8 +391,10 @@ namespace Framework::Scripting::Bind {
 
       public:
         // Throws std::logic_error when T already has a definition, or when `name` is not the name FW_SCRIPT_CLASS
-        // gave T.
-        Class(std::string name, std::string description) {
+        // gave T. `side` is where the class exists at all: Shared in every runtime, with the members of each side;
+        // Server or Client in the runtimes of that side only, where MaterialiseLua and RegisterLuaGlobal do
+        // nothing anywhere else and MaterialiseV8 gives nullptr.
+        Class(std::string name, std::string description, Side side = Side::Shared) {
             if (_registered != nullptr) {
                 throw std::logic_error("Bind: '" + name + "' is a second definition of the C++ type bound as '" + _registered->Describe().name + "'");
             }
@@ -403,6 +405,7 @@ namespace Framework::Scripting::Bind {
             _record                   = std::make_shared<Detail::LuaClass>();
             _record->desc.name        = std::move(name);
             _record->desc.description = std::move(description);
+            _record->desc.side        = side;
             if constexpr (!std::is_trivially_destructible_v<T>) {
                 _record->destroy = &Destroy;
             }
@@ -662,6 +665,9 @@ namespace Framework::Scripting::Bind {
         // of side `runtime`, materialising the bases first. Does nothing in a state that already has the class,
         // whatever the side. Runs unprotected: a Lua error here is one of the state, such as running out of memory.
         void MaterialiseLua(lua_State *L, Side runtime) const {
+            if (!ExistsIn(_record->desc, runtime)) {
+                return;
+            }
             Detail::LuaMaterialiseClass(L, *_record, runtime);
         }
 
@@ -676,6 +682,9 @@ namespace Framework::Scripting::Bind {
         // back under its name. The global is set raw, as PublishLua sets it. Runs unprotected, as MaterialiseLua: a
         // Lua error here panics unless the caller is in a protected call.
         void RegisterLuaGlobal(lua_State *L, Side runtime) const {
+            if (!ExistsIn(_record->desc, runtime)) {
+                return;
+            }
             Detail::LuaRegisterClassGlobal(L, *_record, runtime);
         }
 
@@ -685,6 +694,9 @@ namespace Framework::Scripting::Bind {
         // entered. Throws std::logic_error when a member returns what JavaScript cannot receive, and what v8pp
         // throws when the isolate has the class already or lacks the class of a base.
         std::unique_ptr<v8pp::class_<T>> MaterialiseV8(v8::Isolate *isolate, v8pp::metadata::registry &catalog, Side runtime) const {
+            if (!ExistsIn(_record->desc, runtime)) {
+                return nullptr;
+            }
             return Detail::V8MaterialiseClass(*_v8, _record->desc, isolate, catalog, runtime);
         }
 

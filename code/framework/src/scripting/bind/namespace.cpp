@@ -119,7 +119,8 @@ namespace Framework::Scripting::Bind {
         }
     } // namespace
 
-    Namespace::Namespace(std::string name, std::string description): _record(std::make_shared<Record>()) {
+    Namespace::Namespace(std::string name, std::string description, Side side): _record(std::make_shared<Record>()) {
+        _record->desc.side        = side;
         _record->desc.name        = std::move(name);
         _record->desc.description = std::move(description);
         _record->desc.isNamespace = true;
@@ -182,6 +183,9 @@ namespace Framework::Scripting::Bind {
 
     v8::Local<v8::Object> Namespace::MaterialiseV8(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, v8pp::metadata::registry &catalog, Side runtime, const RuntimeConstants &constants) const {
         const ClassDesc &desc = _record->desc;
+        if (!ExistsIn(desc, runtime)) {
+            return {};
+        }
         for (const Record::Member &member : _record->members) {
             if (member.function && member.v8.empty() && Materialises(member.side, runtime)) {
                 throw std::logic_error("Bind: '" + QualifiedName(member.function->name) + "' returns an object of a class that cannot be copied, which JavaScript cannot receive");
@@ -215,6 +219,9 @@ namespace Framework::Scripting::Bind {
 
     void Namespace::MaterialiseLua(lua_State *L, Side runtime, const RuntimeConstants &constants) const {
         const ClassDesc &desc = _record->desc;
+        if (!ExistsIn(desc, runtime)) {
+            return;
+        }
         luaL_checkstack(L, 6, "cannot materialise a namespace");
         const int top = lua_gettop(L);
 

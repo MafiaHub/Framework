@@ -71,7 +71,11 @@ namespace Framework::Scripting::Bind {
         // The values of the constants a definition leaves to the runtime (RuntimeConstant), by name.
         using RuntimeConstants = std::vector<std::pair<std::string, ConstantValue>>;
 
-        Namespace(std::string name, std::string description);
+        // `side` is where the namespace exists at all: Shared in every runtime, with the members of each side;
+        // Server or Client in the runtimes of that side only. Materialising it anywhere else does nothing, so a
+        // module may register every definition it knows, in any order, and two definitions of one name and of
+        // opposite sides never meet.
+        Namespace(std::string name, std::string description, Side side = Side::Shared);
 
         Namespace &Function(std::string name, NativeFunction function, Doc doc, Side side = Side::Shared);
 
@@ -116,14 +120,16 @@ namespace Framework::Scripting::Bind {
 
         // Sets target[name] to a new object carrying the members that exist in a runtime of side `runtime`, and
         // records it in `catalog` the way a builtin written by hand does: a global_object with its functions and,
-        // for the constants, read-only properties. Returns the object. Every call makes a new one. Call with
+        // for the constants, read-only properties. Returns the object, or an empty handle, with nothing set and
+        // nothing recorded, in a runtime the namespace does not exist in. Every call makes a new one. Call with
         // `context` entered. `constants` has the value of every runtime constant of that side. Throws
         // std::logic_error, before anything is set, when a function returns what JavaScript cannot receive, and
         // when a runtime constant has no value or one of another type.
         v8::Local<v8::Object> MaterialiseV8(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, v8pp::metadata::registry &catalog, Side runtime, const RuntimeConstants &constants = {}) const;
 
         // Publishes the namespace as a global of the state under its name: a table a script reads the members of
-        // and cannot write to, with those that exist in a runtime of side `runtime`. In a state that already has
+        // and cannot write to, with those that exist in a runtime of side `runtime`. Does nothing in a runtime
+        // the namespace does not exist in: the global of that name is left as it is. In a state that already has
         // it, whatever the side and whatever `constants`, it only puts it back under its name. The global is set
         // raw. `constants` is what it is for MaterialiseV8, and what is wrong with it throws std::logic_error before
         // anything is made in the state. Runs unprotected: a Lua error here panics unless the caller is in a
