@@ -12,6 +12,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <networking/rpc/server_resources.h>
@@ -190,6 +191,14 @@ namespace Framework::Integrations::Client::Scripting {
          * Register the Framework SDK bindings in the engine.
          */
         void RegisterFrameworkBindings();
+
+        /**
+         * Have `setup` run in every Lua state the client creates from now on, after the Framework's own builtins
+         * are registered in it: where a project registers its Lua builtins. Call it before a resource starts.
+         */
+        void AddLuaRuntimeSetup(fu2::function<void(Framework::Scripting::LuaRuntime &) const> setup) {
+            _lua->AddRuntimeSetup(std::move(setup));
+        }
 
       private:
         std::unique_ptr<Framework::Scripting::V8Engine> _engine;

@@ -12,7 +12,9 @@
 #include "scripting_catalog_golden_ut.h"
 
 #include "integrations/server/scripting/module.h"
+#include "scripting/bind/namespace.h"
 #include "scripting/lua/lua_engine.h"
+#include "scripting/lua/lua_runtime.h"
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
 #include "scripting/script_log.h"
@@ -444,6 +446,65 @@ MODULE(lua_interop, {
         EQUALS(nodeRuntimes, 1);
         EQUALS(node->GetRuntimeStats().size(), 2u);
         EQUALS(bus.Js("control", "ran"), "yes");
+    });
+
+    // ==================== Builtins of a project ====================
+
+    IT("runs the Lua setup of a project in every state created after it was added, the builtins already there", {
+        static const Bind::Namespace definition = Bind::Namespace("Garage", "What a project adds.")
+                                                      .Function(
+                                                          "wheels",
+                                                          [](Bind::Call &call) {
+                                                              call.Return(4);
+                                                          },
+                                                          Bind::Doc("Counts the wheels.").ReturnType(Bind::TypeOf<int>()));
+
+        Bus bus;
+        bus.server.files.Resource("before", {{"main.lua", "seen = type(Garage)"}});
+        bus.server.files.Resource("added", {{"main.lua", "seen = type(Garage) wheels = Garage.wheels()"}});
+        bus.server.files.Resource("later", {{"main.lua", "wheels = Garage.wheels() spare = Spare ~= nil"}});
+
+        // A runtime created before a setup is added does not have what it registers.
+        int builtinsSeen = 0;
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.Start("before"), "");
+        EQUALS(bus.Lua("before", "seen"), "nil");
+
+        bus.server.module.AddLuaRuntimeSetup([&builtinsSeen](LuaRuntime &runtime) {
+            lua_getglobal(runtime.State(), "Events");
+            builtinsSeen += lua_isnil(runtime.State(), -1) ? 0 : 1;
+            lua_pop(runtime.State(), 1);
+            definition.RegisterLuaGlobal(runtime.State(), runtime.Options().side);
+        });
+        EQUALS(bus.Start("added"), "");
+        EQUALS(bus.Lua("added", "seen"), "table");
+        EQUALS(bus.Lua("added", "wheels"), "4");
+        EQUALS(builtinsSeen, 1);
+        EQUALS(bus.Lua("before", "type(Garage)"), "nil");
+
+        // A second setup runs after the first, in the states created from then on.
+        bus.server.module.AddLuaRuntimeSetup([](LuaRuntime &runtime) {
+            lua_getglobal(runtime.State(), "Garage");
+            lua_setglobal(runtime.State(), "Spare");
+        });
+        EQUALS(bus.Start("later"), "");
+        EQUALS(bus.Lua("later", "wheels"), "4");
+        EQUALS(bus.Lua("later", "spare"), "true");
+        EQUALS(bus.Lua("added", "Spare == nil"), "true");
+        EQUALS(builtinsSeen, 2);
+    });
+
+    IT("takes the Lua setup of a project before the module is initialised", {
+        ServerScriptingModule module;
+        int states = 0;
+        module.AddLuaRuntimeSetup([&states](LuaRuntime &) {
+            ++states;
+        });
+        module.SetResourcesPath(std::string(FW_TEST_FIXTURES_DIR) + "/resources");
+        EQUALS(module.Init() == ScriptingError::SCRIPTING_NONE, true);
+        EQUALS(module.StartAllResources(), true);
+        EQUALS(states >= 1, true);
+        module.PreShutdown();
     });
 
     // ==================== Globals ====================

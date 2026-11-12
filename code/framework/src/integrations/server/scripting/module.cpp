@@ -193,6 +193,15 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Builtins::Chat::RegisterLua(runtime);
         Builtins::Voice::RegisterLua(runtime);
         Builtins::PendingConnection::RegisterLua(runtime);
+
+        // What a project added, after the builtins it may build on.
+        for (size_t i = 0; i < _luaRuntimeSetups.size(); ++i) {
+            _luaRuntimeSetups[i](runtime);
+        }
+    }
+
+    void ServerScriptingModule::AddLuaRuntimeSetup(fu2::function<void(Framework::Scripting::LuaRuntime &) const> setup) {
+        _luaRuntimeSetups.push_back(std::move(setup));
     }
 
     std::vector<const Framework::Scripting::Bind::ClassDesc *> ServerScriptingModule::LuaBuiltinDefinitions() {

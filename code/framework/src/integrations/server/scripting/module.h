@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include <function2/function2.hpp>
+
 #include <scripting/bind/descriptors.h>
 #include <scripting/lua/lua_engine.h>
 #include <scripting/module.h>
@@ -151,10 +153,17 @@ namespace Framework::Integrations::Server::Scripting {
         void RegisterFrameworkBindings();
 
         /**
-         * Register the Framework SDK bindings in a resource's Lua runtime. The Lua engine runs this inside every
-         * runtime it creates, in a protected call.
+         * Register the Framework SDK bindings in a resource's Lua runtime, then run the setups AddLuaRuntimeSetup
+         * was given. The Lua engine runs this inside every runtime it creates, in a protected call.
          */
         void RegisterLuaBindings(Framework::Scripting::LuaRuntime &runtime);
+
+        /**
+         * Have `setup` run in every Lua state the server creates from now on, after the Framework's own builtins
+         * are registered in it and in the same protected call: where a project registers its Lua builtins. Call
+         * it before or after Init(), and before the resources that need it start.
+         */
+        void AddLuaRuntimeSetup(fu2::function<void(Framework::Scripting::LuaRuntime &) const> setup);
 
         /**
          * The definitions of what RegisterLuaBindings publishes: what the Lua definition file of a server is
@@ -173,6 +182,7 @@ namespace Framework::Integrations::Server::Scripting {
         std::unique_ptr<Framework::Scripting::NodeEngine> _nodeEngine;
         std::unique_ptr<Framework::Scripting::LuaEngine> _luaEngine;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
+        std::vector<fu2::function<void(Framework::Scripting::LuaRuntime &) const>> _luaRuntimeSetups;
         std::chrono::steady_clock::time_point _lastLuaTick {};
         uint64_t _waitRounds = 0;
         std::string _modVersion;

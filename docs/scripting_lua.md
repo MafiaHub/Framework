@@ -601,6 +601,13 @@ function). `docs/scripting_resource_isolation.md` has the full rule.
   `setVolume`, ...) and `Nametags`. `types/lua/client.d.lua` lists them.
 - A game adds its own builtins on top; those are documented by the game.
 
+A game adds its own Lua builtins through a hook of its side:
+`ServerScriptingModule::AddLuaRuntimeSetup` on the server and
+`ClientScriptingModule::AddLuaRuntimeSetup` on the client. The function it
+gives runs in every Lua state created from then on, after the Framework's
+builtins are in it. [scripting_bindings.md](scripting_bindings.md#bindings-of-a-project)
+says how such a builtin is declared.
+
 The server has `Chat` (`sendToAll`, `sendToPlayer`), `Voice` (ranges, mutes),
 `PendingConnection` and the server members of `Events`, `StateBag`, `Entity`,
 `Player` and `TextLabel`.

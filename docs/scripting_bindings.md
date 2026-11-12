@@ -795,15 +795,17 @@ To expose an API to Lua, a project:
 2. **Gives it a `RegisterLua(LuaRuntime &runtime)`** that calls
    `Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side)`.
 3. **Registers it in every Lua state**, through the hook of its side:
-   - **Client:** `LuaClientHost::AddRuntimeSetup(std::function<void(LuaRuntime &)> setup)`
-     (`scripting/lua/lua_client_host.h`). `setup` runs in every state created
-     from then on, after the shared builtins are in it. Call it before a
-     resource starts. The client scripting module adds its own builtins this
-     way (`Builtins::RegisterClientBuiltinsLua`). The host is a member of the
-     client scripting module, which has no public accessor for it today.
-   - **Server:** `ServerScriptingModule::AddLuaRuntimeSetup(fu2::function<void(LuaRuntime &) const> setup)`,
-     which mirrors the client one: `setup` runs in every Lua state the server
-     creates, next to the Framework's own builtins.
+   - **Server:** `ServerScriptingModule::AddLuaRuntimeSetup(fu2::function<void(LuaRuntime &) const> setup)`
+     (`integrations/server/scripting/module.h`). `setup` runs in every Lua
+     state the server creates from then on, after the Framework's own builtins
+     are in it. Call it before or after `Init`, and before the resources that
+     need it start: a state that already exists is not given it.
+   - **Client:** `ClientScriptingModule::AddLuaRuntimeSetup(...)`, of the same
+     signature (`integrations/client/scripting/module.h`). It forwards to
+     `LuaClientHost::AddRuntimeSetup` (`scripting/lua/lua_client_host.h`), the
+     hook the client scripting module adds its own builtins through
+     (`Builtins::RegisterClientBuiltinsLua`): `setup` runs after the shared
+     and the client builtins. Call it before a resource starts.
 
    A setup runs inside the setup callback of the Lua engine, which protects
    it, and that is where `RegisterLuaGlobal` belongs.
@@ -817,6 +819,7 @@ To expose an API to Lua, a project:
 `ServerScriptingModule` (`integrations/server/scripting/module.h`) otherwise
 offers publicly: `GetLuaEngine()`, `RegisterLuaBindings(LuaRuntime &)`, which
 the Lua engine runs inside every runtime it creates, in a protected call, and
+which runs the setups after the builtins, and
 the static `LuaBuiltinDefinitions()`, the definitions of what the Framework
 publishes on a server. The `sdkCallback` of `Init` registers JavaScript
 bindings only.
