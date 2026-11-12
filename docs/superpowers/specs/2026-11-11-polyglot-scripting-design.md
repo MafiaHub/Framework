@@ -408,8 +408,8 @@ for a wrong `this`, as the hand-written builtins did.
   it queued as errors to the manager. `Reset()` and `Shutdown()` destroy every state after the resources were
   stopped; between a `Reset()` and the next `Init()` a `.lua` script fails its start with `Lua scripting is not
   available`. The builtins only a client has are added to every state through
-  `LuaClientHost::AddRuntimeSetup`, which the module calls with their `RegisterLua` (`Key`, `Chat`, `Discord`,
-  `Voice`, `Nametags`).
+  `LuaClientHost::AddRuntimeSetup`, which the module calls with their `RegisterLua` (`Web`, `Key`, `Chat`,
+  `Discord`, `Voice`, `Nametags`).
 
 ## 3. Resources
 
