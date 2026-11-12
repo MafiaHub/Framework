@@ -174,16 +174,16 @@ namespace LuaRuntimeTest {
     }
 
     // Runs `source` in a fresh state with a 50 ms deadline and gives the first line of its error. Says so when the
-    // entry was not cut short in time, and when the script got as far as setting the global `survived`. The script
-    // would be busy for five seconds and is given half of that to be gone, so that a machine under load, where a
-    // tower of coroutines takes its time to unwind, does not pass for a deadline that did not hold.
-    inline std::string RunPastDeadline(const std::string &source) {
+    // entry was not gone within `withinMs`, and when the script got as far as setting the global `survived`. The
+    // script would be busy for five seconds, so that a wider bound, for a tower of coroutines that takes its time
+    // to unwind on a machine under load, still does not pass for a deadline that did not hold.
+    inline std::string RunPastDeadline(const std::string &source, int withinMs = 500) {
         LuaRuntime runtime(Options(0, 50));
         AddSpin(runtime, 5000);
         SetGlobalFunction(runtime, "reenter", Reenter);
         const auto start    = std::chrono::steady_clock::now();
         std::string outcome = FirstLine(Run(runtime, source));
-        if (ElapsedMs(start) >= 2500) {
+        if (ElapsedMs(start) >= withinMs) {
             outcome += " (not cut short)";
         }
         if (Eval(runtime, "survived") != "nil") {
@@ -1094,7 +1094,7 @@ MODULE(lua_runtime, {
     IT("aborts an entry that catches the deadline error across coroutines", {
         EQUALS(RunPastDeadline("local function mid() while busy() do pcall(coroutine.wrap(spin)) end end while busy() do pcall(coroutine.wrap(mid)) end survived = true"), "spin:1: script ran too long");
         EQUALS(RunPastDeadline("local function mid() while busy() do coroutine.resume(coroutine.create(spin)) end end while busy() do coroutine.resume(coroutine.create(mid)) end survived = true"), "spin:1: script ran too long");
-        EQUALS(RunPastDeadline("local function tower() while busy() do pcall(coroutine.wrap(tower)) end end tower() survived = true"), "test:1: script ran too long");
+        EQUALS(RunPastDeadline("local function tower() while busy() do pcall(coroutine.wrap(tower)) end end tower() survived = true", 2500), "test:1: script ran too long");
     });
 
     IT("aborts an entry that spreads its work over coroutines too short to be counted", {

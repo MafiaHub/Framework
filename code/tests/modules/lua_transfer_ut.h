@@ -1028,8 +1028,8 @@ MODULE(lua_transfer, {
         }
 
         // What crosses is what the class wrote, under its name, whichever language copied it.
-        const Copied fromLua = Worlds::CopyLua(worlds.lua, "TransferBadge('caf\u{e9}')");
-        const Copied fromJs  = worlds.CopyJs("new TransferBadge('caf\u00e9')");
+        const Copied fromLua = Worlds::CopyLua(worlds.lua, "TransferBadge('caf\\u{e9}')");
+        const Copied fromJs  = worlds.CopyJs("new TransferBadge('caf\\u00e9')");
         EQUALS(static_cast<bool>(fromLua) && static_cast<bool>(fromJs), true);
         EQUALS(fromLua.GetValue().kind == Kind::HostObject && fromJs.GetValue().kind == Kind::HostObject, true);
         EQUALS(fromLua.GetValue().text + " " + fromJs.GetValue().text, "TransferBadge TransferBadge");
@@ -1245,7 +1245,7 @@ MODULE(lua_transfer, {
         for (int i = 0; i < 31; ++i) {
             accents += "\xC3\xA9";
         }
-        EQUALS(worlds.Refusal("{ ['a' .. string.rep('\u{e9}', 40)] = { coroutine.create(print) } }"), "Cannot copy value.a" + accents + "...[1]: a coroutine cannot be copied");
+        EQUALS(worlds.Refusal("{ ['a' .. string.rep('\\u{e9}', 40)] = { coroutine.create(print) } }"), "Cannot copy value.a" + accents + "...[1]: a coroutine cannot be copied");
     });
 
     // --- Protection ---

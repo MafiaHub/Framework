@@ -1257,6 +1257,9 @@ MODULE(bind_call, {
         EQUALS(runtimes.Lua("Probe.kind(Probe.member(Vector3.new(1, 2, 3), 'add'))"), "Nil");
         // JavaScript reads what a script put on the object too.
         EQUALS(runtimes.Js("{ const v = new Vector3(1, 2, 3); v.id = 9; Probe.member(v, 'id') }"), "9");
+        // Of a script's subclass, what it set on the instance and what the bound class answers: the instance
+        // is the one the bound constructor made, so a getter of the subclass is not on it.
+        EQUALS(runtimes.Js("{ class Sub extends Vector3 { constructor() { super(1, 2, 3); this.own = 4; } get id() { return 5; } }; const s = new Sub(); [Probe.kind(Probe.member(s, 'id')), Probe.member(s, 'own'), Probe.member(s, 'x')].join() }"), "Nil,4,1");
         // A Lua table is read raw, as Get reads it.
         EQUALS(runtimes.Lua("Probe.kind(Probe.member(setmetatable({}, { __index = function() error('ran') end }), 'a'))"), "Nil");
 
