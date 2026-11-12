@@ -533,6 +533,14 @@ namespace BindCallTest {
                     },
                     Doc("Fails as a wrong argument does."))
                 .Function(
+                    "failRange",
+                    [](Call &call) {
+                        call.ThrowRangeError("Probe.failRange: expected a tier from 0 to 2");
+                        call.ThrowError("Probe.failRange: thrown second");
+                        call.Return(1);
+                    },
+                    Doc("Fails as a number out of range does."))
+                .Function(
                     "fail",
                     [](Call &call) {
                         call.Return(1);
@@ -1406,6 +1414,11 @@ MODULE(bind_call, {
         EQUALS(runtimes.Js("{ let caught; try { Probe.failType() } catch (error) { caught = error } caught instanceof TypeError }"), "true");
         EQUALS(runtimes.Js("{ let caught; try { Probe.fail() } catch (error) { caught = error } caught instanceof Error && !(caught instanceof TypeError) }"), "true");
         EQUALS(reachedEnd, 4);
+
+        // A number out of range is a RangeError in JavaScript, and the raised string every error is in Lua.
+        EQUALS(runtimes.Js("Probe.failRange()"), "<threw> RangeError: Probe.failRange: expected a tier from 0 to 2");
+        EQUALS(runtimes.Js("{ let caught; try { Probe.failRange() } catch (error) { caught = error } caught instanceof RangeError }"), "true");
+        EQUALS(runtimes.Lua("Probe.failRange()"), "<error> eval:1: Probe.failRange: expected a tier from 0 to 2");
 
         EQUALS(runtimes.Lua("Probe.failType()"), "<error> eval:1: Probe.failType: expected (text)");
         EQUALS(runtimes.Lua("Probe.fail()"), "<error> eval:1: Probe.fail: network peer unavailable");
