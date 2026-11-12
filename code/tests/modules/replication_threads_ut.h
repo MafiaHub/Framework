@@ -330,6 +330,7 @@ MODULE(replication_threads, {
         EQUALS(ticks.load() > 0, true);
         EQUALS(created > static_cast<uint64_t>(kPlayers), true);
         EQUALS(stateChanges.load() > 0, true);
+        EQUALS(handovers.load() > 0, true);
         EQUALS(unresolved, uint64_t {0});
         EQUALS(stillThere, uint64_t {0});
         EQUALS(counted, created - destroyed);

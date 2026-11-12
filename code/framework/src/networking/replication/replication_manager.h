@@ -388,7 +388,8 @@ namespace Framework::Networking::Replication {
         }
 
         // Fired with the NetworkID at the end of CreateEntity, before the world resolves the id, and
-        // when the entity is torn down (see World::Destroy).
+        // when the entity is torn down (see World::Destroy). The creation callback runs with the new
+        // entity locked for its creator: it must not take ReplicaManager3's world.
         void SetOnEntityCreated(fu2::function<void(uint64_t) const> callback) {
             _onEntityCreated = std::move(callback);
         }

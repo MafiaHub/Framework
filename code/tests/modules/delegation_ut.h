@@ -8,13 +8,37 @@
 
 #pragma once
 
+#include "networking/network_server.h"
 #include "networking/replication/delegation.h"
+#include "networking/replication/entity_registry.h"
+#include "networking/replication/network_entity.h"
+#include "networking/replication/replication_manager.h"
+#include "networking/replication/world.h"
 
 #include <glm/glm.hpp>
 #include <mafianet/virtual_world.h>
 #include <mafianet/types.h>
 
+#include <algorithm>
+#include <chrono>
+#include <thread>
 #include <vector>
+
+namespace DelegationTest {
+    using namespace Framework::Networking::Replication;
+
+    struct Avatar final: NetworkEntity {
+        static constexpr const char *kTypeName = "Test::Delegation::Avatar";
+    };
+    // Server-owned, run by whichever player is near.
+    struct Npc final: NetworkEntity {
+        static constexpr const char *kTypeName = "Test::Delegation::Npc";
+        const DelegationPolicy *GetDelegationPolicy() const override {
+            static const DelegationPolicy policy {};
+            return &policy;
+        }
+    };
+} // namespace DelegationTest
 
 // The election rule behind delegated simulation: which client is asked to run an entity the server
 // owns but cannot simulate. Exercised through DelegationManager::Elect, which is the rule with the
@@ -221,5 +245,98 @@ MODULE(delegation, {
         // viewer is gone, so it is not in the list and the entity goes dormant.
         const std::vector<DelegationCandidate> candidates {};
         EQUALS(DelegationManager::Elect(policy, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY), nobody);
+    });
+    IT("tells a simulator-changed handler once the pass is over, and makes a pass it asks for the next one", {
+        using namespace DelegationTest;
+        Framework::Networking::NetworkServer peer;
+        ReplicationManager *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        EntityRegistry::Get().Register<Avatar>(Avatar::kTypeName);
+        EntityRegistry::Get().Register<Npc>(Npc::kTypeName);
+        World &world               = manager->GetWorld();
+        DelegationManager &elector = manager->Delegation();
+
+        {
+            const Ref<Avatar> avatar = world.Create<Avatar>();
+            avatar->ownerGUID        = alice;
+            manager->SetViewer(alice, avatar);
+        }
+        // Two in reach of the player: the pass that hands over the first still has the second to do.
+        uint64_t npcs[2] = {0, 0};
+        for (uint64_t &npc : npcs) {
+            const Ref<Npc> created = world.Create<Npc>();
+            created->position      = glm::vec3(10.0f, 0.0f, 0.0f);
+            npc                    = created->GetNetworkID();
+        }
+
+        int calls              = 0;
+        size_t heldAtMost      = 0;
+        int resolved           = 0;
+        int ownedByNewInside   = 0;
+        int handedOverByThen   = 0;
+        bool namedOthers       = false;
+        const auto subscription = elector.AddSimulatorChangedHandler([&](uint64_t id, MafiaNet::PeerGuid previous, MafiaNet::PeerGuid current, DelegationChange change) {
+            ++calls;
+            heldAtMost  = std::max(heldAtMost, World::HeldByThisThread());
+            namedOthers = namedOthers || (id != npcs[0] && id != npcs[1]) || previous != nobody || current != alice || change != DelegationChange::Acquired;
+            // The whole pass is over by the first call: both were handed over already.
+            if (calls == 1) {
+                for (const uint64_t npc : npcs) {
+                    if (const ConstRef<Npc> other = world.Read<Npc>(npc)) {
+                        handedOverByThen += other->ownerGUID == alice ? 1 : 0;
+                    }
+                }
+            }
+            if (const Ref<Npc> held = world.Write<Npc>(id)) {
+                ++resolved;
+                ownedByNewInside += held->ownerGUID == current ? 1 : 0;
+            }
+            // Asked for from inside: neither aborts nor runs a pass within this one.
+            elector.UpdateNow();
+            elector.Pin(id, nobody);
+        });
+
+        elector.UpdateNow();
+        const int callsAfterFirstPass = calls;
+        const bool namedOthersInFirst = namedOthers;
+        const int resolvedInFirst     = resolved;
+        const int ownedByNewInFirst   = ownedByNewInside;
+        const auto statsAfterFirst    = elector.GetStats();
+        const bool pinnedAfterFirst   = elector.IsPinned(npcs[0]) && elector.IsPinned(npcs[1]);
+        bool stillOwned               = true;
+        for (const uint64_t npc : npcs) {
+            stillOwned = stillOwned && world.Read<Npc>(npc)->ownerGUID == alice;
+        }
+
+        // The pass the handler asked for is the next one: the pins it set take the entities back.
+        elector.SetUpdateInterval(1000000);
+        std::this_thread::sleep_for(std::chrono::milliseconds(DelegationManager::kDeclinedPassGapMs + 20));
+        elector.Update();
+        elector.RemoveSimulatorChangedHandler(subscription);
+        bool dormantAfterNext = true;
+        for (const uint64_t npc : npcs) {
+            dormantAfterNext = dormantAfterNext && world.Read<Npc>(npc)->ownerGUID == nobody;
+        }
+
+        EQUALS(callsAfterFirstPass, 2);
+        EQUALS(heldAtMost, size_t {0});
+        EQUALS(namedOthersInFirst, false);
+        EQUALS(handedOverByThen, 2);
+        EQUALS(resolvedInFirst, 2);
+        EQUALS(ownedByNewInFirst, 2);
+        EQUALS(statsAfterFirst.handovers, uint64_t {2});
+        EQUALS(statsAfterFirst.simulated, 2u);
+        EQUALS(pinnedAfterFirst, true);
+        EQUALS(stillOwned, true);
+        EQUALS(dormantAfterNext, true);
+        // And its handlers are told of those two in turn.
+        EQUALS(calls, 4);
+        EQUALS(World::HeldByThisThread(), size_t {0});
     });
 })

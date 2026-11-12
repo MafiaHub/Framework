@@ -208,7 +208,8 @@ namespace Framework::Networking::Replication {
 
         // An immediate pass, ignoring the interval. Used when the world changed under the schedule:
         // a client dropped, or the game wants an entity placed now. Takes each entity in turn, so
-        // not from inside a handle's scope.
+        // not from inside a handle's scope. From inside a pass or a simulator-changed handler it
+        // runs nothing and asks for the next pass instead.
         void UpdateNow();
 
         // A client went away: everything it was simulating is re-elected on the spot rather than
@@ -220,11 +221,17 @@ namespace Framework::Networking::Replication {
         // games do not need to.
         void OnEntityDestroyed(uint64_t networkId);
 
-        // Raised after the ownership change has been applied and the forced state pushed, so a
-        // handler sees the entity in its new arrangement. `previous` is UNASSIGNED when the entity
-        // was dormant, and `current` is UNASSIGNED when it just became so. A handler is given the
-        // entity's network id, once the pass has let go of the entity: it reaches the entity
-        // through the world, like anything else.
+        // Raised after the ownership change has been applied and the forced state pushed.
+        // `previous` is UNASSIGNED when the entity was dormant, and `current` is UNASSIGNED when it
+        // just became so.
+        //
+        // When: once the pass that made the change (or the walk a disconnect makes) is over, on the
+        // thread that ran it, in the order the changes were made. The handler holds nothing: no
+        // entity, not ReplicaManager3's world, no lock of this class.
+        // What it may call: anything, the world included. It is given the entity's network id and
+        // asks the world for the entity; the entity may have changed again or be gone by then, so
+        // the id may not resolve. A pass it asks for (UpdateNow, Pin) is not run inside it: it is
+        // the next pass, at the next Update.
         //
         // Handles rather than one slot, for the same reason state-bag subscriptions are handles: a
         // game has more than one kind of delegated entity, and the second feature to want this must
@@ -278,6 +285,12 @@ namespace Framework::Networking::Replication {
         // Apply an elected result to one entity, which the caller holds: ownership, forced state,
         // bookkeeping, callback.
         void Assign(NetworkEntity &entity, MafiaNet::PeerGuid next, DelegationChange change);
+        // The pass itself, under ReplicaManager3's world.
+        void RunPass();
+        // Handovers a pass or walk on this thread made, kept until it is over, and their delivery.
+        struct Notice;
+        static std::vector<Notice> &Notices();
+        static void DeliverNotices();
         uint32_t CapacityOf(MafiaNet::PeerGuid guid) const;
 
         // Guards everything below but the scratch of a pass. Taken last: never held while an entity

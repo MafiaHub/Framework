@@ -20,6 +20,46 @@
 #include <limits>
 
 namespace Framework::Networking::Replication {
+    namespace {
+        // Above zero while this thread is inside a pass, a disconnect's walk, or the delivery that
+        // follows either: a pass asked for meanwhile is left to the next one.
+        thread_local int t_walking = 0;
+    } // namespace
+
+    // One handover, for the handlers that were subscribed when it was made.
+    struct DelegationManager::Notice {
+        DelegationManager *manager;
+        std::vector<std::pair<SimulatorChangedHandle, std::shared_ptr<const SimulatorChanged>>> handlers;
+        uint64_t id;
+        MafiaNet::PeerGuid previous;
+        MafiaNet::PeerGuid current;
+        DelegationChange change;
+    };
+
+    std::vector<DelegationManager::Notice> &DelegationManager::Notices() {
+        thread_local std::vector<Notice> notices;
+        return notices;
+    }
+
+    void DelegationManager::DeliverNotices() {
+        std::vector<Notice> &pending = Notices();
+        while (!pending.empty()) {
+            std::vector<Notice> notices;
+            notices.swap(pending);
+            for (const Notice &notice : notices) {
+                for (const auto &[handle, callback] : notice.handlers) {
+                    {
+                        const std::lock_guard guard(notice.manager->_mutex);
+                        if (!notice.manager->_simulatorChanged.contains(handle)) {
+                            continue;
+                        }
+                    }
+                    (*callback)(notice.id, notice.previous, notice.current, notice.change);
+                }
+            }
+        }
+    }
+
     void DelegationManager::Init(ReplicationManager *manager, bool isServer) {
         _manager  = manager;
         _isServer = isServer;
@@ -147,6 +187,7 @@ namespace Framework::Networking::Replication {
         // gone can never report again. Hand those entities back to the server here, so they are
         // dormant rather than owned-by-nobody until the next pass, and drop any pin naming that
         // client -- a pin is to a player, and that player has left.
+        ++t_walking;
         _manager->GetWorld().ForEach<NetworkEntity>([&](Ref<NetworkEntity> &entity) {
             if (entity->GetDelegationPolicy() == nullptr) {
                 return;
@@ -165,7 +206,12 @@ namespace Framework::Networking::Replication {
         });
         // Deliberately no re-election here: this runs while the dropped peer's viewer may still be
         // in the viewer map, and a pass now would hand its entities straight back to it. The caller
-        // runs one once the viewer is gone.
+        // runs one once the viewer is gone. A handler told of the handovers above cannot start one
+        // either: what it asks for is the next pass.
+        if (t_walking == 1) {
+            DeliverNotices();
+        }
+        --t_walking;
     }
 
     void DelegationManager::Update() {
@@ -318,18 +364,9 @@ namespace Framework::Networking::Replication {
         if (dispatch.empty()) {
             return;
         }
-        // Once the caller has let go of the entity: a handler asks the world for it by id.
-        World::WhenNoneHeld([this, dispatch = std::move(dispatch), id = static_cast<uint64_t>(entity.GetNetworkID()), previous, next, change] {
-            for (const auto &[handle, callback] : dispatch) {
-                {
-                    const std::lock_guard guard(_mutex);
-                    if (!_simulatorChanged.contains(handle)) {
-                        continue;
-                    }
-                }
-                (*callback)(id, previous, next, change);
-            }
-        });
+        // Kept for the end of the pass or walk this is part of: a handler runs with the entity let
+        // go, ReplicaManager3's world released and nothing being walked.
+        Notices().push_back({this, std::move(dispatch), static_cast<uint64_t>(entity.GetNetworkID()), previous, next, change});
     }
 
     DelegationManager::SimulatorChangedHandle DelegationManager::AddSimulatorChangedHandler(SimulatorChanged callback) {
@@ -351,8 +388,22 @@ namespace Framework::Networking::Replication {
         if (!_isServer || !_manager) {
             return;
         }
-        FW_PROFILE_SCOPE_N("Replication::DelegationPass");
+        // Asked for from inside a pass, a disconnect's walk or a handler: the next pass, not one
+        // within this one.
+        if (t_walking > 0) {
+            const std::lock_guard guard(_mutex);
+            _passPending = true;
+            return;
+        }
         World::RequireNoneHeld("a delegation pass was run");
+        ++t_walking;
+        RunPass();
+        DeliverNotices();
+        --t_walking;
+    }
+
+    void DelegationManager::RunPass() {
+        FW_PROFILE_SCOPE_N("Replication::DelegationPass");
         // One pass at a time, and the connections stay as they are for it: the world comes before
         // the entities the pass then takes one by one.
         const MafiaNet::ReplicaManager3::WorldGuard pass(*_manager);
