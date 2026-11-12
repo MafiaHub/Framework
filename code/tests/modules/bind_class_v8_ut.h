@@ -1002,6 +1002,27 @@ MODULE(bind_class_v8, {
 
     // --- What JavaScript cannot have ---
 
+    // A caller keeps a reference to the class it is given, so there is no quiet way to give none.
+    IT("refuses to materialise a class in a runtime of a side it does not exist in", {
+        const auto *definition = Class<BindClassLuaTest::ServerOnly>::Find();
+        EQUALS(definition != nullptr, true);
+        Host host;
+        Runtime client(host, Side::Client);
+        v8::Isolate *isolate = client.Isolate();
+        EQUALS(ExistsIn(definition->Describe(), Side::Client), false);
+        const std::string before = v8pp::metadata::to_json(client.Catalog());
+        std::string message;
+        try {
+            definition->MaterialiseV8(isolate, client.Catalog(), Side::Client);
+        }
+        catch (const std::logic_error &error) {
+            message = error.what();
+        }
+        EQUALS(message, "Bind: 'ServerOnly' does not exist in a client runtime");
+        EQUALS(v8pp::metadata::to_json(client.Catalog()) == before, true);
+        EQUALS(SideName(Side::Server) == "server" && SideName(Side::Client) == "client" && SideName(Side::Shared) == "shared", true);
+    });
+
     IT("constructs no object of a class that declares no constructor", {
         Host host;
         Runtime runtime(host);

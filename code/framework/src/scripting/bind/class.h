@@ -393,7 +393,7 @@ namespace Framework::Scripting::Bind {
         // Throws std::logic_error when T already has a definition, or when `name` is not the name FW_SCRIPT_CLASS
         // gave T. `side` is where the class exists at all: Shared in every runtime, with the members of each side;
         // Server or Client in the runtimes of that side only, where MaterialiseLua and RegisterLuaGlobal do
-        // nothing anywhere else and MaterialiseV8 gives nullptr.
+        // nothing anywhere else and MaterialiseV8 throws.
         Class(std::string name, std::string description, Side side = Side::Shared) {
             if (_registered != nullptr) {
                 throw std::logic_error("Bind: '" + name + "' is a second definition of the C++ type bound as '" + _registered->Describe().name + "'");
@@ -421,13 +421,18 @@ namespace Framework::Scripting::Bind {
 
         // Gives the class the methods, properties and operators of `Base`, and lets an instance pass where a
         // `Base` is expected. Statics, the constructor and hooks are not inherited. Throws std::logic_error when
-        // `Base` has no definition yet.
+        // `Base` has no definition yet, and when `Base` declares a side that is not the side of this class: a
+        // runtime that has the class must have its base, so the base is Shared or of the same side.
         template <typename Base>
         Class &Inherit() {
             static_assert(!std::is_same_v<Base, T> && std::is_convertible_v<T *, Base *>, "Bind::Class::Inherit: Base is a public, unambiguous base class of T");
             const Class<Base> *base = Class<Base>::Find();
             if (base == nullptr) {
                 throw std::logic_error("Bind: '" + _record->desc.name + "' inherits '" + ScriptClassName<Base>::value + "', which has no definition yet");
+            }
+
+            if (const Side side = base->Describe().side; side != Side::Shared && side != _record->desc.side) {
+                throw std::logic_error("Bind: '" + _record->desc.name + "' inherits '" + base->Describe().name + "', which exists in a " + std::string(SideName(side)) + " runtime only, and declares no such side itself");
             }
 
             _record->bases.push_back({base->_record.get(), &Upcast<Base>});
@@ -691,11 +696,14 @@ namespace Framework::Scripting::Bind {
         // Builds the v8pp class in `isolate` the way a binding written by hand does, with the members that exist in
         // a runtime of side `runtime`, and records it in `catalog`. Every call builds a class, and an isolate takes
         // one per C++ type: the caller keeps what it gets for the isolate (ClassCache). Call with the isolate
-        // entered. Throws std::logic_error when a member returns what JavaScript cannot receive, and what v8pp
+        // entered. Throws std::logic_error in a runtime the class does not exist in ("'<Class>' does not exist in a
+        // <side> runtime"): there is no class to give, and a caller keeps a reference to what it gets. The Register
+        // of a builtin that declares a side asks ExistsIn(Describe(), runtime) first and returns. Throws
+        // std::logic_error when a member returns what JavaScript cannot receive, and what v8pp
         // throws when the isolate has the class already or lacks the class of a base.
         std::unique_ptr<v8pp::class_<T>> MaterialiseV8(v8::Isolate *isolate, v8pp::metadata::registry &catalog, Side runtime) const {
             if (!ExistsIn(_record->desc, runtime)) {
-                return nullptr;
+                throw std::logic_error("Bind: '" + _record->desc.name + "' does not exist in a " + std::string(SideName(runtime)) + " runtime");
             }
             return Detail::V8MaterialiseClass(*_v8, _record->desc, isolate, catalog, runtime);
         }

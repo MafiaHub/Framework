@@ -168,6 +168,9 @@ namespace Framework::Scripting::Bind {
         return Detail::DescribeSignature(Detail::Signature<void, void, Args...> {}, "constructor", doc, false, Side::Shared);
     }
 
+    // "shared", "server" or "client", for a message.
+    std::string_view SideName(Side side);
+
     // Whether a runtime of side `runtime` has the class or namespace: the side the definition declares is Shared or
     // is that one. The sides of its members, its constructor and its bases say nothing of it.
     bool ExistsIn(const ClassDesc &desc, Side runtime);

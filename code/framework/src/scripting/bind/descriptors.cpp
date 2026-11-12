@@ -201,6 +201,14 @@ namespace Framework::Scripting::Bind {
         return *this;
     }
 
+    std::string_view SideName(Side side) {
+        switch (side) {
+        case Side::Server: return "server";
+        case Side::Client: return "client";
+        default: return "shared";
+        }
+    }
+
     bool ExistsIn(const ClassDesc &desc, Side runtime) {
         return Materialises(desc.side, runtime);
     }

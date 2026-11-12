@@ -188,6 +188,11 @@ namespace BindClassLuaTest {
     };
 
     struct Orphan {};
+    // A class of the server, and classes that would inherit it.
+    struct ServerOnly {};
+    struct ServerChild final: ServerOnly {};
+    struct ClientChild final: ServerOnly {};
+    struct SharedChild final: ServerOnly {};
     struct OrphanChild final: Orphan {};
 
     struct Misnamed final {};
@@ -226,6 +231,10 @@ FW_SCRIPT_CLASS(BindClassLuaTest::Tracked, "Tracked");
 FW_SCRIPT_CLASS(BindClassLuaTest::Token, "Token");
 FW_SCRIPT_CLASS(BindClassLuaTest::Sealed, "Sealed");
 FW_SCRIPT_CLASS(BindClassLuaTest::Orphan, "Orphan");
+FW_SCRIPT_CLASS(BindClassLuaTest::ServerOnly, "ServerOnly");
+FW_SCRIPT_CLASS(BindClassLuaTest::ServerChild, "ServerChild");
+FW_SCRIPT_CLASS(BindClassLuaTest::ClientChild, "ClientChild");
+FW_SCRIPT_CLASS(BindClassLuaTest::SharedChild, "SharedChild");
 FW_SCRIPT_CLASS(BindClassLuaTest::OrphanChild, "OrphanChild");
 FW_SCRIPT_CLASS(BindClassLuaTest::Misnamed, "Misnamed");
 FW_SCRIPT_CLASS(BindClassLuaTest::Mismatch, "Mismatch");
@@ -1197,6 +1206,46 @@ MODULE(bind_class_lua, {
         });
         EQUALS(message.find("'OrphanChild'") != std::string::npos, true);
         EQUALS(definition.Describe().bases.empty(), true);
+    });
+
+    // A runtime that has a class has its bases. bind_class_v8 goes on with these definitions.
+    IT("lets a class of one side inherit a shared base or one of its side, and no other", {
+        Class<BindClassLuaTest::ServerOnly> base("ServerOnly", "Exists on the server.", Side::Server);
+        EQUALS(base.Describe().side == Side::Server, true);
+        EQUALS(CounterDefinition().Describe().side == Side::Shared, true);
+
+        Class<BindClassLuaTest::ServerChild> same("ServerChild", "Of the server too.", Side::Server);
+        EQUALS(LogicErrorOf([&same] {
+            same.Inherit<BindClassLuaTest::ServerOnly>();
+        }),
+            "");
+        EQUALS(same.Describe().bases.size(), 1u);
+
+        Class<BindClassLuaTest::ClientChild> other("ClientChild", "Of the client.", Side::Client);
+        EQUALS(LogicErrorOf([&other] {
+            other.Inherit<BindClassLuaTest::ServerOnly>();
+        }),
+            "Bind: 'ClientChild' inherits 'ServerOnly', which exists in a server runtime only, and declares no such side itself");
+        EQUALS(other.Describe().bases.empty(), true);
+
+        Class<BindClassLuaTest::SharedChild> everywhere("SharedChild", "Everywhere.");
+        EQUALS(LogicErrorOf([&everywhere] {
+            everywhere.Inherit<BindClassLuaTest::ServerOnly>();
+        }).find("'SharedChild' inherits 'ServerOnly'") != std::string::npos,
+            true);
+        EQUALS(everywhere.Describe().bases.empty(), true);
+
+        // In a state of the other side the class is not there, and registering it leaves no global.
+        LuaTest::State client;
+        same.RegisterLuaGlobal(client.L, Side::Client);
+        base.MaterialiseLua(client.L, Side::Client);
+        EQUALS(Eval(client.L, "type(ServerChild) .. type(ServerOnly)"), "nilnil");
+        EQUALS(lua_gettop(client.L), 0);
+        LuaTest::State server;
+        same.RegisterLuaGlobal(server.L, Side::Server);
+        EQUALS(Eval(server.L, "type(ServerChild)"), "table");
+        EQUALS(ApiCatalog::Get().Find("ServerChild", Side::Client) == nullptr, true);
+        EQUALS(ApiCatalog::Get().Find("ServerChild", Side::Server) == &same.Describe(), true);
     });
 
     IT("names the class and the member when a Doc and a signature disagree", {
