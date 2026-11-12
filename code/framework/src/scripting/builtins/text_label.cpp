@@ -7,10 +7,14 @@
  */
 
 #include "text_label.h"
-#include "../engine_helpers.h"
+#include "../lua/lua_runtime.h"
+#include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
+#include "../transferred_value.h"
 #include "color.h"
+#include "quaternion.h"
 #include "vector3.h"
+#include "vector4.h"
 
 #include <core_modules.h>
 #include <external/imgui/widgets/world_text_markup.h>
@@ -90,92 +94,125 @@ namespace Framework::Scripting::Builtins {
         constexpr std::pair<std::string_view, Networking::Replication::Entities::TextLabelAnchor> kAnchors[] {{"center", Networking::Replication::Entities::TextLabelAnchor::Center}, {"bottom", Networking::Replication::Entities::TextLabelAnchor::Bottom},
             {"top", Networking::Replication::Entities::TextLabelAnchor::Top}};
 
-        v8::Local<v8::String> Str(v8::Isolate *isolate, std::string_view text) {
-            return v8::String::NewFromUtf8(isolate, text.data(), v8::NewStringType::kNormal, static_cast<int>(text.size())).ToLocalChecked();
-        }
-
-        bool Fail(v8::Isolate *isolate, const std::string &message) {
-            ThrowTypeError(isolate, ("TextLabel: " + message).c_str());
+        bool Fail(Bind::Call &call, const std::string &message) {
+            call.ThrowTypeError("TextLabel: " + message);
             return false;
         }
 
         // A plain Error, for an argument of the right type that names a player no longer connected.
-        bool FailError(v8::Isolate *isolate, const std::string &message) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel: " + message)));
+        bool FailError(Bind::Call &call, const std::string &message) {
+            call.ThrowError("TextLabel: " + message);
             return false;
         }
 
-        bool Get(v8::Isolate *isolate, v8::Local<v8::Object> object, std::string_view key, v8::Local<v8::Value> &value) {
-            return object->Get(isolate->GetCurrentContext(), Str(isolate, key)).ToLocal(&value);
+        // Whether a value that reads as Nil is JavaScript's null. This API gives null a meaning a key left out
+        // does not have (attachTo: null detaches, showTo: null is everyone), and refuses it where a value of
+        // another type is refused. A Value has the one Nil for both; a copy of it tells them apart. Lua has no
+        // null.
+        bool IsNull(const Bind::Call &call, const Bind::Value &value) {
+            if (!value.IsNil() || call.GetLanguage() != Language::JavaScript) {
+                return false;
+            }
+            const auto copied = value.ToTransfer();
+            return copied && copied.GetValue().kind == TransferredValue::Kind::Null;
         }
 
-        std::optional<float> Number(v8::Isolate *isolate, v8::Local<v8::Value> value, const std::string &name, double min, double max) {
-            const double number = value->IsNumber() ? value->NumberValue(isolate->GetCurrentContext()).FromMaybe(NAN) : NAN;
+        // What stands for "none" where an option takes null with a meaning: null in JavaScript. A Lua table
+        // cannot hold nil, so a Lua script passes false.
+        bool IsNone(const Bind::Call &call, const Bind::Value &value) {
+            if (call.GetLanguage() == Language::Lua) {
+                return value.IsBoolean() && !value.AsBoolean();
+            }
+            return IsNull(call, value);
+        }
+
+        // What JavaScript calls an object and not an array: a plain object or table, a bound object, a function.
+        // Only the first has keys to read (bind/value.h).
+        bool IsObject(const Bind::Value &value) {
+            const Bind::ValueKind kind = value.Kind();
+            return kind == Bind::ValueKind::Object || kind == Bind::ValueKind::Bound || kind == Bind::ValueKind::Function;
+        }
+
+        std::optional<float> Number(Bind::Call &call, const Bind::Value &value, const std::string &name, double min, double max) {
+            const double number = value.IsNumber() ? value.AsNumber() : NAN;
             if (!std::isfinite(number) || number < min || number > max) {
                 std::ostringstream ss;
                 ss << name << " must be a number from " << min << " to " << max;
-                Fail(isolate, ss.str());
+                Fail(call, ss.str());
                 return std::nullopt;
             }
             return static_cast<float>(number);
         }
 
-        std::optional<bool> Bool(v8::Isolate *isolate, v8::Local<v8::Value> value, const std::string &name) {
-            if (!value->IsBoolean()) {
-                Fail(isolate, name + " must be a boolean");
+        std::optional<bool> Bool(Bind::Call &call, const Bind::Value &value, const std::string &name) {
+            if (!value.IsBoolean()) {
+                Fail(call, name + " must be a boolean");
                 return std::nullopt;
             }
-            return value->BooleanValue(isolate);
+            return value.AsBoolean();
         }
 
         // 0xAARRGGBB (or its signed int32 form), "#RRGGBB" / "#RRGGBBAA", or a Color.
-        std::optional<uint32_t> ColorValue(v8::Isolate *isolate, v8::Local<v8::Value> value, const std::string &name) {
-            if (value->IsNumber()) {
-                const double n = value->NumberValue(isolate->GetCurrentContext()).FromMaybe(NAN);
+        std::optional<uint32_t> ColorValue(Bind::Call &call, const Bind::Value &value, const std::string &name) {
+            if (value.IsNumber()) {
+                const double n = value.AsNumber();
                 if (std::isfinite(n) && std::floor(n) == n && n >= -2147483648.0 && n <= 4294967295.0) {
                     return n < 0 ? static_cast<uint32_t>(static_cast<int32_t>(n)) : static_cast<uint32_t>(n);
                 }
             }
-            else if (value->IsString()) {
-                if (const auto parsed = External::ImGUI::Widgets::Detail::ParseHexColor(v8pp::from_v8<std::string>(isolate, value))) {
+            else if (value.IsString()) {
+                if (const auto parsed = External::ImGUI::Widgets::Detail::ParseHexColor(value.AsString())) {
                     return parsed;
                 }
             }
-            else if (auto *color = v8pp::class_<Color>::unwrap_object(isolate, value)) {
+            else if (const auto *color = value.AsBound<Color>()) {
                 return color->toARGB();
             }
-            Fail(isolate, name + " must be 0xAARRGGBB, \"#RRGGBB[AA]\" or a Color");
+            Fail(call, name + " must be 0xAARRGGBB, \"#RRGGBB[AA]\" or a Color");
             return std::nullopt;
         }
 
         // A Vector3, {x, y, z} or [x, y, z].
-        std::optional<glm::vec3> Vec3(v8::Isolate *isolate, v8::Local<v8::Value> value, const std::string &name) {
-            if (auto *vector = v8pp::class_<Vector3>::unwrap_object(isolate, value)) {
+        std::optional<glm::vec3> Vec3(Bind::Call &call, const Bind::Value &value, const std::string &name) {
+            if (const auto *vector = value.AsBound<Vector3>()) {
                 return glm::vec3(vector->getX(), vector->getY(), vector->getZ());
             }
-            v8::Local<v8::Value> parts[3];
-            if (value->IsArray() && value.As<v8::Array>()->Length() == 3) {
-                for (uint32_t i = 0; i < 3; ++i) {
-                    if (!value.As<v8::Array>()->Get(isolate->GetCurrentContext(), i).ToLocal(&parts[i])) {
+            Bind::Value parts[3];
+            // The other bound vectors have an x, a y and a z to read, as an object with these keys has.
+            const auto *vector4    = value.AsBound<Vector4>();
+            const auto *quaternion = value.AsBound<Quaternion>();
+            const auto kind        = value.Kind();
+            if (vector4 || quaternion) {
+                const glm::vec3 xyz = vector4 ? glm::vec3(vector4->getX(), vector4->getY(), vector4->getZ()) : glm::vec3(quaternion->getX(), quaternion->getY(), quaternion->getZ());
+                for (int i = 0; i < 3; ++i) {
+                    parts[i] = call.Number(xyz[i]);
+                }
+            }
+            else if (kind == Bind::ValueKind::Array && value.Length() == 3) {
+                for (size_t i = 0; i < 3; ++i) {
+                    parts[i] = value.At(i);
+                    if (call.HasThrown()) {
                         return std::nullopt;
                     }
                 }
             }
-            else if (value->IsObject()) {
+            else if (kind == Bind::ValueKind::Array || IsObject(value)) {
                 constexpr std::string_view keys[] {"x", "y", "z"};
                 for (int i = 0; i < 3; ++i) {
-                    if (!Get(isolate, value.As<v8::Object>(), keys[i], parts[i])) {
+                    // Empty when a getter of the script threw.
+                    parts[i] = value.Get(keys[i]);
+                    if (call.HasThrown()) {
                         return std::nullopt;
                     }
                 }
             }
             else {
-                Fail(isolate, name + " must be a Vector3, {x, y, z} or [x, y, z]");
+                Fail(call, name + " must be a Vector3, {x, y, z} or [x, y, z]");
                 return std::nullopt;
             }
             glm::vec3 out(0.0f);
             for (int i = 0; i < 3; ++i) {
-                const auto component = Number(isolate, parts[i], name, -1.0e9, 1.0e9);
+                const auto component = Number(call, parts[i], name, -1.0e9, 1.0e9);
                 if (!component) {
                     return std::nullopt;
                 }
@@ -185,9 +222,9 @@ namespace Framework::Scripting::Builtins {
         }
 
         template <typename T, size_t N>
-        std::optional<T> Enum(v8::Isolate *isolate, v8::Local<v8::Value> value, const std::string &name, const std::pair<std::string_view, T> (&entries)[N]) {
-            if (value->IsString()) {
-                const auto text = v8pp::from_v8<std::string>(isolate, value);
+        std::optional<T> Enum(Bind::Call &call, const Bind::Value &value, const std::string &name, const std::pair<std::string_view, T> (&entries)[N]) {
+            if (value.IsString()) {
+                const std::string text = value.AsString();
                 for (const auto &[label, entry] : entries) {
                     if (text == label) {
                         return entry;
@@ -198,52 +235,65 @@ namespace Framework::Scripting::Builtins {
             for (const auto &[label, entry] : entries) {
                 accepted += (accepted.empty() ? "'" : ", '") + std::string(label) + "'";
             }
-            Fail(isolate, name + " must be one of " + accepted);
+            Fail(call, name + " must be one of " + accepted);
             return std::nullopt;
         }
 
-        // An entity handle (anything with a numeric id) or a network id; null or 0 detaches.
-        std::optional<uint64_t> Target(v8::Isolate *isolate, v8::Local<v8::Value> value, const std::string &name) {
-            if (value->IsNull()) {
+        // An entity handle, a table or an object with a numeric id, or a network id. `none` is whether the value
+        // stands for no entity, which detaches, as 0 does.
+        std::optional<uint64_t> Target(Bind::Call &call, const Bind::Value &value, const std::string &name, bool none) {
+            if (none) {
                 return 0;
             }
-            v8::Local<v8::Value> id = value;
-            if (value->IsObject() && !Get(isolate, value.As<v8::Object>(), "id", id)) {
-                return std::nullopt;
+            double n = NAN;
+            if (const auto *entity = value.AsBound<Entity>()) {
+                n = static_cast<double>(entity->GetId());
             }
-            const double n = id->IsNumber() ? id->NumberValue(isolate->GetCurrentContext()).FromMaybe(NAN) : NAN;
+            else {
+                Bind::Value id  = value;
+                const auto kind = value.Kind();
+                if (kind == Bind::ValueKind::Object || kind == Bind::ValueKind::Array) {
+                    id = value.Get("id");
+                    if (call.HasThrown()) {
+                        return std::nullopt;
+                    }
+                }
+                n = id.IsNumber() ? id.AsNumber() : NAN;
+            }
             if (!std::isfinite(n) || n < 0.0 || n > 9007199254740991.0 || std::floor(n) != n) {
-                Fail(isolate, name + " must be an entity or its network id");
+                Fail(call, name + " must be an entity or its network id");
                 return std::nullopt;
             }
             return static_cast<uint64_t>(n);
         }
 
-        // A player handle or network id. Unlike for attachTo, null is not one.
-        std::optional<uint64_t> PlayerId(v8::Isolate *isolate, v8::Local<v8::Value> value, const std::string &name) {
-            if (value->IsNullOrUndefined()) {
-                Fail(isolate, name + " must be a Player or their network id");
+        // A player handle or network id. Unlike for attachTo, nothing is not one.
+        std::optional<uint64_t> PlayerId(Bind::Call &call, const Bind::Value &value, const std::string &name) {
+            if (value.IsNil()) {
+                Fail(call, name + " must be a Player or their network id");
                 return std::nullopt;
             }
-            return Target(isolate, value, name);
+            return Target(call, value, name, false);
         }
 
-        // An array of players, as handles or network ids.
-        std::optional<std::vector<uint64_t>> PlayerIds(v8::Isolate *isolate, v8::Local<v8::Value> value, const std::string &name) {
-            if (!value->IsArray()) {
-                Fail(isolate, name + " must be an array of Players or their network ids");
+        // An array of players, as handles or network ids. The empty table of Lua is an empty list; the empty
+        // object of JavaScript is not an array.
+        std::optional<std::vector<uint64_t>> PlayerIds(Bind::Call &call, const Bind::Value &value, const std::string &name) {
+            const bool lua = call.GetLanguage() == Language::Lua;
+            if (!(lua ? value.IsList() : value.IsArray())) {
+                Fail(call, name + " must be an array of Players or their network ids");
                 return std::nullopt;
             }
-            const auto array = value.As<v8::Array>();
             // Read once: an element's getter can grow the array.
-            const uint32_t length = array->Length();
+            const size_t length = value.Length();
             std::vector<uint64_t> ids;
-            for (uint32_t i = 0; i < length; ++i) {
-                v8::Local<v8::Value> entry;
-                if (!array->Get(isolate->GetCurrentContext(), i).ToLocal(&entry)) {
+            for (size_t i = 0; i < length; ++i) {
+                const Bind::Value entry = value.At(i);
+                if (call.HasThrown()) {
                     return std::nullopt;
                 }
-                const auto id = PlayerId(isolate, entry, name + "[" + std::to_string(i) + "]");
+                // Named as the script counts it.
+                const auto id = PlayerId(call, entry, name + "[" + std::to_string(lua ? i + 1 : i) + "]");
                 if (!id) {
                     return std::nullopt;
                 }
@@ -259,28 +309,28 @@ namespace Framework::Scripting::Builtins {
             Defaults,
             Object,
         };
-        BlockState Block(v8::Isolate *isolate, v8::Local<v8::Value> value, const std::string &name) {
-            if (value->IsNull() || (value->IsBoolean() && !value->BooleanValue(isolate))) {
+        BlockState Block(Bind::Call &call, const Bind::Value &value, const std::string &name) {
+            if (IsNull(call, value) || (value.IsBoolean() && !value.AsBoolean())) {
                 return BlockState::Off;
             }
-            if (value->IsBoolean()) {
+            if (value.IsBoolean()) {
                 return BlockState::Defaults;
             }
-            if (value->IsObject() && !value->IsArray()) {
+            if (IsObject(value)) {
                 return BlockState::Object;
             }
-            Fail(isolate, name + " must be an object, true or false");
+            Fail(call, name + " must be an object, true or false");
             return BlockState::Invalid;
         }
 
         // Reads `key` off a block when present; absent keeps `out` at its default.
         template <typename T, typename Reader>
-        bool BlockField(v8::Isolate *isolate, v8::Local<v8::Object> block, std::string_view key, T &out, const Reader &read) {
-            v8::Local<v8::Value> value;
-            if (!Get(isolate, block, key, value)) {
+        bool BlockField(Bind::Call &call, const Bind::Value &block, std::string_view key, T &out, const Reader &read) {
+            const Bind::Value value = block.Get(key);
+            if (call.HasThrown()) {
                 return false;
             }
-            if (value->IsUndefined()) {
+            if (value.IsNil() && !IsNull(call, value)) {
                 return true;
             }
             const auto parsed = read(value);
@@ -291,62 +341,57 @@ namespace Framework::Scripting::Builtins {
             return true;
         }
 
-        bool ParseOptions(v8::Isolate *isolate, v8::Local<v8::Object> object, float unitsPerMetre, Options &options) {
-            auto context = isolate->GetCurrentContext();
-            v8::Local<v8::Array> names;
-            if (!object->GetOwnPropertyNames(context).ToLocal(&names)) {
-                return false;
-            }
-            for (uint32_t i = 0; i < names->Length(); ++i) {
-                v8::Local<v8::Value> name;
-                if (!names->Get(context, i).ToLocal(&name)) {
-                    return false;
-                }
-                const auto key = v8pp::from_v8<std::string>(isolate, name);
+        bool ParseOptions(Bind::Call &call, const Bind::Value &object, float unitsPerMetre, Options &options) {
+            for (const std::string &key : object.Keys()) {
                 if (std::find(std::begin(kOptionKeys), std::end(kOptionKeys), key) == std::end(kOptionKeys)) {
-                    return Fail(isolate, "unknown option '" + key + "'");
+                    return Fail(call, "unknown option '" + key + "'");
                 }
+            }
+            // The keys could not be listed: the trap of a proxy threw.
+            if (call.HasThrown()) {
+                return false;
             }
 
             const double maxDistance = TextLabel::kMaxDrawMetres * unitsPerMetre;
             for (const std::string_view key : kOptionKeys) {
-                v8::Local<v8::Value> value;
-                if (!Get(isolate, object, key, value)) {
+                const Bind::Value value = object.Get(key);
+                if (call.HasThrown()) {
                     return false;
                 }
-                if (value->IsUndefined()) {
+                // A key left out. null is a value, wrong for most keys and with a meaning of its own for some.
+                if (value.IsNil() && !IsNull(call, value)) {
                     continue;
                 }
                 const std::string name(key);
                 const auto number = [&](double min, double max, std::optional<float> &out) {
-                    out = Number(isolate, value, name, min, max);
+                    out = Number(call, value, name, min, max);
                     return out.has_value();
                 };
 
                 bool ok = true;
                 if (key == "text") {
-                    ok = value->IsString() || Fail(isolate, "text must be a string");
+                    ok = value.IsString() || Fail(call, "text must be a string");
                     if (ok) {
-                        options.text = v8pp::from_v8<std::string>(isolate, value);
+                        options.text = value.AsString();
                     }
                 }
                 else if (key == "markup") {
-                    ok = (options.markup = Bool(isolate, value, name)).has_value();
+                    ok = (options.markup = Bool(call, value, name)).has_value();
                 }
                 else if (key == "position") {
-                    ok = (options.position = Vec3(isolate, value, name)).has_value();
+                    ok = (options.position = Vec3(call, value, name)).has_value();
                 }
                 else if (key == "attachTo") {
-                    ok = (options.attachTo = Target(isolate, value, name)).has_value();
+                    ok = (options.attachTo = Target(call, value, name, IsNone(call, value))).has_value();
                 }
                 else if (key == "offset") {
-                    ok = (options.offset = Vec3(isolate, value, name)).has_value();
+                    ok = (options.offset = Vec3(call, value, name)).has_value();
                 }
                 else if (key == "fontSize") {
                     ok = number(TextLabel::kMinFontSize, TextLabel::kMaxFontSize, options.fontSize);
                 }
                 else if (key == "sizeMode") {
-                    ok = (options.sizeMode = Enum(isolate, value, name, kSizeModes)).has_value();
+                    ok = (options.sizeMode = Enum(call, value, name, kSizeModes)).has_value();
                 }
                 else if (key == "minSize") {
                     ok = number(0.0, TextLabel::kMaxFontSize, options.minSize);
@@ -355,36 +400,35 @@ namespace Framework::Scripting::Builtins {
                     ok = number(0.0, TextLabel::kMaxFontSize, options.maxSize);
                 }
                 else if (key == "color") {
-                    ok = (options.color = ColorValue(isolate, value, name)).has_value();
+                    ok = (options.color = ColorValue(call, value, name)).has_value();
                 }
                 else if (key == "opacity") {
                     ok = number(0.0, 1.0, options.opacity);
                 }
                 else if (key == "style") {
-                    if (value->IsNumber()) {
-                        const double raw = value->NumberValue(context).FromMaybe(NAN);
+                    if (value.IsNumber()) {
+                        const double raw = value.AsNumber();
                         ok               = std::isfinite(raw) && raw >= 0.0 && raw <= static_cast<double>(Networking::Replication::Entities::TextLabelStyle::Box) && std::floor(raw) == raw;
                         if (ok) {
                             options.style = static_cast<Networking::Replication::Entities::TextLabelStyle>(static_cast<uint8_t>(raw));
                         }
                         else {
-                            Fail(isolate, "style must be 'none', 'shadow', 'outline', 'box' or 0-3");
+                            Fail(call, "style must be 'none', 'shadow', 'outline', 'box' or 0-3");
                         }
                     }
                     else {
-                        ok = (options.style = Enum(isolate, value, name, kStyles)).has_value();
+                        ok = (options.style = Enum(call, value, name, kStyles)).has_value();
                     }
                 }
                 else if (key == "outline") {
-                    const auto state = Block(isolate, value, name);
+                    const auto state = Block(call, value, name);
                     ok               = state != BlockState::Invalid;
                     Options::Outline outline;
                     if (state == BlockState::Object) {
-                        const auto block = value.As<v8::Object>();
-                        ok               = BlockField(isolate, block, "color", outline.color, [&](auto v) {
-                            return ColorValue(isolate, v, "outline.color");
-                        }) && BlockField(isolate, block, "width", outline.width, [&](auto v) {
-                            return Number(isolate, v, "outline.width", 0.0, Networking::Replication::Entities::kTextLabelMaxOutlineWidth);
+                        ok = BlockField(call, value, "color", outline.color, [&](const Bind::Value &v) {
+                            return ColorValue(call, v, "outline.color");
+                        }) && BlockField(call, value, "width", outline.width, [&](const Bind::Value &v) {
+                            return Number(call, v, "outline.width", 0.0, Networking::Replication::Entities::kTextLabelMaxOutlineWidth);
                         });
                     }
                     if (ok) {
@@ -392,19 +436,18 @@ namespace Framework::Scripting::Builtins {
                     }
                 }
                 else if (key == "shadow") {
-                    const auto state = Block(isolate, value, name);
+                    const auto state = Block(call, value, name);
                     ok               = state != BlockState::Invalid;
                     Options::Shadow shadow;
                     if (state == BlockState::Object) {
-                        const auto block = value.As<v8::Object>();
-                        ok               = BlockField(isolate, block, "color", shadow.color, [&](auto v) {
-                            return ColorValue(isolate, v, "shadow.color");
-                        }) && BlockField(isolate, block, "offsetX", shadow.offsetX, [&](auto v) {
-                            return Number(isolate, v, "shadow.offsetX", -32.0, 32.0);
-                        }) && BlockField(isolate, block, "offsetY", shadow.offsetY, [&](auto v) {
-                            return Number(isolate, v, "shadow.offsetY", -32.0, 32.0);
-                        }) && BlockField(isolate, block, "blur", shadow.blur, [&](auto v) {
-                            return Number(isolate, v, "shadow.blur", 0.0, Networking::Replication::Entities::kTextLabelMaxShadowBlur);
+                        ok = BlockField(call, value, "color", shadow.color, [&](const Bind::Value &v) {
+                            return ColorValue(call, v, "shadow.color");
+                        }) && BlockField(call, value, "offsetX", shadow.offsetX, [&](const Bind::Value &v) {
+                            return Number(call, v, "shadow.offsetX", -32.0, 32.0);
+                        }) && BlockField(call, value, "offsetY", shadow.offsetY, [&](const Bind::Value &v) {
+                            return Number(call, v, "shadow.offsetY", -32.0, 32.0);
+                        }) && BlockField(call, value, "blur", shadow.blur, [&](const Bind::Value &v) {
+                            return Number(call, v, "shadow.blur", 0.0, Networking::Replication::Entities::kTextLabelMaxShadowBlur);
                         });
                     }
                     if (ok) {
@@ -412,17 +455,16 @@ namespace Framework::Scripting::Builtins {
                     }
                 }
                 else if (key == "background") {
-                    const auto state = Block(isolate, value, name);
+                    const auto state = Block(call, value, name);
                     ok               = state != BlockState::Invalid;
                     Options::Background background;
                     if (state == BlockState::Object) {
-                        const auto block = value.As<v8::Object>();
-                        ok               = BlockField(isolate, block, "color", background.color, [&](auto v) {
-                            return ColorValue(isolate, v, "background.color");
-                        }) && BlockField(isolate, block, "padding", background.padding, [&](auto v) {
-                            return Number(isolate, v, "background.padding", 0.0, kMaxBlockPixels);
-                        }) && BlockField(isolate, block, "radius", background.radius, [&](auto v) {
-                            return Number(isolate, v, "background.radius", 0.0, kMaxBlockPixels);
+                        ok = BlockField(call, value, "color", background.color, [&](const Bind::Value &v) {
+                            return ColorValue(call, v, "background.color");
+                        }) && BlockField(call, value, "padding", background.padding, [&](const Bind::Value &v) {
+                            return Number(call, v, "background.padding", 0.0, kMaxBlockPixels);
+                        }) && BlockField(call, value, "radius", background.radius, [&](const Bind::Value &v) {
+                            return Number(call, v, "background.radius", 0.0, kMaxBlockPixels);
                         });
                     }
                     if (ok) {
@@ -430,10 +472,10 @@ namespace Framework::Scripting::Builtins {
                     }
                 }
                 else if (key == "align") {
-                    ok = (options.align = Enum(isolate, value, name, kAligns)).has_value();
+                    ok = (options.align = Enum(call, value, name, kAligns)).has_value();
                 }
                 else if (key == "anchor") {
-                    ok = (options.anchor = Enum(isolate, value, name, kAnchors)).has_value();
+                    ok = (options.anchor = Enum(call, value, name, kAnchors)).has_value();
                 }
                 else if (key == "lineSpacing") {
                     ok = number(0.5, 4.0, options.lineSpacing);
@@ -448,23 +490,23 @@ namespace Framework::Scripting::Builtins {
                     ok = number(0.0, maxDistance, options.fadeDistance);
                 }
                 else if (key == "occlusion") {
-                    ok = (options.occlusion = Bool(isolate, value, name)).has_value();
+                    ok = (options.occlusion = Bool(call, value, name)).has_value();
                 }
                 else if (key == "virtualWorld") {
-                    const double world = value->IsNumber() ? value->NumberValue(context).FromMaybe(NAN) : NAN;
+                    const double world = value.IsNumber() ? value.AsNumber() : NAN;
                     ok                 = std::isfinite(world) && world >= 0.0 && world <= 4294967295.0 && std::floor(world) == world;
                     if (ok) {
                         options.virtualWorld = static_cast<uint32_t>(world);
                     }
                     else {
-                        Fail(isolate, "virtualWorld must be a whole number from 0 to 4294967295");
+                        Fail(call, "virtualWorld must be a whole number from 0 to 4294967295");
                     }
                 }
                 else if (key == "showTo") {
-                    if (value->IsNull()) {
+                    if (IsNone(call, value)) {
                         options.showTo = std::optional<std::vector<uint64_t>> {};
                     }
-                    else if (auto ids = PlayerIds(isolate, value, name)) {
+                    else if (auto ids = PlayerIds(call, value, name)) {
                         options.showTo.emplace(std::move(*ids));
                     }
                     else {
@@ -472,10 +514,10 @@ namespace Framework::Scripting::Builtins {
                     }
                 }
                 else if (key == "hideFrom") {
-                    ok = (options.hideFrom = value->IsNull() ? std::vector<uint64_t> {} : PlayerIds(isolate, value, name)).has_value();
+                    ok = (options.hideFrom = IsNone(call, value) ? std::vector<uint64_t> {} : PlayerIds(call, value, name)).has_value();
                 }
                 else if (key == "hideForTarget") {
-                    ok = (options.hideForTarget = Bool(isolate, value, name)).has_value();
+                    ok = (options.hideForTarget = Bool(call, value, name)).has_value();
                 }
                 if (!ok) {
                     return false;
@@ -485,47 +527,47 @@ namespace Framework::Scripting::Builtins {
         }
 
         // Against the label's current limits, or a new label's when there is none yet.
-        bool CheckSizes(v8::Isolate *isolate, const Options &options, const Networking::Replication::Entities::TextLabelEntity *label) {
+        bool CheckSizes(Bind::Call &call, const Options &options, const Networking::Replication::Entities::TextLabelEntity *label) {
             const float minSize = options.minSize.value_or(label ? label->minSize : 0.0f);
             const float maxSize = options.maxSize.value_or(label ? label->maxSize : 0.0f);
-            return maxSize <= 0.0f || minSize <= maxSize || Fail(isolate, "minSize must not exceed maxSize");
+            return maxSize <= 0.0f || minSize <= maxSize || Fail(call, "minSize must not exceed maxSize");
         }
 
         // `handle` is null while the label is still to be created, so it cannot be its own target.
-        bool CheckTarget(v8::Isolate *isolate, const Options &options, const TextLabel *handle) {
+        bool CheckTarget(Bind::Call &call, const Options &options, const TextLabel *handle) {
             if (!options.attachTo || *options.attachTo == 0) {
                 return true;
             }
             auto *replication     = CoreModules::GetReplication();
             const bool attachable = handle ? handle->CanAttachTo(*options.attachTo) : replication && replication->GetEntityByNetworkID(*options.attachTo) != nullptr;
-            return attachable || Fail(isolate, "attachTo must be another live entity");
+            return attachable || Fail(call, "attachTo must be another live entity");
         }
 
         // A player's connection, found from their avatar: what a viewer filter is keyed on. An id that
         // is no player's current avatar (gone, an NPC, or an entity they merely own) is an Error, so a
         // player can only be named once SetViewer has run for them.
-        bool ResolvePlayer(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, uint64_t id, const std::string &name, MafiaNet::PeerGuid &guid) {
+        bool ResolvePlayer(Bind::Call &call, const Networking::Replication::ReplicationManager &replication, uint64_t id, const std::string &name, MafiaNet::PeerGuid &guid) {
             const auto *entity = replication.GetEntityByNetworkID(id);
             if (!entity || replication.GetViewer(entity->ownerGUID) != entity) {
-                return FailError(isolate, name + ": " + std::to_string(id) + " is not a player's avatar");
+                return FailError(call, name + ": " + std::to_string(id) + " is not a player's avatar");
             }
             guid = entity->ownerGUID;
             return true;
         }
 
-        bool ResolvePlayers(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, const std::vector<uint64_t> &ids, const std::string &name, std::vector<MafiaNet::PeerGuid> &out) {
+        bool ResolvePlayers(Bind::Call &call, const Networking::Replication::ReplicationManager &replication, const std::vector<uint64_t> &ids, const std::string &name, std::vector<MafiaNet::PeerGuid> &out) {
             out.resize(ids.size());
             for (size_t i = 0; i < ids.size(); ++i) {
-                if (!ResolvePlayer(isolate, replication, ids[i], name, out[i])) {
+                if (!ResolvePlayer(call, replication, ids[i], name, out[i])) {
                     return false;
                 }
             }
             return true;
         }
 
-        bool CheckViewers(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, Options &options) {
+        bool CheckViewers(Bind::Call &call, const Networking::Replication::ReplicationManager &replication, Options &options) {
             const bool showTo = options.showTo && options.showTo->has_value();
-            return (!showTo || ResolvePlayers(isolate, replication, **options.showTo, "showTo", options.showToGuids)) && (!options.hideFrom || ResolvePlayers(isolate, replication, *options.hideFrom, "hideFrom", options.hideFromGuids));
+            return (!showTo || ResolvePlayers(call, replication, **options.showTo, "showTo", options.showToGuids)) && (!options.hideFrom || ResolvePlayers(call, replication, *options.hideFrom, "hideFrom", options.hideFromGuids));
         }
 
         // hideForTarget: the player the label follows is not sent it.
@@ -677,7 +719,7 @@ namespace Framework::Scripting::Builtins {
 
         // A filter's players as their avatars' network ids, ascending. A connected player with no avatar
         // right now has no id to show: they stay in the filter but are left out here.
-        v8::Local<v8::Array> PlayerIdArray(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, const std::unordered_set<MafiaNet::PeerGuid> &guids) {
+        Bind::Value PlayerIdArray(Bind::Call &call, const Networking::Replication::ReplicationManager &replication, const std::unordered_set<MafiaNet::PeerGuid> &guids) {
             std::vector<uint64_t> ids;
             for (const MafiaNet::PeerGuid guid : guids) {
                 if (auto *viewer = replication.GetViewer(guid)) {
@@ -685,9 +727,9 @@ namespace Framework::Scripting::Builtins {
                 }
             }
             std::sort(ids.begin(), ids.end());
-            auto array = v8::Array::New(isolate, static_cast<int>(ids.size()));
-            for (size_t i = 0; i < ids.size(); ++i) {
-                array->Set(isolate->GetCurrentContext(), static_cast<uint32_t>(i), v8pp::to_v8(isolate, static_cast<double>(ids[i]))).Check();
+            Bind::Value array = call.NewArray();
+            for (const uint64_t id : ids) {
+                array.Append(call.Integer(static_cast<int64_t>(id)));
             }
             return array;
         }
@@ -702,99 +744,262 @@ namespace Framework::Scripting::Builtins {
             return std::string(entries[0].first);
         }
 
-        // Who the label is for, as getAudience() reports it.
-        v8::Local<v8::Object> AudienceObject(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, const Networking::Replication::Entities::TextLabelEntity &label) {
-            auto context                = isolate->GetCurrentContext();
-            const auto *viewers         = label.streaming.viewers.get();
-            auto out                    = v8::Object::New(isolate);
-            v8::Local<v8::Value> showTo = v8::Null(isolate);
-            if (viewers && viewers->only) {
-                showTo = PlayerIdArray(isolate, replication, *viewers->only);
-            }
-            out->Set(context, Str(isolate, "showTo"), showTo).Check();
-            out->Set(context, Str(isolate, "hideFrom"), viewers ? PlayerIdArray(isolate, replication, viewers->except) : v8::Array::New(isolate)).Check();
-            out->Set(context, Str(isolate, "hideForTarget"), v8pp::to_v8(isolate, label.hideForTarget)).Check();
+        // Who the label is for, as getAudience() reports it. A showTo of everyone is null, and so no key in Lua.
+        Bind::Value AudienceObject(Bind::Call &call, const Networking::Replication::ReplicationManager &replication, const Networking::Replication::Entities::TextLabelEntity &label) {
+            const auto *viewers = label.streaming.viewers.get();
+            Bind::Value out     = call.NewObject();
+            out.Set("showTo", viewers && viewers->only ? PlayerIdArray(call, replication, *viewers->only) : call.Null());
+            out.Set("hideFrom", viewers ? PlayerIdArray(call, replication, viewers->except) : call.NewArray());
+            out.Set("hideForTarget", call.Boolean(label.hideForTarget));
             return out;
         }
 
         // The label as an options object: what update() takes, so one label's look can seed another's.
         // The audience stays out of it: applying this to another label, or later, must not change who
-        // can see that label.
-        v8::Local<v8::Object> OptionsObject(v8::Isolate *isolate, const Networking::Replication::Entities::TextLabelEntity &label, uint32_t virtualWorld) {
-            auto context   = isolate->GetCurrentContext();
-            const auto put = [&](v8::Local<v8::Object> object, std::string_view key, v8::Local<v8::Value> value) {
-                object->Set(context, Str(isolate, key), value).Check();
-            };
-            const auto set = [&](v8::Local<v8::Object> object, std::string_view key, auto value) {
-                put(object, key, v8pp::to_v8(isolate, value));
-            };
+        // can see that label. A label that is not attached has a null attachTo, and so no key in Lua.
+        Bind::Value OptionsObject(Bind::Call &call, const Networking::Replication::Entities::TextLabelEntity &label, uint32_t virtualWorld) {
             const auto vec = [&](const glm::vec3 &v) {
-                auto object = v8::Object::New(isolate);
-                set(object, "x", v.x);
-                set(object, "y", v.y);
-                set(object, "z", v.z);
+                Bind::Value object = call.NewObject();
+                object.Set("x", call.Number(v.x));
+                object.Set("y", call.Number(v.y));
+                object.Set("z", call.Number(v.z));
                 return object;
             };
 
-            auto out = v8::Object::New(isolate);
-            set(out, "text", label.text);
-            set(out, "markup", label.markup);
-            put(out, "position", vec(label.attachNetworkId != 0 ? label.ownPosition : label.position));
-            if (label.attachNetworkId != 0) {
-                set(out, "attachTo", static_cast<double>(label.attachNetworkId));
-            }
-            else {
-                put(out, "attachTo", v8::Null(isolate));
-            }
-            put(out, "offset", vec(label.attachOffset));
-            set(out, "fontSize", label.fontSize);
-            set(out, "sizeMode", EnumName(label.sizeMode, kSizeModes));
-            set(out, "minSize", label.minSize);
-            set(out, "maxSize", label.maxSize);
-            set(out, "color", label.color);
-            set(out, "opacity", label.opacity);
-            set(out, "style", EnumName(label.style, kStyles));
+            Bind::Value out = call.NewObject();
+            out.Set("text", call.String(label.text));
+            out.Set("markup", call.Boolean(label.markup));
+            out.Set("position", vec(label.attachNetworkId != 0 ? label.ownPosition : label.position));
+            out.Set("attachTo", label.attachNetworkId != 0 ? call.Integer(static_cast<int64_t>(label.attachNetworkId)) : call.Null());
+            out.Set("offset", vec(label.attachOffset));
+            out.Set("fontSize", call.Number(label.fontSize));
+            out.Set("sizeMode", call.String(EnumName(label.sizeMode, kSizeModes)));
+            out.Set("minSize", call.Number(label.minSize));
+            out.Set("maxSize", call.Number(label.maxSize));
+            out.Set("color", call.Integer(label.color));
+            out.Set("opacity", call.Number(label.opacity));
+            out.Set("style", call.String(EnumName(label.style, kStyles)));
 
             if (label.outlineWidth > 0.0f) {
-                auto outline = v8::Object::New(isolate);
-                set(outline, "width", label.outlineWidth);
-                set(outline, "color", label.outlineColor);
-                put(out, "outline", outline);
+                Bind::Value outline = call.NewObject();
+                outline.Set("width", call.Number(label.outlineWidth));
+                outline.Set("color", call.Integer(label.outlineColor));
+                out.Set("outline", outline);
             }
             else {
-                set(out, "outline", false);
+                out.Set("outline", call.Boolean(false));
             }
             if ((label.shadowColor >> 24) != 0) {
-                auto shadow = v8::Object::New(isolate);
-                set(shadow, "color", label.shadowColor);
-                set(shadow, "offsetX", label.shadowOffsetX);
-                set(shadow, "offsetY", label.shadowOffsetY);
-                set(shadow, "blur", label.shadowBlur);
-                put(out, "shadow", shadow);
+                Bind::Value shadow = call.NewObject();
+                shadow.Set("color", call.Integer(label.shadowColor));
+                shadow.Set("offsetX", call.Number(label.shadowOffsetX));
+                shadow.Set("offsetY", call.Number(label.shadowOffsetY));
+                shadow.Set("blur", call.Number(label.shadowBlur));
+                out.Set("shadow", shadow);
             }
             else {
-                set(out, "shadow", false);
+                out.Set("shadow", call.Boolean(false));
             }
             if ((label.backgroundColor >> 24) != 0) {
-                auto background = v8::Object::New(isolate);
-                set(background, "color", label.backgroundColor);
-                set(background, "padding", label.backgroundPadding);
-                set(background, "radius", label.backgroundRadius);
-                put(out, "background", background);
+                Bind::Value background = call.NewObject();
+                background.Set("color", call.Integer(label.backgroundColor));
+                background.Set("padding", call.Number(label.backgroundPadding));
+                background.Set("radius", call.Number(label.backgroundRadius));
+                out.Set("background", background);
             }
             else {
-                set(out, "background", false);
+                out.Set("background", call.Boolean(false));
             }
 
-            set(out, "align", EnumName(label.align, kAligns));
-            set(out, "anchor", EnumName(label.anchor, kAnchors));
-            set(out, "lineSpacing", label.lineSpacing);
-            set(out, "maxWidth", label.maxWidth);
-            set(out, "drawDistance", label.drawDistance);
-            set(out, "fadeDistance", label.fadeDistance);
-            set(out, "occlusion", label.occlusion);
-            set(out, "virtualWorld", virtualWorld);
+            out.Set("align", call.String(EnumName(label.align, kAligns)));
+            out.Set("anchor", call.String(EnumName(label.anchor, kAnchors)));
+            out.Set("lineSpacing", call.Number(label.lineSpacing));
+            out.Set("maxWidth", call.Number(label.maxWidth));
+            out.Set("drawDistance", call.Number(label.drawDistance));
+            out.Set("fadeDistance", call.Number(label.fadeDistance));
+            out.Set("occlusion", call.Boolean(label.occlusion));
+            out.Set("virtualWorld", call.Integer(virtualWorld));
             return out;
+        }
+
+        // ToInt32 of JavaScript, which is how the components of setColor were always read: the whole part, wrapped
+        // to 32 bits.
+        int ToInt32(double number) {
+            if (!std::isfinite(number)) {
+                return 0;
+            }
+            const double wrapped = std::fmod(std::trunc(number), 4294967296.0);
+            return static_cast<int>(static_cast<uint32_t>(static_cast<int64_t>(wrapped)));
+        }
+
+        // setColor(color | r, g?, b?, a?). It takes either a Color or byte components (r, g, b, a from 0-255), so
+        // scripts don't have to hand-pack this API's ARGB layout.
+        void CallSetColor(Bind::Call &call) {
+            auto *self = call.Self<TextLabel>();
+            if (!self) {
+                return;
+            }
+            if (const auto *color = call.Arg(0).AsBound<Color>()) {
+                self->SetColorPacked(color->toARGB());
+                return;
+            }
+            const auto num = [&](size_t i, int fallback) {
+                return call.Arg(i).IsNumber() ? ToInt32(call.Arg(i).AsNumber()) : fallback;
+            };
+            self->SetColor(num(0, 0), num(1, 0), num(2, 0), num(3, 255));
+        }
+
+        void CallUpdate(Bind::Call &call) {
+            auto *self = call.Self<TextLabel>();
+            if (!self || !self->ResolveLabel()) {
+                return;
+            }
+            if (!IsObject(call.Arg(0))) {
+                Fail(call, "update expects an options object");
+                return;
+            }
+            Options options;
+            if (!ParseOptions(call, call.Arg(0), TextLabel::GetUnitsPerMetre(), options)) {
+                return;
+            }
+            // Parsing ran the options' getters, which can destroy the label; look it up only now.
+            auto *label = self->ResolveLabel();
+            if (label && CheckTarget(call, options, self) && CheckSizes(call, options, label) && CheckViewers(call, *CoreModules::GetReplication(), options)) {
+                ApplyOptions(*self, *label, options);
+            }
+        }
+
+        void CallSetVisibleFor(Bind::Call &call) {
+            auto *self = call.Self<TextLabel>();
+            if (!self || !self->ResolveLabel()) {
+                return;
+            }
+            if (!call.Arg(1).IsBoolean()) {
+                Fail(call, "setVisibleFor expects (player, visible)");
+                return;
+            }
+            const auto player       = PlayerId(call, call.Arg(0), "player");
+            MafiaNet::PeerGuid guid = MafiaNet::UNASSIGNED_PEER_GUID;
+            if (!player || !ResolvePlayer(call, *CoreModules::GetReplication(), *player, "setVisibleFor", guid)) {
+                return;
+            }
+            self->SetVisibleFor(guid, call.Arg(1).AsBoolean());
+        }
+
+        void CallAttachTo(Bind::Call &call) {
+            auto *self = call.Self<TextLabel>();
+            if (!self || !self->ResolveLabel()) {
+                return;
+            }
+            // null detaches, as 0 does. Lua, which has no null, has 0 and detach().
+            const auto target = Target(call, call.Arg(0), "target", IsNull(call, call.Arg(0)));
+            if (!target) {
+                return;
+            }
+            std::optional<glm::vec3> offset = glm::vec3(0.0f);
+            if (!call.Arg(1).IsNil() || IsNull(call, call.Arg(1))) {
+                offset = Vec3(call, call.Arg(1), "offset");
+                if (!offset) {
+                    return;
+                }
+            }
+            if (*target == 0) {
+                self->Detach();
+            }
+            else if (!self->AttachTo(*target, *offset)) {
+                Fail(call, "attachTo must be another live entity");
+            }
+        }
+
+        // null for a label that is gone.
+        void CallGetOptions(Bind::Call &call) {
+            const auto *self  = call.Self<TextLabel>();
+            const auto *label = self ? self->ResolveLabel() : nullptr;
+            if (!label) {
+                call.Return(call.Null());
+                return;
+            }
+            call.Return(OptionsObject(call, *label, label->attachNetworkId != 0 ? label->ownVirtualWorld : self->GetVirtualWorld()));
+        }
+
+        void CallGetAudience(Bind::Call &call) {
+            const auto *self  = call.Self<TextLabel>();
+            const auto *label = self ? self->ResolveLabel() : nullptr;
+            if (!label) {
+                call.Return(call.Null());
+                return;
+            }
+            call.Return(AudienceObject(call, *CoreModules::GetReplication(), *label));
+        }
+
+        // TextLabel.create(x, y, z, text, fontSize? | options?, drawDistance?, virtualWorld?) -> TextLabel
+        void CallCreate(Bind::Call &call) {
+            if (call.ArgCount() < 4 || !call.Arg(0).IsNumber() || !call.Arg(1).IsNumber() || !call.Arg(2).IsNumber() || !call.Arg(3).IsString()) {
+                call.ThrowTypeError("TextLabel.create: expected (x, y, z, text, fontSize? | options?, drawDistance?, virtualWorld?)");
+                return;
+            }
+
+            // Options are checked before anything exists, so a bad one leaves nothing half-made.
+            Options options;
+            const bool withOptions = IsObject(call.Arg(4));
+            if (withOptions && (!ParseOptions(call, call.Arg(4), TextLabel::GetUnitsPerMetre(), options) || !CheckSizes(call, options, nullptr))) {
+                return;
+            }
+
+            auto *replication = CoreModules::GetReplication();
+            if (!replication) {
+                call.ThrowError("TextLabel.create: replication unavailable");
+                return;
+            }
+
+            if (!CheckTarget(call, options, nullptr) || !CheckViewers(call, *replication, options)) {
+                return;
+            }
+
+            int count = 0;
+            replication->ForEach<TextLabel::LabelEntity>([&count](TextLabel::LabelEntity *) {
+                ++count;
+            });
+            if (count >= TextLabel::kMaxLabels) {
+                call.ThrowError("TextLabel.create: label limit reached");
+                return;
+            }
+
+            auto *label = replication->CreateEntity<TextLabel::LabelEntity>();
+            if (!label) {
+                call.ThrowError("TextLabel.create: failed to create entity (type not registered?)");
+                return;
+            }
+
+            // A resource owns the labels it makes, and they go when it stops. The resource manager is told of every
+            // entity made and names its owner from the JavaScript that is running (ResourceManager::OnEntityCreated);
+            // the call names it in either language.
+            if (auto *manager = call.GetResourceManager()) {
+                manager->AssignEntity(call.ResourceName(), label->GetNetworkID());
+            }
+
+            label->position = glm::vec3(static_cast<float>(call.Arg(0).AsNumber()), static_cast<float>(call.Arg(1).AsNumber()), static_cast<float>(call.Arg(2).AsNumber()));
+
+            TextLabel handle(label->GetNetworkID());
+            handle.SetText(call.Arg(3).AsString());
+            handle.SetDrawDistance(TextLabel::kDefaultMetres * TextLabel::GetUnitsPerMetre());
+
+            if (withOptions) {
+                ApplyOptions(handle, *label, options);
+            }
+            else {
+                if (call.Arg(4).IsNumber()) {
+                    handle.SetFontSize(static_cast<float>(call.Arg(4).AsNumber()));
+                }
+                if (call.Arg(5).IsNumber()) {
+                    handle.SetDrawDistance(static_cast<float>(call.Arg(5).AsNumber()));
+                }
+                if (call.Arg(6).IsNumber()) {
+                    handle.SetVirtualWorld(static_cast<uint32_t>(call.Arg(6).AsNumber()));
+                }
+            }
+
+            call.Return(call.Wrap(std::move(handle)));
         }
     } // namespace
 
@@ -984,77 +1189,77 @@ namespace Framework::Scripting::Builtins {
         }
     }
 
+    const Bind::Class<TextLabel> &TextLabel::Definition() {
+        using Bind::Doc;
+        using Bind::TypeOf;
+        namespace Type = Bind::Type;
+
+        static const auto definition = [] {
+            // Inherit looks the definition of the base up.
+            Entity::Definition();
+
+            const auto options = Type::Custom("TextLabelOptions", "table");
+            const auto vector  = Type::Custom("Vector3 | { x: number; y: number; z: number }", "Vector3|{ x: number, y: number, z: number }");
+            return Bind::Class<TextLabel>("TextLabel", "Server-created replicated world-space text label.")
+                .Inherit<Entity>()
+                .Constructor<uint64_t>(Doc("Creates a wrapper for an existing text label; use TextLabel.create to spawn one.").Param("id", "Existing text-label network entity identifier."))
+                .Method("toString", &TextLabel::ToString, Doc("Formats this label for logging and debugging.").Returns("Text containing the label ID and current text."))
+                .Method("destroy", &TextLabel::Destroy, Doc("Destroys this replicated label; stale wrappers no longer resolve afterward."))
+                .Method("setText", &TextLabel::SetText, Doc("Changes the label's displayed text.").Param("text", "Replacement text replicated to clients; at most 1024 bytes."))
+                .Method("setFontSize", &TextLabel::SetFontSize, Doc("Changes the rendered font size.").Param("size", "Font size in pixels, clamped from 1 to 512."))
+                .Method("setDrawDistance", &TextLabel::SetDrawDistance, Doc("Changes how far away clients can render the label.").Param("distance", "Maximum rendering distance in world units, clamped from 1 to 1000 metres' worth."))
+                .Method("setFadeDistance", &TextLabel::SetFadeDistance, Doc("Changes where the label starts fading out.").Param("distance", "Distance in world units where fading starts; 0 starts it at 75% of the draw distance."))
+                .Method("setStyle", &TextLabel::SetStyle, Doc("Resets the outline, shadow and background to a preset.").Param("style", "0 none, 1 shadow, 2 outline, 3 box; unsupported values are ignored."))
+                .Method("detach", &TextLabel::Detach, Doc("Stops following an entity; the label returns to its own position."))
+                .Property("text", &TextLabel::GetText, "Current replicated label text.")
+                .Property("color", &TextLabel::GetColor, "Current packed ARGB color.")
+                .Property("fontSize", &TextLabel::GetFontSize, "Current font size.")
+                .Property("drawDistance", &TextLabel::GetDrawDistance, "Current maximum rendering distance in world units.")
+                .Property("fadeDistance", &TextLabel::GetFadeDistance, "Distance in world units where fading starts.")
+                .Property("style", &TextLabel::GetStyle, "The preset nearest the current look: 0 none, 1 shadow, 2 outline, 3 box.")
+                // A context function, as are the ones below: a signature cannot say Color | number, an options
+                // object or a player given as a handle or an id.
+                .Method("setColor", &CallSetColor,
+                    Doc("Changes the label's packed ARGB color from a Color or byte components.")
+                        .Param("colorOrR", Type::Custom("Color | number", "Color|integer"), "A Color, or the red byte (0-255) when passing components.")
+                        .OptionalParam("g", TypeOf<int>(), "Green byte (0-255) when passing components.")
+                        .OptionalParam("b", TypeOf<int>(), "Blue byte (0-255) when passing components.")
+                        .OptionalParam("a", TypeOf<int>(), "Alpha byte (0-255) when passing components; defaults to 255."))
+                .Method("update", &CallUpdate, Doc("Changes any part of the label at once. A bad key throws and changes nothing.").Param("options", options, "Only the keys given change; outline, shadow, background, showTo and hideFrom are replaced whole."))
+                .Method("attachTo", &CallAttachTo,
+                    Doc("Follows another live entity instead of staying at the label's own position. It streams from where the target is, moves into its virtual world and is destroyed with it.")
+                        .Param("target", Type::Custom("Entity | number", "Entity|integer"), "The entity to follow, or its network id.")
+                        .OptionalParam("offset", vector, "Where to draw relative to it; the game decides the reference point (a player's head, say)."))
+                .Method("getOptions", &CallGetOptions, Doc("The label's current look and placement, in the shape update() takes. The audience is left out: see getAudience().").ReturnType(options))
+                .Method("getAudience", &CallGetAudience,
+                    Doc("Who the label is for, with players as network ids. For reading: a connected player with no avatar right now has no id and is left out, though the label stays as set for them, so passing this to update() would drop them.")
+                        .ReturnType(Type::Custom("{ showTo: number[] | null; hideFrom: number[]; hideForTarget: boolean }", "{ showTo: integer[]?, hideFrom: integer[], hideForTarget: boolean }")))
+                .Method("setVisibleFor", &CallSetVisibleFor,
+                    Doc("Shows or hides the label for one player. A hidden player's client is never sent it; hideForTarget still applies.")
+                        .Param("player", Type::Custom("Player | number", "Player|integer"), "A connected player, or their network id.")
+                        .Param("visible", TypeOf<bool>(), "false adds them to hideFrom and takes them off showTo; true undoes both, adding them to showTo while it is set."))
+                .Static("create", &CallCreate,
+                    Doc("Creates and replicates a world-space text label, up to the server-wide limit of 512. A bad option throws and creates nothing.")
+                        .Param("x", TypeOf<double>(), "World-space X coordinate.")
+                        .Param("y", TypeOf<double>(), "World-space Y coordinate.")
+                        .Param("z", TypeOf<double>(), "World-space Z coordinate.")
+                        .Param("text", TypeOf<std::string>(), "Initial displayed text.")
+                        .OptionalParam("fontSizeOrOptions", Type::Custom("number | TextLabelOptions", "number|table"), "Look and placement, or (the older form) the font size from 1 to 512.")
+                        .OptionalParam("drawDistance", TypeOf<double>(), "Older form only: the draw distance in world units.")
+                        .OptionalParam("virtualWorld", TypeOf<uint32_t>(), "Older form only: the virtual-world identifier.")
+                        .ReturnType(Type::Class("TextLabel"))
+                        .Returns("Handle for the newly created label."))
+                // Crosses between runtimes as its network id.
+                .Transfer(&TextLabel::GetId);
+        }();
+        return definition;
+    }
+
     v8pp::class_<TextLabel> &TextLabel::GetClass(v8::Isolate *isolate) {
         return _classes.Get(isolate, [isolate]() {
+            // v8pp inherit<Entity> requires Entity registered first.
             Entity::GetClass(isolate);
-
-            auto cls = std::make_unique<v8pp::class_<TextLabel>>(isolate, GetScriptingCatalog(isolate), "TextLabel", "Server-created replicated world-space text label.");
-            cls->auto_wrap_objects(true);
-            cls->inherit<Entity>()
-                .ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Existing text-label network entity identifier.")}, "Creates a wrapper for an existing text label; use TextLabel.create to spawn one."))
-                .function("toString", &TextLabel::ToString, v8pp::metadata::docs("string", {}, "Formats this label for logging and debugging.", "Text containing the label ID and current text."))
-                .function("destroy", &TextLabel::Destroy, v8pp::metadata::docs("void", {}, "Destroys this replicated label; stale wrappers no longer resolve afterward."))
-                .function("setText", &TextLabel::SetText, v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", false, "Replacement text replicated to clients; at most 1024 bytes.")}, "Changes the label's displayed text."))
-                .function("setFontSize", &TextLabel::SetFontSize, v8pp::metadata::docs("void", {v8pp::metadata::param("size", "number", false, "Font size in pixels, clamped from 1 to 512.")}, "Changes the rendered font size."))
-                .function("setDrawDistance", &TextLabel::SetDrawDistance,
-                    v8pp::metadata::docs("void", {v8pp::metadata::param("distance", "number", false, "Maximum rendering distance in world units, clamped from 1 to 1000 metres' worth.")}, "Changes how far away clients can render the label."))
-                .function("setFadeDistance", &TextLabel::SetFadeDistance,
-                    v8pp::metadata::docs("void", {v8pp::metadata::param("distance", "number", false, "Distance in world units where fading starts; 0 starts it at 75% of the draw distance.")}, "Changes where the label starts fading out."))
-                .function("setStyle", &TextLabel::SetStyle, v8pp::metadata::docs("void", {v8pp::metadata::param("style", "number", false, "0 none, 1 shadow, 2 outline, 3 box; unsupported values are ignored.")}, "Resets the outline, shadow and background to a preset."))
-                .function("detach", &TextLabel::Detach, v8pp::metadata::docs("void", {}, "Stops following an entity; the label returns to its own position."))
-                .property("text", &TextLabel::GetText, v8pp::metadata::property_docs("string", "Current replicated label text."))
-                .property("color", &TextLabel::GetColor, v8pp::metadata::property_docs("number", "Current packed ARGB color."))
-                .property("fontSize", &TextLabel::GetFontSize, v8pp::metadata::property_docs("number", "Current font size."))
-                .property("drawDistance", &TextLabel::GetDrawDistance, v8pp::metadata::property_docs("number", "Current maximum rendering distance in world units."))
-                .property("fadeDistance", &TextLabel::GetFadeDistance, v8pp::metadata::property_docs("number", "Distance in world units where fading starts."))
-                .property("style", &TextLabel::GetStyle, v8pp::metadata::property_docs("number", "The preset nearest the current look: 0 none, 1 shadow, 2 outline, 3 box."));
-
-            // setColor accepts either a Color or byte components (r, g, b, a from 0-255), so scripts
-            // don't have to hand-pack this API's ARGB layout. Registered as a raw prototype function
-            // because v8pp's typed binding can't express the Color|number overload.
-            cls->prototype_function(
-                "setColor",
-                [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                    v8::Isolate *iso = info.GetIsolate();
-                    auto *self       = v8pp::class_<TextLabel>::unwrap_object(iso, info.This());
-                    if (!self) {
-                        return;
-                    }
-                    if (info.Length() >= 1) {
-                        if (auto *col = v8pp::class_<Color>::unwrap_object(iso, info[0])) {
-                            self->SetColorPacked(col->toARGB());
-                            return;
-                        }
-                    }
-                    v8::Local<v8::Context> ctx = iso->GetCurrentContext();
-                    const auto num             = [&](int i, int fallback) {
-                        return (info.Length() > i && info[i]->IsNumber()) ? info[i]->Int32Value(ctx).FromMaybe(fallback) : fallback;
-                    };
-                    self->SetColor(num(0, 0), num(1, 0), num(2, 0), num(3, 255));
-                },
-                v8pp::metadata::docs("void",
-                    {v8pp::metadata::param("colorOrR", "Color | number", false, "A Color, or the red byte (0-255) when passing components."), v8pp::metadata::param("g", "number", true, "Green byte (0-255) when passing components."),
-                        v8pp::metadata::param("b", "number", true, "Blue byte (0-255) when passing components."), v8pp::metadata::param("a", "number", true, "Alpha byte (0-255) when passing components; defaults to 255.")},
-                    "Changes the label's packed ARGB color from a Color or byte components."));
-
-            cls->prototype_function("update", &TextLabel::JS_Update,
-                v8pp::metadata::docs("void", {v8pp::metadata::param("options", "TextLabelOptions", false, "Only the keys given change; outline, shadow, background, showTo and hideFrom are replaced whole.")},
-                    "Changes any part of the label at once. A bad key throws and changes nothing."));
-            cls->prototype_function("attachTo", &TextLabel::JS_AttachTo,
-                v8pp::metadata::docs("void",
-                    {v8pp::metadata::param("target", "Entity | number", false, "The entity to follow, or its network id."),
-                        v8pp::metadata::param("offset", "Vector3 | { x: number; y: number; z: number }", true, "Where to draw relative to it; the game decides the reference point (a player's head, say).")},
-                    "Follows another live entity instead of staying at the label's own position. It streams from where the target is, moves into its virtual world and is destroyed with it."));
-            cls->prototype_function("getOptions", &TextLabel::JS_GetOptions, v8pp::metadata::docs("TextLabelOptions", {}, "The label's current look and placement, in the shape update() takes. The audience is left out: see getAudience()."));
-            cls->prototype_function("getAudience", &TextLabel::JS_GetAudience,
-                v8pp::metadata::docs("{ showTo: number[] | null; hideFrom: number[]; hideForTarget: boolean }", {},
-                    "Who the label is for, with players as network ids. For reading: a connected player with no avatar right now has no id and is left out, though the label stays as set for them, so passing this to update() would drop them."));
-            cls->prototype_function("setVisibleFor", &TextLabel::JS_SetVisibleFor,
-                v8pp::metadata::docs("void",
-                    {v8pp::metadata::param("player", "Player | number", false, "A connected player, or their network id."),
-                        v8pp::metadata::param("visible", "boolean", false, "false adds them to hideFrom and takes them off showTo; true undoes both, adding them to showTo while it is set.")},
-                    "Shows or hides the label for one player. A hidden player's client is never sent it; hideForTarget still applies."));
-            return cls;
+            return Definition().MaterialiseV8(isolate, GetScriptingCatalog(isolate), ScriptingSide(isolate));
         });
     }
 
@@ -1096,174 +1301,14 @@ namespace Framework::Scripting::Builtins {
         v8pp::class_<TextLabel> &cls = GetClass(isolate);
         RegisterOptionsType(isolate);
         auto ctx = isolate->GetCurrentContext();
-
-        auto ctorFn = cls.js_function_template()->GetFunction(ctx).ToLocalChecked();
-
-        cls.static_function(ctorFn, "create", &TextLabel::JS_Create,
-            v8pp::metadata::docs("TextLabel",
-                {
-                    v8pp::metadata::param("x", "number", false, "World-space X coordinate."),
-                    v8pp::metadata::param("y", "number", false, "World-space Y coordinate."),
-                    v8pp::metadata::param("z", "number", false, "World-space Z coordinate."),
-                    v8pp::metadata::param("text", "string", false, "Initial displayed text."),
-                    v8pp::metadata::param("fontSizeOrOptions", "number | TextLabelOptions", true, "Look and placement, or (the older form) the font size from 1 to 512."),
-                    v8pp::metadata::param("drawDistance", "number", true, "Older form only: the draw distance in world units."),
-                    v8pp::metadata::param("virtualWorld", "number", true, "Older form only: the virtual-world identifier."),
-                },
-                "Creates and replicates a world-space text label, up to the server-wide limit of 512. A bad option throws and creates nothing.", "Handle for the newly created label."));
-        cls.publish(global, ctorFn);
+        global->Set(ctx, v8pp::to_v8(isolate, "TextLabel"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
     }
 
-    void TextLabel::JS_Create(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate = info.GetIsolate();
-        v8::HandleScope hs(isolate);
-
-        if (info.Length() < 4 || !info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber() || !info[3]->IsString()) {
-            ThrowTypeError(isolate, "TextLabel.create: expected (x, y, z, text, fontSize? | options?, drawDistance?, virtualWorld?)");
-            return;
-        }
-
-        // Options are checked before anything exists, so a bad one leaves nothing half-made.
-        Options options;
-        const bool withOptions = info.Length() >= 5 && info[4]->IsObject() && !info[4]->IsArray();
-        if (withOptions && (!ParseOptions(isolate, info[4].As<v8::Object>(), _unitsPerMetre, options) || !CheckSizes(isolate, options, nullptr))) {
-            return;
-        }
-
-        auto *replication = CoreModules::GetReplication();
-        if (!replication) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: replication unavailable")));
-            return;
-        }
-
-        if (!CheckTarget(isolate, options, nullptr) || !CheckViewers(isolate, *replication, options)) {
-            return;
-        }
-
-        int count = 0;
-        replication->ForEach<LabelEntity>([&count](LabelEntity *) {
-            ++count;
-        });
-        if (count >= kMaxLabels) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: label limit reached")));
-            return;
-        }
-
-        auto *label = replication->CreateEntity<LabelEntity>();
-        if (!label) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: failed to create entity (type not registered?)")));
-            return;
-        }
-
-        label->position = glm::vec3(static_cast<float>(v8pp::from_v8<double>(isolate, info[0])), static_cast<float>(v8pp::from_v8<double>(isolate, info[1])), static_cast<float>(v8pp::from_v8<double>(isolate, info[2])));
-
-        auto wrapped = v8pp::class_<TextLabel>::create_object(isolate, label->GetNetworkID());
-        auto *handle = v8pp::class_<TextLabel>::unwrap_object(isolate, wrapped);
-        handle->SetText(v8pp::from_v8<std::string>(isolate, info[3]));
-        handle->SetDrawDistance(kDefaultMetres * _unitsPerMetre);
-
-        if (withOptions) {
-            ApplyOptions(*handle, *label, options);
-        }
-        else {
-            if (info.Length() >= 5 && info[4]->IsNumber()) {
-                handle->SetFontSize(static_cast<float>(v8pp::from_v8<double>(isolate, info[4])));
-            }
-            if (info.Length() >= 6 && info[5]->IsNumber()) {
-                handle->SetDrawDistance(static_cast<float>(v8pp::from_v8<double>(isolate, info[5])));
-            }
-            if (info.Length() >= 7 && info[6]->IsNumber()) {
-                handle->SetVirtualWorld(static_cast<uint32_t>(v8pp::from_v8<double>(isolate, info[6])));
-            }
-        }
-
-        info.GetReturnValue().Set(wrapped);
-    }
-
-    void TextLabel::JS_Update(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate = info.GetIsolate();
-        auto *self           = v8pp::class_<TextLabel>::unwrap_object(isolate, info.This());
-        if (!self || !self->ResolveLabel()) {
-            return;
-        }
-        if (info.Length() < 1 || !info[0]->IsObject() || info[0]->IsArray()) {
-            Fail(isolate, "update expects an options object");
-            return;
-        }
-        Options options;
-        if (!ParseOptions(isolate, info[0].As<v8::Object>(), _unitsPerMetre, options)) {
-            return;
-        }
-        // Parsing ran the options' getters, which can destroy the label; look it up only now.
-        auto *label = self->ResolveLabel();
-        if (label && CheckTarget(isolate, options, self) && CheckSizes(isolate, options, label) && CheckViewers(isolate, *CoreModules::GetReplication(), options)) {
-            ApplyOptions(*self, *label, options);
-        }
-    }
-
-    void TextLabel::JS_SetVisibleFor(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate = info.GetIsolate();
-        auto *self           = v8pp::class_<TextLabel>::unwrap_object(isolate, info.This());
-        if (!self || !self->ResolveLabel()) {
-            return;
-        }
-        if (info.Length() < 2 || !info[1]->IsBoolean()) {
-            Fail(isolate, "setVisibleFor expects (player, visible)");
-            return;
-        }
-        const auto player       = PlayerId(isolate, info[0], "player");
-        MafiaNet::PeerGuid guid = MafiaNet::UNASSIGNED_PEER_GUID;
-        if (!player || !ResolvePlayer(isolate, *CoreModules::GetReplication(), *player, "setVisibleFor", guid)) {
-            return;
-        }
-        self->SetVisibleFor(guid, info[1]->BooleanValue(isolate));
-    }
-
-    void TextLabel::JS_AttachTo(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate = info.GetIsolate();
-        auto *self           = v8pp::class_<TextLabel>::unwrap_object(isolate, info.This());
-        if (!self || !self->ResolveLabel()) {
-            return;
-        }
-        const auto target = Target(isolate, info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>(), "target");
-        if (!target) {
-            return;
-        }
-        std::optional<glm::vec3> offset = glm::vec3(0.0f);
-        if (info.Length() > 1 && !info[1]->IsUndefined()) {
-            offset = Vec3(isolate, info[1], "offset");
-            if (!offset) {
-                return;
-            }
-        }
-        if (*target == 0) {
-            self->Detach();
-        }
-        else if (!self->AttachTo(*target, *offset)) {
-            Fail(isolate, "attachTo must be another live entity");
-        }
-    }
-
-    void TextLabel::JS_GetOptions(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate = info.GetIsolate();
-        auto *self           = v8pp::class_<TextLabel>::unwrap_object(isolate, info.This());
-        auto *label          = self ? self->ResolveLabel() : nullptr;
-        if (!label) {
-            info.GetReturnValue().SetNull();
-            return;
-        }
-        info.GetReturnValue().Set(OptionsObject(isolate, *label, label->attachNetworkId != 0 ? label->ownVirtualWorld : self->GetVirtualWorld()));
-    }
-
-    void TextLabel::JS_GetAudience(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate = info.GetIsolate();
-        auto *self           = v8pp::class_<TextLabel>::unwrap_object(isolate, info.This());
-        auto *label          = self ? self->ResolveLabel() : nullptr;
-        if (!label) {
-            info.GetReturnValue().SetNull();
-            return;
-        }
-        info.GetReturnValue().Set(AudienceObject(isolate, *CoreModules::GetReplication(), *label));
+    void TextLabel::RegisterLua(LuaRuntime &runtime) {
+        Entity::RegisterLua(runtime);
+        // What an option reads a colour from, whether or not the state has it as a global.
+        Color::Definition().MaterialiseLua(runtime.State(), runtime.Options().side);
+        Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
     }
 
     void TextLabel::UnregisterIsolate(v8::Isolate *isolate) {

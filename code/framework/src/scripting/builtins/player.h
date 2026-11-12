@@ -72,6 +72,9 @@ namespace Framework::Scripting::Builtins {
 
         std::string ToString() const override;
 
+        // The class as scripts see it, declared once for both languages.
+        static const Bind::Class<Player> &Definition();
+
         static v8pp::class_<Player> &GetClass(v8::Isolate *isolate);
 
         // Publish the Player constructor on a target object, like Entity::Register /
@@ -80,6 +83,10 @@ namespace Framework::Scripting::Builtins {
         static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
 
         static void UnregisterIsolate(v8::Isolate *isolate);
+
+        // Publishes the class as a global of the state of a Lua runtime, with Entity, which it inherits. A failure,
+        // such as the state running out of memory, is a Lua error: call it protected, or it is a panic.
+        static void RegisterLua(LuaRuntime &runtime);
 
       protected:
         const Networking::RPC::ClientIdentity *ResolveIdentity() const;
@@ -92,3 +99,5 @@ namespace Framework::Scripting::Builtins {
         inline static ClassCache<Player> _classes;
     };
 } // namespace Framework::Scripting::Builtins
+
+FW_SCRIPT_CLASS(Framework::Scripting::Builtins::Player, "Player");

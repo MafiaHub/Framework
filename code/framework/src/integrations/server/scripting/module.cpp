@@ -25,7 +25,9 @@
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/messages.h>
+#include <scripting/builtins/player.h>
 #include <scripting/builtins/state_bag.h>
+#include <scripting/builtins/text_label.h>
 #include <scripting/engine_scope.h>
 #include <scripting/event_metadata.h>
 #include <scripting/lua/lua_runtime.h>
@@ -199,6 +201,9 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Builtins::Console::RegisterLua(runtime);
         Framework::Scripting::Builtins::ExecutionEnvironment::RegisterLua(runtime, _modVersion);
         Framework::Scripting::Builtins::Entity::RegisterLua(runtime);
+        // In JavaScript a game publishes these two itself. A Lua state is set up here and nowhere else.
+        Framework::Scripting::Builtins::Player::RegisterLua(runtime);
+        Framework::Scripting::Builtins::TextLabel::RegisterLua(runtime);
     }
 
     bool ServerScriptingModule::PreShutdown() {

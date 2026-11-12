@@ -367,7 +367,7 @@ MODULE(lua_builtins_entity, {
         EQUALS(lua.Eval("e.virtualWorld"), "0");
     });
 
-    IT("keeps the JavaScript Player, still written by hand, an Entity", {
+    IT("keeps the JavaScript Player an Entity", {
         Stage stage;
         auto *avatar         = stage.world.Manager()->CreateEntity(stage.world.targetType);
         avatar->ownerGUID    = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(72));

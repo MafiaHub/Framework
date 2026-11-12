@@ -36,11 +36,10 @@ namespace Framework::Scripting::Builtins {
         Color::Definition().RegisterTransfer();
 
         // The handles cross by their network id. Bases before the handles derived from them: the transfer tries
-        // the newest registration first. Entity and StateBag say so in their definitions, which registers them
-        // with both transfers.
+        // the newest registration first. Each says so in its definition, which registers it with both transfers.
         Entity::Definition().RegisterTransfer();
-        RegisterHandleTransfer<Player>("Player");
-        RegisterHandleTransfer<TextLabel>("TextLabel");
+        Player::Definition().RegisterTransfer();
+        TextLabel::Definition().RegisterTransfer();
         StateBag::Definition().RegisterTransfer();
     }
 

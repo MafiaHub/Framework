@@ -860,11 +860,12 @@ MODULE(lua_transfer, {
         Worlds worlds;
         TransferredValue unknown;
         unknown.kind = Kind::HostObject;
-        unknown.text = "Player";
+        // A handle a project registered for JavaScript alone (Builtins::RegisterHandleTransfer).
+        unknown.text = "Vehicle";
         TransferredValue list;
         list.kind = Kind::Array;
         list.items.push_back(unknown);
-        EQUALS(Worlds::StoreLua(worlds.other, list), "Cannot copy value[0]: host type 'Player' is not available in Lua");
+        EQUALS(Worlds::StoreLua(worlds.other, list), "Cannot copy value[0]: host type 'Vehicle' is not available in Lua");
 
         // A state that never registered the value types.
         LuaRuntime bare(LuaRuntimeTest::Options());
