@@ -8,6 +8,8 @@
 
 #include "voice.h"
 
+#include "script_args.h"
+
 #include "core_modules.h"
 
 #include <input/input.h>
@@ -34,31 +36,6 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // The spellings scripts use for TransmitMode.
         constexpr const char *kPushToTalk    = "pushToTalk";
         constexpr const char *kVoiceActivity = "voiceActivity";
-
-        // A flag, read as the language of the script reads a condition, which is how JavaScript always
-        // read it here: undefined, null, false, 0, NaN and the empty string are false there, nil and
-        // false in Lua.
-        bool ReadFlag(const Bind::Call &call, size_t index) {
-            const Bind::Value flag = call.Arg(index);
-            if (flag.IsNil()) {
-                return false;
-            }
-            if (flag.IsBoolean()) {
-                return flag.AsBoolean();
-            }
-            if (call.GetLanguage() == Framework::Scripting::Language::Lua) {
-                return true;
-            }
-            if (flag.IsNumber()) {
-                const double number = flag.AsNumber();
-                return number != 0.0 && number == number;
-            }
-            if (flag.IsString()) {
-                return !flag.AsString().empty();
-            }
-            // Of what is left only the zero of a BigInt is false.
-            return flag.Kind() != Bind::ValueKind::Other || flag.ToDisplayString() != "0";
-        }
 
         // The number at `index`. Throws `expected` and gives false for anything else.
         bool ReadNumber(Bind::Call &call, size_t index, const char *expected, double &out) {
