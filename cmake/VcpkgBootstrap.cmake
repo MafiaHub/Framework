@@ -91,8 +91,10 @@ endif()
 
 set(VCPKG_OVERLAY_TRIPLETS "${CMAKE_CURRENT_LIST_DIR}/vcpkg-triplets" CACHE STRING "")
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/vcpkg-ports")
-    # FORCE: the toolchain caches it empty, which an existing tree would otherwise keep.
-    set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_LIST_DIR}/vcpkg-ports" CACHE STRING "" FORCE)
+    # FORCE: the toolchain caches it empty, which an existing tree would otherwise keep. The caller's own overlays stay, behind ours.
+    set(_fw_overlay_ports "${CMAKE_CURRENT_LIST_DIR}/vcpkg-ports" ${VCPKG_OVERLAY_PORTS})
+    list(REMOVE_DUPLICATES _fw_overlay_ports)
+    set(VCPKG_OVERLAY_PORTS "${_fw_overlay_ports}" CACHE STRING "" FORCE)
 endif()
 set(CMAKE_TOOLCHAIN_FILE "${_fw_vcpkg_root}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
 get_filename_component(_fw_vcpkg_root "${_fw_vcpkg_root}" ABSOLUTE)
