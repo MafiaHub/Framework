@@ -26,19 +26,13 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         constexpr std::string_view kFaces[] {"regular", "bold", "italic", "boldItalic"};
 
         bool Fail(v8::Isolate *isolate, const std::string &message) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Fonts.register: " + message)));
+            Framework::Scripting::ThrowError(isolate, ("Fonts.register: " + message).c_str());
             return false;
         }
 
         bool FailType(v8::Isolate *isolate, const std::string &message) {
             Framework::Scripting::ThrowTypeError(isolate, ("Fonts.register: " + message).c_str());
             return false;
-        }
-
-        // The file's own tag, not its name: a renamed WOFF2 must not reach the TrueType parser.
-        bool IsLoadableFont(std::string_view bytes) {
-            const std::string_view tag = bytes.substr(0, 4);
-            return tag == std::string_view("\0\1\0\0", 4) || tag == "true" || tag == "OTTO" || tag == "ttcf";
         }
 
         // From the resource's own package only: never the disk, nor another resource's files.
@@ -49,18 +43,21 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             if (path.size() <= root.size() || path.compare(0, root.size(), root) != 0) {
                 return Fail(isolate, label + " is not a file inside resource '" + resource + "'");
             }
-            auto &vfs = Framework::Utils::Vfs::Get();
-            if (!vfs.Contains(path) || !vfs.Read(path, out)) {
+            auto &vfs       = Framework::Utils::Vfs::Get();
+            const auto size = vfs.Size(path);
+            if (!size) {
                 return Fail(isolate, label + " is not in resource '" + resource + "'");
             }
-            if (out.size() > Fonts::kMaxFileBytes) {
+            if (*size > Fonts::kMaxFileBytes) {
                 return Fail(isolate, label + " is larger than " + std::to_string(Fonts::kMaxFileBytes >> 20) + " MiB");
             }
-            const std::string_view tag = std::string_view(out).substr(0, 4);
-            if (tag == "wOFF" || tag == "wOF2") {
+            if (!vfs.Read(path, out)) {
+                return Fail(isolate, label + " could not be read");
+            }
+            if (Framework::External::ImGUI::IsWebFont(out)) {
                 return Fail(isolate, label + " is WOFF/WOFF2, which cannot be loaded; convert it to TTF or OTF");
             }
-            if (out.size() <= 100 || !IsLoadableFont(out)) {
+            if (!Framework::External::ImGUI::IsFontFile(out)) {
                 return Fail(isolate, label + " is not a TrueType or OpenType font");
             }
             return true;

@@ -18,8 +18,10 @@
 #include "font_family.h"
 #include "graphics/backend/d3d12_ui_compositor.h"
 #include "graphics/types.h"
+#include "widgets/world_text_layout.h"
 
 #include <atomic>
+#include <deque>
 #include <function2/function2.hpp>
 #include <mutex>
 #include <queue>
@@ -77,25 +79,28 @@ namespace Framework::External::ImGUI {
 
         std::unordered_map<std::string, ImFont *> _fonts;
 
-        // Families added at runtime: queued from any thread, loaded before the next frame. A face
-        // stays in the atlas until shutdown, as layouts keep pointers into it, so one file is loaded
-        // once and a budget caps what servers can add over the process.
+        // A session's font families: queued from any thread, loaded on Update's thread, removed from the atlas when the session ends.
         struct PendingFamily {
             std::string family;
             FontFamilySource faces;
         };
+        struct RuntimeFace {
+            std::string bytes;      // the atlas reads the face from here
+            ImFont *font = nullptr; // null = failed to load
+        };
         static constexpr size_t kMaxRuntimeFaces     = 64;
         static constexpr size_t kMaxRuntimeFontBytes = 64u << 20;
-        mutable std::mutex _familyMtx;
+        std::mutex _pendingMtx;
         std::vector<PendingFamily> _pendingFamilies;
         bool _clearFamilies = false;
-        std::unordered_map<std::string, FontFamily> _families;
-        std::unordered_map<std::string, ImFont *> _runtimeFaces; // by file size and hash; null = failed
+        std::unordered_map<std::string, Widgets::WorldTextFonts> _families;
+        std::deque<RuntimeFace> _runtimeFaces; // a failed face counts against the budget too
         size_t _runtimeFontBytes = 0;
-        size_t _runtimeFaceCount = 0; // loaded faces; failures are cached but not counted
+        uint32_t _fontGeneration = 0;
 
         void LoadPendingFamilies();
-        ImFont *LoadRuntimeFace(const std::string &family, const char *face, const std::string &bytes);
+        void DropRuntimeFaces();
+        ImFont *LoadRuntimeFace(const std::string &family, const char *face, std::string bytes);
 
         static inline std::atomic_bool isContextInitialized = false;
 
@@ -145,13 +150,16 @@ namespace Framework::External::ImGUI {
             return it != _fonts.end() ? it->second : nullptr;
         }
 
-        // Loads a family's faces before the next frame, replacing what it had. Any thread. A face
-        // that fails to parse, or would pass the budget, stays null and is logged.
+        // Loads a family's faces before the next frame, replacing what it had. Any thread. A face that fails to load, or would pass the session's budget, stays null and is logged.
         void QueueFontFamily(const std::string &family, FontFamilySource faces);
-        // Forgets every family's name, as a session ends; the faces stay loaded for the next one.
+        // Ends the session's families before the next frame, removing their faces from the atlas. Any thread.
         void ClearFontFamilies();
-        // A queued family once it has loaded, else a declared font as the regular face.
-        FontFamily GetFontFamily(const std::string &family) const;
+        // A loaded family, else a declared font as the regular face. Update's thread.
+        Widgets::WorldTextFonts GetFontFamily(const std::string &family) const;
+        // Changes whenever a family loads or the families clear. A layout built under another generation may point at a removed face: rebuild it.
+        uint32_t GetFontGeneration() const {
+            return _fontGeneration;
+        }
 
         void PushWidget(const RenderProc &proc) {
             _renderQueue.push(proc);

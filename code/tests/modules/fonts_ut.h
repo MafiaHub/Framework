@@ -56,7 +56,7 @@ MODULE(fonts, {
         EQUALS(vfs.Init(nullptr), true);
         const std::string regular = Face("\0\1\0\0"), bold = Face("OTTO", 300);
         EQUALS(Mount("typefaces",
-                   {{"client.js", kScript}, {"fonts/regular.ttf", regular}, {"fonts/bold.otf", bold}, {"fonts/web.woff2", Face("wOF2")}, {"fonts/notes.txt", std::string(256, 'x')}, {"fonts/tiny.ttf", Face("true", 64)}}),
+                   {{"client.js", kScript}, {"fonts/regular.ttf", regular}, {"fonts/bold.otf", bold}, {"fonts/web.woff2", Face("wOF2")}, {"fonts/notes.txt", std::string(256, 'x')}, {"fonts/huge.ttf", Face("true", Fonts::kMaxFileBytes + 1)}}),
             true);
         EQUALS(Mount("neighbour", {{"client.js", "void 0;"}, {"secret.ttf", Face("true")}}), true);
 
@@ -109,7 +109,7 @@ MODULE(fonts, {
                 "attempt('Inter', '../../resources/neighbour/secret.ttf'), 'Error: Fonts.register: regular \\'../../resources/neighbour/secret.ttf\\' is not a file inside'",
                 "attempt('Inter', 'fonts/web.woff2'), 'Error: Fonts.register: regular \\'fonts/web.woff2\\' is WOFF/WOFF2'",
                 "attempt('Inter', 'fonts/notes.txt'), 'Error: Fonts.register: regular \\'fonts/notes.txt\\' is not a TrueType'",
-                "attempt('Inter', 'fonts/tiny.ttf'), 'Error: Fonts.register: regular \\'fonts/tiny.ttf\\' is not a TrueType'",
+                "attempt('Inter', 'fonts/huge.ttf'), 'Error: Fonts.register: regular \\'fonts/huge.ttf\\' is larger than 32 MiB'",
                 "attempt('Inter', { regular: 'fonts/regular.ttf', italic: 'fonts/web.woff2' }), 'Error: Fonts.register: italic'",
             };
             for (const char *call : errors) {

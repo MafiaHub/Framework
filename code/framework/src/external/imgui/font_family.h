@@ -9,8 +9,7 @@
 #pragma once
 
 #include <string>
-
-struct ImFont;
+#include <string_view>
 
 namespace Framework::External::ImGUI {
     // A family's faces as TTF/OTF file contents, as a script registers them; an empty one is left out.
@@ -21,11 +20,14 @@ namespace Framework::External::ImGUI {
         std::string boldItalic;
     };
 
-    // A family's faces in the atlas. A null one is the drawer's to synthesize, or to fall back on.
-    struct FontFamily {
-        ImFont *regular    = nullptr;
-        ImFont *bold       = nullptr;
-        ImFont *italic     = nullptr;
-        ImFont *boldItalic = nullptr;
-    };
+    // By the file's own tag, not its name.
+    inline bool IsWebFont(std::string_view bytes) {
+        const std::string_view tag = bytes.substr(0, 4);
+        return tag == "wOFF" || tag == "wOF2";
+    }
+
+    inline bool IsFontFile(std::string_view bytes) {
+        const std::string_view tag = bytes.substr(0, 4);
+        return tag == std::string_view("\0\1\0\0", 4) || tag == "true" || tag == "OTTO" || tag == "ttcf";
+    }
 } // namespace Framework::External::ImGUI
