@@ -130,14 +130,16 @@ function(_fw_refuse_client_in_scripting_tests)
 endfunction()
 cmake_language(DEFER CALL _fw_refuse_client_in_scripting_tests)
 # Nametags reads the switches of the ImGui nametag widget, so it is tested where the headers of ImGui are:
-# in the vcpkg tree of this build, which has them on Windows, or where FW_TEST_IMGUI_INCLUDE_DIR is set to a
-# copy of them. Never a copy found on the host.
-set(FW_TEST_IMGUI_INCLUDE_DIR "" CACHE PATH "Directory of the ImGui headers the client Nametags builtin is tested with; empty for those of vcpkg")
+# in the vcpkg tree of this build, which has them on Windows, or where FW_TEST_IMGUI_HEADERS is set to a
+# copy of them. Never a copy found on the host: the variable was FW_TEST_IMGUI_INCLUDE_DIR while a search of the
+# host could fill it, and a build directory may still have that entry, which is dropped.
+unset(FW_TEST_IMGUI_INCLUDE_DIR CACHE)
+set(FW_TEST_IMGUI_HEADERS "" CACHE PATH "Directory of the ImGui headers the client Nametags builtin is tested with; empty for those of vcpkg")
 set(_fw_test_imgui "")
-if(FW_TEST_IMGUI_INCLUDE_DIR)
-    set(_fw_test_imgui "${FW_TEST_IMGUI_INCLUDE_DIR}")
+if(FW_TEST_IMGUI_HEADERS)
+    set(_fw_test_imgui "${FW_TEST_IMGUI_HEADERS}")
     if(NOT EXISTS "${_fw_test_imgui}/imgui.h")
-        message(FATAL_ERROR "FW_TEST_IMGUI_INCLUDE_DIR is '${_fw_test_imgui}', which has no imgui.h")
+        message(FATAL_ERROR "FW_TEST_IMGUI_HEADERS is '${_fw_test_imgui}', which has no imgui.h")
     endif()
 elseif(VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET AND EXISTS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include/imgui.h")
     set(_fw_test_imgui "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include")
