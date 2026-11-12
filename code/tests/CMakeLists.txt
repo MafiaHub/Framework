@@ -101,6 +101,26 @@ endif()
 target_link_libraries(FrameworkClientScriptingTests Framework FrameworkServer libnode miniaudio)
 target_compile_definitions(FrameworkClientScriptingTests PRIVATE FW_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 
+# The Chat and Discord builtins of a client reach their services through the client instance, which builds
+# on Windows only and with the whole of FrameworkClient. client_doubles has a stand-in for it, ahead of the
+# framework on the include path, and the functions of the chat box and of the Discord wrapper that the
+# builtins call. The activity type of Discord is plain data and is built from the vendored source.
+target_include_directories(FrameworkClientScriptingTests BEFORE PRIVATE client_doubles)
+target_include_directories(FrameworkClientScriptingTests PRIVATE ../../vendors/discord/src)
+target_sources(FrameworkClientScriptingTests PRIVATE
+    client_doubles/client_doubles.cpp
+    ../framework/src/integrations/client/scripting/builtins/chat.cpp
+    ../framework/src/integrations/client/scripting/builtins/discord.cpp
+    ../../vendors/discord/src/types.cpp)
+# Nametags reads the switches of the ImGui nametag widget, so it is tested where the headers of ImGui are:
+# with the Windows dependencies, or wherever FW_TEST_IMGUI_INCLUDE_DIR names a copy of them.
+find_path(FW_TEST_IMGUI_INCLUDE_DIR imgui.h)
+if(FW_TEST_IMGUI_INCLUDE_DIR)
+    target_sources(FrameworkClientScriptingTests PRIVATE ../framework/src/integrations/client/scripting/builtins/nametags.cpp)
+    target_include_directories(FrameworkClientScriptingTests PRIVATE "${FW_TEST_IMGUI_INCLUDE_DIR}")
+    target_compile_definitions(FrameworkClientScriptingTests PRIVATE FW_TEST_CLIENT_NAMETAGS=1)
+endif()
+
 # The SDK smoke test: install this build into a prefix, then configure and build a consumer project
 # against that prefix alone (code/tests/sdk-consumer), the way a mod does through
 # cmake/FrameworkBootstrap.cmake. The vcpkg checkout is shared so the consumer's manifest install

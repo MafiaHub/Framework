@@ -10,7 +10,12 @@
 
 #include "scripting_catalog_golden_ut.h"
 
+#include "integrations/client/scripting/builtins/chat.h"
+#include "integrations/client/scripting/builtins/discord.h"
 #include "integrations/client/scripting/builtins/keybinds.h"
+#ifdef FW_TEST_CLIENT_NAMETAGS
+#include "integrations/client/scripting/builtins/nametags.h"
+#endif
 #include "integrations/client/scripting/builtins/voice.h"
 #include "scripting/engine_scope.h"
 #include "scripting/resource/resource_manager.h"
@@ -25,8 +30,9 @@
 
 // The catalog the client-only builtins record, held against a committed fixture as the server catalog is
 // (scripting_catalog_golden_ut.h): it is what the TypeScript declarations of a client are generated from. The
-// fixture holds the builtins that build on every host, and was written from the hand-written ones, before
-// their port.
+// fixture was written from the hand-written builtins, before their port. Nametags needs the headers of ImGui:
+// a binary built without them (FW_TEST_CLIENT_NAMETAGS) leaves it out of the comparison, and cannot rewrite
+// the fixture.
 //
 // A deliberate change is taken into the fixture by running the module once with FW_UPDATE_GOLDEN=1.
 namespace ClientCatalogGolden {
@@ -34,7 +40,8 @@ namespace ClientCatalogGolden {
         return std::string(FW_TEST_FIXTURES_DIR) + "/scripting_catalog_client.json";
     }
 
-    // What Key and Voice record in the one isolate of a client, normalised. Null when the engine does not start.
+    // What the client-only builtins record in the one isolate of a client, in the order ClientScriptingModule
+    // registers them, normalised. Null when the engine does not start.
     inline nlohmann::json BuildCatalog() {
         using namespace Framework::Scripting;
         namespace ClientBuiltins = Framework::Integrations::Client::Scripting::Builtins;
@@ -53,10 +60,16 @@ namespace ClientCatalogGolden {
                 SetScriptingCatalog(scope.Isolate(), "golden-client");
                 SetScriptingEnvironment(scope.Isolate(), /*isClient*/ true);
                 ClientBuiltins::Keybinds::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
+                ClientBuiltins::Chat::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
+                ClientBuiltins::Discord::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
                 ClientBuiltins::Voice::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
+#ifdef FW_TEST_CLIENT_NAMETAGS
+                ClientBuiltins::Nametags::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
+#endif
                 catalog = nlohmann::json::parse(v8pp::metadata::to_json(GetScriptingCatalog(scope.Isolate())), nullptr, /*allow_exceptions*/ false);
             }
             ClientBuiltins::Keybinds::Shutdown();
+            ClientBuiltins::Discord::Shutdown();
         }
         engine.Shutdown();
         return ScriptingCatalogGolden::Normalise(std::move(catalog));
@@ -67,16 +80,38 @@ namespace ClientCatalogGolden {
         if (!input) {
             return nullptr;
         }
-        return ScriptingCatalogGolden::Normalise(nlohmann::json::parse(input, nullptr, /*allow_exceptions*/ false));
+        nlohmann::json fixture = ScriptingCatalogGolden::Normalise(nlohmann::json::parse(input, nullptr, /*allow_exceptions*/ false));
+#ifndef FW_TEST_CLIENT_NAMETAGS
+        if (fixture.is_object() && fixture["symbols"].is_array()) {
+            nlohmann::json &symbols = fixture["symbols"];
+            for (auto symbol = symbols.begin(); symbol != symbols.end();) {
+                symbol = symbol->value("name", std::string()) == "Nametags" ? symbols.erase(symbol) : symbol + 1;
+            }
+        }
+#endif
+        return fixture;
+    }
+
+    // Whether this binary has every builtin the fixture holds.
+    inline bool HasEveryBuiltin() {
+#ifdef FW_TEST_CLIENT_NAMETAGS
+        return true;
+#else
+        return false;
+#endif
     }
 } // namespace ClientCatalogGolden
 
 MODULE(client_catalog_golden, {
-    IT("the catalog of Key and Voice matches the committed fixture", {
+    IT("the catalog of the client builtins matches the committed fixture", {
         const nlohmann::json catalog = ClientCatalogGolden::BuildCatalog();
         EQUALS(catalog.is_object(), true);
 
         if (ScriptingCatalogGolden::UpdateRequested()) {
+            // A binary without Nametags would write a fixture without it.
+            EQUALS(ClientCatalogGolden::HasEveryBuiltin(), true);
+        }
+        if (ScriptingCatalogGolden::UpdateRequested() && ClientCatalogGolden::HasEveryBuiltin()) {
             std::ofstream output(ClientCatalogGolden::FixturePath(), std::ios::binary | std::ios::trunc);
             output << catalog.dump(2) << '\n';
             EQUALS(static_cast<bool>(output), true);
@@ -85,8 +120,9 @@ MODULE(client_catalog_golden, {
         const nlohmann::json fixture = ClientCatalogGolden::ReadFixture();
         EQUALS(fixture.is_object(), true);
         EQUALS(ScriptingCatalogGolden::Difference(fixture, catalog), "");
-        for (const char *name : {"Key", "Voice", "EventMap"}) {
+        for (const char *name : {"Key", "Chat", "Discord", "Voice", "EventMap"}) {
             EQUALS(ScriptingCatalogGolden::HasSymbol(fixture, name), true);
         }
+        EQUALS(ScriptingCatalogGolden::HasSymbol(fixture, "Nametags"), ClientCatalogGolden::HasEveryBuiltin());
     });
 })

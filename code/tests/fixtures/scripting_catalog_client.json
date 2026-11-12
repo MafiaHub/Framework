@@ -4,11 +4,878 @@
   "symbols": [
     {
       "bases": [],
+      "description": "Client chat transport and native chat-box controls.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Closes the native chat input field without submitting its contents.",
+          "examples": [],
+          "name": "close",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether the native chat input field is active.",
+          "examples": [],
+          "name": "isOpen",
+          "parameters": [],
+          "returns": {
+            "description": "True while chat is capturing keyboard input.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether the native chat overlay is visible.",
+          "examples": [],
+          "name": "isUIVisible",
+          "parameters": [],
+          "returns": {
+            "description": "True when the overlay is currently rendered.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Opens and focuses the native chat input field.",
+          "examples": [],
+          "name": "open",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sends a chat line to the server, bypassing the chatSend event; incoming lines arrive through the reserved chatMessage event.",
+          "examples": [],
+          "name": "send",
+          "parameters": [
+            {
+              "description": "Player-authored chat text sent to the server.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Changes visibility of the native chat overlay without opening its input field. Hidden, the overlay also stops opening on its key. The choice holds for the rest of the session and resets to visible on disconnect, so a resource that replaces the chat calls this once at startup.",
+          "examples": [],
+          "name": "setUIVisible",
+          "parameters": [
+            {
+              "description": "Whether the chat overlay is rendered.",
+              "name": "visible",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Chat",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "Client-only Discord rich-presence composer exposed as the global Discord; setters stage values until update or setPresence publishes them.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Clears what scripts published and resets staged state.",
+          "examples": [],
+          "name": "clear",
+          "parameters": [],
+          "returns": {
+            "description": "True when dispatched; false when Discord is unavailable.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Returns the signed-in Discord user's snowflake.",
+          "examples": [],
+          "name": "getUserId",
+          "parameters": [],
+          "returns": {
+            "description": "User ID string, or an empty string until available.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Returns the signed-in Discord user's username.",
+          "examples": [],
+          "name": "getUsername",
+          "parameters": [],
+          "returns": {
+            "description": "Username string, or an empty string until available.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether Discord is connected and can publish presence.",
+          "examples": [],
+          "name": "isAvailable",
+          "parameters": [],
+          "returns": {
+            "description": "True when rich presence is initialized.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Resets staged activity fields without publishing a Discord update.",
+          "examples": [],
+          "name": "reset",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages multiple Discord image fields at once.",
+          "examples": [],
+          "name": "setAssets",
+          "parameters": [
+            {
+              "description": "Asset keys and tooltips to merge into the staged activity.",
+              "name": "assets",
+              "type": {
+                "cppName": "",
+                "name": "{ largeImage?: string; largeText?: string; smallImage?: string; smallText?: string }",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the top presence line.",
+          "examples": [],
+          "name": "setDetails",
+          "parameters": [
+            {
+              "description": "the top presence line.",
+              "name": "details",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the countdown Unix timestamp in seconds; zero clears it.",
+          "examples": [],
+          "name": "setEndTimestamp",
+          "parameters": [
+            {
+              "description": "the countdown Unix timestamp in seconds; zero clears it.",
+              "name": "seconds",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages whether the activity represents an instanced session.",
+          "examples": [],
+          "name": "setInstance",
+          "parameters": [
+            {
+              "description": "whether the activity represents an instanced session.",
+              "name": "instance",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the opaque join secret that enables invitations.",
+          "examples": [],
+          "name": "setJoinSecret",
+          "parameters": [
+            {
+              "description": "the opaque join secret that enables invitations.",
+              "name": "secret",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the large image asset key.",
+          "examples": [],
+          "name": "setLargeImage",
+          "parameters": [
+            {
+              "description": "the large image asset key.",
+              "name": "assetKey",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the large image tooltip.",
+          "examples": [],
+          "name": "setLargeText",
+          "parameters": [
+            {
+              "description": "the large image tooltip.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the opaque match secret.",
+          "examples": [],
+          "name": "setMatchSecret",
+          "parameters": [
+            {
+              "description": "the opaque match secret.",
+              "name": "secret",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the activity name.",
+          "examples": [],
+          "name": "setName",
+          "parameters": [
+            {
+              "description": "the activity name.",
+              "name": "name",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages multiple Discord party fields at once.",
+          "examples": [],
+          "name": "setParty",
+          "parameters": [
+            {
+              "description": "Party fields to merge into the staged activity.",
+              "name": "party",
+              "type": {
+                "cppName": "",
+                "name": "{ id?: string; size?: [number, number]; privacy?: \"private\" | \"public\" | number }",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the party grouping identifier.",
+          "examples": [],
+          "name": "setPartyId",
+          "parameters": [
+            {
+              "description": "the party grouping identifier.",
+              "name": "id",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the party join-privacy name or numeric enum value.",
+          "examples": [],
+          "name": "setPartyPrivacy",
+          "parameters": [
+            {
+              "description": "the party join-privacy name or numeric enum value.",
+              "name": "privacy",
+              "type": {
+                "cppName": "",
+                "name": "\"private\" | \"public\" | number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the party's current and maximum size.",
+          "examples": [],
+          "name": "setPartySize",
+          "parameters": [
+            {
+              "description": "Current party member count.",
+              "name": "current",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Maximum party capacity.",
+              "name": "max",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Merges a complete option batch into the staged activity and publishes it immediately.",
+          "examples": [],
+          "name": "setPresence",
+          "parameters": [
+            {
+              "description": "Batch of supported activity, timestamp, asset, party, secret, instance, and platform fields.",
+              "name": "options",
+              "type": {
+                "cppName": "",
+                "name": "Record<string, unknown>",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the update was dispatched; false when Discord is unavailable.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages multiple Discord activity secrets at once.",
+          "examples": [],
+          "name": "setSecrets",
+          "parameters": [
+            {
+              "description": "Opaque secrets to merge into the staged activity.",
+              "name": "secrets",
+              "type": {
+                "cppName": "",
+                "name": "{ match?: string; join?: string; spectate?: string }",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the small image asset key.",
+          "examples": [],
+          "name": "setSmallImage",
+          "parameters": [
+            {
+              "description": "the small image asset key.",
+              "name": "assetKey",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the small image tooltip.",
+          "examples": [],
+          "name": "setSmallText",
+          "parameters": [
+            {
+              "description": "the small image tooltip.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the opaque spectate secret.",
+          "examples": [],
+          "name": "setSpectateSecret",
+          "parameters": [
+            {
+              "description": "the opaque spectate secret.",
+              "name": "secret",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the elapsed-time Unix timestamp in seconds; zero clears it.",
+          "examples": [],
+          "name": "setStartTimestamp",
+          "parameters": [
+            {
+              "description": "the elapsed-time Unix timestamp in seconds; zero clears it.",
+              "name": "seconds",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the bottom presence line.",
+          "examples": [],
+          "name": "setState",
+          "parameters": [
+            {
+              "description": "the bottom presence line.",
+              "name": "state",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the supported-platform bitmask: Desktop 1, Android 2, and iOS 4.",
+          "examples": [],
+          "name": "setSupportedPlatforms",
+          "parameters": [
+            {
+              "description": "the supported-platform bitmask: Desktop 1, Android 2, and iOS 4.",
+              "name": "flags",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the Discord activity verb or numeric enum value.",
+          "examples": [],
+          "name": "setType",
+          "parameters": [
+            {
+              "description": "the Discord activity verb or numeric enum value.",
+              "name": "type",
+              "type": {
+                "cppName": "",
+                "name": "\"playing\" | \"streaming\" | \"listening\" | \"watching\" | number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Publishes the currently staged activity as one rate-limited Discord update.",
+          "examples": [],
+          "name": "update",
+          "parameters": [],
+          "returns": {
+            "description": "True when dispatched; false when Discord is unavailable.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Discord",
+      "properties": []
+    },
+    {
+      "bases": [],
       "description": "",
       "functions": [],
       "kind": "dataType",
       "name": "EventMap",
       "properties": [
+        {
+          "description": "Dispatched for every chat line the server sends. An empty author is a notice line; color is packed 0xRRGGBBAA, 0 for the chat box's default.",
+          "name": "chatMessage",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[message: { author: string; text: string; color: number }]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched synchronously for a line the player typed into the chat box, before it is sent. A handler returning false, not a Promise of it, blocks it; Chat.send does not raise this.",
+          "name": "chatSend",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[text: string]",
+            "optional": false
+          }
+        },
         {
           "description": "Dispatched when the local player starts speaking, as isTalking turns true.",
           "name": "voiceStart",
@@ -184,6 +1051,245 @@
       ],
       "kind": "globalObject",
       "name": "Key",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "The local player's view of the nametags above players: whether they draw at all, whether they carry a health bar, and whether their own is shown.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Removes an entity's label before its duration elapses.",
+          "examples": [],
+          "name": "clearLabel",
+          "parameters": [
+            {
+              "description": "Network id of the entity whose label to remove.",
+              "name": "entityId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Removes every label this player is drawing.",
+          "examples": [],
+          "name": "clearLabels",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether this player draws health bars on nametags.",
+          "examples": [],
+          "name": "isHealthVisible",
+          "parameters": [],
+          "returns": {
+            "description": "True unless they were hidden locally.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether this player draws their own nametag.",
+          "examples": [],
+          "name": "isSelfVisible",
+          "parameters": [],
+          "returns": {
+            "description": "False unless it was turned on locally.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether this player draws nametags.",
+          "examples": [],
+          "name": "isVisible",
+          "parameters": [],
+          "returns": {
+            "description": "True unless they were hidden locally.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Shows or hides the health bar on all nametags for this player only, leaving the names alone.",
+          "examples": [],
+          "name": "setHealthVisible",
+          "parameters": [
+            {
+              "description": "True to draw the health bar under each name, false to hide it.",
+              "name": "visible",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Hangs a transient line on that entity's nametag, above its name -- speech, an emote, a status. It follows the body, fades with distance and hides behind cover exactly as the name does. Local to this player: the line is not replicated, and a nametag hidden with Nametags.setVisible draws neither. Player.setNametagText is the server-side counterpart for a lasting name.",
+          "examples": [],
+          "name": "setLabel",
+          "parameters": [
+            {
+              "description": "Network id of the entity to label (server-side `player.id`).",
+              "name": "entityId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Label text; '\\n' splits lines. Empty clears the label.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "How long to hold it (default 6000). <= 0 holds until cleared.",
+              "name": "durationMs",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": true
+              }
+            },
+            {
+              "description": "Packed 0xAARRGGBB; 0 (default) uses the nametag's own colour.",
+              "name": "color",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Shows or hides this player's own nametag, drawn as others see it, with any label set on their own id.",
+          "examples": [],
+          "name": "setSelfVisible",
+          "parameters": [
+            {
+              "description": "True to draw this player's own nametag, false (default) to leave it off.",
+              "name": "visible",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Shows or hides all nametags for this player only. A player hidden with Player.setNametagVisible stays hidden either way.",
+          "examples": [],
+          "name": "setVisible",
+          "parameters": [
+            {
+              "description": "True to draw nametags, false to hide every one of them.",
+              "name": "visible",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Nametags",
       "properties": []
     },
     {
