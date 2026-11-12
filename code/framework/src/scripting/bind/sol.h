@@ -24,6 +24,10 @@
 // release build read a script's values the same way.
 #define SOL_ALL_SAFETIES_ON 1
 
+// Except the getters: with the safety on sol::stack::get checks the value again, and every caller here has checked
+// it, since LuaConvert::Get has Is for precondition.
+#define SOL_SAFE_GETTER 0
+
 // The safeties also write every error to std::cerr and to a default traceback handler; the host has its own.
 #define SOL_PRINT_ERRORS 0
 

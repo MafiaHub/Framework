@@ -13,65 +13,79 @@
 #include "../builtins/vector3.h"
 #include "../builtins/vector4.h"
 
-namespace Framework::Scripting::Bind {
-    bool LuaConvert<glm::vec2>::Is(lua_State *L, int index) {
+namespace Framework::Scripting::Bind::Detail {
+    bool LuaIsGlm(sol::types<glm::vec2>, lua_State *L, int index) {
         return LuaConvert<Builtins::Vector2>::Is(L, index);
     }
 
-    glm::vec2 LuaConvert<glm::vec2>::Get(lua_State *L, int index) {
-        return LuaConvert<const Builtins::Vector2 &>::Get(L, index).vec();
-    }
-
-    void LuaConvert<glm::vec2>::Push(lua_State *L, const glm::vec2 &value) {
-        LuaConvert<Builtins::Vector2>::Push(L, Builtins::Vector2(value));
-    }
-
-    const char *LuaConvert<glm::vec2>::Expected() {
-        return LuaConvert<Builtins::Vector2>::Expected();
-    }
-
-    bool LuaConvert<glm::vec3>::Is(lua_State *L, int index) {
+    bool LuaIsGlm(sol::types<glm::vec3>, lua_State *L, int index) {
         return LuaConvert<Builtins::Vector3>::Is(L, index);
     }
 
-    glm::vec3 LuaConvert<glm::vec3>::Get(lua_State *L, int index) {
-        return LuaConvert<const Builtins::Vector3 &>::Get(L, index).vec();
+    bool LuaIsGlm(sol::types<glm::vec4>, lua_State *L, int index) {
+        return LuaConvert<Builtins::Vector4>::Is(L, index);
     }
 
-    void LuaConvert<glm::vec3>::Push(lua_State *L, const glm::vec3 &value) {
-        LuaConvert<Builtins::Vector3>::Push(L, Builtins::Vector3(value));
+    bool LuaIsGlm(sol::types<glm::quat>, lua_State *L, int index) {
+        return LuaConvert<Builtins::Quaternion>::Is(L, index);
+    }
+} // namespace Framework::Scripting::Bind::Detail
+
+namespace glm {
+    using namespace Framework::Scripting;
+
+    vec2 sol_lua_get(sol::types<vec2>, lua_State *L, int index, sol::stack::record &tracking) {
+        tracking.use(1);
+        return Bind::LuaConvert<const Builtins::Vector2 &>::Get(L, index).vec();
+    }
+
+    vec3 sol_lua_get(sol::types<vec3>, lua_State *L, int index, sol::stack::record &tracking) {
+        tracking.use(1);
+        return Bind::LuaConvert<const Builtins::Vector3 &>::Get(L, index).vec();
+    }
+
+    vec4 sol_lua_get(sol::types<vec4>, lua_State *L, int index, sol::stack::record &tracking) {
+        tracking.use(1);
+        return Bind::LuaConvert<const Builtins::Vector4 &>::Get(L, index).vec();
+    }
+
+    quat sol_lua_get(sol::types<quat>, lua_State *L, int index, sol::stack::record &tracking) {
+        tracking.use(1);
+        return Bind::LuaConvert<const Builtins::Quaternion &>::Get(L, index).quat();
+    }
+
+    int sol_lua_push(lua_State *L, const vec2 &value) {
+        Bind::LuaConvert<Builtins::Vector2>::Push(L, Builtins::Vector2(value));
+        return 1;
+    }
+
+    int sol_lua_push(lua_State *L, const vec3 &value) {
+        Bind::LuaConvert<Builtins::Vector3>::Push(L, Builtins::Vector3(value));
+        return 1;
+    }
+
+    int sol_lua_push(lua_State *L, const vec4 &value) {
+        Bind::LuaConvert<Builtins::Vector4>::Push(L, Builtins::Vector4(value));
+        return 1;
+    }
+
+    int sol_lua_push(lua_State *L, const quat &value) {
+        Bind::LuaConvert<Builtins::Quaternion>::Push(L, Builtins::Quaternion(value));
+        return 1;
+    }
+} // namespace glm
+
+namespace Framework::Scripting::Bind {
+    const char *LuaConvert<glm::vec2>::Expected() {
+        return LuaConvert<Builtins::Vector2>::Expected();
     }
 
     const char *LuaConvert<glm::vec3>::Expected() {
         return LuaConvert<Builtins::Vector3>::Expected();
     }
 
-    bool LuaConvert<glm::vec4>::Is(lua_State *L, int index) {
-        return LuaConvert<Builtins::Vector4>::Is(L, index);
-    }
-
-    glm::vec4 LuaConvert<glm::vec4>::Get(lua_State *L, int index) {
-        return LuaConvert<const Builtins::Vector4 &>::Get(L, index).vec();
-    }
-
-    void LuaConvert<glm::vec4>::Push(lua_State *L, const glm::vec4 &value) {
-        LuaConvert<Builtins::Vector4>::Push(L, Builtins::Vector4(value));
-    }
-
     const char *LuaConvert<glm::vec4>::Expected() {
         return LuaConvert<Builtins::Vector4>::Expected();
-    }
-
-    bool LuaConvert<glm::quat>::Is(lua_State *L, int index) {
-        return LuaConvert<Builtins::Quaternion>::Is(L, index);
-    }
-
-    glm::quat LuaConvert<glm::quat>::Get(lua_State *L, int index) {
-        return LuaConvert<const Builtins::Quaternion &>::Get(L, index).quat();
-    }
-
-    void LuaConvert<glm::quat>::Push(lua_State *L, const glm::quat &value) {
-        LuaConvert<Builtins::Quaternion>::Push(L, Builtins::Quaternion(value));
     }
 
     const char *LuaConvert<glm::quat>::Expected() {

@@ -9,6 +9,7 @@
 #pragma once
 
 #include "lua_class.h"
+#include "sol.h"
 #include "types.h"
 
 #include <lauxlib.h>
@@ -43,6 +44,11 @@ namespace Framework::Scripting::Bind {
     //
     // Is, Get and Push can raise a Lua error, when the stack cannot grow or Lua runs out of memory, and Get can
     // throw std::bad_alloc for a T that allocates.
+    //
+    // The converters of the types sol2 reads exactly as the type model says rest on sol::stack (Detail::SolConvert).
+    // The others are written here, each for a rule sol does not have: the range of an integer and a float with an
+    // integral value, the narrowing of a float, a sequence without a hole, a bound object (sol_smoke_ut.h pins what
+    // sol does instead).
     template <typename T, typename Enable = void>
     struct LuaConvert;
 
@@ -74,6 +80,23 @@ namespace Framework::Scripting::Bind {
             ::new (LuaAllocateObject(L, LuaClassOf<T>::definition, ScriptClassName<T>::value, sizeof(T))) T(std::forward<Args>(args)...);
             lua_setmetatable(L, -2);
         }
+
+        // Is, Get and Push of a type sol::stack reads and pushes as the type model says. sol checks without
+        // converting and reports nothing here: sol::no_panic leaves the failure to the caller.
+        template <typename T>
+        struct SolConvert {
+            static bool Is(lua_State *L, int index) {
+                return sol::stack::check<T>(L, index, sol::no_panic);
+            }
+
+            static T Get(lua_State *L, int index) {
+                return sol::stack::get<T>(L, index);
+            }
+
+            static void Push(lua_State *L, const T &value) {
+                sol::stack::push<T>(L, value);
+            }
+        };
 
         template <typename T>
         inline constexpr bool IsUnqualified = std::is_same_v<T, std::remove_cv_t<T>>;
@@ -131,19 +154,7 @@ namespace Framework::Scripting::Bind {
     };
 
     template <>
-    struct LuaConvert<bool> final {
-        static bool Is(lua_State *L, int index) {
-            return lua_type(L, index) == LUA_TBOOLEAN;
-        }
-
-        static bool Get(lua_State *L, int index) {
-            return lua_toboolean(L, index) != 0;
-        }
-
-        static void Push(lua_State *L, const bool &value) {
-            lua_pushboolean(L, value ? 1 : 0);
-        }
-
+    struct LuaConvert<bool> final: Detail::SolConvert<bool> {
         static const char *Expected() {
             return "boolean";
         }
@@ -191,19 +202,19 @@ namespace Framework::Scripting::Bind {
     };
 
     // An integer or a float is accepted, a float is pushed. A number beyond the range of `float` is read as an
-    // infinity.
+    // infinity. sol reads and pushes the lua_Number; the narrowing is done here, where sol casts.
     template <typename T>
     struct LuaConvert<T, std::enable_if_t<Detail::IsUnqualified<T> && std::is_floating_point_v<T>>> final {
         static bool Is(lua_State *L, int index) {
-            return lua_type(L, index) == LUA_TNUMBER;
+            return Detail::SolConvert<lua_Number>::Is(L, index);
         }
 
         static T Get(lua_State *L, int index) {
-            return Detail::NarrowFloat<T>(lua_tonumberx(L, index, nullptr));
+            return Detail::NarrowFloat<T>(Detail::SolConvert<lua_Number>::Get(L, index));
         }
 
         static void Push(lua_State *L, const T &value) {
-            lua_pushnumber(L, Detail::NarrowFloat<lua_Number>(value));
+            Detail::SolConvert<lua_Number>::Push(L, Detail::NarrowFloat<lua_Number>(value));
         }
 
         static const char *Expected() {
@@ -211,23 +222,9 @@ namespace Framework::Scripting::Bind {
         }
     };
 
-    // A string only. Lua would convert a number, in place, so the type is checked rather than lua_isstring.
+    // A string only: sol checks the type, where lua_isstring would take a number and convert it in place.
     template <>
-    struct LuaConvert<std::string> final {
-        static bool Is(lua_State *L, int index) {
-            return lua_type(L, index) == LUA_TSTRING;
-        }
-
-        static std::string Get(lua_State *L, int index) {
-            size_t length    = 0;
-            const char *text = lua_tolstring(L, index, &length);
-            return std::string(text, length);
-        }
-
-        static void Push(lua_State *L, const std::string &value) {
-            lua_pushlstring(L, value.data(), value.size());
-        }
-
+    struct LuaConvert<std::string> final: Detail::SolConvert<std::string> {
         static const char *Expected() {
             return "string";
         }
@@ -235,21 +232,7 @@ namespace Framework::Scripting::Bind {
 
     // Get returns a view into the Lua string, valid while the value it was read from stays on the stack.
     template <>
-    struct LuaConvert<std::string_view> final {
-        static bool Is(lua_State *L, int index) {
-            return lua_type(L, index) == LUA_TSTRING;
-        }
-
-        static std::string_view Get(lua_State *L, int index) {
-            size_t length    = 0;
-            const char *text = lua_tolstring(L, index, &length);
-            return std::string_view(text, length);
-        }
-
-        static void Push(lua_State *L, const std::string_view &value) {
-            lua_pushlstring(L, value.data(), value.size());
-        }
-
+    struct LuaConvert<std::string_view> final: Detail::SolConvert<std::string_view> {
         static const char *Expected() {
             return "string";
         }
@@ -258,19 +241,7 @@ namespace Framework::Scripting::Bind {
     // Get returns the Lua string itself, valid while the value it was read from stays on the stack. It ends at the
     // first zero the script put in it. A null pointer pushes nil.
     template <>
-    struct LuaConvert<const char *> final {
-        static bool Is(lua_State *L, int index) {
-            return lua_type(L, index) == LUA_TSTRING;
-        }
-
-        static const char *Get(lua_State *L, int index) {
-            return lua_tolstring(L, index, nullptr);
-        }
-
-        static void Push(lua_State *L, const char *const &value) {
-            lua_pushstring(L, value);
-        }
-
+    struct LuaConvert<const char *> final: Detail::SolConvert<const char *> {
         static const char *Expected() {
             return "string";
         }
