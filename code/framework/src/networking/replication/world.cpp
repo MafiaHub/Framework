@@ -25,6 +25,9 @@ namespace Framework::Networking::Replication {
             std::shared_ptr<Detail::WorldEntitySlot> slot;
         };
         thread_local std::vector<Doomed> t_doomed;
+        // Set while this thread tears one down: a handle the teardown takes and releases must not
+        // start the next teardown inside it.
+        thread_local bool t_draining = false;
 
         // Locks are ordered within one call only, so a second call could wait on a thread that waits
         // on this one. Fatal in every build type: a deadlock on a live server is worse.
@@ -86,7 +89,7 @@ namespace Framework::Networking::Replication {
                     continue;
                 }
                 const auto it = _slots.find(request.id);
-                if (it == _slots.end() || it->second->entity->GetTypeId() != request.typeId) {
+                if (it == _slots.end() || (!request.anyType && it->second->entity->GetTypeId() != request.typeId)) {
                     continue;
                 }
                 request.lock = it->second.get();
@@ -151,12 +154,17 @@ namespace Framework::Networking::Replication {
 
     void World::FinishDoomed() {
         // One at a time and off the list first: a teardown may take and release handles, which
-        // comes back here.
+        // comes back here and leaves the rest to this loop.
+        if (t_draining) {
+            return;
+        }
+        t_draining = true;
         while (t_held == 0 && !t_doomed.empty()) {
             const Doomed next = std::move(t_doomed.front());
             t_doomed.erase(t_doomed.begin());
             next.world->Teardown(next.slot);
         }
+        t_draining = false;
     }
 
     void World::Teardown(const std::shared_ptr<Detail::WorldEntitySlot> &slot) {
@@ -183,34 +191,42 @@ namespace Framework::Networking::Replication {
     }
 
     bool World::Destroy(uint64_t id) {
-        std::shared_ptr<Detail::WorldEntitySlot> slot;
-        bool unheld = false;
-        {
-            const std::lock_guard guard(_slotsMutex);
-            const auto it = _slots.find(id);
-            if (it == _slots.end()) {
-                return false;
-            }
-            slot = std::move(it->second);
-            _slots.erase(it);
-            slot->destroyed = true;
-            _doomed.emplace(id, slot);
-            _doomedCount.fetch_add(1, std::memory_order_release);
-            unheld = slot->holders == 0;
-        }
+        std::shared_ptr<Detail::WorldEntitySlot> unheld;
+        const Doom doom = MarkDoomed(id, unheld);
         if (unheld) {
-            t_doomed.push_back({this, std::move(slot)});
-            FinishDoomed();
+            TeardownUnheld(std::move(unheld));
         }
-        return true;
+        return doom == Doom::Marked;
     }
 
-    std::vector<uint64_t> World::IdsOfType(uint32_t typeId) {
+    World::Doom World::MarkDoomed(uint64_t id, std::shared_ptr<Detail::WorldEntitySlot> &unheld) {
+        const std::lock_guard guard(_slotsMutex);
+        const auto it = _slots.find(id);
+        if (it == _slots.end()) {
+            return _doomed.find(id) != _doomed.end() ? Doom::Pending : Doom::Unknown;
+        }
+        std::shared_ptr<Detail::WorldEntitySlot> slot = std::move(it->second);
+        _slots.erase(it);
+        slot->destroyed = true;
+        _doomed.emplace(id, slot);
+        _doomedCount.fetch_add(1, std::memory_order_release);
+        if (slot->holders == 0) {
+            unheld = std::move(slot);
+        }
+        return Doom::Marked;
+    }
+
+    void World::TeardownUnheld(std::shared_ptr<Detail::WorldEntitySlot> slot) {
+        t_doomed.push_back({this, std::move(slot)});
+        FinishDoomed();
+    }
+
+    std::vector<uint64_t> World::IdsOfType(uint32_t typeId, bool anyType) {
         std::vector<uint64_t> ids;
         {
             const std::lock_guard guard(_slotsMutex);
             for (const auto &[id, slot] : _slots) {
-                if (slot->entity->GetTypeId() == typeId) {
+                if (anyType || slot->entity->GetTypeId() == typeId) {
                     ids.push_back(id);
                 }
             }

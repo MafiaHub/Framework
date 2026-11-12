@@ -398,6 +398,9 @@ namespace Framework::Networking::Replication {
         // can be handed out again. From DestroyEntity, and from ~NetworkEntity for any other way out.
         void ForgetEntity(NetworkEntity *entity);
         void ForgetSlot(uint32_t slot);
+        // Server: the owner's destruction of its entity, already accepted. True once the entity is
+        // gone; false when it was on its way out already, or waits on a handle.
+        bool DestroyByOwner(NetworkEntity *entity, MafiaNet::Connection_RM3 *source);
         // What DestroyEntity ends in, with nothing left holding the entity.
         void TeardownEntity(NetworkEntity *entity);
         // Destroyed through the world and waiting on a handle to be torn down.

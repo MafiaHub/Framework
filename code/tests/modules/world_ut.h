@@ -419,6 +419,92 @@ MODULE(world, {
         EQUALS(handle->steps, 5);
     });
 
+    IT("finishes one teardown before starting the next when its callback takes a handle", {
+        Fixture fixture;
+        World &world     = fixture.world;
+        const uint64_t a = fixture.Make<Walker>();
+        const uint64_t b = fixture.Make<Walker>();
+        const uint64_t c = fixture.Make<Prop>();
+        int tornDown     = 0;
+        int inside       = 0;
+        int insideAtMost = 0;
+        fixture.manager->SetOnEntityDestroyed([&](uint64_t) {
+            ++tornDown;
+            insideAtMost = std::max(insideAtMost, ++inside);
+            {
+                // Releasing this must leave the entity still queued to the loop that called here.
+                const Ref<Prop> other = world.Write<Prop>(c);
+                other->uses++;
+            }
+            --inside;
+        });
+        {
+            auto [first, second] = world.Write<Walker, Walker>(a, b);
+            EQUALS(world.Destroy(a), true);
+            EQUALS(world.Destroy(b), true);
+            EQUALS(tornDown, 0);
+        }
+        EQUALS(tornDown, 2);
+        EQUALS(insideAtMost, 1);
+        EQUALS(world.Read<Prop>(c)->uses, 2);
+    });
+
+    IT("refuses to destroy an entity from inside its creation callback", {
+        Fixture fixture;
+        World &world   = fixture.world;
+        bool destroyed = true;
+        int tornDown   = 0;
+        fixture.manager->SetOnEntityCreated([&](uint64_t id) {
+            destroyed = world.Destroy(id);
+        });
+        fixture.manager->SetOnEntityDestroyed([&](uint64_t) {
+            ++tornDown;
+        });
+        uint64_t id = 0;
+        {
+            const Ref<Walker> created = world.Create<Walker>();
+            EQUALS(static_cast<bool>(created), true);
+            created->steps = 3;
+            id             = created->GetNetworkID();
+        }
+        fixture.manager->SetOnEntityCreated({});
+        EQUALS(destroyed, false);
+        EQUALS(tornDown, 0);
+        EQUALS(world.Read<Walker>(id)->steps, 3);
+    });
+
+    IT("reaches an entity of any type through the base, and creates one by type id", {
+        Fixture fixture;
+        World &world          = fixture.world;
+        const uint64_t walker = fixture.Make<Walker>();
+        const uint64_t prop   = fixture.Make<Prop>();
+        {
+            const Ref<Framework::Networking::Replication::NetworkEntity> any = world.Write<Framework::Networking::Replication::NetworkEntity>(prop);
+            EQUALS(static_cast<bool>(any), true);
+            EQUALS(any->GetNetworkID(), prop);
+        }
+        EQUALS(static_cast<bool>(world.Read<Framework::Networking::Replication::NetworkEntity>(walker + prop + 1)), false);
+        {
+            auto [base, typed] = world.Read<Framework::Networking::Replication::NetworkEntity, Prop>(walker, prop);
+            EQUALS(static_cast<bool>(base), true);
+            EQUALS(static_cast<bool>(typed), true);
+        }
+        int visited = 0;
+        world.ForEach<Framework::Networking::Replication::NetworkEntity>([&](Ref<Framework::Networking::Replication::NetworkEntity> &) {
+            ++visited;
+        });
+        EQUALS(visited, 2);
+
+        uint64_t made = 0;
+        {
+            const Ref<Framework::Networking::Replication::NetworkEntity> created = world.Create(Framework::Networking::Replication::EntityTypeId<Prop>());
+            EQUALS(static_cast<bool>(created), true);
+            made = created->GetNetworkID();
+        }
+        EQUALS(static_cast<bool>(world.Read<Prop>(made)), true);
+        EQUALS(static_cast<bool>(world.Create(0x12345678u)), false);
+    });
+
     IT("counts handles held by the thread", {
         Fixture fixture;
         World &world     = fixture.world;

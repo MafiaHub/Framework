@@ -85,6 +85,8 @@ namespace Framework::Networking::Replication {
 
             NetworkEntity *entity = nullptr;
             void *state           = nullptr;
+            // Any entity type, for a handle on the NetworkEntity base.
+            bool anyType = false;
             // Position in the lock order among requests of the same kind.
             uint64_t order      = 0;
             WorldLockable *lock = nullptr;
@@ -165,7 +167,8 @@ namespace Framework::Networking::Replication {
 
     // Server: how every thread reaches replicated entities, and the mod state registered beside
     // them. A type deriving from NetworkEntity is asked for by network id; any other type is
-    // registered state, of which there is one, asked for without an id.
+    // registered state, of which there is one, asked for without an id. Asking for NetworkEntity
+    // itself gives the entity whatever its type.
     //
     // A thread takes everything it needs in one call. Locks are taken in a fixed order (states as
     // registered, then entities by ascending network id), so two threads asking for the same things
@@ -222,7 +225,7 @@ namespace Framework::Networking::Replication {
         template <typename T>
         void ForEach(fu2::function<void(Ref<T> &)> fn) {
             static_assert(std::is_base_of_v<NetworkEntity, T>, "World::ForEach<T>: T must derive from NetworkEntity");
-            for (const uint64_t id : IdsOfType(EntityTypeId<T>())) {
+            for (const uint64_t id : IdsOfType(TypeOf<T>(), std::is_same_v<T, NetworkEntity>)) {
                 if (Ref<T> entity = Write<T>(id)) {
                     fn(entity);
                 }
@@ -233,10 +236,16 @@ namespace Framework::Networking::Replication {
         // Empty if the type is not registered.
         template <typename T>
         Ref<T> Create() {
-            static_assert(std::is_base_of_v<NetworkEntity, T>, "World::Create<T>: T must derive from NetworkEntity");
+            static_assert(std::is_base_of_v<NetworkEntity, T> && !std::is_same_v<T, NetworkEntity>, "World::Create<T>: T must be a registered entity type");
             Detail::WorldHold hold;
             NetworkEntity *entity = CreateEntity(EntityTypeId<T>(), hold);
             return entity ? Ref<T>(static_cast<T *>(entity), std::move(hold)) : Ref<T>();
+        }
+        // By registered type id, for a type known only at run time.
+        Ref<NetworkEntity> Create(uint32_t typeId) {
+            Detail::WorldHold hold;
+            NetworkEntity *entity = CreateEntity(typeId, hold);
+            return entity ? Ref<NetworkEntity>(entity, std::move(hold)) : Ref<NetworkEntity>();
         }
         // The id stops resolving before this returns, here and through the manager; false if it did
         // not resolve. The entity itself goes once no handle holds it and the thread that finds so
@@ -272,12 +281,24 @@ namespace Framework::Networking::Replication {
             return &key;
         }
 
+        // T's registered id; the base has none and stands for every type.
+        template <typename T>
+        static constexpr uint32_t TypeOf() {
+            if constexpr (std::is_same_v<T, NetworkEntity>) {
+                return 0;
+            }
+            else {
+                return EntityTypeId<T>();
+            }
+        }
+
         template <typename T>
         static Detail::WorldRequest RequestFor(const uint64_t *&nextId) {
             Detail::WorldRequest request;
             if constexpr (std::is_base_of_v<NetworkEntity, T>) {
-                request.typeId = EntityTypeId<T>();
-                request.id     = *nextId++;
+                request.typeId  = TypeOf<T>();
+                request.anyType = std::is_same_v<T, NetworkEntity>;
+                request.id      = *nextId++;
             }
             else {
                 request.isState  = true;
@@ -315,13 +336,24 @@ namespace Framework::Networking::Replication {
 
         // The new entity, held by `hold`; null if the type is unknown.
         NetworkEntity *CreateEntity(uint32_t typeId, Detail::WorldHold &hold);
-        std::vector<uint64_t> IdsOfType(uint32_t typeId);
+        std::vector<uint64_t> IdsOfType(uint32_t typeId, bool anyType);
         void AddState(const void *key, void *object, void (*destroy)(void *));
 
         // From the manager: an entity it created, taken for `hold` if there is one before any other
         // thread can find it, and one deleted by another way than Destroy.
         void Adopt(NetworkEntity *entity, Detail::WorldHold *hold);
         void Forget(NetworkEntity *entity);
+
+        // Destroy in two steps, for a caller with something to do in between. The first answers in
+        // one look whether the id resolved, had been destroyed already and waits on a handle, or
+        // is unknown, and hands back the slot when nothing holds it; the second tears that one down.
+        enum class Doom : uint8_t {
+            Unknown,
+            Pending,
+            Marked
+        };
+        Doom MarkDoomed(uint64_t id, std::shared_ptr<Detail::WorldEntitySlot> &unheld);
+        void TeardownUnheld(std::shared_ptr<Detail::WorldEntitySlot> slot);
 
         // Destroyed, and still to be torn down.
         bool AnyDoomed() const {

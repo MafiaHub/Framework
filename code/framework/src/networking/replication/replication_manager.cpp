@@ -729,11 +729,35 @@ namespace Framework::Networking::Replication {
         }
         // An entity the world knows goes through it, so that a handle held on it stays valid. One
         // already on its way out is left to that.
-        const uint64_t id = entity->GetNetworkID();
-        if (_world.Destroy(id) || _world.IsDoomed(id)) {
-            return;
+        std::shared_ptr<Detail::WorldEntitySlot> unheld;
+        switch (_world.MarkDoomed(entity->GetNetworkID(), unheld)) {
+        case World::Doom::Marked:
+            if (unheld) {
+                _world.TeardownUnheld(std::move(unheld));
+            }
+            break;
+        case World::Doom::Pending: break;
+        case World::Doom::Unknown:
+            // A server entity the world does not know yet is inside its creation callback, with its
+            // creator about to adopt it: that one is refused.
+            if (!_isServer) {
+                TeardownEntity(entity);
+            }
+            break;
         }
-        TeardownEntity(entity);
+    }
+
+    bool ReplicationManager::DestroyByOwner(NetworkEntity *entity, MafiaNet::Connection_RM3 *source) {
+        const uint64_t id = entity->GetNetworkID();
+        std::shared_ptr<Detail::WorldEntitySlot> unheld;
+        if (_world.MarkDoomed(id, unheld) != World::Doom::Marked) {
+            return false;
+        }
+        entity->PreDestruction(source);
+        if (unheld) {
+            _world.TeardownUnheld(std::move(unheld));
+        }
+        return !_world.IsDoomed(id);
     }
 
     void ReplicationManager::TeardownEntity(NetworkEntity *entity) {
