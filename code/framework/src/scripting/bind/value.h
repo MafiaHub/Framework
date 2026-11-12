@@ -238,6 +238,10 @@ namespace Framework::Scripting::Bind {
         // Nil removes the key in Lua and stores undefined in JavaScript. A key that is the decimal text of an
         // integer is written where Get reads it, so what Keys listed is replaced and not doubled; in a Lua table
         // that has neither key yet it becomes an integer key.
+        //
+        // In Lua, a function of another runtime (Call::FromTransfer) that is set in a table can from then on be
+        // called as a method of that table, as one that arrived in a rebuilt object: `t:f(x)` is `t.f(x)`
+        // (LuaNoteHolder, lua_callable.h).
         void Set(std::string_view key, Value value) {
             const Target target = Find();
             if (target.backend != nullptr) {

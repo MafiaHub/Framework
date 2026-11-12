@@ -365,13 +365,16 @@ namespace Framework::Scripting::Bind {
                 const bool hasString = lua_rawget(_L, Index(slot)) != LUA_TNIL;
                 lua_pop(_L, 1);
                 const std::optional<lua_Integer> integer = hasString ? std::nullopt : IntegerKey(Index(slot), key);
+                // A function of another runtime the host puts in a table arrived in it, as one a rebuild put there.
                 if (integer) {
                     Push(Slot(value));
+                    LuaNoteHolder(_L, Index(slot), -1);
                     lua_rawseti(_L, Index(slot), *integer);
                     return;
                 }
                 lua_pushlstring(_L, key.data(), key.size());
                 Push(Slot(value));
+                LuaNoteHolder(_L, Index(slot), -1);
                 lua_rawset(_L, Index(slot));
             }
 

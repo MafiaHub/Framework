@@ -222,6 +222,16 @@ namespace ScriptCallableTest {
                                                },
                                                Doc("Builds the value Stage.give copied.").ReturnType(Type::Any()))
                                            .Function(
+                                               "box",
+                                               [](Call &call) {
+                                                   Bind::Value box = call.NewObject();
+                                                   if (const auto built = call.FromTransfer(Held().value)) {
+                                                       box.Set("item", built.GetValue());
+                                                   }
+                                                   call.Return(box);
+                                               },
+                                               Doc("Builds the value Stage.give copied as the item of a new object.").ReturnType(Type::Any()))
+                                           .Function(
                                                "run",
                                                [](Call &call) {
                                                    // As a builtin that dispatches to a handler does, from inside a script's call.
@@ -1385,6 +1395,10 @@ MODULE(script_callable, {
         stage.Lua("delta", "Stage.give({ count = function(...) return select('#', ...) end })");
         EQUALS(stage.LuaValue("gamma", "(function() local theirs = Stage.take() return theirs:count(1, 2) + theirs.count(1, 2) end)()"), "4");
         EQUALS(stage.LuaValue("delta", "(function() local own = Stage.take() return own:count(1) end)()"), "2");
+
+        // A table a builtin fills itself is one its functions arrived in too.
+        stage.Js("alpha", "Stage.give((...args) => args.length)");
+        EQUALS(stage.LuaValue("gamma", "(function() local box = Stage.box() return box:item(1) + box.item(1) end)()"), "2");
 
         // Remembering the table keeps neither it nor the function.
         EQUALS(stage.Lua("gamma", "probe = setmetatable({}, { __mode = 'k' }) probe[Stage.take()] = true probe[api] = true probe[again] = true"), "");

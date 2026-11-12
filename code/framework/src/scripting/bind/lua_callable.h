@@ -40,7 +40,8 @@ namespace Framework::Scripting::Bind {
     void LuaPushCallable(lua_State *L, const std::shared_ptr<ScriptCallable> &callable);
 
     // Tells the function at `function` that it arrived as a member of the table at `holder`, which is what the
-    // rebuild of a copied object does for the functions in it (LuaTransfer::Rebuild). A function that stands for a
+    // rebuild of a copied object does for the functions in it (LuaTransfer::Rebuild), and Value::Set for one a
+    // builtin puts in a table itself, as Imports.get does. A function that stands for a
     // callable of another runtime then takes a call on that table for a method call: called with the table as
     // its first argument, as `api:method(x)` calls it, it forwards the arguments after it, so `api.method(x)` and
     // `api:method(x)` are the same call. With any other first argument, and in a table it was put in by a
