@@ -130,7 +130,9 @@ A definition also says how its class leaves a runtime (§4.1):
   callable (`Vector3(1, 2, 3)`). The table is read-only.
 - Inheritance: a derived class's metatable chains to its base's methods and properties; a parameter of a
   base type accepts a derived instance (the definition stores the upcast).
-- Instance methods are called with `:`; statics and namespace functions with `.`.
+- Instance methods are called with `:`; statics and namespace functions with `.`. A method or a property
+  called on anything but an object of its class, as a method called with `.` is, raises
+  `bad receiver for 'Class:method' (Class expected, got Y)`, whether it is typed or a context function.
 - A wrong argument type or count raises `bad argument #n to 'Class:method' (X expected, got Y)` /
   `wrong number of arguments to 'Class:method'`. A C++ exception from the implementation becomes a Lua
   error carrying `what()`. A thunk catches `std::exception` only, never Lua's own unwinding, and raises
@@ -310,7 +312,9 @@ says `Language::Lua`; only one that says `Language::JavaScript` may be taken for
 ### 1.5 Error conventions
 
 `scripting/builtins/README.md` keeps deciding which failure throws. In Lua a TypeError and an Error are
-both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver stays a silent no-op.
+both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver stays a silent no-op. A
+receiver that is not of the class is not stale: Lua raises for it (1.3), while JavaScript returns silently
+for a wrong `this`, as the hand-written builtins did.
 
 ## 2. Runtimes
 

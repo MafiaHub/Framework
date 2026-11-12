@@ -1516,19 +1516,21 @@ MODULE(bind_call, {
         mismatches += runtimes.Both("{ const c = new CallCounter(1); c.serverBump(); c.get() }", "(function() local c = CallCounter.new(1) c:serverBump() return c:get() end)()", "101");
         EQUALS(mismatches, "");
 
-        // Without a receiver of the class the function finds none, and here returns without effect.
+        // Without a receiver of the class a JavaScript method finds none, and here returns without effect.
         EQUALS(runtimes.Js("new CallCounter(1).bump.call({}, 5)"), "undefined");
         EQUALS(runtimes.Js("{ const bump = new CallCounter(1).bump; bump(5) }"), "undefined");
         EQUALS(runtimes.Js("new CallCounter(1).bump.call(new Vector3(1, 2, 3), 5)"), "undefined");
-        EQUALS(runtimes.Lua("select('#', CallCounter.new(1).bump(5))"), "0");
-        EQUALS(runtimes.Lua("select('#', CallCounter.new(1).bump())"), "0");
-        EQUALS(runtimes.Lua("select('#', CallCounter.new(1).bump(Vector3.new(1, 2, 3), 5))"), "0");
+        // A Lua one is not called at all: it raises, as a typed method called with `.` does.
+        EQUALS(runtimes.Lua("CallCounter.new(1).bump(5)"), "<error> eval:1: bad receiver for 'CallCounter:bump' (CallCounter expected, got number)");
+        EQUALS(runtimes.Lua("CallCounter.new(1).bump()"), "<error> eval:1: bad receiver for 'CallCounter:bump' (CallCounter expected, got no value)");
+        EQUALS(runtimes.Lua("CallCounter.new(1).bump(Vector3.new(1, 2, 3), 5)"), "<error> eval:1: bad receiver for 'CallCounter:bump' (CallCounter expected, got Vector3)");
+        EQUALS(runtimes.Lua("(function() local c = CallCounter.new(1) pcall(c.bump, 5) return c:get() end)()"), "1");
+        // A method a base declares takes an object of a class derived from it, called either way.
+        EQUALS(runtimes.Lua("(function() local s = CallStepper.new(3) CallCounter.new(1).bump(s, 4) return s:get() end)()"), "7");
 
-        // Nor does it take what it made itself for one, where a Lua script passed nothing at all: the first
-        // value it makes lands where the receiver would have been.
+        // The receiver is where Lua put it, and a value the function makes is another.
         EQUALS(runtimes.Both("{ const c = new CallCounter(1); c.late() + ' ' + c.get() }", "(function() local c = CallCounter.new(1) return c:late() .. ' ' .. c:get() end)()", "receiver:Bound:Bound 2"), "");
-        EQUALS(runtimes.Lua("CallCounter.new(1).late()"), "none:Nil:Bound");
-        EQUALS(runtimes.Lua("(function() local c = CallCounter.new(1) return c.late() .. ' ' .. c:get() end)()"), "none:Nil:Bound 1");
+        EQUALS(runtimes.Lua("CallCounter.new(1).late()"), "<error> eval:1: bad receiver for 'CallCounter:late' (CallCounter expected, got no value)");
     });
 
     IT("reads and writes a property written as context functions", {

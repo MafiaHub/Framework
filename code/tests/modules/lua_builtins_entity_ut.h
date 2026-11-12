@@ -561,8 +561,9 @@ MODULE(lua_builtins_entity, {
         EQUALS(Raised(stage.lua, "bag:get()"), "StateBag.get: expected a string key");
         EQUALS(stage.js.Thrown("bag.set('k')"), "TypeError: StateBag.set: expected (key, value, options?)");
 
-        // Called on what is no bag at all, a method is as quiet.
-        EQUALS(stage.lua.Eval("tostring(bag.get({}, 'job'))"), "nil");
+        // Called on what is no bag at all, a JavaScript method is as quiet. A Lua one raises: only a bag whose
+        // entity is gone is a stale receiver.
+        EQUALS(stage.lua.Eval("tostring(bag.get({}, 'job'))"), "<error> eval:1: bad receiver for 'StateBag:get' (StateBag expected, got table)");
         EQUALS(stage.js.Eval("String(bag.get.call({}, 'job'))"), "undefined");
     });
 

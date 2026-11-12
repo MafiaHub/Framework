@@ -194,13 +194,14 @@ namespace Framework::Scripting::Bind::Detail {
 
         // --- What Lua calls ---
 
-        // A context function is handed the call as it is: it looks for its receiver and reads its arguments itself.
+        // A method is called on an object of its class, whichever way it is written. A context function is then
+        // handed the call as it is: it reads its arguments itself.
         int CallMethod(lua_State *L) {
             const LuaFunction &function = FunctionUpvalue(L);
+            void *self                  = CheckReceiver(L, function);
             if (function.thunk.native != nullptr) {
                 return LuaInvokeNative(L, *function.thunk.native, true, function.label.c_str());
             }
-            void *self = CheckReceiver(L, function);
             CheckArguments(L, function, 2);
             return Invoke(L, function, self);
         }
@@ -234,12 +235,13 @@ namespace Framework::Scripting::Bind::Detail {
         }
 
         // Calls the getter or the setter of a property on the stack as it stands: the receiver, then what a setter
-        // is given. One written as a context function looks for its receiver and reads the value itself.
+        // is given. The receiver is an object of the class for either kind; one written as a context function reads
+        // the value itself.
         int InvokeAccessor(lua_State *L, const LuaFunction &accessor) {
+            void *self = CheckReceiver(L, accessor);
             if (accessor.thunk.native != nullptr) {
                 return LuaInvokeNative(L, *accessor.thunk.native, true, accessor.label.c_str());
             }
-            void *self = CheckReceiver(L, accessor);
             CheckArguments(L, accessor, 2);
             return Invoke(L, accessor, self);
         }

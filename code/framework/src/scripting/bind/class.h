@@ -445,9 +445,10 @@ namespace Framework::Scripting::Bind {
         }
 
         // A method or a static written as a context function: it is called with whatever the script passed and
-        // checks it itself, and its Doc gives the types. A method finds its receiver with Call::Self<T>(), which
-        // is null when it was called on anything else, in either language; the receiver is not one of its
-        // arguments.
+        // checks it itself, and its Doc gives the types. A method finds its receiver with Call::Self<T>(); the
+        // receiver is not one of its arguments. In Lua it is only ever called on an object of the class: called on
+        // anything else, as a method called with `.` is, it raises as a typed method does. In JavaScript Self is
+        // null for any other `this`, and the method returns without effect.
         Class &Method(std::string name, NativeFunction function, Doc doc, Side side = Side::Shared) {
             FunctionDesc desc = DescribeContextMember(name, doc, false, side);
             auto shared       = std::make_shared<NativeFunction>(std::move(function));

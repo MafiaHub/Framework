@@ -96,8 +96,9 @@ namespace Framework::Scripting::Bind {
         virtual Value This() const = 0;
 
         // In a method of a class, the receiver as a T: the object the method was called on, when it is a T or of a
-        // class derived from T. nullptr for any other receiver, for none, and in a function that is not a method;
-        // a method then returns without effect, as for a receiver whose object is gone.
+        // class derived from T. nullptr in a function that is not a method, and in JavaScript for any other `this`
+        // and for none: a method then returns without effect, as for a receiver whose object is gone. A Lua method
+        // is not called without a receiver of its class: Lua raises before it is.
         template <typename T>
         T *Self() const {
             static_assert(Detail::HasScriptClassName<T>, "Bind::Call::Self: T is a bound class, named with FW_SCRIPT_CLASS");
