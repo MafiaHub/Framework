@@ -407,7 +407,8 @@ for a wrong `this`, as the hand-written builtins did.
   it queued as errors to the manager. `Reset()` and `Shutdown()` destroy every state after the resources were
   stopped; between a `Reset()` and the next `Init()` a `.lua` script fails its start with `Lua scripting is not
   available`. The builtins only a client has are added to every state through
-  `LuaClientHost::AddRuntimeSetup`, which the module calls with their `RegisterLua` (`Key`, `Voice`).
+  `LuaClientHost::AddRuntimeSetup`, which the module calls with their `RegisterLua` (`Key`, `Chat`, `Discord`,
+  `Voice`, `Nametags`).
 
 ## 3. Resources
 
@@ -507,7 +508,9 @@ One value crosses per call result: a Lua function's first return value.
 ## 5. Tooling
 
 - `Bind::ApiCatalog` records every definition. A generator writes LuaLS definition files (`---@meta`)
-  for each side next to the TypeScript contract.
+  for each side next to the TypeScript contract. Two definitions may share a global name when no runtime
+  has both (the `Chat` of the server and the `Chat` of the client): `Find(name, side)` gives the one a
+  runtime of that side has.
 - A parity test walks the JavaScript catalog and requires every global and member to exist in a Lua
   state of the same side, apart from a short explicit list of language-specific members.
 
