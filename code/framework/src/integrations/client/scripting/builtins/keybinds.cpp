@@ -54,6 +54,17 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             const auto *input = CoreModules::GetInput();
             return input ? input->GetLastWheelNotch() : 0;
         }
+
+        // Whether a resource still runs script: it runs, or it failed and was left running, as errorBehavior
+        // continue says. The rule of ResourceManager::ProcessHandlerFailures, as Web has it.
+        bool StillRuns(const Framework::Scripting::ResourceManager &manager, const std::string &resourceName) {
+            const Framework::Scripting::Resource *resource = manager.GetResource(resourceName);
+            if (resource == nullptr) {
+                return false;
+            }
+            const auto state = resource->GetState();
+            return state == Framework::Scripting::ResourceState::Running || (state == Framework::Scripting::ResourceState::Error && resource->GetManifest().GetMafiaHubConfig().errorBehavior == "continue");
+        }
     } // anonymous namespace
 
     std::map<std::string, Keybinds::Bucket> Keybinds::_buckets;
@@ -439,6 +450,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             for (const auto &p : pending) {
                 // Its runtime may have gone with a handler that ran before it.
                 if (!p.callback->IsAlive() || std::find(failed->begin(), failed->end(), Owner {p.manager, p.resourceName}) != failed->end()) {
+                    continue;
+                }
+                // Or its resource may have stopped with one: a JavaScript handler stays callable in the isolate
+                // its resource shared.
+                if (p.manager->manager != nullptr && !StillRuns(*p.manager->manager, p.resourceName)) {
                     continue;
                 }
                 // A handler that fails is reported to the manager of its resource, when it threw and when

@@ -677,6 +677,24 @@ MODULE(lua_client_builtins, {
         EQUALS(desk.client.errors.size(), 0u);
     });
 
+    IT("does not call a JavaScript handler whose resource an earlier handler stopped on the same edge", {
+        // The isolate of a stopped JavaScript resource lives on, so its handler stays callable: the state of the
+        // resource is what holds it back.
+        Desk desk;
+        EQUALS(desk.Start("js-killer", "client.js", "Key.bind('f5', () => stopResource('js-victim'));"), "");
+        EQUALS(desk.Start("lua-killer", "client.lua", "Key.bind('f5', function() stopResource('other-victim') end)"), "");
+        EQUALS(desk.Start("js-victim", "client.js", "globalThis.victimRan = 0; Key.bind('f5', () => ++victimRan);"), "");
+        EQUALS(desk.Start("other-victim", "client.js", "globalThis.otherRan = 0; Key.bind('f5', () => ++otherRan);"), "");
+        EQUALS(desk.Start("witness", "client.js", "globalThis.witnessRan = 0; Key.bind('f5', () => ++witnessRan);"), "");
+
+        desk.input.held.insert(FW_KEY_F5);
+        desk.Frame();
+        EQUALS(desk.Js("victimRan + ' ' + otherRan + ' ' + witnessRan", "witness"), "0 0 1");
+        EQUALS(desk.client.manager->IsResourceRunning("js-victim"), false);
+        EQUALS(desk.client.manager->IsResourceRunning("other-victim"), false);
+        EQUALS(desk.client.errors.size(), 0u);
+    });
+
     IT("lets a handler unbind itself and a later one during an edge, which that edge still reaches", {
         Desk desk;
         EQUALS(desk.Start("js", "client.js", "globalThis.jsLog = []; const second = () => jsLog.push('second'); const first = () => { jsLog.push('first'); Key.unbind('f5', first); Key.unbind('f5', second); }; Key.bind('f5', 'both', first); Key.bind('f5', 'both', second);"), "");
