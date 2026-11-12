@@ -476,6 +476,32 @@ MODULE(server_packet_thread, {
         server.Stop();
     });
 
+    IT("leaves an entity a handler creates out of the resource whose script is running", {
+        Server server;
+        const bool up = server.Start("fw_packet_thread_owner");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        // What the script thread says while it loads or calls into a resource: entities made meanwhile on that
+        // thread are the resource's, and go when it stops. A handler making one at that moment is not that script.
+        auto *resources = server.GetScriptingModule()->GetResourceManager();
+        resources->SetCurrentResourceContext("demo");
+        Client client;
+        const bool in = Join(server, client);
+        resources->SetCurrentResourceContext("");
+        EQUALS(in, true);
+        if (!in) {
+            break;
+        }
+        EQUALS(server.Count(Framework::Networking::Replication::EntityTypeId<Avatar>()), static_cast<size_t>(1));
+        // Stopping it takes what it owns with it.
+        (void)resources->StopAll();
+        EQUALS(server.Count(Framework::Networking::Replication::EntityTypeId<Avatar>()), static_cast<size_t>(1));
+        EQUALS(server.Replication()->GetViewerId(client.Guid()) != 0, true);
+        server.Stop();
+    });
+
     IT("keeps ticking while a handler takes its time", {
         Server server;
         const bool up = server.Start("fw_packet_thread_slow");
