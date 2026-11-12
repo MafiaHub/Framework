@@ -341,6 +341,41 @@ MODULE(streamed_assets, {
         std::filesystem::remove_all(root);
     });
 
+    IT("tells a lane it could not build from a lane that ships nothing", {
+        const auto root    = Scratch("fw_asset_pak_failed");
+        const auto staging = root / "staging";
+        std::filesystem::create_directories(staging);
+        WriteBytes(root / "demo" / "stream" / "a.bin", 4000, 5);
+
+        Framework::Integrations::Server::AssetPakBuilder builder;
+        builder.Init(std::make_shared<TestPolicy>(), staging);
+        const auto first = builder.Build("demo", root / "demo");
+        UEQUALS(first.size(), 1u);
+
+        // The folder changes, and the staging directory cannot be written to when the pak is built (a file stands
+        // where it was): an I/O failure, not a resource that stopped shipping the lane.
+        const auto modified = std::filesystem::last_write_time(root / "demo" / "stream" / "a.bin");
+        WriteBytes(root / "demo" / "stream" / "a.bin", 4000, 6);
+        std::filesystem::last_write_time(root / "demo" / "stream" / "a.bin", modified + std::chrono::seconds(2));
+        std::filesystem::remove_all(staging);
+        WriteBytes(staging, 10, 1);
+        const auto failed = builder.Prepare("demo", root / "demo");
+        EQUALS(failed.Failed(), true);
+        // What it built before is still what it answers for: nothing was adopted.
+        EQUALS(builder.HasEntry("stream", "a.bin"), true);
+
+        // A lane the policy refuses is not a failure: the resource ships nothing for it, on purpose.
+        std::filesystem::remove(staging);
+        std::filesystem::create_directories(staging);
+        WriteBytes(root / "other" / "stream" / "forbidden.bin", 100, 8);
+        const auto refused = builder.Prepare("other", root / "other");
+        EQUALS(refused.Failed(), false);
+        // And neither is a resource with no lane folder at all.
+        std::filesystem::create_directories(root / "plain");
+        EQUALS(builder.Prepare("plain", root / "plain").Failed(), false);
+        std::filesystem::remove_all(root);
+    });
+
     IT("ships nothing for a lane that breaks the policy", {
         const auto root    = Scratch("fw_asset_pak_refused");
         const auto staging = root / "staging";

@@ -59,8 +59,10 @@ namespace Framework::Integrations::Server {
                 break;
             }
             BuiltLane lanePak;
-            if (BuildLane(laneRoot, resource, lane, lanePak, prepared._retired)) {
-                prepared._lanes.push_back(std::move(lanePak));
+            switch (BuildLane(laneRoot, resource, lane, lanePak, prepared._retired)) {
+            case LaneResult::Built: prepared._lanes.push_back(std::move(lanePak)); break;
+            case LaneResult::Failed: prepared._failed = true; break;
+            case LaneResult::None: break;
             }
         }
         return prepared;
@@ -111,7 +113,7 @@ namespace Framework::Integrations::Server {
         return false;
     }
 
-    bool AssetPakBuilder::BuildLane(const std::filesystem::path &laneRoot, const std::string &resource, const std::string &lane, BuiltLane &out, std::vector<std::filesystem::path> &retired) const {
+    AssetPakBuilder::LaneResult AssetPakBuilder::BuildLane(const std::filesystem::path &laneRoot, const std::string &resource, const std::string &lane, BuiltLane &out, std::vector<std::filesystem::path> &retired) const {
         std::error_code code;
         std::vector<Utils::StreamedAssets::PakSourceEntry> entries;
         for (const std::filesystem::directory_entry &entry : std::filesystem::recursive_directory_iterator(laneRoot, code)) {
@@ -123,7 +125,7 @@ namespace Framework::Integrations::Server {
             std::string reason;
             if (!_policy->NormalizeEntry(lane, resource, relative, normalized, reason)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("'{}' {}: {}: {}; the lane is not shipped", resource, lane, relative, reason);
-                return false;
+                return LaneResult::None;
             }
             if (!_policy->ShouldShip(lane, resource, normalized, entry.path().string(), reason)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("'{}' {}: {} is not shipped: {}", resource, lane, relative, reason);
@@ -131,8 +133,13 @@ namespace Framework::Integrations::Server {
             }
             entries.push_back({normalized, entry.path().string()});
         }
-        if (code || entries.empty()) {
-            return false;
+        // A folder that could not be walked is not a folder with nothing in it.
+        if (code) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("'{}' {}: cannot read the lane folder: {}", resource, lane, code.message());
+            return LaneResult::Failed;
+        }
+        if (entries.empty()) {
+            return LaneResult::None;
         }
 
         std::sort(entries.begin(), entries.end(), [](const Utils::StreamedAssets::PakSourceEntry &a, const Utils::StreamedAssets::PakSourceEntry &b) {
@@ -154,7 +161,7 @@ namespace Framework::Integrations::Server {
             // the client would refuse is never announced.
             if (!Utils::StreamedAssets::PakArchive::Validate(path.string(), *_policy, lane, resource, listed, error)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("'{}' {}: the pak fails validation: {}", resource, lane, error);
-                return false;
+                return LaneResult::None;
             }
             out.info    = {lane, sha256, static_cast<std::uint64_t>(std::filesystem::file_size(path, code))};
             out.entries = std::move(listed);
@@ -172,7 +179,7 @@ namespace Framework::Integrations::Server {
                 }
             }
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset pak '{}' {}: {} files, {} bytes ({})", resource, lane, out.entries.size(), out.info.size, how);
-            return true;
+            return LaneResult::Built;
         };
 
         // An unchanged folder keeps its pak: no rewrite, no rehash.
@@ -192,20 +199,20 @@ namespace Framework::Integrations::Server {
         if (!Utils::StreamedAssets::PakArchive::Write(building.string(), entries, *_policy, error)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("'{}' {}: {}", resource, lane, error);
             std::filesystem::remove(building, code);
-            return false;
+            return LaneResult::Failed;
         }
         const std::string sha256 = Utils::Crypto::Sha256FileHex(building.string());
         if (sha256.empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("'{}' {}: cannot hash the built pak", resource, lane);
             std::filesystem::remove(building, code);
-            return false;
+            return LaneResult::Failed;
         }
 
         const std::filesystem::path path = _stagingDir / Utils::StreamedAssets::PakFileName(resource, lane, sha256);
         std::filesystem::rename(building, path, code);
         if (code) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("'{}' {}: cannot move the built pak into place", resource, lane);
-            return false;
+            return LaneResult::Failed;
         }
         std::ofstream(indexPath, std::ios::trunc) << nlohmann::json {{"fingerprint", fingerprintHash}, {"sha256", sha256}}.dump();
         return adopt(sha256, "built");

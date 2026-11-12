@@ -44,9 +44,21 @@ namespace Framework::Integrations::Server {
       public:
         /** What Prepare built, for Adopt: the lanes' paks, and the staged files they make obsolete. */
         class Prepared final {
+          public:
+            /**
+             * A lane could not be built for a reason that is not the resource's doing: a file that could not be
+             * read or written. Not set for a lane the policy refuses or a folder with nothing to ship, which are
+             * a resource shipping nothing. A failed build should not replace what was published before it.
+             */
+            bool Failed() const {
+                return _failed;
+            }
+
+          private:
             friend class AssetPakBuilder;
             std::vector<BuiltLane> _lanes;
             std::vector<std::filesystem::path> _retired;
+            bool _failed = false;
         };
 
         void Init(std::shared_ptr<const Utils::StreamedAssets::Policy> policy, std::filesystem::path stagingDir);
@@ -78,7 +90,12 @@ namespace Framework::Integrations::Server {
         bool HasEntry(std::string_view lane, std::string_view path) const;
 
       private:
-        bool BuildLane(const std::filesystem::path &laneRoot, const std::string &resource, const std::string &lane, BuiltLane &out, std::vector<std::filesystem::path> &retired) const;
+        enum class LaneResult {
+            Built,  // a pak, new or kept
+            None,   // nothing to ship: an empty folder, or content the policy refuses
+            Failed, // the pak could not be written
+        };
+        LaneResult BuildLane(const std::filesystem::path &laneRoot, const std::string &resource, const std::string &lane, BuiltLane &out, std::vector<std::filesystem::path> &retired) const;
 
         // Held for a whole Prepare, so the policy is only ever asked by one thread at a time.
         mutable std::mutex _policyMutex;

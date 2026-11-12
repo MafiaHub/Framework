@@ -330,6 +330,9 @@ namespace Framework::Integrations::Server {
         void FinishRepublish(const std::string &name, ClientPublish built);
         // Tell connected clients a resource's files changed. Only after they are served.
         void AnnounceResourceRefresh(const std::string &name);
+        // While everything is published again: what each resource's paks were before, to put back for a
+        // resource whose paks could not be rebuilt. Empty otherwise.
+        std::unordered_map<std::string, std::vector<Framework::Networking::RPC::AssetPakInfo>> _assetPaksBefore;
         // Resources being rebuilt in the background, and those that changed again meanwhile.
         std::unordered_set<std::string> _publishing;
         std::unordered_set<std::string> _publishAgain;

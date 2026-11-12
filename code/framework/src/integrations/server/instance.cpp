@@ -1034,6 +1034,8 @@ namespace Framework::Integrations::Server {
         _packageHashes.clear();
         _packageSizes.clear();
         _servedFiles.clear();
+        // Kept aside, not dropped: a resource whose paks cannot be rebuilt below goes on serving these.
+        _assetPaksBefore = std::move(_assetPaks);
         _assetPaks.clear();
 
         const auto resourceManager = scripting->GetResourceManager();
@@ -1074,6 +1076,7 @@ namespace Framework::Integrations::Server {
         for (size_t i = 0; i < names.size(); ++i) {
             RecordClientPublish(names[i], std::move(built[i]), packagedFiles);
         }
+        _assetPaksBefore.clear();
         // A rebuild still on its way was planned against the set this one just replaced.
         _publishAgain.insert(_publishing.begin(), _publishing.end());
 
@@ -1146,6 +1149,8 @@ namespace Framework::Integrations::Server {
             built.wantsPaks = true;
             try {
                 built.paks = paks.Prepare(job.name, *job.pakFolder);
+                // A lane that could not be written fails the build as a throw does; it has logged why.
+                built.paksFailed = built.paks.Failed();
             }
             catch (const std::exception &ex) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not build the asset paks of '{}': {}", job.name, ex.what());
@@ -1176,8 +1181,24 @@ namespace Framework::Integrations::Server {
         if (!_opts.assetPakPolicy) {
             return;
         }
-        // Nothing to adopt, and no reason to drop what was built last time: the caller left it published.
+        // Nothing to adopt, and no reason to drop what was built last time. A hot reload left it published; a full
+        // publish set it aside, and it is put back here, for the paks that are still on disk.
         if (built.paksFailed) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("The asset paks of '{}' were not rebuilt; clients keep the ones published before", name);
+            if (const auto before = _assetPaksBefore.find(name); before != _assetPaksBefore.end()) {
+                std::vector<Framework::Networking::RPC::AssetPakInfo> kept;
+                for (const auto &pak : before->second) {
+                    const std::filesystem::path path = _assetPakBuilder.PathOf(name, pak);
+                    std::error_code code;
+                    if (std::filesystem::is_regular_file(path, code)) {
+                        _servedFiles[Framework::Utils::StreamedAssets::PakFileName(name, pak.lane, pak.sha256)] = path;
+                        kept.push_back(pak);
+                    }
+                }
+                if (!kept.empty()) {
+                    _assetPaks[name] = std::move(kept);
+                }
+            }
             return;
         }
         if (!built.wantsPaks) {
