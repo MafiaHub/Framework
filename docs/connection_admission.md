@@ -135,9 +135,13 @@ properties read-only and its functions called with `:`. To JavaScript it is a
 plain object whose members are read-only properties of its own.
 
 A connection crosses between runtimes, of either language, as itself (an
-event argument, an export call), for as long as the gate holds it. One that is
-decided or gone still answers in the runtime that kept it, but can no longer be
-handed to another: the copy fails.
+event argument, an export call), with its identity. One that is decided or
+gone still crosses: it reads as it did, `isPending()` is false, and `reject`
+and `update` do nothing. A queue can hand it to a logging resource.
+
+In Lua, `connection.reject("...")` written with `.` raises (`bad receiver for
+'PendingConnection:reject'`) and refuses nobody; the handler fails, so the
+connection is refused as for any handler that raises.
 
 **Nothing in it is verified.** Every identifier is what the client said about
 itself; `steamId` is read from an environment variable the launcher sets and is

@@ -221,10 +221,16 @@ what it needs, and nothing else diverges:
     `PendingConnection` is a `Bind::Class` that only Lua materialises: to
     JavaScript a connection stays the plain object it was, built by `Create`
     with functions that run the same context functions as the methods of the
-    class, and its catalog data type is written from `Describe()`. It crosses
-    between runtimes by its guid (`PendingConnection::RegisterTransfer`); the
-    JavaScript object is told by a private key and rebuilt from what the gate
-    holds (`ConnectionGate::Describe`).
+    class, and its catalog data type is written from `Describe()`
+    (`Bind::RecordV8DataType`). It crosses between runtimes with its identity
+    (`Transfer(&Encode, &Decode)`, `PendingConnection::RegisterTransfer`), so
+    one the gate has decided still arrives, as an inert handle; the JavaScript
+    object carries the same bytes under a private key.
+  - In Lua, a method or a property of a bound class called on anything but an
+    object of the class raises `bad receiver for 'Class:method' (...)`, typed
+    or context function alike: `connection.reject("x")` with `.` does not
+    silently do nothing. Only a receiver of the class whose object is gone is
+    a silent no-op. JavaScript returns silently for a wrong `this`.
 
 `RegisterValueTypes` registers **only** the pure value types — its name says so.
 It is the counterpart to `UnregisterAll`, which additionally drops the handle
