@@ -1,0 +1,9 @@
+{
+  "name": "lua-example",
+  "version": "1.0.0",
+  "description": "A Lua resource: events, timers, an export and a Vector3.",
+  "mafiahub": {
+    "serverScripts": ["server.lua"],
+    "exports": ["distanceToSpawn"]
+  }
+}
