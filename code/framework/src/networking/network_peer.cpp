@@ -95,14 +95,10 @@ namespace Framework::Networking {
             return;
         }
 
-        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance, then
-        // send this tick's state-bag changes — the flush asks each connection what it has
-        // constructed, so it reads the relevance this rebuild just settled.
+        // A client's whole tick; a server splits it between its tick thread (NetworkServer::Update)
+        // and whoever drains its packets. The first three are a server's work and cost a client a
+        // call each, except that the flush drops a client's dirty marks.
         _replicationManager->RebuildInterest();
-        // After the rebuild and before the flush: the election reads the positions this tick
-        // settled, and a handover it decides is an ownership change the flush then sees, so an
-        // owner-scoped bag key travels to the peer that has just been given the entity rather
-        // than to the one that had it a moment ago.
         _replicationManager->Delegation().Update();
         _replicationManager->FlushStateBags();
 
@@ -118,7 +114,11 @@ namespace Framework::Networking {
             return;
         }
         FW_PROFILE_SCOPE_N("Networking::Receive");
+        // A server's pass is run by its tick thread (NetworkServer::Update), not by the plugin
+        // update each Receive() makes here.
+        const Replication::ReplicationManager::NoPassScope noPass(_replicationManager->IsServer());
         [[maybe_unused]] uint64_t packets = 0; // read by the profiler zone only
+        _drainStop                        = stop;
         while (stop == nullptr || !stop->load(std::memory_order_acquire)) {
             BeforeReceive();
             _packet = _peer->Receive();
@@ -129,7 +129,8 @@ namespace Framework::Networking {
             Dispatch();
             _peer->DeallocatePacket(_packet);
         }
-        _packet = nullptr;
+        _packet    = nullptr;
+        _drainStop = nullptr;
         // What the pass and the inbound state put off while they held an entity: a destruction or a
         // state change made from inside one of their callbacks.
         Replication::World::Settle();

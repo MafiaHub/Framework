@@ -67,8 +67,10 @@ MODULE(replication_parallel, {
         const auto pumpUntil = [&](const auto &done) {
             for (int i = 0; i < 2500; ++i) {
                 server.Update();
+                server.DrainPackets();
                 for (auto &client : clients) {
-                    client.Update();
+                    // A server peer standing in for a client: the client's update, which drains.
+                    client.NetworkPeer::Update();
                 }
                 if (done()) {
                     return true;

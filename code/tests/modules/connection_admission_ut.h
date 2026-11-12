@@ -114,6 +114,7 @@ class ConnectionAdmissionRig {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(maxMs);
         while (std::chrono::steady_clock::now() < deadline) {
             server->Update();
+            server->DrainPackets();
             client->Update();
             if (condition()) {
                 return true;

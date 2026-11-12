@@ -21,6 +21,7 @@
 #include <utils/result.h>
 
 #include <atomic>
+#include <chrono>
 #include <mafianet/peer_interface.h>
 #include <mafianet/types.h>
 #include <mutex>
@@ -90,6 +91,12 @@ namespace Framework::Networking {
 
         bool _replicationRPCsRegistered = false;
 
+        std::atomic<int32_t> _slowHandlerWarnMs {10};
+        // The draining thread's own: slow handlers since the last warning, and when the next may be written.
+        uint64_t _slowHandlers = 0;
+        std::chrono::steady_clock::time_point _nextSlowHandlerWarning {};
+        void NoteHandlerTime(RPC::Identifier identifier, std::chrono::steady_clock::duration elapsed);
+
         void ClearClientState(MafiaNet::RakNetGUID guid);
 
       public:
@@ -97,6 +104,17 @@ namespace Framework::Networking {
 
         [[nodiscard]] Utils::Result<void, Error> Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password = "", const AdmissionSettings &admission = {});
         void Shutdown() override;
+
+        // The tick's share of networking: interest, delegation, the state-bag flush and the
+        // replication pass. It receives nothing: packets are handled by whoever calls DrainPackets,
+        // a PacketThread on a running server.
+        void Update() override;
+
+        // A handler that takes at least this long is logged, at most once a second, with the digest
+        // of its RPC identifier (the name is not in the binary). 0 turns the warning off.
+        void SetSlowHandlerWarnMs(int32_t ms) {
+            _slowHandlerWarnMs.store(ms, std::memory_order_relaxed);
+        }
 
         bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;
 

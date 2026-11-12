@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <networking/packet_thread.h>
 #include <networking/replication/replication_manager.h>
 #include <networking/rpc/rpc_identifier.h>
 
@@ -359,6 +360,9 @@ namespace Framework::Integrations::Server {
         // the thread that runs Init() and Shutdown().
         std::unique_ptr<ScriptThread> _scriptThread;
         bool _worldHeld = false;
+        // The thread packets are handled on: RPC handlers, inbound entity state, connections opening
+        // and closing. It does not take the world; see Networking::PacketThread.
+        Framework::Networking::PacketThread _packetThread;
         // What a tick owes scripts, once per tick interval, on their thread.
         void ScriptRound();
         // The scripting half of Init(), on the script thread. Empty on success.
@@ -392,8 +396,9 @@ namespace Framework::Integrations::Server {
             (void)engine;
         }
 
-        // The five below are called where the packet that caused them is handled, with no entity
-        // held: an override reaches entities through `world`, by handle (networking/replication/world.h).
+        // The five below are called where the packet that caused them is handled, on the packet
+        // thread, with no entity held: an override reaches entities through `world`, by handle
+        // (networking/replication/world.h), and anything else it touches guards itself.
         virtual void OnPlayerConnect(const PlayerConnectionData &data, Framework::Networking::Replication::World &world) {
             (void)data, (void)world;
         }

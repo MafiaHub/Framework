@@ -115,6 +115,7 @@ void operator delete(void *block, std::size_t) noexcept {
 // Starts and stops whole servers, which shuts the logger down with each: kept last.
 #include "modules/server_threading_ut.h"
 #include "modules/server_script_thread_ut.h"
+#include "modules/server_packet_thread_ut.h"
 
 int main() {
     UNIT_CREATE("FrameworkTests");
@@ -202,6 +203,7 @@ int main() {
     UNIT_MODULE(nametag);
     UNIT_MODULE(server_threading);
     UNIT_MODULE(server_script_thread);
+    UNIT_MODULE(server_packet_thread);
 
     return UNIT_RUN();
 }

@@ -82,6 +82,7 @@ set(FRAMEWORK_SERVER_SRC
     src/http/webserver.cpp
 
     src/networking/network_server.cpp
+    src/networking/packet_thread.cpp
 
     src/integrations/server/instance.cpp
     src/integrations/server/connection_gate.cpp

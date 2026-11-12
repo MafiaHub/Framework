@@ -21,6 +21,7 @@
 #include <mafianet/message_identifiers.h>
 
 #include <algorithm>
+#include <chrono>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -42,9 +43,52 @@ namespace Framework::Networking {
     }
 
     void NetworkServer::RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, Sender, Replication::World &)> handler) {
-        NetworkPeer::RegisterRawRPC(identifier, [this, cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) mutable {
+        NetworkPeer::RegisterRawRPC(identifier, [this, identifier, cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) mutable {
+            // Shutting down: no handler starts once the drain was told to stop.
+            if (DrainStopped()) {
+                return;
+            }
+            const auto start = std::chrono::steady_clock::now();
             cb(bs, Sender(*this, packet->guid), _replicationManager->GetWorld());
+            NoteHandlerTime(identifier, std::chrono::steady_clock::now() - start);
         });
+    }
+
+    void NetworkServer::NoteHandlerTime(RPC::Identifier identifier, std::chrono::steady_clock::duration elapsed) {
+        const int32_t warnMs = _slowHandlerWarnMs.load(std::memory_order_relaxed);
+        if (warnMs <= 0 || elapsed < std::chrono::milliseconds(warnMs)) {
+            return;
+        }
+        // A slow handler holds up the packets behind it and nothing else; one that is always slow
+        // would otherwise write a line per packet.
+        ++_slowHandlers;
+        const auto now = std::chrono::steady_clock::now();
+        if (now < _nextSlowHandlerWarning) {
+            return;
+        }
+        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Packet handler for RPC {:016x} took {:.0f} ms against a {} ms budget ({} slow handler(s) since the last warning)", identifier.digest, std::chrono::duration<double, std::milli>(elapsed).count(), warnMs, _slowHandlers);
+        _slowHandlers           = 0;
+        _nextSlowHandlerWarning = now + std::chrono::seconds(1);
+    }
+
+    void NetworkServer::Update() {
+        if (!_peer) {
+            return;
+        }
+        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance, then
+        // send this tick's state-bag changes — the flush asks each connection what it has
+        // constructed, so it reads the relevance this rebuild just settled.
+        _replicationManager->RebuildInterest();
+        // After the rebuild and before the flush: the election reads the positions this tick
+        // settled, and a handover it decides is an ownership change the flush then sees, so an
+        // owner-scoped bag key travels to the peer that has just been given the entity rather
+        // than to the one that had it a moment ago.
+        _replicationManager->Delegation().Update();
+        _replicationManager->FlushStateBags();
+        _replicationManager->Update();
+        // What the pass put off while it held an entity: a destruction or a state change made from
+        // inside one of its callbacks.
+        Replication::World::Settle();
     }
 
     Utils::Result<void, Error> NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password, const AdmissionSettings &admission) {

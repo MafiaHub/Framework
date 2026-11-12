@@ -353,6 +353,14 @@ namespace Framework::Integrations::Server {
             return Error(scriptingError);
         }
 
+        // Last: a handler may raise an event, which needs the runtimes made just above, and every
+        // handler the mod registered in PostInit and PostScriptInit is in place.
+        _packetThread.Start(*_networkingEngine->GetNetworkServer(), [this] {
+            if (auto *engine = _scriptingModule->GetEngine()) {
+                engine->BindOffThreadRuntime("packet");
+            }
+        });
+
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
@@ -1730,6 +1738,14 @@ namespace Framework::Integrations::Server {
         // Run() may still be looping: end it before a tick can observe a half-torn-down
         // instance. Lifecycle::Shutdown() below clears _initialized far too late for that.
         _stopRequested = true;
+
+        // No packet is handled from here on. A handler in progress finishes first, and may be waiting
+        // for scripts (a synchronous event), which wait for the world: it is let go for the join.
+        if (_scriptThread && _worldHeld) {
+            _scriptThread->UnlockWorld();
+            _worldHeld = false;
+        }
+        _packetThread.Stop();
 
         // As in Init(): this thread has the world until the script thread is gone.
         if (_scriptThread && !_worldHeld) {

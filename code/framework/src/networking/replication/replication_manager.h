@@ -134,6 +134,19 @@ namespace Framework::Networking::Replication {
         void EndNetworkUpdate() {
             _networkUpdateActive = false;
         }
+        // Server: while one lives, the calling thread's Update() runs no pass. The thread that
+        // handles packets holds one around its Receive() calls, each of which updates every plugin:
+        // the pass is the tick thread's, which calls Update() itself.
+        class NoPassScope final {
+          public:
+            explicit NoPassScope(bool active);
+            ~NoPassScope();
+            NoPassScope(const NoPassScope &)            = delete;
+            NoPassScope &operator=(const NoPassScope &) = delete;
+
+          private:
+            bool _active;
+        };
         void Update() override;
         // Server: a replica was constructed, seeded with values no pass has compared yet. Makes the
         // pass serialize even if it is not due, so they are what the next delta is taken against;

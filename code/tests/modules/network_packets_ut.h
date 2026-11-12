@@ -165,12 +165,12 @@ MODULE(network_packets, {
         for (int i = 0; i < 100; ++i) {
             enqueue(ID_RAKVOICE_RELAY_DATA);
         }
-        server.Update();
+        server.DrainPackets();
         EQUALS(voiceFrames, 100);
         EQUALS(logs->last_raw().empty(), true);
 
         enqueue(ID_USER_PACKET_ENUM);
-        server.Update();
+        server.DrainPackets();
         EQUALS(declinedPackets, 1);
         EQUALS(logs->last_raw().size(), static_cast<size_t>(1));
         EQUALS(logs->last_formatted()[0].find("Received unknown packet " + std::to_string(ID_USER_PACKET_ENUM)), static_cast<size_t>(0));
@@ -178,7 +178,7 @@ MODULE(network_packets, {
         // A known id still gets a diagnostic when no application handler claims it.
         server.SetUnknownPacketHandler({});
         enqueue(ID_RAKVOICE_RELAY_DATA);
-        server.Update();
+        server.DrainPackets();
         EQUALS(logs->last_raw().size(), static_cast<size_t>(2));
         EQUALS(logs->last_formatted()[1].find("Received unknown packet " + std::to_string(ID_RAKVOICE_RELAY_DATA)), static_cast<size_t>(0));
     });

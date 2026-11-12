@@ -151,7 +151,26 @@ namespace Framework::Networking::Replication {
         });
     }
 
+    namespace {
+        thread_local uint32_t t_noPass = 0;
+    } // namespace
+
+    ReplicationManager::NoPassScope::NoPassScope(bool active): _active(active) {
+        if (_active) {
+            ++t_noPass;
+        }
+    }
+
+    ReplicationManager::NoPassScope::~NoPassScope() {
+        if (_active) {
+            --t_noPass;
+        }
+    }
+
     void ReplicationManager::Update() {
+        if (t_noPass != 0) {
+            return;
+        }
         if (_networkUpdateActive && std::exchange(_updatedThisNetworkUpdate, true)) {
             return;
         }

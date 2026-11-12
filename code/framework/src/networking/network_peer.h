@@ -105,9 +105,17 @@ namespace Framework::Networking {
         // Called by DrainPackets before each Receive(), on the thread that drains.
         virtual void BeforeReceive() {}
 
+        // Whether the drain in progress was told to stop. One Receive() hands every RPC it finds to
+        // its handler before it returns, so a dispatcher asks this to leave the rest unhandled.
+        bool DrainStopped() const {
+            return _drainStop != nullptr && _drainStop->load(std::memory_order_acquire);
+        }
+
       private:
         // Handles the packet DrainPackets has just received.
         void Dispatch();
+        // The draining thread's own, for the length of a drain.
+        const std::atomic<bool> *_drainStop = nullptr;
 
       public:
         // TwoWayAuthentication identifier under which the build token is registered/challenged.
@@ -200,8 +208,9 @@ namespace Framework::Networking {
 
         void Update() override;
         // Receives until nothing waits, handling each packet as it comes: plugins, RPC handlers,
-        // HandlePacket, in arrival order. One thread calls it. `stop`, when given, ends the drain
-        // before the next packet once it is raised.
+        // HandlePacket, in arrival order. One thread calls it. Once `stop`, when given, is raised, no
+        // further packet is handled: a server's RPCs still in the queue are dropped unhandled, and
+        // the rest is left in the peer.
         void DrainPackets(const std::atomic<bool> *stop = nullptr);
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
 

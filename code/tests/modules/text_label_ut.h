@@ -530,8 +530,10 @@ MODULE(text_label, {
         const auto pumpUntil = [&](const auto &done) {
             for (int i = 0; i < 2500; ++i) {
                 world.peer.Update();
-                clients[0].Update();
-                clients[1].Update();
+                world.peer.DrainPackets();
+                // Server peers standing in for clients: the client's update, which drains.
+                clients[0].NetworkPeer::Update();
+                clients[1].NetworkPeer::Update();
                 if (done()) {
                     return true;
                 }

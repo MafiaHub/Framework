@@ -139,8 +139,10 @@ MODULE(state_bag_routing, {
 
         void Pump() {
             server.Update();
+            server.DrainPackets();
             for (auto &client : clients) {
-                client->Update();
+                // A server peer standing in for a client: the client's update, which drains.
+                client->NetworkPeer::Update();
             }
         }
 
