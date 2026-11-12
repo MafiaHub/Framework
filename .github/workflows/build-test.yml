@@ -143,10 +143,14 @@ jobs:
 
   # The threading tests under ThreadSanitizer (-DFW_SANITIZE=thread). MafiaNet is built from source
   # with the same instrumentation, so a race across the library boundary shows both sides; the
-  # pinned archive is not instrumented. Any report fails the job, bar two sets of suppressions:
-  # cmake/tsan.supp, for third-party code only, and MafiaNet's own baseline (ci/tsan.supp in the
-  # checkout built here) of the unlocked reads RakPeer has always made between the user's thread
-  # and its network thread. This repository carries no suppression for MafiaNet code.
+  # pinned archive is not instrumented. A report in Framework code always fails the job.
+  #
+  # What is suppressed: the races MafiaNet baselines itself, in ci/tsan.supp of the checkout built
+  # here. RakPeer's public getters read connection state its network thread owns without a lock,
+  # by design, and that file is where MafiaNet records them, so the job fails on a new race and
+  # not on those. The Framework carries no suppression for MafiaNet code: one that file does not
+  # cover is fixed or baselined there. cmake/tsan.supp is for other third-party code and holds
+  # no entry today; Tracy's start-up race is avoided with -DFW_PROFILING=OFF instead.
   tsan:
     name: ThreadSanitizer
     runs-on: ubuntu-latest
@@ -154,13 +158,14 @@ jobs:
     # A release is tested against the pinned MafiaNet archive, which this job does not use.
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     env:
-      # The MafiaNet ref to build. The code needs the unreleased branch of MafiaHub/MafiaNet#88;
-      # once that is released and cmake/MafiaNetPin.cmake names it, this becomes the pinned tag,
-      # v${MAFIANET_PIN_VERSION}.
-      MAFIANET_REF: feat/receive-off-pass-thread
+      # The MafiaNet tag to build. It follows MAFIANET_PIN_VERSION in cmake/MafiaNetPin.cmake:
+      # raise the two together.
+      MAFIANET_REF: v0.26.0
       # Modules that start V8 (server_*, resource*, node_*, engine and the rest of scripting) are
-      # left out: libnode is not instrumented.
-      FW_TEST_FILTER: world,fork_join_pool,task_scheduler,world_lock,replication_parallel,replication_threads,network_packets,delegation
+      # left out: libnode is not instrumented. A term selects every module whose name contains it,
+      # so each one here is also a module's whole name, which the run step checks.
+      FW_TEST_FILTER: world,fork_join_pool,task_scheduler,world_lock,delegation,replication_threads,replication_parallel,network_packets,packet_drain,voice_positions,transform_batch,interest_scale
+      NO_COLOR: 1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -234,7 +239,7 @@ jobs:
         run: |
           cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
-            -DFW_MAFIANET_ROOT="${RUNNER_TEMP}/mafianet-prefix" -DFW_SANITIZE=thread
+            -DFW_MAFIANET_ROOT="${RUNNER_TEMP}/mafianet-prefix" -DFW_SANITIZE=thread -DFW_PROFILING=OFF
 
       - name: Build the tests
         run: cmake --build build --target FrameworkTests
@@ -252,6 +257,13 @@ jobs:
             echo "::error::ThreadSanitizer made reports in a run that exited cleanly"
             exit 1
           fi
+          # A module that was renamed or removed must not drop out of the run unnoticed.
+          for module in ${FW_TEST_FILTER//,/ }; do
+            if ! grep -qE "^ *module: ${module}[[:space:]]*$" tsan.log; then
+              echo "::error::FW_TEST_FILTER names '${module}', and no module of that name ran"
+              exit 1
+            fi
+          done
 
       - name: Summarize the reports
         if: always()

@@ -1,12 +1,14 @@
-# ThreadSanitizer suppressions for a -DFW_SANITIZE=thread build of the tests:
-#   TSAN_OPTIONS=suppressions=cmake/tsan.supp build/bin/FrameworkTests
+# ThreadSanitizer suppressions for a -DFW_SANITIZE=thread build of the tests. The sanitizer job
+# (.github/workflows/build-test.yml) joins this file to MafiaNet's own baseline, ci/tsan.supp in
+# the MafiaNet checkout it builds:
+#   cat cmake/tsan.supp <MafiaNet>/ci/tsan.supp > all.supp
+#   TSAN_OPTIONS=suppressions=all.supp build/bin/FrameworkTests
 #
 # Third-party code only, one reason per entry. Nothing here may name Framework or MafiaNet code:
-# a report there is a finding.
+# a report in the Framework is a finding, and one in MafiaNet is fixed or baselined there.
 #
 # Format: https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
 
-# Tracy starts its worker threads from one static initializer and constructs its allocator's span
-# cache from a later one in the same file, so the constructor writes zeros under a thread already
-# allocating. Before main(), inside vendors/tracy.
-race:tracy::global_cache_t::global_cache_t
+# No entry today. Tracy races with itself before main() (its worker threads start from one static
+# initializer, its allocator's span cache is constructed by a later one); configure with
+# -DFW_PROFILING=OFF, as the job does, rather than suppress it.
