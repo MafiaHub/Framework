@@ -208,6 +208,18 @@ what it needs, and nothing else diverges:
     (`Messages::ReplyFunction`) that queues a copy of the answer; a Lua
     requester waits on a `Bind::Deferred`. `ProcessPendingResponses()`
     delivers both kinds of reply, with or without an isolate at hand.
+  - The server's `Voice` and `PendingConnection`
+    (`integrations/server/scripting/builtins/`) are declared this way too.
+    `Voice` throws a `RangeError` for a tier that is none
+    (`Call::ThrowRangeError`; in Lua the raised string every error is), and
+    reads its flags as the language of the script reads a condition.
+    `PendingConnection` is a `Bind::Class` that only Lua materialises: to
+    JavaScript a connection stays the plain object it was, built by `Create`
+    with functions that run the same context functions as the methods of the
+    class, and its catalog data type is written from `Describe()`. It crosses
+    between runtimes by its guid (`PendingConnection::RegisterTransfer`); the
+    JavaScript object is told by a private key and rebuilt from what the gate
+    holds (`ConnectionGate::Describe`).
 
 `RegisterValueTypes` registers **only** the pure value types — its name says so.
 It is the counterpart to `UnregisterAll`, which additionally drops the handle

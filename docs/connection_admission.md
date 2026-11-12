@@ -104,12 +104,40 @@ waits up to two minutes for an answer; it is always the server that decides.
 | Member | |
 |---|---|
 | `nickname` | the name the player asked to join under |
-| `steamId`, `discordId`, `discordName`, `hardwareId` | as reported by the client; empty when absent |
+| `steamId`, `epicId`, `discordId`, `discordName`, `hardwareId` | as reported by the client; empty when absent |
 | `ticket` | the `ticket` of the client's launch link, untouched |
 | `ip` | remote address, no port |
 | `reject(reason?)` | refuse; reason up to 512 bytes |
 | `update(message)` | status line up to 256 bytes; restarts the timeout |
 | `isPending()` | false once decided or the player left |
+
+### From Lua
+
+A gate resource may be written in Lua, alone or beside JavaScript ones: every
+handler of either language is asked, and one refusal is enough.
+
+```lua
+Events.on("playerConnecting", function(connection)
+    connection:update("Checking the whitelist...")
+    local entry = whitelist.lookup(connection.steamId)   -- may sleep() or wait on a request
+    if not entry then
+        return connection:reject("You are not on the whitelist. Apply at example.org")
+    end
+    -- Returning without rejecting lets the player in.
+end)
+```
+
+The table of section 3 holds as written, with "returns a Promise" read as
+"waits": the request is held while a handler sleeps or waits on a call, a
+handler that raises refuses it, at once or after a wait, and the same timeout
+applies. In Lua the connection is a handle with the members above, its
+properties read-only and its functions called with `:`. To JavaScript it is a
+plain object whose members are read-only properties of its own.
+
+A connection crosses between runtimes, of either language, as itself (an
+event argument, an export call), for as long as the gate holds it. One that is
+decided or gone still answers in the runtime that kept it, but can no longer be
+handed to another: the copy fails.
 
 **Nothing in it is verified.** Every identifier is what the client said about
 itself; `steamId` is read from an environment variable the launcher sets and is
