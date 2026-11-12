@@ -98,6 +98,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/function_references_ut.h"
 #include "modules/js_features_ut.h"
 #include "modules/lua_smoke_ut.h"
+#include "modules/sol_smoke_ut.h"
 #include "modules/bind_types_ut.h"
 #include "modules/lua_convert_ut.h"
 #include "modules/bind_class_lua_ut.h"
@@ -201,6 +202,7 @@ int main() {
     UNIT_MODULE(run_until);
     UNIT_MODULE(js_features);
     UNIT_MODULE(lua_smoke);
+    UNIT_MODULE(sol_smoke);
     UNIT_MODULE(bind_types);
     UNIT_MODULE(lua_convert);
     UNIT_MODULE(bind_class_lua);

@@ -41,6 +41,10 @@
       ]
     },
     {
+      "$comment": "Header-only. The port carries the patch that lets 3.5.0 build against Lua 5.5.",
+      "name": "sol2"
+    },
+    {
       "name": "directxtk",
       "platform": "windows"
     },

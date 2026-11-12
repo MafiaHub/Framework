@@ -85,3 +85,4 @@ This codebase also depends on the following third-party libraries:
     stackwalker     - https://github.com/JochenKalmbach/StackWalker/blob/master/LICENSE
     v8pp            - https://github.com/pmed/v8pp
     lua             - https://www.lua.org/license.html
+    sol2            - https://github.com/ThePhD/sol2/blob/develop/LICENSE.txt
