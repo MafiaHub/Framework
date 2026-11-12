@@ -11,9 +11,7 @@
 #include "chat.h"
 #include "discord.h"
 #include "keybinds.h"
-#ifndef FW_CLIENT_SCRIPTING_WITHOUT_NAMETAGS
 #include "nametags.h"
-#endif
 #include "voice.h"
 #include "web.h"
 
@@ -56,9 +54,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         Chat::Register(isolate, context, global, manager);
         Discord::Register(isolate, context, global, manager);
         Voice::Register(isolate, context, global, manager);
-#ifndef FW_CLIENT_SCRIPTING_WITHOUT_NAMETAGS
         Nametags::Register(isolate, context, global, manager);
-#endif
     }
 
     void RegisterClientBuiltinsLua(Framework::Scripting::LuaRuntime &runtime) {
@@ -67,9 +63,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         Chat::RegisterLua(runtime);
         Discord::RegisterLua(runtime);
         Voice::RegisterLua(runtime);
-#ifndef FW_CLIENT_SCRIPTING_WITHOUT_NAMETAGS
         Nametags::RegisterLua(runtime);
-#endif
     }
 
     std::vector<const Framework::Scripting::Bind::ClassDesc *> ClientLuaDefinitions() {
@@ -79,9 +73,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             &Chat::Definition().Describe(),
             &Discord::Definition().Describe(),
             &Voice::Definition().Describe(),
-#ifndef FW_CLIENT_SCRIPTING_WITHOUT_NAMETAGS
             &Nametags::Definition().Describe(),
-#endif
         });
     }
 } // namespace Framework::Integrations::Client::Scripting::Builtins

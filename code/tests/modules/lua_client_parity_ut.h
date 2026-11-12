@@ -15,9 +15,7 @@
 #include "integrations/client/scripting/builtins/builtins.h"
 #include "integrations/client/scripting/builtins/discord.h"
 #include "integrations/client/scripting/builtins/keybinds.h"
-#ifdef FW_TEST_CLIENT_NAMETAGS
 #include "integrations/client/scripting/builtins/nametags.h"
-#endif
 #include "integrations/client/scripting/builtins/web.h"
 #include "scripting/builtins/builtins.h"
 #include "scripting/builtins/console.h"
@@ -38,21 +36,11 @@
 // catalog of a client documents is there in a Lua state set up as ClientScriptingModule sets it up, and so is
 // everything the Lua definition file of a client declares. The module itself builds on Windows only; what it
 // registers in its isolate, what it adds to every Lua state and what it writes its definition file from are the
-// functions of integrations/client/scripting/builtins/builtins.h, which are what is used here. Nametags needs the
-// headers of ImGui (FW_TEST_CLIENT_NAMETAGS): a binary built without them holds every other builtin to the gate,
-// and the committed definition file less its Nametags section.
+// functions of integrations/client/scripting/builtins/builtins.h, which are what is used here.
 namespace LuaClientParityTest {
     using namespace Framework::Scripting;
     using Framework::Utils::Vfs;
     namespace ClientBuiltins = Framework::Integrations::Client::Scripting::Builtins;
-
-    inline bool HasNametags() {
-#ifdef FW_TEST_CLIENT_NAMETAGS
-        return true;
-#else
-        return false;
-#endif
-    }
 
     // What the client builtins keep is let go of in the order of ClientScriptingModule::Shutdown: what names the
     // manager before the manager goes, what holds V8 globals after the Lua host and before the engine.
@@ -63,9 +51,7 @@ namespace LuaClientParityTest {
 
     inline void ShutdownIsolateBuiltins() {
         ClientBuiltins::Discord::Shutdown();
-#ifdef FW_TEST_CLIENT_NAMETAGS
         ClientBuiltins::Nametags::Shutdown();
-#endif
     }
 
     // What a client records for JavaScript: what ClientScriptingModule::RegisterFrameworkBindings registers,
@@ -155,9 +141,6 @@ MODULE(lua_client_parity, {
     using LuaClientParityTest::Stage;
     namespace ClientBuiltins = Framework::Integrations::Client::Scripting::Builtins;
 
-    // Nametags is one global object in the catalog, and one global table of nine functions in the file.
-    const int nametags = LuaClientParityTest::HasNametags() ? 1 : 0;
-
     IT("gives Lua every member of every global the client catalog documents for JavaScript", {
         const nlohmann::json catalog = LuaClientParityTest::BuildCatalog();
         EQUALS(catalog.is_object(), true);
@@ -173,13 +156,13 @@ MODULE(lua_client_parity, {
 
         EQUALS(LuaParity::Join(report.missing), "");
         EQUALS(LuaParity::Join(report.stale), "");
-        // The whole catalog: 11 global objects, and Nametags where it builds, and 9 classes. The data types are
+        // The whole catalog: 12 global objects and 9 classes. The data types are
         // EventMap, TextLabelOptions and the twelve payloads of the browser events.
-        EQUALS(report.symbols, 20 + nametags);
+        EQUALS(report.symbols, 21);
         EQUALS(report.dataTypes, 14);
         EQUALS(report.members >= 250, true);
         EQUALS(static_cast<size_t>(report.exempted), LuaClientParityTest::Exemptions().size());
-        EQUALS(ScriptingCatalogGolden::HasSymbol(catalog, "Nametags"), LuaClientParityTest::HasNametags());
+        EQUALS(ScriptingCatalogGolden::HasSymbol(catalog, "Nametags"), true);
         // A builtin registered for one language alone.
         EQUALS(LuaParity::Join(LuaParity::OneSided(catalog, builtins, Side::Client)), "");
     });
@@ -197,9 +180,9 @@ MODULE(lua_client_parity, {
         EQUALS(LuaParity::CompileError(definitions), "");
         EQUALS(LuaParity::Join(declared.missing), "");
         EQUALS(LuaParity::Join(LuaParity::UndeclaredGlobals(L, declared.globals)), "");
-        // 19 global tables, and Nametags where it builds, and 8 global functions; StateBag is no global.
-        EQUALS(declared.globals.size(), static_cast<size_t>(27 + nametags));
-        EQUALS(declared.tables.size(), static_cast<size_t>(20 + nametags));
+        // 20 global tables and 8 global functions; StateBag is no global.
+        EQUALS(declared.globals.size(), static_cast<size_t>(28));
+        EQUALS(declared.tables.size(), static_cast<size_t>(21));
         EQUALS(declared.members >= 230, true);
         // As on a server: the operators of the value types, and the classes a script calls.
         EQUALS(declared.operators, 3 * 7 + 2 + 1);
@@ -208,17 +191,12 @@ MODULE(lua_client_parity, {
 
     IT("the client definition file matches the committed one", {
         const std::string generated = LuaParity::Generate(ClientBuiltins::ClientLuaDefinitions(), Side::Client);
-        EQUALS(generated.find("---@class Nametags\n") != std::string::npos, LuaClientParityTest::HasNametags());
+        EQUALS(generated.find("---@class Nametags\n") != std::string::npos, true);
 
         if (LuaParity::UpdateRequested()) {
-            // A binary without Nametags would write a file without it.
-            EQUALS(LuaClientParityTest::HasNametags(), true);
             EQUALS(LuaParity::WriteDefinitions("client.d.lua", generated), true);
         }
 
-        // The committed file has every builtin. A binary without Nametags holds the rest of it.
-        const std::string committed = LuaParity::ReadDefinitions("client.d.lua");
-        EQUALS(committed.find("---@class Nametags\n") != std::string::npos, true);
-        EQUALS(LuaParity::FirstDifference(LuaClientParityTest::HasNametags() ? committed : LuaParity::WithoutDefinition(committed, "Nametags"), generated), "");
+        EQUALS(LuaParity::FirstDifference(LuaParity::ReadDefinitions("client.d.lua"), generated), "");
     });
 })

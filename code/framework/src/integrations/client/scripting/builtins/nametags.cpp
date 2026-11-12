@@ -10,7 +10,7 @@
 
 #include <scripting/builtins/script_args.h>
 
-#include <external/imgui/widgets/nametag.h>
+#include <external/imgui/widgets/nametag_view.h>
 #include <integrations/client/ui/nametag_notes.h>
 #include <scripting/lua/lua_runtime.h>
 #include <scripting/scripting_catalog.h>

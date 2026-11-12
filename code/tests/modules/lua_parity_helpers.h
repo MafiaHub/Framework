@@ -452,28 +452,6 @@ namespace LuaParity {
         return names;
     }
 
-    // `text` without the section of the definition `name`: its class and its functions.
-    inline std::string WithoutDefinition(const std::string &text, const std::string &name) {
-        std::string out;
-        for (size_t at = 0; at < text.size();) {
-            size_t end = text.find("\n\n", at);
-            end        = end == std::string::npos ? text.size() : end + 1;
-            const std::string_view paragraph(text.data() + at, end - at);
-            const size_t lastLine             = paragraph.rfind('\n', paragraph.size() - 2);
-            const std::string_view definition = paragraph.substr(lastLine == std::string_view::npos ? 0 : lastLine + 1);
-            const bool ofName                 = paragraph.find("---@class " + name + "\n") != std::string_view::npos || definition.starts_with("function " + name + ".") || definition.starts_with("function " + name + ":");
-            if (!ofName) {
-                out += paragraph;
-                out += end < text.size() ? "\n" : "";
-            }
-            at = end < text.size() ? end + 1 : end;
-        }
-        if (out.ends_with("\n\n")) {
-            out.pop_back();
-        }
-        return out;
-    }
-
     // The globals of a Lua state with every standard library open: what a script has without the framework.
     inline std::set<std::string> StandardGlobals() {
         std::set<std::string> names;

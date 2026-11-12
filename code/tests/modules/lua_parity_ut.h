@@ -320,8 +320,6 @@ function Tools.log(level, ...) end
         // And a builtin one language has alone.
         EQUALS(LuaParity::Join(LuaParity::OneSided(catalog, {&Framework::Scripting::Builtins::Vector3::Definition().Describe(), &Framework::Scripting::Builtins::Color::Definition().Describe(), &Framework::Scripting::Builtins::StateBag::Definition().Describe()}, Side::Server)),
             "Chat (JavaScript only), Color (Lua only), Entity (JavaScript only), Ghost (JavaScript only)");
-        EQUALS(LuaParity::WithoutDefinition("---@meta\n\n---A.\n---@class A\nA = {}\n\n---f\nfunction A.f() end\n\n---@class B\nB = {}\n\nfunction B:g() end\n\nfunction after() end\n", "B"),
-            "---@meta\n\n---A.\n---@class A\nA = {}\n\n---f\nfunction A.f() end\n\nfunction after() end\n");
         EQUALS(LuaParity::Join(LuaParity::UndeclaredGlobals(L, declared.globals)).find("Events") != std::string::npos, true);
     });
 })

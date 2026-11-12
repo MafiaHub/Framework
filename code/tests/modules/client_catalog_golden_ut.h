@@ -13,9 +13,7 @@
 #include "integrations/client/scripting/builtins/chat.h"
 #include "integrations/client/scripting/builtins/discord.h"
 #include "integrations/client/scripting/builtins/keybinds.h"
-#ifdef FW_TEST_CLIENT_NAMETAGS
 #include "integrations/client/scripting/builtins/nametags.h"
-#endif
 #include "integrations/client/scripting/builtins/voice.h"
 #include "integrations/client/scripting/builtins/web.h"
 #include "scripting/engine_scope.h"
@@ -31,9 +29,7 @@
 
 // The catalog the client-only builtins record, held against a committed fixture as the server catalog is
 // (scripting_catalog_golden_ut.h): it is what the TypeScript declarations of a client are generated from. The
-// fixture was written from the hand-written builtins, before their port. Nametags needs the headers of ImGui:
-// a binary built without them (FW_TEST_CLIENT_NAMETAGS) leaves it out of the comparison, and cannot rewrite
-// the fixture.
+// fixture was written from the hand-written builtins, before their port.
 //
 // A deliberate change is taken into the fixture by running the module once with FW_UPDATE_GOLDEN=1.
 namespace ClientCatalogGolden {
@@ -65,9 +61,7 @@ namespace ClientCatalogGolden {
                 ClientBuiltins::Chat::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
                 ClientBuiltins::Discord::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
                 ClientBuiltins::Voice::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-#ifdef FW_TEST_CLIENT_NAMETAGS
                 ClientBuiltins::Nametags::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
-#endif
                 catalog = nlohmann::json::parse(v8pp::metadata::to_json(GetScriptingCatalog(scope.Isolate())), nullptr, /*allow_exceptions*/ false);
             }
             ClientBuiltins::Web::Shutdown();
@@ -83,25 +77,7 @@ namespace ClientCatalogGolden {
         if (!input) {
             return nullptr;
         }
-        nlohmann::json fixture = ScriptingCatalogGolden::Normalise(nlohmann::json::parse(input, nullptr, /*allow_exceptions*/ false));
-#ifndef FW_TEST_CLIENT_NAMETAGS
-        if (fixture.is_object() && fixture["symbols"].is_array()) {
-            nlohmann::json &symbols = fixture["symbols"];
-            for (auto symbol = symbols.begin(); symbol != symbols.end();) {
-                symbol = symbol->value("name", std::string()) == "Nametags" ? symbols.erase(symbol) : symbol + 1;
-            }
-        }
-#endif
-        return fixture;
-    }
-
-    // Whether this binary has every builtin the fixture holds.
-    inline bool HasEveryBuiltin() {
-#ifdef FW_TEST_CLIENT_NAMETAGS
-        return true;
-#else
-        return false;
-#endif
+        return ScriptingCatalogGolden::Normalise(nlohmann::json::parse(input, nullptr, /*allow_exceptions*/ false));
     }
 } // namespace ClientCatalogGolden
 
@@ -111,10 +87,6 @@ MODULE(client_catalog_golden, {
         EQUALS(catalog.is_object(), true);
 
         if (ScriptingCatalogGolden::UpdateRequested()) {
-            // A binary without Nametags would write a fixture without it.
-            EQUALS(ClientCatalogGolden::HasEveryBuiltin(), true);
-        }
-        if (ScriptingCatalogGolden::UpdateRequested() && ClientCatalogGolden::HasEveryBuiltin()) {
             std::ofstream output(ClientCatalogGolden::FixturePath(), std::ios::binary | std::ios::trunc);
             output << catalog.dump(2) << '\n';
             EQUALS(static_cast<bool>(output), true);
@@ -123,9 +95,8 @@ MODULE(client_catalog_golden, {
         const nlohmann::json fixture = ClientCatalogGolden::ReadFixture();
         EQUALS(fixture.is_object(), true);
         EQUALS(ScriptingCatalogGolden::Difference(fixture, catalog), "");
-        for (const char *name : {"Web", "Key", "Chat", "Discord", "Voice", "EventMap", "BrowserCreatedEvent", "BrowserOriginChangeEvent"}) {
+        for (const char *name : {"Web", "Key", "Chat", "Discord", "Voice", "Nametags", "EventMap", "BrowserCreatedEvent", "BrowserOriginChangeEvent"}) {
             EQUALS(ScriptingCatalogGolden::HasSymbol(fixture, name), true);
         }
-        EQUALS(ScriptingCatalogGolden::HasSymbol(fixture, "Nametags"), ClientCatalogGolden::HasEveryBuiltin());
     });
 })

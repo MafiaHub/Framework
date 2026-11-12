@@ -37,11 +37,6 @@
 #include <cctype>
 #include <filesystem>
 
-// Of the test binary that builds without the headers of ImGui (builtins/builtins.h). A client always has Nametags.
-#ifdef FW_CLIENT_SCRIPTING_WITHOUT_NAMETAGS
-#error "FW_CLIENT_SCRIPTING_WITHOUT_NAMETAGS is for the client scripting tests only: a product build must not define it"
-#endif
-
 namespace Framework::Integrations::Client::Scripting {
     namespace {
         bool IsResourceAvailableLocally(const std::string &resourcePath) {

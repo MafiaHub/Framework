@@ -17,11 +17,9 @@
 #include "integrations/client/scripting/builtins/keybinds.h"
 #include "integrations/client/scripting/builtins/voice.h"
 #include "integrations/server/scripting/builtins/voice.h"
-#ifdef FW_TEST_CLIENT_NAMETAGS
-#include "external/imgui/widgets/nametag.h"
+#include "external/imgui/widgets/nametag_view.h"
 #include "integrations/client/scripting/builtins/nametags.h"
 #include "integrations/client/ui/nametag_notes.h"
-#endif
 #include "scripting/bind/descriptors.h"
 #include "scripting/builtins/chat.h"
 #include "scripting/engine_scope.h"
@@ -66,9 +64,7 @@ namespace ClientServicesTest {
             client.lua.AddRuntimeSetup([](LuaRuntime &runtime) {
                 ClientBuiltins::Chat::RegisterLua(runtime);
                 ClientBuiltins::Discord::RegisterLua(runtime);
-#ifdef FW_TEST_CLIENT_NAMETAGS
                 ClientBuiltins::Nametags::RegisterLua(runtime);
-#endif
             });
             if (!client.Init()) {
                 return;
@@ -78,9 +74,7 @@ namespace ClientServicesTest {
                 const auto context = scope.Context();
                 ClientBuiltins::Chat::Register(scope.Isolate(), context, context->Global(), client.manager.get());
                 ClientBuiltins::Discord::Register(scope.Isolate(), context, context->Global(), client.manager.get());
-#ifdef FW_TEST_CLIENT_NAMETAGS
                 ClientBuiltins::Nametags::Register(scope.Isolate(), context, context->Global(), client.manager.get());
-#endif
             }
             ready = Mount("js", R"("clientScripts":["client.js"])", {{"client.js", ""}}).empty() && client.Start("js").empty() && Mount("lua", R"("clientScripts":["client.lua"])", {{"client.lua", ""}}).empty() && client.Start("lua").empty();
         }
@@ -93,9 +87,7 @@ namespace ClientServicesTest {
             }
             client.lua.Shutdown();
             ClientBuiltins::Discord::Shutdown();
-#ifdef FW_TEST_CLIENT_NAMETAGS
             ClientBuiltins::Nametags::Shutdown();
-#endif
             client.v8.Shutdown();
             Framework::CoreModules::SetClientInstance(nullptr);
             Vfs::Get().Unmount("js.zip");
@@ -307,10 +299,8 @@ MODULE(lua_client_services, {
         }
         EQUALS(Bind::ApiCatalog::Get().Find("Key", Bind::Side::Server) == nullptr, true);
         EQUALS(Bind::ApiCatalog::Get().Find("Discord", Bind::Side::Server) == nullptr, true);
-#ifdef FW_TEST_CLIENT_NAMETAGS
         EQUALS(Bind::ApiCatalog::Get().Find("Nametags", Bind::Side::Server) == nullptr, true);
         EQUALS(Bind::ApiCatalog::Get().Find("Nametags", Bind::Side::Client) == &ClientBuiltins::Nametags::Definition().Describe(), true);
-#endif
     });
 
     // ==================== Chat ====================
@@ -758,7 +748,6 @@ MODULE(lua_client_services, {
         EQUALS(LuaClientTest::Contains(Stage::Published(), "name=of lua "), true);
     });
 
-#ifdef FW_TEST_CLIENT_NAMETAGS
     // ==================== Nametags ====================
 
     IT("gives both languages the same Nametags, read-only in Lua", {
@@ -903,5 +892,4 @@ MODULE(lua_client_services, {
         ClientBuiltins::Nametags::Shutdown();
         EQUALS(notes.Empty(), true);
     });
-#endif
 })

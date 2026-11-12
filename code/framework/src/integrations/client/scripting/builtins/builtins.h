@@ -25,9 +25,6 @@ namespace Framework::Scripting {
 // from the same list, so a builtin added here is in both languages and in the file. What the isolate of a client
 // has before them is named here too. It is apart from the module,
 // which builds on Windows only, so that the tests hold exactly this list to the parity gate.
-//
-// Nametags needs the headers of ImGui. A test binary built where they are not defines
-// FW_CLIENT_SCRIPTING_WITHOUT_NAMETAGS and has every other builtin; nothing else may define it.
 namespace Framework::Integrations::Client::Scripting::Builtins {
     // Registers in the isolate what a client shares with a server, in the client's flavour: the environment, the
     // metadata of the events and the timers, the value types, Events, Messages, Exports, Imports, Console and
