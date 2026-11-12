@@ -199,10 +199,13 @@ MODULE(network_packets, {
         int calls = 0;
         MafiaNet::PeerGuid seenGuid = MafiaNet::UNASSIGNED_PEER_GUID;
         uint64_t seenAvatar = 0;
+        bool seenSlot       = false;
         std::string seenText;
         net.server.RegisterRPC<RPC::ChatMessage>([&](const RPC::ChatMessage &message, Sender sender, Replication::World &handlerWorld) {
             ++calls;
             seenGuid   = sender.Guid();
+            // The connection as MafiaNet names it carries the slot the ready event is keyed on.
+            seenSlot   = sender.Connection().systemIndex == net.server.GetPeer()->GetGuidFromSystemAddress(net.server.GetPeer()->GetSystemAddressFromGuid(sender.Connection())).systemIndex && sender.Connection().systemIndex != static_cast<MafiaNet::SystemIndex>(-1);
             seenAvatar = sender.Avatar();
             seenText   = message.text;
             if (auto avatar = handlerWorld.Write<NetworkPacketsTest::Avatar>(sender.Avatar())) {
@@ -218,6 +221,7 @@ MODULE(network_packets, {
         EQUALS(calls, 1);
         EQUALS(seenGuid == net.ClientGuid(), true);
         EQUALS(seenAvatar, avatarId);
+        EQUALS(seenSlot, true);
         STREQUALS(seenText.c_str(), "Lumos");
         EQUALS(&world == &net.server.GetReplicationManager()->GetWorld(), true);
         auto avatar = world.Read<NetworkPacketsTest::Avatar>(avatarId);

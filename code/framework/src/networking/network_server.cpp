@@ -33,17 +33,17 @@ namespace Framework::Networking {
     } // namespace
 
     uint64_t Sender::Avatar() const {
-        return _server->GetReplicationManager()->GetViewerId(_guid);
+        return _server->GetReplicationManager()->GetViewerId(Guid());
     }
 
     void Sender::Drop(std::string_view reason) const {
-        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Dropping {}: {}", MafiaNet::to_string(MafiaNet::ToGuid(_guid)), reason);
-        _server->KickPlayer(MafiaNet::ToGuid(_guid), reason.empty() ? DisconnectionReason::KICKED : DisconnectionReason::KICKED_CUSTOM, std::string(reason));
+        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Dropping {}: {}", MafiaNet::to_string(_guid), reason);
+        _server->KickPlayer(_guid, reason.empty() ? DisconnectionReason::KICKED : DisconnectionReason::KICKED_CUSTOM, std::string(reason));
     }
 
     void NetworkServer::RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, Sender, Replication::World &)> handler) {
         NetworkPeer::RegisterRawRPC(identifier, [this, cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) mutable {
-            cb(bs, Sender(*this, MafiaNet::ToPeerGuid(packet->guid)), _replicationManager->GetWorld());
+            cb(bs, Sender(*this, packet->guid), _replicationManager->GetWorld());
         });
     }
 

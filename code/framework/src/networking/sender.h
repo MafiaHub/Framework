@@ -24,6 +24,11 @@ namespace Framework::Networking {
     class Sender final {
       public:
         MafiaNet::PeerGuid Guid() const {
+            return MafiaNet::ToPeerGuid(_guid);
+        }
+
+        // The same connection as MafiaNet names it, its slot on this server included.
+        MafiaNet::RakNetGUID Connection() const {
             return _guid;
         }
 
@@ -42,9 +47,9 @@ namespace Framework::Networking {
 
       private:
         friend class NetworkServer;
-        Sender(NetworkServer &server, MafiaNet::PeerGuid guid): _server(&server), _guid(guid) {}
+        Sender(NetworkServer &server, MafiaNet::RakNetGUID guid): _server(&server), _guid(guid) {}
 
         NetworkServer *_server;
-        MafiaNet::PeerGuid _guid;
+        MafiaNet::RakNetGUID _guid;
     };
 } // namespace Framework::Networking

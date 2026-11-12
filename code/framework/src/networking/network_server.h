@@ -191,6 +191,6 @@ namespace Framework::Networking {
 
     template <RPC::Payload T>
     void Sender::Reply(T payload, MafiaNet::Priority priority, MafiaNet::Reliability reliability) const {
-        _server->SendRPC(payload, MafiaNet::ToGuid(_guid), priority, reliability);
+        _server->SendRPC(payload, _guid, priority, reliability);
     }
 } // namespace Framework::Networking
